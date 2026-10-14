@@ -6,21 +6,24 @@ import { z } from "zod";
 import { REPORT_LIST_LAG_DAYS, REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type ReportClassCounts, type YearEarlierSpan } from "@app/shared";
 
 const count = z.number().int().min(0);
-const countsRowSchema = z.object({
-  today: z.string(),
-  months: z.array(z.object({ month: z.string(), activeAtStart: count, joined: count, left: count, leftOfStart: count })),
-  active_now: count,
-  ever_left: z.boolean(),
-  first_listed_on: z.string().nullable(),
-  list_changed_on: z.string().nullable(),
-  period_joined: count,
-  period_left: count,
-  stay_leavers: count,
-  stay_days: z.number().min(0),
-  earlier_joined: count,
-  earlier_late: count,
-  earlier_late_on: z.string().nullable(),
-});
+const countsRowSchema = z
+  .object({
+    today: z.string(),
+    months: z.array(z.object({ month: z.string(), activeAtStart: count, joined: count, left: count, leftOfStart: count })),
+    active_now: count,
+    ever_left: z.boolean(),
+    first_listed_on: z.string().nullable(),
+    list_changed_on: z.string().nullable(),
+    period_joined: count,
+    period_left: count,
+    stay_leavers: count,
+    stay_days: z.number().min(0),
+    earlier_joined: count,
+    earlier_late: count,
+    earlier_late_on: z.string().nullable(),
+  })
+  // Both are read from `late_days`: somebody added late always has a day.
+  .refine((row) => (row.earlier_late === 0) === (row.earlier_late_on === null), "earlier_late and earlier_late_on disagree");
 export type MemberCounts = z.infer<typeof countsRowSchema>;
 
 /** Everybody the gym's list has held, as two WITH parts, `gone` and `people`: for each
@@ -113,6 +116,11 @@ export async function readMemberCounts(
     shown AS (SELECT ${periodFrom}::date AS from_day),
     was AS MATERIALIZED (
       SELECT p.listed_on FROM people p WHERE p.started >= ${earlier.from}::date AND p.started <= ${earlier.to}::date
+    ),
+    late_days AS (
+      SELECT listed_on, count(*)::int AS people FROM was
+      WHERE listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int
+      GROUP BY listed_on
     )
     SELECT to_char(c.today, 'YYYY-MM-DD') AS today,
       (SELECT json_agg(json_build_object(
@@ -132,10 +140,8 @@ export async function readMemberCounts(
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
        FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days,
       (SELECT count(*)::int FROM was WHERE listed_on <= ${earlier.to}::date) AS earlier_joined,
-      (SELECT count(*)::int FROM was WHERE listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int) AS earlier_late,
-      (SELECT to_char(w.listed_on, 'YYYY-MM-DD') FROM was w
-       WHERE w.listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int
-       GROUP BY w.listed_on ORDER BY count(*) DESC, w.listed_on LIMIT 1) AS earlier_late_on
+      (SELECT COALESCE(sum(people), 0)::int FROM late_days) AS earlier_late,
+      (SELECT to_char(listed_on, 'YYYY-MM-DD') FROM late_days ORDER BY people DESC, listed_on LIMIT 1) AS earlier_late_on
     FROM clock c`;
   return countsRowSchema.parse(rows[0]);
 }
