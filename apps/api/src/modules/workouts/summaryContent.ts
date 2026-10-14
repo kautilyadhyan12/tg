@@ -6,17 +6,14 @@
 // been told the spec names no home for either feature: a grep over `docs/spec`
 // for "meal suggestion", "stretch" and "post-workout" returns MET values and a
 // share-card flow, and nothing that specifies this. The stretches, the record
-// labels, the muscle names, the calorie bands and their thresholds are still
-// the Python file's, in the Python file's order.
+// labels and the muscle names are still the Python file's, in the Python
+// file's order.
 //
-// THE MEAL IDEAS ARE NO LONGER A VERBATIM PORT (RULINGS 2026-08-06, amended
-// 2026-09-13). They follow the diet screen 9 stores (RULINGS 2026-09-10), so a
-// vegan is never offered the chicken: where a diet rules an idea's food out,
-// that food alone is swapped for one it allows. And their words are the
-// market's: every timing counts from the workout (never "before bed" on a
-// post-workout card), and the foods are what the US, Canada and Europe eat,
-// never rice first. The seven lines and their swaps are written out on ROADMAP
-// 4b-ii.
+// THE MEAL IDEAS ARE NOT PORTED (ROADMAP 34d-ii). They come from the one rule
+// that makes the day's meal ideas (`modules/nutrition/suggest.ts`), so the app
+// has one source of food ideas; here they are only put into the card's words.
+// Every timing counts from the workout (RULINGS 2026-09-13: never "before bed"
+// on a post-workout card).
 //
 // WHY STRINGS AND NOT MESSAGE KEYS. v1 §14 wants message keys so hi/as is a
 // translation task. These are English strings because that is what ships today
@@ -29,56 +26,36 @@
 // (R3.1). The old backend chose server-side too; a client that picked its own
 // meal ideas from a number it computed itself is the class of thing this
 // project keeps deleting.
-import { DIET_LADDER, EXERCISE_CONTENT, type Diet, type MealSuggestion } from "@app/shared";
+import { EXERCISE_CONTENT, type MealSuggestion, type SuggestedFood } from "@app/shared";
+import type { AfterWorkoutIdea, AfterWorkoutWhen } from "../nutrition/suggest.js";
 
-/** One meal idea. `meal` is eaten as it is by `fitsFrom` and every diet above
- *  it; `swap` is the same idea for the diets below, with only the food they
- *  rule out changed. An idea every diet can eat has none. */
-interface MealIdea {
-  meal: string;
-  timing: string;
-  fitsFrom: Diet;
-  swap: string | null;
+const TIMING: Readonly<Record<AfterWorkoutWhen, string>> = { soon: "Within 30 mins", meal: "Within 2 hours" };
+
+/** A count in halves, as a menu writes it: "½", "1", "1½". */
+function halves(n: number): string {
+  const whole = Math.floor(n + 1e-9);
+  const half = n - whole > 0.25;
+  return whole === 0 ? (half ? "½" : "0") : `${String(whole)}${half ? "½" : ""}`;
 }
 
-/** Three calorie bands, as workouts.py:600-615 had them. The thresholds are
- *  `> 400` and `> 200` on the workout's kcal figure; the words are RULINGS
- *  2026-09-13's. */
-const HIGH_BAND: readonly MealIdea[] = [
-  { meal: "Protein shake + banana", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake + banana" },
-  { meal: "Grilled chicken + potatoes + vegetables", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Grilled tofu + potatoes + vegetables" },
-  { meal: "Greek yogurt with berries", timing: "In 3–4 hours", fitsFrom: "vegetarian", swap: "Soy yogurt with berries" },
-];
-const MIDDLE_BAND: readonly MealIdea[] = [
-  { meal: "Protein shake or chocolate milk", timing: "Within 30 mins", fitsFrom: "vegetarian", swap: "Plant protein shake or soy chocolate milk" },
-  { meal: "Eggs + whole grain toast + avocado", timing: "Within 2 hours", fitsFrom: "vegetarian_eggs", swap: "Tofu scramble + whole grain toast + avocado" },
-];
-const LOW_BAND: readonly MealIdea[] = [
-  { meal: "Banana + peanut butter", timing: "Within 30 mins", fitsFrom: "vegan", swap: null },
-  { meal: "Light salad with grilled protein", timing: "Within 2 hours", fitsFrom: "non_vegetarian", swap: "Light salad with chickpeas" },
-];
+/** A food's amount in its own unit: "150 g", "1½ cups", "1 oz", "4 tbsp", "2 slices", "1 banana". */
+export function amountWords(item: Pick<SuggestedFood, "grams" | "servings" | "unit">): string {
+  if (item.unit === "g") return `${String(Math.round(item.grams))} g`;
+  const tbsp = /^(\d+) tbsp$/.exec(item.unit);
+  if (tbsp !== null) return `${halves(item.servings * Number(tbsp[1]))} tbsp`;
+  if (item.unit === "oz") return `${halves(item.servings)} oz`;
+  const many = item.servings > 1;
+  const plural = /(ch|sh|s|x|o)$/.test(item.unit) ? `${item.unit}es` : `${item.unit}s`;
+  return `${halves(item.servings)} ${many ? plural : item.unit}`;
+}
 
-/** Every idea, for the test that holds each to the ladder. */
-export const MEAL_IDEA_BANDS = { high: HIGH_BAND, middle: MIDDLE_BAND, low: LOW_BAND } as const;
-
-/** The workout's band of ideas, in the words the person's diet allows.
- *
- *  NO DIET ANSWER READS AS THE STRICTEST DIET, so every idea is one anybody
- *  can eat: a guessed "non-vegetarian" is the one guess that would put meat in
- *  front of a vegetarian (RULINGS 2026-07-15: unanswered is never a default). */
-export function mealSuggestionsFor(caloriesBurned: number | null, diet: Diet | null): MealSuggestion[] {
-  // Python read `session.get("calories_burned", 0)`, so an absent figure took
-  // the lowest band rather than producing no suggestions. NULL is that case.
-  const kcal = caloriesBurned ?? 0;
-  const band = kcal > 400 ? HIGH_BAND : kcal > 200 ? MIDDLE_BAND : LOW_BAND;
-  const level = diet === null ? 0 : DIET_LADDER[diet];
-  return band.map((idea) => {
-    if (level >= DIET_LADDER[idea.fitsFrom]) return { meal: idea.meal, timing: idea.timing };
-    // Never the idea's own words in place of a missing swap: that fallback is the
-    // chicken offered to a vegan this function exists to prevent.
-    if (idea.swap === null) throw new Error(`meal idea "${idea.meal}" has no swap for a diet below ${idea.fitsFrom}`);
-    return { meal: idea.swap, timing: idea.timing };
-  });
+/** The ideas in the card's words: each food with its amount, and when to eat it. */
+export function mealSuggestionsFrom(ideas: readonly AfterWorkoutIdea[]): MealSuggestion[] {
+  return ideas.map(({ when, idea }) => ({
+    meal: idea.items.map((item) => `${item.name} (${amountWords(item)})`).join(" + "),
+    timing: TIMING[when],
+    idea,
+  }));
 }
 
 /** Primary muscles of the exercises in a workout, by catalog slug.
