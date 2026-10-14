@@ -5,6 +5,7 @@
 // sync is either keyed-idempotent or skipped on status==='duplicate'.
 import type { Sql } from "postgres";
 import {
+  dayInTz,
   getMe as getGamificationMe,
   isContinuationDay,
   onWorkoutSynced,
@@ -33,9 +34,12 @@ import {
   type KcalSetInputV3,
 } from "./calories.js";
 import * as repo from "./repo.js";
+import { predictions } from "./predictions.js";
+import { weeklyTrainingDaysTarget } from "../goals/service.js";
 import type {
   PersonalRecords,
   ProgressDistribution,
+  ProgressPredictions,
   ProgressHeatmap,
   ProgressOverview,
   ProgressPeriod,
@@ -460,4 +464,29 @@ export async function personalRecords(deps: ReadDeps, userId: string): Promise<P
   // longestStreak stays ungated: streaks are identity, not history reads
   // (Part 7 §3.3 "longest is displayed forever").
   return { ...records, longestStreak: streak.longest, limitedToDays: gate.limitedToDays };
+}
+
+/** Progress's predictions (ROADMAP 35a; spec Part 2B §5): the person's own last 90 days
+ *  at most, plan-clamped like every progress read, and their week's training-days goal. */
+export async function progressPredictions(
+  deps: ReadDeps,
+  userId: string,
+  now: Date = new Date(),
+): Promise<ProgressPredictions> {
+  const gate = await historyGate(deps, userId);
+  const timeZone = await userTz(deps.sql, userId);
+  // A day longer than the 90 read, so the first local day is whole in every zone.
+  const since = clamp(new Date(now.getTime() - 91 * 86_400_000), gate.floor) ?? new Date(0);
+  const [workouts, firstDay, weeklyTarget] = await Promise.all([
+    repo.predictionWorkouts(deps.sql, userId, since, timeZone),
+    repo.firstWorkoutDay(deps.sql, userId, timeZone),
+    weeklyTrainingDaysTarget(deps.sql, userId),
+  ]);
+  return predictions({
+    today: dayInTz(now, timeZone),
+    workouts,
+    firstWorkoutDay: firstDay,
+    weeklyTarget,
+    limitedToDays: gate.limitedToDays,
+  });
 }
