@@ -155,14 +155,19 @@ function money(over: Partial<MoneyReportFacts>) {
       period: "12m",
       currency: "GBP",
       anyMembership: true,
+      anySale: false,
+      firstSoldOn: null,
       firstPaidOn: "2025-01-10",
       otherCurrency: false,
       overdueAfterDays: 0,
       held: [],
       months: [],
+      sales: [],
+      products: [],
+      staff: [],
       owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
       members: { today: TODAY, firstListedOn: "2024-03-04", everLeft: false, months: monthsTo(TODAY, () => ({})) },
-      yearEarlier: { paidMinor: 0, refundedMinor: 0 },
+      yearEarlier: { paidMinor: 0, soldMinor: 0, refundedMinor: 0 },
       ...over,
     }),
   );
@@ -178,13 +183,13 @@ describe("the money figures follow the period", () => {
       months: [paid("2026-08", 7000, 0), paid("2026-09", 9000, 4000, 1000, 500), paid("2026-10", 3000, 3000, 200, 200), paid("2026-09", 600, 0, 0, 0, "day")],
     });
     expect(r.period).toEqual({ key: "4w", from: "2026-09-16", to: TODAY });
-    expect(r.inPeriod).toEqual({ paidMinor: 7000, refundedMinor: 700, netMinor: 6300 });
+    expect(r.inPeriod).toEqual({ paidMinor: 7000, soldMinor: 0, refundedMinor: 700, netMinor: 6300 });
     // The months listed are whole months, each its own true figure.
     expect(r.months).toEqual([
-      { month: "2026-09", paidMinor: 9600, refundedMinor: 1000, netMinor: 8600 },
-      { month: "2026-10", paidMinor: 3000, refundedMinor: 200, netMinor: 2800 },
+      { month: "2026-09", paidMinor: 9600, soldMinor: 0, refundedMinor: 1000, netMinor: 8600 },
+      { month: "2026-10", paidMinor: 3000, soldMinor: 0, refundedMinor: 200, netMinor: 2800 },
     ]);
-    expect(r.thisMonth).toEqual({ month: "2026-10", paidMinor: 3000, refundedMinor: 200, netMinor: 2800 });
+    expect(r.thisMonth).toEqual({ month: "2026-10", paidMinor: 3000, soldMinor: 0, refundedMinor: 200, netMinor: 2800 });
     // A membership with no money in the period and none in use is not listed.
     expect(r.types).toEqual([{ name: "GOLD", inUse: 0, monthlyMinor: 0, monthNetMinor: 2800, periodNetMinor: 6300 }]);
   });
@@ -205,7 +210,7 @@ describe("the money figures follow the period", () => {
 
   it("the period gave back more than it took: a figure below zero, said as it is", () => {
     const r = money({ period: "4w", months: [paid("2026-10", 1000, 1000, 2500, 2500)] });
-    expect(r.inPeriod).toEqual({ paidMinor: 1000, refundedMinor: 2500, netMinor: -1500 });
+    expect(r.inPeriod).toEqual({ paidMinor: 1000, soldMinor: 0, refundedMinor: 2500, netMinor: -1500 });
   });
 
   it("a gym whose first payment is inside the period is listed from that month", () => {

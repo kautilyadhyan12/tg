@@ -367,7 +367,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
 
         // Money: the payments of those days, less the refunds of those days.
         const refunded = key === "4w" ? 20 : 30;
-        expect(money.inPeriod, key).toEqual({ paidMinor: paidFrom(from), refundedMinor: refunded, netMinor: paidFrom(from) - refunded });
+        expect(money.inPeriod, key).toEqual({ paidMinor: paidFrom(from), soldMinor: 0, refundedMinor: refunded, netMinor: paidFrom(from) - refunded });
         expect(money.months[0]?.month, key).toBe(from.slice(0, 7));
         expect(money.types, key).toEqual([
           { name: "Annual", inUse: 1, monthlyMinor: 8333, monthNetMinor: 6400, periodNetMinor: yearlyFrom(from) },
@@ -387,8 +387,8 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       // Four weeks list whole months, each its own figure: September holds the day before too.
       const fourWeeks = await moneyOf(gym, owner, "4w");
       expect(fourWeeks.months).toEqual([
-        { month: "2026-09", paidMinor: 1600 + 3200, refundedMinor: 30, netMinor: 4770 },
-        { month: "2026-10", paidMinor: 6400, refundedMinor: 0, netMinor: 6400 },
+        { month: "2026-09", paidMinor: 1600 + 3200, soldMinor: 0, refundedMinor: 30, netMinor: 4770 },
+        { month: "2026-10", paidMinor: 6400, soldMinor: 0, refundedMinor: 0, netMinor: 6400 },
       ]);
 
       // What is true today is the same under every period.
@@ -409,7 +409,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
         expect((await membersOf(next, nextOwner, key)).leads, key).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
         expect((await membersOf(next, nextOwner, key)).inPeriod, key).toEqual({ joined: 1, joinedFrom: FROM[key], left: 0 });
         expect((await attendanceOf(next, nextOwner, key)).inPeriod, key).toEqual({ visits: 1, people: 1 });
-        expect((await moneyOf(next, nextOwner, key)).inPeriod, key).toEqual({ paidMinor: 5000, refundedMinor: 0, netMinor: 5000 });
+        expect((await moneyOf(next, nextOwner, key)).inPeriod, key).toEqual({ paidMinor: 5000, soldMinor: 0, refundedMinor: 0, netMinor: 5000 });
       }
     },
     TEST_TIMEOUT_MS,
@@ -469,7 +469,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
           expect(attendance.inPeriod, key).toEqual({ visits: inside, people: inside });
           expect(attendance.hours.state === "ok" ? attendance.hours.cells.reduce((sum, c) => sum + c.visits, 0) : null, key).toBe(inside);
           expect(attendance.classes, key).toMatchObject({ state: "ok", classes: inside });
-          expect(money.inPeriod, key).toEqual({ paidMinor: 1000 * inside, refundedMinor: 0, netMinor: 1000 * inside });
+          expect(money.inPeriod, key).toEqual({ paidMinor: 1000 * inside, soldMinor: 0, refundedMinor: 0, netMinor: 1000 * inside });
         }
         // The first day shown is the 24th, with the one visit of half past midnight.
         expect((await attendanceOf(gym, owner, "4w")).days[0]).toEqual({ day: "2026-09-24", visits: 1 });

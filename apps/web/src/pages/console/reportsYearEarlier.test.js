@@ -70,14 +70,19 @@ const money = (over = {}) =>
     period: '3m',
     currency: 'GBP',
     anyMembership: true,
+    anySale: false,
+    firstSoldOn: null,
     firstPaidOn: '2025-01-10',
     otherCurrency: false,
     overdueAfterDays: 0,
     held: [],
     months: [{ typeId: 'g', typeName: 'Gold', month: '2026-09', paidMinor: 50000, refundedMinor: 0, periodPaidMinor: 50000, periodRefundedMinor: 0 }],
+    sales: [],
+    products: [],
+    staff: [],
     owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
     members: { today: TODAY, firstListedOn: '2024-03-04', everLeft: false, months: monthsTo(TODAY) },
-    yearEarlier: { paidMinor: 62000, refundedMinor: 2000 },
+    yearEarlier: { paidMinor: 62000, soldMinor: 0, refundedMinor: 2000 },
     ...over,
   });
 const collectedLine = (report) => moneyTiles(report, GYM, 'iron-house').find((t) => t.key === 'collected').earlier;
@@ -153,6 +158,15 @@ describe('money a year earlier', () => {
 
   it('a first payment after those days began reads its day, never £0.00', () => {
     expect(collectedLine(money({ firstPaidOn: '2025-08-02' }))).toBe('A year earlier: no figures. Your first payment was recorded on 2 Aug 2025.');
+  });
+
+  it('a gym that records payments and began selling at the desk this period reads the day of its first sale, never "up" by the new page', () => {
+    const report = money({
+      anySale: true,
+      firstSoldOn: '2026-10-02',
+      sales: [{ month: '2026-10', soldMinor: 1200, periodSoldMinor: 1200 }],
+    });
+    expect(collectedLine(report)).toBe('A year earlier: no figures. Your first sale at the front desk was recorded on 2 Oct 2026.');
   });
 
   it('only Collected has a line: what is true today has none', () => {

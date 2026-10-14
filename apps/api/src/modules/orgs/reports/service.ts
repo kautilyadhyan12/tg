@@ -1,5 +1,6 @@
-// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i, 21d-ii): the members, attendance
-// and money figures, for staff holding `reports.read`. Counts only; no person's name or details leave here.
+// The Reports page (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21b-ii, 21d-i, 21d-ii): the members, attendance
+// and money figures, for staff holding `reports.read`. Counts only; no member's name or details leave here.
+// The money figures name the staff who recorded payments and sales, for staff shown money.
 import type { Sql } from "postgres";
 import {
   HELD_PAYMENT_WORDS,
@@ -125,8 +126,8 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
     const currency = home !== null && gym.paidCurrencies.includes(home) ? home : (gym.paidCurrencies[0] ?? gym.heldCurrency ?? home);
     if (currency === null) return null;
     const money = await repo.readMoney(tx, gymId, today, currency, gym.overdueAfterDays, periodFrom);
-    const none = { paidMinor: 0, refundedMinor: 0 };
-    if (!money.any_membership || money.first_paid_on === null) return { gym, currency, money, held: [], members: null, listPeople: 0, collected: none };
+    const none = { paidMinor: 0, soldMinor: 0, refundedMinor: 0 };
+    if ((!money.any_membership && !money.any_sale) || (money.first_paid_on === null && money.first_sold_on === null)) return { gym, currency, money, held: [], members: null, listPeople: 0, collected: none };
     const collected = await repo.readCollected(tx, gymId, currency, earlier);
     const held = await inUseForMoney(tx, gymId, currency);
     const onList = await heldAndOverIn(tx, gymId, today, null);
@@ -144,11 +145,16 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
       period,
       currency: facts?.currency ?? null,
       anyMembership: facts?.money.any_membership ?? false,
+      anySale: facts?.money.any_sale ?? false,
       firstPaidOn: facts?.money.first_paid_on ?? null,
+      firstSoldOn: facts?.money.first_sold_on ?? null,
       otherCurrency: facts?.money.other_currency ?? false,
       overdueAfterDays: facts?.gym.overdueAfterDays ?? 0,
       held: facts?.held ?? [],
       months: facts?.money.months ?? [],
+      sales: facts?.money.sales ?? [],
+      products: facts?.money.products ?? [],
+      staff: facts?.money.staff ?? [],
       owed: {
         currentMinor: facts?.money.current_minor ?? 0,
         currentPeople: facts?.money.current_people ?? 0,
@@ -164,7 +170,7 @@ export async function getMoneyReport(deps: ReportsDeps, gymId: string, org: { ti
         everLeft: facts?.members?.ever_left ?? false,
         months: facts?.members?.months ?? [],
       },
-      yearEarlier: facts?.collected ?? { paidMinor: 0, refundedMinor: 0 },
+      yearEarlier: facts?.collected ?? { paidMinor: 0, soldMinor: 0, refundedMinor: 0 },
     }),
   });
 }
