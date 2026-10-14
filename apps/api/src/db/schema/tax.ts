@@ -1,4 +1,4 @@
-// A GYM'S TAX RATES (Part 3 §14.3; ROADMAP Stage 2 item 18b-iii). Mirrors `0108_tax_rates.sql`
+// A GYM'S TAX RATES (Part 3 §14.3; ROADMAP Stage 2 item 18b-iii). Mirrors `0109_tax_rates.sql`
 // 1:1; the migration carries the reasoning. A file of its own, so the register's tables and
 // the memberships' can both point at it.
 import { sql } from "drizzle-orm";

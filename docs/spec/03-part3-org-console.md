@@ -2017,8 +2017,9 @@ they never saw, or put a signature on a relative when a family shares one email 
 - **Privacy.** A person's "download my data" holds each waiver they signed with its words.
   A signature is kept with the gym after the person's account is deleted, on the consent
   log's footing: it is the gym's proof. **It is removed six years after the account is
-  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years). Not built
-  yet: ROADMAP Stage 2 item 3e-iii.
+  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years), by the
+  nightly purge's own step beside the consent log's (3e-iii,
+  `privacy/repo.ts` `deleteExpiredWaiverSignatures`).
 - **Limits:** staff reads 300 an hour a person (900 an address), saves and stops 30 (90);
   a member's read 120 (6,000 an address, a gym's wi-fi), signing 10 (600).
 - **Cost at full size** (2026-10-13, mains, 3,294 MHz, local database, a waiver of 29,990
@@ -2068,7 +2069,12 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   otherwise `409 waiver_changed` / `waiver_not_in_use` or `404 person_not_found`, and
   nothing is written. Twice is once. Two records joined: the kept one takes the other's
   desk signatures it has none of; a record deleted for good lets go of its signature, which
-  stays as the gym's proof.
+  stays as the gym's proof with the day the record was deleted (`record_deleted_at`,
+  `0108`), and the purge removes it six years after that day (Kd,
+  `rulings/2026-10-14-3e-ii.md`; 3e-iii). A gym's whole list deleted with the gym
+  (`deleteListForGym`) is the same. A record cannot be deleted any other way while a
+  signature points at it (the link is checked when the change is saved), and a signature
+  with neither a record nor a day is refused, so none is ever kept for ever by mistake.
 - **Who has signed, by record** (`waiver/signed.ts`, one rule): a desk signature of the
   wording in use, or an app signature by the person the record certainly is (§18.4). An app
   signature on a shared family email signs no record. Members' Filter shows **Waiver not
@@ -5287,6 +5293,34 @@ says why, with the days counted. A
 value that is not one of the three is refused (400). Cost at twelve months, a gym of 2,000
 beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
 the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
+
+**Built by 21d-ii (2026-10-14): a year earlier.** Under two figures, New members and,
+for staff shown money, Collected (Kd, 2026-10-14, `rulings/2026-10-14-21d-ii.md`), one
+small line: "A year earlier: 9 · up 3", "down 3" or "the same", for the same days a year
+before (`yearEarlierOf`, `packages/shared/src/reportPeriod.ts`). Four weeks go back 52
+weeks, so a Monday is set beside a Monday; three and twelve months go back a calendar year,
+the same months up to the same day of the month (29 February is 28 February). Each of the
+two tiles says which days in its "how" ("A year earlier counts the same weekdays 52 weeks
+before: …" for four weeks). No other figure has a line, nothing in Attendance has one, and
+the reads work out no other year-earlier figure.
+**New members a year earlier** (`membersYearEarlierFrom`, `packages/shared/src/reports.ts`)
+are counted as today's are: the people who started in those days and were on the list on
+their last day, as it stood then. Today's figure has the same blind spot, joiners not yet
+imported, so a gym that imports each month reads the same in both years. There is no
+figure, and the line says why with the day, never a zero: where the list could not count new
+members from that span's first day (it began after it, or in its month: "Your member list
+started on …"); and where the list was not being kept then: more of the people who started
+in those days were added over a month after them (`REPORT_LIST_LAG_DAYS`, 31; the page asks
+a gym to import each month) than were on it in time, as when one member is typed in by hand
+before the gym imports its real file ("Most of your member list was added on 10 Sep 2026.",
+the day most of them were added, the earliest where days tie). People added within the
+month are an ordinary import and count on neither side. The counts are
+`readMemberCounts`' `was` and `late_days` parts, on the gym's own clock.
+**Collected a year earlier** is payments less refunds of those days in the gym's currency,
+as `readMoney` counts them (`readCollected`; a refund of a payment taken back is not
+money), and no figure where the first payment recorded here came after those days began
+("Your first payment was recorded on …"). Every read names the gym in its WHERE. The cost
+tools seed two years of visits and payments: HANDOFF has the table.
 
 ### 16.6 Cards
 

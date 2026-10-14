@@ -755,7 +755,14 @@
       "idx": 107,
       "version": "7",
       "when": 1790294400108,
-      "tag": "0108_tax_rates",
+      "tag": "0108_waiver_record_deleted",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1790380800109,
+      "tag": "0109_tax_rates",
       "breakpoints": true
     }
   ]

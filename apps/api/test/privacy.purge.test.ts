@@ -30,7 +30,8 @@ import {
   purgeUser,
   type PurgeResult,
 } from "../src/modules/privacy/purge.js";
-import { lockDueUserForPurge, recordPurge } from "../src/modules/privacy/repo.js";
+import { deleteEntry, deleteListForGym } from "../src/modules/orgs/memberList/repo.js";
+import { deleteExpiredWaiverSignatures, lockDueUserForPurge, recordPurge } from "../src/modules/privacy/repo.js";
 import {
   ADDRESS_KEYED_PURGE_TABLES,
   CASCADE_COLLECTED_TABLES,
@@ -939,6 +940,7 @@ describe("purge shortfall (no database)", () => {
     errors: 0,
     schemaDriftSnapshots: 0,
     consentProofExpired: 2,
+    waiverSignaturesExpired: 1,
     consentProofExpiryFailed: false,
     photoFilesLeft: 0,
     dryRun: false,
@@ -981,5 +983,215 @@ describe("purge shortfall (no database)", () => {
         inlineCopy: false,
       });
     }
+  });
+});
+
+// A SIGNED WAIVER, REMOVED SIX YEARS AFTER ITS PERSON IS GONE (ROADMAP Stage 2 item 3e-iii;
+// needs migration 0108). In this file, not its own, because the expiry is one statement over
+// every gym: another file's purge run at the same moment would remove these fixtures under
+// the assertions. The first test is the worst thing the job could do to a real person
+// (CLAUDE.md §2.1): remove a gym's proof too early — while the person still has an account,
+// while their record is still on the gym's list, or before the six years are up.
+const DOMAIN = "wret-t.example.com";
+const daysAgo = (n: number): Date => new Date(Date.now() - n * DAY_MS);
+
+const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
+
+d("a signed waiver removed six years after its person is gone (real Postgres)", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 4 });
+  const gymIds: string[] = [];
+  let made = 0;
+
+  const mine = () => sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE ${`%@${DOMAIN}`})`;
+  const cleanup = async () => {
+    await sql`DELETE FROM gym_waiver_desk_signatures WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_waiver_signatures WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_waivers WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gyms WHERE id IN (${mine()})`;
+    await sql`DELETE FROM audit_log WHERE target_id IN (SELECT id::text FROM users WHERE email LIKE ${`%@${DOMAIN}`})`;
+    await sql`DELETE FROM users WHERE email LIKE ${`%@${DOMAIN}`}`;
+  };
+
+  beforeAll(cleanup, 60_000);
+  afterAll(async () => {
+    await cleanup();
+    await sql.end();
+  }, 60_000);
+
+  /** An account; `deletedDaysAgo` null is a live one. */
+  async function person(deletedDaysAgo: number | null, status?: "active"): Promise<string> {
+    const deletedAt = deletedDaysAgo === null ? null : daysAgo(deletedDaysAgo);
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO users (email, display_name, status, deleted_at)
+      VALUES (${`p${String(made++)}-${randomUUID()}@${DOMAIN}`}, 'Waiver Person', ${status ?? (deletedAt === null ? "active" : "deleted")}, ${deletedAt})
+      RETURNING id`;
+    const id = rows[0]?.id;
+    if (id === undefined) throw new Error("no user");
+    return id;
+  }
+
+  async function gymWithWaiver(): Promise<{ gymId: string; waiverId: string }> {
+    const owner = await person(null);
+    const gym = await sql<{ id: string }[]>`
+      INSERT INTO gyms (slug, name, owner_user_id) VALUES (${`wret-${randomUUID()}`}, 'Waiver Retention Gym', ${owner}) RETURNING id`;
+    const gymId = gym[0]?.id ?? "";
+    gymIds.push(gymId);
+    const waiver = await sql<{ id: string }[]>`
+      INSERT INTO gym_waivers (gym_id, version, body) VALUES (${gymId}, 1, 'I take part at my own risk.') RETURNING id`;
+    return { gymId, waiverId: waiver[0]?.id ?? "" };
+  }
+
+  async function record(gymId: string): Promise<string> {
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+      VALUES (${gymId}, 'Desk Person', ${`r${String(made++)}-${randomUUID()}@${DOMAIN}`}, encode(sha256(${randomUUID()}::bytea), 'hex'), 'typed')
+      RETURNING id`;
+    return rows[0]?.id ?? "";
+  }
+
+  async function appSignature(gymId: string, waiverId: string, userId: string): Promise<string> {
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_waiver_signatures (gym_id, waiver_id, user_id, signed_name, signed_at)
+      VALUES (${gymId}, ${waiverId}, ${userId}, 'Waiver Person', ${daysAgo(CONSENT_PROOF_RETENTION_DAYS + 400)})
+      RETURNING id`;
+    return rows[0]?.id ?? "";
+  }
+
+  /** A desk signature; `recordDeletedDaysAgo` null is one whose record is still on the list. */
+  async function deskSignature(gymId: string, waiverId: string, recordDeletedDaysAgo: number | null): Promise<string> {
+    const entryId = recordDeletedDaysAgo === null ? await record(gymId) : null;
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO gym_waiver_desk_signatures (gym_id, waiver_id, entry_id, signer, signed_name, signed_at, record_deleted_at)
+      VALUES (${gymId}, ${waiverId}, ${entryId}, 'person', 'Desk Person', ${daysAgo(CONSENT_PROOF_RETENTION_DAYS + 400)},
+              ${recordDeletedDaysAgo === null ? null : daysAgo(recordDeletedDaysAgo)})
+      RETURNING id`;
+    return rows[0]?.id ?? "";
+  }
+
+  const appLeft = async (ids: string[]): Promise<string[]> =>
+    (await sql<{ id: string }[]>`SELECT id FROM gym_waiver_signatures WHERE id = ANY(${ids})`).map((r) => r.id);
+  const deskLeft = async (ids: string[]): Promise<string[]> =>
+    (await sql<{ id: string }[]>`SELECT id FROM gym_waiver_desk_signatures WHERE id = ANY(${ids})`).map((r) => r.id);
+  const cutoffAt = (now: Date): Date => new Date(now.getTime() - CONSENT_PROOF_RETENTION_DAYS * DAY_MS);
+
+  it("WORST THING: keeps every signature whose person is still here or whose six years are not up", { timeout: 60_000 }, async () => {
+    const { gymId, waiverId } = await gymWithWaiver();
+    // Kept: all of these, signed more than six years ago.
+    const live = await appSignature(gymId, waiverId, await person(null));
+    const nearly = await appSignature(gymId, waiverId, await person(CONSENT_PROOF_RETENTION_DAYS - 5));
+    // Back to active with an old deleted_at never cleared: a person with an account.
+    const restored = await appSignature(gymId, waiverId, await person(CONSENT_PROOF_RETENTION_DAYS + 30, "active"));
+    const onTheList = await deskSignature(gymId, waiverId, null);
+    const deskNearly = await deskSignature(gymId, waiverId, CONSENT_PROOF_RETENTION_DAYS - 5);
+    // A signature can never lose its record with no day kept (it would be kept for ever):
+    // letting go without the day, or deleting the record without letting go, is refused.
+    const noDay = await deskSignature(gymId, waiverId, null);
+    await expect(sql`UPDATE gym_waiver_desk_signatures SET entry_id = NULL WHERE id = ${noDay}`).rejects.toThrow(/deleted_day_check/);
+    await expect(
+      sql.begin((tx) => tx`DELETE FROM gym_member_list_entries WHERE id = (SELECT entry_id FROM gym_waiver_desk_signatures WHERE id = ${noDay})`),
+    ).rejects.toThrow(/gym_waiver_desk_signatures_entry_fk/);
+    // Removed: past six years.
+    const gone = await appSignature(gymId, waiverId, await person(CONSENT_PROOF_RETENTION_DAYS + 1));
+    const deskGone = await deskSignature(gymId, waiverId, CONSENT_PROOF_RETENTION_DAYS + 1);
+
+    const removed = await deleteExpiredWaiverSignatures(sql, cutoffAt(new Date()));
+
+    expect(removed).toBeGreaterThanOrEqual(2);
+    expect((await appLeft([live, nearly, restored, gone])).sort()).toEqual([live, nearly, restored].sort());
+    expect((await deskLeft([onTheList, deskNearly, noDay, deskGone])).sort()).toEqual([onTheList, deskNearly, noDay].sort());
+
+    // Six days later the nearly-due two go; the live, restored and listed never do.
+    await deleteExpiredWaiverSignatures(sql, cutoffAt(new Date(Date.now() + 6 * DAY_MS)));
+    expect((await appLeft([live, nearly, restored])).sort()).toEqual([live, restored].sort());
+    expect((await deskLeft([onTheList, deskNearly, noDay])).sort()).toEqual([onTheList, noDay].sort());
+  });
+
+  it("a record deleted for good keeps its desk signature with the day it was deleted", { timeout: 60_000 }, async () => {
+    const { gymId, waiverId } = await gymWithWaiver();
+    const kept = await deskSignature(gymId, waiverId, null);
+    const deleted = await deskSignature(gymId, waiverId, null);
+    const at = new Date("2027-03-04T05:06:07.000Z");
+    const deletedEntry = (await sql<{ entry_id: string }[]>`SELECT entry_id FROM gym_waiver_desk_signatures WHERE id = ${deleted}`)[0]?.entry_id ?? "";
+
+    await sql.begin((tx) => deleteEntry(tx, gymId, deletedEntry, at));
+
+    const rows = await sql<{ id: string; entry_id: string | null; record_deleted_at: Date | null }[]>`
+      SELECT id, entry_id, record_deleted_at FROM gym_waiver_desk_signatures WHERE id IN (${kept}, ${deleted})`;
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(kept)?.entry_id).not.toBeNull();
+    expect(byId.get(kept)?.record_deleted_at).toBeNull();
+    expect(byId.get(deleted)?.entry_id).toBeNull();
+    // The run's own clock, never the database's.
+    expect(byId.get(deleted)?.record_deleted_at).toEqual(at);
+  });
+
+  it("a gym's whole list deleted with the gym keeps each desk signature with that day", { timeout: 60_000 }, async () => {
+    const { gymId, waiverId } = await gymWithWaiver();
+    const other = await gymWithWaiver();
+    const a = await deskSignature(gymId, waiverId, null);
+    const b = await deskSignature(gymId, waiverId, null);
+    const elsewhere = await deskSignature(other.gymId, other.waiverId, null);
+
+    const at = new Date("2027-03-04T05:06:07.000Z");
+    await sql.begin((tx) => deleteListForGym(tx, gymId, at));
+
+    const rows = await sql<{ id: string; gone: boolean; dated: boolean }[]>`
+      SELECT id, entry_id IS NULL AS gone, record_deleted_at IS NOT DISTINCT FROM ${at} AS dated
+      FROM gym_waiver_desk_signatures WHERE id IN (${a}, ${b}, ${elsewhere}) ORDER BY id`;
+    expect(rows.map((r) => ({ id: r.id, gone: r.gone, dated: r.dated }))).toEqual(
+      [
+        { id: a, gone: true, dated: true },
+        { id: b, gone: true, dated: true },
+        { id: elsewhere, gone: false, dated: false },
+      ].sort((x, y) => (x.id < y.id ? -1 : 1)),
+    );
+  });
+
+  it("the nightly purge runs it: counted, nothing on a dry run, and a failure is a shortfall", { timeout: 60_000 }, async () => {
+    const { gymId, waiverId } = await gymWithWaiver();
+    const app = await appSignature(gymId, waiverId, await person(CONSENT_PROOF_RETENTION_DAYS + 1));
+    const desk = await deskSignature(gymId, waiverId, CONSENT_PROOF_RETENTION_DAYS + 1);
+
+    const dry = await purgeDueUsers({ sql, log: quiet, photos: noPhotos }, { dryRun: true });
+    expect(dry.waiverSignaturesExpired).toBe(0);
+    expect(await appLeft([app])).toEqual([app]);
+    expect(await deskLeft([desk])).toEqual([desk]);
+
+    // A client that throws for the waiver statement only: the run says it fell short and
+    // nothing of the waivers is removed (one transaction), so the next run tries again.
+    const failing = new Proxy(sql, {
+      apply(_target, _thisArg, args: Parameters<typeof sql>) {
+        if (args[0].join("").includes("DELETE FROM gym_waiver_desk_signatures")) throw new Error("injected failure: waiver expiry");
+        return sql(...args);
+      },
+      get(target, prop, receiver) {
+        const value: unknown = Reflect.get(target, prop, receiver);
+        if (prop !== "begin") return value;
+        return (fn: (tx: postgres.TransactionSql) => Promise<unknown>) =>
+          sql.begin((tx) =>
+            fn(
+              new Proxy(tx, {
+                apply(_t, _a, args: Parameters<typeof tx>) {
+                  if (args[0].join("").includes("DELETE FROM gym_waiver_desk_signatures")) throw new Error("injected failure: waiver expiry");
+                  return tx(...args);
+                },
+              }),
+            ),
+          );
+      },
+    });
+    const failed = await purgeDueUsers({ sql: failing, log: quiet, photos: noPhotos }, {});
+    expect(failed.consentProofExpiryFailed).toBe(true);
+    expect(purgeShortfall(failed)).toBe(true);
+    expect(await appLeft([app])).toEqual([app]);
+    expect(await deskLeft([desk])).toEqual([desk]);
+
+    const result = await purgeDueUsers({ sql, log: quiet, photos: noPhotos }, {});
+    expect(result.consentProofExpiryFailed).toBe(false);
+    expect(result.waiverSignaturesExpired).toBeGreaterThanOrEqual(2);
+    expect(await appLeft([app])).toEqual([]);
+    expect(await deskLeft([desk])).toEqual([]);
   });
 });

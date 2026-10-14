@@ -144,7 +144,7 @@ export const gyms = pgTable(
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),
     atRiskWeeksCame: integer("at_risk_weeks_came").notNull().default(2),
     /** Whether the gym's prices already hold its tax (0102; spec Part 3 §14.3; null: its
-     *  country says). Its rates are `gym_tax_rates` (0108). */
+     *  country says). Its rates are `gym_tax_rates` (0109). */
     salesTaxIncluded: boolean("sales_tax_included"),
     /** Whom the front desk checks in, and what it does with a payment overdue (0101; spec
      *  Part 3 §12.4), under `gyms_checkin_rules_check`; `checkinRulesSchema` in `@app/shared`. */

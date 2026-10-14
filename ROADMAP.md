@@ -134,7 +134,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 3e. **A gym's waiver, signed in the app** (RULINGS 2026-10-08; spec Part 3 §10.10): split 2026-10-13 in two, built back to back (the line as first written is in `handoff/2026-10-13-3e-i.md`). The words are the gym's, never ours.
      - 3e-i. [x] **The gym writes it, and people sign in the app** — merged 2026-10-13 (PR #239).
      - 3e-ii. [x] **Signed at the desk, and who has not signed** — merged 2026-10-14 (PR #262).
-     - 3e-iii. [ ] **A signed waiver is removed six years after its person deletes their account** (Kd, `rulings/2026-10-13-3e-i.md`): the purge that removes the consent log's proof after six years (`purge.ts`, `deleteExpiredConsentProof`) removes these signatures too; kept until then, and while the person has an account. **Also a signature made at the desk (3e-ii) whose record was deleted for good: removed six years after that deletion** (Kd, `rulings/2026-10-14-3e-ii.md`; it needs the day the record was deleted kept with it). Ordinary; no screen.
+     - 3e-iii. [x] **A signed waiver is removed six years after its person is gone** — merged 2026-10-14 (PR #265).
    - ~~3c. **The code admits at once**~~ **(STRUCK 2026-09-21, never built)**; its plan of 2026-09-19 (spec Part 3 §9.13) went with it.
    - The line as Kd ruled it (RULINGS 2026-09-17): a roster upload that reconciles, invitations by email, and a code that admits at once — the code part reversed 2026-09-21; the rest is the lines above.
 4. **Staff, seats and the gym's own details** (split 2026-09-21; 4a and 4c are Part 1 of the re-plan and are built right after item 5, RULINGS 2026-09-21).
@@ -322,7 +322,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        Reports keeps the day the membership ended for somebody removed later, never the day Remove was pressed. Risky (it removes people from the app). Its plan reads how Mindbody, PushPress and Gymdesk treat inactive members first.
    - 21d. **A period picker for Reports** (Kd, RULINGS 2026-10-10; Folder B, after 21b), split 2026-10-13 in two (the year earlier doubles what is read and has its own tests; the line as first written is in this job's file in `handoff/`):
      - 21d-i. [x] **The period picker** — merged 2026-10-13 (PR #241).
-     - 21d-ii. [ ] **The same period a year earlier**, beside the figures the period moves; a gym with no figures for that year reads a sentence, never a zero. Its plan measures the cost again. Folder B, after 21d-i.
+     - 21d-ii. [x] **The same period a year earlier** — merged 2026-10-14 (PR #260).
 22. **The console's new look** (Kd, RULINGS 2026-09-26; spec Part 3 §17; the drawings in `docs/design/console`). Screen jobs, Opus high, no review; a restyle keeps every button, field, message and permission its page has, and the last of R2–R8 built also turns on the Light · Dark · Auto switch (§17.7). **R4–R7, R9 and 19d-iv are built LAST (Kd, RULINGS 2026-10-08), when every web feature that can be built is built: those pages still get boxes from the features to come, so each is restyled once, as it will stay; a box added to one of them before then is built in the page's present look.**
    - R1. [x] **The menu, the font and the colours** — merged 2026-09-26 (PR #118).
    - R2. [x] **Classes and the Calendar** — merged 2026-09-26 (PR #119).
