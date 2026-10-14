@@ -995,6 +995,7 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     currentLevel: 4, currentXp: 1200,
     personalRecords: ['Best form accuracy!'],
     mealSuggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
+    mealLabelCaution: 'Check labels too: some breads and cheeses contain animal ingredients.',
     stretches: ['Hamstring stretch'],
   };
 
@@ -1022,8 +1023,11 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
       formAccuracy: 88, exercisesCount: 3, currentStreak: 3, xpEarned: 70,
       personalRecords: ['Best form accuracy!'],
       mealSuggestions: [{ meal: 'Paneer bhurji', timing: 'within 45 min' }],
+      mealLabelCaution: 'Check labels too: some breads and cheeses contain animal ingredients.',
       stretches: ['Hamstring stretch'],
     });
+    // Null for somebody who eats meat, and for anything that is not a line.
+    for (const v of [null, undefined, '', 7]) expect(readSummaryView({ ...full, mealLabelCaution: v }).mealLabelCaution).toBe(null);
   });
 
   it('converts the total to minutes ONCE, here — and rounds it', () => {
@@ -1045,7 +1049,7 @@ describe('readSummaryView — NULL is the signal that fixes the blank page', () 
     expect(readSummaryView({ workoutId: ID })).toEqual({
       activeSeconds: null, durationSeconds: null, durationMinutes: null, caloriesBurned: null,
       formAccuracy: null, exercisesCount: null, currentStreak: null, xpEarned: null,
-      personalRecords: null, mealSuggestions: null, stretches: null,
+      personalRecords: null, mealSuggestions: null, mealLabelCaution: null, stretches: null,
     });
     const v = readSummaryView({ workoutId: ID, formAccuracy: 88, caloriesBurned: 'lots' });
     expect(v.formAccuracy).toBe(88);

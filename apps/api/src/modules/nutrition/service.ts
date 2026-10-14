@@ -619,8 +619,8 @@ export async function getMealIdeas(deps: Pick<NutritionDeps, "sql">, userId: str
 }
 
 /** What to eat after one of the person's own workouts (ROADMAP 34d-ii), from the
- *  same rule and the same foods as the day's ideas. A workout of today is sized
- *  to what today has left; an earlier day's to a usual meal.
+ *  same rule and the same foods as the day's ideas. A workout of the person's
+ *  own today is sized to what today has left; an earlier day's to a usual meal.
  *
  *  No diet answer reads as the strictest diet, so every idea is one anybody can
  *  eat (RULINGS 2026-07-15: a guessed "non-vegetarian" would put meat in front

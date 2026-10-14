@@ -328,17 +328,23 @@ describe("how many meals, and how big: every class of day", () => {
 });
 
 describe("after a workout (34d-ii)", () => {
-  const sizes = (over: Partial<AfterWorkoutInput>): (readonly [string, number])[] => suggestAfterWorkout(after(over)).map((i) => [i.when, i.kcalTarget] as const);
+  /** Each idea's calories; a meal sized to what the small idea's own food left is "rest". */
+  const sizes = (over: Partial<AfterWorkoutInput>): (readonly [string, number | "rest"])[] => {
+    const ideas = suggestAfterWorkout(after(over));
+    const day = after(over).day;
+    const rest = day === null ? null : mealSizes(day).kcalLeft - (ideas[0]?.idea.totals.kcal ?? 0);
+    return ideas.map((i) => [i.when, i.when === "meal" && i.kcalTarget === rest ? "rest" : i.kcalTarget] as const);
+  };
 
-  const cases: readonly (readonly [name: string, over: Partial<AfterWorkoutInput>, wanted: readonly (readonly [string, number])[]])[] = [
+  const cases: readonly (readonly [name: string, over: Partial<AfterWorkoutInput>, wanted: readonly (readonly [string, number | "rest"])[]])[] = [
     ["a light workout, nothing eaten: something small, then a usual meal", { kcalBurned: 150 }, [["soon", 150], ["meal", 667]]],
     ["no calories on the workout reads as a light one", { kcalBurned: null }, [["soon", 150], ["meal", 667]]],
     ["exactly 200 burned is still a light one", { kcalBurned: 200 }, [["soon", 150], ["meal", 667]]],
     ["over 200 burned: a bigger small one", { kcalBurned: 201 }, [["soon", 200], ["meal", 667]]],
     ["exactly 400 burned is still the middle", { kcalBurned: 400 }, [["soon", 200], ["meal", 667]]],
     ["over 400 burned: the biggest small one", { kcalBurned: 401 }, [["soon", 250], ["meal", 667]]],
-    ["two meals logged: the meal is what the day's ideas would size it to", { kcalBurned: 401, day: dayOf({ kcalEaten: 1300, mealsLogged: 2 }) }, [["soon", 250], ["meal", 450]]],
-    ["little left: the meal is what is left after the small one", { kcalBurned: 401, day: dayOf({ kcalEaten: 1500, mealsLogged: 3 }) }, [["soon", 250], ["meal", 250]]],
+    ["two meals logged, 900 left: the meal is what the day's ideas would size it to", { kcalBurned: 401, day: dayOf({ kcalEaten: 1100, mealsLogged: 2 }) }, [["soon", 250], ["meal", 450]]],
+    ["little left: the meal is what is left after the small one", { kcalBurned: 401, day: dayOf({ kcalEaten: 1500, mealsLogged: 3 }) }, [["soon", 250], ["meal", "rest"]]],
     ["less left than a small one and a meal: the small one only", { kcalBurned: 401, day: dayOf({ kcalEaten: 1700, mealsLogged: 3 }) }, [["soon", 250]]],
     ["less left than the small one: it is sized to what is left", { kcalBurned: 401, day: dayOf({ kcalEaten: 1820, mealsLogged: 3 }) }, [["soon", 180]]],
     ["exactly the least a meal holds is left", { day: dayOf({ kcalEaten: 2000 - LEAST_MEAL_KCAL }) }, [["soon", LEAST_MEAL_KCAL]]],
@@ -363,9 +369,9 @@ describe("after a workout (34d-ii)", () => {
     expect(meals.size).toBeGreaterThan(25);
   });
 
-  it("the meal is a plate after some workouts and a dish after others", () => {
+  it.each(DIETS)("a %s person: the meal is a plate after some workouts and a dish after others", (diet) => {
     const kinds = new Set<string>();
-    for (let w = 0; w < 30; w++) kinds.add(suggestAfterWorkout(after({ seed: `person-1|workout-${String(w)}` }))[1]?.idea.kind ?? "none");
+    for (let w = 0; w < 30; w++) kinds.add(suggestAfterWorkout(after({ diet, seed: `person-1|workout-${String(w)}` }))[1]?.idea.kind ?? "none");
     expect([...kinds].sort()).toEqual(["dish", "plate"]);
   });
 
@@ -380,9 +386,10 @@ describe("after a workout (34d-ii)", () => {
       }
       expect(ideas[0]?.when, JSON.stringify(one)).toBe("soon");
       expect(ideas[0]?.idea.kind).toBe("light");
-      // The meal is there whenever a meal's calories are left after the small one.
-      expect(ideas.length, JSON.stringify(one)).toBe(left === null || left - (ideas[0]?.kcalTarget ?? 0) >= LEAST_MEAL_KCAL ? 2 : 1);
-      if (left !== null) expect(ideas.reduce((n, i) => n + i.kcalTarget, 0)).toBeLessThanOrEqual(left);
+      // The meal is there whenever a meal's calories are left after the small one's food.
+      expect(ideas.length, JSON.stringify(one)).toBe(left === null || left - (ideas[0]?.idea.totals.kcal ?? 0) >= LEAST_MEAL_KCAL ? 2 : 1);
+      // The food itself, not only the sizes, holds no more than the day has left.
+      if (left !== null) expect(ideas.reduce((n, i) => n + i.idea.totals.kcal, 0), JSON.stringify(one)).toBeLessThanOrEqual(left);
       const keys = ideas.map((i) => i.idea.items.map((x) => `${x.canonical}:${String(x.grams)}`).sort().join("|"));
       expect(new Set(keys).size).toBe(keys.length);
       for (const { kcalTarget, idea } of ideas) {

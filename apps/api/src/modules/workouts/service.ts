@@ -252,7 +252,6 @@ export async function getWorkoutSummary(
   deps: ReadDeps,
   userId: string,
   workoutId: string,
-  now: Date = new Date(),
 ): Promise<WorkoutSummary | null> {
   const found = await repo.getWorkoutDetail(deps.sql, userId, workoutId);
   if (found === null) return null;
@@ -276,7 +275,7 @@ export async function getWorkoutSummary(
     repo.hasEarlierWorkoutOnDay(deps.sql, userId, workout.id, workout.startedAt, tz),
     // The meal ideas follow the person's diet as it is NOW (RULINGS 2026-09-13),
     // so a diet changed in Settings changes the ideas on the next read.
-    getAfterWorkoutIdeas({ sql: deps.sql }, userId, { id: workout.id, startedAt: workout.startedAt, kcalBurned: workout.kcalPoint }, now),
+    getAfterWorkoutIdeas({ sql: deps.sql }, userId, { id: workout.id, startedAt: workout.startedAt, kcalBurned: workout.kcalPoint }),
   ]);
 
   // ONE STREAK BONUS PER DAY, awarded to the day's FIRST workout — see

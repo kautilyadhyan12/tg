@@ -7,8 +7,9 @@
 // the day's own rule (ROADMAP 34d-ii).
 import { describe, expect, it } from "vitest";
 import { mealSuggestionSchema } from "@app/shared";
-import { suggestAfterWorkout } from "../src/modules/nutrition/suggest.js";
+import { SUGGEST_POOLS, suggestAfterWorkout } from "../src/modules/nutrition/suggest.js";
 import {
+  amountWords,
   mealSuggestionsFrom,
   personalRecordsFor,
   primaryMusclesFor,
@@ -19,16 +20,45 @@ import { isStreakContinuationDay, xpEarnedForWorkout } from "../src/modules/gami
 describe("the meal ideas in the card's words (34d-ii; the rule itself is nutrition.suggest.unit.test.ts)", () => {
   const ideas = suggestAfterWorkout({ seed: "person-1|workout-1", diet: "vegan", kcalBurned: 450, day: null });
 
-  it("each food with its weight, joined, and timings that count from the workout", () => {
+  it("each food with its amount, joined, and timings that count from the workout", () => {
     const said = mealSuggestionsFrom(ideas);
     expect(said.map((s) => s.timing)).toEqual(["Within 30 mins", "Within 2 hours"]);
     said.forEach((one, at) => {
       const idea = ideas[at]?.idea;
       expect(one.idea).toEqual(idea);
-      expect(one.meal).toBe(idea?.items.map((i) => `${i.name} ${String(Math.round(i.grams))} g`).join(" + "));
-      expect(one.meal).toMatch(/^.+ \d+ g( \+ .+ \d+ g)+$/);
+      expect(one.meal).toBe(idea?.items.map((i) => `${i.name} (${amountWords(i)})`).join(" + "));
       expect(mealSuggestionSchema.safeParse(one).success).toBe(true);
     });
+  });
+
+  it.each([
+    [{ unit: "g", grams: 150, servings: 1.5 }, "150 g"],
+    [{ unit: "g", grams: 112.5, servings: 1.125 }, "113 g"],
+    [{ unit: "cup", grams: 120, servings: 0.5 }, "½ cup"],
+    [{ unit: "cup", grams: 240, servings: 1 }, "1 cup"],
+    [{ unit: "cup", grams: 360, servings: 1.5 }, "1½ cups"],
+    [{ unit: "oz", grams: 28, servings: 1 }, "1 oz"],
+    [{ unit: "2 tbsp", grams: 32, servings: 1 }, "2 tbsp"],
+    [{ unit: "2 tbsp", grams: 64, servings: 2 }, "4 tbsp"],
+    [{ unit: "slice", grams: 32, servings: 1 }, "1 slice"],
+    [{ unit: "slice", grams: 64, servings: 2 }, "2 slices"],
+    [{ unit: "egg", grams: 150, servings: 3 }, "3 eggs"],
+    [{ unit: "potato", grams: 346, servings: 2 }, "2 potatoes"],
+    [{ unit: "peach", grams: 150, servings: 1 }, "1 peach"],
+    [{ unit: "peach", grams: 300, servings: 2 }, "2 peaches"],
+    [{ unit: "sandwich", grams: 400, servings: 2 }, "2 sandwiches"],
+    [{ unit: "banana", grams: 118, servings: 1 }, "1 banana"],
+    [{ unit: "container", grams: 170, servings: 1 }, "1 container"],
+  ])("%o reads %s", (item, words) => {
+    expect(amountWords(item)).toBe(words);
+  });
+
+  it("every unit a suggested food has is said in words, never in grams unless it is weighed", () => {
+    for (const food of Object.values(SUGGEST_POOLS).flat()) {
+      const words = amountWords({ unit: food.unit, grams: food.serving, servings: 1 });
+      expect(words, food.name).toMatch(food.unit === "g" ? /^\d+ g$/ : /^\d+ [a-z]+$/);
+      if (food.unit !== "g") expect(words, food.name).not.toMatch(/ g$/);
+    }
   });
 
   it("no ideas is no lines", () => {

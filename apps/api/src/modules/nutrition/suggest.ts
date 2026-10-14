@@ -252,9 +252,9 @@ export function mealSizes(day: DayNumbers): { kcalLeft: number; count: number; k
 
 /** Makes one reply's ideas, one at a time: `wanted` sized to `kcalTarget`, of
  *  foods the diet allows. An idea is within IDEA_TOLERANCE of its calories, holds
- *  MOST_IDEA_GRAMS of food at most, and is in the reply once; null where none can
- *  be made so. The same seed gives the same ideas in the same order. */
-function ideaMaker(seed: string, diet: Diet): (kcalTarget: number, wanted: MealIdeaKind) => MealIdea | null {
+ *  no more than `mostKcal` and MOST_IDEA_GRAMS of food, and is in the reply once;
+ *  null where none can be made so. The same seed gives the same ideas in the same order. */
+function ideaMaker(seed: string, diet: Diet): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number) => MealIdea | null {
   const next = drawer(hash(seed));
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet));
   /** The foods already in an idea of this reply. */
@@ -275,7 +275,7 @@ function ideaMaker(seed: string, diet: Diet): (kcalTarget: number, wanted: MealI
   const given = new Set<string>();
   const keyOf = (parts: readonly Part[]): string => parts.map((p) => `${p.food.canonical}:${String(p.grams)}`).sort().join("|");
 
-  return (kcalTarget, wanted) => {
+  return (kcalTarget, wanted, mostKcal = Infinity) => {
     const size = (...shares: Share[]): Part[] => sized(shares, kcalTarget);
     const plate = (): Part[] => size([pick("protein"), "protein", 0.42], [pick("starch"), "starch", 0.48], [pick("vegetable"), "vegetable", 0.1]);
     const dish = (): Part[] => {
@@ -298,7 +298,8 @@ function ideaMaker(seed: string, diet: Diet): (kcalTarget: number, wanted: MealI
     };
     const shapes: Readonly<Record<MealIdeaKind, () => Part[]>> = { plate, dish, light: kcalTarget < LEAST_PLATE_KCAL ? snack : light };
     const fits = (parts: readonly Part[]): boolean =>
-      Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts));
+      Math.abs(partsKcal(parts) - kcalTarget) <= kcalTarget * IDEA_TOLERANCE && partsKcal(parts) <= mostKcal
+      && partsGrams(parts) <= MOST_IDEA_GRAMS && !given.has(keyOf(parts));
 
     // The shape drawn again until its foods can be sized to the meal. Where no
     // dish or bowl of the diet can be (a vegan's big meal), a plate takes its place.
@@ -356,29 +357,28 @@ export type AfterWorkoutWhen = "soon" | "meal";
 export interface AfterWorkoutIdea { when: AfterWorkoutWhen; kcalTarget: number; idea: MealIdea }
 
 /** What to eat after a workout: something small soon, then a meal, both out of
- *  what the day has left, so the two are never sized past it. None once under
- *  LEAST_MEAL_KCAL is left. The same workout gets the same ideas. */
+ *  what the day has left: the two ideas' food together never holds more. None
+ *  once under LEAST_MEAL_KCAL is left. The same workout on the same day's
+ *  numbers gets the same ideas; a meal logged since changes them. */
 export function suggestAfterWorkout(input: AfterWorkoutInput): AfterWorkoutIdea[] {
   const burned = input.kcalBurned ?? 0;
   const band = burned > 400 ? "high" : burned > 200 ? "middle" : "low";
-  let soonKcal: number = SOON_KCAL[band];
-  let mealKcal: number = MEAL_KCAL_WITHOUT_A_PLAN[band];
-  if (input.day !== null) {
-    const sizes = mealSizes(input.day);
-    if (sizes.count === 0) return [];
-    soonKcal = Math.min(soonKcal, sizes.kcalLeft);
-    mealKcal = Math.min(sizes.kcalTarget, sizes.kcalLeft - soonKcal);
-  }
+  const sizes = input.day === null ? null : mealSizes(input.day);
+  if (sizes !== null && sizes.count === 0) return [];
+  /** What the day has left for the ideas still to make. */
+  let room = sizes === null ? Infinity : sizes.kcalLeft;
   const make = ideaMaker(input.seed, input.diet);
-  const wanted: readonly (readonly [AfterWorkoutWhen, number, MealIdeaKind])[] = [
-    ["soon", soonKcal, "light"],
-    ["meal", mealKcal, mealKcal < LEAST_PLATE_KCAL ? "light" : hash(input.seed) % 2 === 0 ? "plate" : "dish"],
-  ];
   const out: AfterWorkoutIdea[] = [];
-  for (const [when, kcalTarget, kind] of wanted) {
-    if (kcalTarget < LEAST_MEAL_KCAL) continue;
-    const idea = make(kcalTarget, kind);
-    if (idea !== null) out.push({ when, kcalTarget, idea });
-  }
+  const add = (when: AfterWorkoutWhen, kcalTarget: number, kind: MealIdeaKind): void => {
+    if (kcalTarget < LEAST_MEAL_KCAL) return;
+    const idea = make(kcalTarget, kind, room);
+    if (idea === null) return;
+    room -= idea.totals.kcal;
+    out.push({ when, kcalTarget, idea });
+  };
+  add("soon", Math.min(SOON_KCAL[band], room), "light");
+  // The meal is sized to what the small idea's own food left, so the two never hold more than the day.
+  const mealKcal = sizes === null ? MEAL_KCAL_WITHOUT_A_PLAN[band] : Math.min(sizes.kcalTarget, room);
+  add("meal", mealKcal, mealKcal < LEAST_PLATE_KCAL ? "light" : hash(input.seed) % 2 === 0 ? "plate" : "dish");
   return out;
 }

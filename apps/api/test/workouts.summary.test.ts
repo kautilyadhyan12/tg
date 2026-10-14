@@ -24,6 +24,7 @@ import { loadConfig } from "../src/config.js";
 import { seed } from "../src/db/seed.js";
 import { DIET_LABEL_CAUTION, dietAllows, workoutSummarySchema, type Diet, type WorkoutSummary } from "@app/shared";
 import { CURATED_FOODS } from "../src/modules/nutrition/foods.js";
+import { amountWords } from "../src/modules/workouts/summaryContent.js";
 
 const DIET_OF = new Map(CURATED_FOODS.map((f) => [f.canonical, f.diet]));
 
@@ -347,7 +348,7 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     body.mealSuggestions.forEach((one, at) => {
       const wanted = kcal[at] ?? 0;
       expect(Math.abs(one.idea.totals.kcal - wanted), one.meal).toBeLessThanOrEqual(wanted * 0.2);
-      expect(one.meal).toBe(one.idea.items.map((i) => `${i.name} ${String(Math.round(i.grams))} g`).join(" + "));
+      expect(one.meal).toBe(one.idea.items.map((i) => `${i.name} (${amountWords(i)})`).join(" + "));
     });
   };
 
@@ -390,9 +391,21 @@ d("GET /v1/workouts/:id/summary (real Postgres)", () => {
     expect((await read(other, cookieA)).mealSuggestions).not.toEqual(unanswered.mealSuggestions);
   });
 
-  it("today's workout is sized to what today has left, and an earlier day's to a usual meal", { timeout: 60_000 }, async () => {
+  it("a workout of the person's own today is sized to what today has left, and an earlier day's to a usual meal", { timeout: 60_000 }, async () => {
     // A plan that keeps the weight: 1,817 kcal a day (users.onboarding.routes.test.ts's golden person).
     const carol = await session("sum-carol@example.com");
+    // Carol lives where today is another date than UTC's, and an hour or more from
+    // her midnight: so reading her day in UTC goes red, and the test never races
+    // her midnight. At any instant one of the three zones is so.
+    const now = new Date();
+    const zone = ["Pacific/Kiritimati", "Pacific/Honolulu", "Etc/GMT+12"].find((z) => {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: z, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
+      const part = (t: string): string => parts.find((p) => p.type === t)?.value ?? "";
+      const hour = Number(part("hour"));
+      return `${part("year")}-${part("month")}-${part("day")}` !== now.toISOString().slice(0, 10) && hour >= 1 && hour <= 22;
+    });
+    if (zone === undefined) throw new Error("no zone an hour from its midnight on another date than UTC's");
+    await sql`UPDATE users SET timezone = ${zone} WHERE id = ${carol.userId}`;
     const answers = {
       weightGoal: "maintain", age: 30, gender: "female", heightCm: 165, weightKg: 70, dayActivity: "sitting",
       trainingDays: 3, sessionMinutes: 45, diet: "non_vegetarian", mealsPerDay: 3,
