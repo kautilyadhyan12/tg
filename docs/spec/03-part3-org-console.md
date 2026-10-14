@@ -5168,12 +5168,14 @@ two tiles says which days in its "how" ("A year earlier counts the same weekdays
 before: …" for four weeks). No other figure has a line, nothing in Attendance has one, and
 the reads work out no other year-earlier figure.
 **New members a year earlier** (`membersYearEarlierFrom`, `packages/shared/src/reports.ts`)
-are the people who started in those days and were on the list by their last day. There is
-no figure, and the line says why with the day, never a zero: where the list could not count
-new members from that span's first day (it began after it, or in its month: "Your member
-list started on …"); and where more of the people who started in those days reached the
-list only after them than by them, as when one member is typed in by hand before the gym
-imports its real file ("Most of your member list was added on 10 Sep 2026."). The counts
+are the people who started in those days and were on the list within 31 days of their last
+day (`REPORT_LIST_LAG_DAYS`): a gym that imports last month's joiners each month has the
+same lag today. There is no figure, and the line says why with the day, never a zero: where
+the list could not count new members from that span's first day (it began after it, or in
+its month: "Your member list started on …"); and where more of the people who started in
+those days reached the list only later than that than in time, as when one member is typed
+in by hand before the gym imports its real file ("Most of your member list was added on
+10 Sep 2026.", the day most of them were added, the earliest where days tie). The counts
 are `readMemberCounts`' `was` part, on the gym's own clock.
 **Collected a year earlier** is payments less refunds of those days in the gym's currency,
 as `readMoney` counts them (`readCollected`; a refund of a payment taken back is not
