@@ -199,8 +199,10 @@ list, targets, XP and mix by fitness level (easy, medium, hard). Measured on eve
 from the person's own workouts and meals; a done one adds its XP, worked out again from
 history like all XP. Never two counting the same thing; calories only with a weight,
 form only after the camera in the last 28 days; Safe mode gets only training on 3 days
-and food on 5 days, and holds the rest of a week picked before it. Rule:
-`gamification/challenges.ts`.
+and food on 5 days. Safe mode answered in a week already picked pauses its other
+challenges until Sunday, even after clearance, and a paused one pays nothing for that
+week. Each week is read in the time zone it was picked in, and a meal deleted or moved
+works the XP out again at once. Rule: `gamification/challenges.ts`.
 
 ### 4.2 Org challenges (console Slice B/C)
 
