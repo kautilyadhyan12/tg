@@ -13,6 +13,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createIoRedis, createMemoryRedis } from "../src/redis.js";
 import * as heldService from "../src/modules/orgs/memberships/heldService.js";
+import { anonymizeUser } from "../src/modules/privacy/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -63,6 +64,8 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
     return app;
   };
 
+  /** Accounts the test deleted: their email is gone, so the pattern below cannot find them. */
+  const deleted: string[] = [];
   const cleanup = async () => {
     const mine = sql`
       SELECT id FROM gyms
@@ -79,6 +82,7 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
     await sql`DELETE FROM audit_log WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gyms WHERE id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'rep-s-%@example.com'`;
+    if (deleted.length > 0) await sql`DELETE FROM users WHERE id IN ${sql(deleted)}`;
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
@@ -304,6 +308,12 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       const gym = await makeGym(owner, "Rep Sales Desk Only");
       const left = await makeUser("left");
       await makeStaff(gym, left, "manager", ["billing.members"]);
+      const gone = await makeUser("gone");
+      await makeStaff(gym, gone, "manager", ["billing.members"]);
+      // Another member of staff with the owner's own name.
+      const twin = await makeUser("twin");
+      await makeStaff(gym, twin, "manager", ["billing.members"]);
+      await sql`UPDATE users SET display_name = ${owner.name} WHERE id = ${twin.userId}`
       const bar = await addProduct(gym, owner, "Protein bar", 250);
 
       // Before anything is sold: no money figures, and why.
@@ -313,9 +323,15 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       await sell(gym, owner, bar, "2025-08-10", 1, 250);
       await sell(gym, owner, bar, "2025-10-01", 4, 1000);
       await sell(gym, owner, bar, "2026-10-02", 1, 250);
-      const theirs = await sell(gym, left, bar, "2026-10-03", 2, 500);
-      // The account that sold it is deleted: the sale stays, with nobody's name.
-      await sql`UPDATE gym_sales SET recorded_by = NULL WHERE gym_id = ${gym} AND id = ${theirs}`;
+      const theirs = await sell(gym, left, bar, "2026-10-03", 1, 250);
+      await sell(gym, gone, bar, "2026-10-04", 1, 250);
+      await sell(gym, twin, bar, "2026-10-05", 1, 250);
+      // Both accounts are deleted the way the app deletes one: marked, then made anonymous.
+      for (const who of [left, gone]) {
+        await sql`UPDATE users SET status = 'deleted', deleted_at = now() WHERE id = ${who.userId}`;
+        await sql.begin((tx) => anonymizeUser(tx, who.userId));
+        deleted.push(who.userId);
+      }
       // A sale in euros, from before the gym's country changed: not counted, and said.
       await sql`
         INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
@@ -326,12 +342,16 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       const r = figures(await read(gym, owner, "4w"));
       expect(r.firstPaidOn).toBe("2025-07-15");
       expect(r.otherCurrency).toBe(true);
-      expect(r.inPeriod).toEqual({ paidMinor: 0, soldMinor: 750, refundedMinor: 0, netMinor: 750 });
-      expect(r.products).toEqual([{ name: "Protein bar", sold: 3, minor: 750 }]);
+      expect(r.inPeriod).toEqual({ paidMinor: 0, soldMinor: 1000, refundedMinor: 0, netMinor: 1000 });
+      expect(r.products).toEqual([{ name: "Protein bar", sold: 4, minor: 1000 }]);
+      // The two deleted accounts are one row with no name, last; the owner and the
+      // member of staff with the same name are told apart by their email.
       expect(r.staff).toEqual([
-        { name: owner.name, paidMinor: 0, soldMinor: 250, totalMinor: 250 },
+        { name: `${owner.name} (rep-s-${RUN_TAG}-desk)`, paidMinor: 0, soldMinor: 250, totalMinor: 250 },
+        { name: `${owner.name} (rep-s-${RUN_TAG}-twin)`, paidMinor: 0, soldMinor: 250, totalMinor: 250 },
         { name: null, paidMinor: 0, soldMinor: 500, totalMinor: 500 },
       ]);
+      expect(JSON.stringify(r.staff)).not.toContain("Deleted user");
       expect(r.recurring).toEqual({ monthlyMinor: 0, memberships: 0 });
       expect(r.types).toEqual([]);
       // Four weeks a year earlier are 24 Sep to 21 Oct 2025.
@@ -339,6 +359,32 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       // Three months a year earlier are 1 Aug to 20 Oct 2025.
       const quarter = figures(await read(gym, owner, "3m"));
       expect(quarter.yearEarlier).toEqual({ state: "ok", from: "2025-08-01", to: "2025-10-20", paidMinor: 0, soldMinor: 1250, refundedMinor: 0, netMinor: 1250 });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a year earlier sets payments and desk sales each beside their own history: a part new this period has no figure, never a zero",
+    async () => {
+      // A bar sold in July 2025, and membership payments that begin this month.
+      const one = await makeUser("hist1");
+      const oldSale = await makeGym(one, "Rep Sales Old Sale");
+      const bar = await addProduct(oldSale, one, "Bar", 250);
+      await sell(oldSale, one, bar, "2025-07-15", 1, 250);
+      await givePaid(oldSale, one, one, "2026-10-05");
+      const a = figures(await read(oldSale, one));
+      expect(a.inPeriod).toEqual({ paidMinor: 4000, soldMinor: 0, refundedMinor: 0, netMinor: 4000 });
+      expect(a.yearEarlier).toEqual({ state: "no_history", from: "2025-09-24", to: "2025-10-21", since: "2026-10-05" });
+
+      // Payments recorded since July 2025, and the Sell page used for the first time today.
+      const two = await makeUser("hist2");
+      const newDesk = await makeGym(two, "Rep Sales New Desk");
+      await givePaid(newDesk, two, two, "2025-07-01");
+      const water = await addProduct(newDesk, two, "Water", 150);
+      await sell(newDesk, two, water, TODAY, 2, 300);
+      const b = figures(await read(newDesk, two));
+      expect(b.inPeriod).toEqual({ paidMinor: 0, soldMinor: 300, refundedMinor: 0, netMinor: 300 });
+      expect(b.yearEarlier).toEqual({ state: "no_sales_history", from: "2025-09-24", to: "2025-10-21", since: TODAY });
     },
     TEST_TIMEOUT_MS,
   );

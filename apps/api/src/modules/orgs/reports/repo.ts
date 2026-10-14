@@ -355,7 +355,7 @@ const moneyRowSchema = z.object({
   ),
   sales: z.array(z.object({ month: z.string(), soldMinor: minor, periodSoldMinor: minor })),
   products: z.array(z.object({ productId: z.string(), name: z.string(), sold: count, minor })),
-  staff: z.array(z.object({ userId: z.string().nullable(), name: z.string().nullable(), paidMinor: minor, soldMinor: minor })),
+  staff: z.array(z.object({ userId: z.string().nullable(), name: z.string().nullable(), login: z.string().nullable(), paidMinor: minor, soldMinor: minor })),
   current_minor: minor,
   current_people: count,
   past_minor: minor,
@@ -374,7 +374,8 @@ export type MoneyCounts = z.infer<typeof moneyRowSchema>;
  *  each that falls from `periodFrom` on: the first day of the period the page shows,
  *  never earlier than those months. A sale at the desk counts the same way, in the month
  *  of the day it was sold, while it stands; the period's sales are also given by product,
- *  and its payments and sales by the staff member who recorded them (21b-ii).
+ *  and its payments and sales by the staff member who recorded them (21b-ii); an account
+ *  since deleted (or deleted for good) is no name, all of them one row.
  *
  *  Owed is every bill still open whose day has come, less what is paid on it, for the
  *  people on the list and for past members apart; overdue is the part of both that is
@@ -479,8 +480,13 @@ export async function readMoney(
              WHERE s.sold_on >= c.period_from AND s.sold_on < c.after_month
              GROUP BY s.product_id) x
        JOIN gym_products pr ON pr.gym_id = ${gymId} AND pr.id = x.product_id) AS products,
-      (SELECT COALESCE(json_agg(json_build_object('userId', b.recorded_by, 'name', u.display_name, 'paidMinor', b.paid_minor, 'soldMinor', b.sold_minor)), '[]'::json)
-       FROM by_staff b LEFT JOIN users u ON u.id = b.recorded_by) AS staff,
+      (SELECT COALESCE(json_agg(json_build_object('userId', x.user_id, 'name', x.name, 'login', x.login, 'paidMinor', x.paid_minor, 'soldMinor', x.sold_minor)), '[]'::json)
+       FROM (SELECT CASE WHEN u.status = 'active' THEN b.recorded_by END AS user_id,
+                    CASE WHEN u.status = 'active' THEN u.display_name END AS name,
+                    CASE WHEN u.status = 'active' THEN split_part(u.email, '@', 1) END AS login,
+                    sum(b.paid_minor) AS paid_minor, sum(b.sold_minor) AS sold_minor
+             FROM by_staff b LEFT JOIN users u ON u.id = b.recorded_by
+             GROUP BY 1, 2, 3) x) AS staff,
       (SELECT COALESCE(sum(left_minor) FILTER (WHERE NOT past), 0)::float8 FROM owed) AS current_minor,
       (SELECT (count(DISTINCT entry_id) FILTER (WHERE NOT past))::int FROM owed) AS current_people,
       (SELECT COALESCE(sum(left_minor) FILTER (WHERE past), 0)::float8 FROM owed) AS past_minor,

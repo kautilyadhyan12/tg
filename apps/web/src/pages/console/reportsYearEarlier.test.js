@@ -160,6 +160,15 @@ describe('money a year earlier', () => {
     expect(collectedLine(money({ firstPaidOn: '2025-08-02' }))).toBe('A year earlier: no figures. Your first payment was recorded on 2 Aug 2025.');
   });
 
+  it('a gym that records payments and began selling at the desk this period reads the day of its first sale, never "up" by the new page', () => {
+    const report = money({
+      anySale: true,
+      firstSoldOn: '2026-10-02',
+      sales: [{ month: '2026-10', soldMinor: 1200, periodSoldMinor: 1200 }],
+    });
+    expect(collectedLine(report)).toBe('A year earlier: no figures. Your first sale at the front desk was recorded on 2 Oct 2026.');
+  });
+
   it('only Collected has a line: what is true today has none', () => {
     const tiles = moneyTiles(money(), GYM, 'iron-house');
     expect(tiles.filter((t) => t.earlier).map((t) => t.key)).toEqual(['collected']);

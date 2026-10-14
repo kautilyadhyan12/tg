@@ -154,7 +154,7 @@ describe('the money figures', () => {
     expect(within(tile('recurring')).getByText('£99.98')).toBeTruthy();
     expect(within(tile('recurring')).getByText('2 repeating memberships')).toBeTruthy();
     expect(within(tile('collected')).getByText('£345.00')).toBeTruthy();
-    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment recorded here: £380.00 paid, £35.00 refunded · October, so far: £45.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment or sale recorded here: £380.00 paid, £35.00 refunded · October, so far: £45.00')).toBeTruthy();
     expect(within(tile('due')).getByText('£139.98')).toBeTruthy();
     expect(within(tile('due')).getByText('2 members and 1 past member · £49.99 of it overdue')).toBeTruthy();
     // 300.00 collected in July to September, and 2 members left in them.
@@ -315,7 +315,7 @@ describe('products sold at the desk, and who took the money (21b-ii)', () => {
     open();
     await screen.findByTestId('tile-recurring');
     expect(within(tile('collected')).getByText('£382.00')).toBeTruthy();
-    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment recorded here · October, so far: £57.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment or sale recorded here · October, so far: £57.00')).toBeTruthy();
     // What came from where is its own lines under the figure, not inside a sentence.
     expect([...screen.getByTestId('split-collected').querySelectorAll('div')].map((row) => row.textContent)).toEqual([
       'Memberships£380.00',
@@ -480,7 +480,7 @@ describe('the period', () => {
     svc.money.mockResolvedValue(money({ period: '12m', firstPaidOn: '2026-06-10' }));
     open();
     await screen.findByTestId('tile-recurring');
-    expect(tile('collected').textContent).toContain('since 10 Jun 2026, the first payment recorded here');
+    expect(tile('collected').textContent).toContain('since 10 Jun 2026, the first payment or sale recorded here');
     svc.money.mockResolvedValue(money({ period: '12m', firstPaidOn: '2025-03-01' }));
     cleanup();
     open();

@@ -264,8 +264,9 @@ describe("what is carried through as the database counted it", () => {
   });
 });
 
+const sale = (month: string, soldMinor: number, periodSoldMinor = soldMinor) => ({ month, soldMinor, periodSoldMinor });
+
 describe("products sold at the desk (21b-ii)", () => {
-  const sale = (month: string, soldMinor: number, periodSoldMinor = soldMinor) => ({ month, soldMinor, periodSoldMinor });
 
   it.each<[string, Partial<MoneyReportFacts>, string]>([
     ["no membership given and nothing sold", { anyMembership: false }, "no_memberships"],
@@ -304,10 +305,25 @@ describe("products sold at the desk (21b-ii)", () => {
     expect(r.months.map((m) => m.soldMinor)).toEqual([900, 600]);
   });
 
-  it("a year earlier counts sales too, and the earlier first sale says how far back the records go", () => {
-    const facts = { period: "3m" as const, anySale: true, firstPaidOn: "2026-01-10", firstSoldOn: "2025-06-01", yearEarlier: { paidMinor: 10000, soldMinor: 2500, refundedMinor: 500 } };
-    expect(figures(facts).yearEarlier).toEqual({ state: "ok", from: "2025-08-01", to: "2025-10-20", paidMinor: 10000, soldMinor: 2500, refundedMinor: 500, netMinor: 12000 });
-    expect(figures({ ...facts, firstSoldOn: "2025-08-02" }).yearEarlier).toEqual({ state: "no_history", from: "2025-08-01", to: "2025-10-20", since: "2025-08-02" });
+  // A year earlier, three months: 1 Aug to 20 Oct 2025. "Old" records began on or before
+  // 1 Aug 2025, "new" ones after it; each part is set beside its own history.
+  const SPAN = { from: "2025-08-01", to: "2025-10-20" };
+  const THEN = { paidMinor: 10000, soldMinor: 2500, refundedMinor: 500 };
+  const PAID_NOW = [money("gold", "2026-09", 4999)];
+  const SOLD_NOW = [sale("2026-09", 1200)];
+  it.each<[string, Partial<MoneyReportFacts>, unknown]>([
+    ["payments old, sales old, both now: both counted", { firstPaidOn: "2025-01-10", firstSoldOn: "2025-06-01", months: PAID_NOW, sales: SOLD_NOW }, { state: "ok", ...SPAN, ...THEN, netMinor: 12000 }],
+    ["payments old, sales new this period: no figure, and when the first sale was", { firstPaidOn: "2025-01-10", firstSoldOn: "2026-10-02", months: PAID_NOW, sales: SOLD_NOW }, { state: "no_sales_history", ...SPAN, since: "2026-10-02" }],
+    ["payments old, a sale began inside the span, none now: sales left out of both sides", { firstPaidOn: "2025-01-10", firstSoldOn: "2025-09-01", months: PAID_NOW, sales: [] }, { state: "ok", ...SPAN, paidMinor: 10000, soldMinor: 0, refundedMinor: 500, netMinor: 9500 }],
+    ["sales old, payments new this period: no figure, and when the first payment was", { firstPaidOn: "2026-10-05", firstSoldOn: "2025-07-15", months: [money("gold", "2026-10", 4000)], sales: SOLD_NOW }, { state: "no_history", ...SPAN, since: "2026-10-05" }],
+    ["sales old, payments inside the span, none now: payments left out of both sides", { firstPaidOn: "2025-09-01", firstSoldOn: "2025-07-15", months: [], sales: SOLD_NOW }, { state: "ok", ...SPAN, paidMinor: 0, soldMinor: 2500, refundedMinor: 0, netMinor: 2500 }],
+    ["only a refund now, payments new: no figure", { firstPaidOn: "2025-09-01", firstSoldOn: "2025-07-15", months: [money("gold", "2026-09", 0, 700)], sales: [] }, { state: "no_history", ...SPAN, since: "2025-09-01" }],
+    ["both new: no figure, from the first payment", { firstPaidOn: "2025-09-01", firstSoldOn: "2025-08-15", months: PAID_NOW, sales: SOLD_NOW }, { state: "no_history", ...SPAN, since: "2025-09-01" }],
+    ["desk only, sales new: no figure, from the first sale", { anyMembership: false, firstPaidOn: null, firstSoldOn: "2025-08-15", months: [], sales: SOLD_NOW }, { state: "no_sales_history", ...SPAN, since: "2025-08-15" }],
+    ["desk only, sales old", { anyMembership: false, firstPaidOn: null, firstSoldOn: "2025-08-01", months: [], sales: SOLD_NOW }, { state: "ok", ...SPAN, paidMinor: 0, soldMinor: 2500, refundedMinor: 0, netMinor: 2500 }],
+    ["payments only, old, never a sale", { firstPaidOn: "2025-01-10", firstSoldOn: null, months: PAID_NOW, sales: [] }, { state: "ok", ...SPAN, paidMinor: 10000, soldMinor: 0, refundedMinor: 500, netMinor: 9500 }],
+  ])("a year earlier: %s", (_name, over, want) => {
+    expect(figures({ period: "3m", anySale: true, yearEarlier: THEN, ...over }).yearEarlier).toEqual(want);
   });
 
   it("lifetime value is membership money only: a sale may be a walk-in's", () => {
@@ -343,11 +359,11 @@ describe("products sold at the desk (21b-ii)", () => {
   it("staff: payments and sales each recorded, the most first, an account since deleted last, nobody with nothing", () => {
     const r = figures({
       staff: [
-        { userId: null, name: null, paidMinor: 99999, soldMinor: 0 },
-        { userId: "u1", name: "Ravi", paidMinor: 5000, soldMinor: 500 },
-        { userId: "u2", name: "Asha", paidMinor: 0, soldMinor: 9000 },
-        { userId: "u3", name: "Ben", paidMinor: 5500, soldMinor: 0 },
-        { userId: "u4", name: "Cat", paidMinor: 0, soldMinor: 0 },
+        { userId: null, name: null, login: null, paidMinor: 99999, soldMinor: 0 },
+        { userId: "u1", name: "Ravi", login: "ravi", paidMinor: 5000, soldMinor: 500 },
+        { userId: "u2", name: "Asha", login: "asha", paidMinor: 0, soldMinor: 9000 },
+        { userId: "u3", name: "Ben", login: "ben", paidMinor: 5500, soldMinor: 0 },
+        { userId: "u4", name: "Cat", login: "cat", paidMinor: 0, soldMinor: 0 },
       ],
     });
     expect(r.staff).toEqual([
@@ -356,5 +372,19 @@ describe("products sold at the desk (21b-ii)", () => {
       { name: "Ravi", paidMinor: 5000, soldMinor: 500, totalMinor: 5500 },
       { name: null, paidMinor: 99999, soldMinor: 0, totalMinor: 99999 },
     ]);
+  });
+});
+
+describe("two staff with the same name (21b-ii, round one)", () => {
+  it("each has the part of their email before the @ beside it; a name nobody shares is left alone", () => {
+    const r = figures({
+      staff: [
+        { userId: "a", name: "Sam", login: "sam.k", paidMinor: 5000, soldMinor: 0 },
+        { userId: "b", name: "Sam", login: "sam.b", paidMinor: 0, soldMinor: 300 },
+        { userId: "c", name: "Ravi", login: "ravi", paidMinor: 100, soldMinor: 0 },
+        { userId: "d", name: "Ravi", login: "ravi.p", paidMinor: 0, soldMinor: 0 },
+      ],
+    });
+    expect(r.staff.map((m) => m.name)).toEqual(["Sam (sam.k)", "Sam (sam.b)", "Ravi"]);
   });
 });

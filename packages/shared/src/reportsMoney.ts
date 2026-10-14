@@ -6,7 +6,7 @@
 // gym that records no payment here has no figures and is told why, never shown a zero.
 import { z } from "zod";
 import { heldMembershipView, type HeldMembership } from "./heldMemberships.js";
-import { coversFrom, reportPeriodOf, reportPeriodSchema, yearEarlierFigureSchema, yearEarlierOf, type ReportPeriodKey } from "./reportPeriod.js";
+import { coversFrom, reportPeriodOf, reportPeriodSchema, yearEarlierOf, type ReportPeriodKey } from "./reportPeriod.js";
 import { churnBasis, type MembersReportFacts } from "./reports.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -59,10 +59,12 @@ export interface MoneyProduct {
 }
 
 /** What one staff member recorded over the period's days: payments and sales that stand.
- *  `userId` is null for an account that has since been deleted. */
+ *  `userId` and `name` are null for accounts since deleted, all of them one row. `login`
+ *  is the part of their email before the @, said only where two names are the same. */
 export interface MoneyStaff {
   userId: string | null;
   name: string | null;
+  login: string | null;
   paidMinor: number;
   soldMinor: number;
 }
@@ -115,6 +117,17 @@ export interface MoneyReportFacts {
 
 const collectedShape = { paidMinor: minorSchema, soldMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema };
 
+/** Collected over the same days a year earlier. Each part is set beside its own history:
+ *  `no_history` where payments in the period have no payment recorded by those days'
+ *  first day (`since` is the first payment), `no_sales_history` where sales in the
+ *  period have no sale recorded by then (`since` is the first sale), as when a gym that
+ *  records payments starts using the Sell page. */
+const collectedEarlierSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("ok"), from: daySchema, to: daySchema, ...collectedShape }).strict(),
+  z.object({ state: z.enum(["no_history", "no_sales_history"]), from: daySchema, to: daySchema, since: daySchema }).strict(),
+]);
+export type CollectedEarlier = z.infer<typeof collectedEarlierSchema>;
+
 const lifetimeSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ok"), minor: minorSchema, months: z.array(monthSchema).min(1), leavers: countSchema.min(1) }).strict(),
   /** `nobody_left` here is nobody in the months it is worked out over; `nothing_collected`
@@ -142,7 +155,7 @@ const moneyFiguresSchema = z
     inPeriod: z.object(collectedShape).strict(),
     /** The same over the same days a year earlier; no figure where the first payment or
      *  sale recorded here came after they began. */
-    yearEarlier: yearEarlierFigureSchema(collectedShape),
+    yearEarlier: collectedEarlierSchema,
     owed: z
       .object({
         minor: minorSchema,
@@ -312,9 +325,7 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     recurring: { monthlyMinor, memberships },
     thisMonth: monthSums(thisMonth),
     inPeriod: { ...inPeriod, netMinor: net(inPeriod) },
-    yearEarlier: coversFrom(firstOn, earlier.from)
-      ? { state: "ok", ...earlier, ...facts.yearEarlier, netMinor: net(facts.yearEarlier) }
-      : { state: "no_history", ...earlier, since: firstOn },
+    yearEarlier: collectedEarlier(facts, inPeriod, earlier),
     owed: {
       minor: facts.owed.currentMinor,
       people: facts.owed.currentPeople,
@@ -339,11 +350,40 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
       .map((p) => ({ name: p.name, sold: p.sold, minor: p.minor }))
       .sort((a, b) => b.minor - a.minor || b.sold - a.sold || a.name.localeCompare(b.name)),
     staff: facts.staff
-      .map((m) => ({ name: m.name, paidMinor: m.paidMinor, soldMinor: m.soldMinor, totalMinor: m.paidMinor + m.soldMinor }))
+      .map((m) => ({ name: told(m, facts.staff), paidMinor: m.paidMinor, soldMinor: m.soldMinor, totalMinor: m.paidMinor + m.soldMinor }))
       .filter((m) => m.totalMinor > 0)
       // A deleted account last: it is nobody the gym can ask.
       .sort((a, b) => Number(a.name === null) - Number(b.name === null) || b.totalMinor - a.totalMinor || (a.name ?? "").localeCompare(b.name ?? "")),
   };
+}
+
+/** A staff member's name, with their login where another row has the same name. */
+function told(m: MoneyStaff, all: readonly MoneyStaff[]): string | null {
+  if (m.name === null) return null;
+  const same = all.filter((o) => o.name === m.name && o.paidMinor + o.soldMinor > 0).length > 1;
+  return same && m.login !== null ? `${m.name} (${m.login})` : m.name;
+}
+
+/** Collected a year earlier, like with like. A part with money in the period needs its
+ *  own records to cover those days, or there is no figure, and the line names that part's
+ *  first day. A part with none in the period and records that do not cover those days is
+ *  left out of both sides. */
+function collectedEarlier(
+  facts: MoneyReportFacts,
+  now: { paidMinor: number; soldMinor: number; refundedMinor: number },
+  earlier: { from: string; to: string },
+): CollectedEarlier {
+  const paidCovered = coversFrom(facts.firstPaidOn, earlier.from);
+  const soldCovered = coversFrom(facts.firstSoldOn, earlier.from);
+  const paidHere = now.paidMinor > 0 || now.refundedMinor > 0;
+  if (facts.firstPaidOn !== null && !paidCovered && (paidHere || !soldCovered)) return { state: "no_history", ...earlier, since: facts.firstPaidOn };
+  if (facts.firstSoldOn !== null && !soldCovered && (now.soldMinor > 0 || !paidCovered)) return { state: "no_sales_history", ...earlier, since: facts.firstSoldOn };
+  const then = {
+    paidMinor: paidCovered ? facts.yearEarlier.paidMinor : 0,
+    refundedMinor: paidCovered ? facts.yearEarlier.refundedMinor : 0,
+    soldMinor: soldCovered ? facts.yearEarlier.soldMinor : 0,
+  };
+  return { state: "ok", ...earlier, ...then, netMinor: then.paidMinor + then.soldMinor - then.refundedMinor };
 }
 
 /** The earlier of two days, either of which may be missing. */

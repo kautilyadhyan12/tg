@@ -5236,10 +5236,17 @@ Product sales · Refunded · Collected only where a month it shows holds a sale,
 that never sells at the desk reads no column of zeros. A gym that has given no membership
 and sold something has its figures. Lifetime value stays membership money only, since a
 sale may be a walk-in's. **Money by product**: each product sold in the period, how many
-and the money, the most money first. **Money taken, by staff**: each staff member who
-recorded a payment or a sale in the period, the two and their total, the most first, an
-account since deleted last as "Deleted account"; refunds come off Collected, not off a
-person, and the table says so. Both follow the period and download as CSV; both are shown
+and the money, the most money first. **Sales by staff** (Staff member · Membership
+payments · Product sales · Total): each staff member who recorded a payment or a sale in
+the period, the most first; every account since deleted is one row, "Deleted account",
+last; two staff with the same name each have the part of their email before the @ beside
+it; refunds come off Collected, not off a person, and the table says so. Collected's year
+earlier sets each part beside its own history: where the period has desk sales and no sale
+was recorded by those days, there is no figure, and the line says when the first sale was
+(a gym that records payments and has just begun using the Sell page), and the same for
+payments; a part with nothing in the period and no history then is left out of both sides.
+Under Collected, with desk sales, Memberships · Product sales · Refunded are lines of their
+own. Both follow the period and download as CSV; both are shown
 only with `billing.members`, like every money figure. The money read is the only Reports
 read that names a person, and it names only staff. Cost at twelve months, with 72,100 sales
 for the big gym: HANDOFF has the table.

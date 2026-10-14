@@ -72,7 +72,7 @@ export function moneyTiles(report, words, orgSlug) {
   const cur = report.currency;
   const month = monthName(report.thisMonth.month);
   // A gym whose first payment is inside the period is counted from that day, and the tile says so.
-  const span = countedSpan(report.period, report.firstPaidOn, 'the first payment recorded here');
+  const span = countedSpan(report.period, report.firstPaidOn, 'the first payment or sale recorded here');
   const paidFrom = report.firstPaidOn > report.period.from ? report.firstPaidOn : report.period.from;
   const soFar = `${month}, so far: ${moneyText(report.thisMonth.netMinor, cur)}`;
   const refunded = report.inPeriod.refundedMinor > 0;
@@ -120,7 +120,10 @@ export function moneyTiles(report, words, orgSlug) {
       line: null,
       earlier: earlierLine(
         report.yearEarlier,
-        (f) => `Your first payment was recorded on ${dayText(f.since)}.`,
+        (f) =>
+          f.state === 'no_sales_history'
+            ? `Your first sale at the front desk was recorded on ${dayText(f.since)}.`
+            : `Your first payment was recorded on ${dayText(f.since)}.`,
         (f) => `${moneyText(f.netMinor, cur)} · ${changeWords(report.inPeriod.netMinor, f.netMinor, (n) => moneyText(n, cur))}`,
       ),
       // With desk sales, what came from where is its own lines under the figure.
