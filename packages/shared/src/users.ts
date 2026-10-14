@@ -193,8 +193,8 @@ export const equipmentArraySchema = uniqueArray(equipmentSchema, equipmentSchema
   { message: "'none' cannot be combined with equipment" },
 );
 
-/** The app is for 18 and over, and under it there is never a calorie-cutting
- *  target (RULINGS 2026-09-07); shared so screen 3 can leave its building-muscle
+/** The app is for 18 and over (RULINGS 2026-09-15), and under it there is
+ *  never a calorie-cutting target (RULINGS 2026-09-07); shared so screen 3 can leave its building-muscle
  *  mark off before the plan exists to say what each pace eats. */
 export const ADULT_AGE = 18;
 

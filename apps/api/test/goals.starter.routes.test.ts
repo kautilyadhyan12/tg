@@ -112,10 +112,10 @@ d("starter goals (real Postgres)", () => {
   /** Setup finished by a person whose stored age is under 18 (`storedAge`). */
   const finishedTeen = async (name: string, age: number, healthAnswer: unknown = NO_CONDITION) => {
     const user = await makeUser(name);
-    await answer(user.cookies, LOSING_ANSWERS);
+    await finishSetup(user.cookies, LOSING_ANSWERS, healthAnswer);
+    // Setup does not finish on an age under 18, so it is written after Finish and
+    // before the goals are first read, as an account from before would hold it.
     await storedAge(user.userId, age);
-    await health(user.cookies, healthAnswer);
-    await answer(user.cookies, FINISH);
     return user;
   };
 

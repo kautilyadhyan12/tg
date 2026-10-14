@@ -27,9 +27,10 @@ export interface PlanAnswerInput {
  *  does not) fails loud here instead of producing a number nobody can explain
  *  (R1.3). Two writers reach these columns: `patchOnboardingRequestSchema`
  *  and the old profile form's `putFitnessProfileRequestSchema`; both carry
- *  the plan's rails today (the age rail was raised to 16 on both, and
- *  migration 0027 cleared the ages stored under the old 13), so this is a
- *  guard and not a routine branch. */
+ *  the plan's rails today (both read `ageSchema`, 18 and over since RULINGS
+ *  2026-09-15, while the plan's own rail keeps 16 as a floor; migration 0027
+ *  cleared the ages stored under the old 13), so this is a guard and not a
+ *  routine branch. */
 export function planAnswersFor(input: PlanAnswerInput): PlanAnswers {
   const a = input.answers;
   return planAnswersSchema.parse({

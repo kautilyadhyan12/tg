@@ -1065,6 +1065,12 @@ d("onboarding v2 routes (real Postgres)", () => {
 
     // Answered on its own route, and the finish is taken.
     await answerHealth(cookies, { hasCondition: false });
+    // …but not with an age under 18 kept from before the app became 18+
+    // (RULINGS 2026-09-15): no route saves one now, so it is written here.
+    await sql`UPDATE user_fitness_profiles SET age = 17 WHERE user_id = ${userId}`;
+    await refused({ onboardingCompleted: true }, ["age"]);
+    expect(await completed()).toBe(false);
+    await patchOk(cookies, { age: SCREENS.aboutYou.age });
     const done = await patchOk(cookies, { onboardingCompleted: true });
     expect(done.answers["onboardingCompleted"]).toBe(true);
     expect(done.plan).toMatchObject(GOLDEN_LOSE);
