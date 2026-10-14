@@ -225,7 +225,7 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
         <Field label="Age">
           <input type="number" value={form.age}
             onChange={(e) => set('age', e.target.value)}
-            min={ADULT_AGE} max={120}
+            max={120}
             className="input-field" style={inputStyle} />
           {underAge && <p role="alert" className="text-2xs" style={{ color: '#f87171' }}>{UNDER_AGE_LINE}</p>}
         </Field>

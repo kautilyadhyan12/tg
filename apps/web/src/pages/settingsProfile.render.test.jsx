@@ -127,9 +127,10 @@ describe('Settings → Profile', () => {
     expect(screen.queryByText(why)).toBeNull();
     type('30', '17');
     expect(screen.getByText(why)).toBeTruthy();
-    // The box's own minimum stops Save in the browser; the page refuses it too.
+    // The page says it in its own words: the box has no minimum for the browser to say it first.
+    expect(screen.getByDisplayValue('17').min).toBe('');
     save();
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(why));
     expect(svc.putFitnessProfile).not.toHaveBeenCalled();
     expect(svc.updateProfile).not.toHaveBeenCalled();
     type('17', '18');
