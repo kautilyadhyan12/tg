@@ -298,10 +298,13 @@ d("health screening + consent routes (real Postgres)", () => {
   });
 
   it("the macro rings' number never cuts calories under 18, with a NO on the health screen (RULINGS 2026-09-07)", { timeout: 30_000 }, async () => {
-    const { cookies } = await makeUser("hs-teen@example.com");
+    const { userId, cookies } = await makeUser("hs-teen@example.com");
     expect((await putScreening(cookies, { hasCondition: false })).statusCode).toBe(200);
+    expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: LOSING_ANSWERS, cookies })).statusCode).toBe(200);
+    // No route saves an age under 18 since the app became 18+ (RULINGS 2026-09-15);
+    // the floor stays for a row from before, so the age is written here.
     const targetsAt = async (age: number) => {
-      expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { ...LOSING_ANSWERS, age }, cookies })).statusCode).toBe(200);
+      await sql`UPDATE user_fitness_profiles SET age = ${age} WHERE user_id = ${userId}`;
       const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
       expect(res.statusCode).toBe(200);
       return (JSON.parse(res.body) as { targets: { tdee: number; kcal: number; noCalorieCut: boolean } }).targets;
