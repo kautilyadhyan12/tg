@@ -33,6 +33,8 @@ describe('the folded box', () => {
     [{ ...IN_USE, people: 1, signed: 1 }, 'In use · signed by 1 of 1 person in the app'],
     [{ ...IN_USE, people: 1, signed: 0 }, 'In use · signed by 0 of 1 person in the app'],
     [{ ...IN_USE, people: 0, signed: 0 }, 'In use · nobody is in the app yet'],
+    [{ ...IN_USE, atDesk: 2 }, 'In use · signed by 3 of 12 people in the app, and 2 at the desk'],
+    [{ ...IN_USE, people: 0, signed: 0, atDesk: 1 }, 'In use · 1 signed at the desk, nobody in the app yet'],
   ])('%#', (data, line) => {
     expect(waiverSummary(data)).toBe(line);
   });

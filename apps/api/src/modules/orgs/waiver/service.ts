@@ -45,12 +45,13 @@ export const toRead = (row: repo.WaiverRow): WaiverToRead => ({ id: row.id, vers
 async function gymWaiver(sql: repo.SqlOrTx, gymId: string): Promise<GymWaiverResponse> {
   const latest = await repo.latestWaiver(sql, gymId);
   const inUse = latest !== null && latest.stoppedAt === null;
-  const { people, signed } = await repo.counts(sql, gymId, latest?.id ?? null);
+  const { people, signed, atDesk } = await repo.counts(sql, gymId, latest?.id ?? null);
   return gymWaiverResponseSchema.parse({
     waiver: latest === null ? null : { ...toRead(latest), savedAt: latest.savedAt.toISOString() },
     inUse,
     people,
     signed,
+    atDesk,
   });
 }
 

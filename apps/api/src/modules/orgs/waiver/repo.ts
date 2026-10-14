@@ -63,15 +63,20 @@ export async function setStopped(tx: TransactionSql, gymId: string, waiverId: st
   await tx`UPDATE gym_waivers SET stopped_at = ${at} WHERE gym_id = ${gymId} AND id = ${waiverId}`;
 }
 
-/** How many people use the app through the gym, and how many of them signed this wording. */
-export async function counts(sql: SqlOrTx, gymId: string, waiverId: string | null): Promise<{ people: number; signed: number }> {
-  const rows = await sql<{ people: number; signed: number }[]>`
-    SELECT count(*)::int AS people, count(s.id)::int AS signed
+/** How many people use the app through the gym, how many of them signed this wording, and
+ *  how many people on the gym's list signed it at the desk (3e-ii). */
+export async function counts(sql: SqlOrTx, gymId: string, waiverId: string | null): Promise<{ people: number; signed: number; atDesk: number }> {
+  const rows = await sql<{ people: number; signed: number; at_desk: number }[]>`
+    SELECT count(*)::int AS people, count(s.id)::int AS signed,
+      (SELECT count(*)::int FROM gym_waiver_desk_signatures d
+       JOIN gym_member_list_entries e ON e.gym_id = d.gym_id AND e.id = d.entry_id AND e.former_at IS NULL
+       WHERE d.gym_id = ${gymId} AND d.waiver_id = ${waiverId}::uuid) AS at_desk
     FROM gym_members m
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
     LEFT JOIN gym_waiver_signatures s ON s.gym_id = m.gym_id AND s.waiver_id = ${waiverId}::uuid AND s.user_id = m.user_id
     WHERE m.gym_id = ${gymId} AND m.removed_at IS NULL`;
-  return rows[0] ?? { people: 0, signed: 0 };
+  const row = rows[0];
+  return row === undefined ? { people: 0, signed: 0, atDesk: 0 } : { people: row.people, signed: row.signed, atDesk: row.at_desk };
 }
 
 export interface SignatureRow {

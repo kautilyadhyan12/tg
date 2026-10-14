@@ -13,10 +13,12 @@ export function waiverSummary(data) {
   return `In use · ${signedCount(data)}`;
 }
 
-/** "signed by 3 of 12 people in the app". */
+/** "signed by 3 of 12 people in the app, and 2 at the desk". */
 export function signedCount(data) {
-  if (data.people === 0) return 'nobody is in the app yet';
-  return `signed by ${String(data.signed)} of ${people(data.people)} in the app`;
+  const atDesk = typeof data.atDesk === 'number' && data.atDesk > 0 ? `${String(data.atDesk)} signed at the desk` : null;
+  if (data.people === 0) return atDesk === null ? 'nobody is in the app yet' : `${atDesk}, nobody in the app yet`;
+  const inApp = `signed by ${String(data.signed)} of ${people(data.people)} in the app`;
+  return atDesk === null ? inApp : `${inApp}, and ${String(data.atDesk)} at the desk`;
 }
 
 /** What Save would do with the words typed: nothing to save, too long, or go. */

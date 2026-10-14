@@ -72,6 +72,8 @@ export const gymWaiverResponseSchema = z
      *  the newest wording. */
     people: z.number().int().min(0),
     signed: z.number().int().min(0),
+    /** How many people on the gym's list signed the newest wording at the desk (3e-ii). */
+    atDesk: z.number().int().min(0).default(0),
   })
   .strict();
 export type GymWaiverResponse = z.infer<typeof gymWaiverResponseSchema>;

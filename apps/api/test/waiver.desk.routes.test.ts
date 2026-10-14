@@ -300,6 +300,8 @@ d("a waiver signed at the desk (real Postgres)", () => {
         { entry_id: ben.entryId, version: 1, signer: "person", signed_name: "Ben Stone", witnessed_by: iron.owner.userId },
         { entry_id: kid.entryId, version: 1, signer: "guardian", signed_name: "Ana Reyes", witnessed_by: iron.owner.userId },
       ]);
+      // Settings' Waiver box counts them, beside the people in the app.
+      expect(gymWaiverResponseSchema.parse(JSON.parse((await get(waiverUrl(iron), iron.owner.cookies)).body))).toMatchObject({ people: 0, signed: 0, atDesk: 2 });
       // Each page shows its own record's signature and nobody else's.
       expect((await personPage(iron, ben.entryId)).waiverDesk).toMatchObject({ name: "Ben Stone", signer: "person" });
       expect((await personPage(iron, kid.entryId)).waiverDesk).toMatchObject({ name: "Ana Reyes", signer: "guardian" });
