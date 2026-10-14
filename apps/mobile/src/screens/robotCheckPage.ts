@@ -21,6 +21,7 @@ export function robotCheckPage(siteKey: string): string | null {
   return `<!doctype html>
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
 <style>html,body{margin:0;padding:0;background:transparent}#box{display:flex;justify-content:center}</style>
 </head><body>
 <div id="box"></div>
