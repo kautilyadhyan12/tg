@@ -295,9 +295,6 @@ function MembersReport({ report, org, orgSlug }) {
               <div className="flex flex-col gap-1">
                 {headline.value !== null ? <p className="c-big-sm c-t1">{headline.value}</p> : <p className="c-s14 c-t2">{headline.line}</p>}
                 <p className="c-s13 c-t3">{headline.note}</p>
-                <p className="c-s13 c-t3" data-testid="year-earlier">
-                  {headline.earlier}
-                </p>
               </div>
               <CsvButton name={csvName('leads-report', report)} text={leadsCsv(report)} />
             </div>

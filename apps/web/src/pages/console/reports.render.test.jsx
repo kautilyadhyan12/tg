@@ -116,10 +116,10 @@ describe('the members figures', () => {
     expect(['active', 'new', 'left', 'churn', 'retention', 'stay'].map((k) => tile(k).textContent)).toEqual([
       'Members now11Members on your list, month by month1 Jul 2026Today',
       'New members2since 1 Jul 2026, the month after your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
-      'Members who left4since 10 Jun 2026, when your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
+      'Members who left4since 10 Jun 2026, when your member list started',
       'Churn5.3%a month, Jul to Sep 2026',
       'Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left',
-      'Average stay11 months4 people left · since 10 Jun 2026, when your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
+      'Average stay11 months4 people left · since 10 Jun 2026, when your member list started',
     ]);
     expect(screen.getByText('These figures come from your member list and the memberships you give in the app. Someone was last added or removed on 3 Oct 2026.')).toBeTruthy();
     expect(tableRows('Members, month by month')).toEqual([
@@ -174,7 +174,7 @@ describe('the members figures', () => {
       expect(tile(key).textContent, key).toContain(line);
       expect(tile(key).textContent, key).not.toContain('%');
     }
-    expect(tile('left').textContent).toBe('Members who left4since 15 Aug 2026, when your member list startedA year earlier: no figures. Your member list started on 15 Aug 2026.');
+    expect(tile('left').textContent).toBe('Members who left4since 15 Aug 2026, when your member list started');
     expect(screen.queryByTestId('stay-bar')).toBeNull();
   });
 
@@ -438,7 +438,7 @@ describe('the period', () => {
     expect(svc.members).toHaveBeenLastCalledWith('g1', '4w');
     await waitFor(() => expect(svc.attendance).toHaveBeenLastCalledWith('g1', '4w'));
     expect(tile('new').textContent).toBe('New members213 Sep 2026 to 10 Oct 2026A year earlier: 0 · up 2');
-    expect(tile('left').textContent).toBe('Members who left413 Sep 2026 to 10 Oct 2026A year earlier: 0 · up 4');
+    expect(tile('left').textContent).toBe('Members who left413 Sep 2026 to 10 Oct 2026');
     // Four weeks touch two months; the table lists those and no other.
     expect(tableRows('Members, month by month').map((row) => row[0])).toEqual(['Month', 'Oct 2026 (so far)', 'Sep 2026']);
 

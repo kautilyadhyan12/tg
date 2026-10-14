@@ -1,5 +1,5 @@
-// The Reports page, a year earlier (ROADMAP 21d-ii): the line under each figure that follows
-// the period. The worst thing it could do is set a figure beside a zero from a year the app
+// The Reports page, a year earlier (ROADMAP 21d-ii): the line under New members, Visits and
+// Collected, and no other figure (Kd, 2026-10-14). The worst thing it could do is set a figure beside a zero from a year the app
 // was not used, or beside somebody else's days: a gym without those records reads why.
 import { describe, expect, it } from 'vitest';
 import { attendanceReportFrom, membersReportFrom, moneyReportFrom, orgWords } from '@app/shared';
@@ -97,20 +97,16 @@ describe('the words of a change', () => {
 });
 
 describe('members a year earlier', () => {
-  it('new, left and the average stay, each with how it moved', () => {
+  it('new members, with how it moved; no other member figure has a line (Kd, 2026-10-14)', () => {
     const r = members();
     expect(memberLine(r, 'new')).toBe('A year earlier: 7 · up 3');
-    expect(memberLine(r, 'left')).toBe('A year earlier: 5 · the same');
-    expect(memberLine(r, 'stay')).toBe('A year earlier: 5 months');
-    // Members now, churn and retention are today's: no line.
-    for (const key of ['active', 'churn', 'retention']) expect(memberLine(r, key), key).toBeUndefined();
+    for (const key of ['active', 'left', 'churn', 'retention', 'stay']) expect(memberLine(r, key), key).toBeUndefined();
+    expect(leadsHeadline(r).earlier).toBeUndefined();
   });
 
   it('a list that began after those days did reads the day it began, never 0', () => {
     const r = members({ firstListedOn: '2025-03-04' });
-    for (const key of ['new', 'left', 'stay']) {
-      expect(memberLine(r, key), key).toBe('A year earlier: no figures. Your member list started on 4 Mar 2025.');
-    }
+    expect(memberLine(r, 'new')).toBe('A year earlier: no figures. Your member list started on 4 Mar 2025.');
   });
 
   it('a list that began in the month those days began says why its first people are not new', () => {
@@ -118,20 +114,6 @@ describe('members a year earlier', () => {
     expect(memberLine(members({ period: '4w', firstListedOn: '2025-09-05' }), 'new')).toBe(
       'A year earlier: no figures. Your member list started on 5 Sep 2025, and the people on it in its first month are not counted as new.',
     );
-  });
-
-  it('nobody left in those days: "nobody left", never 0 days', () => {
-    expect(memberLine(members({ yearEarlier: { joined: 7, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 } }), 'stay')).toBe(
-      'A year earlier: nobody left',
-    );
-  });
-
-  it('leads: how many joined of how many were added, or the day the first was added', () => {
-    expect(leadsHeadline(members()).earlier).toBe('A year earlier: 2 of 8 leads joined · 25%');
-    expect(leadsHeadline(members({ yearEarlier: { joined: 7, left: 5, stay: { leavers: 5, totalDays: 802 }, leads: 0, leadsJoined: 0 } })).earlier).toBe(
-      'A year earlier: no lead was added',
-    );
-    expect(leadsHeadline(members({ firstLeadOn: '2025-06-01' })).earlier).toBe('A year earlier: no figures. Your first lead was added on 1 Jun 2025.');
   });
 
   it('the line under the picker names the days a year earlier', () => {
@@ -143,11 +125,13 @@ describe('members a year earlier', () => {
 });
 
 describe('attendance a year earlier', () => {
-  it('visits and visits a member a week, each with how it moved; the busiest time has none', () => {
+  it('visits, with how it moved; visits a member a week, the busiest time and the class tiles have none', () => {
     const r = attendance();
     expect(visitLine(r, 'visits')).toBe('A year earlier: 62 · down 12');
-    expect(visitLine(r, 'per-member')).toBe('A year earlier: 1 · down 0.3');
+    expect(visitLine(r, 'per-member')).toBeUndefined();
     expect(visitLine(r, 'busiest')).toBeUndefined();
+    expect(classLine(r, 'fill')).toBeUndefined();
+    expect(classLine(r, 'no-shows')).toBeUndefined();
   });
 
   it('a first check-in after those days began reads its day, never 0 visits', () => {
@@ -155,19 +139,6 @@ describe('attendance a year earlier', () => {
     expect(visitLine(r, 'visits')).toBe('A year earlier: no figures. Your first check-in was on 20 Sep 2025.');
   });
 
-  it('nobody on the list for those weeks: said so, never 0', () => {
-    const r = attendance({ yearEarlier: { visits: 5, people: 2, member: { members: 0, visits: 0, visitors: 0 }, classes: [] } });
-    expect(visitLine(r, 'per-member')).toBe('A year earlier: nobody was on your member list for those weeks');
-  });
-
-  it('classes: how full and no-shows, or no class ran, or the day the first one did', () => {
-    expect(classLine(attendance(), 'fill')).toBe('A year earlier: 50%');
-    expect(classLine(attendance(), 'no-shows')).toBe('A year earlier: 10%');
-    const none = attendance({ yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] } });
-    expect(classLine(none, 'fill')).toBe('A year earlier: no class ran');
-    expect(classLine(none, 'no-shows')).toBe('A year earlier: no class ran');
-    expect(classLine(attendance({ firstClassOn: '2025-10-01' }), 'fill')).toBe('A year earlier: no figures. Your first class ran on 1 Oct 2025.');
-  });
 });
 
 describe('money a year earlier', () => {

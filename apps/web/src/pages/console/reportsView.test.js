@@ -211,7 +211,7 @@ describe('the tables and their CSV', () => {
 
   it('show leads by where they heard of the gym, with the share that joined', () => {
     const r = report();
-    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined · added 1 Nov 2025 to 10 Oct 2026', earlier: 'A year earlier: no figures.' });
+    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined · added 1 Nov 2025 to 10 Oct 2026' });
     expect(leadRows(r)).toEqual([
       { key: 'walk_in', source: 'Walked in', percent: 33.3, text: '1 of 3 joined · 33.3%' },
       { key: 'friend', source: 'A friend', percent: 100, text: '1 of 1 joined · 100%' },
@@ -231,7 +231,6 @@ describe('the tables and their CSV', () => {
       value: null,
       line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.',
       note: '4 leads added · 1 Nov 2025 to 10 Oct 2026',
-      earlier: 'A year earlier: no figures.',
     });
     expect(leadRows(r)).toEqual([
       { key: 'walk_in', source: 'Walked in', percent: 0, text: '3 leads' },
@@ -334,7 +333,7 @@ describe('the period', () => {
 
   it('leads are the period’s: the headline says the days, and no lead in them is not "no leads yet"', () => {
     const r = report({ period: '4w' });
-    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined · added 13 Sep 2026 to 10 Oct 2026', earlier: 'A year earlier: no figures.' });
+    expect(leadsHeadline(r)).toEqual({ value: '50%', line: null, note: '2 of 4 leads joined · added 13 Sep 2026 to 10 Oct 2026' });
     expect(leadsHow(r)).toBe('Leads added from 13 Sep 2026 to today that are marked Joined, out of every lead added in those days, by where they heard of you. Leads you deleted are not counted.');
     expect(leadsMissing(r)).toBeNull();
     // Leads from before the period, and none in it.

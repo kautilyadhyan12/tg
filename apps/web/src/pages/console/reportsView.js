@@ -49,8 +49,9 @@ export function periodLine(period, words, seesMoney, yearEarlier = null) {
   return `Showing ${periodSpan(period)}. ${still.slice(0, -1).join(', ')} and ${still[still.length - 1]} are today's figures, so they stay the same whichever period you choose.${earlier}`;
 }
 
-// A YEAR EARLIER. Under each figure that follows the period, the same figure for the same
-// days a year before; where the app has no records of all those days, why there is none.
+// A YEAR EARLIER. Under the three figures an owner checks for growth, New members, Visits
+// and Collected (Kd, 2026-10-14), the same figure for the same days a year before; where the
+// app has no records of all those days, why there is none.
 
 /** "up 3", "down 3" or "the same", with `text` writing the difference. */
 export function changeWords(now, then, text = (n) => n.toLocaleString('en-GB')) {
@@ -199,7 +200,6 @@ export function memberTiles(report, words) {
       value: report.everLeft ? count(report.inPeriod.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
       note: report.everLeft ? span : null,
-      earlier: report.everLeft ? earlierLine(was, began, (f) => `${count(f.left)} · ${changeWords(report.inPeriod.left, f.left)}`) : null,
       how: `${words.peopleCap} removed from your ${words.person} list from ${from} to today, and ${words.people} whose membership ended or was cancelled in those days and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
@@ -224,10 +224,6 @@ export function memberTiles(report, words) {
       value: stay.value,
       line: stay.line,
       note: stay.note,
-      earlier:
-        stay.value === null || report.averageStay.state !== 'ok'
-          ? null
-          : earlierLine(was, began, (f) => (f.stay === null ? 'nobody left' : stayText(f.stay.days))),
       how: `How long the ${words.people} who left from ${from} to today had been with you on average, from their join date to the day they were removed or their membership ended.`,
     },
   ];
@@ -271,21 +267,13 @@ export function leadsMissing(report) {
 export function leadsHeadline(report) {
   if (report.leads.percent === null) return null;
   if (!everJoined(report)) {
-    return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: `${leadsWord(report.leads.total)} added · ${periodSpan(report.period)}`, earlier: leadsEarlier(report) };
+    return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: `${leadsWord(report.leads.total)} added · ${periodSpan(report.period)}` };
   }
   return {
     value: percentText(report.leads.percent),
     line: null,
     note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined · added ${periodSpan(report.period)}`,
-    earlier: leadsEarlier(report),
   };
-}
-
-/** Leads a year earlier: how many were added, and how many of them are marked Joined. */
-function leadsEarlier(report) {
-  return earlierLine(report.leads.yearEarlier, (since) => `Your first lead was added on ${dayText(since)}.`, (f) =>
-    f.total === 0 ? 'no lead was added' : `${count(f.joined)} of ${leadsWord(f.total)} joined · ${percentText(Math.round((f.joined / f.total) * 1000) / 10)}`,
-  );
 }
 
 /** How the leads figure is worked out, for the period shown. */
