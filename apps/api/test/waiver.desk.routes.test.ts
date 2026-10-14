@@ -324,6 +324,11 @@ d("a waiver signed at the desk (real Postgres)", () => {
       expect(stale.statusCode).toBe(409);
       expect(errorOf(stale)).toMatchObject({ error: "waiver_changed", message: WAIVER_WORDS.waiver_changed("Iron House") });
       expect((await deskRows(iron)).filter((row) => row.version === 2)).toEqual([]);
+      // Somebody who never signed the old words, on a screen still showing them: refused,
+      // and no signature of those words is written for them either.
+      const staleCara = await signAtDesk(iron, cara.entryId, { waiverId: v1, signer: "person", name: "Cara Lane" });
+      expect(staleCara.statusCode).toBe(409);
+      expect((await deskRows(iron)).filter((row) => row.entry_id === cara.entryId)).toEqual([]);
 
       // Twice is once: the second press answers with the first signature.
       expect((await signAtDesk(iron, ben.entryId, { waiverId: v2, signer: "person", name: "Ben Stone" })).statusCode).toBe(200);
