@@ -70,9 +70,10 @@ export function listPeople(sql: Sql | TransactionSql, gymId: string, timezone: s
  *  the list began (`newCountedFrom`).
  *
  *  Who started over `earlier`, the same days a year back, both ends among them: those the
- *  list held by `REPORT_LIST_LAG_DAYS` after its last day (a month's import is on time),
- *  and those it took in only later, with the day most of them were added, the earliest
- *  where days tie. A file imported since with last year's join dates is in the second. */
+ *  list held on its last day, and those it took in more than `REPORT_LIST_LAG_DAYS` later,
+ *  with the day most of them were added, the earliest where days tie
+ *  (`MembersEarlierCounts`). A file imported since with last year's join dates is in the
+ *  second. */
 export async function readMemberCounts(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -130,7 +131,7 @@ export async function readMemberCounts(
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_leavers,
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
        FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days,
-      (SELECT count(*)::int FROM was WHERE listed_on <= ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int) AS earlier_joined,
+      (SELECT count(*)::int FROM was WHERE listed_on <= ${earlier.to}::date) AS earlier_joined,
       (SELECT count(*)::int FROM was WHERE listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int) AS earlier_late,
       (SELECT to_char(w.listed_on, 'YYYY-MM-DD') FROM was w
        WHERE w.listed_on > ${earlier.to}::date + ${REPORT_LIST_LAG_DAYS}::int

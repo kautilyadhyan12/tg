@@ -12,9 +12,8 @@ export const REPORT_MONTHS = 12;
 export const REPORT_FULL_MONTHS_NEEDED = 3;
 /** Churn is worked out over this many full months, the newest ones. */
 export const REPORT_CHURN_MONTHS = 3;
-/** A person who joined in a year-earlier span and reached the list within this many days
- *  after it is on time: a gym that imports last month's joiners each month has the same lag
- *  today, so the two periods are counted alike. */
+/** A month: the page asks a gym that keeps its list in other software to import it each
+ *  month, so somebody added within this many days of joining was added in the ordinary way. */
 export const REPORT_LIST_LAG_DAYS = 31;
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -65,9 +64,11 @@ export interface MembersReportFacts {
   yearEarlier: MembersEarlierCounts;
 }
 
-/** Who started in a year-earlier span: those the list held by `REPORT_LIST_LAG_DAYS` after
- *  its last day (`joined`), and those who reached it only later (`late`; most of them were
- *  added on `lateOn`, the earliest such day where days tie). */
+/** Who started in a year-earlier span: those the list held on its last day (`joined`), as
+ *  today's figure counts those the list holds today; and those added more than
+ *  `REPORT_LIST_LAG_DAYS` after it (`late`; most of them on `lateOn`, the earliest such day
+ *  where days tie). Those added in between are a month's ordinary import, as today's own
+ *  newest joiners may be, and are in neither. */
 export interface MembersEarlierCounts {
   joined: number;
   late: number;
@@ -93,11 +94,11 @@ const membersEarlierSchema = z.discriminatedUnion("state", [
 ]);
 export type MembersYearEarlier = z.infer<typeof membersEarlierSchema>;
 
-/** New members a year earlier. Given only where the list could count new members from
- *  that span's first day (`newCountedFrom`), and where most of those who started in it
- *  were on the list within `REPORT_LIST_LAG_DAYS` of its last day: one person typed in by
- *  hand before a gym imports its file would otherwise make the file's people look like a
- *  year of growth. */
+/** New members a year earlier, counted as today's are: from the list as it stood on that
+ *  span's last day. Given only where the list could count new members from the span's first
+ *  day (`newCountedFrom`), and where it was being kept then: not where more of those who
+ *  started in the span were added over a month later than were on it in time, as when one
+ *  person is typed in by hand before a gym imports its file. */
 export function membersYearEarlierFrom(firstListedOn: string | null, span: YearEarlierSpan, counts: MembersEarlierCounts): MembersYearEarlier {
   if (newCountedFrom(firstListedOn, span.from) !== span.from) return { state: "no_history", ...span, since: firstListedOn };
   if (counts.late > counts.joined && counts.lateOn !== null) return { state: "added_later", ...span, on: counts.lateOn };

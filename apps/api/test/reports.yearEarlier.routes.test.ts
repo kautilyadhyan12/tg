@@ -357,22 +357,29 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
   );
 
   it(
-    "a gym that imports last month's joiners on the 1st of each month keeps its figure a year earlier: a month's lag is on time (the re-check's H2)",
+    "a gym that imports last month's joiners on the 1st of each month, joining at the same rate both years, reads the same both years: a year earlier is counted as today is (the confirm's H3)",
     async () => {
       const owner = await makeUser("monthly");
       const gym = await makeGym(owner, "Rep Year Monthly Import");
       await listedMany(gym, ["First On The List"], "2024-01-10");
-      // One joiner a day from 1 August to 31 October 2025, each on the list from the 1st of the next month.
+      // One joiner a day from 1 August 2025 to 30 September 2026, each month's on the list
+      // from the 1st of the next month: October 2026's are not imported yet, as October
+      // 2025's were not on 20 October 2025.
       await sql`
         INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
         SELECT ${gym}, 'Joined ' || d::date, 'rep-y-monthly-' || to_char(d, 'YYYYMMDD') || '@example.com', lpad(to_char(d, 'YYYYMMDD'), 64, 'c'), 'upload',
                (date_trunc('month', d) + interval '1 month' + interval '11 hours') AT TIME ZONE 'UTC', d::date
-        FROM generate_series(DATE '2025-08-01', DATE '2025-10-31', interval '1 day') AS d`;
-      // Four weeks a year earlier, 24 September to 21 October 2025: 28 joiners, those of
-      // October on the list from 1 November.
-      expect((await membersOf(gym, owner, "4w")).yearEarlier).toEqual({ state: "ok", ...SPAN["4w"], joined: 28 });
-      // Three months, 1 August to 20 October 2025: 31 + 30 + 20.
-      expect((await membersOf(gym, owner, "3m")).yearEarlier).toEqual({ state: "ok", ...SPAN["3m"], joined: 81 });
+        FROM generate_series(DATE '2025-08-01', DATE '2026-09-30', interval '1 day') AS d`;
+      // Four weeks, 23 September to 20 October 2026: the 8 of 23 to 30 September. A year
+      // earlier, 24 September to 21 October 2025: the 7 of 24 to 30 September. October's
+      // were imported on 1 November, a month's ordinary lag: in neither figure.
+      const fourWeeks = await membersOf(gym, owner, "4w");
+      expect(fourWeeks.inPeriod.joined).toBe(8);
+      expect(fourWeeks.yearEarlier).toEqual({ state: "ok", ...SPAN["4w"], joined: 7 });
+      // Three months: August and September, 31 + 30, in both years.
+      const threeMonths = await membersOf(gym, owner, "3m");
+      expect(threeMonths.inPeriod.joined).toBe(61);
+      expect(threeMonths.yearEarlier).toEqual({ state: "ok", ...SPAN["3m"], joined: 61 });
     },
     TEST_TIMEOUT_MS,
   );
