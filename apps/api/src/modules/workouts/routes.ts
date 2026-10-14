@@ -5,7 +5,12 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import type { z } from "zod";
-import { progressQuerySchema, workoutListQuerySchema, workoutSyncPayloadSchema } from "./schemas.js";
+import {
+  progressPredictionsQuerySchema,
+  progressQuerySchema,
+  workoutListQuerySchema,
+  workoutSyncPayloadSchema,
+} from "./schemas.js";
 import * as service from "./service.js";
 import { handleWorkoutSync } from "./service.js";
 import { ForeignWorkoutError } from "./repo.js";
@@ -165,5 +170,12 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql; re
 
   app.get("/v1/progress/records", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.status(200).send(await service.personalRecords(readDeps, authedUserId(req)));
+  });
+
+  // Progress's predictions (ROADMAP 35a; spec Part 2B §5). The person is the session's
+  // own, so there is no id to change; no model call and no quota.
+  app.get("/v1/progress/predictions", { preHandler: [app.authenticate] }, async (req, reply) => {
+    if (parseQuery(progressPredictionsQuerySchema, req, reply) === null) return;
+    return reply.status(200).send(await service.progressPredictions(readDeps, authedUserId(req)));
   });
 }
