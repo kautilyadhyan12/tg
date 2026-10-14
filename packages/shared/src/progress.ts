@@ -105,8 +105,10 @@ export const PREDICTIONS_CALC_VERSION = 1;
 export const progressPredictionsQuerySchema = z.object({}).strict();
 
 export const PREDICTION_GATES = {
-  /** Workouts in the 28 days before today, for the next 7 days' calories. */
+  /** Workouts in the 28 days before today, and a first workout at least 7 days before
+   *  today (so every weekday has a day of its own), for the next 7 days' calories. */
   forecastWorkouts: 5,
+  forecastDaysSinceFirst: 7,
   /** Finished weeks since the person's first workout, for this week's goal. */
   weekGoalWeeks: 3,
   /** Workouts in the last 6 weeks, at least 3 of them in each half, for a steady pace. */
@@ -126,8 +128,12 @@ export const forecastDaySchema = z.object({
   kcalHigh: int,
 });
 
+/** few_workouts: under 5 workouts in the 28 days before today · too_new: the first
+ *  workout was under 7 days ago. */
+export const forecastHiddenReasonSchema = z.enum(["few_workouts", "too_new"]);
+
 export const calorieForecastSchema = z.discriminatedUnion("available", [
-  z.object({ available: z.literal(false), workouts: int, needed: int }),
+  z.object({ available: z.literal(false), reason: forecastHiddenReasonSchema, workouts: int, needed: int }),
   z.object({
     available: z.literal(true),
     /** Tomorrow and the six days after it. */
@@ -167,8 +173,19 @@ export const steadyFigureSchema = z
   .object({ before: int, recent: int, changePct: z.number() })
   .nullable();
 
+/** few_workouts: under the gate · nothing_to_compare: enough workouts, and no figure
+ *  that both sides have with an earlier average above 0. */
+export const steadyHiddenReasonSchema = z.enum(["few_workouts", "nothing_to_compare"]);
+
 export const steadyPaceSchema = z.discriminatedUnion("available", [
-  z.object({ available: z.literal(false), recent: int, before: int, needed: int, neededEachSide: int }),
+  z.object({
+    available: z.literal(false),
+    reason: steadyHiddenReasonSchema,
+    recent: int,
+    before: int,
+    needed: int,
+    neededEachSide: int,
+  }),
   z.object({
     available: z.literal(true),
     /** Every figure that could be compared moved less than 5 % either way. */

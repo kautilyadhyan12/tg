@@ -54,17 +54,27 @@ export function addDays(day: string, n: number): string {
 const sinceMonday = (day: string): number => (new Date(utc(day)).getUTCDay() + 6) % 7;
 
 const round10 = (v: number): number => Math.round(v / 10) * 10;
-const round1 = (v: number): number => Math.round(v * 10) / 10;
+/** To one decimal, the same either way: 4.95 and -4.95 are 5.0 and -5.0. */
+const round1 = (v: number): number => (Math.sign(v) * Math.round(Math.abs(v) * 10)) / 10 || 0;
 
 /** The next 7 days, each from the same weekday of the 4 weeks before today, newest
- *  weighted 4, then 3, 2, 1; a weekday with no workout counts as 0. The band is the
- *  weighted mean distance from that average, never under 15 % of it. */
-export function calorieForecast(today: string, workouts: readonly PredictionWorkout[]): CalorieForecast {
+ *  weighted 4, then 3, 2, 1; a weekday with no workout counts as 0, and a day before the
+ *  first workout is not read at all: it was never skipped. The band is the weighted mean
+ *  distance from that average, never under 15 % of it. */
+export function calorieForecast(
+  today: string,
+  workouts: readonly PredictionWorkout[],
+  firstWorkoutDay: string | null,
+): CalorieForecast {
   const first = addDays(today, -FORECAST_WEEKS * 7);
   const inWindow = workouts.filter((w) => w.day >= first && w.day < today);
-  if (inWindow.length < PREDICTION_GATES.forecastWorkouts) {
-    return { available: false, workouts: inWindow.length, needed: PREDICTION_GATES.forecastWorkouts };
+  const hidden = { available: false as const, workouts: inWindow.length, needed: PREDICTION_GATES.forecastWorkouts };
+  if (inWindow.length < PREDICTION_GATES.forecastWorkouts) return { ...hidden, reason: "few_workouts" };
+  // From 7 days on, every weekday's newest day is on or after the first workout.
+  if (firstWorkoutDay === null || firstWorkoutDay > addDays(today, -PREDICTION_GATES.forecastDaysSinceFirst)) {
+    return { ...hidden, reason: "too_new" };
   }
+  const started = firstWorkoutDay;
   const kcalByDay = new Map<string, number>();
   for (const w of inWindow) kcalByDay.set(w.day, (kcalByDay.get(w.day) ?? 0) + (w.kcal ?? 0));
 
@@ -73,11 +83,13 @@ export function calorieForecast(today: string, workouts: readonly PredictionWork
     // The same weekday's last 4 days before today, newest first: a week back for
     // tomorrow to 6 days ahead, two weeks back for the day a week from today.
     const back = (Math.floor(ahead / 7) + 1) * 7;
-    const samples = [0, 1, 2, 3].map((k) => kcalByDay.get(addDays(date, -back - k * 7)) ?? 0);
-    const weights = [4, 3, 2, 1];
-    const weightSum = 10;
-    const mean = samples.reduce((n, x, i) => n + x * (weights[i] ?? 0), 0) / weightSum;
-    const spread = samples.reduce((n, x, i) => n + Math.abs(x - mean) * (weights[i] ?? 0), 0) / weightSum;
+    const samples = [0, 1, 2, 3].flatMap((k) => {
+      const sample = addDays(date, -back - k * 7);
+      return sample < started ? [] : [{ kcal: kcalByDay.get(sample) ?? 0, weight: 4 - k }];
+    });
+    const weightSum = samples.reduce((n, s) => n + s.weight, 0);
+    const mean = samples.reduce((n, s) => n + s.kcal * s.weight, 0) / weightSum;
+    const spread = samples.reduce((n, s) => n + Math.abs(s.kcal - mean) * s.weight, 0) / weightSum;
     const half = Math.max(spread, (mean * BAND_FLOOR_PCT) / 100);
     return {
       date,
@@ -96,8 +108,10 @@ export function calorieForecast(today: string, workouts: readonly PredictionWork
 }
 
 /** This week's training-days goal as a band. The finished weeks since the first workout,
- *  6 at most, newest weighted 6 down to 1, give how often the goal is met; a week whose
- *  remaining days cannot hold what is still needed is tough. */
+ *  6 at most, newest weighted 6 down to 1, give how often the goal is met; the week of
+ *  the first workout counts only when it began on a Monday or met the goal anyway, since
+ *  its days before the first workout were never missed. A week whose remaining days
+ *  cannot hold what is still needed is tough. */
 export function weekGoal(
   today: string,
   workouts: readonly PredictionWorkout[],
@@ -115,7 +129,9 @@ export function weekGoal(
   for (let k = 1; k <= GOAL_WEEKS; k++) {
     const start = addDays(monday, -7 * k);
     if (firstMonday === null || start < firstMonday) break;
-    weeks.push(daysIn(start, addDays(start, 6)));
+    const count = daysIn(start, addDays(start, 6));
+    if (start === firstMonday && firstWorkoutDay !== firstMonday && count < target) break;
+    weeks.push(count);
   }
   if (weeks.length < PREDICTION_GATES.weekGoalWeeks) {
     return { available: false, reason: "few_weeks", weeks: weeks.length, needed: PREDICTION_GATES.weekGoalWeeks };
@@ -161,6 +177,7 @@ export function steadyPace(today: string, workouts: readonly PredictionWorkout[]
   const before = workouts.filter((w) => w.day >= beforeFrom && w.day < recentFrom);
   const gate = {
     available: false as const,
+    reason: "few_workouts" as const,
     recent: recent.length,
     before: before.length,
     needed: PREDICTION_GATES.steadyWorkouts,
@@ -183,7 +200,7 @@ export function steadyPace(today: string, workouts: readonly PredictionWorkout[]
   const mins = figure(avg(before, minutes), avg(recent, minutes));
   const form = figure(avg(before, (w) => w.formScore), avg(recent, (w) => w.formScore));
   const compared = [kcal, mins, form].filter((f) => f !== null);
-  if (compared.length === 0) return gate;
+  if (compared.length === 0) return { ...gate, reason: "nothing_to_compare" };
   return {
     available: true,
     steady: compared.every((f) => Math.abs(f.changePct) < STEADY_PCT),
@@ -240,7 +257,7 @@ export function predictions(input: PredictionsInput): ProgressPredictions {
   return progressPredictionsSchema.parse({
     calcVersion: PREDICTIONS_CALC_VERSION,
     workouts: workouts.filter((w) => w.day >= first).length,
-    forecast: calorieForecast(input.today, workouts),
+    forecast: calorieForecast(input.today, workouts, input.firstWorkoutDay),
     weekGoal: weekGoal(input.today, workouts, input.firstWorkoutDay, input.weeklyTarget),
     steady: steadyPace(input.today, workouts),
     bestTime: bestTime(input.today, workouts),

@@ -46,6 +46,9 @@ const PLAN_ANSWERS = {
 };
 const FINISH = { diet: "non_vegetarian", mealsPerDay: 3, onboardingCompleted: true };
 
+/** A plan of this file's own that shows 30 days of history. */
+const PLAN_30 = "predictions_test_30d";
+
 d("progress's predictions (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
@@ -98,9 +101,11 @@ d("progress's predictions (real Postgres)", () => {
 
   const mine = sql`SELECT id FROM users WHERE email LIKE 'predictions-%@example.com'`;
   const clear = async () => {
+    await sql`DELETE FROM subscriptions WHERE owner_type = 'user' AND owner_id IN (${mine})`;
     await sql`DELETE FROM workouts WHERE user_id IN (${mine})`;
     await sql`DELETE FROM user_goals WHERE user_id IN (${mine})`;
     await sql`DELETE FROM users WHERE email LIKE 'predictions-%@example.com'`;
+    await sql`DELETE FROM plans WHERE code = ${PLAN_30}`;
   };
 
   beforeAll(async () => {
@@ -180,14 +185,15 @@ d("progress's predictions (real Postgres)", () => {
     await sql`UPDATE users SET timezone = 'Asia/Kolkata' WHERE id = ${id}`;
     const today = dayInTz(new Date(), "Asia/Kolkata");
     // 02:00 UTC is 07:30 in Kolkata: morning there, night in UTC.
-    for (let n = 1; n <= 6; n++) await putWorkout(id, at(addDays(today, -n), "02:00"), { kcal: 300, form: 70 });
+    for (let n = 1; n <= 7; n++) await putWorkout(id, at(addDays(today, -n), "02:00"), { kcal: 300, form: 70 });
     // 19:00 UTC the day before today is 00:30 today in Kolkata: today's, so not in the forecast.
     await putWorkout(id, at(addDays(today, -1), "19:00"), { kcal: 5000, form: null });
     const p = await read(cookies);
-    expect(p.bestTime).toMatchObject({ available: true, best: "morning", slots: [{ slot: "morning", workouts: 6 }] });
+    expect(p.bestTime).toMatchObject({ available: true, best: "morning", slots: [{ slot: "morning", workouts: 7 }] });
     if (!p.forecast.available) throw new Error("hidden");
     expect(p.forecast.days[0]?.date).toBe(addDays(today, 1));
-    expect(Math.max(...p.forecast.days.map((x) => x.kcalHigh))).toBeLessThan(5000);
+    // Read on yesterday's day in UTC, the 5000 would lift a day's band far past 1000.
+    for (const x of p.forecast.days) expect(x).toMatchObject({ kcalPoint: 300, kcalHigh: 350 });
   });
 
   it("reads 90 days at most, and says the plan's history limit as the other progress reads do", async () => {
@@ -198,5 +204,20 @@ d("progress's predictions (real Postgres)", () => {
     expect(p.workouts).toBe(4);
     const overview = await inject({ method: "GET", url: "/v1/progress/overview", cookies });
     expect(p.limitedToDays).toBe(progressOverviewSchema.parse(JSON.parse(overview.body)).limitedToDays);
+  });
+
+  it("a plan that shows 30 days of history: nothing older is read", async () => {
+    const { cookies, id } = await makeUser("limit30");
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, trial_days, rank, entitlements)
+      VALUES (${PLAN_30}, 'consumer', ${"plan." + PLAN_30}, 0, 'USD', 'month', 0, 5, ${sql.json({ history_days: 30 })})
+      ON CONFLICT (code) DO UPDATE SET active = true, entitlements = EXCLUDED.entitlements`;
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+      VALUES ('user', ${id}, (SELECT id FROM plans WHERE code = ${PLAN_30}), 'active', 'pilot')`;
+    const today = todayUtc();
+    for (const n of [1, 2, 3, 28, 35, 60]) await putWorkout(id, at(addDays(today, -n), "12:00"), { kcal: 200, form: 80 });
+    const p = await read(cookies);
+    expect(p).toMatchObject({ workouts: 4, limitedToDays: 30 });
   });
 });

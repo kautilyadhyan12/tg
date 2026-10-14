@@ -23,19 +23,40 @@ const w = (day: string, o: Partial<Omit<PredictionWorkout, "day">> = {}): Predic
   formScore: o.formScore === undefined ? 80 : o.formScore,
 });
 const back = (n: number) => addDays(TODAY, -n);
+/** A first workout long before any window: every day read is a day the person could train. */
+const LONG_AGO = back(400);
 
 describe("the next 7 days' calories", () => {
   it("is hidden below 5 workouts in the 28 days before today, and today and older days do not count", () => {
     const four = [1, 2, 3, 4].map((n) => w(back(n)));
-    expect(calorieForecast(TODAY, [...four, w(TODAY), w(back(29))])).toEqual({ available: false, workouts: 4, needed: 5 });
-    expect(calorieForecast(TODAY, [...four, w(back(28))]).available).toBe(true);
+    expect(calorieForecast(TODAY, [...four, w(TODAY), w(back(29))], back(29))).toEqual({ available: false, reason: "few_workouts", workouts: 4, needed: 5 });
+    expect(calorieForecast(TODAY, [...four, w(back(28))], back(28)).available).toBe(true);
+  });
+
+  it("is hidden until the first workout is 7 days back", () => {
+    const five = [1, 2, 3, 4, 5].map((n) => w(back(n)));
+    expect(calorieForecast(TODAY, five, back(6))).toEqual({ available: false, reason: "too_new", workouts: 5, needed: 5 });
+    expect(calorieForecast(TODAY, five, null)).toMatchObject({ available: false, reason: "too_new" });
+    expect(calorieForecast(TODAY, five, back(7)).available).toBe(true);
+  });
+
+  it("never reads a day before the first workout as a day skipped", () => {
+    // Started 8 days ago and burnt 300 every day since: 300 every day ahead, not 120.
+    const ws = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => w(back(n), { kcal: 300 }));
+    const f = calorieForecast(TODAY, ws, back(8));
+    if (!f.available) throw new Error("hidden");
+    for (const d of f.days) expect(d).toMatchObject({ kcalPoint: 300, kcalLow: 260, kcalHigh: 350 });
+    // The same days with a first workout long before: the 3 older weeks were skipped.
+    const long = calorieForecast(TODAY, ws, LONG_AGO);
+    if (!long.available) throw new Error("hidden");
+    expect(long.days.find((d) => d.date === "2026-10-15")?.kcalPoint).toBe(120);
   });
 
   it("weights the same weekday 4, 3, 2, 1 from the newest, with its spread as the band", () => {
     // Mondays 12, 5 Oct, 28 and 21 Sep: 400, 300, 200, 100. Mean 300; spread
     // (4·100 + 3·0 + 2·100 + 1·200) / 10 = 80, over the 15 % floor of 45.
     const mondays = [400, 300, 200, 100].map((kcal, k) => w(back(2 + 7 * k), { kcal }));
-    const f = calorieForecast(TODAY, [...mondays, w(back(1), { kcal: 0 })]);
+    const f = calorieForecast(TODAY, [...mondays, w(back(1), { kcal: 0 })], LONG_AGO);
     if (!f.available) throw new Error("hidden");
     expect(f.days.find((d) => d.date === "2026-10-19")).toEqual({ date: "2026-10-19", kcalPoint: 300, kcalLow: 220, kcalHigh: 380 });
   });
@@ -43,7 +64,7 @@ describe("the next 7 days' calories", () => {
   it("counts a weekday with no workout as 0, and the band never goes under 0", () => {
     // Tuesdays: 500 on 13 Oct, none before. Mean 200; spread (4·300 + 3·200 + 2·200 + 1·200) / 10 = 240.
     const ws = [w(back(1), { kcal: 500 }), ...[2, 3, 4, 5].map((n) => w(back(n), { kcal: 0 }))];
-    const f = calorieForecast(TODAY, ws);
+    const f = calorieForecast(TODAY, ws, LONG_AGO);
     if (!f.available) throw new Error("hidden");
     expect(f.days.find((d) => d.date === "2026-10-20")).toEqual({ date: "2026-10-20", kcalPoint: 200, kcalLow: 0, kcalHigh: 440 });
   });
@@ -51,7 +72,7 @@ describe("the next 7 days' calories", () => {
   it("never draws a band narrower than 15 % of its point, rounded to 10 kcal", () => {
     // Thursdays 8 Oct back to 17 Sep, 300 each: no spread, so ±45.
     const ws = [6, 13, 20, 27].map((n) => w(back(n), { kcal: 300 }));
-    const f = calorieForecast(TODAY, [...ws, w(back(1), { kcal: 0 })]);
+    const f = calorieForecast(TODAY, [...ws, w(back(1), { kcal: 0 })], LONG_AGO);
     if (!f.available) throw new Error("hidden");
     expect(f.days.find((d) => d.date === "2026-10-15")).toEqual({ date: "2026-10-15", kcalPoint: 300, kcalLow: 260, kcalHigh: 350 });
   });
@@ -59,14 +80,14 @@ describe("the next 7 days' calories", () => {
   it("reads the day a week from today from the 4 weeks before today, never today itself", () => {
     // Wednesdays 7 Oct, 30, 23 and 16 Sep at 100; today's 1000 is left out.
     const ws = [7, 14, 21, 28].map((n) => w(back(n), { kcal: 100 }));
-    const f = calorieForecast(TODAY, [...ws, w(back(1), { kcal: 0 }), w(TODAY, { kcal: 1000 })]);
+    const f = calorieForecast(TODAY, [...ws, w(back(1), { kcal: 0 }), w(TODAY, { kcal: 1000 })], LONG_AGO);
     if (!f.available) throw new Error("hidden");
     expect(f.days.at(-1)).toEqual({ date: "2026-10-21", kcalPoint: 100, kcalLow: 90, kcalHigh: 120 });
   });
 
   it("adds up two workouts on one day, reads a missing figure as 0, and its totals are its days added up", () => {
     const ws = [w(back(1), { kcal: 150 }), w(back(1), { kcal: 250 }), w(back(2), { kcal: null }), w(back(3)), w(back(4))];
-    const f = calorieForecast(TODAY, ws);
+    const f = calorieForecast(TODAY, ws, LONG_AGO);
     if (!f.available) throw new Error("hidden");
     expect(f.days.map((d) => d.date)).toEqual(["2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"]);
     // Tuesday 13 Oct: 400, weighted 4 of 10, so 160.
@@ -95,6 +116,22 @@ describe("this week's training-days goal", () => {
     expect(weekGoal(TODAY, weeksOf([3, 3, 3]), firstOf(3), 3)).toMatchObject({ band: "on_track" });
     // Ten weeks of history: the 7th to 10th weeks back are not read.
     expect(weekGoal(TODAY, weeksOf([3, 3, 3, 3, 3, 3, 0, 0, 0, 0]), firstOf(10), 3)).toMatchObject({ band: "on_track" });
+    // 16 of 21 over 6 weeks; a 7th week read would make it 20 of 28, under 75 %.
+    expect(weekGoal(TODAY, weeksOf([3, 3, 3, 0, 0, 3, 0, 0, 0, 0]), firstOf(10), 3)).toMatchObject({ band: "on_track" });
+  });
+
+  it("counts the week of the first workout only when it began on a Monday or met the goal", () => {
+    // Weeks back 1 to 3 hold 3, 0, 0 days; the 4th week back holds only its Sunday, the first workout.
+    const sundayStart = addDays(firstOf(4), 6);
+    const ws = [...weeksOf([3, 0, 0]), w(sundayStart)];
+    // Not counted: 6 of 15 is doable (as a missed week it would be 6 of 18, tough).
+    expect(weekGoal(TODAY, ws, sundayStart, 3)).toMatchObject({ band: "doable" });
+    // Met in its few days, it counts: 6 + 3 of 18 is doable too, and the gate sees 4 weeks.
+    expect(weekGoal(TODAY, [...weeksOf([3, 0, 0]), ...[4, 5, 6].map((d) => w(addDays(firstOf(4), d)))], addDays(firstOf(4), 4), 3)).toMatchObject({ band: "doable" });
+    // Begun on a Monday it was a whole week: missed, it counts (6 of 18, tough).
+    expect(weekGoal(TODAY, [...weeksOf([3, 0, 0]), w(firstOf(4))], firstOf(4), 3)).toMatchObject({ band: "tough" });
+    // Two whole weeks met and a part week before them: too few weeks yet, never "doable".
+    expect(weekGoal(TODAY, [...weeksOf([3, 3]), w(addDays(firstOf(3), 6))], addDays(firstOf(3), 6), 3)).toEqual({ available: false, reason: "few_weeks", weeks: 2, needed: 3 });
   });
 
   it("says reached once the week holds the goal, whatever the weeks before", () => {
@@ -144,7 +181,7 @@ describe("a steady pace", () => {
   const before = (n: number, o: Partial<Omit<PredictionWorkout, "day">> = {}) => Array.from({ length: n }, (_, i) => w(back(14 + i), o));
 
   it("is hidden below 8 workouts in 6 weeks, or below 3 on either side", () => {
-    expect(steadyPace(TODAY, [...recent(4), ...before(3)])).toEqual({ available: false, recent: 4, before: 3, needed: 8, neededEachSide: 3 });
+    expect(steadyPace(TODAY, [...recent(4), ...before(3)])).toEqual({ available: false, reason: "few_workouts", recent: 4, before: 3, needed: 8, neededEachSide: 3 });
     expect(steadyPace(TODAY, [...recent(2), ...before(8)])).toMatchObject({ available: false, recent: 2, before: 8 });
     expect(steadyPace(TODAY, [...recent(8), ...before(2)])).toMatchObject({ available: false, recent: 8, before: 2 });
     expect(steadyPace(TODAY, [...recent(4), ...before(4)]).available).toBe(true);
@@ -162,6 +199,9 @@ describe("a steady pace", () => {
     { label: "5.0 % more calories", recentKcal: 1050, steady: false },
     { label: "4.9 % fewer calories", recentKcal: 951, steady: true },
     { label: "5.0 % fewer calories", recentKcal: 950, steady: false },
+    // Rounded the same either way: 4.95 % up and down are both 5.0.
+    { label: "4.95 % more calories", recentKcal: 1049.5, steady: false },
+    { label: "4.95 % fewer calories", recentKcal: 950.5, steady: false },
   ])("$label: steady $steady", ({ recentKcal, steady }) => {
     const s = steadyPace(TODAY, [...recent(4, { kcal: recentKcal }), ...before(4, { kcal: 1000 })]);
     expect(s).toMatchObject({ available: true, steady, recentDays: 14 });
@@ -186,7 +226,9 @@ describe("a steady pace", () => {
 
   it("is hidden when no figure can be compared", () => {
     const none = { kcal: null, durationMs: null, formScore: null };
-    expect(steadyPace(TODAY, [...recent(4, none), ...before(4, none)])).toMatchObject({ available: false });
+    expect(steadyPace(TODAY, [...recent(4, none), ...before(4, none)])).toEqual({
+      available: false, reason: "nothing_to_compare", recent: 4, before: 4, needed: 8, neededEachSide: 3,
+    });
   });
 });
 
