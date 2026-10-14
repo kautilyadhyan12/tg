@@ -119,7 +119,7 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     answer(refusal(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message));
     await started;
     expect(session.state()).toEqual(signedInAs(MEERA));
-    expect(store.value).toBe(kept(7, MEERA));
+    expect(store.value).toBe(kept(7, MEERA, null));
     expect(session.accessToken()).toBe("access-7");
   });
 });
@@ -243,7 +243,7 @@ describe("one refresh at a time, and the answer to the last try", () => {
     // The last person's answer comes last, and changes nothing of hers.
     answers[0]?.({ status: 200, body: { tokens: tokens(2) } });
     await started;
-    expect(store.value).toBe(kept(8, MEERA));
+    expect(store.value).toBe(kept(8, MEERA, null));
     expect(session.accessToken()).toBe("access-8");
     // Her one-at-a-time rule still holds after his run has ended.
     const again = [session.refresh(), session.refresh()];
@@ -324,7 +324,7 @@ describe("signing in with a code", () => {
       },
     ]);
     expect(session.state()).toEqual({ kind: "in", user: RAVI });
-    expect(store.value).toBe(kept(1));
+    expect(store.value).toBe(kept(1, RAVI, null));
     expect(session.accessToken()).toBe("access-1");
   });
 

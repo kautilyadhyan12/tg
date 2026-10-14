@@ -19,7 +19,7 @@ import { CopyContext } from "./ThisCopy";
 // the same act: an email, the 6-digit code, and a new address gets its account on the spot.
 // Google's button comes with ROADMAP Stage 5 item 12d.
 
-const NO_ANSWER = "Can’t connect. Check your internet and try again.";
+export const NO_ANSWER = "Can’t connect. Check your internet and try again.";
 /** The resend gap in words, from the number the server enforces. */
 const gapWords = (seconds: number) =>
   seconds === 60 ? "a minute" : seconds % 60 === 0 ? `${String(seconds / 60)} minutes` : `${String(seconds)} seconds`;

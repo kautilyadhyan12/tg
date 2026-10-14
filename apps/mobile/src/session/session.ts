@@ -9,7 +9,7 @@ import {
   type SendCodeResponse,
   type VerifyCodePhoneResponse,
 } from "@app/shared";
-import { post, type Answer, type Server } from "./calls";
+import { call, post, type Answer, type Request, type Server, type Shape } from "./calls";
 
 /** The phone's own key store (Android's Keystore, the iPhone's Keychain), or a test's stand-in. */
 export interface KeyStore {
@@ -61,6 +61,13 @@ export interface Session {
   signOut: () => Promise<void>;
   /** In memory only, for the requests a signed-in screen makes. */
   accessToken: () => string | null;
+  /** A request as the person signed in now. A token the server no longer takes is refreshed
+   *  once and the request sent again; with no token and no answer to the refresh, `no_answer`. */
+  signedIn: <T>(request: Omit<Request, "token">, shape: Shape<T>) => Promise<Answer<T>>;
+  /** The version of "Before you start" this phone knows the person ticked, or null. */
+  signUpNote: () => string | null;
+  /** Kept with the sign-in, once the server has said the person ticked that version. */
+  keepSignUpNote: (version: string) => Promise<void>;
 }
 
 export function createSession({
@@ -163,6 +170,9 @@ export function createSession({
     return run;
   };
 
+  const sendAs = <T>(request: Omit<Request, "token">, shape: Shape<T>, token: string) =>
+    call(server, { ...request, token }, shape);
+
   return {
     state: () => state,
     accessToken: () => access?.token ?? null,
@@ -191,6 +201,36 @@ export function createSession({
         show({ kind: "in", user });
       }
       return answer;
+    },
+
+    signedIn: async (request, shape) => {
+      const mine = kept;
+      if (mine === null) return { kind: "no_answer" };
+      if (access === null) await refresh();
+      const first = access;
+      // A refresh gives the same person a new kept object; a sign-out or another person does not.
+      if (first === null || kept?.user.id !== mine.user.id) return { kind: "no_answer" };
+      const answer = await sendAs(request, shape, first.token);
+      if (answer.kind !== "refused" || answer.status !== 401) return answer;
+      // Its fifteen minutes ran out while the app was open: one refresh, then once more.
+      if (access === first) access = null;
+      await refresh();
+      const next = access;
+      return next === null ? { kind: "no_answer" } : sendAs(request, shape, next.token);
+    },
+
+    signUpNote: () => kept?.signUpNote ?? null,
+
+    keepSignUpNote: async (version) => {
+      // The same object, so a refresh that is away still knows it as this person's.
+      const mine = kept;
+      if (mine === null) return;
+      mine.signUpNote = version;
+      try {
+        await twice(() => store.write(JSON.stringify(mine)));
+      } catch {
+        // Known for as long as the app stays open; the server is asked again next time.
+      }
     },
 
     signOut: async () => {

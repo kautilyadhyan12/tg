@@ -166,8 +166,14 @@ export const SIGNED_IN_ELSEWHERE = {
 } as const;
 
 /** What the phone app keeps in the phone's own key store between openings: its refresh
- *  token and whose it is, so the app opens signed in with no internet. */
-export const phoneKeptSessionSchema = z.object({ refreshToken: oneTimeTokenSchema, user: authUserSchema });
+ *  token and whose it is, so the app opens signed in with no internet. `signUpNote`: the
+ *  version of "Before you start" the server has this account's tick on, once it said so,
+ *  so a person who ticked it is not stopped there when the phone has no internet. */
+export const phoneKeptSessionSchema = z.object({
+  refreshToken: oneTimeTokenSchema,
+  user: authUserSchema,
+  signUpNote: z.string().regex(/^v\d{1,4}$/).optional(),
+});
 export type PhoneKeptSession = z.infer<typeof phoneKeptSessionSchema>;
 
 /** A refusal as this api words it: `message` is written for people, and `retryAfterSeconds`
