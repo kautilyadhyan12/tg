@@ -82,6 +82,8 @@ import {
   gymWaiverResponseSchema,
   myWaiverResponseSchema,
   signWaiverResponseSchema,
+  deskWaiverResponseSchema,
+  signAtDeskResponseSchema,
   notMeInvitationResponseSchema,
   billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
@@ -652,6 +654,20 @@ export const orgService = {
   getMyWaiver: (gymId) => readThrough(myWaiverResponseSchema, 'the waiver', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/waiver/mine`)),
   signMyWaiver: (gymId, waiverId, name) =>
     readThrough(signWaiverResponseSchema, 'the waiver', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/waiver/sign`, { waiverId, name })),
+  // Signed at the desk (3e-ii), on a person's page (`members.confirm`): the box's words, and
+  // the signature of the person or their parent or guardian.
+  getDeskWaiver: (gymId, entryId) =>
+    readThrough(
+      deskWaiverResponseSchema,
+      'the waiver',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/waiver`),
+    ),
+  signAtDesk: (gymId, entryId, body) =>
+    readThrough(
+      signAtDeskResponseSchema,
+      'the waiver',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/waiver/sign`, body),
+    ),
 
   /** POST /v1/orgs/invitations/:invitationId/decline — No thanks. */
   declineInvitation: (invitationId) =>
@@ -1060,7 +1076,7 @@ export const orgService = {
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-devices/${encodeURIComponent(deviceId)}/off`),
     ),
 
-  // WHO CAN CHECK IN (Settings, `org.manage`; ROADMAP 16d): the gym's two choices, and who
+  // WHO CAN CHECK IN (Settings, `org.manage`; ROADMAP 16d, 3e-ii): the gym's three choices, and who
   // they would send to staff today, asked before a change is saved.
   getCheckinRules: (gymId) =>
     readThrough(checkinRulesResponseSchema, 'who can check in', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules`)),
@@ -1070,7 +1086,7 @@ export const orgService = {
     readThrough(
       checkinRulesPreviewResponseSchema,
       'who this stops',
-      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules/preview`, { params: { who: rules.who, overdue: rules.overdue } }),
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/checkin-rules/preview`, { params: { who: rules.who, overdue: rules.overdue, waiver: rules.waiver } }),
     ),
 
   // STAFF CHECK-IN AND THE LIVE LOG (Attendance; ROADMAP 16b-ii). The search and the

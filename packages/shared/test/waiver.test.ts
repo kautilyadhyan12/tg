@@ -6,6 +6,8 @@ import {
   acceptInvitationBodySchema,
   cleanSignedName,
   cleanWaiverText,
+  isUnder18,
+  signAtDeskBodySchema,
   saveGymWaiverBodySchema,
   signWaiverBodySchema,
   waiverReadyToSign,
@@ -122,5 +124,37 @@ describe("who a save asks to sign, said before Save", () => {
     ["nobody in the app", { savedText: null, inUse: false, draft: saved, people: 0, signed: 0 }],
   ])("asks nobody: %s", (_case, input) => {
     expect(waiverSaveAsks(input)).toBeNull();
+  });
+});
+
+describe("under 18 at the desk (3e-ii)", () => {
+  it.each([
+    ["no date of birth", null, "2026-10-14", null],
+    ["18 today", "2008-10-14", "2026-10-14", false],
+    ["18 tomorrow", "2008-10-15", "2026-10-14", true],
+    ["18 yesterday", "2008-10-13", "2026-10-14", false],
+    ["a child", "2015-03-02", "2026-10-14", true],
+    ["an adult of 40", "1986-01-01", "2026-10-14", false],
+    ["born 29 February, the day before 1 March of a year with no 29th", "2008-02-29", "2026-02-28", true],
+    ["born 29 February, on 1 March of a year with no 29th", "2008-02-29", "2026-03-01", false],
+  ] as const)("%s", (_name, dateOfBirth, today, expected) => {
+    expect(isUnder18(dateOfBirth, today)).toBe(expected);
+  });
+});
+
+describe("what staff send from the desk (3e-ii)", () => {
+  const id = ID;
+  it("takes the person or a parent or guardian, and a name", () => {
+    expect(signAtDeskBodySchema.parse({ waiverId: id, signer: "guardian", name: "  Ana   Reyes " })).toEqual({ waiverId: id, signer: "guardian", name: "Ana Reyes" });
+  });
+  it.each([
+    ["anybody else", { waiverId: id, signer: "staff", name: "Ana Reyes" }],
+    ["no signer", { waiverId: id, name: "Ana Reyes" }],
+    ["a name of one letter", { waiverId: id, signer: "person", name: "A" }],
+    ["a name nobody can see", { waiverId: id, signer: "person", name: "​​ㅤ" }],
+    ["an entry of the gym's list named in the body", { waiverId: id, signer: "person", name: "Ana Reyes", entryId: id }],
+    ["no wording", { signer: "person", name: "Ana Reyes" }],
+  ])("refuses %s", (_name, body) => {
+    expect(signAtDeskBodySchema.safeParse(body).success).toBe(false);
   });
 });

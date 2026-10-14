@@ -1,5 +1,6 @@
 // A gym's waiver and its signatures (ROADMAP 3e-i; migration 0103). Every statement
 // carries the gym in its WHERE.
+import { deskSignerSchema, type DeskSigner } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 
 export type SqlOrTx = Sql | TransactionSql;
@@ -117,4 +118,91 @@ export async function signAtJoin(tx: TransactionSql, input: { gymId: string; wai
     ON CONFLICT (waiver_id, user_id) DO NOTHING
     RETURNING id`;
   return rows.length > 0;
+}
+
+// ── AT THE DESK (3e-ii; migration 0106) ──
+// A desk signature is a record's: the person on the gym's list, never an app account.
+
+export interface DeskSignatureRow {
+  entryId: string;
+  name: string;
+  signer: DeskSigner;
+  at: Date;
+  /** The member of staff who opened the screen, as the app names them; null where their
+   *  account is gone. */
+  by: string | null;
+}
+
+/** These current records' desk signatures of this wording; every current record's for null. */
+export async function deskSignaturesOf(
+  sql: SqlOrTx,
+  gymId: string,
+  waiverId: string,
+  entryIds: readonly string[] | null,
+): Promise<Map<string, DeskSignatureRow>> {
+  if (entryIds !== null && entryIds.length === 0) return new Map();
+  const ids = entryIds === null ? null : [...entryIds];
+  const rows = await sql<{ entry_id: string; signed_name: string; signer: string; signed_at: Date; by: string | null }[]>`
+    SELECT s.entry_id, s.signed_name, s.signer, s.signed_at, u.display_name AS by
+    FROM gym_waiver_desk_signatures s
+    JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id AND e.former_at IS NULL
+    LEFT JOIN users u ON u.id = s.witnessed_by AND u.status = 'active'
+    WHERE s.gym_id = ${gymId} AND s.waiver_id = ${waiverId}
+      AND (${ids}::uuid[] IS NULL OR s.entry_id = ANY(${ids}::uuid[]))`;
+  return new Map(
+    rows.map((row) => [
+      row.entry_id,
+      // Text under a CHECK: parsed, so a signer this build does not know fails here.
+      { entryId: row.entry_id, name: row.signed_name, signer: deskSignerSchema.parse(row.signer), at: row.signed_at, by: row.by },
+    ]),
+  );
+}
+
+/** Every app account that signed this wording at this gym. */
+export async function appSignersOf(sql: SqlOrTx, gymId: string, waiverId: string): Promise<Set<string>> {
+  const rows = await sql<{ user_id: string }[]>`
+    SELECT user_id FROM gym_waiver_signatures WHERE gym_id = ${gymId} AND waiver_id = ${waiverId}`;
+  return new Set(rows.map((row) => row.user_id));
+}
+
+/** A person signs at the desk, in one statement: written only while the wording shown is
+ *  the one the gym asks for, the record is on the gym's list today, and its date of birth
+ *  is still the one the under-18 check read. False where nothing was written, a second
+ *  press of the same signature included. */
+export async function signAtDesk(
+  sql: SqlOrTx,
+  input: { gymId: string; waiverId: string; entryId: string; dateOfBirth: string | null; signer: DeskSigner; name: string; witnessedBy: string; at: Date },
+): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    INSERT INTO gym_waiver_desk_signatures (gym_id, waiver_id, entry_id, signer, signed_name, witnessed_by, signed_at)
+    SELECT w.gym_id, w.id, e.id, ${input.signer}, ${input.name}, ${input.witnessedBy}, ${input.at}
+    FROM gym_waivers w
+    JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = ${input.entryId} AND e.former_at IS NULL
+    WHERE w.gym_id = ${input.gymId} AND w.id = ${input.waiverId} AND w.stopped_at IS NULL
+      AND w.version = (SELECT max(version) FROM gym_waivers WHERE gym_id = ${input.gymId})
+      AND e.date_of_birth IS NOT DISTINCT FROM ${input.dateOfBirth}::date
+    ON CONFLICT (waiver_id, entry_id) DO NOTHING
+    RETURNING id`;
+  return rows.length > 0;
+}
+
+/** Two records joined: the kept one takes the other's desk signatures, of every wording it
+ *  has none of its own for. The rest let go of their record when it is deleted and stay. */
+export async function moveDeskSignatures(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<void> {
+  await tx`
+    UPDATE gym_waiver_desk_signatures s SET entry_id = ${toEntryId}
+    WHERE s.gym_id = ${gymId} AND s.entry_id = ${fromEntryId}
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_waiver_desk_signatures k
+        WHERE k.gym_id = ${gymId} AND k.waiver_id = s.waiver_id AND k.entry_id = ${toEntryId}
+      )`;
+}
+
+/** A current record of the gym as the desk's box reads it: its name and date of birth. */
+export async function deskRecord(sql: SqlOrTx, gymId: string, entryId: string): Promise<{ fullName: string; dateOfBirth: string | null } | null> {
+  const rows = await sql<{ full_name: string; date_of_birth: string | null }[]>`
+    SELECT full_name, date_of_birth::text AS date_of_birth FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ${entryId} AND former_at IS NULL`;
+  const row = rows[0];
+  return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth };
 }

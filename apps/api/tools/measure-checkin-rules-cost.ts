@@ -41,7 +41,7 @@ const BURST = 20;
 const PLAN = "zz_checkin_rules_cost";
 const PREFIX = "checkin-rules-cost-";
 const ZONE = "Europe/London";
-const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
 if (!Number.isInteger(PEOPLE) || PEOPLE < 200) {
   console.error("measure-checkin-rules-cost: --people= takes a whole number, 200 or more");
   process.exit(2);
@@ -259,7 +259,7 @@ await measure("all 20 gyms at one moment", async () => {
   await Promise.all(all.map((gym) => previewRules(deps(), gym.owner, gym.id, STRICT, yes)));
 });
 await measure("Save", async (i) => {
-  await saveRules(deps(), big.owner, big.id, i % 2 === 0 ? STRICT : { who: "everyone", overdue: "let_in" }, yes);
+  await saveRules(deps(), big.owner, big.id, i % 2 === 0 ? STRICT : { who: "everyone", overdue: "let_in", waiver: "let_in" }, yes);
 });
 
 await cleanup();

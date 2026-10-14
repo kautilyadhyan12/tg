@@ -42,7 +42,8 @@ import SentencePlace from '../../components/console/SentencePlace';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
-import { waiverLineParts, waiverNotInAppLine } from './waiverView';
+import { signedInApp, waiverLineParts } from './waiverView';
+import DeskWaiver from './DeskWaiver';
 import {
   DAY_FIELDS,
   HELD_ANSWERS,
@@ -1415,14 +1416,20 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ))}
           </section>
         ) : null}
-        {p.waiverInUse && p.members.length === 0 && p.formerAt === null ? (
-          // Nobody in the app uses this record, so nobody can have signed for it (3e-i).
-          <section className="c-card px-4 py-3 md:px-5 md:py-4">
-            <h3 className="c-h2 mb-1">Waiver</h3>
-            <p className="c-s14 c-t2 m-0" data-testid="waiver-line">
-              {waiverNotInAppLine(p.fullName)}
-            </p>
-          </section>
+        {p.waiverInUse && p.formerAt === null && !signedInApp(p) ? (
+          // Nobody whose record this is has signed in the app: signed at the desk, or the
+          // button to sign there now (3e-ii).
+          <DeskWaiver
+            key={`desk-waiver-${p.entryId}`}
+            gymId={gymId}
+            entry={p}
+            readOnly={readOnly}
+            when={(iso) => noteDay(iso, gym?.timezone ?? null)}
+            onSigned={(signed) => {
+              setEntry((e) => (e !== null && e.entryId === p.entryId ? { ...e, waiverDesk: signed } : e));
+              onChanged();
+            }}
+          />
         ) : null}
         {byHand.length > 0 ? (
           <p className="c-s13 c-t3 m-0">

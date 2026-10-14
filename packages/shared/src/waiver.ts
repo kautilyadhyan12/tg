@@ -133,3 +133,59 @@ export function waiverSaveAsks(input: { savedText: string | null; inUse: boolean
   // "Again" only where somebody has signed the words in use.
   return input.savedText !== null && input.inUse && input.signed > 0 ? `${who} will be asked to sign again, because the words have changed.` : `${who} will be asked to sign it.`;
 }
+
+// ── At the desk (3e-ii; a person's page, `members.confirm`) ──
+// Staff open a person on the gym's list, hand the screen over, and the person — or, for
+// somebody under 18, a parent or guardian — reads the waiver and types their own name.
+// The signature is the record's, never an app account's.
+
+export const deskSignerSchema = z.enum(["person", "guardian"]);
+export type DeskSigner = z.infer<typeof deskSignerSchema>;
+
+/** A signature made at the desk, as staff see it: who signed, the name typed, when, and
+ *  the member of staff who opened the screen (null where they have since left). */
+export const deskSignedSchema = z
+  .object({ name: z.string(), signer: deskSignerSchema, at: z.string(), by: z.string().nullable() })
+  .strict();
+export type DeskSigned = z.infer<typeof deskSignedSchema>;
+
+/** What the desk's box reads when it opens. */
+export const deskWaiverResponseSchema = z
+  .object({
+    gymName: z.string(),
+    /** The person on the list, as the gym wrote them. */
+    personName: z.string(),
+    timezone: z.string(),
+    /** The waiver the gym asks for today, or null where it asks for none. */
+    waiver: waiverToReadSchema.nullable(),
+    /** Under 18 by the record's date of birth on the gym's own day; null where the record
+     *  holds no date of birth. */
+    minor: z.boolean().nullable(),
+    /** This record's desk signature of THAT wording, or null. */
+    signed: deskSignedSchema.nullable(),
+  })
+  .strict();
+export type DeskWaiverResponse = z.infer<typeof deskWaiverResponseSchema>;
+
+export const signAtDeskBodySchema = z.object({ waiverId: z.string().uuid(), signer: deskSignerSchema, name: signedNameSchema }).strict();
+export type SignAtDeskBody = z.infer<typeof signAtDeskBodySchema>;
+
+export const signAtDeskResponseSchema = z.object({ signed: deskSignedSchema }).strict();
+export type SignAtDeskResponse = z.infer<typeof signAtDeskResponseSchema>;
+
+export const WAIVER_DESK_WORDS = {
+  /** The record says the person is under 18 and the box said they sign themselves. */
+  guardian_needed: (name: string): string => `${name === "" ? "This person" : name} is under 18, so a parent or guardian signs for them.`,
+  /** The record is not on the list any more, or is another gym's. */
+  person_not_found: "We couldn't find this person on your list.",
+} as const;
+
+/** Under 18 on `today` by a date of birth, both `YYYY-MM-DD` in the gym's own calendar;
+ *  null where there is no date of birth. Somebody born on 29 February turns 18 on
+ *  1 March in a year with no 29th. */
+export function isUnder18(dateOfBirth: string | null, today: string): boolean | null {
+  if (dateOfBirth === null) return null;
+  const year = Number(dateOfBirth.slice(0, 4));
+  if (!Number.isInteger(year)) return null;
+  return today < `${String(year + 18).padStart(4, "0")}${dateOfBirth.slice(4)}`;
+}

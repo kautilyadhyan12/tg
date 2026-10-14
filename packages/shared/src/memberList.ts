@@ -16,7 +16,7 @@ import {
 } from "./memberInvites.js";
 import { heldOnListSchema } from "./heldOnList.js";
 import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
-import { waiverSignedSchema } from "./waiver.js";
+import { deskSignedSchema, waiverSignedSchema } from "./waiver.js";
 
 // ---------------------------------------------------------------------------
 // Limits (§9.9)
@@ -1694,6 +1694,9 @@ export const memberListViewSchema = z.object({
   /** Each App choice with how many current members it holds (§18.4), in the Filter's
    *  order, choices holding nobody left out. */
   appWords: z.array(memberAppWordCountSchema).max(MEMBER_APP_FILTER_ORDER.length).default([]),
+  /** How many current members have not signed the waiver the gym asks for today (3e-ii),
+   *  for the Filter's "Waiver not signed"; null where the gym asks for none. */
+  waiverNotSigned: z.number().int().min(0).nullable().default(null),
   /** The current members an import found a problem with, until staff fix it (5b-v-d-iv). */
   review: memberListReviewSignSchema.default({ count: 0 }),
   /** How many pairs may be one person twice (5b-iv-a), for the Members sign. */
@@ -1823,6 +1826,9 @@ export const memberListEntriesQuerySchema = z
     app: z.union([memberAppFilterSchema, z.array(memberAppFilterSchema).max(MEMBER_APP_FILTER_ORDER.length)]).optional(),
     /** Only the people who hold this one of the gym's tags (5d-ii; §18.13). */
     tag: z.string().uuid().optional(),
+    /** Only the current members who have not signed the waiver the gym asks for today
+     *  (3e-ii): no signature at the desk, and none in the app by the person the record is. */
+    waiver: z.literal("not_signed").optional(),
     /** `over`: only the people the Members sign counts (21c-iii), whose last membership
      *  here has ended or been cancelled. `over_owing`: only the people left off it because
      *  they still owe on a bill. Current members only. */
@@ -2393,6 +2399,8 @@ export const memberListEntryDetailSchema = memberListEntrySchema.extend({
   review: z.array(memberListReviewLineSchema).max(MEMBER_LIST_MAX_REVIEW_ITEMS).default([]),
   /** The gym asks people to sign a waiver today (3e-i). */
   waiverInUse: z.boolean().default(false),
+  /** This record's signature of that waiver, made at the desk (3e-ii), or null. */
+  waiverDesk: deskSignedSchema.nullable().default(null),
 });
 export type MemberListEntryDetail = z.infer<typeof memberListEntryDetailSchema>;
 

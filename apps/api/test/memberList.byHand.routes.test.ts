@@ -1156,6 +1156,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // walk-in's when the record is deleted for good (`register.routes.test.ts`).
       "gym_sales.entry_id",
       "gym_sales.gym_id",
+      // A waiver signed at the desk (0106): moved by the join where the kept record has none
+      // of that wording, and kept with no record when one is deleted for good, as the gym's
+      // proof (`waiver.desk.routes.test.ts`).
+      "gym_waiver_desk_signatures.entry_id",
+      "gym_waiver_desk_signatures.gym_id",
     ]);
   });
 });
