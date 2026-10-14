@@ -83,6 +83,8 @@ function members(over: Partial<MembersReportFacts>): ReturnType<typeof membersRe
       stay: { leavers: 0, totalDays: 0 },
       leads: [],
       anyLead: false,
+      yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 },
+      firstLeadOn: null,
       ...over,
     }),
   );
@@ -161,6 +163,7 @@ function money(over: Partial<MoneyReportFacts>) {
       months: [],
       owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
       members: { today: TODAY, firstListedOn: "2024-03-04", everLeft: false, months: monthsTo(TODAY, () => ({})) },
+      yearEarlier: { paidMinor: 0, refundedMinor: 0 },
       ...over,
     }),
   );

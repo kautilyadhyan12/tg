@@ -1,6 +1,6 @@
 import { REPORT_FULL_WEEKS_NEEDED, addDays, weekdayOf } from '@app/shared';
 import { clockLabel } from './hoursView';
-import { csvWords, dayText, monthShort, percentText, periodWords } from './reportsView';
+import { changeWords, csvWords, dayText, earlierLine, monthShort, percentText, periodWords } from './reportsView';
 
 // The Reports page's attendance words (spec Part 3 §16.5; ROADMAP 21a-ii, 21d-i). Every figure
 // says how it is worked out, and a figure the gym's check-ins or classes cannot give is a
@@ -49,6 +49,9 @@ export function visitsLine(report) {
 export function visitTiles(report, words, clockFormat) {
   const week = report.weeks.length > 0 ? report.weeks[report.weeks.length - 1] : null;
   const shownFrom = report.days.length > 0 ? report.days[0].day : report.period.from;
+  const firstCheckIn = (since) => `Your first check-in was on ${dayText(since)}.`;
+  const memberEarlier = (f) =>
+    f.perMember === null ? `nobody was on your ${words.person} list for those weeks` : `${String(f.perMember.perWeek)} · ${changeWords(report.perMember.state === 'ok' ? report.perMember.perWeek : 0, f.perMember.perWeek, (n) => String(Math.round(n * 10) / 10))}`;
 
   let member;
   if (report.perMember.state === 'ok') {
@@ -56,6 +59,7 @@ export function visitTiles(report, words, clockFormat) {
     member = {
       value: String(m.perWeek),
       line: null,
+      earlier: earlierLine(report.yearEarlier, firstCheckIn, memberEarlier),
       note: `${count(m.visitors)} of the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayBefore(m.from, m.to)} came · ${span(m.from, m.to)}`,
       how: `The ${visitsWord(m.visits)} that the ${count(m.members)} ${m.members === 1 ? words.person : words.people} on your list since ${dayText(m.from)} made in the last ${String(m.weeks)} full weeks (${span(m.from, m.to)}), shared between them and the ${String(m.weeks)} weeks. Anyone added since, and anyone you have removed, is not counted.`,
     };
@@ -107,6 +111,7 @@ export function visitTiles(report, words, clockFormat) {
       label: 'Visits',
       value: count(report.inPeriod.visits),
       line: null,
+      earlier: earlierLine(report.yearEarlier, firstCheckIn, (f) => `${count(f.visits)} · ${changeWords(report.inPeriod.visits, f.visits)}`),
       note: `${count(report.inPeriod.people)} ${report.inPeriod.people === 1 ? 'person' : 'people'} · ${span(shownFrom, report.period.to)}${week === null ? '' : ` · this week, so far: ${count(week.visits)}`}`,
       how: `Every check-in from ${dayText(shownFrom)} to today${shownFrom === report.period.from ? '' : ', the day of your first check-in'}. Someone who comes on three days is three visits and one person.`,
     },
@@ -272,6 +277,9 @@ export function hourGrid(report, clockFormat) {
 export function classTiles(report) {
   const classes = report.classes;
   if (classes.state !== 'ok') return null;
+  const firstClass = (since) => `Your first class ran on ${dayText(since)}.`;
+  const was = classes.yearEarlier;
+  const noneThen = (f) => (f.classes === 0 ? 'no class ran' : null);
   const since = `classes that started since ${dayText(classes.from)} (${periodWords(report.period)})`;
   const fill = classes.fill;
   const noShows = classes.noShows;
@@ -280,6 +288,7 @@ export function classTiles(report) {
     noShowTile = {
       value: percentText(noShows.percent),
       line: null,
+      earlier: earlierLine(was, firstClass, (f) => noneThen(f) ?? (f.noShowPercent === null ? 'no place was marked Came or No-show' : percentText(f.noShowPercent))),
       note: `${noShows.noShows === 1 ? '1 no-show' : `${count(noShows.noShows)} no-shows`} of ${placesWord(noShows.marked)} marked${noShows.unmarked > 0 ? ` · ${count(noShows.unmarked)} not marked yet` : ''}`,
       calendar: false,
     };
@@ -298,6 +307,10 @@ export function classTiles(report) {
       key: 'fill',
       label: 'How full classes are',
       value: fill.state === 'ok' ? percentText(fill.percent) : null,
+      earlier:
+        fill.state === 'ok'
+          ? earlierLine(was, firstClass, (f) => noneThen(f) ?? (f.fillPercent === null ? 'no class had a limit on places' : percentText(f.fillPercent)))
+          : null,
       line: fill.state === 'ok' ? null : 'None of your classes has a limit on places, so there is no share to give.',
       note: fill.state === 'ok' ? `${count(fill.booked)} of ${placesWord(fill.places)} booked · ${classesWord(fill.classes)}` : null,
       how: `Places booked, out of all the places in ${since}. A cancelled class and a class with no limit on places are not counted; a cancelled booking and the waitlist are not a place booked.`,

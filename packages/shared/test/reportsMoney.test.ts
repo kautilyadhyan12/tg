@@ -86,6 +86,7 @@ function facts(over: Partial<MoneyReportFacts> = {}): MoneyReportFacts {
     months: [],
     owed: { currentMinor: 0, currentPeople: 0, listPeople: 0, pastMinor: 0, pastPeople: 0, overdueMinor: 0, overduePeople: 0 },
     members: { today: TODAY, firstListedOn: "2026-01-05", everLeft: true, months: monthsTo(TODAY, LEAVING) },
+    yearEarlier: { paidMinor: 0, refundedMinor: 0 },
     ...over,
   };
 }
@@ -206,7 +207,7 @@ describe("lifetime value: the money of churn's months for each member who left i
     const f = facts({ months: quarter });
     const r = figures({ months: quarter });
     expect(r.lifetimeValue).toEqual({ state: "ok", minor: 100000, months: ["2026-07", "2026-08", "2026-09"], leavers: 10 });
-    const members = membersReportFrom({ ...f.members, period: "12m", inPeriod: { joined: 0, left: 0 }, timezone: f.timezone, listChangedOn: null, activeNow: 100, stay: { leavers: 0, totalDays: 0 }, leads: [], anyLead: false });
+    const members = membersReportFrom({ ...f.members, period: "12m", inPeriod: { joined: 0, left: 0 }, timezone: f.timezone, listChangedOn: null, activeNow: 100, stay: { leavers: 0, totalDays: 0 }, leads: [], anyLead: false, yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 }, firstLeadOn: null });
     expect(members.churnMonths).toEqual(["2026-07", "2026-08", "2026-09"]);
     if (members.churn.state !== "ok") throw new Error("no churn");
     // 1,000,000 over 300 member-months is 3,333.33 a member a month; churn is 10 in 300.

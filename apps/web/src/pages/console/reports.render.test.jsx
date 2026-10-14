@@ -52,6 +52,8 @@ const facts = (over = {}) => ({
     { source: 'walk_in', leads: 3, joined: 1 },
     { source: 'friend', leads: 1, joined: 1 },
   ],
+  yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 },
+  firstLeadOn: null,
   ...over,
 });
 const NOBODY_REMOVED = facts({
@@ -94,6 +96,8 @@ beforeEach(() => {
       hoursNoTime: 0,
       member: { members: 0, visits: 0, visitors: 0 },
       classes: { ever: false, types: [] },
+      firstClassOn: null,
+      yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] },
     }),
   );
 });
@@ -111,11 +115,11 @@ describe('the members figures', () => {
     expect(svc.members).toHaveBeenCalledWith('g1', '12m');
     expect(['active', 'new', 'left', 'churn', 'retention', 'stay'].map((k) => tile(k).textContent)).toEqual([
       'Members now11Members on your list, month by month1 Jul 2026Today',
-      'New members2since 1 Jul 2026, the month after your member list started',
-      'Members who left4since 10 Jun 2026, when your member list started',
+      'New members2since 1 Jul 2026, the month after your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
+      'Members who left4since 10 Jun 2026, when your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
       'Churn5.3%a month, Jul to Sep 2026',
       'Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left',
-      'Average stay11 months4 people left · since 10 Jun 2026, when your member list started',
+      'Average stay11 months4 people left · since 10 Jun 2026, when your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
     ]);
     expect(screen.getByText('These figures come from your member list and the memberships you give in the app. Someone was last added or removed on 3 Oct 2026.')).toBeTruthy();
     expect(tableRows('Members, month by month')).toEqual([
@@ -170,7 +174,7 @@ describe('the members figures', () => {
       expect(tile(key).textContent, key).toContain(line);
       expect(tile(key).textContent, key).not.toContain('%');
     }
-    expect(tile('left').textContent).toBe('Members who left4since 15 Aug 2026, when your member list started');
+    expect(tile('left').textContent).toBe('Members who left4since 15 Aug 2026, when your member list startedA year earlier: no figures. Your member list started on 15 Aug 2026.');
     expect(screen.queryByTestId('stay-bar')).toBeNull();
   });
 
@@ -347,7 +351,7 @@ describe('who sees it, and when it cannot be read', () => {
 describe('the period', () => {
   const picked = () => screen.getAllByRole('radio').map((b) => [b.textContent, b.getAttribute('aria-checked')]);
   const attendanceOf = (period) =>
-    attendanceReportFrom({ timezone: 'Europe/London', today: '2026-10-10', period, firstVisitOn: null, days: [], weeks: [], people: 0, hours: [], hoursNoTime: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: { ever: false, types: [] } });
+    attendanceReportFrom({ timezone: 'Europe/London', today: '2026-10-10', period, firstVisitOn: null, days: [], weeks: [], people: 0, hours: [], hoursNoTime: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: { ever: false, types: [] }, firstClassOn: null, yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] } });
   // The server's part: each read answers for the period it was asked.
   const answering = () => {
     svc.members.mockImplementation((gymId, period) => Promise.resolve(membersReportFrom(facts({ period, firstListedOn: '2024-02-01' }))));
@@ -365,7 +369,7 @@ describe('the period', () => {
     ]);
     // This owner is shown no money, so the line names no money figure.
     expect(screen.getByTestId('period-line').textContent).toBe(
-      "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose.",
+      "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose. \"A year earlier\" under a figure counts the same days a year before: 1 Nov 2024 to 10 Oct 2025.",
     );
     expect(svc.attendance).toHaveBeenCalledWith('g1', '12m');
   });
@@ -376,7 +380,7 @@ describe('the period', () => {
     open({ ...ORG, privileges: [...ORG.privileges, 'billing.members'] });
     await screen.findByTestId('tile-active');
     expect(screen.getByTestId('period-line').textContent).toBe(
-      "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose.",
+      "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn, retention, monthly recurring revenue, payment due and lifetime value are today's figures, so they stay the same whichever period you choose. \"A year earlier\" under a figure counts the same days a year before: 1 Nov 2024 to 10 Oct 2025.",
     );
   });
 
@@ -433,8 +437,8 @@ describe('the period', () => {
     ]);
     expect(svc.members).toHaveBeenLastCalledWith('g1', '4w');
     await waitFor(() => expect(svc.attendance).toHaveBeenLastCalledWith('g1', '4w'));
-    expect(tile('new').textContent).toBe('New members213 Sep 2026 to 10 Oct 2026');
-    expect(tile('left').textContent).toBe('Members who left413 Sep 2026 to 10 Oct 2026');
+    expect(tile('new').textContent).toBe('New members213 Sep 2026 to 10 Oct 2026A year earlier: 0 · up 2');
+    expect(tile('left').textContent).toBe('Members who left413 Sep 2026 to 10 Oct 2026A year earlier: 0 · up 4');
     // Four weeks touch two months; the table lists those and no other.
     expect(tableRows('Members, month by month').map((row) => row[0])).toEqual(['Month', 'Oct 2026 (so far)', 'Sep 2026']);
 

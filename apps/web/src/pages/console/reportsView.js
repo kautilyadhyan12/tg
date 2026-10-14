@@ -1,7 +1,7 @@
 import { REPORT_FULL_MONTHS_NEEDED, REPORT_PERIODS } from '@app/shared';
 import { sourceWord } from './leadsView';
 
-// The Reports page's words (spec Part 3 §16.5; ROADMAP 21a-i, 21d-i). Every figure says how it is
+// The Reports page's words (spec Part 3 §16.5; ROADMAP 21a-i, 21d-i, 21d-ii). Every figure says how it is
 // worked out and which days it counts, and a figure the gym's list cannot give is a sentence,
 // never a zero.
 
@@ -41,12 +41,38 @@ export function countedSpan(period, startedOn, what) {
   if (startedOn !== null && startedOn > period.from) return `since ${dayText(startedOn)}, ${what}`;
   return periodSpan(period);
 }
-/** The line under the picker: the days counted, and what does not move with them. The
- *  money figures are named only to staff who are shown money. */
-export function periodLine(period, words, seesMoney) {
+/** The line under the picker: the days counted, what does not move with them, and the
+ *  days "A year earlier" counts. The money figures are named only to staff who are shown money. */
+export function periodLine(period, words, seesMoney, yearEarlier = null) {
   const still = [`${words.peopleCap} now`, 'churn', 'retention', ...(seesMoney ? ['monthly recurring revenue', 'payment due', 'lifetime value'] : [])];
-  return `Showing ${periodSpan(period)}. ${still.slice(0, -1).join(', ')} and ${still[still.length - 1]} are today's figures, so they stay the same whichever period you choose.`;
+  const earlier = yearEarlier === null ? '' : ` "A year earlier" under a figure counts the same days a year before: ${periodSpan(yearEarlier)}.`;
+  return `Showing ${periodSpan(period)}. ${still.slice(0, -1).join(', ')} and ${still[still.length - 1]} are today's figures, so they stay the same whichever period you choose.${earlier}`;
 }
+
+// A YEAR EARLIER. Under each figure that follows the period, the same figure for the same
+// days a year before; where the app has no records of all those days, why there is none.
+
+/** "up 3", "down 3" or "the same", with `text` writing the difference. */
+export function changeWords(now, then, text = (n) => n.toLocaleString('en-GB')) {
+  if (now === then) return 'the same';
+  return now > then ? `up ${text(now - then)}` : `down ${text(then - now)}`;
+}
+
+/** The line under a figure: "A year earlier: 9 · up 3", from `said`, the year-earlier
+ *  figure's words. Without the records for those days, `began` says why from the day they
+ *  began. */
+export function earlierLine(yearEarlier, began, said) {
+  if (yearEarlier.state === 'ok') return `A year earlier: ${said(yearEarlier)}`;
+  if (yearEarlier.since === null) return 'A year earlier: no figures.';
+  return `A year earlier: no figures. ${began(yearEarlier.since, yearEarlier)}`;
+}
+
+/** Why the member list has no figure a year earlier: it began after those days did, or in
+ *  the month they began, whose people are not new members. */
+const listBegan = (words) => (since, yearEarlier) =>
+  since > yearEarlier.from
+    ? `Your ${words.person} list started on ${dayText(since)}.`
+    : `Your ${words.person} list started on ${dayText(since)}, and the people on it in its first month are not counted as new.`;
 /** Under a month-by-month table when the period begins inside a month: the rows are whole
  *  months, so they do not add up to the period's own figure. Null where they do. */
 export function wholeMonthsNote(period) {
@@ -146,6 +172,8 @@ export function memberTiles(report, words) {
   // New is counted from the month after the list began, when that is inside the period.
   const newFrom = report.inPeriod.joinedFrom;
   const newSpan = countedSpan(report.period, newFrom, `the month after your ${words.person} list started`);
+  const was = report.yearEarlier;
+  const began = listBegan(words);
 
   return [
     {
@@ -162,6 +190,7 @@ export function memberTiles(report, words) {
       value: started ? null : count(report.inPeriod.joined),
       line: started ? `Your ${words.person} list started this month, so new ${words.people} are counted from next month.` : null,
       note: started ? null : newSpan,
+      earlier: started ? null : earlierLine(was, began, (f) => `${count(f.joined)} · ${changeWords(report.inPeriod.joined ?? 0, f.joined)}`),
       how: `${words.peopleCap} whose join date is from ${dayText(newFrom ?? report.period.from)} to today. Where your list gave no join date, or one later than the day they were added here, it is the day they were added. The month your list started is not counted.`,
     },
     {
@@ -170,6 +199,7 @@ export function memberTiles(report, words) {
       value: report.everLeft ? count(report.inPeriod.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
       note: report.everLeft ? span : null,
+      earlier: report.everLeft ? earlierLine(was, began, (f) => `${count(f.left)} · ${changeWords(report.inPeriod.left, f.left)}`) : null,
       how: `${words.peopleCap} removed from your ${words.person} list from ${from} to today, and ${words.people} whose membership ended or was cancelled in those days and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
     },
     {
@@ -194,6 +224,10 @@ export function memberTiles(report, words) {
       value: stay.value,
       line: stay.line,
       note: stay.note,
+      earlier:
+        stay.value === null || report.averageStay.state !== 'ok'
+          ? null
+          : earlierLine(was, began, (f) => (f.stay === null ? 'nobody left' : stayText(f.stay.days))),
       how: `How long the ${words.people} who left from ${from} to today had been with you on average, from their join date to the day they were removed or their membership ended.`,
     },
   ];
@@ -237,9 +271,21 @@ export function leadsMissing(report) {
 export function leadsHeadline(report) {
   if (report.leads.percent === null) return null;
   if (!everJoined(report)) {
-    return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: `${leadsWord(report.leads.total)} added · ${periodSpan(report.period)}` };
+    return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: `${leadsWord(report.leads.total)} added · ${periodSpan(report.period)}`, earlier: leadsEarlier(report) };
   }
-  return { value: percentText(report.leads.percent), line: null, note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined · added ${periodSpan(report.period)}` };
+  return {
+    value: percentText(report.leads.percent),
+    line: null,
+    note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined · added ${periodSpan(report.period)}`,
+    earlier: leadsEarlier(report),
+  };
+}
+
+/** Leads a year earlier: how many were added, and how many of them are marked Joined. */
+function leadsEarlier(report) {
+  return earlierLine(report.leads.yearEarlier, (since) => `Your first lead was added on ${dayText(since)}.`, (f) =>
+    f.total === 0 ? 'no lead was added' : `${count(f.joined)} of ${leadsWord(f.total)} joined · ${percentText(Math.round((f.joined / f.total) * 1000) / 10)}`,
+  );
 }
 
 /** How the leads figure is worked out, for the period shown. */

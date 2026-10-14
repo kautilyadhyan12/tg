@@ -5,7 +5,16 @@
 // figures, and says why where a figure cannot be given.
 import { z } from "zod";
 import { addDays, daysBetween } from "./heldMemberships.js";
-import { reportPeriodOf, reportPeriodSchema, type ReportPeriod, type ReportPeriodKey } from "./reportPeriod.js";
+import {
+  coversFrom,
+  reportPeriodOf,
+  reportPeriodSchema,
+  yearEarlierFigureSchema,
+  yearEarlierOf,
+  type ReportPeriod,
+  type ReportPeriodKey,
+  type YearEarlierSpan,
+} from "./reportPeriod.js";
 
 /** The most days a period holds: twelve calendar months, one of them February in a leap year. */
 export const REPORT_VISIT_DAYS_MAX = 366;
@@ -85,6 +94,16 @@ export function attendanceWindows(today: string, firstVisitOn: string | null, ke
   return { period, thisWeek, fullWeeks, whole, hours };
 }
 
+/** The same days a year earlier, and the whole weeks, Monday to Sunday, inside them that
+ *  visits a member a week is counted over there; null where not one whole week fits. */
+export function attendanceYearEarlier(today: string, key: ReportPeriodKey): { span: YearEarlierSpan; whole: DayWindow | null } {
+  const span = yearEarlierOf(reportPeriodOf(key, today));
+  const from = mondayFrom(span.from);
+  const lastMonday = mondayOf(span.to);
+  const weeks = Math.floor(daysBetween(from, lastMonday) / 7);
+  return { span, whole: weeks >= 1 ? { from, to: addDays(lastMonday, -1), weeks } : null };
+}
+
 /** One class the gym runs, counted over the classes of it that started in the window. */
 export interface ReportClassCounts {
   name: string;
@@ -124,6 +143,16 @@ export interface AttendanceReportFacts {
   member: { members: number; visits: number; visitors: number };
   /** Whether the gym has set up any class, and the classes that started in the window. */
   classes: { ever: boolean; types: readonly ReportClassCounts[] };
+  /** The day of the gym's first class that ran; null with none. */
+  firstClassOn: string | null;
+  /** The same counts over `attendanceYearEarlier`'s days: visits a member a week of the
+   *  people on the list on its last day who were on it when its whole weeks began. */
+  yearEarlier: {
+    visits: number;
+    people: number;
+    member: { members: number; visits: number; visitors: number };
+    classes: readonly ReportClassCounts[];
+  };
 }
 
 const cellSchema = z.object({ weekday: weekdaySchema, hour: hourSchema }).strict();
@@ -202,6 +231,22 @@ const classTypeSchema = z
   })
   .strict();
 
+const classesEarlierSchema = yearEarlierFigureSchema({
+  /** Classes that ran; the two shares are null where there is none to give. */
+  classes: countSchema,
+  fillPercent: percentSchema.nullable(),
+  noShowPercent: percentSchema.nullable(),
+});
+export type ReportClassesYearEarlier = z.infer<typeof classesEarlierSchema>;
+
+const visitsEarlierSchema = yearEarlierFigureSchema({
+  visits: countSchema,
+  people: countSchema,
+  /** Null where not one whole week fits in those days, or nobody was on the list then. */
+  perMember: z.object({ perWeek: z.number().min(0), weeks: countSchema.min(1), members: countSchema.min(1) }).strict().nullable(),
+});
+export type ReportVisitsYearEarlier = z.infer<typeof visitsEarlierSchema>;
+
 const classesSchema = z.discriminatedUnion("state", [
   /** The gym has set up no class. */
   z.object({ state: z.literal("none_ever") }).strict(),
@@ -218,6 +263,7 @@ const classesSchema = z.discriminatedUnion("state", [
       types: z.array(classTypeSchema).min(1).max(REPORT_CLASS_TYPES_MAX),
       /** Classes counted in the totals and not listed. */
       moreTypes: countSchema,
+      yearEarlier: classesEarlierSchema,
     })
     .strict(),
 ]);
@@ -241,6 +287,9 @@ export const attendanceReportSchema = z
       .array(z.object({ weekStart: daySchema, visits: countSchema, people: countSchema, full: z.boolean() }).strict())
       .max(REPORT_VISIT_WEEKS_MAX),
     perMember: perMemberSchema,
+    /** Visits, people and visits a member a week over the same days a year earlier; no
+     *  figure where the first check-in came after they began. */
+    yearEarlier: visitsEarlierSchema,
     hours: hoursSchema,
     classes: classesSchema,
   })
@@ -275,7 +324,20 @@ function hoursFrom(facts: AttendanceReportFacts, window: AttendanceWindows["hour
   };
 }
 
-function classesFrom(facts: AttendanceReportFacts, from: string): ReportClasses {
+/** How full classes were and the share of no-shows, over `types`; null where none is given. */
+function classShares(types: readonly ReportClassCounts[]): { classes: number; fillPercent: number | null; noShowPercent: number | null } {
+  const sum = (pick: (t: ReportClassCounts) => number): number => types.reduce((total, t) => total + pick(t), 0);
+  const limited = sum((t) => t.limitedClasses);
+  const places = sum((t) => t.places);
+  const marked = sum((t) => t.attended) + sum((t) => t.noShows);
+  return {
+    classes: sum((t) => t.classes),
+    fillPercent: limited === 0 || places === 0 ? null : percentOf(sum((t) => t.booked), places),
+    noShowPercent: marked === 0 ? null : percentOf(sum((t) => t.noShows), marked),
+  };
+}
+
+function classesFrom(facts: AttendanceReportFacts, from: string, earlier: YearEarlierSpan): ReportClasses {
   const ran = facts.classes.types.filter((t) => t.classes > 0);
   if (ran.length === 0) return facts.classes.ever ? { state: "none_recent", from } : { state: "none_ever" };
   const sum = (pick: (t: ReportClassCounts) => number): number => ran.reduce((total, t) => total + pick(t), 0);
@@ -317,6 +379,9 @@ function classesFrom(facts: AttendanceReportFacts, from: string): ReportClasses 
       };
     }),
     moreTypes: Math.max(0, listed.length - REPORT_CLASS_TYPES_MAX),
+    yearEarlier: coversFrom(facts.firstClassOn, earlier.from)
+      ? { state: "ok", ...earlier, ...classShares(facts.yearEarlier.classes.filter((t) => t.classes > 0)) }
+      : { state: "no_history", ...earlier, since: facts.firstClassOn },
   };
 }
 
@@ -363,6 +428,26 @@ export function attendanceReportFrom(facts: AttendanceReportFacts): AttendanceRe
     };
   }
 
+  // A year earlier only where check-ins were kept here for every one of its days.
+  const earlier = attendanceYearEarlier(facts.today, facts.period);
+  const was = facts.yearEarlier;
+  const yearEarlier: ReportVisitsYearEarlier = coversFrom(first, earlier.span.from)
+    ? {
+        state: "ok",
+        ...earlier.span,
+        visits: was.visits,
+        people: was.people,
+        perMember:
+          earlier.whole === null || was.member.members === 0
+            ? null
+            : {
+                perWeek: Math.round((was.member.visits / earlier.whole.weeks / was.member.members) * 10) / 10,
+                weeks: earlier.whole.weeks,
+                members: was.member.members,
+              },
+      }
+    : { state: "no_history", ...earlier.span, since: first };
+
   return {
     timezone: facts.timezone,
     today: facts.today,
@@ -373,7 +458,8 @@ export function attendanceReportFrom(facts: AttendanceReportFacts): AttendanceRe
     days,
     weeks,
     perMember,
+    yearEarlier,
     hours: hoursFrom(facts, windows.hours),
-    classes: classesFrom(facts, from),
+    classes: classesFrom(facts, from, earlier.span),
   };
 }

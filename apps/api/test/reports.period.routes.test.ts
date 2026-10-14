@@ -406,7 +406,9 @@ d("Reports, the period: every figure counts the days the answer names (real Post
 
       // Next door reads its own under every period, and none of this gym's.
       for (const key of REPORT_PERIODS) {
-        expect((await membersOf(next, nextOwner, key)).leads, key).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
+        const { yearEarlier: leadsEarlier, ...theirLeads } = (await membersOf(next, nextOwner, key)).leads;
+        expect(theirLeads, key).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
+        expect(leadsEarlier, key).toMatchObject({ state: "no_history", since: null });
         expect((await membersOf(next, nextOwner, key)).inPeriod, key).toEqual({ joined: 1, joinedFrom: FROM[key], left: 0 });
         expect((await attendanceOf(next, nextOwner, key)).inPeriod, key).toEqual({ visits: 1, people: 1 });
         expect((await moneyOf(next, nextOwner, key)).inPeriod, key).toEqual({ paidMinor: 5000, refundedMinor: 0, netMinor: 5000 });

@@ -46,6 +46,8 @@ const MEMBERS = membersReportFrom({
   stay: { leavers: 2, totalDays: 400 },
   leads: [],
   anyLead: false,
+  yearEarlier: { joined: 0, left: 0, stay: { leavers: 0, totalDays: 0 }, leads: 0, leadsJoined: 0 },
+  firstLeadOn: null,
 });
 const NO_VISITS = attendanceReportFrom({
   timezone: 'Europe/London',
@@ -59,6 +61,8 @@ const NO_VISITS = attendanceReportFrom({
   hoursNoTime: 0,
   member: { members: 0, visits: 0, visitors: 0 },
   classes: { ever: false, types: [] },
+  firstClassOn: null,
+  yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] },
 });
 
 const gold = (over = {}) => ({
@@ -105,6 +109,7 @@ const money = (over = {}) =>
     ],
     owed: { currentMinor: 7998, currentPeople: 2, listPeople: 2, pastMinor: 6000, pastPeople: 1, overdueMinor: 4999, overduePeople: 1 },
     members: { today: TODAY, firstListedOn: '2026-01-05', everLeft: true, months: memberMonths },
+    yearEarlier: { paidMinor: 0, refundedMinor: 0 },
     ...over,
   }));
 
@@ -351,7 +356,7 @@ describe('the period', () => {
     );
     open();
     await screen.findByTestId('tile-recurring');
-    expect(tile('collected').textContent).toBe('Collected£95.0023 Sep 2026 to 20 Oct 2026: £110.00 paid, £15.00 refunded · October, so far: £45.00');
+    expect(tile('collected').textContent).toBe('Collected£95.0023 Sep 2026 to 20 Oct 2026: £110.00 paid, £15.00 refunded · October, so far: £45.00A year earlier: £0.00 · up £95.00');
     fireEvent.click(within(tile('collected')).getByRole('button', { name: 'How Collected is worked out' }));
     expect(within(tile('collected')).getByText('Payments your staff recorded from 23 Sep 2026 to today, less refunds noted in those days. A payment or a refund that was undone is not counted.')).toBeTruthy();
     // Whole months, each its own figure; and each membership's money in the four weeks.

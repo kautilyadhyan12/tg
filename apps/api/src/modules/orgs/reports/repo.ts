@@ -3,7 +3,7 @@
 // Every read names the gym in the WHERE and returns counts, never a person.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
-import { REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type ReportClassCounts } from "@app/shared";
+import { REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type DayWindow, type ReportClassCounts, type YearEarlierSpan } from "@app/shared";
 
 const count = z.number().int().min(0);
 const countsRowSchema = z.object({
@@ -17,6 +17,9 @@ const countsRowSchema = z.object({
   period_left: count,
   stay_leavers: count,
   stay_days: z.number().min(0),
+  earlier_joined: count,
+  earlier_left: count,
+  earlier_stay_days: z.number().min(0),
 });
 export type MemberCounts = z.infer<typeof countsRowSchema>;
 
@@ -64,7 +67,9 @@ export function listPeople(sql: Sql | TransactionSql, gymId: string, timezone: s
  *  with last year's join dates fills no month before September, when nobody on it could
  *  have been seen to leave. New, left and the stay of those who left are also counted
  *  from `periodFrom`, the first day of the period the page shows; new never in the month
- *  the list began (`newCountedFrom`). */
+ *  the list began (`newCountedFrom`). The same three over `earlier`, the same days a
+ *  year back, both ends among them: the caller gives that figure only where the list
+ *  covers every one of its days. */
 export async function readMemberCounts(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -72,6 +77,7 @@ export async function readMemberCounts(
   today: string,
   gone: readonly { id: string; on: string }[],
   periodFrom: string,
+  earlier: YearEarlierSpan,
 ): Promise<MemberCounts> {
   const first = await sql<{ first_listed_on: string | null }[]>`
     SELECT to_char(min((e.created_at AT TIME ZONE ${timezone})::date), 'YYYY-MM-DD') AS first_listed_on
@@ -100,7 +106,12 @@ export async function readMemberCounts(
       LEFT JOIN people p ON true
       GROUP BY m.first_day
     ),
-    shown AS (SELECT ${periodFrom}::date AS from_day)
+    shown AS (SELECT ${periodFrom}::date AS from_day),
+    was AS MATERIALIZED (
+      SELECT p.started, p.left_on FROM people p
+      WHERE (p.started >= ${earlier.from}::date AND p.started <= ${earlier.to}::date)
+         OR (p.left_on >= ${earlier.from}::date AND p.left_on <= ${earlier.to}::date)
+    )
     SELECT to_char(c.today, 'YYYY-MM-DD') AS today,
       (SELECT json_agg(json_build_object(
                 'month', to_char(b.first_day, 'YYYY-MM'),
@@ -117,7 +128,11 @@ export async function readMemberCounts(
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS period_left,
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_leavers,
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
-       FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days
+       FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days,
+      (SELECT count(*)::int FROM was WHERE started >= ${earlier.from}::date AND started <= ${earlier.to}::date) AS earlier_joined,
+      (SELECT count(*)::int FROM was WHERE left_on >= ${earlier.from}::date AND left_on <= ${earlier.to}::date) AS earlier_left,
+      (SELECT COALESCE(sum(GREATEST(left_on - started, 0)), 0)::float8
+       FROM was WHERE left_on >= ${earlier.from}::date AND left_on <= ${earlier.to}::date) AS earlier_stay_days
     FROM clock c`;
   return countsRowSchema.parse(rows[0]);
 }
@@ -129,15 +144,29 @@ export interface LeadCounts {
 }
 
 /** The gym's leads added from `periodFrom` on, on the gym's calendar, by where they came
- *  from, with how many of each are marked Joined; and whether it has any lead at all. */
-export async function readLeadCounts(sql: Sql, gymId: string, timezone: string, periodFrom: string): Promise<{ any: boolean; sources: LeadCounts[] }> {
+ *  from, with how many of each are marked Joined; the same over `earlier`'s days, and
+ *  the day the first lead was added (null with none). */
+export async function readLeadCounts(
+  sql: Sql,
+  gymId: string,
+  timezone: string,
+  periodFrom: string,
+  earlier: YearEarlierSpan,
+): Promise<{ any: boolean; firstOn: string | null; sources: LeadCounts[]; earlier: { leads: number; joined: number } }> {
   const sources = await sql<LeadCounts[]>`
     SELECT source, count(*)::int AS leads, (count(*) FILTER (WHERE status = 'joined'))::int AS joined
     FROM gym_leads
     WHERE gym_id = ${gymId} AND created_at >= (${periodFrom}::date::timestamp AT TIME ZONE ${timezone})
     GROUP BY source`;
-  const any = await sql<{ any: boolean }[]>`SELECT EXISTS (SELECT 1 FROM gym_leads WHERE gym_id = ${gymId}) AS any`;
-  return { any: any[0]?.any === true, sources };
+  const rows = await sql<{ first_on: string | null; leads: number; joined: number }[]>`
+    SELECT (SELECT to_char(min((l.created_at AT TIME ZONE ${timezone})::date), 'YYYY-MM-DD') FROM gym_leads l WHERE l.gym_id = ${gymId}) AS first_on,
+           count(*)::int AS leads, (count(*) FILTER (WHERE status = 'joined'))::int AS joined
+    FROM gym_leads
+    WHERE gym_id = ${gymId}
+      AND created_at >= (${earlier.from}::date::timestamp AT TIME ZONE ${timezone})
+      AND created_at < ((${earlier.to}::date + 1)::timestamp AT TIME ZONE ${timezone})`;
+  const firstOn = rows[0]?.first_on ?? null;
+  return { any: firstOn !== null, firstOn, sources, earlier: { leads: rows[0]?.leads ?? 0, joined: rows[0]?.joined ?? 0 } };
 }
 
 const visitClockSchema = z.object({ today: z.string(), first_visit_on: z.string().nullable() });
@@ -236,6 +265,44 @@ export async function readVisitCounts(
   return visitCountsSchema.parse(rows[0]);
 }
 
+const earlierVisitsSchema = z.object({ visits: count, people: count, members: count, member_visits: count, member_visitors: count });
+
+/** The gym's visits over `span`, the same days a year back, both ends among them: how
+ *  many, by how many people, and visits a member over `whole`, its whole weeks, by the
+ *  people on the list on its last day who were on it when those weeks began. A person
+ *  and a member's visit are what `readVisitCounts` says they are. */
+export async function readEarlierVisits(
+  sql: Sql,
+  gymId: string,
+  timezone: string,
+  span: YearEarlierSpan,
+  whole: DayWindow | null,
+): Promise<z.infer<typeof earlierVisitsSchema>> {
+  const wholeFrom = whole?.from ?? null;
+  const wholeTo = whole?.to ?? null;
+  const rows = await sql<Record<string, unknown>[]>`
+    WITH v AS MATERIALIZED (
+      SELECT a.day, COALESCE(a.entry_id, a.user_id) AS who, COALESCE(a.entry_id, m.entry_id) AS entry_id
+      FROM gym_attendance a
+      LEFT JOIN gym_members m ON a.entry_id IS NULL AND m.gym_id = a.gym_id AND m.user_id = a.user_id AND m.removed_at IS NULL
+      WHERE a.gym_id = ${gymId} AND a.day >= ${span.from}::date AND a.day <= ${span.to}::date
+    ),
+    members AS MATERIALIZED (
+      SELECT e.id FROM gym_member_list_entries e
+      WHERE e.gym_id = ${gymId} AND ${wholeFrom}::date IS NOT NULL
+        AND (e.created_at AT TIME ZONE ${timezone})::date <= ${wholeFrom}::date
+        AND (e.former_at IS NULL OR (e.former_at AT TIME ZONE ${timezone})::date > ${span.to}::date)
+    )
+    SELECT (SELECT count(*)::int FROM v) AS visits,
+           (SELECT count(DISTINCT who)::int FROM v) AS people,
+           (SELECT count(*)::int FROM members) AS members,
+           (SELECT count(*)::int FROM v JOIN members e ON e.id = v.entry_id
+            WHERE v.day >= ${wholeFrom}::date AND v.day <= ${wholeTo}::date) AS member_visits,
+           (SELECT count(DISTINCT v.entry_id)::int FROM v JOIN members e ON e.id = v.entry_id
+            WHERE v.day >= ${wholeFrom}::date AND v.day <= ${wholeTo}::date) AS member_visitors`;
+  return earlierVisitsSchema.parse(rows[0]);
+}
+
 const classCountsSchema = z.object({
   name: z.string(),
   classes: count,
@@ -247,18 +314,22 @@ const classCountsSchema = z.object({
   noShows: count,
 });
 
-/** Whether the gym has set up any class, and the classes that started from `fromDay` on
- *  the gym's calendar up to now, counted for each class the gym runs. A cancelled class
- *  is not counted; a place is taken while it is booked, came or no-show. */
+/** Whether the gym has set up any class, the day its first class ran, and the classes
+ *  that started from `fromDay` on the gym's calendar up to now, or to the end of `toDay`
+ *  where one is given, counted for each class the gym runs. A cancelled class is not
+ *  counted; a place is taken while it is booked, came or no-show. */
 export async function readClassCounts(
   sql: Sql,
   gymId: string,
   timezone: string,
   fromDay: string,
   now: Date,
-): Promise<{ ever: boolean; types: ReportClassCounts[] }> {
-  const ever = await sql<{ ever: boolean }[]>`
-    SELECT EXISTS (SELECT 1 FROM gym_class_types t WHERE t.gym_id = ${gymId}) AS ever`;
+  toDay: string | null = null,
+): Promise<{ ever: boolean; firstOn: string | null; types: ReportClassCounts[] }> {
+  const ever = await sql<{ ever: boolean; first_on: string | null }[]>`
+    SELECT EXISTS (SELECT 1 FROM gym_class_types t WHERE t.gym_id = ${gymId}) AS ever,
+           (SELECT to_char(min((s.starts_at AT TIME ZONE ${timezone})::date), 'YYYY-MM-DD') FROM gym_class_sessions s
+            WHERE s.gym_id = ${gymId} AND s.status = 'scheduled' AND s.starts_at <= ${now}::timestamptz) AS first_on`;
   const rows = await sql<Record<string, unknown>[]>`
     SELECT t.name,
            count(*)::int AS classes,
@@ -280,8 +351,9 @@ export async function readClassCounts(
     WHERE s.gym_id = ${gymId} AND s.status = 'scheduled'
       AND s.starts_at >= (${fromDay}::date::timestamp AT TIME ZONE ${timezone})
       AND s.starts_at <= ${now}::timestamptz
+      AND (${toDay}::date IS NULL OR s.starts_at < ((${toDay}::date + 1)::timestamp AT TIME ZONE ${timezone}))
     GROUP BY t.id, t.name`;
-  return { ever: ever[0]?.ever === true, types: z.array(classCountsSchema).parse(rows) };
+  return { ever: ever[0]?.ever === true, firstOn: ever[0]?.first_on ?? null, types: z.array(classCountsSchema).parse(rows) };
 }
 
 const moneyGymSchema = z.object({
@@ -415,4 +487,25 @@ export async function readMoney(
       (SELECT COALESCE(sum(left_minor) FILTER (WHERE overdue), 0)::float8 FROM owed) AS overdue_minor,
       (SELECT (count(DISTINCT entry_id) FILTER (WHERE overdue))::int FROM owed) AS overdue_people`;
   return moneyRowSchema.parse(rows[0]);
+}
+
+/** Payments and refunds in `currency` that stand, over `span`'s days, both ends among
+ *  them, as `readMoney` counts them: a refund of a payment that was taken back is not money. */
+export async function readCollected(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  currency: string,
+  span: YearEarlierSpan,
+): Promise<{ paidMinor: number; refundedMinor: number }> {
+  const rows = await sql<Record<string, unknown>[]>`
+    SELECT
+      (SELECT COALESCE(sum(p.amount_minor), 0)::float8 FROM gym_member_payments p
+       WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency}
+         AND p.paid_on >= ${span.from}::date AND p.paid_on <= ${span.to}::date) AS paid_minor,
+      (SELECT COALESCE(sum(r.amount_minor), 0)::float8 FROM gym_member_refunds r
+       JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+       WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND p.undone_at IS NULL AND r.currency = ${currency}
+         AND r.refunded_on >= ${span.from}::date AND r.refunded_on <= ${span.to}::date) AS refunded_minor`;
+  const row = z.object({ paid_minor: minor, refunded_minor: minor }).parse(rows[0]);
+  return { paidMinor: row.paid_minor, refundedMinor: row.refunded_minor };
 }

@@ -44,6 +44,11 @@ const nextIp = () => `10.21.${String(Math.floor(ipCounter / 250))}.${String((ipC
 const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
+/** A year earlier, for a gym whose records began in 2026
+ *  (`reports.yearEarlier.routes.test.ts` holds the figures themselves). */
+const someText: unknown = expect.any(String);
+const NO_YEAR = { state: "no_history", from: someText, to: someText, since: someText };
+
 d("Reports, members: whose figures, who reads them, and what they count (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const redis = createMemoryRedis();
@@ -213,6 +218,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
           thisMonth: { month: "2026-10", joined: 1, left: 1 },
           // New is counted from July, the month after the list began: one in July and one in October.
           inPeriod: { joined: 2, joinedFrom: "2026-07-01", left: 4 },
+          yearEarlier: NO_YEAR,
           churnMonths: ["2026-07", "2026-08", "2026-09"],
           // Of 13 + 13 + 12 on the list as July, August and September began, 0 + 1 + 1 left.
           churn: { state: "ok", percent: 5.3 },
@@ -236,6 +242,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
               { source: "walk_in", leads: 3, joined: 1, percent: 33.3 },
               { source: "friend", leads: 1, joined: 1, percent: 100 },
             ],
+            yearEarlier: NO_YEAR,
           },
         });
 
@@ -251,6 +258,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
           fullMonths: 1,
           thisMonth: { month: "2026-10", joined: 0, left: 1 },
           inPeriod: { joined: 0, joinedFrom: "2026-10-01", left: 1 },
+          yearEarlier: NO_YEAR,
           churnMonths: [],
           churn: { state: "not_enough_data" },
           retention: { state: "not_enough_data" },
@@ -259,7 +267,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
             { month: "2026-09", full: true, activeAtStart: 0, joined: null, left: 0, churnPercent: null },
             { month: "2026-10", full: false, activeAtStart: 3, joined: 0, left: 1, churnPercent: null },
           ],
-          leads: { ever: true, total: 2, joined: 0, percent: 0, sources: [{ source: "website", leads: 2, joined: 0, percent: 0 }] },
+          leads: { ever: true, total: 2, joined: 0, percent: 0, sources: [{ source: "website", leads: 2, joined: 0, percent: 0 }], yearEarlier: NO_YEAR },
         });
 
         // Nobody from outside reads either gym, and the refusal carries none of its numbers.
@@ -359,7 +367,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
       const empty = await read(gym, owner);
       expect(empty).toMatchObject({ activeNow: 0, everLeft: false, listChangedOn: null, months: [], fullMonths: 0 });
       expect(empty.churn).toEqual({ state: "nobody_left" });
-      expect(empty.leads).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [] });
+      expect(empty.leads).toEqual({ ever: false, total: 0, joined: 0, percent: null, sources: [], yearEarlier: { ...NO_YEAR, since: null } });
 
       // The list's first person, added today: on the list, and not a new member.
       const first = await post(`/v1/orgs/${gym}/member-list/entries`, { fullName: "Ola First", email: "rep-t-ola@example.com" }, owner.cookies);
@@ -399,11 +407,12 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
         joined: 0,
         percent: 0,
         sources: [{ source: "social", leads: 1, joined: 0, percent: 0 }],
+        yearEarlier: NO_YEAR,
       });
       const joined = await post(`/v1/orgs/${gym}/leads/${leadId}/join`, { asNew: true }, owner.cookies);
       expect(joined.statusCode, joined.body).toBe(200);
       const after = await read(gym, owner);
-      expect(after.leads).toEqual({ ever: true, total: 1, joined: 1, percent: 100, sources: [{ source: "social", leads: 1, joined: 1, percent: 100 }] });
+      expect(after.leads).toEqual({ ever: true, total: 1, joined: 1, percent: 100, sources: [{ source: "social", leads: 1, joined: 1, percent: 100 }], yearEarlier: NO_YEAR });
       expect(after).toMatchObject({ activeNow: 3, thisMonth: { joined: 2, left: 0 } });
     },
     TEST_TIMEOUT_MS,

@@ -28,6 +28,8 @@ function facts(over: Partial<AttendanceReportFacts> = {}): AttendanceReportFacts
     hoursNoTime: 0,
     member: { members: 0, visits: 0, visitors: 0 },
     classes: { ever: false, types: [] },
+    firstClassOn: null,
+    yearEarlier: { visits: 0, people: 0, member: { members: 0, visits: 0, visitors: 0 }, classes: [] },
     ...over,
   };
 }

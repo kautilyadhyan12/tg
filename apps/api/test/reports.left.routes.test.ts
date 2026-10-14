@@ -367,6 +367,8 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
         retention: { state: "ok", percent: 94.2 },
         // From 10 June: 36 + 86 + 106 + 115 + 117 + 124 + 126 days, and none for Mona, between the eight.
         averageStay: { state: "ok", days: 89, leavers: 8 },
+        // The list began in June 2026: nothing a year earlier.
+        yearEarlier: { state: "no_history", from: "2024-11-01", to: "2025-10-15", since: "2026-06-10" },
         months: [
           { month: "2026-06", full: false, activeAtStart: null, joined: null, left: 0, churnPercent: null },
           { month: "2026-07", full: true, activeAtStart: 18, joined: 0, left: 1, churnPercent: 5.6 },
@@ -377,7 +379,7 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
           { month: "2026-09", full: true, activeAtStart: 17, joined: 1, left: 3, churnPercent: 11.8 },
           { month: "2026-10", full: false, activeAtStart: 15, joined: 0, left: 4, churnPercent: null },
         ],
-        leads: { ever: false, total: 0, joined: 0, percent: null, sources: [] },
+        leads: { ever: false, total: 0, joined: 0, percent: null, sources: [], yearEarlier: { state: "no_history", from: "2024-11-01", to: "2025-10-15", since: null } },
       };
       expect(await read(gym, owner)).toEqual(expected);
 
@@ -443,7 +445,7 @@ d("Reports counts a membership that ended as left (real Postgres)", () => {
 
       // The count itself: a day handed in for somebody already removed, or for another
       // gym's person, moves nothing. Rob left on the day he was removed, whatever it says.
-      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", "2026-10-15", gone, "2025-11-01");
+      const counted = (gone: { id: string; on: string }[]) => readMemberCounts(sql, gym, "Europe/London", "2026-10-15", gone, "2025-11-01", { from: "2024-11-01", to: "2025-10-15" });
       expect(await counted([{ id: id["Rob Removed"], on: "2026-07-20" }, { id: nell, on: "2026-07-20" }])).toEqual(await counted([]));
 
       // A month that has closed stays as it closed. October, read on 2 November and again on
