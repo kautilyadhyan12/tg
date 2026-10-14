@@ -26,8 +26,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   return { ...actual, orgService: orgApi };
 });
 vi.mock('./MemberListPerson', () => ({
-  default: ({ entryId, onClose }) => (
-    <div role="dialog" aria-label={`person ${entryId}`}>
+  default: ({ entryId, addMembership, onClose }) => (
+    <div role="dialog" aria-label={`person ${entryId}`} data-add-membership={addMembership ? 'yes' : 'no'}>
       <button type="button" onClick={onClose}>
         Close
       </button>
@@ -100,7 +100,6 @@ const page = (over = {}) => ({
 });
 const withSale = (s = sale()) => page({ sales: [s], totals: totals({ count: 1, totalMinor: s.totalMinor, taxMinor: s.taxMinor, cash: s.totalMinor }) });
 const MAYA = { entryId: 'e-maya', name: 'Maya Patel', email: null, memberNumber: '1042', past: false };
-const PAST = { entryId: 'e-omar', name: 'Omar Diaz', email: null, memberNumber: null, past: true };
 const MONTH = { id: 't-month', name: '1 Month', kind: 'one_time', priceMinor: 4999, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { message } } });
 
@@ -196,8 +195,8 @@ describe('a product sale', () => {
     fireEvent.click(screen.getByLabelText('A member'));
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).getByText('Find and pick the member, or choose Walk-in.')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'm' } });
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'm' } });
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
     fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
     expect(svc.findPeople).toHaveBeenCalledTimes(1);
     expect(svc.findPeople).toHaveBeenCalledWith('g1', 'may');
@@ -212,7 +211,7 @@ describe('a product sale', () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
     fireEvent.click(screen.getByLabelText('A member'));
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'zed' } });
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'zed' } });
     expect(await within(newSale()).findByText('Nobody on your list matches. Add them to your list first, or choose Walk-in.')).toBeTruthy();
     fireEvent.click(within(newSale()).getByRole('button', { name: 'Add a member' }));
     expect(within(newSale()).getByText(/You'll leave this page/)).toBeTruthy();
@@ -331,144 +330,33 @@ describe('today', () => {
 });
 
 describe('a membership', () => {
-  it('needs a person, is given as paid from today, and says so with a button to their page', async () => {
-    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
+  // Kd, 2026-10-14: Sell is for products; a membership is sold on the member's own page.
+  it('is not sold here: the member is found, and their page opens with Add membership already open', async () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
-    await screen.findByLabelText('Membership');
-    pick('Membership', 't-month');
-    expect(screen.queryByLabelText('Walk-in (not on your list)')).toBeNull();
-    expect(takeButton().disabled).toBe(true);
-    expect(within(newSale()).getByText('Find and pick the member it is for.')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
-    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
-    pick('How did they pay?', 'bank_transfer');
-    expect(takeButton().textContent).toBe('Take payment · $49.99');
-    fireEvent.click(takeButton());
-    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
-    expect(orgApi.giveHeldMembership).toHaveBeenCalledWith('g1', 'e-maya', { requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: 't-month', startsOn: '2026-10-12', paid: true, priceMinor: 4999, method: 'bank_transfer' });
-    const done = await within(newSale()).findByTestId('sale-done');
-    expect(done.textContent).toContain('Sale recorded');
-    expect(done.textContent).toContain('1 Month given to Maya Patel and recorded as paid. $49.99, bank transfer.');
-    expect(done.textContent).toContain("To undo or refund it, open the member's page.");
-    expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
-    // The day is read before the give and the takings after it, so the payment is in today's list.
-    await waitFor(() => expect(svc.get).toHaveBeenCalledTimes(3));
-    fireEvent.click(within(done).getByRole('button', { name: "Open Maya Patel's page" }));
-    expect(screen.getByRole('dialog', { name: 'person e-maya' })).toBeTruthy();
-  });
-
-  it('with a discount: offers only the ones for this membership, shows what comes off and what later payments are, and sends exactly that', async () => {
-    const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
-    const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
-    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
-    const first = { ...base, ...reach, id: 'd-first', name: 'First month', code: 'FIRST20', membershipPayments: 'first' };
-    const water = { ...base, ...reach, id: 'd-water', name: 'Water deal', code: null, forProducts: true, forMemberships: false, membershipPayments: null };
-    const passOnly = { ...base, ...reach, id: 'd-pass', name: 'Pass only', code: null, allMembershipTypes: false, membershipTypeIds: ['t-pass'], membershipPayments: 'every' };
-    svc.get.mockResolvedValue(page({ discounts: [first, passOnly, water] }));
-    orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [GOLD] } });
-    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
-    open();
-    await screen.findByRole('region', { name: 'New sale' });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
-    await screen.findByLabelText('Membership');
-    pick('Membership', 't-gold');
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
-    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
-    // Only First month is for Gold Monthly: Pass only is for another type, Water deal for products.
-    const list = within(newSale()).getByLabelText('Discount');
-    expect([...list.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['No discount', 'First month · 20% off · code FIRST20']);
-    expect(takeButton().textContent).toBe('Take payment · $50.00');
-    // The code a member gives is applied, and the lines say what it comes to.
-    fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: 'first20' } });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
-    expect(within(newSale()).getByRole('status').textContent).toBe('FIRST20 applied: 20% off.');
-    const lines = within(newSale()).getByTestId('sale-summary');
-    expect([...lines.querySelectorAll('dt')].map((x) => x.textContent)).toEqual(['Price', 'Discount (First month)', 'Total']);
-    expect([...lines.querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['$50.00', '-$10.00', '$40.00']);
-    expect(within(newSale()).getByText('This is the first payment. Every payment after it is $50.00.')).toBeTruthy();
-    expect(takeButton().textContent).toBe('Take payment · $40.00');
-    fireEvent.click(takeButton());
-    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
-    expect(orgApi.giveHeldMembership).toHaveBeenCalledWith('g1', 'e-maya', {
-      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
-      typeId: 't-gold',
-      startsOn: '2026-10-12',
-      paid: true,
-      priceMinor: 5000,
-      method: 'cash',
-      discountId: 'd-first',
-      discountMinor: 1000,
-    });
-    const done = await within(newSale()).findByTestId('sale-done');
-    expect(done.textContent).toContain('Gold Monthly given to Maya Patel and recorded as paid. $40.00, cash. First month took $10.00 off.');
-  });
-
-  it('a tab left open overnight starts the membership on the day the server says it is now, never the day the page was opened', async () => {
-    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
-    open();
-    await screen.findByRole('region', { name: 'New sale' });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
-    await screen.findByLabelText('Membership');
-    pick('Membership', 't-month');
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
-    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
-    // Midnight passes at the gym while the form is open.
-    svc.get.mockResolvedValue(page({ today: '2026-10-13' }));
-    fireEvent.click(takeButton());
-    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
-    expect(orgApi.giveHeldMembership.mock.calls[0][2]).toMatchObject({ startsOn: '2026-10-13', priceMinor: 4999 });
-  });
-
-  it('a price that changed while the form was open is refused in words, and the price list is read again', async () => {
-    orgApi.giveHeldMembership.mockRejectedValue(refusal(409, 'The price of this membership changed while this was open. Nothing was saved: check the total and press again.'));
-    open();
-    await screen.findByRole('region', { name: 'New sale' });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
-    await screen.findByLabelText('Membership');
-    pick('Membership', 't-month');
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
-    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
-    expect(takeButton().textContent).toBe('Take payment · $49.99');
-    orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [{ ...MONTH, priceMinor: 5999 }] } });
-    fireEvent.click(takeButton());
-    expect((await within(newSale()).findByRole('alert')).textContent).toBe('The price of this membership changed while this was open. Nothing was saved: check the total and press again.');
-    expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
-    // The button now says the price as it is, and the next press sends that one.
-    await waitFor(() => expect(takeButton().textContent).toBe('Take payment · $59.99'));
-    expect(orgApi.getMembershipTypes).toHaveBeenCalledTimes(2);
-    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
-    fireEvent.click(takeButton());
-    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(2));
-    expect(orgApi.giveHeldMembership.mock.calls[1][2]).toMatchObject({ priceMinor: 5999 });
-    expect(orgApi.giveHeldMembership.mock.calls[1][2].requestKey).not.toBe(orgApi.giveHeldMembership.mock.calls[0][2].requestKey);
-  });
-
-  it('a past member is not given one here: the screen says why and opens their page', async () => {
-    svc.findPeople.mockResolvedValue([PAST]);
-    open();
-    await screen.findByRole('region', { name: 'New sale' });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
-    await screen.findByLabelText('Membership');
-    pick('Membership', 't-month');
-    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'omar' } });
-    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Omar Diaz · Past member' }));
-    expect(takeButton().disabled).toBe(true);
-    expect(within(newSale()).getByText('Omar Diaz is a past member. Put them back on your list from their page, then give the membership.')).toBeTruthy();
-    fireEvent.click(within(newSale()).getByRole('button', { name: "Open Omar Diaz's page" }));
-    expect(screen.getByRole('dialog', { name: 'person e-omar' })).toBeTruthy();
+    expect(within(newSale()).queryByRole('button', { name: 'A membership' })).toBeNull();
+    expect(within(newSale()).getByLabelText('Product')).toBeTruthy();
+    const box = screen.getByRole('region', { name: 'Sell a membership' });
+    expect(within(box).getByText("Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and how they paid.")).toBeTruthy();
+    fireEvent.change(within(box).getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
+    fireEvent.click(await within(box).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Add a membership for Maya Patel' }));
+    const page = screen.getByRole('dialog', { name: 'person e-maya' });
+    expect(page.getAttribute('data-add-membership')).toBe('yes');
     expect(orgApi.giveHeldMembership).not.toHaveBeenCalled();
   });
 
-  it('with no membership types the box says so and opens Memberships', async () => {
-    orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
+  it('a name opened from today\'s list opens their page as it is, with nothing open', async () => {
+    svc.get.mockResolvedValue(page({ payments: [{ id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'cash', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' } }], totals: totals({ payments: 1, totalMinor: 4999, cash: 4999 }) }));
     open();
+    fireEvent.click(await within(await screen.findByRole('region', { name: "Today's takings" })).findByRole('button', { name: "Open Maya Patel's page" }));
+    expect(screen.getByRole('dialog', { name: 'person e-maya' }).getAttribute('data-add-membership')).toBe('no');
+  });
+
+  it('staff who cannot add memberships are not offered the box', async () => {
+    open(SELLER);
     await screen.findByRole('region', { name: 'New sale' });
-    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
-    expect(await within(newSale()).findByText(/You have no membership types yet\./)).toBeTruthy();
-    fireEvent.click(within(newSale()).getByRole('link', { name: 'Open Memberships' }));
-    expect(screen.getByText('The Memberships page')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Sell a membership' })).toBeNull();
   });
 });
 

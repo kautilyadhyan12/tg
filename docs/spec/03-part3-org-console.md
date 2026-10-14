@@ -3571,7 +3571,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   draws its newest 10 rows, with Show all.
 - **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
   in nothing, and what it took from the stock count goes back.
-- **A membership** is sold from the same box by giving it as paid (§14.2): the notebook's
+- **A membership** was sold from the same box (moved to the member's own page on 2026-10-14, 18b-ii-b, below) by giving it as paid (§14.2): the notebook's
   own bill and payment, starting today, to a person on the list. No `gym_sales` row.
 - **Today**: the day's product sales and the membership payments recorded that day (here
   or on a person's page), newest first, with one total and how it was paid. A refund noted
@@ -3634,8 +3634,8 @@ memberships.
   products alone, as it was. One for memberships says how often it comes off a
   membership that renews: **First payment only** or **Every payment**; a membership paid
   once (a day pass, a pack, a trial, a fixed term) gets it on that one payment.
-- **Used** on Sell's membership box and on a person's **Add membership**, from the same
-  Discount list and Promo code box as a product sale, offering only what the server
+- **Used** on a person's **Add membership**, from the same Discount list and Promo code
+  box as a product sale, offering only what the server
   will take on that type today and what leaves something to pay. Price, Discount and
   Total are shown above the button, and what every later payment is.
 - **The server** works out what comes off again (`membershipDiscount`) under the gym's
@@ -3646,6 +3646,9 @@ memberships.
   the price after the discount, so every bill opened from it carries it; with First payment
   only its price stays the full price and only the bill opened when it was given is
   discounted. A later change of the discount or the type's price rewrites nobody's.
+- **Sell sells products alone** (Kd, 2026-10-14): its New sale box has no membership
+  choice. A **Sell a membership** box under it finds the member and opens their page
+  with Add membership already open.
 - **A person's page** says it under the membership: "Sold with First month: $10.00 off the
   first payment. Every payment after it is $50.00."
 - **Not built**: a use given back when a membership is cancelled (it stands, as a redeemed

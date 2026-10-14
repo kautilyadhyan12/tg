@@ -9,7 +9,6 @@ import {
   discountOff,
   formatMinor,
   isVisibleText,
-  membershipDiscount,
   minorToPriceText,
   priceToMinor,
   saleAmounts,
@@ -135,15 +134,6 @@ export function soldWords(sale) {
 export function saleDiscountWords(sale) {
   if (sale.discountName === null || sale.discountName === undefined) return null;
   return `${sale.discountName}: ${formatMinor(sale.discountMinor, sale.currency)} off`;
-}
-
-/** Said once a membership is given as paid from this page. */
-export function membershipSoldWords(type, personName, method, discount = null) {
-  if (type.priceMinor === 0) return `${type.name} given to ${personName}. Nothing to pay.`;
-  const costs = discount === null ? null : membershipDiscount(discount, type);
-  const paid = costs !== null && costs.ok ? costs.firstBillMinor : type.priceMinor;
-  const words = `${type.name} given to ${personName} and recorded as paid. ${formatMinor(paid, type.currency)}, ${methodWords(method).toLowerCase()}.`;
-  return costs !== null && costs.ok ? `${words} ${discount.name} took ${formatMinor(costs.offMinor, type.currency)} off.` : words;
 }
 
 /** One person the search found, as their button reads. */

@@ -9,13 +9,11 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { canRemoveMembers, orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { placeFor } from './consolePlaces';
-import { termLine } from './membershipTypesView';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
-import { NO_CODE, applyPromoCode, discountOption, discountsFor, membershipSummary, oldMoneySaleLine, pickedDiscount, promoCodeNote } from './sellDiscountsView';
-import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
+import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -23,7 +21,6 @@ import {
   SELL_REFUSED,
   canOpenSell,
   canSellMemberships,
-  membershipSoldWords,
   personOption,
   productOption,
   quantityMax,
@@ -426,147 +423,31 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   );
 }
 
-/** A membership given as paid: the notebook's own step, from the desk, with a discount
- *  if one applies. */
-function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, membershipsTo, onOpenPerson, onPage }) {
-  const [types, setTypes] = useState({ gymId: null, list: null, error: null });
-  /** Raised to read the price list again: after a sale, and after a refusal. */
-  const [typesAsk, setTypesAsk] = useState(0);
-  const [typeId, setTypeId] = useState('');
-  const [person, setPerson] = useState(firstPerson);
-  const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
-  const [key, setKey] = useState(newKey);
-  const [state, setState] = useState({ busy: false, error: null, done: null });
-  const [discountId, setDiscountId] = useState('');
-  const [code, setCode] = useState(NO_CODE);
-  const typeSelect = useId();
-
-  useEffect(() => {
-    let live = true;
-    orgService.getMembershipTypes(gymId).then(
-      (res) => live && setTypes({ gymId, list: res.data.types, error: null }),
-      (err) => live && setTypes({ gymId, list: null, error: errorText(err, "We couldn't load your membership types.") }),
-    );
-    return () => {
-      live = false;
-    };
-  }, [gymId, typesAsk]);
-
-  if (types.gymId !== gymId) return <ConsoleLoading label="Loading your membership types…" newLook />;
-  if (types.list === null) return <Refusal>{types.error}</Refusal>;
-  if (types.list.length === 0) {
-    return (
-      <div className="flex flex-col gap-3">
-        <p className="c-s15 c-t2 m-0">You have no membership types yet. Add what you sell, such as a monthly membership or a day pass, and it appears here.</p>
-        {membershipsTo !== null ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : <p className="c-s14 c-t3 m-0">The owner can add membership types.</p>}
-      </div>
-    );
-  }
-
-  if (state.done !== null) {
-    const bought = state.done.person;
-    return (
-      <SaleRecorded
-        words={state.done.words}
-        note="It is in today's list below. To undo or refund it, open the member's page."
-        onNew={() => {
-          setState({ busy: false, error: null, done: null });
-          setTypesAsk((n) => n + 1);
-        }}
-      >
-        <button type="button" className="c-btn c-btn-s c-btn-lg" onClick={() => onOpenPerson(bought.entryId)}>
-          {`Open ${bought.name}'s page`}
-        </button>
-      </SaleRecorded>
-    );
-  }
-
-  const type = types.list.find((t) => t.id === typeId) ?? null;
-  const free = type !== null && type.priceMinor === 0;
-  // Only a discount the server will take on this type today is ever sent.
-  const discount = type === null ? null : pickedDiscount(page, type, discountId);
-  const summary = membershipSummary(type, discount);
-  const problem = type === null ? 'Pick a membership.' : person === null ? 'Find and pick the member it is for.' : person.past ? `${person.name} is a past member. Put them back on your list from their page, then give the membership.` : null;
-
-  const give = async () => {
-    if (problem !== null || type === null || person === null) return;
-    setState({ busy: true, error: null, done: null });
-    try {
-      // The gym's own day as the server reads it now, never a day this page read when it
-      // was opened: a tab left open overnight still starts the membership today.
-      const fresh = await registerService.get(gymId);
-      onPage(fresh);
-      // The price sent is the one on the button: the server gives nothing at any other.
-      await orgService.giveHeldMembership(gymId, person.entryId, {
-        requestKey: key,
-        typeId: type.id,
-        startsOn: fresh.today,
-        paid: !free,
-        priceMinor: type.priceMinor,
-        ...(free ? {} : { method }),
-        ...(discount === null || summary === null || summary.offMinor === null ? {} : { discountId: discount.id, discountMinor: summary.offMinor }),
-      });
-      setState({ busy: false, error: null, done: { words: membershipSoldWords(type, person.name, method, discount), person } });
-      setKey(newKey());
-      setPerson(null);
-      setTypeId('');
-      setDiscountId('');
-      setCode(NO_CODE);
-      registerService.get(gymId).then(onPage, () => undefined);
-    } catch (err) {
-      setState({ busy: false, error: errorText(err, "We couldn't give that membership. Nothing was saved: try again."), done: null });
-      // A refusal of this form's own key is final, and the price list may be why: read again.
-      if (errorStatus(err) === 409) {
-        setKey(newKey());
-        setTypesAsk((n) => n + 1);
-      }
-    }
-  };
-
+/** Memberships are sold on the member's own page (Kd, 2026-10-14): find them here, and
+ *  their page opens with Add membership already open. */
+function MembershipFinder({ gymId, locked, addMemberTo, onOpen }) {
+  const [person, setPerson] = useState(null);
   return (
-    <div className="flex flex-col gap-4">
-      <div className="c-field">
-        <label className="c-label" htmlFor={typeSelect}>
-          Membership
-        </label>
-        <select
-          id={typeSelect}
-          className="c-input"
-          value={typeId}
-          disabled={locked || state.busy}
-          onChange={(e) => {
-            setTypeId(e.target.value);
-            setCode((was) => ({ ...was, note: null, appliedId: null }));
+    <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Sell a membership">
+      <div className="flex flex-col gap-1">
+        <h2 className="c-h2">Sell a membership</h2>
+        <p className="c-s14 c-t2 m-0">Memberships are sold on the member&apos;s own page, where you pick the membership, a discount if there is one, and how they paid.</p>
+      </div>
+      <WhoPicker gymId={gymId} who="member" setWho={() => undefined} person={person} setPerson={setPerson} mustPick disabled={locked} addMemberTo={addMemberTo} />
+      {person !== null ? (
+        <button
+          type="button"
+          className="c-btn c-btn-p c-btn-lg self-start"
+          disabled={locked}
+          onClick={() => {
+            onOpen(person.entryId);
+            setPerson(null);
           }}
         >
-          <option value="">Pick a membership</option>
-          {types.list.map((t) => (
-            <option key={t.id} value={t.id}>
-              {`${t.name} · ${termLine(t)}`}
-            </option>
-          ))}
-        </select>
-        <p className="c-s13 c-t3 m-0">It starts today. To start it on another day, add it on the member&apos;s own page.</p>
-      </div>
-      <WhoPicker gymId={gymId} who="member" setWho={() => undefined} person={person} setPerson={setPerson} mustPick disabled={locked || state.busy} addMemberTo={addMemberTo} />
-      {person !== null && person.past ? (
-        <button type="button" className="c-btn c-btn-s c-btn-sm self-start" onClick={() => onOpenPerson(person.entryId)}>
-          {`Open ${person.name}'s page`}
+          {`Add a membership for ${person.name}`}
         </button>
       ) : null}
-      {!free ? <MembershipDiscountPicker page={page} type={type} discountId={discountId} setDiscountId={setDiscountId} code={code} setCode={setCode} disabled={locked || state.busy} /> : null}
-      {!free ? <PayPicker method={method} setMethod={setMethod} disabled={locked || state.busy} /> : null}
-      <MembershipTotal summary={summary} />
-      <div className="flex flex-col gap-2">
-        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked || state.busy || problem !== null || summary === null} onClick={() => void give()}>
-          {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {state.busy ? 'Recording…' : type === null || summary === null ? 'Take payment' : free ? 'Give membership' : `Take payment · ${summary.total}`}
-        </button>
-        {problem !== null && (typeId !== '' || person !== null) ? <p className="c-s14 c-t2 m-0">{problem}</p> : null}
-        {!free ? <p className="c-s13 c-t3 m-0">{SALE_HINT}</p> : null}
-      </div>
-      {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
-    </div>
+    </section>
   );
 }
 
@@ -665,9 +546,10 @@ export default function Sell() {
   const may = canOpenSell(viewerPrivileges(org));
   // Each answer carries the gym it was asked for, so another gym's sales are never drawn.
   const [state, setState] = useState({ gymId: null, error: null, refused: false, page: null });
-  const [kind, setKind] = useState('product');
   const [addAsk, setAddAsk] = useState(0);
   const [personId, setPersonId] = useState(null);
+  /** Their page opens with Add membership open: it was opened to sell one. */
+  const [personAdds, setPersonAdds] = useState(false);
   const [columns, setColumns] = useState(null);
   const productsRef = useRef(null);
   // A person's page can lead here with them already picked.
@@ -696,8 +578,9 @@ export default function Sell() {
     };
   }, [load]);
 
-  const openPerson = (entryId) => {
+  const openPerson = (entryId, adds = false) => {
     setPersonId(entryId);
+    setPersonAdds(adds);
     if (columns === null && gymId !== null) {
       orgService.getMemberList(gymId).then(
         (res) => setColumns(res.data.list),
@@ -771,29 +654,6 @@ export default function Sell() {
           {page.canSell ? (
             <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="New sale">
               <h2 className="c-h2">New sale</h2>
-              {sellsMemberships ? (
-                <div className="flex flex-wrap gap-2" role="group" aria-label="What are you selling?">
-                  <button type="button" className={`c-chip ${kind === 'product' ? 'c-chip-on' : ''}`} aria-pressed={kind === 'product'} onClick={() => setKind('product')}>
-                    A product
-                  </button>
-                  <button type="button" className={`c-chip ${kind === 'membership' ? 'c-chip-on' : ''}`} aria-pressed={kind === 'membership'} onClick={() => setKind('membership')}>
-                    A membership
-                  </button>
-                </div>
-              ) : null}
-              {kind === 'membership' && sellsMemberships ? (
-                <MembershipSale
-                  key={`membership-${gymId}`}
-                  gymId={gymId}
-                  page={page}
-                  locked={readOnly}
-                  firstPerson={firstPerson}
-                  addMemberTo={placeFor(orgSlug, privileges, 'addMember')}
-                  membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
-                  onOpenPerson={openPerson}
-                  onPage={setPage}
-                />
-              ) : (
                 <ProductSale
                   key={`product-${gymId}`}
                   gymId={gymId}
@@ -805,13 +665,14 @@ export default function Sell() {
                   onAddProduct={addProduct}
                   onPage={setPage}
                 />
-              )}
             </section>
           ) : (
             <section className="c-card p-5 md:p-6">
               <p className="c-s15 c-t2">{NO_SELLING_LINE}</p>
             </section>
           )}
+
+          {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
 
           {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} /> : null}
 
@@ -840,6 +701,7 @@ export default function Sell() {
           words={words}
           readOnly={readOnly}
           canRemove={canRemoveMembers(privileges)}
+          addMembership={personAdds}
           onClose={() => setPersonId(null)}
           onChanged={() => void load()}
         />

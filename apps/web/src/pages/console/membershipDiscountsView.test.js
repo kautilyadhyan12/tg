@@ -19,7 +19,6 @@ import {
   oldMoneySaleLine,
   pickedDiscount,
 } from './sellDiscountsView';
-import { membershipSoldWords } from './sellView';
 
 const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
 const PASS = { id: 't-pass', name: 'Day pass', kind: 'pack', priceMinor: 1500, currency: 'USD', termCount: null, termUnit: null, packClasses: 1, packDays: 1 };
@@ -135,10 +134,6 @@ describe('what a membership with a discount comes to', () => {
     expect(membershipSummary(PASS, discount({ kind: 'amount', percentBp: null, amountMinor: 1500, currency: 'USD' }))).toBeNull();
   });
 
-  it('the sentence once it is sold says what was paid and what came off', () => {
-    expect(membershipSoldWords(GOLD, 'Maya Patel', 'cash', FIRST)).toBe('Gold Monthly given to Maya Patel and recorded as paid. $40.00, cash. First month took $10.00 off.');
-    expect(membershipSoldWords(GOLD, 'Maya Patel', 'cash')).toBe('Gold Monthly given to Maya Patel and recorded as paid. $50.00, cash.');
-  });
 });
 
 describe('what a person page says of a membership sold with a discount', () => {
