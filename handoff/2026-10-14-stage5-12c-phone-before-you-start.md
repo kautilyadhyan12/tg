@@ -7,6 +7,8 @@
 - **Deliberate breaks, each red and put back:** no answer read as a tick (3 red) · a tick on any words counts (1 red) · Continue goes on without the tick (2 red).
 - **Walked on the phone** (moto g35, copy `com.aihomegym.dev.feature1`): a person not ticked sees the note, ticks (201), Continue glows, Dashboard; cut off and reopened, Dashboard. A new person cut off: the note with "Can’t connect", no tab; back online, tick, Continue, Dashboard; the database holds `sign_up|v4|phone 0.0.1`. Round one's fixes are logic only and were not re-walked.
 - **Cost at full size:** it reads no list of people: one profile read on opening until the phone keeps the tick, one consent write per tick.
-- **Open:** L2 below, for the "please update" rule (ROADMAP item 21). Kd's click-through result not yet reported.
+- **Open:** L2 below, for the "please update" rule (ROADMAP item 21).
 - (12c) **Round one:** two Highs, both fixed in ec40476. H1: a request refused 401 was refreshed and re-sent as whoever was signed in by then (run: B recorded as having ticked a note B never saw); now re-sent only as the person who made it. H2: a late write of the kept sign-in could put a signed-out person back on the phone; a write now restores what the phone holds after it, and Sign out waits for Continue. L1 commented; three weak tests made real. **L2, open by agreement:** a build whose kept tick is its own words never asks again when the server moves to new words; it belongs with "please update" (item 21).
 - (12c) **Re-check** (ec40476): H1, H2, L1, T1–T3 closed, run on the real api; nothing broken; no Critical or High; the round ends.
+- (12c) **Kd's click-through: passed** (2026-10-14): sign out, a new address, Continue dead before the tick, tick, Continue, Dashboard; closed and reopened straight to the Dashboard.
+- (12c) **Merged** 2026-10-14, PR #271. The ROADMAP line it replaced: 12c. [ ] **"Before you start" on the phone** (it reads the profile's `signUpDisclaimerAgreed`).
