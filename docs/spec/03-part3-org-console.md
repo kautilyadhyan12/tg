@@ -3739,7 +3739,9 @@ the app never picks one.
 - **The Tax box** is one box drawn on Sell and on Memberships (under the price list): its
   rates, what each is charged on, Add a tax rate, Change, Remove, and how the tax is
   charged. Changed by whoever may change prices. A new percentage is charged on sales and
-  bills from then on; one already made keeps its own. A rate is removed only once no product,
+  bills from then on; one already made keeps its own. Each rate has **Choose memberships**
+  (on Sell, **Choose products**): a tick list of what charges it, saved in one press, and
+  opened by itself under a rate just added. A rate is removed only once no product,
   type or membership in use charges it, and the box says what still does.
 - **A product and a membership type each pick a rate or No tax.** A new product starts on
   the gym's rate where it has exactly one; a new type starts on No tax. A rate can be added

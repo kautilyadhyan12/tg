@@ -41,6 +41,7 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
         page={mine.page}
         locked={readOnly}
         lockedNote={readOnlyNote(org.orgType)}
+        use="memberships"
         onPage={(page) => {
           setState({ gymId, page, error: null });
           onTaxChanged();

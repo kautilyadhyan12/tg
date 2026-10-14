@@ -7,6 +7,8 @@ import {
   canOpenSell,
   canSell,
   canSellMemberships,
+  chargeChoices,
+  chargedWords,
   draftFromProduct,
   emptyProductDraft,
   personOption,
@@ -266,6 +268,26 @@ describe('products and tax', () => {
       expect(rateProblems({ name: 'GST', rate: typed })).toEqual({ rate: 'Enter the rate as a number above 0 and up to 30, like 8.25.' });
     }
   });
+  it('a rate’s Choose box ticks what charges it, says what another one charges now, and says what was saved', () => {
+    const page = {
+      tax: { included: false, rates: [rate(), rate({ id: 'r2', name: 'VAT', bp: 2000 })] },
+      membershipTypes: [
+        { id: 't1', name: 'Gold', taxRateId: 'r1' },
+        { id: 't2', name: 'Silver', taxRateId: 'r2' },
+        { id: 't3', name: 'Bronze', taxRateId: null },
+      ],
+      products: [water()],
+    };
+    expect(chargeChoices(page, rate(), 'memberships')).toEqual([
+      { id: 't1', name: 'Gold', on: true, note: null },
+      { id: 't2', name: 'Silver', on: false, note: 'Now charges VAT 20%' },
+      { id: 't3', name: 'Bronze', on: false, note: null },
+    ]);
+    expect(chargeChoices(page, rate(), 'products')).toEqual([{ id: 'p1', name: 'Water', on: true, note: null }]);
+    expect(chargedWords(rate(), ['Gold'], 'memberships')).toBe('Sales tax 8.25% is now charged on Gold.');
+    expect(chargedWords(rate(), ['A', 'B', 'C', 'D', 'E'], 'memberships')).toBe('Sales tax 8.25% is now charged on A, B, C and 2 more.');
+    expect(chargedWords(rate(), [], 'products')).toBe('Sales tax 8.25% is now charged on no products.');
+  });
   it('what a rate is charged on, and why one in use is not removed', () => {
     expect(rateUses(rate())).toBe('Not charged on anything yet.');
     expect(rateRemoveBlock(rate())).toBeNull();
@@ -283,8 +305,13 @@ describe('products and tax', () => {
   });
   it('the two ways are explained in the gym’s own money, with sums that are true', () => {
     expect(taxModes('GBP').map((m) => [m.value, m.label, m.hint])).toEqual([
-      ['added', 'Added on top of the price', 'At 10% tax, a price of £10.00 costs the customer £11.00. Usual in the United States and Canada.'],
-      ['included', 'Already included in the price', 'At 10% tax, a price of £10.00 costs the customer £10.00, and £0.91 of it is tax. Usual where VAT or GST is charged.'],
+      ['added', 'Added on top of the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £110.00. Usual in the United States and Canada.'],
+      ['included', 'Already included in the price', 'For example, with a 10% tax, a price of £100.00 costs the customer £100.00, and £9.09 of it is tax. Usual where VAT or GST is charged.'],
+    ]);
+    // With a rate of its own, the gym reads its own rate, never a made-up 10% (Kd's click-through).
+    expect(taxModes('INR', rate({ name: 'GST', bp: 1800 })).map((m) => m.hint)).toEqual([
+      'With GST 18%, a price of ₹100.00 costs the customer ₹118.00. Usual in the United States and Canada.',
+      'With GST 18%, a price of ₹100.00 costs the customer ₹100.00, and ₹15.25 of it is tax. Usual where VAT or GST is charged.',
     ]);
     // The example's own numbers, by the rule the server uses.
     const ten = [rate({ name: 'Tax', bp: 1000 })];

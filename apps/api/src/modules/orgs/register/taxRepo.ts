@@ -7,7 +7,7 @@
 // Every write takes the gym's row lock first, so the cap, the name check and "nothing live
 // charges it" are decided against rows nobody else is changing.
 import type { Sql, TransactionSql } from "postgres";
-import { TAX_RATES_MAX, taxIncludedForCountry, type GymTaxRate } from "@app/shared";
+import { TAXED_PRICE_MINOR_MAX, TAX_RATES_MAX, taxIncludedForCountry, type GymTaxRate } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 
 /** Whether the gym's prices hold its tax: what it chose, else what its country does. */
@@ -126,6 +126,59 @@ export async function removeRate(sql: Sql, input: { gymId: string; rateId: strin
       targetId: input.rateId,
       meta: { name: rate.name, bp: String(rate.bp) },
     });
+    return { kind: "ok" };
+  });
+}
+
+export type ChargeOutcome =
+  | RateWriteOutcome
+  /** An id on the list is not one of this gym's live types or products. */
+  | { kind: "items_not_found" }
+  /** A type on the list is priced too high to tax (`TAXED_PRICE_MINOR_MAX`). */
+  | { kind: "too_high"; name: string };
+
+/** WHAT CHARGES ONE RATE, in one press: every live type (or product) on the list charges
+ *  it; one off the list that charged it charges none. Memberships people already hold keep
+ *  the rate they were sold with. Each row changed is stamped, so a form opened on it before
+ *  is refused rather than saved over this. */
+export async function chargeRate(
+  sql: Sql,
+  input: { gymId: string; rateId: string; use: "memberships" | "products"; ids: readonly string[]; actorUserId: string; now: Date },
+): Promise<ChargeOutcome> {
+  return await sql.begin(async (tx): Promise<ChargeOutcome> => {
+    await lockOrgRow(tx, input.gymId);
+    const rate = await rateOf(tx, input.gymId, input.rateId);
+    if (rate === null) return { kind: "not_found" };
+    const ids = [...new Set(input.ids)];
+    const table = input.use === "memberships" ? tx`gym_membership_types` : tx`gym_products`;
+    const listed = await tx<{ id: string; name: string; price_minor: number }[]>`
+      SELECT id, name, price_minor FROM ${table}
+      WHERE gym_id = ${input.gymId} AND archived_at IS NULL AND id = ANY(${ids}::uuid[])`;
+    if (listed.length !== ids.length) return { kind: "items_not_found" };
+    if (input.use === "memberships") {
+      const high = listed.find((row) => row.price_minor > TAXED_PRICE_MINOR_MAX);
+      if (high !== undefined) return { kind: "too_high", name: high.name };
+    }
+    const on = await tx<{ id: string }[]>`
+      UPDATE ${table} SET tax_rate_id = ${input.rateId}, updated_at = ${input.now}
+      WHERE gym_id = ${input.gymId} AND archived_at IS NULL AND id = ANY(${ids}::uuid[])
+        AND tax_rate_id IS DISTINCT FROM ${input.rateId}::uuid
+      RETURNING id`;
+    const off = await tx<{ id: string }[]>`
+      UPDATE ${table} SET tax_rate_id = NULL, updated_at = ${input.now}
+      WHERE gym_id = ${input.gymId} AND archived_at IS NULL AND tax_rate_id = ${input.rateId}
+        AND NOT (id = ANY(${ids}::uuid[]))
+      RETURNING id`;
+    if (on.length > 0 || off.length > 0) {
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.tax_rate_charged_on",
+        targetType: "gym_tax_rate",
+        targetId: input.rateId,
+        meta: { name: rate.name, use: input.use, now: String(ids.length), added: String(on.length), taken: String(off.length) },
+      });
+    }
     return { kind: "ok" };
   });
 }

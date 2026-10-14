@@ -407,6 +407,72 @@ d("tax on memberships (real Postgres)", () => {
   );
 
   it(
+    "what charges a rate is set in one press: ticked types and products charge it, unticked ones charge none, memberships already held keep theirs, and only this gym's own things are taken",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("charge-owner");
+      const desk = await makeUser("charge-desk");
+      const nextDoor = await makeUser("charge-nextdoor");
+      const gymId = await makeGym(owner, "Mtx Charge Gym");
+      const otherGym = await makeGym(nextDoor, "Mtx Charge Next Door");
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymId}, ${desk.userId}, 'manager', ${["billing.members", "members.read", "members.confirm"]})`;
+      const gst = await addRate(gymId, owner.cookies, "GST", 1800);
+      const vat = await addRate(gymId, owner.cookies, "VAT", 2000);
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const silver = await addType(gymId, owner.cookies, monthly({ name: "Silver Monthly", taxRateId: vat.id }));
+      const bronze = await addType(gymId, owner.cookies, monthly({ name: "Bronze Monthly", taxRateId: gst.id }));
+      const theirs = await addType(otherGym, nextDoor.cookies, monthly({ name: "Their Gold" }));
+      // Maya holds Bronze at GST before the change.
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      expect((await give(gymId, maya, owner.cookies, giveBody(bronze, 5000, 5900))).statusCode).toBe(201);
+      const charge = (gym: string, rateId: string, body: unknown, cookies: Cookies) => put(`${register(gym)}/tax-rates/${rateId}/charged-on`, body, cookies);
+      const typesNow = async () =>
+        (await sql<{ name: string; rate: string | null }[]>`
+          SELECT t.name, r.name AS rate FROM gym_membership_types t LEFT JOIN gym_tax_rates r ON r.id = t.tax_rate_id
+          WHERE t.gym_id = ${gymId} ORDER BY t.name`).map((r) => `${r.name}: ${r.rate ?? "none"}`);
+      const before = await typesNow();
+
+      // Refused, with nothing changed: next door's type on the list, next door asking, staff
+      // who may not change prices, nobody signed in, a list that is not a list.
+      for (const [res, status] of [
+        [await charge(gymId, gst.id, { use: "memberships", ids: [gold, theirs] }, owner.cookies), 409],
+        [await charge(gymId, gst.id, { use: "memberships", ids: [gold] }, nextDoor.cookies), 404],
+        [await charge(otherGym, gst.id, { use: "memberships", ids: [theirs] }, nextDoor.cookies), 404],
+        [await charge(gymId, gst.id, { use: "memberships", ids: [gold] }, desk.cookies), 403],
+        [await charge(gymId, gst.id, { use: "memberships", ids: [gold] }, {}), 401],
+        [await charge(gymId, gst.id, { use: "everything", ids: [gold] }, owner.cookies), 400],
+        [await charge(gymId, gst.id, { use: "memberships", ids: ["gold"] }, owner.cookies), 400],
+      ] as const) {
+        expect(res.statusCode, res.body).toBe(status);
+      }
+      expect(await typesNow()).toEqual(before);
+
+      // Gold and Silver ticked for GST, Bronze not: Gold charges GST, Silver moves from VAT
+      // to GST, Bronze charges none. Maya's Bronze keeps GST, as she was sold it.
+      const res = await charge(gymId, gst.id, { use: "memberships", ids: [gold, silver] }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await typesNow()).toEqual(["Bronze Monthly: none", "Gold Monthly: GST", "Silver Monthly: GST"]);
+      expect((await membershipOf(gymId, maya)).tax_rate_id).toBe(gst.id);
+      expect(page(res).membershipTypes.find((t) => t.id === gold)?.taxRateId).toBe(gst.id);
+      // A new member on Gold now pays the tax.
+      const liam = await addPerson(gymId, owner.cookies, "Liam Chen");
+      expect((await give(gymId, liam, owner.cookies, giveBody(gold, 5000, 5900))).statusCode).toBe(201);
+
+      // Products the same way; and a membership type priced too high to tax is refused by name.
+      const water = page(await post(`${register(gymId)}/products`, { name: "Water", priceMinor: 2000, taxRateId: null, stock: null }, owner.cookies)).products[0];
+      if (water === undefined) throw new Error("no product");
+      expect((await charge(gymId, vat.id, { use: "products", ids: [water.id] }, owner.cookies)).statusCode).toBe(200);
+      expect((await sql<{ tax_rate_id: string | null }[]>`SELECT tax_rate_id FROM gym_products WHERE id = ${water.id}`)[0]?.tax_rate_id).toBe(vat.id);
+      const dear = await addType(gymId, owner.cookies, monthly({ name: "Lifetime", kind: "one_time", termUnit: "year", termCount: 99, priceMinor: 80_000_000 }));
+      const tooHigh = await charge(gymId, gst.id, { use: "memberships", ids: [gold, dear] }, owner.cookies);
+      expect(tooHigh.statusCode).toBe(409);
+      expect(messageOf(tooHigh)).toBe("Lifetime: This price is too high to charge tax on. Lower the price, or choose No tax.");
+      expect(await typesNow()).toEqual(["Bronze Monthly: none", "Gold Monthly: GST", "Lifetime: none", "Silver Monthly: GST"]);
+    },
+    T,
+  );
+
+  it(
     "a rate is this gym's alone: next door's cannot be charged, read, changed or removed, staff who may not change prices are refused, and a rate in use is not removed",
     async () => {
       clock = new Date("2026-10-15T17:00:00Z");

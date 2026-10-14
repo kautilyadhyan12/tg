@@ -12,6 +12,7 @@
 //   POST   /v1/orgs/:gymId/register/tax-rates               add a tax rate (`memberships.manage`)
 //   PUT    /v1/orgs/:gymId/register/tax-rates/:rateId       change its name or rate
 //   DELETE /v1/orgs/:gymId/register/tax-rates/:rateId       remove one nothing live charges
+//   PUT    /v1/orgs/:gymId/register/tax-rates/:rateId/charged-on   the types, or products, that charge it
 //   POST   /v1/orgs/:gymId/register/products                add a product
 //   PUT    /v1/orgs/:gymId/register/products/:productId     change one, every field
 //   DELETE /v1/orgs/:gymId/register/products/:productId     archive it
@@ -28,6 +29,7 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import {
   salePeopleQuerySchema,
+  chargeTaxRateRequestSchema,
   saveTaxRateRequestSchema,
   taxModeRequestSchema,
   saveGymDiscountRequestSchema,
@@ -162,6 +164,17 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
     const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
     if (!(await within(manageLimit, req, reply))) return reply;
     return reply.status(200).send(await service.updateTaxRate(registerDeps, userId, params.data.gymId, viewer, params.data.rateId, body.data));
+  });
+
+  app.put("/v1/orgs/:gymId/register/tax-rates/:rateId/charged-on", pre, async (req, reply) => {
+    const params = rateParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = chargeTaxRateRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(200).send(await service.chargeTaxRate(registerDeps, userId, params.data.gymId, viewer, params.data.rateId, body.data));
   });
 
   app.delete("/v1/orgs/:gymId/register/tax-rates/:rateId", pre, async (req, reply) => {

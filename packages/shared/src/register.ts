@@ -199,6 +199,18 @@ export type TaxModeRequest = z.infer<typeof taxModeRequestSchema>;
 export const saveTaxRateRequestSchema = z.object({ name: taxNameSchema, bp: rateBpSchema }).strict();
 export type SaveTaxRateRequest = z.infer<typeof saveTaxRateRequestSchema>;
 
+/** WHAT CHARGES ONE RATE, set in one press (18b-iii): the gym's membership types, or its
+ *  products, that charge it, every one of them. One of that kind on the list now charges
+ *  this rate; one not on it that charged this rate charges none. A type or product that
+ *  charged another rate and is on the list charges this one instead. */
+export const chargeTaxRateRequestSchema = z
+  .object({
+    use: z.enum(["memberships", "products"]),
+    ids: z.array(z.string().uuid()).max(200),
+  })
+  .strict();
+export type ChargeTaxRateRequest = z.infer<typeof chargeTaxRateRequestSchema>;
+
 export const gymSaleSchema = z
   .object({
     id: z.string().uuid(),
@@ -294,7 +306,16 @@ export const sellPageResponseSchema = z
     archivedDiscountsTotal: z.number().int().min(0),
     /** The gym's membership types on its price list, by name: what a discount can be
      *  limited to (18b-ii-b). */
-    membershipTypes: z.array(z.object({ id: z.string().uuid(), name: z.string() }).strict()),
+    membershipTypes: z.array(
+      z
+        .object({
+          id: z.string().uuid(),
+          name: z.string(),
+          /** The tax rate its bills charge (18b-iii); null for none. */
+          taxRateId: z.string().uuid().nullable(),
+        })
+        .strict(),
+    ),
     /** May record a sale and take one back (`billing.members`). */
     canSell: z.boolean(),
     /** May change the products and the tax (`memberships.manage`). */
@@ -364,6 +385,7 @@ export const REGISTER_WORDS = {
   person_not_found: "That person was not found on your list. Pick them again, or sell to a walk-in.",
   price_changed: "The price or the tax changed while this was open. Nothing was sold: check the total and press again.",
   rate_not_found: "That tax rate was not found. Pick another, or choose No tax.",
+  charged_not_found: "Something on this list was archived or removed while it was open. Nothing was saved: tick them again.",
   rate_name_taken: "You already have a tax rate with this name. Pick another name.",
   too_many_rates: `You can have ${String(TAX_RATES_MAX)} tax rates. Remove one you no longer charge first.`,
   taxed_price_too_high: "This price is too high to charge tax on. Lower the price, or choose No tax.",

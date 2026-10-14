@@ -32,6 +32,8 @@ export const registerService = {
   saveTaxMode: async (gymId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax`, body)),
   addTaxRate: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/tax-rates`, body)),
   changeTaxRate: async (gymId, rateId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax-rates/${encodeURIComponent(rateId)}`, body)),
+  /** What charges a rate: `{ use: 'memberships' | 'products', ids }`, every one of them. */
+  chargeTaxRate: async (gymId, rateId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax-rates/${encodeURIComponent(rateId)}/charged-on`, body)),
   removeTaxRate: async (gymId, rateId) => page(await authApi.delete(`${gymPath(gymId)}/register/tax-rates/${encodeURIComponent(rateId)}`)),
   addProduct: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/products`, body)),
   changeProduct: async (gymId, productId, body) => page(await authApi.put(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`, body)),

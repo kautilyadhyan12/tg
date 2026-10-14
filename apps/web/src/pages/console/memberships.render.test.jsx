@@ -39,6 +39,7 @@ const register = {
   changeTaxRate: vi.fn(),
   removeTaxRate: vi.fn(),
   saveTaxMode: vi.fn(),
+  chargeTaxRate: vi.fn(),
 };
 vi.mock('../../api/registerApi', () => ({ registerService: register }));
 
@@ -161,7 +162,7 @@ describe('discounts for memberships (18b-ii-b)', () => {
     discounts,
     archivedDiscounts: [],
     archivedDiscountsTotal: 0,
-    membershipTypes: [{ id: type().id, name: 'Gold Monthly' }],
+    membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateId: null }],
     canSell: true,
     canManage: true,
     sales: [],
@@ -215,7 +216,7 @@ describe('tax on memberships (18b-iii)', () => {
     discounts: [],
     archivedDiscounts: [],
     archivedDiscountsTotal: 0,
-    membershipTypes: [{ id: type().id, name: 'Gold Monthly' }],
+    membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateId: null }],
     canSell: true,
     canManage: true,
     sales: [],
@@ -232,6 +233,32 @@ describe('tax on memberships (18b-iii)', () => {
     expect(await screen.findByText('Plus GST 18% on each payment')).toBeTruthy();
     const box = await screen.findByRole('region', { name: 'Tax' });
     expect(within(box).getAllByTestId('tax-rate-row').map((r) => r.textContent)).toEqual([expect.stringContaining("GST 18%Charged on 1 membership type and 12 members' memberships.")]);
+  });
+
+  it('a rate added in the Tax box opens what charges it: Gold Monthly ticked and saved is charged, and its row says so (Kd’s click-through)', async () => {
+    register.get.mockResolvedValue(sellPage([]));
+    register.addTaxRate.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 0 })]));
+    register.chargeTaxRate.mockResolvedValue({ ...sellPage([rateRow(GST)]), membershipTypes: [{ id: type().id, name: 'Gold Monthly', taxRateId: GST.id }] });
+    draw([gym()]);
+    const box = await screen.findByRole('region', { name: 'Tax' });
+    fireEvent.click(within(box).getByRole('button', { name: 'Add a tax rate' }));
+    const form = within(within(box).getByRole('form', { name: 'Add a tax rate' }));
+    fireEvent.change(form.getByLabelText('Tax name'), { target: { value: 'GST' } });
+    fireEvent.change(form.getByLabelText('Rate, in percent'), { target: { value: '18' } });
+    // The price list is read again once the rate is charged.
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
+    // Read again after the add, the Sell page has the new rate, as the server answers.
+    register.get.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 0 })]));
+    fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
+    expect(await within(box).findByText('GST 18% added. Now tick what charges it.')).toBeTruthy();
+    const choose = within(within(box).getByRole('group', { name: 'What charges GST 18%' }));
+    expect(choose.getByText('Which memberships charge GST 18%?')).toBeTruthy();
+    expect(choose.getByText('Members who already hold a membership keep the tax it was sold with. New memberships charge what you tick here.')).toBeTruthy();
+    fireEvent.click(choose.getByRole('checkbox', { name: 'Gold Monthly' }));
+    fireEvent.click(choose.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(register.chargeTaxRate).toHaveBeenCalledWith(IRON, GST.id, { use: 'memberships', ids: [type().id] }));
+    expect(await screen.findByText('GST 18% is now charged on Gold Monthly.')).toBeTruthy();
+    expect(await screen.findByText('Plus GST 18% on each payment')).toBeTruthy();
   });
 
   it('where the gym’s prices hold the tax, the row says the price includes it', async () => {

@@ -7,6 +7,7 @@ import {
   SALE_QUANTITY_MAX,
   TAX_NAME_MAX,
   TAX_RATES_MAX,
+  billAmounts,
   bpToTaxRateText,
   discountOff,
   formatMinor,
@@ -325,21 +326,47 @@ export const TOO_MANY_RATES = `You can have ${String(TAX_RATES_MAX)} tax rates. 
 export const RATE_HINT = 'Your accountant or tax office can tell you the name and rate of the tax you charge, such as GST 18% or Sales tax 8.25%.';
 export const RATE_CHANGE_NOTE = 'A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.';
 
-/** The two ways a gym charges tax, each with an example in the gym's own money. */
-export function taxModes(currency) {
+/** The two ways a gym charges tax, each with an example in the gym's own money, at the
+ *  gym's own first rate where it has one (Kd's click-through: "how is tax 10% decided"). */
+export function taxModes(currency, rate = null) {
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
+  const bp = rate === null || rate === undefined ? 1000 : rate.bp;
+  const name = rate === null || rate === undefined ? 'a 10% tax' : rateLabel(rate);
+  const price = 10000;
+  const onTop = billAmounts(price, { name: 'Tax', bp, included: false });
+  const inside = billAmounts(price, { name: 'Tax', bp, included: true });
+  const example = rate === null || rate === undefined ? 'For example, with a 10% tax' : `With ${name}`;
   return [
     {
       value: 'added',
       label: 'Added on top of the price',
-      hint: `At 10% tax, a price of ${money(1000)} costs the customer ${money(1100)}. Usual in the United States and Canada.`,
+      hint: `${example}, a price of ${money(price)} costs the customer ${money(onTop.ok ? onTop.totalMinor : price)}. Usual in the United States and Canada.`,
     },
     {
       value: 'included',
       label: 'Already included in the price',
-      hint: `At 10% tax, a price of ${money(1000)} costs the customer ${money(1000)}, and ${money(91)} of it is tax. Usual where VAT or GST is charged.`,
+      hint: `${example}, a price of ${money(price)} costs the customer ${money(price)}, and ${money(inside.ok ? inside.taxMinor : 0)} of it is tax. Usual where VAT or GST is charged.`,
     },
   ];
+}
+
+/** What a rate's "Choose" box lists: the gym's membership types or its products, each
+ *  ticked where it charges this rate, with the rate it charges now where that is another. */
+export function chargeChoices(page, rate, use) {
+  const items = use === 'memberships' ? page.membershipTypes : page.products;
+  return items.map((item) => {
+    const other = item.taxRateId !== null && item.taxRateId !== rate.id ? rateById(page.tax, item.taxRateId) : null;
+    return { id: item.id, name: item.name, on: item.taxRateId === rate.id, note: other === null ? null : `Now charges ${rateLabel(other)}` };
+  });
+}
+
+/** Said once a rate's list is saved, in the box it was saved in. */
+export function chargedWords(rate, names, use) {
+  const label = rateLabel(rate);
+  const what = use === 'memberships' ? 'membership' : 'product';
+  if (names.length === 0) return `${label} is now charged on no ${what}s.`;
+  const shown = names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${String(names.length - 3)} more`;
+  return `${label} is now charged on ${shown}.`;
 }
 
 /** What the gym's tax is, in one sentence. */

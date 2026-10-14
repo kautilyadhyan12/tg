@@ -16,6 +16,7 @@ const svc = {
   addTaxRate: vi.fn(),
   changeTaxRate: vi.fn(),
   removeTaxRate: vi.fn(),
+  chargeTaxRate: vi.fn(),
   addProduct: vi.fn(),
   changeProduct: vi.fn(),
   archiveProduct: vi.fn(),
@@ -446,7 +447,10 @@ describe('products and tax', () => {
     fireEvent.change(form.getByLabelText('Rate, in percent'), { target: { value: '18' } });
     fireEvent.click(form.getByRole('button', { name: 'Add tax rate' }));
     await waitFor(() => expect(svc.addTaxRate).toHaveBeenCalledWith('g1', { name: 'GST', bp: 1800 }));
-    expect(await within(taxBox()).findByText('GST 18% added. Pick it as the tax of a product or a membership type.')).toBeTruthy();
+    expect(await within(taxBox()).findByText('GST 18% added. Now tick what charges it.')).toBeTruthy();
+    // A new rate charges nothing: the box to tick what charges it opens under it by itself.
+    expect(within(taxBox()).getByRole('group', { name: 'What charges GST 18%' })).toBeTruthy();
+    fireEvent.click(within(within(taxBox()).getByRole('group', { name: 'What charges GST 18%' })).getByRole('button', { name: 'Cancel' }));
     // A new rate reaches what is made from now on, and the form says so.
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Change GST' }));
     const change = within(within(taxBox()).getByRole('form', { name: 'Change tax rate' }));
@@ -478,6 +482,22 @@ describe('products and tax', () => {
     fireEvent.click(within(taxBox()).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(svc.removeTaxRate).toHaveBeenCalledWith('g1', 'r3'));
     expect(await within(taxBox()).findByText('Spare removed.')).toBeTruthy();
+  });
+
+  it('the Tax box: Choose products ticks what charges a rate, sends every one ticked, and says it in the same place', async () => {
+    svc.chargeTaxRate.mockResolvedValue(page({ products: [TOWEL, product({ taxRateId: null })] }));
+    open();
+    await screen.findByRole('region', { name: 'Tax' });
+    fireEvent.click(within(taxBox()).getByRole('button', { name: 'Choose products for Sales tax' }));
+    const box = within(within(taxBox()).getByRole('group', { name: 'What charges Sales tax 8.25%' }));
+    expect(box.getByText('Which products charge Sales tax 8.25%?')).toBeTruthy();
+    expect(box.getByRole('checkbox', { name: 'Towel' }).checked).toBe(true);
+    expect(box.getByRole('checkbox', { name: 'Water' }).checked).toBe(true);
+    fireEvent.click(box.getByRole('checkbox', { name: 'Water' }));
+    fireEvent.click(box.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(svc.chargeTaxRate).toHaveBeenCalledWith('g1', 'r1', { use: 'products', ids: ['p-towel'] }));
+    expect(await within(taxBox()).findByText('Sales tax 8.25% is now charged on Towel.')).toBeTruthy();
+    expect(within(taxBox()).queryByRole('group', { name: 'What charges Sales tax 8.25%' })).toBeNull();
   });
 
   it('the Tax box: how the tax is charged is saved on its own, and says it is saved', async () => {

@@ -32,6 +32,7 @@ import {
   type OrgPrivilege,
   type SellPageResponse,
   type SalePeopleResponse,
+  type ChargeTaxRateRequest,
   type SaveTaxRateRequest,
   type TaxModeRequest,
   type SaveGymDiscountRequest,
@@ -132,7 +133,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
     discounts: offered.live.map(isoDiscount),
     archivedDiscounts: offered.archived.map(isoDiscount),
     archivedDiscountsTotal: offered.archivedTotal,
-    membershipTypes: types.map((t) => ({ id: t.id, name: t.name })),
+    membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
     sales: row.sales.map((s) => shownSale(s, today, viewer.canSell)),
@@ -265,6 +266,14 @@ export async function createTaxRate(deps: RegisterDeps, userId: string, gymId: s
 
 export async function updateTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string, req: SaveTaxRateRequest): Promise<SellPageResponse> {
   throwOnRateFailure(await tax.updateRate(deps.sql, { gymId, rateId, name: req.name, bp: req.bp, actorUserId: userId, now: deps.now() }));
+  return await read(deps, gymId, viewer);
+}
+
+export async function chargeTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string, req: ChargeTaxRateRequest): Promise<SellPageResponse> {
+  const outcome = await tax.chargeRate(deps.sql, { gymId, rateId, use: req.use, ids: req.ids, actorUserId: userId, now: deps.now() });
+  if (outcome.kind === "items_not_found") throw new OrgsError(409, "tax_charged_not_found", REGISTER_WORDS.charged_not_found);
+  if (outcome.kind === "too_high") throw new OrgsError(409, "taxed_price_too_high", `${outcome.name}: ${REGISTER_WORDS.taxed_price_too_high}`);
+  throwOnRateFailure(outcome);
   return await read(deps, gymId, viewer);
 }
 
