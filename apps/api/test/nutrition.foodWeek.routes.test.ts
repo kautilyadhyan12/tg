@@ -261,6 +261,26 @@ d("your week in food (real Postgres)", () => {
     expect(put.statusCode, put.body).toBe(200);
   });
 
+  it("a keep that fails never fails the meal: it answers once, saved", async () => {
+    const { cookies, id } = await makeUser("keepfails");
+    // Refuse this one person's kept targets, and nobody else's.
+    await sql.unsafe(`CREATE OR REPLACE FUNCTION foodweek_test_refuse() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.user_id = '${id}'::uuid THEN RAISE EXCEPTION 'refused by the test'; END IF; RETURN NEW; END $$`);
+    await sql`CREATE TRIGGER foodweek_test_refuse BEFORE INSERT OR UPDATE ON food_day_targets FOR EACH ROW EXECUTE FUNCTION foodweek_test_refuse()`;
+    try {
+      const res = await inject({
+        method: "POST", url: "/v1/nutrition/meals", cookies,
+        body: { mealName: "Lunch", takenAt: new Date().toISOString(), items: [{ canonical: "rice_white_cooked", grams: 200 }] },
+      });
+      expect(res.statusCode, res.body).toBe(201);
+      expect((await sql`SELECT 1 FROM meal_logs WHERE user_id = ${id}`).length).toBe(1);
+      expect((await sql`SELECT 1 FROM food_day_targets WHERE user_id = ${id}`).length).toBe(0);
+    } finally {
+      await sql`DROP TRIGGER IF EXISTS foodweek_test_refuse ON food_day_targets`;
+      await sql`DROP FUNCTION IF EXISTS foodweek_test_refuse()`;
+    }
+  });
+
   it("keeps the targets on the day of the person's own time zone", async () => {
     // UTC+14 and UTC-11 are a day or more apart at every hour, so a keep made on the
     // UTC day is on the wrong day for at least one of them.
