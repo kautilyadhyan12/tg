@@ -66,6 +66,9 @@ export const DIRECT_DELETE_TABLES = [
   // A person's own diet plan (migration 0106; ROADMAP 34e-i): their own, deleted at Day 14
   // and exported.
   "diet_plans",
+  // Each day's food targets (migration 0110; ROADMAP 34f-i): their own, deleted at Day 14
+  // and exported.
+  "food_day_targets",
   // A member's reactions to their gym's posts (migration 0071; ROADMAP 19b-i): the
   // person's own taps, deleted at Day 14 and exported.
   "gym_post_reactions",
