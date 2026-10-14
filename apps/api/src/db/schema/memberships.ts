@@ -145,6 +145,12 @@ export const gymHeldMemberships = pgTable(
     renews: boolean("renews").notNull(),
     classesLeft: integer("classes_left"),
     fromList: boolean("from_list").notNull().default(false),
+    /** The discount it was given with (`0106`). Its key to `gym_discounts` is the
+     *  migration's: declaring it here would import `register.ts`, which imports this file. */
+    discountId: uuid("discount_id"),
+    discountName: text("discount_name"),
+    discountMinor: integer("discount_minor").notNull().default(0),
+    discountPayments: text("discount_payments"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -178,6 +184,10 @@ export const gymHeldMemberships = pgTable(
       sql`${t.paidFloor} >= 0 AND ${t.paidPeriods} >= ${t.paidFloor} AND (${t.kind} = 'recurring' OR (${t.paidPeriods} <= 1 AND ${t.paidFloor} = 0)) AND (${t.priceMinor} > 0 OR ${t.paidPeriods} = 0)`,
     ),
     check("gym_held_memberships_renews_check", sql`${t.kind} = 'recurring' OR NOT ${t.renews}`),
+    check(
+      "gym_held_memberships_discount_check",
+      sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND (${t.discountId} IS NULL) = (${t.discountPayments} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND 99999999 AND ${t.discountPayments} IN ('first','every') AND (${t.discountPayments} = 'every' OR ${t.kind} = 'recurring') END`,
+    ),
     foreignKey({
       name: "gym_held_memberships_entry_fk",
       columns: [t.gymId, t.entryId],
@@ -190,6 +200,9 @@ export const gymHeldMemberships = pgTable(
     }),
     index("gym_held_memberships_entry_idx").on(t.gymId, t.entryId),
     index("gym_held_memberships_type_idx").on(t.gymId, t.membershipTypeId),
+    index("gym_held_memberships_discount_idx")
+      .on(t.gymId, t.discountId)
+      .where(sql`${t.discountId} IS NOT NULL`),
   ],
 );
 

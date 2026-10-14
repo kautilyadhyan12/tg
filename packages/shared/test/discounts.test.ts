@@ -1,5 +1,5 @@
-// DISCOUNTS AND PROMO CODES (spec Part 3 §14.3; ROADMAP 18b-ii-a): what comes off, when a
-// discount can be used, and what a sale made with one comes to. Every expected number
+// DISCOUNTS AND PROMO CODES (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): what comes
+// off, when a discount can be used, and what a sale or a membership made with one comes to. Every expected number
 // here was worked out by hand.
 import { describe, expect, it } from "vitest";
 import {
@@ -8,6 +8,8 @@ import {
   discountOff,
   discountRefusalWords,
   discountStatus,
+  giveHeldMembershipRequestSchema,
+  membershipDiscount,
   percentToBp,
   promoCodeFrom,
   saleAmounts,
@@ -148,8 +150,26 @@ describe("what a discount is on a given day", () => {
 describe("whether a discount can be used on a sale", () => {
   const WATER = "11111111-1111-4111-8111-111111111111";
   const TOWEL = "22222222-2222-4222-8222-222222222222";
-  const d = { ...percent(1000), currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archived: false, allProducts: true, productIds: [] as string[] };
+  const MONTHLY = "33333333-3333-4333-8333-333333333333";
+  const DAY_PASS = "44444444-4444-4444-8444-444444444444";
+  const d = {
+    ...percent(1000),
+    currency: null,
+    startsOn: null,
+    endsOn: null,
+    maxUses: null,
+    uses: 0,
+    archived: false,
+    forProducts: true,
+    allProducts: true,
+    productIds: [] as string[],
+    forMemberships: false,
+    allMembershipTypes: true,
+    membershipTypeIds: [] as string[],
+  };
   const sale = { today: "2026-10-13", productId: WATER, currency: "USD" };
+  const give = { today: "2026-10-13", membershipTypeId: MONTHLY, currency: "USD" };
+  const both = { ...d, forMemberships: true };
 
   it.each([
     ["on every product, no dates, no limit", d, { ok: true }],
@@ -167,15 +187,42 @@ describe("whether a discount can be used on a sale", () => {
     ["a fixed amount in another money", { ...d, ...amount(100), currency: "GBP" }, { ok: false, reason: "other_currency" }],
     ["a percentage has no money, so any sale's will do", { ...d, currency: null }, { ok: true }],
     ["expired is said before the wrong product", { ...d, endsOn: "2026-10-01", allProducts: false, productIds: [TOWEL] }, { ok: false, reason: "expired" }],
+    ["for memberships alone is not for a product", { ...d, forProducts: false, forMemberships: true }, { ok: false, reason: "not_for_product" }],
+    ["for products and memberships", both, { ok: true }],
   ] as const)("%s", (_what, discount, answer) => {
     expect(discountFits(discount, sale)).toEqual(answer);
   });
 
-  it("every refusal has a sentence that names the discount and says nothing was sold", () => {
-    for (const reason of ["archived", "not_started", "expired", "used_up", "not_for_product", "other_currency"] as const) {
+  it.each([
+    // A discount made before 18b-ii-b is for products alone, as the migration leaves it.
+    ["for products alone is not for a membership", d, { ok: false, reason: "not_for_membership" }],
+    ["for every membership type", { ...d, forProducts: false, forMemberships: true }, { ok: true }],
+    ["for products and memberships", both, { ok: true }],
+    ["limited to this membership", { ...both, allMembershipTypes: false, membershipTypeIds: [MONTHLY] }, { ok: true }],
+    ["limited to this one and another", { ...both, allMembershipTypes: false, membershipTypeIds: [DAY_PASS, MONTHLY] }, { ok: true }],
+    ["limited to another membership", { ...both, allMembershipTypes: false, membershipTypeIds: [DAY_PASS] }, { ok: false, reason: "not_for_membership" }],
+    ["limited to no membership at all", { ...both, allMembershipTypes: false, membershipTypeIds: [] }, { ok: false, reason: "not_for_membership" }],
+    ["a product's id is not a membership's", { ...both, allMembershipTypes: false, membershipTypeIds: [WATER] }, { ok: false, reason: "not_for_membership" }],
+    ["limited to some products says nothing of memberships", { ...both, allProducts: false, productIds: [TOWEL] }, { ok: true }],
+    ["archived", { ...both, archived: true }, { ok: false, reason: "archived" }],
+    ["starts tomorrow", { ...both, startsOn: "2026-10-14" }, { ok: false, reason: "not_started" }],
+    ["ended yesterday", { ...both, endsOn: "2026-10-12" }, { ok: false, reason: "expired" }],
+    ["at its limit", { ...both, maxUses: 1, uses: 1 }, { ok: false, reason: "used_up" }],
+    ["a fixed amount in the membership's money", { ...both, ...amount(1000), currency: "USD" }, { ok: true }],
+    ["a fixed amount in another money", { ...both, ...amount(1000), currency: "GBP" }, { ok: false, reason: "other_currency" }],
+  ] as const)("on a membership: %s", (_what, discount, answer) => {
+    expect(discountFits(discount, give)).toEqual(answer);
+  });
+
+  it("every refusal has a sentence that names the discount and says nothing was sold, or saved", () => {
+    for (const reason of ["archived", "not_started", "expired", "used_up", "not_for_product", "not_for_membership", "other_currency"] as const) {
       const words = discountRefusalWords("Summer sale", reason);
       expect(words).toContain("Summer sale");
       expect(words).toContain("Nothing was sold");
+      const membership = discountRefusalWords("Summer sale", reason, "membership");
+      expect(membership).toContain("Summer sale");
+      expect(membership).toContain("Nothing was saved");
+      expect(membership).not.toContain("sold");
     }
   });
 });
@@ -228,6 +275,54 @@ describe("what staff type", () => {
   });
 });
 
+describe("what a membership given with a discount costs", () => {
+  const first = { membershipPayments: "first" as const };
+  const every = { membershipPayments: "every" as const };
+  it.each([
+    // [what, discount, type, what comes off, which payments, the price kept on it, its first bill]
+    ["$50.00 a month, 20% off the first payment", { ...percent(2000), ...first }, { kind: "recurring", priceMinor: 5000 }, 1000, "first", 5000, 4000],
+    ["$50.00 a month, 20% off every payment", { ...percent(2000), ...every }, { kind: "recurring", priceMinor: 5000 }, 1000, "every", 4000, 4000],
+    ["$50.00 a month, $10.00 off the first", { ...amount(1000), ...first }, { kind: "recurring", priceMinor: 5000 }, 1000, "first", 5000, 4000],
+    ["$50.00 a month, $10.00 off every one", { ...amount(1000), ...every }, { kind: "recurring", priceMinor: 5000 }, 1000, "every", 4000, 4000],
+    ["$19.99 a week, 12.5% is 2.49875, so 2.50, every one", { ...percent(1250), ...every }, { kind: "recurring", priceMinor: 1999 }, 250, "every", 1749, 1749],
+    ["a $30.00 one-time membership is paid once: first is every", { ...percent(2000), ...first }, { kind: "one_time", priceMinor: 3000 }, 600, "every", 2400, 2400],
+    ["a $120.00 pack, $25.00 off", { ...amount(2500), ...first }, { kind: "pack", priceMinor: 12_000 }, 2500, "every", 9500, 9500],
+    ["a $15.00 trial, 10% off", { ...percent(1000), ...every }, { kind: "trial", priceMinor: 1500 }, 150, "every", 1350, 1350],
+    ["99.99% of $100.00 leaves a cent", { ...percent(9999), ...first }, { kind: "recurring", priceMinor: 10_000 }, 9999, "first", 10_000, 1],
+    ["a repeating one with no setting comes off every payment", { ...percent(2000), membershipPayments: null }, { kind: "recurring", priceMinor: 5000 }, 1000, "every", 4000, 4000],
+  ] as const)("%s", (_what, discount, type, offMinor, payments, heldPriceMinor, firstBillMinor) => {
+    expect(membershipDiscount(discount, type)).toEqual({ ok: true, offMinor, payments, heldPriceMinor, firstBillMinor });
+  });
+
+  it.each([
+    ["99.99% of $50.00 is all of it", { ...percent(9999), ...every }, { kind: "recurring", priceMinor: 5000 }, "nothing_to_pay"],
+    ["$50.00 off $50.00", { ...amount(5000), ...first }, { kind: "recurring", priceMinor: 5000 }, "nothing_to_pay"],
+    ["$60.00 off $50.00", { ...amount(6000), ...first }, { kind: "one_time", priceMinor: 5000 }, "nothing_to_pay"],
+    ["1% of $0.30 rounds to nothing", { ...percent(100), ...every }, { kind: "recurring", priceMinor: 30 }, "nothing_off"],
+    ["a free membership", { ...percent(2000), ...every }, { kind: "trial", priceMinor: 0 }, "nothing_off"],
+  ] as const)("refuses %s", (_what, discount, type, reason) => {
+    expect(membershipDiscount(discount, type)).toEqual({ ok: false, reason });
+  });
+});
+
+describe("a membership given with a discount, as the server takes it", () => {
+  const give = { requestKey: "00000000-0000-4000-8000-000000000001", typeId: "33333333-3333-4333-8333-333333333333", startsOn: "2026-10-13", paid: false };
+  const DISCOUNT = "55555555-5555-4555-8555-555555555555";
+  it("takes none, or one with the price and what comes off", () => {
+    expect(giveHeldMembershipRequestSchema.safeParse(give).success).toBe(true);
+    expect(giveHeldMembershipRequestSchema.safeParse({ ...give, priceMinor: 5000, discountId: DISCOUNT, discountMinor: 1000 }).success).toBe(true);
+  });
+  it.each([
+    ["a discount with nothing said to come off", { priceMinor: 5000, discountId: DISCOUNT }],
+    ["something off with no discount", { priceMinor: 5000, discountMinor: 1000 }],
+    ["a discount and no price", { discountId: DISCOUNT, discountMinor: 1000 }],
+    ["nothing off", { priceMinor: 5000, discountId: DISCOUNT, discountMinor: 0 }],
+    ["a discount that is not an id", { priceMinor: 5000, discountId: "SUMMER20", discountMinor: 1000 }],
+  ])("refuses %s", (_what, patch) => {
+    expect(giveHeldMembershipRequestSchema.safeParse({ ...give, ...patch }).success).toBe(false);
+  });
+});
+
 describe("the discount form as the server takes it", () => {
   const good = {
     name: "Summer sale",
@@ -238,10 +333,16 @@ describe("the discount form as the server takes it", () => {
     startsOn: "2026-06-01",
     endsOn: "2026-08-31",
     maxUses: 100,
+    forProducts: true,
     allProducts: true,
     productIds: [],
+    forMemberships: false,
+    allMembershipTypes: true,
+    membershipTypeIds: [],
+    membershipPayments: null,
   };
   const WATER = "11111111-1111-4111-8111-111111111111";
+  const MONTHLY = "33333333-3333-4333-8333-333333333333";
 
   it("takes a percentage, a fixed amount, no code, no dates, no limit and picked products", () => {
     expect(saveGymDiscountRequestSchema.safeParse(good).success).toBe(true);
@@ -252,6 +353,13 @@ describe("the discount form as the server takes it", () => {
     expect(saveGymDiscountRequestSchema.safeParse({ ...good, startsOn: "2028-02-29", endsOn: "2028-02-29" }).success).toBe(true);
     expect(saveGymDiscountRequestSchema.safeParse({ ...good, percentBp: 9999 }).success).toBe(true);
     expect(saveGymDiscountRequestSchema.parse({ ...good, name: "  Summer sale  " }).name).toBe("Summer sale");
+  });
+
+  it("takes memberships alone, both, picked types, and how often it comes off", () => {
+    const memberships = { forProducts: false, forMemberships: true, membershipPayments: "first" };
+    expect(saveGymDiscountRequestSchema.safeParse({ ...good, ...memberships }).success).toBe(true);
+    expect(saveGymDiscountRequestSchema.safeParse({ ...good, forMemberships: true, membershipPayments: "every" }).success).toBe(true);
+    expect(saveGymDiscountRequestSchema.safeParse({ ...good, ...memberships, allMembershipTypes: false, membershipTypeIds: [MONTHLY] }).success).toBe(true);
   });
 
   it.each([
@@ -282,6 +390,16 @@ describe("the discount form as the server takes it", () => {
     ["every product, and some named as well", { allProducts: true, productIds: [WATER] }],
     ["the same product twice", { allProducts: false, productIds: [WATER, WATER] }],
     ["a product that is not an id", { allProducts: false, productIds: ["water"] }],
+    ["for nothing at all", { forProducts: false }],
+    ["not for products, with products picked", { forProducts: false, forMemberships: true, membershipPayments: "first", allProducts: false, productIds: [WATER] }],
+    ["not for memberships, with types picked", { allMembershipTypes: false, membershipTypeIds: [MONTHLY] }],
+    ["for memberships, with no word on how often", { forMemberships: true }],
+    ["how often, on one not for memberships", { membershipPayments: "every" }],
+    ["how often in a word nobody knows", { forMemberships: true, membershipPayments: "twice" }],
+    ["picked types with none named", { forMemberships: true, membershipPayments: "first", allMembershipTypes: false, membershipTypeIds: [] }],
+    ["every type, and some named as well", { forMemberships: true, membershipPayments: "first", membershipTypeIds: [MONTHLY] }],
+    ["the same type twice", { forMemberships: true, membershipPayments: "first", allMembershipTypes: false, membershipTypeIds: [MONTHLY, MONTHLY] }],
+    ["an older screen that does not say what it is for", { forProducts: undefined, forMemberships: undefined }],
     ["a field nobody asked for", { uses: 0 }],
   ])("refuses %s", (_what, patch) => {
     expect(saveGymDiscountRequestSchema.safeParse({ ...good, ...patch }).success).toBe(false);

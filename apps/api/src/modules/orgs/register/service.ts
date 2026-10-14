@@ -293,6 +293,8 @@ function throwOnDiscountFailure(outcome: discounts.DiscountWriteOutcome): void {
       throw new OrgsError(409, "discount_changed", DISCOUNT_WORDS.changed);
     case "product_not_found":
       throw new OrgsError(409, "product_not_for_sale", DISCOUNT_WORDS.product_not_found);
+    case "membership_type_not_found":
+      throw new OrgsError(409, "membership_type_not_found", DISCOUNT_WORDS.membership_type_not_found);
     case "no_currency":
       throw new OrgsError(409, "no_member_currency", DISCOUNT_WORDS.no_currency);
     default: {
@@ -311,8 +313,13 @@ const discountInput = (req: SaveGymDiscountRequest): discounts.DiscountInput => 
   startsOn: req.startsOn,
   endsOn: req.endsOn,
   maxUses: req.maxUses,
+  forProducts: req.forProducts,
   allProducts: req.allProducts,
   productIds: req.productIds,
+  forMemberships: req.forMemberships,
+  allMembershipTypes: req.allMembershipTypes,
+  membershipTypeIds: req.membershipTypeIds,
+  membershipPayments: req.membershipPayments,
 });
 
 export async function createDiscount(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, req: SaveGymDiscountRequest): Promise<SellPageResponse> {

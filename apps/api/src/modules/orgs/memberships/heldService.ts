@@ -9,12 +9,15 @@
 // gym's time zone, never the caller's.
 import type { Sql } from "postgres";
 import {
+  DISCOUNT_WORDS,
   BILLS_SHOWN,
   BILL_OVERDUE_DAYS_MAX,
   HELD_EARLIER_PAGE,
   MEMBER_LIST_BY_HAND_WORDS,
   billSettingsResponseSchema,
   countAfterGap,
+  discountNothingOffWords,
+  discountRefusalWords,
   formatMinor,
   heldMembershipView,
   heldMembershipsResponseSchema,
@@ -43,6 +46,7 @@ import { endMembershipBookings, membershipBookingsAsk } from "../classes/booking
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
+import { membershipDiscounts } from "../register/discountsRepo.js";
 import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow } from "./billsSql.js";
 
 export interface HeldDeps {
@@ -143,7 +147,7 @@ function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly
 }
 
 async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean): Promise<HeldMembershipsResponse> {
-  const list = await repo.readHeld(deps.sql, gymId, entryId);
+  const [list, offered] = await Promise.all([repo.readHeld(deps.sql, gymId, entryId), membershipDiscounts(deps.sql, gymId)]);
   if (list === null) throw notFound();
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays };
   // The page reads a membership as the next write will find it: with its count moved
@@ -181,6 +185,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
+      discount: row.discount,
       view: viewOf(row, list.bills, today, list.past),
     }))
     .sort(
@@ -203,6 +208,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     types: list.types,
     listed: list.listed,
     canBill,
+    discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
   });
 }
 
@@ -250,6 +256,16 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(400, "payment_method_needed", "Pick how they paid.");
     case "price_changed":
       throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
+    case "discount_not_found":
+      throw new OrgsError(409, "discount_not_available", DISCOUNT_WORDS.membership_not_available);
+    case "discount_refused":
+      throw new OrgsError(409, `discount_${outcome.reason}`, discountRefusalWords(outcome.name, outcome.reason, "membership"));
+    case "discount_nothing_off":
+      throw new OrgsError(409, "discount_takes_nothing_off", discountNothingOffWords(outcome.name, "membership"));
+    case "discount_nothing_to_pay":
+      throw new OrgsError(409, "discount_nothing_to_pay", DISCOUNT_WORDS.membership_nothing_to_pay);
+    case "discount_changed":
+      throw new OrgsError(409, "membership_discount_changed", DISCOUNT_WORDS.membership_discount_changed);
     case "early_payment":
       throw new OrgsError(
         409,
@@ -302,6 +318,7 @@ export async function giveHeldMembership(
       paid: req.paid,
       method: req.method ?? null,
       shownPriceMinor: req.priceMinor ?? null,
+      discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
       today,
       actorUserId: userId,
       now,
