@@ -5,10 +5,12 @@
 import { useState } from 'react';
 import { AlertTriangle, Check, ChevronRight, Dumbbell, ShieldCheck } from 'lucide-react';
 import {
+  ADULT_AGE,
   CHECK_FIRST_OPTIONS,
   CURRENT_DISCLAIMER_VERSION,
   DISCLAIMER_WORDINGS,
   ORG_TYPES_PHRASE,
+  UNDER_AGE_LINE,
   patchOnboardingRequestSchema,
 } from '@app/shared';
 import DisclaimerTick from '../../components/common/DisclaimerTick';
@@ -174,16 +176,19 @@ function AgeWheel({ age, save }) {
     if (v !== age && takes({ age: v })) save({ age: v });
   };
   return (
-    <NumberWheel
-      id="ob-age"
-      question="Age"
-      shown={age === null ? 'Not set' : `${age} years`}
-      isSet={age !== null}
-      unit="years"
-      stepLabel="Age"
-      onStep={(by) => pick(stepIn(list, at, by))}
-      columns={[{ label: 'Age', values: list, index: list.indexOf(at), format: String, onPick: (i) => pick(list[i]) }]}
-    />
+    <div>
+      <NumberWheel
+        id="ob-age"
+        question="Age"
+        shown={age === null ? 'Not set' : `${age} years`}
+        isSet={age !== null}
+        unit="years"
+        stepLabel="Age"
+        onStep={(by) => pick(stepIn(list, at, by))}
+        columns={[{ label: 'Age', values: list, index: list.indexOf(at), format: String, onPick: (i) => pick(list[i]) }]}
+      />
+      <FieldError>{age !== null && age < ADULT_AGE ? UNDER_AGE_LINE : null}</FieldError>
+    </div>
   );
 }
 

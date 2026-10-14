@@ -19,7 +19,7 @@ import {
 import { DIET_ICONS, EQUIPMENT_ICONS, GOAL_ICONS, WEIGHT_GOAL_ICONS } from './onboarding/onboardingIcons';
 import HealthQuestion from './onboarding/HealthQuestion';
 import { useHealthScreening } from './onboarding/useHealthScreening';
-import { CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS } from '@app/shared';
+import { ADULT_AGE, CURRENT_DISCLAIMER_VERSION, DISCLAIMER_WORDINGS, UNDER_AGE_LINE } from '@app/shared';
 import { authService } from '../api/authApi';
 import mlApi from '../api/mlApi'; // KEPT: avatar/profile-picture only — no new-API home (owed card)
 import Select from '../components/common/Select';
@@ -146,6 +146,8 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
   // still saves (Kd, 2026-09-14), held against the height, age and gender this
   // save leaves, and read as the boxes show it: 50.35 typed is under 50.4.
   const ageNow = parseInt(form.age, 10);
+  // The app is for 18 and over (RULINGS 2026-09-15): said under the box, and never sent.
+  const underAge = Number.isFinite(ageNow) && ageNow < ADULT_AGE;
   const typed = (text) => {
     const n = parseFloat(text);
     return Number.isFinite(n) ? n : null;
@@ -162,6 +164,10 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
     e.preventDefault();
     if (wrongSide !== null && targetTyped) {
       toast.error(wrongSide);
+      return;
+    }
+    if (underAge) {
+      toast.error(UNDER_AGE_LINE);
       return;
     }
     setLoading(true);
@@ -219,8 +225,9 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
         <Field label="Age">
           <input type="number" value={form.age}
             onChange={(e) => set('age', e.target.value)}
-            min={13} max={120}
+            max={120}
             className="input-field" style={inputStyle} />
+          {underAge && <p role="alert" className="text-2xs" style={{ color: '#f87171' }}>{UNDER_AGE_LINE}</p>}
         </Field>
 
         <Field label="Gender">
@@ -298,7 +305,7 @@ function ProfileTab({ profile, onSaved, fileRef, handleAvatar }) {
 }
 
 // ── Fitness tab ───────────────────────────────────────────────────────────────
-export function FitnessTab({ profile, onSaved }) {
+export function FitnessTab({ profile, onSaved, onChangeAge }) {
   // Screen 1's two questions and screen 7's equipment, in the screens' own
   // words, line icons and tables (4a-iv), so the two can never offer
   // different answers: ONE weight choice, which alone sets the calories, and
@@ -329,8 +336,16 @@ export function FitnessTab({ profile, onSaved }) {
   const tickGoal = (value) => setForm((f) => ({ ...f, fitnessGoals: toggleGoal(f.fitnessGoals, value) }));
   const tickEquipment = (value) => setForm((f) => ({ ...f, availableEquipment: toggleEquipment(f.availableEquipment, value) }));
 
+  // Every save here sends the stored age too, so an age under 18 kept from
+  // before the app became 18+ (RULINGS 2026-09-15) holds this tab as well.
+  const underAge = Number.isFinite(profile.age) && profile.age < ADULT_AGE;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (underAge) {
+      toast.error(UNDER_AGE_LINE);
+      return;
+    }
     setLoading(true);
     try {
       // MERGE: preserve the basic-info fields the other form owns (age/gender/
@@ -365,6 +380,14 @@ export function FitnessTab({ profile, onSaved }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {underAge && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm" style={{ color: '#f87171' }}>{UNDER_AGE_LINE}</p>
+          {onChangeAge && (
+            <button type="button" onClick={onChangeAge} className="btn-secondary">Change your age</button>
+          )}
+        </div>
+      )}
       <Field label="Fitness Level">
         <div className="flex gap-2">
           {['beginner', 'intermediate', 'advanced'].map((l) => (
@@ -1113,7 +1136,7 @@ export default function Settings() {
                           to think it needs saving (RULINGS 2026-09-09: a change
                           takes effect at once). */}
                       <HealthCard />
-                      <FitnessTab profile={profile} onSaved={loadProfile} />
+                      <FitnessTab profile={profile} onSaved={loadProfile} onChangeAge={() => setTab('profile')} />
                     </div>
                   )}
                   {tab === 'gym'           && <GymTab />}

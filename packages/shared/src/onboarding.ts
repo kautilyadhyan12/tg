@@ -18,6 +18,7 @@
 import { z } from "zod";
 import { dayActivitySchema, missingPlanInputSchema, planNumbersSchema, planPaceSchema } from "./plan.js";
 import {
+  ageSchema,
   dietSchema,
   displayNameSchema,
   equipmentArraySchema,
@@ -103,7 +104,7 @@ export const patchOnboardingRequestSchema = z
     weightGoal: weightGoalSchema.nullable().optional(),
     /** The whole list as it now stands: a tap sends all of it. */
     fitnessGoals: fitnessGoalsArraySchema.optional(),
-    age: z.number().int().min(16).max(120).nullable().optional(),
+    age: ageSchema.nullable().optional(),
     gender: genderSchema.nullable().optional(),
     heightCm: z.number().min(50).max(300).multipleOf(0.01).nullable().optional(),
     weightKg: z.number().positive().lt(1000).multipleOf(0.01).nullable().optional(),
