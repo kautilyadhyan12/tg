@@ -371,7 +371,8 @@ describe('the period', () => {
     expect(screen.getByTestId('period-line').textContent).toBe(
       "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose. \"A year earlier\" under a figure counts the same days a year before: 1 Nov 2024 to 10 Oct 2025.",
     );
-    expect(svc.attendance).toHaveBeenCalledWith('g1', '12m');
+    // Attendance is asked for once its part of the page is drawn, a moment after the members tiles.
+    await waitFor(() => expect(svc.attendance).toHaveBeenCalledWith('g1', '12m'));
   });
 
   it('staff who are shown money read which money figures do not move', async () => {
