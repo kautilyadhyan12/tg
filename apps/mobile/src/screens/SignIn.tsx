@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Image, Keyboard, LayoutAnimation, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SIGN_IN_CODE_RULES, authEmailSchema } from "@app/shared";
@@ -11,6 +11,8 @@ import { pictures } from "../look/pictures";
 import { fonts, Txt } from "../look/Txt";
 import type { Answer } from "../session/calls";
 import { useSession } from "../session/SessionProvider";
+import { RobotCheck } from "./RobotCheck";
+import { CopyContext } from "./ThisCopy";
 
 // The browser's "Get started" page, fitted to a phone (apps/web/src/pages/Login.jsx): its
 // picture fills the top and its form sits under it, by the thumb. Sign-up and sign-in are
@@ -18,8 +20,6 @@ import { useSession } from "../session/SessionProvider";
 // Google's button comes with ROADMAP Stage 5 item 12d.
 
 const NO_ANSWER = "Can’t connect. Check your internet and try again.";
-/** The phone's own robot check is item 12b-ii; until then a phone that is asked for it is told to wait. */
-const ROBOT_ON_PHONE = "Too many requests from this network. Try again later.";
 /** The resend gap in words, from the number the server enforces. */
 const gapWords = (seconds: number) =>
   seconds === 60 ? "a minute" : seconds % 60 === 0 ? `${String(seconds / 60)} minutes` : `${String(seconds)} seconds`;
@@ -40,12 +40,12 @@ const PHOTO_TALL = 1200 / 1141;
 /** The server's sentence is written for people; a reply with none gets one plain line. */
 function wordsFor(answer: Exclude<Answer<unknown>, { kind: "ok" }>, fallback: string): string {
   if (answer.kind === "no_answer") return NO_ANSWER;
-  if (answer.error === "robot_check" || answer.error === "robot_failed") return ROBOT_ON_PHONE;
   return answer.message === "" ? fallback : answer.message;
 }
 
 export function SignInScreen({ note }: { note: string | null }) {
   const { session } = useSession();
+  const apiUrl = useContext(CopyContext).extra?.apiUrl ?? "";
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -66,6 +66,9 @@ export function SignInScreen({ note }: { note: string | null }) {
   const [typing, setTyping] = useState(false);
   /** The room the form leaves the picture, as the phone laid it out. */
   const [room, setRoom] = useState(0);
+  /** The server asked for the robot check before it sends a code: its key, its sentence, and the
+   *  press that the check's answer finishes. */
+  const [robot, setRobot] = useState<{ key: string; line: string; press: "email" | "resend" } | null>(null);
 
   useEffect(() => {
     const show = (up: boolean) => () => {
@@ -98,12 +101,12 @@ export function SignInScreen({ note }: { note: string | null }) {
   };
 
   /** `too-soon`: a code was asked for inside the server's gap, so none went out; the code box opens either way. */
-  async function askForCode(to: string): Promise<"sent" | "too-soon" | null> {
+  async function askForCode(to: string, press: "email" | "resend", robotToken?: string): Promise<"sent" | "too-soon" | null> {
     setBusy(true);
     setProblem("");
     setSaid("");
     try {
-      const answer = await session.sendCode(to);
+      const answer = await session.sendCode(to, robotToken);
       if (answer.kind === "ok") {
         waitFor(answer.data.resendAfterSeconds);
         return "sent";
@@ -112,6 +115,10 @@ export function SignInScreen({ note }: { note: string | null }) {
         waitFor(answer.retryAfterSeconds ?? SIGN_IN_CODE_RULES.resendAfterSeconds);
         return "too-soon";
       }
+      if (answer.kind === "refused" && answer.robotCheckKey !== null && (answer.error === "robot_check" || answer.error === "robot_failed")) {
+        setRobot({ key: answer.robotCheckKey, line: answer.message, press });
+        return null;
+      }
       setProblem(wordsFor(answer, "We couldn’t send the code. Try again."));
       return null;
     } finally {
@@ -119,7 +126,7 @@ export function SignInScreen({ note }: { note: string | null }) {
     }
   }
 
-  async function continueWithEmail() {
+  async function continueWithEmail(robotToken?: string) {
     if (busy) return;
     if (typed.trim() === "") {
       setProblem("Enter your email address.");
@@ -130,7 +137,7 @@ export function SignInScreen({ note }: { note: string | null }) {
       setProblem("Enter a valid email address.");
       return;
     }
-    const arrived = await askForCode(parsed.data);
+    const arrived = await askForCode(parsed.data, "email", robotToken);
     if (arrived !== null) {
       setAddress(parsed.data);
       setCode("");
@@ -139,9 +146,9 @@ export function SignInScreen({ note }: { note: string | null }) {
     }
   }
 
-  async function resend() {
+  async function resend(robotToken?: string) {
     if (busy || secondsToResend > 0) return;
-    if ((await askForCode(address)) === "sent") {
+    if ((await askForCode(address, "resend", robotToken)) === "sent") {
       setCode("");
       setArrival("sent");
       setSaid("New code sent.");
@@ -168,6 +175,20 @@ export function SignInScreen({ note }: { note: string | null }) {
     if (answer.kind === "refused") setCode("");
     setBusy(false);
   }
+
+  /** The check passed: the press it stood in front of is finished with its answer. */
+  const robotPassed = (token: string) => {
+    const press = robot?.press;
+    setRobot(null);
+    if (press === "email") void continueWithEmail(token);
+    else if (press === "resend") void resend(token);
+  };
+
+  /** Closed before it passed: the page says what is still to do, and the same button asks again. */
+  const robotClosed = () => {
+    if (robot !== null) setProblem(robot.line);
+    setRobot(null);
+  };
 
   const changeEmail = () => {
     setStep("email");
@@ -312,6 +333,14 @@ export function SignInScreen({ note }: { note: string | null }) {
       <Txt kind="tiny" style={styles.terms}>
         By continuing you agree to our Terms & Privacy Policy
       </Txt>
+
+      <RobotCheck
+        siteKey={robot?.key ?? null}
+        apiUrl={apiUrl}
+        line={robot?.line ?? ""}
+        onToken={robotPassed}
+        onClose={robotClosed}
+      />
     </ScrollView>
   );
 }

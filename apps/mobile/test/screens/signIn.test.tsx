@@ -232,11 +232,6 @@ describe("signing in by email code", () => {
       () => refusal(503, "code_send_failed", "We could not send the code. Please try again in a minute."),
       "We could not send the code. Please try again in a minute.",
     ],
-    [
-      "the server asks for the robot check, which this job's phone cannot show",
-      () => refusal(403, "robot_check", "One quick check that you're not a robot, then we'll send your code.", { robotCheckKey: "0x4AAA" }),
-      "Too many requests from this network. Try again later.",
-    ],
   ])("a code that cannot be sent (%s) says why, and stays on the email step", async (_name, route, line) => {
     await openApp({ "/v1/auth/code/send": route });
     await askForCode();

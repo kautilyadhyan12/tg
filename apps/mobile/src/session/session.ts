@@ -52,7 +52,8 @@ export interface Session {
   state: () => SessionState;
   /** Reads the key store: signed in at once if it holds a sign-in, internet or none. */
   start: () => Promise<void>;
-  sendCode: (email: string) => Promise<Answer<SendCodeResponse>>;
+  /** `robotToken`: the robot check's answer, only once the server has asked for it. */
+  sendCode: (email: string, robotToken?: string) => Promise<Answer<SendCodeResponse>>;
   verifyCode: (email: string, code: string) => Promise<Answer<VerifyCodePhoneResponse>>;
   /** One at a time: a second call while one is away waits for the same one. */
   refresh: () => Promise<void>;
@@ -174,7 +175,8 @@ export function createSession({
       await refresh();
     },
 
-    sendCode: (email) => post(server, "/v1/auth/code/send", { email }, sendCodeResponseSchema),
+    sendCode: (email, robotToken) =>
+      post(server, "/v1/auth/code/send", robotToken === undefined ? { email } : { email, robotToken }, sendCodeResponseSchema),
 
     verifyCode: async (email, code) => {
       const answer = await post(
