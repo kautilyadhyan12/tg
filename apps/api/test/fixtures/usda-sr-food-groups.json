@@ -1,0 +1,1425 @@
+{
+ "about": "USDA FoodData Central, SR Legacy (April 2018, public domain): the description and the food group of every entry our food list cites, by FDC id, as USDA's own food.csv and food_category.csv give them. Written by tools/check-food-sources.ts --write-groups, which also fails when this file differs from the download; never edited by hand.",
+ "foods": {
+  "167536": [
+   "Snacks, beef jerky, chopped and formed",
+   "Snacks"
+  ],
+  "167542": [
+   "Snacks, granola bars, hard, plain",
+   "Snacks"
+  ],
+  "167555": [
+   "Snacks, pretzels, hard, plain, salted",
+   "Snacks"
+  ],
+  "167558": [
+   "Snacks, tortilla chips, plain, white corn, salted",
+   "Snacks"
+  ],
+  "167561": [
+   "Snacks, trail mix, regular",
+   "Snacks"
+  ],
+  "167575": [
+   "Ice creams, vanilla",
+   "Sweets"
+  ],
+  "167587": [
+   "Candies, milk chocolate",
+   "Sweets"
+  ],
+  "167717": [
+   "Yeast extract spread",
+   "Vegetables and Vegetable Products"
+  ],
+  "167742": [
+   "Mollusks, scallop, (bay and sea), cooked, steamed",
+   "Finfish and Shellfish Products"
+  ],
+  "167746": [
+   "Lemons, raw, without peel",
+   "Fruits and Fruit Juices"
+  ],
+  "167755": [
+   "Raspberries, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "167762": [
+   "Strawberries, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "167765": [
+   "Watermelon, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "167827": [
+   "Pork, fresh, loin, center loin (chops), bone-in, separable lean and fat, cooked, broiled",
+   "Pork Products"
+  ],
+  "167914": [
+   "Pork, cured, bacon, cooked, baked",
+   "Pork Products"
+  ],
+  "167959": [
+   "Snacks, popcorn, air-popped",
+   "Snacks"
+  ],
+  "168013": [
+   "Bread, multi-grain (includes whole-grain)",
+   "Baked Products"
+  ],
+  "168062": [
+   "Restaurant, Italian, chicken parmesan without pasta",
+   "Restaurant Foods"
+  ],
+  "168153": [
+   "Kiwifruit, green, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "168155": [
+   "Limes, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "168162": [
+   "Plums, dried (prunes), uncooked",
+   "Fruits and Fruit Juices"
+  ],
+  "168165": [
+   "Raisins, dark, seedless (Includes foods for USDA's Food Distribution Program)",
+   "Fruits and Fruit Juices"
+  ],
+  "168191": [
+   "Dates, medjool",
+   "Fruits and Fruit Juices"
+  ],
+  "168192": [
+   "Durian, raw or frozen",
+   "Fruits and Fruit Juices"
+  ],
+  "168195": [
+   "Clementines, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "168200": [
+   "Plantains, yellow, fried, Latino restaurant",
+   "Fruits and Fruit Juices"
+  ],
+  "168216": [
+   "Plantains, green, boiled",
+   "Fruits and Fruit Juices"
+  ],
+  "168250": [
+   "Pork, fresh, loin, tenderloin, separable lean only, cooked, roasted",
+   "Pork Products"
+  ],
+  "168386": [
+   "Artichokes, (globe or french), cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "168390": [
+   "Asparagus, cooked, boiled, drained",
+   "Vegetables and Vegetable Products"
+  ],
+  "168409": [
+   "Cucumber, with peel, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "168411": [
+   "Edamame, frozen, prepared",
+   "Vegetables and Vegetable Products"
+  ],
+  "168421": [
+   "Kale, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "168426": [
+   "Leeks, (bulb and lower leaf-portion), cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "168437": [
+   "Mushrooms, shiitake, cooked, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "168449": [
+   "Pumpkin, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "168462": [
+   "Spinach, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "168463": [
+   "Spinach, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "168483": [
+   "Sweet potato, cooked, baked in skin, flesh, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "168555": [
+   "Potatoes, mashed, home-prepared, whole milk and butter added",
+   "Vegetables and Vegetable Products"
+  ],
+  "168556": [
+   "Catsup",
+   "Vegetables and Vegetable Products"
+  ],
+  "168558": [
+   "Pickles, cucumber, dill or kosher dill",
+   "Vegetables and Vegetable Products"
+  ],
+  "168567": [
+   "Tomatoes, sun-dried",
+   "Vegetables and Vegetable Products"
+  ],
+  "168569": [
+   "Hearts of palm, canned",
+   "Vegetables and Vegetable Products"
+  ],
+  "168576": [
+   "Peppers, jalapeno, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "168588": [
+   "Nuts, almond butter, plain, without salt added",
+   "Nut and Seed Products"
+  ],
+  "168627": [
+   "Beef, variety meats and by-products, liver, cooked, pan-fried",
+   "Beef Products"
+  ],
+  "168727": [
+   "Beef, top sirloin, steak, separable lean and fat, trimmed to 1/8\" fat, all grades, cooked, broiled",
+   "Beef Products"
+  ],
+  "168746": [
+   "Alcoholic beverage, beer, regular, all",
+   "Beverages"
+  ],
+  "168749": [
+   "Alcoholic beverage, beer, light",
+   "Beverages"
+  ],
+  "168871": [
+   "Millet, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168878": [
+   "Rice, white, long-grain, regular, enriched, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168892": [
+   "Wheat germ, crude",
+   "Cereal Grains and Pasta"
+  ],
+  "168897": [
+   "Wild rice, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168907": [
+   "Noodles, japanese, soba, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168910": [
+   "Pasta, whole-wheat, cooked (Includes foods for USDA's Food Distribution Program)",
+   "Cereal Grains and Pasta"
+  ],
+  "168914": [
+   "Rice noodles, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168917": [
+   "Quinoa, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "168919": [
+   "Noodles, egg, cooked, enriched, with added salt",
+   "Cereal Grains and Pasta"
+  ],
+  "169086": [
+   "Litchis, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169092": [
+   "Melons, cantaloupe, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169094": [
+   "Olives, ripe, canned (small-extra large)",
+   "Fruits and Fruit Juices"
+  ],
+  "169097": [
+   "Oranges, raw, all commercial varieties",
+   "Fruits and Fruit Juices"
+  ],
+  "169098": [
+   "Orange juice, raw (Includes foods for USDA's Food Distribution Program)",
+   "Fruits and Fruit Juices"
+  ],
+  "169105": [
+   "Tangerines, (mandarin oranges), raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169108": [
+   "Passion-fruit, (granadilla), purple, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169118": [
+   "Pears, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169124": [
+   "Pineapple, raw, all varieties",
+   "Fruits and Fruit Juices"
+  ],
+  "169134": [
+   "Pomegranates, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169141": [
+   "Beans, snap, green, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169146": [
+   "Beets, cooked, boiled, drained",
+   "Vegetables and Vegetable Products"
+  ],
+  "169178": [
+   "Pork, fresh, spareribs, separable lean and fat, cooked, roasted",
+   "Pork Products"
+  ],
+  "169229": [
+   "Eggplant, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169230": [
+   "Garlic, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169231": [
+   "Ginger root, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169238": [
+   "Kale, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169243": [
+   "Mushrooms, portabella, grilled",
+   "Vegetables and Vegetable Products"
+  ],
+  "169249": [
+   "Lettuce, green leaf, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169251": [
+   "Mushrooms, white, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169261": [
+   "Okra, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169269": [
+   "Potato salad, home-prepared",
+   "Vegetables and Vegetable Products"
+  ],
+  "169276": [
+   "Radishes, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169279": [
+   "Sauerkraut, canned, solids and liquids",
+   "Vegetables and Vegetable Products"
+  ],
+  "169291": [
+   "Squash, summer, zucchini, includes skin, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169293": [
+   "Squash, winter, acorn, cooked, baked, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169296": [
+   "Squash, winter, butternut, cooked, baked, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169299": [
+   "Squash, winter, spaghetti, cooked, boiled, drained, or baked, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169385": [
+   "Fennel, bulb, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169387": [
+   "Arugula, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169414": [
+   "Seeds, flaxseed",
+   "Nut and Seed Products"
+  ],
+  "169488": [
+   "Beef, brisket, flat half, separable lean and fat, trimmed to 1/8\" fat, all grades, cooked, braised",
+   "Beef Products"
+  ],
+  "169640": [
+   "Honey",
+   "Sweets"
+  ],
+  "169641": [
+   "Jams and preserves",
+   "Sweets"
+  ],
+  "169655": [
+   "Sugars, granulated",
+   "Sweets"
+  ],
+  "169661": [
+   "Syrups, maple",
+   "Sweets"
+  ],
+  "169677": [
+   "Snacks, potato chips, plain, salted",
+   "Snacks"
+  ],
+  "169700": [
+   "Couscous, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "169704": [
+   "Rice, brown, long-grain, cooked (Includes foods for USDA's Food Distribution Program)",
+   "Cereal Grains and Pasta"
+  ],
+  "169711": [
+   "Rice, white, glutinous, unenriched, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "169717": [
+   "Tapioca, pearl, dry",
+   "Cereal Grains and Pasta"
+  ],
+  "169737": [
+   "Pasta, cooked, enriched, without added salt",
+   "Cereal Grains and Pasta"
+  ],
+  "169910": [
+   "Mangos, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169911": [
+   "Melons, honeydew, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169914": [
+   "Nectarines, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169926": [
+   "Papayas, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169928": [
+   "Peaches, yellow, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169941": [
+   "Persimmons, japanese, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169949": [
+   "Plums, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "169957": [
+   "Mung beans, mature seeds, sprouted, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169967": [
+   "Broccoli, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169971": [
+   "Brussels sprouts, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "169975": [
+   "Cabbage, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169977": [
+   "Cabbage, red, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169986": [
+   "Cauliflower, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169988": [
+   "Celery, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "169999": [
+   "Corn, sweet, yellow, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170000": [
+   "Onions, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170005": [
+   "Onions, spring or scallions (includes tops and bulb), raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170009": [
+   "Parsnips, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170010": [
+   "Peas, edible-podded, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170017": [
+   "Peas, green, frozen, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170044": [
+   "Potatoes, hash brown, frozen, plain, prepared, pan fried in canola oil",
+   "Vegetables and Vegetable Products"
+  ],
+  "170058": [
+   "Turnips, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170068": [
+   "Watercress, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170093": [
+   "Potatoes, baked, flesh and skin, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170108": [
+   "Peppers, sweet, red, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170148": [
+   "Seeds, hemp seed, hulled",
+   "Nut and Seed Products"
+  ],
+  "170150": [
+   "Seeds, sesame seeds, whole, dried",
+   "Nut and Seed Products"
+  ],
+  "170162": [
+   "Nuts, cashew nuts, raw",
+   "Nut and Seed Products"
+  ],
+  "170173": [
+   "Nuts, coconut milk, canned (liquid expressed from grated meat and water)",
+   "Nut and Seed Products"
+  ],
+  "170178": [
+   "Nuts, macadamia nuts, raw",
+   "Nut and Seed Products"
+  ],
+  "170182": [
+   "Nuts, pecans",
+   "Nut and Seed Products"
+  ],
+  "170184": [
+   "Nuts, pistachio nuts, raw",
+   "Nut and Seed Products"
+  ],
+  "170187": [
+   "Nuts, walnuts, english",
+   "Nut and Seed Products"
+  ],
+  "170189": [
+   "Seeds, sesame butter, tahini, from roasted and toasted kernels (most common type)",
+   "Nut and Seed Products"
+  ],
+  "170190": [
+   "Nuts, chestnuts, european, roasted",
+   "Nut and Seed Products"
+  ],
+  "170250": [
+   "Snacks, rice cakes, brown rice, plain, unsalted",
+   "Snacks"
+  ],
+  "170273": [
+   "Chocolate, dark, 70-85% cacao solids",
+   "Sweets"
+  ],
+  "170285": [
+   "Barley, pearled, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "170287": [
+   "Bulgur, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "170379": [
+   "Broccoli, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170391": [
+   "Cabbage, chinese (pak-choi), cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170392": [
+   "Cabbage, kimchi",
+   "Vegetables and Vegetable Products"
+  ],
+  "170393": [
+   "Carrots, raw",
+   "Vegetables and Vegetable Products"
+  ],
+  "170394": [
+   "Carrots, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170397": [
+   "Cauliflower, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170401": [
+   "Chard, swiss, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170407": [
+   "Collards, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170440": [
+   "Potatoes, boiled, cooked without skin, flesh, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170457": [
+   "Tomatoes, red, ripe, raw, year round average",
+   "Vegetables and Vegetable Products"
+  ],
+  "170472": [
+   "Vegetables, mixed, frozen, cooked, boiled, drained, without salt",
+   "Vegetables and Vegetable Products"
+  ],
+  "170554": [
+   "Seeds, chia seeds, dried",
+   "Nut and Seed Products"
+  ],
+  "170556": [
+   "Seeds, pumpkin and squash seed kernels, dried",
+   "Nut and Seed Products"
+  ],
+  "170562": [
+   "Seeds, sunflower seed kernels, dried",
+   "Nut and Seed Products"
+  ],
+  "170567": [
+   "Nuts, almonds",
+   "Nut and Seed Products"
+  ],
+  "170569": [
+   "Nuts, brazilnuts, dried, unblanched",
+   "Nut and Seed Products"
+  ],
+  "170581": [
+   "Nuts, hazelnuts or filberts",
+   "Nut and Seed Products"
+  ],
+  "170585": [
+   "Nuts, mixed nuts, dry roasted, with peanuts, without salt added",
+   "Nut and Seed Products"
+  ],
+  "170591": [
+   "Nuts, pine nuts, dried",
+   "Nut and Seed Products"
+  ],
+  "170686": [
+   "Buckwheat groats, roasted, cooked",
+   "Cereal Grains and Pasta"
+  ],
+  "170698": [
+   "Fast foods, potato, french fried in vegetable oil",
+   "Fast Foods"
+  ],
+  "170845": [
+   "Cheese, mozzarella, whole milk",
+   "Dairy and Egg Products"
+  ],
+  "170848": [
+   "Cheese, parmesan, hard",
+   "Dairy and Egg Products"
+  ],
+  "170851": [
+   "Cheese, ricotta, whole milk",
+   "Dairy and Egg Products"
+  ],
+  "170859": [
+   "Cream, fluid, heavy whipping",
+   "Dairy and Egg Products"
+  ],
+  "170872": [
+   "Milk, lowfat, fluid, 1% milkfat, with added vitamin A and vitamin D",
+   "Dairy and Egg Products"
+  ],
+  "170874": [
+   "Milk, buttermilk, fluid, cultured, lowfat",
+   "Dairy and Egg Products"
+  ],
+  "170880": [
+   "Milk, chocolate, fluid, commercial, reduced fat, with added vitamin A and vitamin D",
+   "Dairy and Egg Products"
+  ],
+  "170886": [
+   "Yogurt, plain, low fat",
+   "Dairy and Egg Products"
+  ],
+  "170894": [
+   "Yogurt, Greek, plain, nonfat (Includes foods for USDA's Food Distribution Program)",
+   "Dairy and Egg Products"
+  ],
+  "171009": [
+   "Salad dressing, mayonnaise, regular",
+   "Fats and Oils"
+  ],
+  "171016": [
+   "Oil, sesame, salad or cooking",
+   "Fats and Oils"
+  ],
+  "171019": [
+   "Salad dressing, italian dressing, commercial, regular",
+   "Fats and Oils"
+  ],
+  "171061": [
+   "Chicken, liver, all classes, cooked, simmered",
+   "Poultry Products"
+  ],
+  "171186": [
+   "Sauce, hot chile, sriracha",
+   "Soups, Sauces, and Gravies"
+  ],
+  "171192": [
+   "Sauce, pasta, spaghetti/marinara, ready-to-serve",
+   "Soups, Sauces, and Gravies"
+  ],
+  "171241": [
+   "Cheese, gouda",
+   "Dairy and Egg Products"
+  ],
+  "171251": [
+   "Cheese, swiss",
+   "Dairy and Egg Products"
+  ],
+  "171257": [
+   "Cream, sour, cultured",
+   "Dairy and Egg Products"
+  ],
+  "171265": [
+   "Milk, whole, 3.25% milkfat, with added vitamin D",
+   "Dairy and Egg Products"
+  ],
+  "171267": [
+   "Milk, reduced fat, fluid, 2% milkfat, with added vitamin A and vitamin D",
+   "Dairy and Egg Products"
+  ],
+  "171269": [
+   "Milk, nonfat, fluid, with added vitamin A and vitamin D (fat free or skim)",
+   "Dairy and Egg Products"
+  ],
+  "171278": [
+   "Milk, goat, fluid, with added vitamin D",
+   "Dairy and Egg Products"
+  ],
+  "171284": [
+   "Yogurt, plain, whole milk",
+   "Dairy and Egg Products"
+  ],
+  "171285": [
+   "Yogurt, fruit, low fat, 10 grams protein per 8 ounce",
+   "Dairy and Egg Products"
+  ],
+  "171287": [
+   "Egg, whole, raw, fresh",
+   "Dairy and Egg Products"
+  ],
+  "171304": [
+   "Yogurt, Greek, plain, whole milk",
+   "Dairy and Egg Products"
+  ],
+  "171411": [
+   "Oil, soybean, salad or cooking",
+   "Fats and Oils"
+  ],
+  "171412": [
+   "Oil, coconut",
+   "Fats and Oils"
+  ],
+  "171413": [
+   "Oil, olive, salad or cooking",
+   "Fats and Oils"
+  ],
+  "171477": [
+   "Chicken, broilers or fryers, breast, meat only, cooked, roasted",
+   "Poultry Products"
+  ],
+  "171496": [
+   "Turkey, whole, breast, meat only, cooked, roasted",
+   "Poultry Products"
+  ],
+  "171506": [
+   "Turkey, Ground, cooked",
+   "Poultry Products"
+  ],
+  "171534": [
+   "Chicken, broiler or fryers, breast, skinless, boneless, meat only, cooked, grilled",
+   "Poultry Products"
+  ],
+  "171579": [
+   "Sauce, pesto, ready-to-serve, refrigerated",
+   "Soups, Sauces, and Gravies"
+  ],
+  "171620": [
+   "Bratwurst, pork, cooked",
+   "Sausages and Luncheon Meats"
+  ],
+  "171646": [
+   "Cereals ready-to-eat, granola, homemade",
+   "Breakfast Cereals"
+  ],
+  "171688": [
+   "Apples, raw, with skin (Includes foods for USDA's Food Distribution Program)",
+   "Fruits and Fruit Juices"
+  ],
+  "171695": [
+   "Applesauce, canned, unsweetened, without added ascorbic acid (Includes foods for USDA's Food Distribution Program)",
+   "Fruits and Fruit Juices"
+  ],
+  "171697": [
+   "Apricots, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "171705": [
+   "Avocados, raw, all commercial varieties",
+   "Fruits and Fruit Juices"
+  ],
+  "171711": [
+   "Blueberries, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "171715": [
+   "Carambola, (starfruit), raw",
+   "Fruits and Fruit Juices"
+  ],
+  "171719": [
+   "Cherries, sweet, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "171723": [
+   "Cranberries, dried, sweetened (Includes foods for USDA's Food Distribution Program)",
+   "Fruits and Fruit Juices"
+  ],
+  "171794": [
+   "Beef, ground, 90% lean meat / 10% fat, crumbles, cooked, pan-browned",
+   "Beef Products"
+  ],
+  "171799": [
+   "Beef, ground, 80% lean meat / 20% fat, crumbles, cooked, pan-browned",
+   "Beef Products"
+  ],
+  "171844": [
+   "Bread, chapati or roti, plain, commercially prepared",
+   "Baked Products"
+  ],
+  "171845": [
+   "Bread, naan, plain, commercially prepared, refrigerated",
+   "Baked Products"
+  ],
+  "171890": [
+   "Beverages, coffee, brewed, prepared with tap water",
+   "Beverages"
+  ],
+  "171956": [
+   "Fish, cod, Atlantic, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "171967": [
+   "Crustaceans, crab, blue, crab cakes, home recipe",
+   "Finfish and Shellfish Products"
+  ],
+  "171975": [
+   "Mollusks, clam, mixed species, cooked, moist heat",
+   "Finfish and Shellfish Products"
+  ],
+  "171978": [
+   "Mollusks, oyster, eastern, wild, raw",
+   "Finfish and Shellfish Products"
+  ],
+  "171982": [
+   "Mollusks, squid, mixed species, cooked, fried",
+   "Finfish and Shellfish Products"
+  ],
+  "171992": [
+   "Fish, mahimahi, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "172006": [
+   "Fish, tuna, yellowfin, fresh, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "172164": [
+   "Beef, rib eye steak, boneless, lip off, separable lean and fat, trimmed to 0\" fat, all grades, cooked, grilled",
+   "Beef Products"
+  ],
+  "172175": [
+   "Cheese, blue",
+   "Dairy and Egg Products"
+  ],
+  "172177": [
+   "Cheese, brie",
+   "Dairy and Egg Products"
+  ],
+  "172179": [
+   "Cheese, cottage, creamed, large or small curd",
+   "Dairy and Egg Products"
+  ],
+  "172182": [
+   "Cheese, cottage, lowfat, 2% milkfat",
+   "Dairy and Egg Products"
+  ],
+  "172183": [
+   "Egg, white, raw, fresh",
+   "Dairy and Egg Products"
+  ],
+  "172185": [
+   "Egg, whole, cooked, omelet",
+   "Dairy and Egg Products"
+  ],
+  "172186": [
+   "Egg, whole, cooked, poached",
+   "Dairy and Egg Products"
+  ],
+  "172187": [
+   "Egg, whole, cooked, scrambled",
+   "Dairy and Egg Products"
+  ],
+  "172234": [
+   "Mustard, prepared, yellow",
+   "Spices and Herbs"
+  ],
+  "172241": [
+   "Vinegar, balsamic",
+   "Spices and Herbs"
+  ],
+  "172336": [
+   "Oil, canola",
+   "Fats and Oils"
+  ],
+  "172376": [
+   "Chicken, broilers or fryers, dark meat, drumstick, meat only, cooked, roasted",
+   "Poultry Products"
+  ],
+  "172388": [
+   "Chicken, broilers or fryers, thigh, meat only, cooked, roasted",
+   "Poultry Products"
+  ],
+  "172411": [
+   "Duck, domesticated, meat only, cooked, roasted",
+   "Poultry Products"
+  ],
+  "172421": [
+   "Lentils, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "172429": [
+   "Peas, split, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "172430": [
+   "Peanuts, all types, raw",
+   "Legumes and Legume Products"
+  ],
+  "172438": [
+   "Refried beans, canned, traditional style",
+   "Legumes and Legume Products"
+  ],
+  "172442": [
+   "Miso",
+   "Legumes and Legume Products"
+  ],
+  "172443": [
+   "Natto",
+   "Legumes and Legume Products"
+  ],
+  "172449": [
+   "Tofu, soft, prepared with calcium sulfate and magnesium chloride (nigari)",
+   "Legumes and Legume Products"
+  ],
+  "172451": [
+   "Tofu, fried",
+   "Legumes and Legume Products"
+  ],
+  "172455": [
+   "Falafel, home-prepared",
+   "Legumes and Legume Products"
+  ],
+  "172475": [
+   "Tofu, raw, firm, prepared with calcium sulfate",
+   "Legumes and Legume Products"
+  ],
+  "172480": [
+   "Lamb, composite of trimmed retail cuts, separable lean and fat, trimmed to 1/4\" fat, choice, cooked",
+   "Lamb, Veal, and Game Products"
+  ],
+  "172489": [
+   "Lamb, loin, separable lean and fat, trimmed to 1/4\" fat, choice, cooked, broiled",
+   "Lamb, Veal, and Game Products"
+  ],
+  "172675": [
+   "Bread, french or vienna (includes sourdough)",
+   "Baked Products"
+  ],
+  "172684": [
+   "Bread, rye",
+   "Baked Products"
+  ],
+  "172688": [
+   "Bread, whole-wheat, commercially prepared",
+   "Baked Products"
+  ],
+  "172711": [
+   "Cake, cheesecake, commercially prepared",
+   "Baked Products"
+  ],
+  "172713": [
+   "Cookies, brownies, commercially prepared",
+   "Baked Products"
+  ],
+  "172716": [
+   "Cookies, chocolate chip, commercially prepared, regular, higher fat, enriched",
+   "Baked Products"
+  ],
+  "172744": [
+   "Crackers, rye, wafers, plain",
+   "Baked Products"
+  ],
+  "172758": [
+   "Doughnuts, yeast-leavened, glazed, enriched (includes honey buns)",
+   "Baked Products"
+  ],
+  "172765": [
+   "Muffins, blueberry, commercially prepared (Includes mini-muffins)",
+   "Baked Products"
+  ],
+  "172796": [
+   "Rolls, hamburger or hotdog, plain",
+   "Baked Products"
+  ],
+  "172938": [
+   "Salami, dry or hard, pork",
+   "Sausages and Luncheon Meats"
+  ],
+  "172941": [
+   "Turkey breast, sliced, prepackaged",
+   "Sausages and Luncheon Meats"
+  ],
+  "173021": [
+   "Figs, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "173044": [
+   "Guavas, common, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "173061": [
+   "Beef, loin, top sirloin cap steak, boneless, separable lean and fat, trimmed to 1/8\" fat, all grades, cooked, grilled",
+   "Beef Products"
+  ],
+  "173190": [
+   "Alcoholic beverage, wine, table, red",
+   "Beverages"
+  ],
+  "173227": [
+   "Beverages, tea, black, brewed, prepared with tap water",
+   "Beverages"
+  ],
+  "173410": [
+   "Butter, salted",
+   "Dairy and Egg Products"
+  ],
+  "173412": [
+   "Butter oil, anhydrous",
+   "Dairy and Egg Products"
+  ],
+  "173414": [
+   "Cheese, cheddar (Includes foods for USDA's Food Distribution Program)",
+   "Dairy and Egg Products"
+  ],
+  "173418": [
+   "Cheese, cream",
+   "Dairy and Egg Products"
+  ],
+  "173420": [
+   "Cheese, feta",
+   "Dairy and Egg Products"
+  ],
+  "173423": [
+   "Egg, whole, cooked, fried",
+   "Dairy and Egg Products"
+  ],
+  "173424": [
+   "Egg, whole, cooked, hard-boiled",
+   "Dairy and Egg Products"
+  ],
+  "173435": [
+   "Cheese, goat, soft type",
+   "Dairy and Egg Products"
+  ],
+  "173469": [
+   "Vinegar, cider",
+   "Spices and Herbs"
+  ],
+  "173573": [
+   "Oil, avocado",
+   "Fats and Oils"
+  ],
+  "173592": [
+   "Salad dressing, ranch dressing, regular",
+   "Fats and Oils"
+  ],
+  "173630": [
+   "Chicken, broilers or fryers, wing, meat and skin, cooked, roasted",
+   "Poultry Products"
+  ],
+  "173647": [
+   "Beverages, water, tap, drinking",
+   "Beverages"
+  ],
+  "173681": [
+   "Fish, pollock, Alaska, cooked, dry heat (may contain additives to retain moisture)",
+   "Finfish and Shellfish Products"
+  ],
+  "173687": [
+   "Fish, salmon, chinook, smoked",
+   "Finfish and Shellfish Products"
+  ],
+  "173694": [
+   "Fish, sea bass, mixed species, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "173699": [
+   "Fish, snapper, mixed species, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "173704": [
+   "Fish, swordfish, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "173709": [
+   "Fish, tuna, light, canned in water, drained solids (Includes foods for USDA's Food Distribution Program)",
+   "Finfish and Shellfish Products"
+  ],
+  "173718": [
+   "Fish, trout, rainbow, farmed, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "173724": [
+   "Fish, Salmon, pink, canned, drained solids, without skin and bones",
+   "Finfish and Shellfish Products"
+  ],
+  "173735": [
+   "Beans, black, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "173740": [
+   "Beans, kidney, all types, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "173746": [
+   "Beans, navy, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "173753": [
+   "Broadbeans (fava beans), mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "173757": [
+   "Chickpeas (garbanzo beans, bengal gram), mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "173759": [
+   "Cowpeas, common (blackeyes, crowder, southern), mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "173864": [
+   "Ham, sliced, regular (approximately 11% fat)",
+   "Sausages and Luncheon Meats"
+  ],
+  "173877": [
+   "Kielbasa, fully cooked, grilled",
+   "Sausages and Luncheon Meats"
+  ],
+  "173904": [
+   "Cereals, oats, regular and quick, not fortified, dry",
+   "Breakfast Cereals"
+  ],
+  "173905": [
+   "Cereals, oats, regular and quick, unenriched, cooked with water (includes boiling and microwaving), without salt",
+   "Breakfast Cereals"
+  ],
+  "173933": [
+   "Apple juice, canned or bottled, unsweetened, without added ascorbic acid",
+   "Fruits and Fruit Juices"
+  ],
+  "173941": [
+   "Apricots, dried, sulfured, uncooked",
+   "Fruits and Fruit Juices"
+  ],
+  "173944": [
+   "Bananas, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "173946": [
+   "Blackberries, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "174034": [
+   "Beef, ground, 85% lean meat / 15% fat, crumbles, cooked, pan-browned",
+   "Beef Products"
+  ],
+  "174076": [
+   "Bread, paratha, whole wheat, commercially prepared, frozen",
+   "Baked Products"
+  ],
+  "174183": [
+   "Fish, anchovy, european, canned in oil, drained solids",
+   "Finfish and Shellfish Products"
+  ],
+  "174195": [
+   "Fish, fish sticks, frozen, prepared",
+   "Finfish and Shellfish Products"
+  ],
+  "174198": [
+   "Fish, haddock, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "174201": [
+   "Fish, halibut, Atlantic and Pacific, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "174205": [
+   "Crustaceans, crab, blue, cooked, moist heat",
+   "Finfish and Shellfish Products"
+  ],
+  "174209": [
+   "Crustaceans, lobster, northern, cooked, moist heat",
+   "Finfish and Shellfish Products"
+  ],
+  "174217": [
+   "Mollusks, mussel, blue, cooked, moist heat",
+   "Finfish and Shellfish Products"
+  ],
+  "174253": [
+   "Lima beans, large, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "174257": [
+   "Mung beans, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "174266": [
+   "Peanut butter, smooth style, with salt (Includes foods for USDA's Food Distribution Program)",
+   "Legumes and Legume Products"
+  ],
+  "174271": [
+   "Soybeans, mature cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "174272": [
+   "Tempeh",
+   "Legumes and Legume Products"
+  ],
+  "174277": [
+   "Soy sauce made from soy and wheat (shoyu)",
+   "Legumes and Legume Products"
+  ],
+  "174284": [
+   "Lentils, pink or red, raw",
+   "Legumes and Legume Products"
+  ],
+  "174289": [
+   "Hummus, commercial",
+   "Legumes and Legume Products"
+  ],
+  "174373": [
+   "Lamb, leg, whole (shank and sirloin), separable lean and fat, trimmed to 1/8\" fat, choice, cooked, roasted",
+   "Lamb, Veal, and Game Products"
+  ],
+  "174422": [
+   "Game meat, bison, ground, cooked, pan-broiled",
+   "Lamb, Veal, and Game Products"
+  ],
+  "174523": [
+   "Sauce, barbecue",
+   "Soups, Sauces, and Gravies"
+  ],
+  "174524": [
+   "Sauce, salsa, ready-to-serve",
+   "Soups, Sauces, and Gravies"
+  ],
+  "174575": [
+   "Pepperoni, beef and pork, sliced",
+   "Sausages and Luncheon Meats"
+  ],
+  "174578": [
+   "Pork sausage, link/patty, cooked, pan-fried",
+   "Sausages and Luncheon Meats"
+  ],
+  "174665": [
+   "Figs, dried, uncooked",
+   "Fruits and Fruit Juices"
+  ],
+  "174673": [
+   "Grapefruit, raw, pink and red, all areas",
+   "Fruits and Fruit Juices"
+  ],
+  "174683": [
+   "Grapes, red or green (European type, such as Thompson seedless), raw",
+   "Fruits and Fruit Juices"
+  ],
+  "174687": [
+   "Jackfruit, raw",
+   "Fruits and Fruit Juices"
+  ],
+  "174815": [
+   "Alcoholic beverage, distilled, all (gin, rum, vodka, whiskey) 80 proof",
+   "Beverages"
+  ],
+  "174831": [
+   "Beverages, Coconut water, ready-to-drink, unsweetened",
+   "Beverages"
+  ],
+  "174832": [
+   "Beverages, almond milk, unsweetened, shelf stable",
+   "Beverages"
+  ],
+  "174837": [
+   "Alcoholic beverage, wine, table, white",
+   "Beverages"
+  ],
+  "174852": [
+   "Beverages, carbonated, cola, regular",
+   "Beverages"
+  ],
+  "174899": [
+   "Bagels, plain, enriched, with calcium propionate (includes onion, poppy, sesame)",
+   "Baked Products"
+  ],
+  "174906": [
+   "Bread, banana, prepared from recipe, made with margarine",
+   "Baked Products"
+  ],
+  "174915": [
+   "Bread, pita, white, enriched",
+   "Baked Products"
+  ],
+  "174924": [
+   "Bread, white, commercially prepared (includes soft bread crumbs)",
+   "Baked Products"
+  ],
+  "174934": [
+   "Cake, chocolate, commercially prepared with chocolate frosting, in-store bakery",
+   "Baked Products"
+  ],
+  "174982": [
+   "Crackers, standard snack-type, regular",
+   "Baked Products"
+  ],
+  "174987": [
+   "Croissants, butter",
+   "Baked Products"
+  ],
+  "175011": [
+   "Pie, apple, commercially prepared, enriched flour",
+   "Baked Products"
+  ],
+  "175032": [
+   "Strudel, apple",
+   "Baked Products"
+  ],
+  "175036": [
+   "Tortillas, ready-to-bake or -fry, corn",
+   "Baked Products"
+  ],
+  "175037": [
+   "Tortillas, ready-to-bake or -fry, flour, refrigerated",
+   "Baked Products"
+  ],
+  "175063": [
+   "English muffins, plain, enriched, without calcium propionate(includes sourdough)",
+   "Baked Products"
+  ],
+  "175085": [
+   "Game meat, deer, cooked, roasted",
+   "Lamb, Veal, and Game Products"
+  ],
+  "175118": [
+   "Fish, herring, Atlantic, pickled",
+   "Finfish and Shellfish Products"
+  ],
+  "175120": [
+   "Fish, mackerel, Atlantic, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "175139": [
+   "Fish, sardine, Atlantic, canned in oil, drained solids with bone",
+   "Finfish and Shellfish Products"
+  ],
+  "175159": [
+   "Fish, tuna, fresh, yellowfin, raw",
+   "Finfish and Shellfish Products"
+  ],
+  "175160": [
+   "Fish, tuna salad",
+   "Finfish and Shellfish Products"
+  ],
+  "175166": [
+   "Fish, catfish, channel, farmed, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "175167": [
+   "Fish, salmon, Atlantic, farmed, raw",
+   "Finfish and Shellfish Products"
+  ],
+  "175168": [
+   "Fish, salmon, Atlantic, farmed, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "175177": [
+   "Fish, tilapia, cooked, dry heat",
+   "Finfish and Shellfish Products"
+  ],
+  "175180": [
+   "Crustaceans, shrimp, cooked",
+   "Finfish and Shellfish Products"
+  ],
+  "175182": [
+   "Beans, baked, canned, plain or vegetarian",
+   "Legumes and Legume Products"
+  ],
+  "175200": [
+   "Beans, pinto, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "175203": [
+   "Beans, white, mature seeds, cooked, boiled, without salt",
+   "Legumes and Legume Products"
+  ],
+  "175215": [
+   "Soymilk (all flavors), unsweetened, with added calcium, vitamins A and D",
+   "Legumes and Legume Products"
+  ]
+ }
+}

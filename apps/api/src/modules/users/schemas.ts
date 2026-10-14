@@ -13,6 +13,7 @@ export {
   UNANSWERED_HEALTH_SCREENING,
   deleteAccountRequestSchema,
   dietSchema,
+  mealsPerDaySchema,
   fitnessProfileResponseSchema,
   fitnessProfileSchema,
   onboardingAnswersSchema,

@@ -1,7 +1,9 @@
 // P2.1 — auth routes (thin, R7.1). Route order per R3.3:
 // rate limit (per-IP AND per-identifier, R3.7) → Zod parse → handler.
-// Tokens travel ONLY as httpOnly cookies (DECISIONS 2026-07-11); bodies never
-// carry them. All limits/lifetimes are ported values, cited inline.
+// A browser's tokens travel ONLY as httpOnly cookies (DECISIONS 2026-07-11). The phone
+// app has no cookie: a sign-in that names itself `phone` is sent its tokens in the
+// reply and sets no cookie (spec Part 3 §10.5). All limits/lifetimes are ported values,
+// cited inline.
 import "@fastify/cookie"; // module augmentation: reply.setCookie / req.cookies
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
@@ -13,7 +15,7 @@ import { errorSummary, type GoogleVerifier } from "./google.js";
 import { WrongGuessError } from "./errors.js";
 import { createDualRateLimit } from "./rateLimit.js";
 import type { RobotCheck } from "../orgs/gymPage/robotCheck.js";
-import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS } from "@app/shared";
+import { SIGN_IN_FREE_SENDS_PER_ADDRESS, SIGN_IN_ROBOT_WORDS, phoneRefreshRequestSchema } from "@app/shared";
 import {
   changePasswordRequestSchema,
   forgotPasswordRequestSchema,
@@ -83,6 +85,25 @@ const googleCallbackQuerySchema = z.object({
   code: z.string().min(1).optional(),
   state: z.string().min(1).optional(),
 });
+
+/** A BROWSER NEVER HOLDS A TOKEN A SCRIPT CAN READ (CLAUDE.md §4). A browser puts an
+ *  `Origin` on every one of these POSTs and the phone app sends none, so the phone's
+ *  way is refused to anything that carries one. true: refused, and answered. */
+function refusedFromABrowser(req: FastifyRequest, reply: FastifyReply): boolean {
+  if (req.headers.origin === undefined) return false;
+  void reply.status(400).send({ error: "validation_error", message: "client: not_in_a_browser", requestId: req.id });
+  return true;
+}
+
+/** The phone app's refresh token, from a body that names one. null: the body names
+ *  none (a browser sends nothing or an empty one), so the cookie is read. undefined:
+ *  the body names one and was refused, and the reply is already sent. */
+function phoneTokenIn(req: FastifyRequest, reply: FastifyReply): string | null | undefined {
+  const body: unknown = req.body;
+  if (typeof body !== "object" || body === null || !("refreshToken" in body)) return null;
+  if (refusedFromABrowser(req, reply)) return undefined;
+  return parseBody(phoneRefreshRequestSchema, req, reply)?.refreshToken;
+}
 
 function requestMeta(req: FastifyRequest): service.RequestMeta {
   return { ip: req.ip || null, userAgent: req.headers["user-agent"] ?? null };
@@ -182,15 +203,15 @@ export function registerAuthRoutes(
   const googleRefusedKey = (req: FastifyRequest) => `rl:google_refused:ip:${req.ip}`;
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The per-ADDRESS limits are in the database (two unused codes a day, five
+  // The per-ADDRESS limits are in the database (three unused codes a day, five
   // guesses a code). These Redis buckets are the wall against a client that VARIES
   // the address, which the per-address rule cannot see: every send is an
   // email Kd pays for. A gym's wi-fi or a phone company's gateway puts a whole
   // gym on one internet address (ROADMAP Stage 4 item 10: 200 people in an hour),
   // so the address's first 20 sends an hour go straight through and every send
   // after needs the robot check (`codeRobotGate`), not a refusal. 500 an hour is
-  // the ceiling even with the check: 200 people at two codes a day each (the
-  // database's own limit), with room. On top sits ONE ceiling on sends a day
+  // the ceiling even with the check: 200 people at a code and a resend each, with
+  // room (all three of the database's own limit, from everybody, would be 600). On top sits ONE ceiling on sends a day
   // across everyone — the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",
@@ -289,6 +310,7 @@ export function registerAuthRoutes(
   app.post("/v1/auth/code/verify", { preHandler: [codeVerifyLimit, guessRoom] }, async (req, reply) => {
     const input = parseBody(verifyCodeRequestSchema, req, reply);
     if (input === null) return;
+    if (input.client === "phone" && refusedFromABrowser(req, reply)) return;
     let signedIn: Awaited<ReturnType<typeof service.signInWithCode>>;
     try {
       signedIn = await service.signInWithCode(authDeps, input, requestMeta(req));
@@ -297,6 +319,9 @@ export function registerAuthRoutes(
       throw err;
     }
     const { user, tokens, isNewAccount } = signedIn;
+    if (input.client === "phone") {
+      return reply.header("cache-control", "no-store").status(200).send({ user, isNewAccount, tokens });
+    }
     setSessionCookies(reply, deps.config, tokens);
     return reply.status(200).send({ user, isNewAccount });
   });
@@ -320,6 +345,12 @@ export function registerAuthRoutes(
   });
 
   app.post("/v1/auth/refresh", async (req, reply) => {
+    const phone = phoneTokenIn(req, reply);
+    if (phone === undefined) return;
+    if (phone !== null) {
+      const tokens = await service.refresh(authDeps, phone, requestMeta(req), "phone");
+      return reply.header("cache-control", "no-store").status(200).send({ tokens });
+    }
     const raw = req.cookies[REFRESH_COOKIE];
     if (raw === undefined || raw === "") {
       return reply.status(401).send({
@@ -334,6 +365,12 @@ export function registerAuthRoutes(
   });
 
   app.post("/v1/auth/logout", async (req, reply) => {
+    const phone = phoneTokenIn(req, reply);
+    if (phone === undefined) return;
+    if (phone !== null) {
+      await service.logout(authDeps, phone, "phone");
+      return reply.status(200).send({ message: "Logged out successfully" });
+    }
     await service.logout(authDeps, req.cookies[REFRESH_COOKIE] ?? null);
     clearSessionCookies(reply, deps.config);
     return reply.status(200).send({ message: "Logged out successfully" });

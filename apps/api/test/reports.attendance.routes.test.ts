@@ -277,7 +277,7 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
         [u3, "no_show"],
       ]);
       await classAt(london, spin, "2026-10-08T17:00:00Z", 10, [[u1, "booked"]], "cancelled");
-      // Later today, and the day before the eight weeks begin: neither is counted.
+      // Later today: not counted. One in August, inside the twelve months read here, is.
       await classAt(london, spin, "2026-10-10T17:00:00Z", 10, [[u1, "booked"]]);
       await classAt(london, spin, "2026-08-15T17:00:00Z", 10, [[u1, "no_show"]]);
       await classAt(london, open, "2026-10-09T09:00:00Z", null, [
@@ -298,9 +298,14 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
         expect(await read(london.id, londonOwner)).toEqual({
           timezone: "Europe/London",
           today: "2026-10-10",
+          period: { key: "12m", from: "2025-11-01", to: "2026-10-10" },
           firstVisitOn: "2026-08-31",
           fullWeeks: 5,
-          days: everyDay("2026-09-13", "2026-10-10", {
+          // Ana, Ben, Cat, Dan and the owner.
+          inPeriod: { visits: 11, people: 5 },
+          days: everyDay("2026-08-31", "2026-10-10", {
+            "2026-08-31": 1,
+            "2026-09-07": 1,
             "2026-09-14": 2,
             "2026-09-15": 1,
             "2026-09-16": 1,
@@ -318,16 +323,20 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
             { weekStart: "2026-09-28", visits: 1, people: 1, full: true },
             { weekStart: "2026-10-05", visits: 3, people: 3, full: false },
           ],
-          // Ana, Ben and Cat are on the list; between them 6 visits in the four weeks to 4 October.
-          perMember: { state: "ok", perWeek: 0.5, from: "2026-09-07", to: "2026-10-04", weeks: 4, members: 3, visits: 6, visitors: 3 },
+          // Ana, Ben and Cat are on the list; between them 7 visits in the five whole weeks to 4 October.
+          perMember: { state: "ok", perWeek: 0.5, from: "2026-08-31", to: "2026-10-04", weeks: 5, members: 3, visits: 7, visitors: 3 },
+          // Every day from the first check-in to today: this week's three visits are in it too
+          // (Ben's at 00:30 on Monday, Ana's at noon on Thursday, the owner's at 09:00 today).
           hours: {
             state: "ok",
             from: "2026-08-31",
-            to: "2026-10-04",
-            weeks: 5,
+            to: "2026-10-10",
             cells: [
+              { weekday: 1, hour: 0, visits: 1 },
               { weekday: 1, hour: 18, visits: 5 },
               { weekday: 3, hour: 7, visits: 1 },
+              { weekday: 4, hour: 12, visits: 1 },
+              { weekday: 6, hour: 9, visits: 1 },
               { weekday: 7, hour: 23, visits: 1 },
             ],
             top: 5,
@@ -337,14 +346,14 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
           },
           classes: {
             state: "ok",
-            from: "2026-08-16",
-            classes: 3,
-            bookings: 8,
-            // 3 of 10 and 2 of 2; the class with no limit has no share.
-            fill: { state: "ok", percent: 41.7, booked: 5, places: 12, classes: 2 },
-            noShows: { state: "ok", percent: 33.3, noShows: 2, marked: 6, unmarked: 2 },
+            from: "2025-11-01",
+            classes: 4,
+            bookings: 9,
+            // 3 of 10, 2 of 2 and August's 1 of 10; the class with no limit has no share.
+            fill: { state: "ok", percent: 27.3, booked: 6, places: 22, classes: 3 },
+            noShows: { state: "ok", percent: 42.9, noShows: 3, marked: 7, unmarked: 2 },
             types: [
-              { name: "Spin", classes: 2, places: 12, booked: 5, fillPercent: 41.7, attended: 3, noShows: 2, noShowPercent: 40 },
+              { name: "Spin", classes: 3, places: 22, booked: 6, fillPercent: 27.3, attended: 3, noShows: 3, noShowPercent: 50 },
               { name: "Open gym", classes: 1, places: null, booked: 2, fillPercent: null, attended: 1, noShows: 0, noShowPercent: 0 },
             ],
             moreTypes: 0,
@@ -354,9 +363,11 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
         expect(await read(delhi.id, delhiOwner)).toEqual({
           timezone: "Asia/Kolkata",
           today: "2026-10-10",
+          period: { key: "12m", from: "2025-11-01", to: "2026-10-10" },
           firstVisitOn: "2026-09-28",
           // One whole week, where two are needed.
           fullWeeks: 1,
+          inPeriod: { visits: 2, people: 1 },
           days: everyDay("2026-09-28", "2026-10-10", { "2026-09-28": 1, "2026-10-05": 1 }),
           weeks: [
             { weekStart: "2026-09-28", visits: 1, people: 1, full: true },
@@ -364,7 +375,7 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
           ],
           perMember: { state: "not_enough_data" },
           hours: { state: "not_enough_data" },
-          classes: { state: "none_recent", from: "2026-08-16" },
+          classes: { state: "none_recent", from: "2025-11-01" },
         });
 
         // Nobody from outside reads either gym, and the refusal carries none of its numbers.
@@ -560,9 +571,10 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
       await visit(gym, who, "2026-09-27T22:30:00Z");
       await visit(gym, other, "2026-09-27T22:31:00Z");
       const spin = await classType(gym.id, "Moved Spin", 10);
-      // Delhi's midnight as 16 August begins is 18:30 UTC on the 15th: a minute before is left out.
-      await classAt({ ...gym, timezone: "Asia/Kolkata" }, spin, "2026-08-15T18:29:00Z", 10, [[booker, "attended"]]);
-      await classAt({ ...gym, timezone: "Asia/Kolkata" }, spin, "2026-08-15T18:30:00Z", 10, [[booker, "no_show"]]);
+      // The twelve months read here begin on 1 November 2025. Delhi's midnight as that day
+      // begins is 18:30 UTC on 31 October: a minute before is left out.
+      await classAt({ ...gym, timezone: "Asia/Kolkata" }, spin, "2025-10-31T18:29:00Z", 10, [[booker, "attended"]]);
+      await classAt({ ...gym, timezone: "Asia/Kolkata" }, spin, "2025-10-31T18:30:00Z", 10, [[booker, "no_show"]]);
       clock = NOON;
       try {
         const london = await read(gym.id, owner);
@@ -572,8 +584,8 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
             { weekday: 7, hour: 23, visits: 2 },
           ],
         });
-        // London's 16 August begins at 23:00 UTC on the 15th: both classes are before it.
-        expect(london.classes).toEqual({ state: "none_recent", from: "2026-08-16" });
+        // London's 1 November begins at 00:00 UTC: both classes are before it.
+        expect(london.classes).toEqual({ state: "none_recent", from: "2025-11-01" });
 
         await sql`UPDATE gyms SET timezone = 'Asia/Kolkata' WHERE id = ${gym.id}`;
         const delhi = await read(gym.id, owner);
@@ -583,7 +595,7 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
             { weekday: 1, hour: 22, visits: 1 },
           ],
         });
-        expect(delhi.classes).toMatchObject({ state: "ok", from: "2026-08-16", classes: 1, noShows: { state: "ok", percent: 100, noShows: 1, marked: 1, unmarked: 0 } });
+        expect(delhi.classes).toMatchObject({ state: "ok", from: "2025-11-01", classes: 1, noShows: { state: "ok", percent: 100, noShows: 1, marked: 1, unmarked: 0 } });
       } finally {
         clock = null;
       }

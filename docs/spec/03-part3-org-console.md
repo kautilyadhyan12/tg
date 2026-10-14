@@ -1901,6 +1901,23 @@ next sign-in and wiped for any other account's. The `client` word comes from the
 own request; proving it (Play Integrity, App Attest) is after launch — what it guards is
 a shared login, not a secret.
 
+**Built in 12a (2026-10-13):** migration `0105`. `POST /v1/auth/code/verify` with
+`client: "phone"` answers `{ user, isNewAccount, tokens }` and sets no cookie.
+`POST /v1/auth/refresh` and `/logout` with `{ refreshToken }` in the body are the
+phone's: refresh answers `{ tokens }`. A token is taken only the way its sign-in was
+made (a phone's from the body, a browser's from its cookie); the other way ends
+nothing, a plain 401 on refresh. The phone's way is refused (400) to any request that
+carries an `Origin`, as every browser's does, so no script in a page is ever handed a
+token. A phone's refresh sent again, its reply lost, is answered with a new token and
+its unreceived successor is ended, for as long as that successor was never used and the
+token is inside its own life: no clock (12b-i's review, 2026-10-14: a reply lost in a
+lift and the app opened the next day signed the person out after 60 seconds). Once the
+successor has been used, the same token again is reuse and ends the sign-in; a thief
+answered with an old token is ended, with the whole sign-in, by the phone's own next
+refresh. The old phone's 401 is `signed_in_elsewhere`
+(`SIGNED_IN_ELSEWHERE` in `@app/shared`). Its access token lasts out its fifteen
+minutes, as a signed-out browser's does. Google on the phone is 12d.
+
 ### 10.6 Join codes switched off (3c) — built LAST in this section
 
 So that no build exists in which nobody can join. **Server:** `POST /v1/orgs/join`, the
@@ -5107,6 +5124,39 @@ rule is `moneyReportFrom` (`packages/shared/src/reportsMoney.ts`), the sums `rea
 (`reports/repo.ts`), in one snapshot with the list's own counts. Not in this job (21b-ii):
 money by product, which waits for the Sell page (18b), and by coach, which no payment
 names today.
+
+**Built by 21d-i (2026-10-13): the period.** One control at the top of Reports, **Last 4
+weeks · Last 3 months · Last 12 months**, that every part of the page follows; the page
+opens on twelve months, and the choice is in the address (`?period=4w|3m|12m`), so a page
+loaded again shows the same one. Four weeks are today and the 27 days before it. Three and
+twelve months are whole calendar months with the month in progress last, so a
+month-by-month table adds up to the period's own figure. One rule says which days a period
+covers (`reportPeriodOf`, `packages/shared/src/reportPeriod.ts`); each of the three reads
+takes the period, counts those days and answers with them (`period: { key, from, to }`),
+and the page's words are made from the answer, never from what was pressed. **What follows
+the period:** new members and members who left, the average stay of those who left, the
+months listed, and leads (those added in the period, and how many of them are marked
+Joined; a gym with leads and none added in the period reads "No lead was added in the
+last 4 weeks", never "no leads yet") · visits and the people who made them, the days and the weeks (the week
+a period begins in starts on the period's first day and says so), visits a member a week
+over the whole weeks inside the period, the busiest hours over every day of it (today
+among them, so the grid shows whatever the page says came in the period; Kd's
+click-through, the job's file in `rulings/`), and classes that started in it · money collected, the months listed, and each membership's money. **What does not,**
+because it is true today or is a monthly rate with its own months: members now, churn and
+retention (the newest three full months, RULINGS 2026-07-15), monthly recurring revenue,
+payment due and lifetime value; a line under the control says so, naming the money figures
+only to staff who are shown money. Four weeks begin inside a month, so under each
+month-by-month table a line says its rows are whole months; and the week a period begins
+in is said as the days it holds ("Sat 1 Aug to Sun 2 Aug 2026"). An answer for a period
+the page has left is not drawn. A gym younger than the
+period is counted from its own first day and each tile says which ("since 10 Jun 2026,
+when your member list started"); what it has no history for is a sentence, never a zero.
+A list of weeks longer than twelve shows the newest twelve and a button for the rest. The
+grid of hours is never narrower than 06:00 to 21:00, and where there is none its place
+says why, with the days counted. A
+value that is not one of the three is refused (400). Cost at twelve months, a gym of 2,000
+beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
+the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
 
 ### 16.6 Cards
 

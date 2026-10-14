@@ -153,12 +153,12 @@ export function DayLine({ report }) {
           ))}
         </div>
       </div>
-      {/* The dates under the line: each week's Monday, and the key to the shading. */}
+      {/* The dates under the line: each week's Monday, or each month's first day in a long period, and the key to the shading. */}
       <div className="flex c-s12 c-t3" aria-hidden="true">
         <span className="shrink-0" style={{ width: SIDE }} />
         <div className="relative flex-1 min-w-0" style={{ height: 16 }}>
           {points.map((p) =>
-            p.monday ? (
+            p.mark ? (
               <span key={p.key} className="absolute top-0 whitespace-nowrap" style={{ left: `${String(p.at * 100)}%`, transform: p.at > 0.9 ? 'translateX(-100%)' : 'translateX(-50%)' }}>
                 {p.label}
               </span>

@@ -51,8 +51,13 @@ export function configFor(copy: Copy): ExpoConfig {
     slug: "ai-home-gym",
     version: "0.0.1",
     orientation: "portrait",
+    // Dark only, as the member web is (spec Part 6 §16.3a); the colour is the look's page.
+    userInterfaceStyle: "dark",
+    backgroundColor: "#0A0908",
     scheme: copy.scheme,
     android: { package: copy.applicationId },
+    // Keeps the key store's sign-in out of Android's backups, so it never lands on another phone.
+    plugins: ["expo-secure-store"],
     extra,
   };
 }

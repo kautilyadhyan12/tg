@@ -9,6 +9,8 @@
 //     table and for a food of our list that copies its numbers from a USDA entry;
 //   - the food's own serving, where no other measure of that name weighs the same
 //     (our list's "nugget", a packaged product's label);
+//   - for a food of our list whose cited entry names no piece, the measures of the
+//     USDA entry that does (`pieces`), under ids of their own;
 //   - always grams and ounces.
 import { MAX_ITEM_GRAMS, type FoodMeasure } from "@app/shared";
 
@@ -113,6 +115,9 @@ export interface MeasureSource {
   unit: string;
   portions: readonly UsdaPortion[];
   ownServing: boolean;
+  /** The household measures of another USDA entry of the same food, borrowed for
+   *  its pieces (`PIECE_ENTRIES`, foods.ts). */
+  pieces?: readonly UsdaPortion[];
 }
 
 const sameName = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -154,17 +159,24 @@ function servingMeasure(source: MeasureSource, usda: readonly FoodMeasure[]): Fo
  *  item of a meal may, is plainly grams or an ounce, or repeats an earlier one's
  *  name and weight (SR Legacy lists beef jerky's "oz" twice), is left out. Two USDA
  *  measures of one name and two weights stay: they are USDA's own two sizes (a
- *  granola bar of 21 g and one of 25), told apart by their grams. */
+ *  granola bar of 21 g and one of 25), told apart by their grams. Borrowed pieces
+ *  come after them, by the same rules, as "piece-<seq_num>": a measure's id is its
+ *  row's place in its OWN entry, and a saved "usda-1" must go on meaning the cited
+ *  entry's first measure, never the borrowed entry's. */
 export function foodMeasures(source: MeasureSource): FoodMeasure[] {
   const usda: FoodMeasure[] = [];
-  for (const portion of source.portions) {
-    if (!isHouseholdMeasure(portion)) continue;
-    const name = usdaMeasureName(portion);
-    if (!(portion.gramWeight > 0 && portion.gramWeight <= MAX_ITEM_GRAMS)) continue;
-    if (sameName(name, GRAM.name) || sameName(name, OUNCE.name)) continue;
-    if (usda.some((m) => sameName(m.name, name) && sameWeight(m.grams, portion.gramWeight))) continue;
-    usda.push({ id: `usda-${String(portion.seqNum)}`, name, grams: portion.gramWeight });
-  }
+  const add = (portions: readonly UsdaPortion[], prefix: "usda" | "piece"): void => {
+    for (const portion of portions) {
+      if (!isHouseholdMeasure(portion)) continue;
+      const name = usdaMeasureName(portion);
+      if (!(portion.gramWeight > 0 && portion.gramWeight <= MAX_ITEM_GRAMS)) continue;
+      if (sameName(name, GRAM.name) || sameName(name, OUNCE.name)) continue;
+      if (usda.some((m) => sameName(m.name, name) && sameWeight(m.grams, portion.gramWeight))) continue;
+      usda.push({ id: `${prefix}-${String(portion.seqNum)}`, name, grams: portion.gramWeight });
+    }
+  };
+  add(source.portions, "usda");
+  add(source.pieces ?? [], "piece");
   const own = servingMeasure(source, usda);
   return [...(own === null ? [] : [own]), ...usda, GRAM, OUNCE];
 }

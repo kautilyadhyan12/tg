@@ -570,6 +570,17 @@ The terminal's own choices, each a job's to better with a reason.
 - **Sign-in** (item 12; §8): the refresh token in SecureStore, the access token in
   memory. The server's sign-in learns a phone client (`refresh_tokens.client`, Part 3
   §10.5), which alone is sent its tokens in the reply. Risky: the two extra passes.
+  **Built in 12b-i (2026-10-13):** `apps/mobile/src/session/`. The app opens on "Get
+  started" (an email, the 6-digit code) and, signed in, on the five tabs. The key store
+  holds the refresh token and the person, so the app opens signed in with no internet.
+  Only this api's own 401 signs anybody out: no answer, a late one, or a reply that is
+  not this api's never does. One refresh at a time, sent again after 2, 5 and 10 seconds
+  when it had no answer, on opening and on coming back after ten minutes; a reply lost
+  costs nothing, since the server takes the same token again (Part 3 §10.5). A code asked
+  for inside the server's minute opens the code step as "Enter your code.", never as a
+  code just sent. Sign out is on Me, asks first, and forgets on the phone before it tells
+  the server. A screen's signed-in requests take `session.accessToken()`. The robot
+  check on the phone is 12b-ii; until then a phone asked for it says why it must wait.
 - **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a
   meal, a weigh-in, a run) is written to the phone first and sent when the internet is
   there, each route safe to call twice. Built once, with the workout (item 61), then used
@@ -619,6 +630,43 @@ is. This replaces §16.3's "the console's named colours and Archivo, light and d
 - **The pictures:** the web's own, made small (31 of them: 47,597 KB as the web ships
   them, 1,036 KB at 900 pixels on the long side as WebP, measured 2026-10-13). 11b
   ships them in the app that way and never the web's full-size files.
+- **The first tab is named Dashboard**, the member web's own word, not Today (Kd,
+  2026-10-13, `rulings/2026-10-13-stage5-11b-phone-look-in-app.md`): Dashboard ·
+  Workout · Food · Gym · Me. Where this file or ROADMAP says "Today" of the tab or its
+  screen, it is the Dashboard.
+- **In the app (item 11b, 2026-10-13):** `apps/mobile/src/look/` holds the look, and a
+  screen takes everything from it by name: `colours.ts` (every colour and size; a test
+  fails a screen that writes its own), `Txt` (every word, Inter), `Icon`
+  (`icons.json`, the drawn file's copy), `Button`, `Card`, `PictureCard`, `Badge`,
+  `Pill`, `Page`, `TabBar`, and `pictures.ts` (the 31 pictures in `assets/pictures/`).
+  A piece a feature needs first (a chip, a field, a ring, a box from the bottom) is
+  added there by that feature's job, from `helmet.html`. The tabs are React Navigation's
+  bottom tabs (`src/App.tsx`, `TABS`); a page under a tab is added to that tab. Screen
+  tests are jest's, in `test/screens/`; rules that need no screen stay on vitest.
+- **Get started, and what it added to the look (item 12b-i, 2026-10-13):** the browser's
+  sign-in page fitted to a phone (`src/screens/SignIn.tsx`, read beside
+  `apps/web/src/pages/Login.jsx`): its athlete picture filling the top and running into
+  the page; under it, by the thumb, the mark, "Get started.", one line, the email box and
+  the glowing button. The browser's box of words over the picture, its label above the
+  email box and its line under the button are left off: on a phone they crowded the screen
+  (Kd, 2026-10-14). The code step's heading is "Check your email.". The picture takes the
+  room the form leaves and makes way when the keyboard opens. A button's ends are round
+  (`sizes.round`; `helmet.html`'s `.btn` was changed to match). The picture is `getstarted`, cut from
+  the web's `exercises/lifting.jpg` by `compact.py` (1141 by 1200, 97 KB); it is not
+  on the design canvas. New pieces: `Field` (the browser's typing box; its edge turns
+  orange while typed in), `Sheet` (the box from the bottom), `Logo`, `Avatar`, a
+  button's `link` and `quiet` kinds (words with no box), its `busy`, and the main
+  button's glow (`shadows` in `colours.ts`, as `helmet.html` draws `.btn-p`). A tab
+  whose feature is not built shows its picture and one row ending "Coming soon". No
+  tab's page has its tab's name as a heading (Kd, 2026-10-14): the Dashboard opens on
+  the browser's greeting and the person's name, as 11a drew it (`greetingAt`), Workout
+  and Food on their pictures, Me on the person's card; Gym keeps "My gyms", as drawn.
+  A page's own picture is `PictureTop`: edge to edge from the top of the phone, running
+  into the page, never a box, with the page's first words over it (the Dashboard's
+  greeting and name; "Exercise Library"; "Nutrition"). `Page` takes it as `top`. Gym's
+  picture is Kd's to add. A new account is not told "Your account is ready" (his word). Me has
+  the person's initial, name and email, and Sign out, which asks in a box from the
+  bottom. **CLAUDE.md §4, "A phone screen is the browser's screen", is the rule.**
 
 ### 16.4 The order
 
