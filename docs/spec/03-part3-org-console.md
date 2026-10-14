@@ -5158,30 +5158,28 @@ value that is not one of the three is refused (400). Cost at twelve months, a gy
 beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
 the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
 
-**Built by 21d-ii (2026-10-14): a year earlier.** Under each figure that follows the
-period, one small line, "A year earlier: 9 · up 3", for the same days a year before
-(`yearEarlierOf`, `packages/shared/src/reportPeriod.ts`): four weeks go back 52 weeks, so
-a Monday is set beside a Monday; three and twelve months go back a calendar year, the same
-months up to the same day of the month (29 February is 28 February). The line under the
-picker names those days. **Which figures (Kd, 2026-10-14, `rulings/2026-10-14-21d-ii.md`):
-two:** New members, and Collected for staff shown money, each with "up", "down" or "the
-same". Every other figure has no line, and nothing in Attendance has one. The reads still
-answer a year earlier for members who left, the average stay, leads, visits, visits a
-member a week (the people on the list on that span's last day who were on it when its
-whole weeks began, over its whole weeks), how full classes were and no-shows; the page
-does not show them.
-**A figure is given only where the app's records cover every day of that span:** the
-member list began before it (and, for new members, in an earlier month, since a list's
-first month holds no new members), the first lead, check-in, class or payment came on or
-before its first day; new members then are people the list held by that span's last day,
-so a file imported since with last year's join dates fills no year earlier. Otherwise the
-line says why, with the day those records began ("A
-year earlier: no figures. Your first check-in was on 31 Aug 2026."), never a zero and
-never "up" from nothing. Each of the three reads counts those days too, in the same
-statement or one beside it, with the gym in every WHERE (`readEarlierVisits`,
-`readCollected`, the `was` part of `readMemberCounts`; `readClassCounts` and
-`readLeadCounts` take the span). The cost tools seed two years of visits and payments:
-HANDOFF has the table.
+**Built by 21d-ii (2026-10-14): a year earlier.** Under two figures, New members and,
+for staff shown money, Collected (Kd, 2026-10-14, `rulings/2026-10-14-21d-ii.md`), one
+small line: "A year earlier: 9 · up 3", "down 3" or "the same", for the same days a year
+before (`yearEarlierOf`, `packages/shared/src/reportPeriod.ts`). Four weeks go back 52
+weeks, so a Monday is set beside a Monday; three and twelve months go back a calendar year,
+the same months up to the same day of the month (29 February is 28 February). Each of the
+two tiles says which days in its "how" ("A year earlier counts the same weekdays 52 weeks
+before: …" for four weeks). No other figure has a line, nothing in Attendance has one, and
+the reads work out no other year-earlier figure.
+**New members a year earlier** (`membersYearEarlierFrom`, `packages/shared/src/reports.ts`)
+are the people who started in those days and were on the list by their last day. There is
+no figure, and the line says why with the day, never a zero: where the list could not count
+new members from that span's first day (it began after it, or in its month: "Your member
+list started on …"); and where more of the people who started in those days reached the
+list only after them than by them, as when one member is typed in by hand before the gym
+imports its real file ("Most of your member list was added on 10 Sep 2026."). The counts
+are `readMemberCounts`' `was` part, on the gym's own clock.
+**Collected a year earlier** is payments less refunds of those days in the gym's currency,
+as `readMoney` counts them (`readCollected`; a refund of a payment taken back is not
+money), and no figure where the first payment recorded here came after those days began
+("Your first payment was recorded on …"). Every read names the gym in its WHERE. The cost
+tools seed two years of visits and payments: HANDOFF has the table.
 
 ### 16.6 Cards
 
