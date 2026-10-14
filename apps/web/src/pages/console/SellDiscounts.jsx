@@ -5,6 +5,7 @@ import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import DatePick from '../../components/console/DatePick';
+import PlaceLink from '../../components/console/PlaceLink';
 import { Refusal } from './MemberListTags';
 import {
   NO_MANAGING_DISCOUNTS,
@@ -16,26 +17,30 @@ import {
   discountStatusTag,
   draftFromDiscount,
   emptyDiscountDraft,
+  MEMBERSHIP_PAYMENTS_WORDS,
   oldMoneyLine,
 } from './sellDiscountsView';
 import { priceExample } from './sellView';
 import { SavedNote } from './SellProducts';
 
-// DISCOUNTS, on the Sell page (spec Part 3 §14.3; ROADMAP 18b-ii-a): the gym's own
-// discounts and promo codes, for staff who may change prices. Whoever sells reads the
-// list and picks from it on the sale form above.
+// DISCOUNTS, on the Sell page (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): the gym's
+// own discounts and promo codes, on products, memberships or both, for staff who may
+// change prices. Whoever sells reads the list and picks from it on the sale form above,
+// and on a person's page when a membership is added.
 
 const LINE = { borderTop: '1px solid var(--line)' };
 const BAD = { color: 'var(--bad)' };
 const BOX = { border: '1px solid var(--line)', borderRadius: 12 };
 const ROW = { minHeight: 44 };
 
-function DiscountForm({ page, draft, setDraft, busy, error, onSave, onCancel }) {
-  const problems = draft.pressed ? discountProblems(draft, page.currency, page.products) : {};
+function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSave, onCancel }) {
+  const problems = draft.pressed ? discountProblems(draft, page.currency, page.products, page.membershipTypes) : {};
   const id = useId();
   const set = (patch) => setDraft((was) => ({ ...was, ...patch }));
   const toggle = (productId) =>
     setDraft((was) => ({ ...was, productIds: was.productIds.includes(productId) ? was.productIds.filter((x) => x !== productId) : [...was.productIds, productId] }));
+  const toggleType = (typeId) => setDraft((was) => ({ ...was, typeIds: was.typeIds.includes(typeId) ? was.typeIds.filter((x) => x !== typeId) : [...was.typeIds, typeId] }));
+  const types = page.membershipTypes;
   return (
     <form
       className="flex flex-col gap-4 p-4"
@@ -89,7 +94,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, onSave, onCancel }) 
             onChange={(e) => set({ amount: e.target.value })}
             placeholder={page.currency === null ? '' : priceExample(page.currency)}
           />
-          <p className="c-s13 c-t3 m-0">It comes off once for each sale, however many of the product are bought.</p>
+          <p className="c-s13 c-t3 m-0">On a product it comes off once for each sale, however many are bought. On a membership it comes off each payment it applies to.</p>
           {problems.value ? <p className="c-s14 m-0" style={BAD}>{problems.value}</p> : null}
         </div>
       )}
@@ -105,26 +110,81 @@ function DiscountForm({ page, draft, setDraft, busy, error, onSave, onCancel }) 
 
       <fieldset className="flex flex-col" style={{ border: 0, padding: 0, margin: 0 }}>
         <legend className="c-label">Applies to</legend>
-        <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
-          <input type="radio" name={`${id}-scope`} checked={draft.scope === 'all'} disabled={busy} onChange={() => set({ scope: 'all' })} />
-          All products
+        <label className="flex items-center gap-3 c-s15 c-w6 c-t1" style={ROW}>
+          <input type="checkbox" checked={draft.forProducts} disabled={busy} onChange={(e) => set({ forProducts: e.target.checked })} />
+          Products
         </label>
-        <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
-          <input type="radio" name={`${id}-scope`} checked={draft.scope === 'some'} disabled={busy || page.products.length === 0} onChange={() => set({ scope: 'some' })} />
-          Selected products
-        </label>
-        {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products above to choose it here.</p> : null}
-        {draft.scope === 'some' ? (
-          <div className="flex flex-col pl-7" role="group" aria-label="Products this discount applies to">
-            {page.products.map((product) => (
-              <label key={product.id} className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
-                <input type="checkbox" checked={draft.productIds.includes(product.id)} disabled={busy} onChange={() => toggle(product.id)} />
-                {product.name}
-              </label>
-            ))}
-            {problems.products ? <p className="c-s14 m-0" style={BAD}>{problems.products}</p> : null}
+        {draft.forProducts ? (
+          <div className="flex flex-col pl-7">
+            <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+              <input type="radio" name={`${id}-scope`} checked={draft.scope === 'all'} disabled={busy} onChange={() => set({ scope: 'all' })} />
+              All products
+            </label>
+            <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+              <input type="radio" name={`${id}-scope`} checked={draft.scope === 'some'} disabled={busy || page.products.length === 0} onChange={() => set({ scope: 'some' })} />
+              Selected products
+            </label>
+            {page.products.length === 0 ? <p className="c-s13 c-t3 m-0">You have no products yet. Add one under Products above to choose it here.</p> : null}
+            {draft.scope === 'some' ? (
+              <div className="flex flex-col pl-7" role="group" aria-label="Products this discount applies to">
+                {page.products.map((product) => (
+                  <label key={product.id} className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                    <input type="checkbox" checked={draft.productIds.includes(product.id)} disabled={busy} onChange={() => toggle(product.id)} />
+                    {product.name}
+                  </label>
+                ))}
+                {problems.products ? <p className="c-s14 m-0" style={BAD}>{problems.products}</p> : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
+        <label className="flex items-center gap-3 c-s15 c-w6 c-t1" style={ROW}>
+          <input type="checkbox" checked={draft.forMemberships} disabled={busy} onChange={(e) => set({ forMemberships: e.target.checked })} />
+          Memberships
+        </label>
+        {draft.forMemberships ? (
+          <div className="flex flex-col gap-2 pl-7">
+            <div className="flex flex-col">
+              <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                <input type="radio" name={`${id}-types`} checked={draft.typeScope === 'all'} disabled={busy} onChange={() => set({ typeScope: 'all' })} />
+                All memberships
+              </label>
+              <label className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                <input type="radio" name={`${id}-types`} checked={draft.typeScope === 'some'} disabled={busy || types.length === 0} onChange={() => set({ typeScope: 'some' })} />
+                Selected memberships
+              </label>
+              {types.length === 0 ? (
+                <div className="flex flex-col gap-2">
+                  <p className="c-s13 c-t3 m-0">You have no memberships on your price list yet.</p>
+                  {membershipsTo !== null ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : null}
+                </div>
+              ) : null}
+              {draft.typeScope === 'some' ? (
+                <div className="flex flex-col pl-7" role="group" aria-label="Memberships this discount applies to">
+                  {types.map((type) => (
+                    <label key={type.id} className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                      <input type="checkbox" checked={draft.typeIds.includes(type.id)} disabled={busy} onChange={() => toggleType(type.id)} />
+                      {type.name}
+                    </label>
+                  ))}
+                  {problems.types ? <p className="c-s14 m-0" style={BAD}>{problems.types}</p> : null}
+                </div>
+              ) : null}
+            </div>
+            <fieldset className="flex flex-col" style={{ border: 0, padding: 0, margin: 0 }}>
+              <legend className="c-label">On a membership that renews</legend>
+              {['first', 'every'].map((often) => (
+                <label key={often} className="flex items-center gap-3 c-s15 c-t1" style={ROW}>
+                  <input type="radio" name={`${id}-payments`} checked={draft.payments === often} disabled={busy} onChange={() => set({ payments: often })} />
+                  {MEMBERSHIP_PAYMENTS_WORDS[often]}
+                </label>
+              ))}
+              <p className="c-s13 c-t3 m-0">A membership that is paid once, such as a day pass or a class pack, gets the discount on that one payment.</p>
+              {problems.payments ? <p className="c-s14 m-0" style={BAD}>{problems.payments}</p> : null}
+            </fieldset>
+          </div>
+        ) : null}
+        {problems.appliesTo ? <p className="c-s14 m-0" style={BAD}>{problems.appliesTo}</p> : null}
       </fieldset>
 
       <div className="flex flex-col gap-4 md:flex-row">
@@ -160,7 +220,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, onSave, onCancel }) 
             Usage limit
           </label>
           <input id={`${id}-uses`} className="c-input" style={{ maxWidth: 160 }} inputMode="numeric" value={draft.maxUses} disabled={busy} onChange={(e) => set({ maxUses: e.target.value })} placeholder="100" />
-          <p className="c-s13 c-t3 m-0">Each sale made with the discount counts as one use. A sale you undo gives its use back.</p>
+          <p className="c-s13 c-t3 m-0">Each sale or membership made with the discount counts as one use. A product sale you undo gives its use back.</p>
           {problems.maxUses ? <p className="c-s14 m-0" style={BAD}>{problems.maxUses}</p> : null}
         </div>
       ) : null}
@@ -179,7 +239,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, onSave, onCancel }) 
   );
 }
 
-export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage }) {
+export default function SellDiscounts({ gymId, page, locked, lockedNote, membershipsTo = null, onPage }) {
   const canManage = page.canManage;
   const [draft, setDraft] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
@@ -204,14 +264,15 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
 
   const save = async () => {
     if (draft === null) return;
-    if (Object.keys(discountProblems(draft, page.currency, page.products)).length > 0) {
+    if (Object.keys(discountProblems(draft, page.currency, page.products, page.membershipTypes)).length > 0) {
       setDraft((was) => ({ ...was, pressed: true }));
       return;
     }
-    const body = discountBody(draft, page.currency, page.products);
+    const body = discountBody(draft, page.currency, page.products, page.membershipTypes);
+    const where = body.forProducts && body.forMemberships ? 'when they sell a product or a membership' : body.forMemberships ? 'when they sell or add a membership' : 'on the sale form above';
     const ok = await run(
       () => (draft.id === null ? registerService.addDiscount(gymId, body) : registerService.changeDiscount(gymId, draft.id, body)),
-      draft.id === null ? `${body.name} added. Staff can now choose it on the sale form above.` : `${body.name} saved. Sales already made keep the discount they were sold with.`,
+      draft.id === null ? `${body.name} added. Staff can now choose it ${where}.` : `${body.name} saved. Sales and memberships already made keep the discount they were made with.`,
     );
     if (ok) setDraft(null);
   };
@@ -222,6 +283,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
       setDraft={setDraft}
       busy={state.busy}
       error={state.error}
+      membershipsTo={membershipsTo}
       onSave={() => void save()}
       onCancel={() => {
         setDraft(null);
@@ -258,7 +320,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
 
       {page.discounts.length === 0 ? (
-        <p className="c-s15 c-t2 m-0">No discounts yet. Add one to take a percentage or a fixed amount off a product, with a promo code if you want one.</p>
+        <p className="c-s15 c-t2 m-0">No discounts yet. Add one to take a percentage or a fixed amount off a product or a membership, with a promo code if you want one.</p>
       ) : (
         <ul className="list-none m-0 p-0">
           {page.discounts.map((discount) => {
@@ -274,7 +336,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
                         {discount.name}
                         <span className={`c-tag ${tag.tag}`}>{tag.words}</span>
                       </p>
-                      <p className="c-s14 c-t2 m-0">{discountRow(discount, page.products)}</p>
+                      <p className="c-s14 c-t2 m-0">{discountRow(discount, page.products, page.membershipTypes)}</p>
                       {discountInOldMoney(discount, page.currency) ? <p className="c-s14 c-t1 m-0">{oldMoneyLine(discount, page.currency)}</p> : null}
                     </div>
                     {canManage ? (
@@ -327,7 +389,7 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, onPage 
             <ul className="list-none m-0 p-0">
               {page.archivedDiscounts.map((discount) => (
                 <li key={discount.id} className="flex flex-wrap items-center justify-between gap-2 py-2" data-testid="archived-discount-row">
-                  <span className="c-s14 c-t2">{`${discount.name} · ${discountRow(discount, page.products)}`}</span>
+                  <span className="c-s14 c-t2">{`${discount.name} · ${discountRow(discount, page.products, page.membershipTypes)}`}</span>
                   {canManage ? (
                     <button
                       type="button"

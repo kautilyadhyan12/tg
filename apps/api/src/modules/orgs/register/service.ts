@@ -101,10 +101,11 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
   const today = dayInTz(deps.now(), viewer.timezone);
   // A sale names who bought it and a payment who paid: both are read only for whoever
   // may record one. Staff who only change prices are sent the products and the tax.
-  const [row, paid, offered] = await Promise.all([
+  const [row, paid, offered, types] = await Promise.all([
     repo.readRegister(deps.sql, gymId, today, SALES_SHOWN, viewer.canSell),
     viewer.canSell ? paymentsOn(deps.sql, gymId, today, SALES_SHOWN) : null,
     discounts.readDiscounts(deps.sql, gymId),
+    discounts.membershipTypeNames(deps.sql, gymId),
   ]);
   if (row === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   // The day's total is in the gym's own money. What was taken in another (the gym changed
@@ -128,6 +129,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
     discounts: offered.live.map(isoDiscount),
     archivedDiscounts: offered.archived.map(isoDiscount),
     archivedDiscountsTotal: offered.archivedTotal,
+    membershipTypes: types.map((t) => ({ id: t.id, name: t.name })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
     sales: row.sales.map((s) => shownSale(s, today, viewer.canSell)),

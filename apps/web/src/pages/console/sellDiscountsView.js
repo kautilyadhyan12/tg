@@ -7,16 +7,18 @@ import {
   discountStatus,
   formatMinor,
   isVisibleText,
+  membershipDiscount,
   minorToPriceText,
   percentToBp,
   priceToMinor,
   promoCodeFrom,
 } from '@app/shared';
 
-// DISCOUNTS AND PROMO CODES ON THE SELL PAGE (spec Part 3 §14.3; ROADMAP 18b-ii-a). Every
-// sentence about a discount is made here, from what the server sent; the page only draws
-// them. Whether a discount can be used is the server's own rule (`discountFits`), so the
-// form offers what the server will take.
+// DISCOUNTS AND PROMO CODES (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): on the Sell
+// page, its membership box and a person's Add membership. Every sentence about a discount
+// is made here, from what the server sent; the page only draws them. Whether a discount
+// can be used is the server's own rule (`discountFits`), and what it takes off a
+// membership too (`membershipDiscount`), so the form offers what the server will take.
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -51,9 +53,11 @@ export function oldMoneyLine(discount, currency) {
 
 /** The same, said on the sale form, which leaves such a discount out of its list; null
  *  where the gym has none. */
-export function oldMoneySaleLine(page) {
-  // Only the ones that would otherwise be in use: an expired or used-up one is not missed.
-  const old = page.discounts.filter((d) => discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
+export function oldMoneySaleLine(page, use = 'product') {
+  // Only the ones that would otherwise be in use here: an expired or used-up one, or one
+  // for the other kind of sale, is not missed.
+  const forThis = (d) => (use === 'product' ? d.forProducts : d.forMemberships);
+  const old = page.discounts.filter((d) => forThis(d) && discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
   if (old.length === 0) return null;
   const names = old.length === 1 ? old[0].name : old.length === 2 ? `${old[0].name} and ${old[1].name}` : `${old[0].name} and ${String(old.length - 1)} more`;
   return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. ${
@@ -75,26 +79,53 @@ const appliedWords = (discount) => `${discount.code ?? discount.name} applied: $
  *  applied only while its discount is the one on the sale: after the product changes, or
  *  the discount is used up or archived, the line says why it is no longer on it. */
 export function promoCodeNote(page, product, discount, code) {
+  return codeNote(page, product === null || product === undefined ? null : productTarget(product), discount, code, 'sale');
+}
+
+/** The same, on a membership's form: `page` holds the discounts and the gym's day. */
+export function membershipPromoCodeNote(page, type, discount, code) {
+  return codeNote(page, type === null || type === undefined ? null : typeTarget(type), discount, code, 'membership');
+}
+
+function codeNote(page, target, discount, code, what) {
   if (code.appliedId === null || code.appliedId === undefined) return code.note;
   // Said from the discount as it is now: it may have been changed since Apply was pressed.
   if (discount !== null && discount.id === code.appliedId) return appliedWords(discount);
+  const none = what === 'sale' ? 'No discount is on this sale.' : 'No discount is on this membership.';
   const applied = page.discounts.find((d) => d.id === code.appliedId);
-  if (applied === undefined) return 'That promo code is no longer offered. No discount is on this sale.';
-  if (product === null || product === undefined) return null;
-  const why = discountWhyNot(applied, product, page.today);
-  return why === null ? null : `${why} No discount is on this sale.`;
+  if (applied === undefined) return `That promo code is no longer offered. ${none}`;
+  if (target === null) return null;
+  const why = whyNot(applied, target, page.today);
+  return why === null ? null : `${why} ${none}`;
+}
+
+/** Names, as many as fit: "Water and Towel", "Water, Towel and 2 more". `gone` says one
+ *  that is no longer on the list. */
+function namesWords(ids, list, gone) {
+  const names = ids.map((id) => list.find((p) => p.id === id)?.name).filter((name) => typeof name === 'string');
+  const hidden = ids.length - names.length;
+  if (names.length === 0) return gone(hidden);
+  const shown = names.slice(0, 2);
+  const more = names.length - shown.length + hidden;
+  if (more > 0) return `${shown.join(', ')} and ${String(more)} more`;
+  return shown.join(' and ');
 }
 
 /** Which products a discount is for, by name. */
 export function discountProductsWords(discount, products) {
   if (discount.allProducts) return 'All products';
-  const names = discount.productIds.map((id) => products.find((p) => p.id === id)?.name).filter((name) => typeof name === 'string');
-  const hidden = discount.productIds.length - names.length;
-  if (names.length === 0) return hidden === 1 ? '1 archived product' : `${String(hidden)} archived products`;
-  const shown = names.slice(0, 2);
-  const more = names.length - shown.length + hidden;
-  if (more > 0) return `${shown.join(', ')} and ${String(more)} more`;
-  return shown.join(' and ');
+  return namesWords(discount.productIds, products, (n) => (n === 1 ? '1 archived product' : `${String(n)} archived products`));
+}
+
+export const MEMBERSHIP_PAYMENTS_WORDS = { first: 'First payment only', every: 'Every payment' };
+
+/** Which memberships a discount is for, by name, and how often it comes off a repeating one. */
+export function discountMembershipsWords(discount, types) {
+  const which = discount.allMembershipTypes
+    ? 'All memberships'
+    : namesWords(discount.membershipTypeIds, types, (n) => (n === 1 ? '1 archived membership' : `${String(n)} archived memberships`));
+  const often = discount.membershipPayments === 'first' ? 'first payment only' : 'every payment';
+  return `${which}, ${often}`;
 }
 
 /** When it can be used; null where it has no dates. */
@@ -114,11 +145,12 @@ export function discountUsesWords(discount) {
 }
 
 /** One discount in the Discounts list. */
-export function discountRow(discount, products) {
+export function discountRow(discount, products, types = []) {
   return [
     discountAmountWords(discount),
     discount.code === null ? 'No promo code' : `Promo code ${discount.code}`,
-    discountProductsWords(discount, products),
+    discount.forProducts ? discountProductsWords(discount, products) : null,
+    discount.forMemberships ? discountMembershipsWords(discount, types) : null,
     discountDatesWords(discount),
     discountUsesWords(discount),
   ]
@@ -133,17 +165,40 @@ export function discountOption(discount) {
   return parts.join(' · ');
 }
 
-const fits = (discount, product, today) => discountFits(terms(discount), { today, productId: product.id, currency: product.currency });
+/** What a discount is used on: a product, or a membership type. */
+const productTarget = (product) => ({ name: product.name, currency: product.currency, on: { productId: product.id } });
+const typeTarget = (type) => ({ name: type.name, currency: type.currency, on: { membershipTypeId: type.id } });
+const fitsTarget = (discount, target, today) => discountFits(terms(discount), { today, currency: target.currency, ...target.on });
 
 /** The discounts that can be used on this product today. */
 export function discountsFor(page, product) {
   if (product === null || product === undefined) return [];
-  return page.discounts.filter((discount) => fits(discount, product, page.today).ok);
+  return page.discounts.filter((discount) => fitsTarget(discount, productTarget(product), page.today).ok);
+}
+
+/** The discounts that can be used on this membership type today, and that take something
+ *  off its price and leave something to pay. */
+export function discountsForType(page, type) {
+  if (type === null || type === undefined) return [];
+  return page.discounts.filter((discount) => fitsTarget(discount, typeTarget(type), page.today).ok && membershipDiscount(discount, type).ok);
 }
 
 /** Why a discount cannot be used on this product today, said before anything is sold. */
 export function discountWhyNot(discount, product, today) {
-  const answer = fits(discount, product, today);
+  return whyNot(discount, productTarget(product), today);
+}
+
+/** Why a discount cannot be used on this membership type today. */
+export function discountWhyNotType(discount, type, today) {
+  const why = whyNot(discount, typeTarget(type), today);
+  if (why !== null) return why;
+  const costs = membershipDiscount(discount, type);
+  if (costs.ok) return null;
+  return costs.reason === 'nothing_off' ? `${discount.name} takes nothing off ${type.name}.` : `${discount.name} would take off the whole price of ${type.name}.`;
+}
+
+function whyNot(discount, target, today) {
+  const answer = fitsTarget(discount, target, today);
   if (answer.ok) return null;
   switch (answer.reason) {
     case 'not_started':
@@ -153,7 +208,8 @@ export function discountWhyNot(discount, product, today) {
     case 'used_up':
       return `${discount.name} has reached its usage limit.`;
     case 'not_for_product':
-      return `${discount.name} does not apply to ${product.name}.`;
+    case 'not_for_membership':
+      return `${discount.name} does not apply to ${target.name}.`;
     case 'other_currency':
       return `${discount.name} is a fixed amount in ${discount.currency}. Open it under Discounts and save its amount again.`;
     default:
@@ -164,15 +220,65 @@ export function discountWhyNot(discount, product, today) {
 /** What typing a promo code and pressing Apply finds: the discount to use, or the
  *  sentence that says why there is none. */
 export function applyPromoCode(page, product, text) {
+  return applyCode(page, text, product === null || product === undefined ? null : (found) => discountWhyNot(found, product, page.today), 'Pick a product first, then apply the promo code.');
+}
+
+/** The same, on a membership's form. */
+export function applyPromoCodeToType(page, type, text) {
+  return applyCode(page, text, type === null || type === undefined ? null : (found) => discountWhyNotType(found, type, page.today), 'Pick a membership first, then apply the promo code.');
+}
+
+function applyCode(page, text, why, pickFirst) {
   const typed = text.trim();
   if (typed === '') return { discount: null, note: 'Type the promo code, then press Apply.' };
   const code = promoCodeFrom(typed);
   const found = code === null ? undefined : page.discounts.find((discount) => discount.code === code);
   if (found === undefined) return { discount: null, note: `There is no promo code ${typed.toUpperCase()}. Check the spelling with the customer.` };
-  if (product === null || product === undefined) return { discount: null, note: 'Pick a product first, then apply the promo code.' };
-  const why = discountWhyNot(found, product, page.today);
-  if (why !== null) return { discount: null, note: why };
+  if (why === null) return { discount: null, note: pickFirst };
+  const reason = why(found);
+  if (reason !== null) return { discount: null, note: reason };
   return { discount: found, appliedId: found.id, note: appliedWords(found) };
+}
+
+/** A promo code box with nothing typed. */
+export const NO_CODE = { text: '', note: null, appliedId: null };
+
+/** The discount picked, among the ones that can be used on this type today; null for none. */
+export function pickedDiscount(page, type, discountId) {
+  return discountsForType(page, type).find((d) => d.id === discountId) ?? null;
+}
+
+/** What a membership given with this discount comes to, as the lines above its button
+ *  read: Price, Discount, Total, and what every later payment is. `discount` null is none.
+ *  `offMinor` is what the server is sent as coming off. */
+export function membershipSummary(type, discount) {
+  if (type === null || type === undefined) return null;
+  const money = (minor) => formatMinor(minor, type.currency);
+  if (discount === null || discount === undefined) {
+    return { totalMinor: type.priceMinor, offMinor: null, total: type.priceMinor === 0 ? 'Free' : money(type.priceMinor), lines: [{ label: 'Total', value: type.priceMinor === 0 ? 'Free' : money(type.priceMinor), strong: true }], later: null };
+  }
+  const costs = membershipDiscount(discount, type);
+  if (!costs.ok) return null;
+  const lines = [
+    { label: 'Price', value: money(type.priceMinor) },
+    { label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` },
+    { label: 'Total', value: money(costs.firstBillMinor), strong: true },
+  ];
+  let later = null;
+  if (type.kind === 'recurring') {
+    later = costs.payments === 'first' ? `This is the first payment. Every payment after it is ${money(type.priceMinor)}.` : `Every payment is ${money(costs.heldPriceMinor)} while the membership lasts.`;
+  }
+  return { totalMinor: costs.firstBillMinor, offMinor: costs.offMinor, total: money(costs.firstBillMinor), lines, later };
+}
+
+/** A held membership's discount, said on a person's page; null where it had none. */
+export function heldDiscountLine(membership) {
+  const d = membership.discount;
+  if (d === null || d === undefined) return null;
+  const off = formatMinor(d.offMinor, membership.currency);
+  if (membership.kind !== 'recurring') return `Sold with ${d.name}: ${off} off.`;
+  if (d.payments === 'first') return `Sold with ${d.name}: ${off} off the first payment. Every payment after it is ${formatMinor(membership.priceMinor, membership.currency)}.`;
+  return `Sold with ${d.name}: ${off} off every payment.`;
 }
 
 // ── The form ────────────────────────────────────────────────────────────────
@@ -182,7 +288,26 @@ export const NO_MANAGING_DISCOUNTS = 'The owner, or staff who can change members
 const HIDDEN_TEXT = 'Something hidden was pasted in with this. Delete it and type it again.';
 
 export function emptyDiscountDraft() {
-  return { id: null, name: '', kind: 'percent', percent: '', amount: '', code: '', scope: 'all', productIds: [], startsOn: '', endsOn: '', limited: false, maxUses: '', updatedAt: null };
+  return {
+    id: null,
+    name: '',
+    kind: 'percent',
+    percent: '',
+    amount: '',
+    code: '',
+    forProducts: true,
+    scope: 'all',
+    productIds: [],
+    forMemberships: false,
+    typeScope: 'all',
+    typeIds: [],
+    payments: '',
+    startsOn: '',
+    endsOn: '',
+    limited: false,
+    maxUses: '',
+    updatedAt: null,
+  };
 }
 
 export function draftFromDiscount(discount) {
@@ -193,8 +318,13 @@ export function draftFromDiscount(discount) {
     percent: discount.kind === 'percent' ? bpToPercentText(discount.percentBp ?? 0) : '',
     amount: discount.kind === 'amount' ? minorToPriceText(discount.amountMinor ?? 0, discount.currency ?? 'USD') : '',
     code: discount.code ?? '',
+    forProducts: discount.forProducts,
     scope: discount.allProducts ? 'all' : 'some',
     productIds: [...discount.productIds],
+    forMemberships: discount.forMemberships,
+    typeScope: discount.allMembershipTypes ? 'all' : 'some',
+    typeIds: [...discount.membershipTypeIds],
+    payments: discount.membershipPayments ?? '',
     startsOn: discount.startsOn ?? '',
     endsOn: discount.endsOn ?? '',
     limited: discount.maxUses !== null,
@@ -211,9 +341,11 @@ const usesOf = (text) => {
 
 /** The products of the form that are still for sale: an archived one is dropped. */
 const pickedOf = (draft, products) => draft.productIds.filter((id) => products.some((p) => p.id === id));
+/** The same for membership types. */
+const typesPickedOf = (draft, types) => draft.typeIds.filter((id) => types.some((t) => t.id === id));
 
 /** What is wrong with a discount form, by box; empty where it can be saved. */
-export function discountProblems(draft, currency, products) {
+export function discountProblems(draft, currency, products, types = []) {
   const problems = {};
   const name = draft.name.trim();
   if (name === '') problems.name = 'Give the discount a name.';
@@ -228,14 +360,17 @@ export function discountProblems(draft, currency, products) {
     if (minor === null || minor < 1) problems.value = `Enter the amount as a number above 0, like ${minorToPriceText(500, currency)}.`;
   }
   if (draft.code.trim() !== '' && promoCodeFrom(draft.code) === null) problems.code = 'Use 3 to 20 letters and numbers with no spaces, like SUMMER20.';
-  if (draft.scope === 'some' && pickedOf(draft, products).length === 0) problems.products = 'Tick at least one product.';
+  if (!draft.forProducts && !draft.forMemberships) problems.appliesTo = 'Tick products, memberships, or both.';
+  if (draft.forProducts && draft.scope === 'some' && pickedOf(draft, products).length === 0) problems.products = 'Tick at least one product.';
+  if (draft.forMemberships && draft.typeScope === 'some' && typesPickedOf(draft, types).length === 0) problems.types = 'Tick at least one membership.';
+  if (draft.forMemberships && draft.payments !== 'first' && draft.payments !== 'every') problems.payments = 'Choose whether it comes off the first payment only or every payment.';
   if (draft.startsOn !== '' && draft.endsOn !== '' && draft.endsOn < draft.startsOn) problems.endsOn = 'The end date is before the start date. Pick a later end date.';
   if (draft.limited && usesOf(draft.maxUses) === null) problems.maxUses = `Enter how many times it can be used, from 1 to ${DISCOUNT_USES_MAX.toLocaleString('en')}.`;
   return problems;
 }
 
 /** The form as the server takes it. Call only with no problems. */
-export function discountBody(draft, currency, products) {
+export function discountBody(draft, currency, products, types = []) {
   const percent = draft.kind === 'percent';
   const body = {
     name: draft.name.trim(),
@@ -246,8 +381,13 @@ export function discountBody(draft, currency, products) {
     startsOn: draft.startsOn === '' ? null : draft.startsOn,
     endsOn: draft.endsOn === '' ? null : draft.endsOn,
     maxUses: draft.limited ? usesOf(draft.maxUses) : null,
-    allProducts: draft.scope === 'all',
-    productIds: draft.scope === 'all' ? [] : pickedOf(draft, products),
+    forProducts: draft.forProducts,
+    allProducts: !draft.forProducts || draft.scope === 'all',
+    productIds: !draft.forProducts || draft.scope === 'all' ? [] : pickedOf(draft, products),
+    forMemberships: draft.forMemberships,
+    allMembershipTypes: !draft.forMemberships || draft.typeScope === 'all',
+    membershipTypeIds: !draft.forMemberships || draft.typeScope === 'all' ? [] : typesPickedOf(draft, types),
+    membershipPayments: draft.forMemberships ? draft.payments : null,
   };
   return draft.id === null ? body : { ...body, updatedAt: draft.updatedAt };
 }

@@ -129,6 +129,14 @@ export async function membershipDiscounts(sql: Sql, gymId: string): Promise<Disc
   return rows.map(discount);
 }
 
+/** The gym's membership types on its price list, by name; a gym has at most 60. */
+export async function membershipTypeNames(sql: Sql, gymId: string): Promise<{ id: string; name: string }[]> {
+  return await sql<{ id: string; name: string }[]>`
+    SELECT id, name FROM gym_membership_types
+    WHERE gym_id = ${gymId} AND archived_at IS NULL
+    ORDER BY lower(name), id`;
+}
+
 /** One discount of this gym's, held for a sale, or null where it is not this gym's. */
 export async function lockedDiscount(tx: TransactionSql, gymId: string, discountId: string): Promise<DiscountRow | null> {
   const [raw] = await tx<RawDiscount[]>`

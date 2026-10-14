@@ -241,6 +241,9 @@ export const sellPageResponseSchema = z
     discounts: z.array(gymDiscountSchema),
     archivedDiscounts: z.array(gymDiscountSchema),
     archivedDiscountsTotal: z.number().int().min(0),
+    /** The gym's membership types on its price list, by name: what a discount can be
+     *  limited to (18b-ii-b). */
+    membershipTypes: z.array(z.object({ id: z.string().uuid(), name: z.string() }).strict()),
     /** May record a sale and take one back (`billing.members`). */
     canSell: z.boolean(),
     /** May change the products and the tax (`memberships.manage`). */

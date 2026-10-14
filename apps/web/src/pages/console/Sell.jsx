@@ -9,12 +9,13 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { canRemoveMembers, orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { placeFor } from './consolePlaces';
-import { priceLabel, termLine } from './membershipTypesView';
+import { termLine } from './membershipTypesView';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
-import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
+import { NO_CODE, applyPromoCode, discountOption, discountsFor, membershipSummary, oldMoneySaleLine, pickedDiscount, promoCodeNote } from './sellDiscountsView';
+import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -425,8 +426,9 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   );
 }
 
-/** A membership given as paid: the notebook's own step, from the desk. */
-function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo, onOpenPerson, onPage }) {
+/** A membership given as paid: the notebook's own step, from the desk, with a discount
+ *  if one applies. */
+function MembershipSale({ gymId, page, locked, firstPerson, addMemberTo, membershipsTo, onOpenPerson, onPage }) {
   const [types, setTypes] = useState({ gymId: null, list: null, error: null });
   /** Raised to read the price list again: after a sale, and after a refusal. */
   const [typesAsk, setTypesAsk] = useState(0);
@@ -435,6 +437,8 @@ function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo
   const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, done: null });
+  const [discountId, setDiscountId] = useState('');
+  const [code, setCode] = useState(NO_CODE);
   const typeSelect = useId();
 
   useEffect(() => {
@@ -479,6 +483,9 @@ function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo
 
   const type = types.list.find((t) => t.id === typeId) ?? null;
   const free = type !== null && type.priceMinor === 0;
+  // Only a discount the server will take on this type today is ever sent.
+  const discount = type === null ? null : pickedDiscount(page, type, discountId);
+  const summary = membershipSummary(type, discount);
   const problem = type === null ? 'Pick a membership.' : person === null ? 'Find and pick the member it is for.' : person.past ? `${person.name} is a past member. Put them back on your list from their page, then give the membership.` : null;
 
   const give = async () => {
@@ -490,11 +497,21 @@ function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo
       const fresh = await registerService.get(gymId);
       onPage(fresh);
       // The price sent is the one on the button: the server gives nothing at any other.
-      await orgService.giveHeldMembership(gymId, person.entryId, { requestKey: key, typeId: type.id, startsOn: fresh.today, paid: !free, priceMinor: type.priceMinor, ...(free ? {} : { method }) });
-      setState({ busy: false, error: null, done: { words: membershipSoldWords(type, person.name, method), person } });
+      await orgService.giveHeldMembership(gymId, person.entryId, {
+        requestKey: key,
+        typeId: type.id,
+        startsOn: fresh.today,
+        paid: !free,
+        priceMinor: type.priceMinor,
+        ...(free ? {} : { method }),
+        ...(discount === null || summary === null || summary.offMinor === null ? {} : { discountId: discount.id, discountMinor: summary.offMinor }),
+      });
+      setState({ busy: false, error: null, done: { words: membershipSoldWords(type, person.name, method, discount), person } });
       setKey(newKey());
       setPerson(null);
       setTypeId('');
+      setDiscountId('');
+      setCode(NO_CODE);
       registerService.get(gymId).then(onPage, () => undefined);
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't give that membership. Nothing was saved: try again."), done: null });
@@ -512,7 +529,16 @@ function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo
         <label className="c-label" htmlFor={typeSelect}>
           Membership
         </label>
-        <select id={typeSelect} className="c-input" value={typeId} disabled={locked || state.busy} onChange={(e) => setTypeId(e.target.value)}>
+        <select
+          id={typeSelect}
+          className="c-input"
+          value={typeId}
+          disabled={locked || state.busy}
+          onChange={(e) => {
+            setTypeId(e.target.value);
+            setCode((was) => ({ ...was, note: null, appliedId: null }));
+          }}
+        >
           <option value="">Pick a membership</option>
           {types.list.map((t) => (
             <option key={t.id} value={t.id}>
@@ -528,19 +554,13 @@ function MembershipSale({ gymId, locked, firstPerson, addMemberTo, membershipsTo
           {`Open ${person.name}'s page`}
         </button>
       ) : null}
+      {!free ? <MembershipDiscountPicker page={page} type={type} discountId={discountId} setDiscountId={setDiscountId} code={code} setCode={setCode} disabled={locked || state.busy} /> : null}
       {!free ? <PayPicker method={method} setMethod={setMethod} disabled={locked || state.busy} /> : null}
-      {type !== null ? (
-        <dl className="flex flex-col gap-1 m-0 pt-3" style={LINE} data-testid="sale-summary">
-          <div className="flex justify-between gap-4" style={{ maxWidth: 360 }}>
-            <dt className="c-s16 c-w7 c-t1">Total</dt>
-            <dd className="m-0 c-num c-s16 c-w7 c-t1">{priceLabel(type)}</dd>
-          </div>
-        </dl>
-      ) : null}
+      <MembershipTotal summary={summary} />
       <div className="flex flex-col gap-2">
-        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked || state.busy || problem !== null} onClick={() => void give()}>
+        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked || state.busy || problem !== null || summary === null} onClick={() => void give()}>
           {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {state.busy ? 'Recording…' : type === null ? 'Take payment' : free ? 'Give membership' : `Take payment · ${priceLabel(type)}`}
+          {state.busy ? 'Recording…' : type === null || summary === null ? 'Take payment' : free ? 'Give membership' : `Take payment · ${summary.total}`}
         </button>
         {problem !== null && (typeId !== '' || person !== null) ? <p className="c-s14 c-t2 m-0">{problem}</p> : null}
         {!free ? <p className="c-s13 c-t3 m-0">{SALE_HINT}</p> : null}
@@ -765,6 +785,7 @@ export default function Sell() {
                 <MembershipSale
                   key={`membership-${gymId}`}
                   gymId={gymId}
+                  page={page}
                   locked={readOnly}
                   firstPerson={firstPerson}
                   addMemberTo={placeFor(orgSlug, privileges, 'addMember')}
@@ -797,7 +818,15 @@ export default function Sell() {
           <div ref={productsRef}>
             <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />
           </div>
-          <SellDiscounts key={`discounts-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
+          <SellDiscounts
+            key={`discounts-${gymId}`}
+            gymId={gymId}
+            page={page}
+            locked={readOnly}
+            lockedNote={readOnlyNote(org.orgType)}
+            membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
+            onPage={setPage}
+          />
         </>
       )}
 

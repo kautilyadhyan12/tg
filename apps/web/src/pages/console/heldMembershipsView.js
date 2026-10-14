@@ -319,9 +319,13 @@ export const METHOD_NEEDED = 'Pick how they paid.';
 
 /** What the server is sent for a choice. `requestKey` is made once a form. A paid one
  *  says how it was paid: the server records the payment with the membership. */
-export function giveBody(requestKey, type, value) {
+export function giveBody(requestKey, type, value, discount = null, summary = null) {
   const paid = type.priceMinor === 0 ? false : value.paid;
-  return { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
+  const body = { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
+  // With a discount the screen says the price and what comes off: the server gives nothing
+  // where either is no longer so (18b-ii-b).
+  if (discount === null || summary === null || summary.offMinor === null) return body;
+  return { ...body, priceMinor: type.priceMinor, discountId: discount.id, discountMinor: summary.offMinor };
 }
 
 /** A key the server takes one membership for, however often the request arrives. */

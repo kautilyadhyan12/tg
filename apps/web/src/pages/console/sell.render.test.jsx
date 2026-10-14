@@ -88,6 +88,7 @@ const page = (over = {}) => ({
   discounts: [],
   archivedDiscounts: [],
   archivedDiscountsTotal: 0,
+  membershipTypes: [],
   canSell: true,
   canManage: true,
   sales: [],
@@ -356,6 +357,52 @@ describe('a membership', () => {
     await waitFor(() => expect(svc.get).toHaveBeenCalledTimes(3));
     fireEvent.click(within(done).getByRole('button', { name: "Open Maya Patel's page" }));
     expect(screen.getByRole('dialog', { name: 'person e-maya' })).toBeTruthy();
+  });
+
+  it('with a discount: offers only the ones for this membership, shows what comes off and what later payments are, and sends exactly that', async () => {
+    const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
+    const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
+    const first = { ...base, ...reach, id: 'd-first', name: 'First month', code: 'FIRST20', membershipPayments: 'first' };
+    const water = { ...base, ...reach, id: 'd-water', name: 'Water deal', code: null, forProducts: true, forMemberships: false, membershipPayments: null };
+    const passOnly = { ...base, ...reach, id: 'd-pass', name: 'Pass only', code: null, allMembershipTypes: false, membershipTypeIds: ['t-pass'], membershipPayments: 'every' };
+    svc.get.mockResolvedValue(page({ discounts: [first, passOnly, water] }));
+    orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [GOLD] } });
+    orgApi.giveHeldMembership.mockResolvedValue({ data: {} });
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'A membership' }));
+    await screen.findByLabelText('Membership');
+    pick('Membership', 't-gold');
+    fireEvent.change(screen.getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    // Only First month is for Gold Monthly: Pass only is for another type, Water deal for products.
+    const list = within(newSale()).getByLabelText('Discount');
+    expect([...list.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['No discount', 'First month · 20% off · code FIRST20']);
+    expect(takeButton().textContent).toBe('Take payment · $50.00');
+    // The code a member gives is applied, and the lines say what it comes to.
+    fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: 'first20' } });
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
+    expect(within(newSale()).getByRole('status').textContent).toBe('FIRST20 applied: 20% off.');
+    const lines = within(newSale()).getByTestId('sale-summary');
+    expect([...lines.querySelectorAll('dt')].map((x) => x.textContent)).toEqual(['Price', 'Discount (First month)', 'Total']);
+    expect([...lines.querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['$50.00', '-$10.00', '$40.00']);
+    expect(within(newSale()).getByText('This is the first payment. Every payment after it is $50.00.')).toBeTruthy();
+    expect(takeButton().textContent).toBe('Take payment · $40.00');
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(orgApi.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgApi.giveHeldMembership).toHaveBeenCalledWith('g1', 'e-maya', {
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      typeId: 't-gold',
+      startsOn: '2026-10-12',
+      paid: true,
+      priceMinor: 5000,
+      method: 'cash',
+      discountId: 'd-first',
+      discountMinor: 1000,
+    });
+    const done = await within(newSale()).findByTestId('sale-done');
+    expect(done.textContent).toContain('Gold Monthly given to Maya Patel and recorded as paid. $40.00, cash. First month took $10.00 off.');
   });
 
   it('a tab left open overnight starts the membership on the day the server says it is now, never the day the page was opened', async () => {
