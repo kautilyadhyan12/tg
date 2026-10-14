@@ -192,7 +192,11 @@ describe("signing in by email code", () => {
     expect(server.asked.map((one) => [one.path, one.body])).toEqual([
       ["/v1/auth/code/send", { email: "ravi@example.com" }],
       ["/v1/auth/code/verify", { email: "ravi@example.com", code: "123456", client: "phone" }],
+      // "Before you start" is asked of the server, as the person signed in now.
+      ["/v1/users/me", undefined],
     ]);
+    expect(server.asked.at(-1)?.headers.authorization).toBe("Bearer access-1");
+    // The server said they ticked it, so the phone keeps that with the sign-in.
     expect(store.value).toBe(kept(1));
     await fireEvent.press(screen.getByRole("tab", { name: "Me" }));
     expect(await screen.findByText("ravi@example.com")).toBeTruthy();
