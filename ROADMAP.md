@@ -450,7 +450,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 34f. **Your week in food** (7d; split 2026-10-14: the server part needs no phone).
       - 34f-i. [x] **The server works out your week in food** — merged 2026-10-14 (PR #269).
       - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.
-35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
+35. **Progress** (split 2026-10-14: the parts on the server need no phone).
+    - 35a. [ ] **The predictions on the server** (spec Part 2B §5): the next 7 days' calories from the person's recent same weekdays, this week's training-days goal in words, a steady pace, the best time of day; hidden below their data gates.
+    - 35b. [ ] **Weekly challenges on the server** (dead on the web; its plan reads the old one first).
+    - 35c. [ ] **The Progress screen**: the charts, the workout calendar, body measurements and weigh-ins, badges, the weekly challenges and the predictions. Waits for items 10 to 12.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.
 38. [ ] **Reminders** for workouts, meals and streaks (the six switches the web drew and never saved); the global board last, once Kd has answered RULINGS 2026-10-02's open question.

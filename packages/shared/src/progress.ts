@@ -92,3 +92,119 @@ export const personalRecordsSchema = z.object({
   limitedToDays,
 });
 export type PersonalRecords = z.infer<typeof personalRecordsSchema>;
+
+// ── Predictions (ROADMAP 35a; spec Part 2B §5) ───────────────────────────────
+// Reflections of the person's own pattern, worked out the same way every time: the
+// same workouts give the same answer until the day changes. Each part is hidden below
+// its own data gate rather than guessed. Words are the screen's; these are the facts.
+
+/** The rules' version, so a later change to them is never mistaken for the person's. */
+export const PREDICTIONS_CALC_VERSION = 1;
+
+/** The predictions take no query; anything sent is refused, never quietly read. */
+export const progressPredictionsQuerySchema = z.object({}).strict();
+
+export const PREDICTION_GATES = {
+  /** Workouts in the 28 days before today, for the next 7 days' calories. */
+  forecastWorkouts: 5,
+  /** Finished weeks since the person's first workout, for this week's goal. */
+  weekGoalWeeks: 3,
+  /** Workouts in the last 6 weeks, at least 3 of them in each half, for a steady pace. */
+  steadyWorkouts: 8,
+  steadyEachSide: 3,
+  /** Workouts with a form score in the last 90 days, for the best time of day. */
+  bestTimeWorkouts: 6,
+} as const;
+
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const int = z.number().int();
+
+export const forecastDaySchema = z.object({
+  date: day,
+  kcalPoint: int,
+  kcalLow: int,
+  kcalHigh: int,
+});
+
+export const calorieForecastSchema = z.discriminatedUnion("available", [
+  z.object({ available: z.literal(false), workouts: int, needed: int }),
+  z.object({
+    available: z.literal(true),
+    /** Tomorrow and the six days after it. */
+    days: z.array(forecastDaySchema).length(7),
+    totalPoint: int,
+    totalLow: int,
+    totalHigh: int,
+  }),
+]);
+export type CalorieForecast = z.infer<typeof calorieForecastSchema>;
+
+/** reached: the goal is met this week · on_track · doable: `moreNeeded` days more ·
+ *  tough: the week is unlikely, and one session still keeps the streak. Never a percent. */
+export const weekGoalBandSchema = z.enum(["reached", "on_track", "doable", "tough"]);
+export type WeekGoalBand = z.infer<typeof weekGoalBandSchema>;
+
+export const weekGoalPredictionSchema = z.union([
+  z.object({ available: z.literal(false), reason: z.literal("no_goal") }),
+  z.object({ available: z.literal(false), reason: z.literal("few_weeks"), weeks: int, needed: int }),
+  z.object({
+    available: z.literal(true),
+    /** The person's training-days goal for a week. */
+    target: int,
+    /** Days trained this week, Monday to today. */
+    done: int,
+    /** Days of this week still free to train on, today included when nothing is logged yet. */
+    daysLeft: int,
+    moreNeeded: int,
+    band: weekGoalBandSchema,
+  }),
+]);
+export type WeekGoalPrediction = z.infer<typeof weekGoalPredictionSchema>;
+
+/** One figure's average in the 4 weeks before and the last 2 weeks; null where either
+ *  side has nothing to average or the earlier one is 0. */
+export const steadyFigureSchema = z
+  .object({ before: int, recent: int, changePct: z.number() })
+  .nullable();
+
+export const steadyPaceSchema = z.discriminatedUnion("available", [
+  z.object({ available: z.literal(false), recent: int, before: int, needed: int, neededEachSide: int }),
+  z.object({
+    available: z.literal(true),
+    /** Every figure that could be compared moved less than 5 % either way. */
+    steady: z.boolean(),
+    recentDays: z.literal(14),
+    kcal: steadyFigureSchema,
+    minutes: steadyFigureSchema,
+    form: steadyFigureSchema,
+  }),
+]);
+export type SteadyPace = z.infer<typeof steadyPaceSchema>;
+
+/** Morning 5:00–11:59 · afternoon 12:00–16:59 · evening 17:00–21:59 · night 22:00–4:59,
+ *  in the person's own time zone. */
+export const timeSlotSchema = z.enum(["morning", "afternoon", "evening", "night"]);
+export type TimeSlot = z.infer<typeof timeSlotSchema>;
+
+export const bestTimeSchema = z.discriminatedUnion("available", [
+  z.object({ available: z.literal(false), workouts: int, needed: int }),
+  z.object({
+    available: z.literal(true),
+    /** Null until a time of day holds 2 workouts. */
+    best: timeSlotSchema.nullable(),
+    slots: z.array(z.object({ slot: timeSlotSchema, workouts: int, avgForm: int })),
+  }),
+]);
+export type BestTime = z.infer<typeof bestTimeSchema>;
+
+export const progressPredictionsSchema = z.object({
+  calcVersion: z.literal(PREDICTIONS_CALC_VERSION),
+  /** Workouts in the last 90 days, the most any part reads. */
+  workouts: int,
+  forecast: calorieForecastSchema,
+  weekGoal: weekGoalPredictionSchema,
+  steady: steadyPaceSchema,
+  bestTime: bestTimeSchema,
+  limitedToDays,
+});
+export type ProgressPredictions = z.infer<typeof progressPredictionsSchema>;

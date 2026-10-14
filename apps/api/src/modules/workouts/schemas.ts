@@ -7,6 +7,7 @@ export {
   workoutSyncPayloadSchema,
   workoutListQuerySchema,
   progressQuerySchema,
+  progressPredictionsQuerySchema,
   workoutSummarySchema,
 } from "@app/shared";
 export type {
@@ -23,6 +24,7 @@ export type {
   ProgressWeekly,
   ProgressHeatmap,
   ProgressDistribution,
+  ProgressPredictions,
   PersonalRecords,
 } from "@app/shared";
 
