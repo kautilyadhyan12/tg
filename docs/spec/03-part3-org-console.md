@@ -2016,8 +2016,9 @@ they never saw, or put a signature on a relative when a family shares one email 
   has not signed (3e-ii); no drawn signature, and no IP address kept.
 - **Privacy.** A person's "download my data" holds each waiver they signed with its words.
   A signature is kept with the gym after the person's account is deleted, on the consent
-  log's footing: it is the gym's proof. How long a gym may keep it is the lawyer's (ROADMAP
-  Stage 4 item 3).
+  log's footing: it is the gym's proof. **It is removed six years after the account is
+  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years). Not built
+  yet: ROADMAP Stage 2 item 3e-iii.
 - **Limits:** staff reads 300 an hour a person (900 an address), saves and stops 30 (90);
   a member's read 120 (6,000 an address, a gym's wi-fi), signing 10 (600).
 - **Cost at full size** (2026-10-13, mains, 3,294 MHz, local database, a waiver of 29,990
