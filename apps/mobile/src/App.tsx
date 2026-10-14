@@ -16,6 +16,7 @@ import { colours } from "./look/colours";
 import type { IconName } from "./look/Icon";
 import { Page } from "./look/Page";
 import { TabBar } from "./look/TabBar";
+import { SignUpNoteGate } from "./screens/BeforeYouStart";
 import { SignInScreen } from "./screens/SignIn";
 import { CopyContext, ThisCopy } from "./screens/ThisCopy";
 import type { Ask } from "./session/calls";
@@ -58,11 +59,20 @@ interface AppProps {
   wait?: (ms: number) => Promise<void>;
 }
 
-/** Signed out, the sign-in screen and nothing of anybody's; signed in, the five tabs. */
+/** Signed out, the sign-in screen and nothing of anybody's; signed in, "Before you start" until
+ *  the person has ticked it, then the five tabs. */
 function SignedInOrOut() {
   const { state } = useSession();
   if (state.kind === "starting") return <View style={styles.page} />;
   if (state.kind === "out") return <SignInScreen note={state.note} />;
+  return (
+    <SignUpNoteGate key={state.user.id}>
+      <FiveTabs />
+    </SignUpNoteGate>
+  );
+}
+
+function FiveTabs() {
   return (
     <NavigationContainer theme={theme}>
       <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} />}>

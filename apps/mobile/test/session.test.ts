@@ -119,7 +119,7 @@ describe("the worst thing: no internet never signs anybody out, and a signed-out
     answer(refusal(401, SIGNED_IN_ELSEWHERE.error, SIGNED_IN_ELSEWHERE.message));
     await started;
     expect(session.state()).toEqual(signedInAs(MEERA));
-    expect(store.value).toBe(kept(7, MEERA));
+    expect(store.value).toBe(kept(7, MEERA, null));
     expect(session.accessToken()).toBe("access-7");
   });
 });
@@ -243,7 +243,7 @@ describe("one refresh at a time, and the answer to the last try", () => {
     // The last person's answer comes last, and changes nothing of hers.
     answers[0]?.({ status: 200, body: { tokens: tokens(2) } });
     await started;
-    expect(store.value).toBe(kept(8, MEERA));
+    expect(store.value).toBe(kept(8, MEERA, null));
     expect(session.accessToken()).toBe("access-8");
     // Her one-at-a-time rule still holds after his run has ended.
     const again = [session.refresh(), session.refresh()];
@@ -324,7 +324,7 @@ describe("signing in with a code", () => {
       },
     ]);
     expect(session.state()).toEqual({ kind: "in", user: RAVI });
-    expect(store.value).toBe(kept(1));
+    expect(store.value).toBe(kept(1, RAVI, null));
     expect(session.accessToken()).toBe("access-1");
   });
 
@@ -349,5 +349,118 @@ describe("signing in with a code", () => {
     await session.start();
     await session.signOut();
     expect(server.asked.at(-1)).toMatchObject({ path: "/v1/auth/logout", body: { refreshToken: "refresh-2" } });
+  });
+});
+
+/** A route that waits until it is let go, so a test can act while a request is away. */
+function held(answer: Reply) {
+  let open: () => void = () => undefined;
+  const shut = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return {
+    route: async () => shut.then(() => answer),
+    open: () => {
+      open();
+    },
+  };
+}
+
+const anyReply = { safeParse: (raw: unknown) => ({ success: true as const, data: raw }) };
+
+describe("a signed-in request is only ever sent as the person who made it", () => {
+  it.each([
+    ["Sign out", "its first send"],
+    ["another person signs in", "its first send"],
+    ["Sign out", "the refresh after its 401"],
+    ["another person signs in", "the refresh after its 401"],
+  ])("%s during %s: no answer, and nothing is sent with anybody else's token", async (what, when) => {
+    const firstSend = held(refusal(401, "unauthorized", "Sign in again."));
+    const secondRefresh = held({ status: 200, body: { tokens: tokens(3) } });
+    let refreshes = 0;
+    let sends = 0;
+    const { session, server } = phone(
+      {
+        "/v1/auth/refresh": () => {
+          refreshes += 1;
+          if (refreshes === 2 && when === "the refresh after its 401") return secondRefresh.route();
+          return { status: 200, body: { tokens: tokens(refreshes + 1) } };
+        },
+        "/v1/users/me/consents": () => {
+          sends += 1;
+          if (sends === 1) return when === "its first send" ? firstSend.route() : refusal(401, "unauthorized", "Sign in again.");
+          return { status: 201, body: { recorded: true } };
+        },
+        "/v1/auth/code/verify": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(7) } }),
+        "/v1/auth/logout": () => ({ status: 200, body: {} }),
+      },
+      kept(1, RAVI, null),
+    );
+    await session.start();
+    const asked = session.signedIn({ method: "POST", path: "/v1/users/me/consents", body: {} }, anyReply);
+    await vi.waitFor(() => {
+      expect(server.paths()).toContain(when === "its first send" ? "/v1/users/me/consents" : "/v1/auth/refresh");
+      if (when !== "its first send") expect(refreshes).toBe(2);
+    });
+    if (what === "Sign out") await session.signOut();
+    else await session.verifyCode(MEERA.email, "123456");
+    firstSend.open();
+    secondRefresh.open();
+    expect(await asked).toEqual({ kind: "no_answer" });
+    const sentWith = server.asked.filter((one) => one.path === "/v1/users/me/consents").map((one) => one.headers.authorization);
+    expect(sentWith).toEqual(["Bearer access-2"]);
+  });
+});
+
+describe("a late write never undoes a sign-out", () => {
+  /** A key store whose writes, while `slow`, finish only when the test says. */
+  function slowStore(value: string) {
+    const store = memoryStore(value);
+    const write = store.write;
+    const away: (() => void)[] = [];
+    const control = {
+      slow: false,
+      finish: () => {
+        for (const done of away.splice(0)) done();
+      },
+    };
+    store.write = (next: string) =>
+      control.slow
+        ? new Promise<void>((resolve) => {
+            away.push(() => {
+              void write(next).then(resolve);
+            });
+          })
+        : write(next);
+    return { store, control };
+  }
+
+  it.each([
+    ["Sign out", null],
+    ["another person signs in", kept(7, MEERA, null)],
+  ])("the tick's write, finished after %s, leaves the key store as the phone holds it now", async (what, after) => {
+    const { store, control } = slowStore(kept(1, RAVI, null));
+    const server = fakeServer({
+      "/v1/auth/refresh": () => ({ status: 200, body: { tokens: tokens(2) } }),
+      "/v1/auth/code/verify": () => ({ status: 200, body: { user: MEERA, isNewAccount: false, tokens: tokens(7) } }),
+      "/v1/auth/logout": () => ({ status: 200, body: {} }),
+    });
+    const session = createSession({
+      server: { apiUrl: API, ask: server.ask },
+      store,
+      onChange: () => undefined,
+      wait: () => Promise.resolve(),
+    });
+    await session.start();
+    control.slow = true;
+    const keeping = session.keepSignUpNote("v4");
+    control.slow = false;
+    if (what === "Sign out") await session.signOut();
+    else await session.verifyCode(MEERA.email, "123456");
+    expect(store.value).toBe(after);
+    // The tick's write lands only now, after the phone has moved on.
+    control.finish();
+    await keeping;
+    expect(store.value).toBe(after);
   });
 });

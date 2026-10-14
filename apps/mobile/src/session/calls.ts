@@ -2,7 +2,7 @@ import { apiRefusalSchema } from "@app/shared";
 
 export interface AskInit {
   signal: AbortSignal;
-  method?: "POST";
+  method?: "GET" | "POST";
   headers?: Record<string, string>;
   body?: string;
 }
@@ -13,7 +13,7 @@ export type Ask = (
   init: AskInit,
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
-interface Shape<T> {
+export interface Shape<T> {
   safeParse: (raw: unknown) => { success: true; data: T } | { success: false };
 }
 
@@ -31,13 +31,20 @@ export interface Server {
 const LATE = Symbol("late");
 
 /** One POST, its reply read through its shape. A reply that comes after `waitMs` is dropped. */
-export async function post<T>(
-  server: Server,
-  path: string,
-  body: unknown,
-  shape: Shape<T>,
-  waitMs = 15_000,
-): Promise<Answer<T>> {
+export function post<T>(server: Server, path: string, body: unknown, shape: Shape<T>, waitMs = 15_000): Promise<Answer<T>> {
+  return call(server, { method: "POST", path, body }, shape, waitMs);
+}
+
+export interface Request {
+  method: "GET" | "POST";
+  path: string;
+  body?: unknown;
+  /** A signed-in request's access token. */
+  token?: string;
+}
+
+/** One request, its reply read through its shape. A reply that comes after `waitMs` is dropped. */
+export async function call<T>(server: Server, request: Request, shape: Shape<T>, waitMs = 15_000): Promise<Answer<T>> {
   const stop = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<typeof LATE>((resolve) => {
@@ -48,11 +55,14 @@ export async function post<T>(
   });
   try {
     const reply = await Promise.race([
-      server.ask(`${server.apiUrl}${path}`, {
+      server.ask(`${server.apiUrl}${request.path}`, {
         signal: stop.signal,
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
+        method: request.method,
+        headers: {
+          ...(request.method === "POST" ? { "content-type": "application/json" } : {}),
+          ...(request.token === undefined ? {} : { authorization: `Bearer ${request.token}` }),
+        },
+        ...(request.method === "POST" ? { body: JSON.stringify(request.body ?? {}) } : {}),
       }),
       late,
     ]);

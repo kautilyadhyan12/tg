@@ -411,7 +411,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 12b. **Sign in on the phone by email code** (split 2026-10-13: the robot check needs a package and a page of its own).
         - 12b-i. [x] **The sign-in itself** — merged 2026-10-14 (PR #256).
         - 12b-ii. [x] **The robot check on the phone** — merged 2026-10-14 (PR #263).
-    - 12c. [ ] **"Before you start" on the phone** (it reads the profile's `signUpDisclaimerAgreed`).
+    - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
     - 12d. [ ] **Sign in with Google on the phone**: Google's own sign-in box, and a server route that takes its answer. Needs Kd's step in Google's console for each copy of the app, told to him in its plan.
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms; the invitation email's button opens the app.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
@@ -452,7 +452,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 34f-ii. [ ] **The chart on the Food screen**, with the facts under it in words ("Protein was under target on 5 of 6 days"). Waits for 32b.
 35. **Progress** (split 2026-10-14: the parts on the server need no phone).
     - 35a. [x] **The predictions on the server** — merged 2026-10-14 (PR #270).
-    - 35b. [ ] **Weekly challenges on the server** (dead on the web; its plan reads the old one first).
+    - 35b. [x] **Weekly challenges on the server** — merged 2026-10-15 (PR #272).
     - 35c. [ ] **The Progress screen**: the charts, the workout calendar, body measurements and weigh-ins, badges, the weekly challenges and the predictions. Waits for items 10 to 12.
 36. [ ] **The weekly plan**: the plan builder on the server (6a), the week screen (6b). Doing a planned workout (6c) is exercise folder 2's item 64. Once the plan names a week's sessions, calories burned joins the starter goals with the plan's own number (RULINGS 2026-10-13).
 37. [ ] **Running** (item 4; Stage 1's 7b): recording by GPS with the screen off, the map, the summary, the run plan, routes.

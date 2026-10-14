@@ -69,6 +69,9 @@ export const DIRECT_DELETE_TABLES = [
   // Each day's food targets (migration 0110; ROADMAP 34f-i): their own, deleted at Day 14
   // and exported.
   "food_day_targets",
+  // The weekly challenges picked for a person (migration 0111; ROADMAP 35b): game state
+  // like streaks and user_xp, deleted at Day 14 and exported.
+  "weekly_challenges",
   // A member's reactions to their gym's posts (migration 0071; ROADMAP 19b-i): the
   // person's own taps, deleted at Day 14 and exported.
   "gym_post_reactions",

@@ -1,3 +1,4 @@
+import { CURRENT_DISCLAIMER_VERSION } from "@app/shared";
 import type { Ask, AskInit } from "../src/session/calls";
 import type { KeyStore } from "../src/session/session";
 
@@ -15,7 +16,22 @@ export const RAVI = {
 };
 
 export const tokens = (n: number) => ({ accessToken: `access-${String(n)}`, refreshToken: `refresh-${String(n)}` });
-export const kept = (n: number, user = RAVI) => JSON.stringify({ refreshToken: `refresh-${String(n)}`, user });
+/** A sign-in the phone kept, with the person's tick on today's "Before you start" unless told `null`. */
+export const kept = (n: number, user = RAVI, signUpNote: string | null = CURRENT_DISCLAIMER_VERSION.sign_up) =>
+  JSON.stringify({ refreshToken: `refresh-${String(n)}`, user, ...(signUpNote === null ? {} : { signUpNote }) });
+
+/** The person's profile as the server sends it; `agreed`: their tick on today's sign-up note. */
+export const profile = (agreed: boolean, user = RAVI) => ({
+  user: {
+    ...user,
+    timezone: null,
+    weightKg: null,
+    leaderboardOptOut: false,
+    onboardingCompleted: false,
+    signUpDisclaimerAgreed: agreed,
+    createdAt: "2026-10-14T09:00:00.000Z",
+  },
+});
 
 export interface Reply {
   status: number;
@@ -39,10 +55,16 @@ export interface Asked {
   headers: Record<string, string>;
 }
 
-/** A server of the routes it is handed; any other path answers 404. `/health` is up unless told. */
+/** A server of the routes it is handed; any other path answers 404. `/health` is up, and the
+ *  profile says the person ticked "Before you start", unless told. */
 export function fakeServer(routes: Record<string, Route>): { ask: Ask; asked: Asked[]; paths: () => string[] } {
   const asked: Asked[] = [];
-  const all: Record<string, Route> = { "/health": () => ({ status: 200, body: { status: "ok" } }), ...routes };
+  const all: Record<string, Route> = {
+    "/health": () => ({ status: 200, body: { status: "ok" } }),
+    // Somebody who ticked "Before you start" long ago, unless a test says otherwise.
+    "/v1/users/me": () => ({ status: 200, body: profile(true) }),
+    ...routes,
+  };
   const ask: Ask = async (url: string, init: AskInit) => {
     const path = new URL(url).pathname;
     asked.push({
