@@ -376,8 +376,14 @@ function collectedEarlier(
   const paidCovered = coversFrom(facts.firstPaidOn, earlier.from);
   const soldCovered = coversFrom(facts.firstSoldOn, earlier.from);
   const paidHere = now.paidMinor > 0 || now.refundedMinor > 0;
-  if (facts.firstPaidOn !== null && !paidCovered && (paidHere || !soldCovered)) return { state: "no_history", ...earlier, since: facts.firstPaidOn };
-  if (facts.firstSoldOn !== null && !soldCovered && (now.soldMinor > 0 || !paidCovered)) return { state: "no_sales_history", ...earlier, since: facts.firstSoldOn };
+  if (facts.firstPaidOn !== null && !paidCovered && paidHere) return { state: "no_history", ...earlier, since: facts.firstPaidOn };
+  if (facts.firstSoldOn !== null && !soldCovered && now.soldMinor > 0) return { state: "no_sales_history", ...earlier, since: facts.firstSoldOn };
+  // Nothing in the period, and neither part covers those days.
+  if (!paidCovered && !soldCovered) {
+    return facts.firstPaidOn !== null
+      ? { state: "no_history", ...earlier, since: facts.firstPaidOn }
+      : { state: "no_sales_history", ...earlier, since: facts.firstSoldOn ?? earlier.from };
+  }
   const then = {
     paidMinor: paidCovered ? facts.yearEarlier.paidMinor : 0,
     refundedMinor: paidCovered ? facts.yearEarlier.refundedMinor : 0,
