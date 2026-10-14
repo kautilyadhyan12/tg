@@ -5157,6 +5157,30 @@ value that is not one of the three is refused (400). Cost at twelve months, a gy
 beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
 the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
 
+**Built by 21d-ii (2026-10-14): a year earlier.** Under each figure that follows the
+period, one small line, "A year earlier: 9 · up 3", for the same days a year before
+(`yearEarlierOf`, `packages/shared/src/reportPeriod.ts`): four weeks go back 52 weeks, so
+a Monday is set beside a Monday; three and twelve months go back a calendar year, the same
+months up to the same day of the month (29 February is 28 February). The line under the
+picker names those days. **Which figures:** new members, members who left and the average
+stay; leads added and how many of them are marked Joined; visits, visits a member a week
+(the people on the list on that span's last day who were on it when its whole weeks
+began, over its whole weeks); how full classes were and no-shows; and money collected,
+for staff shown money. Counts, money and visits a member a week say "up", "down" or "the same"; shares and the
+stay give the earlier figure alone. What is true today, and the busiest time, have none.
+**A figure is given only where the app's records cover every day of that span:** the
+member list began before it (and, for new members, in an earlier month, since a list's
+first month holds no new members), the first lead, check-in, class or payment came on or
+before its first day; new members then are people the list held by that span's last day,
+so a file imported since with last year's join dates fills no year earlier. Otherwise the
+line says why, with the day those records began ("A
+year earlier: no figures. Your first check-in was on 31 Aug 2026."), never a zero and
+never "up" from nothing. Each of the three reads counts those days too, in the same
+statement or one beside it, with the gym in every WHERE (`readEarlierVisits`,
+`readCollected`, the `was` part of `readMemberCounts`; `readClassCounts` and
+`readLeadCounts` take the span). The cost tools seed two years of visits and payments:
+HANDOFF has the table.
+
 ### 16.6 Cards
 
 **20a** the inbox and the message rule (its table test first) · **20b** the automatic
