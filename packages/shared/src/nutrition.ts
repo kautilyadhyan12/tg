@@ -604,3 +604,79 @@ export type MealIdeasResponse = z.infer<typeof mealIdeasResponseSchema>;
  *  photo scans say they estimate calories and cannot detect allergens. One
  *  wording, for the web's sheet and the phone app's. */
 export const PHOTO_SCAN_CAUTION = "Calories from a photo are an estimate. A photo cannot detect allergens.";
+
+// ROADMAP 34e-i — a person's own diet plan: a week, Monday to Sunday, that repeats
+// until they change it (RULINGS 2026-09-12, "make their own diet plan").
+/** A day of the plan's week: 1 is Monday, 7 Sunday. */
+export const dietPlanDaySchema = z.number().int().min(1).max(7);
+export const dietPlanDayParamsSchema = z.object({ day: z.coerce.number().pipe(dietPlanDaySchema) }).strict();
+/** The most meals one day of the plan holds. */
+export const MOST_PLAN_MEALS = 8;
+/** One change's id, made by the phone: the same change sent twice is made once. */
+const planChangeIdSchema = z.string().uuid().toLowerCase();
+
+export const dietPlanMealSchema = z.object({
+  mealType: mealTypeSchema,
+  items: z.array(mealItemSchema).min(1).max(30),
+  totals: mealTotalsSchema,
+  /** The names of its foods of the app's own list that the person's diet answer, as it
+   *  is now, does not eat: a plan made before the answer changed, or a food the person
+   *  put in. Empty for a food the list has no diet for, and for no diet answer. */
+  outsideDiet: z.array(z.string()),
+}).strict();
+export type DietPlanMeal = z.infer<typeof dietPlanMealSchema>;
+
+const planNumbersSchema = z.object({
+  kcal: z.number().int(), proteinG: z.number().int(), carbsG: z.number().int(), fatG: z.number().int(),
+}).strict();
+export const dietPlanDayReplySchema = z.object({
+  day: dietPlanDaySchema,
+  meals: z.array(dietPlanMealSchema).max(MOST_PLAN_MEALS),
+  /** What the day's meals hold. */
+  planned: planNumbersSchema,
+  /** The day's targets, the rings' own; null while the person has no calorie number. */
+  target: planNumbersSchema.nullable(),
+  /** planned less target, each figure; null with the target. Below 0 is under it. */
+  off: planNumbersSchema.nullable(),
+}).strict();
+export type DietPlanDayReply = z.infer<typeof dietPlanDayReplySchema>;
+
+/** Whether the app can make the plan: it never makes one on a guessed answer
+ *  (RULINGS 2026-07-15), the same reasons as the meal ideas'. */
+export const dietPlanMakeSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok") }).strict(),
+  z.object({ status: z.literal("needs_answers"), missing: z.array(foodAnswerSchema).min(1) }).strict(),
+  z.object({ status: z.literal("needs_plan") }).strict(),
+]);
+export type DietPlanMake = z.infer<typeof dietPlanMakeSchema>;
+
+export const dietPlanResponseSchema = z.object({
+  days: z.array(dietPlanDayReplySchema).length(7),
+  make: dietPlanMakeSchema,
+  caution: z.literal(FOOD_ALLERGY_CAUTION),
+  /** For a vegetarian or vegan, or somebody with no diet answer; null for somebody who eats meat. */
+  labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
+}).strict();
+export type DietPlanResponse = z.infer<typeof dietPlanResponseSchema>;
+
+/** Make the plan: every day of the week, or the days named. It replaces what they held. */
+export const makeDietPlanRequestSchema = z.object({
+  changeId: planChangeIdSchema,
+  days: z.array(dietPlanDaySchema).min(1).max(7).refine((days) => new Set(days).size === days.length, { message: "a day is named once" }).optional(),
+}).strict();
+export type MakeDietPlanRequest = z.infer<typeof makeDietPlanRequestSchema>;
+
+/** A day as the person wants it, whole: its meals in order, each with its foods and
+ *  amounts. A meal left out is removed; no meals clears the day. */
+export const putDietPlanDayRequestSchema = z.object({
+  changeId: planChangeIdSchema,
+  meals: z.array(z.object({ mealType: mealTypeSchema, items: chosenItemsSchema }).strict()).max(MOST_PLAN_MEALS),
+}).strict();
+export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
+
+/** Swap one meal of a day, by its place in the day, for another idea of the same size. */
+export const swapDietPlanMealRequestSchema = z.object({
+  changeId: planChangeIdSchema,
+  meal: z.number().int().min(0).max(MOST_PLAN_MEALS - 1),
+}).strict();
+export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSchema>;

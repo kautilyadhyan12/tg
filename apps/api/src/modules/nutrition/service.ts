@@ -564,7 +564,7 @@ const asMeal = (r: repo.MealRow): Meal => ({
   itemsVersion: itemsVersion(r.items),
 });
 
-const totals = (items: readonly MealItem[]) => ({
+export const totals = (items: readonly MealItem[]) => ({
   kcalPoint: items.reduce((n, i) => n + i.kcalPoint, 0),
   kcalLow: items.reduce((n, i) => n + i.kcalLow, 0),
   kcalHigh: items.reduce((n, i) => n + i.kcalHigh, 0),
@@ -1142,7 +1142,7 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
 
 /** Search-resolved items for the manual flow — ONE implementation shared by
  *  createManualMeal and previewMeal (T3: divergence here is a trust bug). */
-async function resolveChosenItems(
+export async function resolveChosenItems(
   deps: NutritionDeps,
   userId: string,
   chosenItems: readonly ChosenItem[],

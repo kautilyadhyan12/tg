@@ -101,7 +101,7 @@ export const MOST_MEALS = 6;
 /** The most food one idea puts on the table, in grams. */
 export const MOST_IDEA_GRAMS = 750;
 /** Past this a bowl or toast cannot be made big enough, and a second plate takes its place. */
-const MOST_LIGHT_KCAL = 450;
+export const MOST_LIGHT_KCAL = 450;
 /** Under this a meal is a light one only. */
 const LEAST_PLATE_KCAL = 300;
 /** How far an idea's calories may be from the meal's, as a share of them. */
@@ -193,7 +193,7 @@ function toIdea(kind: MealIdeaKind, parts: readonly Part[]): MealIdea {
 }
 
 /** A number from a text, the same for the same text (FNV-1a, 32 bits). */
-function hash(text: string): number {
+export function hash(text: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);
@@ -253,12 +253,17 @@ export function mealSizes(day: DayNumbers): { kcalLeft: number; count: number; k
 /** Makes one reply's ideas, one at a time: `wanted` sized to `kcalTarget`, of
  *  foods the diet allows. An idea is within IDEA_TOLERANCE of its calories, holds
  *  no more than `mostKcal` and MOST_IDEA_GRAMS of food, and is in the reply once;
- *  null where none can be made so. The same seed gives the same ideas in the same order. */
-function ideaMaker(seed: string, diet: Diet): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number) => MealIdea | null {
+ *  null where none can be made so. The same seed gives the same ideas in the same order.
+ *  Foods `avoid` names are drawn only once no other fits. */
+export function ideaMaker(
+  seed: string,
+  diet: Diet,
+  avoid: Iterable<string> = [],
+): (kcalTarget: number, wanted: MealIdeaKind, mostKcal?: number) => MealIdea | null {
   const next = drawer(hash(seed));
   const allowed = (role: SuggestRole): CuratedFood[] => SUGGEST_POOLS[role].filter((f) => dietAllows(diet, f.diet));
-  /** The foods already in an idea of this reply. */
-  const used = new Set<string>();
+  /** The foods already in an idea of this reply, and those `avoid` names (a meal being swapped). */
+  const used = new Set<string>(avoid);
   /** Whether a draw keeps to foods not yet in the reply. */
   let freshOnly = true;
   /** One of the role's foods: one not yet in the reply while any is left, unless
