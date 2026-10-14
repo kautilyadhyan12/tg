@@ -1122,7 +1122,7 @@ describe('GamificationStrip — XP renders when the old backend does not', () =>
     const { container } = renderPage(<Dashboard />);
     await waitFor(() => expect(screen.getAllByText(/Level 3/).length).toBeGreaterThan(0));
     expect(container.textContent.length).toBeGreaterThan(0);
-    expect(screen.getByText('Recommendations are unavailable right now.')).toBeTruthy();
+    expect(await screen.findByText('Recommendations are unavailable right now.')).toBeTruthy();
   });
 
   it('a partial recommendation is neutral, not "advanced" — round 6 F3', async () => {

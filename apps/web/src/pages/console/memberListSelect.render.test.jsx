@@ -304,6 +304,8 @@ describe('selecting people', () => {
     // The old count is gone at once: no Send button to press with it.
     await waitFor(() => expect(box.queryByRole('button', { name: /^Send \d/ })).toBeNull());
     expect(bar().getByTestId('sel-count').textContent).toBe('314 selected');
+    // The new count is asked for once the page has redrawn; a slow machine gets here first.
+    await waitFor(() => expect(answer).toBeTypeOf('function'));
     answer(preview(302));
     expect(await box.findByRole('button', { name: 'Send 302 invitations' })).toBeTruthy();
     expect(orgService.getSelectedInvitePreview).toHaveBeenLastCalledWith(GYM, { kind: 'all', filter: {}, count: 314, digest: 'b'.repeat(64) });
