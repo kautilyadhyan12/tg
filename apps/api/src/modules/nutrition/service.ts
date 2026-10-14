@@ -1466,6 +1466,8 @@ export async function patchMeal(
     });
     if (row === null) return null;
     await keepTodaysTargets(deps, userId, row.takenAt);
+    // A meal moved to another day can finish or undo a week's food challenge (35b).
+    if (input.takenAt !== undefined) await awardMealBadges(deps, userId);
     return asMeal(row);
   } catch (err) {
     if (err instanceof repo.MealChangedError) throw mealChanged();
@@ -1479,8 +1481,11 @@ export async function patchMeal(
 
 type ReadDeps = Pick<NutritionDeps, "sql">;
 
-export async function deleteMeal(deps: ReadDeps, userId: string, id: string): Promise<boolean> {
-  return await repo.deleteMeal(deps.sql, userId, id);
+export async function deleteMeal(deps: NutritionDeps, userId: string, id: string): Promise<boolean> {
+  const deleted = await repo.deleteMeal(deps.sql, userId, id);
+  // A removed meal can undo a week's food challenge, so its XP is worked out again (35b).
+  if (deleted) await awardMealBadges(deps, userId);
+  return deleted;
 }
 export async function listDishware(
   deps: ReadDeps,

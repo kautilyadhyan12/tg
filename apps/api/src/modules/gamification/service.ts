@@ -2,7 +2,7 @@
 // module at sync (service interface, R7.1) and by its own /me route. All
 // mutations are retry-safe: streak transitions are day-idempotent and awards
 // upsert (R3.5).
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import * as repo from "./repo.js";
 import { badgeXpForCodes, earnedCodes } from "./badges.js";
 import {
@@ -12,7 +12,18 @@ import {
   xpProgress,
 } from "./xp.js";
 import { dayInTz, reconcile, replayActivityDays, safeTimeZone, type StreakState } from "./streak.js";
-import type { GamificationMe } from "@app/shared";
+import { weeklyChallengeCodeSchema, type GamificationMe, type WeeklyChallengeCode, type WeeklyChallenges } from "@app/shared";
+import { getPlanHealth, getUserFitnessLevel, getUserSyncContext } from "../users/service.js";
+import {
+  NO_FACTS,
+  challengeXp,
+  codesToHold,
+  measureChallenge,
+  pausedBySafeMode,
+  pickChallenges,
+  weekOf,
+  type WeekFacts,
+} from "./challenges.js";
 
 // Part of this module's service interface (R7.1) — other modules import the
 // tz helper from here, never from the internal streak.ts (T3 P2.3 nit).
@@ -65,25 +76,30 @@ export async function onWorkoutSynced(
  *  user_xp row exists yet (T3 F1: a SELECT … FOR UPDATE would lock nothing there
  *  and let two first-syncs lose an update). Since the total is a pure function
  *  of committed rows, serialized recompute is exactly correct. */
-async function recomputeXp(deps: GamificationDeps, userId: string, tz: string): Promise<number> {
-  // NOT exported (T3 F5): both callers are in this file, and an external caller
+async function recomputeXp(deps: GamificationDeps, userId: string, tz: string, now: Date = new Date()): Promise<number> {
+  // NOT exported (T3 F5): every caller is in this file, and an external caller
   // could not know the ordering rule that XP must be recomputed AFTER awards.
   // safeTimeZone is re-applied here rather than trusted from the caller —
   // getActivityDays' contract requires a validated zone, and the guard is
   // idempotent, so being self-contained costs nothing.
   const zone = safeTimeZone(tz);
+  // Safe mode on now pauses this week's challenges not yet done, for the rest of the week (35b).
+  const safeMode = (await getPlanHealth(deps.sql, userId))?.safeMode === true;
+  const thisWeek = weekOf(dayInTz(now, zone)).weekStart;
   return await deps.sql.begin(async (tx) => {
     await repo.lockXpForUser(tx, userId); // serialize concurrent recompute (T3 F1)
+    if (safeMode) await holdThisWeek(tx, userId, thisWeek);
     const counts = await repo.getXpAccrualCounts(tx, userId);
     const days = await repo.getActivityDays(tx, userId, zone);
     const earned = await repo.listEarned(tx, userId);
-    const total = computeTotalXp({
-      workoutCount: counts.workoutCount,
-      perfectFormWorkouts: counts.perfectFormWorkouts,
-      excellentFormWorkouts: counts.excellentFormWorkouts,
-      streakContinuationDays: countStreakContinuationDays(days),
-      badgeXp: badgeXpForCodes(earned.map((e) => e.code)),
-    });
+    const total =
+      computeTotalXp({
+        workoutCount: counts.workoutCount,
+        perfectFormWorkouts: counts.perfectFormWorkouts,
+        excellentFormWorkouts: counts.excellentFormWorkouts,
+        streakContinuationDays: countStreakContinuationDays(days),
+        badgeXp: badgeXpForCodes(earned.map((e) => e.code)),
+      }) + (await weeklyChallengeXp(tx, userId));
     await repo.upsertXp(tx, userId, total);
     return total;
   });
@@ -226,5 +242,102 @@ export async function getMe(
       nextLevelAt: p.nextLevelAt,
     },
     achievements: earned.map((e) => ({ code: e.code, earnedAt: e.earnedAt.toISOString() })),
+  };
+}
+
+/** The week's codes as kept, minus any the app no longer has. */
+const codesOf = (stored: readonly string[]): WeeklyChallengeCode[] =>
+  stored.flatMap((c) => {
+    const parsed = weeklyChallengeCodeSchema.safeParse(c);
+    return parsed.success ? [parsed.data] : [];
+  });
+
+/** Safe mode is on: this week's challenges not yet done are paused for the rest of the
+ *  week, and one already done keeps its XP (35b). Inside recomputeXp's lock. */
+async function holdThisWeek(tx: TransactionSql, userId: string, weekStart: string): Promise<void> {
+  const week = await repo.getWeekPicks(tx, userId, weekStart);
+  if (week === null) return;
+  const [facts] = await repo.weekFacts(tx, userId, safeTimeZone(week.timeZone), [weekStart]);
+  const held = codesToHold(codesOf(week.codes), codesOf(week.heldCodes), facts ?? NO_FACTS);
+  if (held.length !== week.heldCodes.length) await repo.setHeldCodes(tx, userId, weekStart, held);
+}
+
+/** XP from every week's done challenges (ROADMAP 35b), worked out again from the person's
+ *  own workouts and meals, so a workout sent twice never pays twice. Each week is read in
+ *  the zone it was picked in. Inside recomputeXp's lock. */
+async function weeklyChallengeXp(tx: TransactionSql, userId: string): Promise<number> {
+  const weeks = await repo.listWeekPicks(tx, userId);
+  const facts = new Map<string, WeekFacts>();
+  for (const zone of new Set(weeks.map((w) => w.timeZone))) {
+    const inZone = weeks.filter((w) => w.timeZone === zone).map((w) => w.weekStart);
+    for (const f of await repo.weekFacts(tx, userId, safeTimeZone(zone), inZone)) facts.set(f.weekStart, f);
+  }
+  return challengeXp(
+    weeks.map((w) => ({ weekStart: w.weekStart, codes: codesOf(w.codes), heldCodes: codesOf(w.heldCodes) })),
+    facts,
+  );
+}
+
+/** The health answer was saved (ROADMAP 35b): if Safe mode is on now, this week's
+ *  challenges but the gentle two are paused, and the XP is worked out again so a paused
+ *  one pays nothing. */
+export async function onHealthAnswered(deps: GamificationDeps, userId: string): Promise<void> {
+  const ctx = await getUserSyncContext(deps.sql, userId);
+  await recomputeXp(deps, userId, safeTimeZone(ctx.timezone));
+}
+
+const CAMERA_LOOKBACK_MS = 28 * 86_400_000;
+
+/** This week's challenges (ROADMAP 35b): picked on the first read of the week and kept
+ *  until Sunday, then measured from the person's own workouts and meals. */
+export async function getWeeklyChallenges(
+  deps: GamificationDeps,
+  userId: string,
+  now: Date = new Date(),
+): Promise<WeeklyChallenges> {
+  const ctx = await getUserSyncContext(deps.sql, userId);
+  const tz = safeTimeZone(ctx.timezone);
+  const { weekStart, weekEnd } = weekOf(dayInTz(now, tz));
+  const safeMode = (await getPlanHealth(deps.sql, userId))?.safeMode === true;
+  const pick = async (): Promise<WeeklyChallengeCode[]> =>
+    pickChallenges({
+      userId,
+      weekStart,
+      fitnessLevel: await getUserFitnessLevel(deps.sql, userId),
+      safeMode,
+      weightKnown: ctx.weightKg !== null,
+      usedCamera: await repo.usedCameraBetween(deps.sql, userId, new Date(now.getTime() - CAMERA_LOOKBACK_MS), now),
+    });
+
+  const kept = await repo.getWeekPicks(deps.sql, userId, weekStart);
+  // A week already part done pays at once, not at the next workout; and Safe mode pauses
+  // this week's other challenges before any of them is shown or paid.
+  let changed = false;
+  if (kept === null) {
+    changed = await repo.insertWeekPicks(deps.sql, userId, weekStart, tz, await pick());
+  } else if (codesOf(kept.codes).length === 0) {
+    // Every challenge kept for the week is one the app no longer has.
+    await repo.replaceWeekPicks(deps.sql, userId, weekStart, kept.codes, tz, await pick());
+    changed = true;
+  } else if (safeMode) {
+    const [before] = await repo.weekFacts(deps.sql, userId, safeTimeZone(kept.timeZone), [weekStart]);
+    const held = codesOf(kept.heldCodes);
+    changed = codesToHold(codesOf(kept.codes), held, before ?? NO_FACTS).length !== held.length;
+  }
+  if (changed) await recomputeXp(deps, userId, tz, now);
+  const week = await repo.getWeekPicks(deps.sql, userId, weekStart);
+  if (week === null) throw new Error("the week's challenges were not kept");
+
+  const [facts] = await repo.weekFacts(deps.sql, userId, safeTimeZone(week.timeZone), [weekStart]);
+  const held = codesOf(week.heldCodes);
+  const challenges = codesOf(week.codes).map((code) => {
+    const done = measureChallenge(code, facts ?? NO_FACTS, false).done;
+    return measureChallenge(code, facts ?? NO_FACTS, held.includes(code) || (safeMode && pausedBySafeMode(code) && !done));
+  });
+  return {
+    weekStart,
+    weekEnd,
+    challenges,
+    xpThisWeek: challenges.reduce((sum, c) => sum + (c.done && c.held === null ? c.xp : 0), 0),
   };
 }

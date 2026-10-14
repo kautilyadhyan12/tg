@@ -359,7 +359,7 @@ export function registerNutritionRoutes(
     { preHandler: [app.authenticate] },
     async (req, reply) => {
       if (!UUID.test(req.params.id)) return notFound(req, reply);
-      const deleted = await service.deleteMeal(readDeps, authedUserId(req), req.params.id);
+      const deleted = await service.deleteMeal(nutritionDeps, authedUserId(req), req.params.id);
       return deleted ? reply.status(204).send() : notFound(req, reply);
     },
   );
