@@ -1,5 +1,5 @@
 import { formatMinor, minorToPriceText } from '@app/shared';
-import { countedSpan, csvWords, dayText, monthLong, monthShort, periodName } from './reportsView';
+import { changeWords, countedSpan, csvWords, dayText, earlierDays, earlierLine, monthLong, monthShort, periodName } from './reportsView';
 import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 
 // The Reports page's money words (spec Part 3 §16.5; ROADMAP 21b-i, 21d-i). The figures come from
@@ -117,10 +117,15 @@ export function moneyTiles(report, words, orgSlug) {
       label: 'Collected',
       value: moneyText(report.inPeriod.netMinor, cur),
       line: null,
+      earlier: earlierLine(
+        report.yearEarlier,
+        (f) => `Your first payment was recorded on ${dayText(f.since)}.`,
+        (f) => `${moneyText(f.netMinor, cur)} · ${changeWords(report.inPeriod.netMinor, f.netMinor, (n) => moneyText(n, cur))}`,
+      ),
       note: refunded
         ? `${span}: ${moneyText(report.inPeriod.paidMinor, cur)} paid, ${moneyText(report.inPeriod.refundedMinor, cur)} refunded · ${soFar}`
         : `${span} · ${soFar}`,
-      how: `Payments your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment or a refund that was undone is not counted.`,
+      how: `Payments your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment or a refund that was undone is not counted. ${earlierDays(report.period, report.yearEarlier)}`,
       links: [],
     },
     {

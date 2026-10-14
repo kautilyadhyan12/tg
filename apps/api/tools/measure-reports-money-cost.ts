@@ -1,7 +1,8 @@
 // What the Reports page's money figures cost to read (ROADMAP 21b-i; CLAUDE.md §4 "Cost at
 // full size"). One gym of 2,000 people on its list (--people= for another size) with three
 // former records for each, beside 19 gyms of 200. Everybody on a list holds a monthly
-// membership a year old with a bill and a payment for each of its twelve months; one in
+// membership two years old with a bill and a payment for each of its 24 months, so the
+// same period a year earlier (21d-ii) has its own; one in
 // five has not paid the newest, and one payment in twenty has a refund noted.
 //
 // Two numbers each: how long it takes, and how long the server's one thread is busy and
@@ -37,7 +38,7 @@ const PERIOD = reportPeriodKeySchema.parse(periodArg === undefined ? "12m" : per
 const KEEP = process.argv.includes("--keep");
 const CLEAN_ONLY = process.argv.includes("--clean");
 const FORMER_EACH = 3;
-const MONTHS = 12;
+const MONTHS = 24;
 const PRICE = 4500;
 const OTHER_GYMS = 19;
 const OTHER_PEOPLE = 200;
@@ -87,7 +88,7 @@ async function makeGym(people: number): Promise<Made> {
       email: `${PREFIX}l-${String(i)}-${id}@example.com`,
       identity_key: createHash("sha256").update(id).digest("hex"),
       source: "upload",
-      created_at: new Date(now.getTime() - 500 * DAY_MS),
+      created_at: new Date(now.getTime() - 900 * DAY_MS),
       // The former records left over the last year, so every month has leavers.
       former_at: i >= people ? new Date(now.getTime() - (20 + (i % 330)) * DAY_MS) : null,
     };
@@ -98,13 +99,13 @@ async function makeGym(people: number): Promise<Made> {
   await sql`
     INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
     VALUES (${gold}, ${gymId}, 'Gold Monthly', 'recurring', ${PRICE}::int, 'GBP', 1, 'month', 'all_classes')`;
-  // Started eleven months and ten days ago: today is in its twelfth month. One in five
+  // Started 23 months and ten days ago: today is in its 24th month. One in five
   // has not paid that month.
   await sql`
     INSERT INTO gym_held_memberships
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews)
     SELECT ${gymId}, e.id, ${gold}, gen_random_uuid(), 'recurring', ${PRICE}::int, 'GBP', 1, 'month',
-           (current_date - interval '11 months' - interval '10 days')::date, 'active',
+           (current_date - interval '23 months' - interval '10 days')::date, 'active',
            CASE WHEN right(e.full_name, 6) = '0 Cost' OR right(e.full_name, 6) = '5 Cost' THEN ${MONTHS - 1}::int ELSE ${MONTHS}::int END, true
     FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.former_at IS NULL`;
   await sql`

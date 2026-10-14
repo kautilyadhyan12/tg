@@ -31,3 +31,38 @@ export function reportPeriodOf(key: ReportPeriodKey, today: string): ReportPerio
   if (key === "4w") return { key, from: addDays(today, -27), to: today };
   return { key, from: firstOfMonthBack(today, key === "3m" ? 2 : 11), to: today };
 }
+
+/** The same days a year earlier (ROADMAP 21d-ii), both ends among them. */
+export const yearEarlierSpanSchema = z.object({ from: daySchema, to: daySchema }).strict();
+export type YearEarlierSpan = z.infer<typeof yearEarlierSpanSchema>;
+
+/** `day` a calendar year back; 29 February is 28 February. */
+function yearBack(day: string): string {
+  const year = Number(day.slice(0, 4)) - 1;
+  const month = day.slice(5, 7);
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const dayOfMonth = month === "02" && day.slice(8) === "29" && !leap ? "28" : day.slice(8);
+  return `${String(year).padStart(4, "0")}-${month}-${dayOfMonth}`;
+}
+
+/** The days a period is set beside a year earlier. Four weeks go back 52 weeks, so a
+ *  Monday is set beside a Monday; three and twelve months go back a calendar year, the
+ *  same months up to the same day of the month. */
+export function yearEarlierOf(period: ReportPeriod): YearEarlierSpan {
+  if (period.key === "4w") return { from: addDays(period.from, -364), to: addDays(period.to, -364) };
+  return { from: yearBack(period.from), to: yearBack(period.to) };
+}
+
+/** A figure a year earlier: its counts, or, where the app's records of it began after
+ *  those days did (`since`, null with none ever), no figure and the day they began. */
+export function yearEarlierFigureSchema<T extends z.ZodRawShape>(shape: T) {
+  return z.discriminatedUnion("state", [
+    z.object({ state: z.literal("ok"), from: daySchema, to: daySchema, ...shape }).strict(),
+    z.object({ state: z.literal("no_history"), from: daySchema, to: daySchema, since: daySchema.nullable() }).strict(),
+  ]);
+}
+
+/** Whether records that began on `since` cover every day from `from` on. */
+export function coversFrom(since: string | null, from: string): since is string {
+  return since !== null && since <= from;
+}

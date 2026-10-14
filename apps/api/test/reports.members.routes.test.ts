@@ -44,6 +44,11 @@ const nextIp = () => `10.21.${String(Math.floor(ipCounter / 250))}.${String((ipC
 const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies =>
   Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
 
+/** A year earlier, for a gym whose records began in 2026
+ *  (`reports.yearEarlier.routes.test.ts` holds the figures themselves). */
+const someText: unknown = expect.any(String);
+const NO_YEAR = { state: "no_history", from: someText, to: someText, since: someText };
+
 d("Reports, members: whose figures, who reads them, and what they count (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const redis = createMemoryRedis();
@@ -213,6 +218,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
           thisMonth: { month: "2026-10", joined: 1, left: 1 },
           // New is counted from July, the month after the list began: one in July and one in October.
           inPeriod: { joined: 2, joinedFrom: "2026-07-01", left: 4 },
+          yearEarlier: NO_YEAR,
           churnMonths: ["2026-07", "2026-08", "2026-09"],
           // Of 13 + 13 + 12 on the list as July, August and September began, 0 + 1 + 1 left.
           churn: { state: "ok", percent: 5.3 },
@@ -251,6 +257,7 @@ d("Reports, members: whose figures, who reads them, and what they count (real Po
           fullMonths: 1,
           thisMonth: { month: "2026-10", joined: 0, left: 1 },
           inPeriod: { joined: 0, joinedFrom: "2026-10-01", left: 1 },
+          yearEarlier: NO_YEAR,
           churnMonths: [],
           churn: { state: "not_enough_data" },
           retention: { state: "not_enough_data" },

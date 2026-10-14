@@ -52,6 +52,7 @@ const facts = (over = {}) => ({
     { source: 'walk_in', leads: 3, joined: 1 },
     { source: 'friend', leads: 1, joined: 1 },
   ],
+  yearEarlier: { joined: 0, late: 0, lateOn: null },
   ...over,
 });
 const NOBODY_REMOVED = facts({
@@ -111,7 +112,7 @@ describe('the members figures', () => {
     expect(svc.members).toHaveBeenCalledWith('g1', '12m');
     expect(['active', 'new', 'left', 'churn', 'retention', 'stay'].map((k) => tile(k).textContent)).toEqual([
       'Members now11Members on your list, month by month1 Jul 2026Today',
-      'New members2since 1 Jul 2026, the month after your member list started',
+      'New members2since 1 Jul 2026, the month after your member list startedA year earlier: no figures. Your member list started on 10 Jun 2026.',
       'Members who left4since 10 Jun 2026, when your member list started',
       'Churn5.3%a month, Jul to Sep 2026',
       'Retention94.7%a month, Jul to Sep 202694.7% stayed5.3% left',
@@ -367,7 +368,8 @@ describe('the period', () => {
     expect(screen.getByTestId('period-line').textContent).toBe(
       "Showing 1 Nov 2025 to 10 Oct 2026. Members now, churn and retention are today's figures, so they stay the same whichever period you choose.",
     );
-    expect(svc.attendance).toHaveBeenCalledWith('g1', '12m');
+    // Attendance is asked for once its part of the page is drawn, a moment after the members tiles.
+    await waitFor(() => expect(svc.attendance).toHaveBeenCalledWith('g1', '12m'));
   });
 
   it('staff who are shown money read which money figures do not move', async () => {
@@ -433,7 +435,7 @@ describe('the period', () => {
     ]);
     expect(svc.members).toHaveBeenLastCalledWith('g1', '4w');
     await waitFor(() => expect(svc.attendance).toHaveBeenLastCalledWith('g1', '4w'));
-    expect(tile('new').textContent).toBe('New members213 Sep 2026 to 10 Oct 2026');
+    expect(tile('new').textContent).toBe('New members213 Sep 2026 to 10 Oct 2026A year earlier: 0 · up 2');
     expect(tile('left').textContent).toBe('Members who left413 Sep 2026 to 10 Oct 2026');
     // Four weeks touch two months; the table lists those and no other.
     expect(tableRows('Members, month by month').map((row) => row[0])).toEqual(['Month', 'Oct 2026 (so far)', 'Sep 2026']);
