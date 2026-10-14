@@ -13,7 +13,7 @@ import {
 } from "../gamification/service.js";
 import { xpEarnedForWorkout } from "../gamification/xp.js";
 import {
-  mealSuggestionsFor,
+  mealSuggestionsFrom,
   personalRecordsFor,
   primaryMusclesFor,
   stretchesFor,
@@ -21,7 +21,8 @@ import {
 import { getEntitlements } from "../entitlements/service.js";
 import type { RedisLike } from "../../redis.js";
 import { z } from "zod";
-import { getUserDiet, getUserSyncContext } from "../users/service.js";
+import { getUserSyncContext } from "../users/service.js";
+import { getAfterWorkoutIdeas } from "../nutrition/service.js";
 import {
   KCAL_CALC_VERSION_V1,
   KCAL_CALC_VERSION_V2,
@@ -267,14 +268,14 @@ export async function getWorkoutSummary(
   // The guarantee that matters is unchanged: same query, same gate, so the
   // summary and the records screen cannot disagree about who holds a record.
   const gate = await historyGate(deps, userId);
-  const [me, records, isContinuation, hasEarlierToday, diet] = await Promise.all([
+  const [me, records, isContinuation, hasEarlierToday, food] = await Promise.all([
     getGamificationMe({ sql: deps.sql }, userId, ctx.timezone),
     repo.getPersonalRecords(deps.sql, userId, gate.floor),
     isContinuationDay({ sql: deps.sql }, userId, ctx.timezone, workout.startedAt),
     repo.hasEarlierWorkoutOnDay(deps.sql, userId, workout.id, workout.startedAt, tz),
     // The meal ideas follow the person's diet as it is NOW (RULINGS 2026-09-13),
     // so a diet changed in Settings changes the ideas on the next read.
-    getUserDiet(deps.sql, userId),
+    getAfterWorkoutIdeas({ sql: deps.sql }, userId, { id: workout.id, startedAt: workout.startedAt, kcalBurned: workout.kcalPoint }),
   ]);
 
   // ONE STREAK BONUS PER DAY, awarded to the day's FIRST workout — see
@@ -331,7 +332,8 @@ export async function getWorkoutSummary(
       longestValue: records.longestWorkout?.value ?? null,
       bestAvgFormValue: records.bestAvgForm?.value ?? null,
     }),
-    mealSuggestions: mealSuggestionsFor(workout.kcalPoint, diet),
+    mealSuggestions: mealSuggestionsFrom(food.ideas),
+    mealLabelCaution: food.labelCaution,
     stretches: stretchesFor(primaryMusclesFor(sets.map((s) => s.exerciseSlug))),
   };
 }

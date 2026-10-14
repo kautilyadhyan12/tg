@@ -28,7 +28,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { FOOD_ALLERGY_CAUTION } from '@app/shared';
+import { DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION } from '@app/shared';
 
 // Only the NETWORK functions are mocked. readXpView / readStatsView /
 // readOverviewView / orUnknown / formatLevel — every piece of logic that decides
@@ -2631,6 +2631,33 @@ describe('PostWorkout — the last copy of the hardcoded-100 XP curve', () => {
       expect(screen.queryByText(FOOD_ALLERGY_CAUTION)).toBeNull();
       cleanup();
     }
+  });
+
+  it('a vegetarian or vegan reads the label line under the allergy line, and only under ideas (Kd, 2026-10-14)', async () => {
+    gamificationService.getMe.mockResolvedValue({ data: XP_LEVEL_3 });
+    workoutService.getSummary.mockResolvedValue({ data: { ...SUMMARY_LISTS, mealLabelCaution: DIET_LABEL_CAUTION } });
+    renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+    const allergy = screen.getByText(FOOD_ALLERGY_CAUTION);
+    const label = screen.getByText(DIET_LABEL_CAUTION);
+    expect(allergy.closest('.card')).toBe(label.closest('.card'));
+    expect(allergy.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+
+    // Somebody who eats meat reads no label line.
+    workoutService.getSummary.mockResolvedValue({ data: { ...SUMMARY_LISTS, mealLabelCaution: null } });
+    renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+    expect(screen.queryByText(DIET_LABEL_CAUTION)).toBeNull();
+    cleanup();
+
+    // No ideas, because the day's calories are eaten: one line says so, and no caution.
+    workoutService.getSummary.mockResolvedValue({ data: { ...SUMMARY, mealLabelCaution: DIET_LABEL_CAUTION } });
+    renderPostWorkout();
+    await waitFor(() => expect(screen.getByText('Workout Complete!')).toBeTruthy());
+    expect(screen.getByText("You have eaten today's calories, so there is no meal to suggest.")).toBeTruthy();
+    expect(screen.queryByText(DIET_LABEL_CAUTION)).toBeNull();
+    expect(screen.queryByText(FOOD_ALLERGY_CAUTION)).toBeNull();
   });
 
   it('lists arriving as strings do not blank the page', async () => {

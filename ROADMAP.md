@@ -442,7 +442,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 34c-iii. [x] **Brazil and Asia** — merged 2026-10-13 (PR #255).
     - 34d. **Meal suggestions** (7a; split 2026-10-13 in three: the first needs no phone).
       - 34d-i. [x] **The server makes the day's meal ideas** — merged 2026-10-14 (PR #257).
-      - 34d-ii. [ ] **The meal ideas after a workout come from the same place** (one source of food ideas; no phone needed).
+      - 34d-ii. [x] **The meal ideas after a workout come from the same place** — merged 2026-10-14 (PR #258).
       - 34d-iii. [ ] **The ideas on the Food screen**, each logged with one tap, and the Food option of Today's Recommended box (7a-ii). Waits for 32b.
     - 34e. [ ] **Your own diet plan** (7c). 34f. [ ] **Your week in food** (7d). Each is split again by the terminal that reaches it.
 35. [ ] **Progress**: the charts, the workout calendar, body measurements and weigh-ins, badges; then weekly challenges and predictions on the new server (dead on the web; spec Part 2B §5).
