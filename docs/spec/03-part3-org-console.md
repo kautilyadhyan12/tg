@@ -1908,9 +1908,13 @@ phone's: refresh answers `{ tokens }`. A token is taken only the way its sign-in
 made (a phone's from the body, a browser's from its cookie); the other way ends
 nothing, a plain 401 on refresh. The phone's way is refused (400) to any request that
 carries an `Origin`, as every browser's does, so no script in a page is ever handed a
-token. A phone's refresh sent again within 60 seconds, its reply lost, is answered
-with a new token and its unreceived successor is ended; after that, or once the
-successor has been used, the same token again is reuse and ends the sign-in. The old phone's 401 is `signed_in_elsewhere`
+token. A phone's refresh sent again, its reply lost, is answered with a new token and
+its unreceived successor is ended, for as long as that successor was never used and the
+token is inside its own life: no clock (12b-i's review, 2026-10-14: a reply lost in a
+lift and the app opened the next day signed the person out after 60 seconds). Once the
+successor has been used, the same token again is reuse and ends the sign-in; a thief
+answered with an old token is ended, with the whole sign-in, by the phone's own next
+refresh. The old phone's 401 is `signed_in_elsewhere`
 (`SIGNED_IN_ELSEWHERE` in `@app/shared`). Its access token lasts out its fifteen
 minutes, as a signed-out browser's does. Google on the phone is 12d.
 

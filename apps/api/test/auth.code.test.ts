@@ -3,7 +3,7 @@
 // sender is the only way to a code — it is stored as an HMAC, by design.
 //
 // Every rule Kd set has a test that fails if the rule is deleted: ten-minute
-// life · resend replaces · sixty-second gap · two a day per address · five
+// life · resend replaces · sixty-second gap · three a day per address · five
 // wrong guesses kill the code · single use · asking never creates an account
 // or reveals one · a code sent to one address opens no other account.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -273,37 +273,39 @@ d("sign-in by email code (real Postgres)", () => {
     expect((await sql`SELECT 1 FROM users WHERE email = ${email}`).length).toBe(0);
   });
 
-  it("two codes a day per address: the third is refused until the day has passed", { timeout: 30_000 }, async () => {
+  it("three codes a day per address, the first and two resends: the fourth is refused until the day has passed", { timeout: 30_000 }, async () => {
     const email = "code-daycap@example.com";
-    expect((await send(email)).statusCode).toBe(200);
-    await ageCodes(email, "61 seconds");
-    expect((await send(email)).statusCode).toBe(200);
-    await ageCodes(email, "61 seconds");
+    for (let sentSoFar = 0; sentSoFar < 3; sentSoFar++) {
+      expect([sentSoFar, (await send(email)).statusCode]).toEqual([sentSoFar, 200]);
+      await ageCodes(email, "61 seconds");
+    }
 
-    const third = await send(email);
-    expect(third.statusCode).toBe(429);
-    expect((JSON.parse(third.body) as { error: string; message: string }).error).toBe("code_limit");
-    expect((JSON.parse(third.body) as { message: string }).message).toMatch(/too many codes today/i);
+    const fourth = await send(email);
+    expect(fourth.statusCode).toBe(429);
+    expect((JSON.parse(fourth.body) as { error: string; message: string }).error).toBe("code_limit");
+    expect((JSON.parse(fourth.body) as { message: string }).message).toMatch(/too many codes today/i);
 
-    // Tomorrow: the two old ones fall out of the window.
+    // Tomorrow: the old ones fall out of the window.
     await ageCodes(email, "24 hours");
     expect((await send(email)).statusCode).toBe(200);
   });
 
-  it("a code that signed you in does not count against the day: sign in, then two more codes are still allowed", { timeout: 30_000 }, async () => {
+  it("a code that signed you in does not count against the day: sign in, then three more codes are still allowed", { timeout: 30_000 }, async () => {
     // Kd's amendment of 2026-09-08 after the click-through locked him out: a
-    // morning sign-in plus an evening sign-in with one resend is a normal day.
+    // morning sign-in plus an evening sign-in with its resends is a normal day.
     const email = "code-daycap-used@example.com";
     expect((await send(email)).statusCode).toBe(200);
     expect((await verify(email, lastCodeFor(email))).statusCode).toBe(200); // used
     await ageCodes(email, "61 seconds");
-    expect((await send(email)).statusCode).toBe(200); // unused 1 of 2
+    expect((await send(email)).statusCode).toBe(200); // unused 1 of 3
     await ageCodes(email, "61 seconds");
-    expect((await send(email)).statusCode).toBe(200); // unused 2 of 2
+    expect((await send(email)).statusCode).toBe(200); // unused 2 of 3
     await ageCodes(email, "61 seconds");
-    const fourth = await send(email);
-    expect(fourth.statusCode).toBe(429);
-    expect((JSON.parse(fourth.body) as { error: string }).error).toBe("code_limit");
+    expect((await send(email)).statusCode).toBe(200); // unused 3 of 3
+    await ageCodes(email, "61 seconds");
+    const fifth = await send(email);
+    expect(fifth.statusCode).toBe(429);
+    expect((JSON.parse(fifth.body) as { error: string }).error).toBe("code_limit");
   });
 
   it("asking again immediately after signing in is still refused as too soon", { timeout: 30_000 }, async () => {

@@ -14,8 +14,14 @@ import type { PhoneAppExtra } from "@app/shared";
 import { readAppExtra } from "./appExtra";
 import { colours } from "./look/colours";
 import type { IconName } from "./look/Icon";
+import { Page } from "./look/Page";
 import { TabBar } from "./look/TabBar";
-import { CopyContext, type Ask } from "./screens/ThisCopy";
+import { SignInScreen } from "./screens/SignIn";
+import { CopyContext, ThisCopy } from "./screens/ThisCopy";
+import type { Ask } from "./session/calls";
+import { phoneKeyStore } from "./session/keyStore";
+import type { KeyStore } from "./session/session";
+import { SessionProvider, useSession } from "./session/SessionProvider";
 import { FoodScreen, GymScreen, MeScreen, DashboardScreen, WorkoutScreen } from "./screens/tabs";
 
 /** The five tabs, in their order (spec Part 6 §16.3a). A tab's name is the word under its icon. */
@@ -48,28 +54,48 @@ interface AppProps {
   /** Tests hand these in; the app reads its own. */
   extra?: PhoneAppExtra | null;
   ask?: Ask;
+  store?: KeyStore;
+  wait?: (ms: number) => Promise<void>;
 }
 
-export function App({ extra, ask = fetch }: AppProps) {
+/** Signed out, the sign-in screen and nothing of anybody's; signed in, the five tabs. */
+function SignedInOrOut() {
+  const { state } = useSession();
+  if (state.kind === "starting") return <View style={styles.page} />;
+  if (state.kind === "out") return <SignInScreen note={state.note} />;
+  return (
+    <NavigationContainer theme={theme}>
+      <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} icons={tabIcons} />}>
+        {TABS.map((tab) => (
+          <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
+        ))}
+      </Tabs.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export function App({ extra, ask = fetch, store = phoneKeyStore, wait }: AppProps) {
   // A font that cannot be read must not leave a blank page: the phone's own font shows instead.
   const [fontsReady, fontsFailed] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
   const copy = useMemo(() => ({ extra: extra === undefined ? readAppExtra() : extra, ask }), [extra, ask]);
+  const apiUrl = copy.extra?.apiUrl;
+  const server = useMemo(() => (apiUrl === undefined ? null : { apiUrl, ask }), [apiUrl, ask]);
 
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" />
       {fontsReady || fontsFailed !== null ? (
         <CopyContext.Provider value={copy}>
-          <NavigationContainer theme={theme}>
-            <Tabs.Navigator
-              screenOptions={{ headerShown: false }}
-              tabBar={(props) => <TabBar {...props} icons={tabIcons} />}
-            >
-              {TABS.map((tab) => (
-                <Tabs.Screen key={tab.name} name={tab.name} component={tab.screen} />
-              ))}
-            </Tabs.Navigator>
-          </NavigationContainer>
+          {server === null ? (
+            // A copy that opened with no settings has no server to sign in to, and says so.
+            <Page>
+              <ThisCopy />
+            </Page>
+          ) : (
+            <SessionProvider server={server} store={store} wait={wait}>
+              <SignedInOrOut />
+            </SessionProvider>
+          )}
         </CopyContext.Provider>
       ) : (
         <View style={styles.page} />

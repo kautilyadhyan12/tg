@@ -1,30 +1,27 @@
 import { StyleSheet, View } from "react-native";
-import { Badge, Card } from "../look/Card";
+import { Badge, Card, Pill } from "../look/Card";
 import type { IconName } from "../look/Icon";
 import { Txt } from "../look/Txt";
 
-/** Sign-in is ROADMAP Stage 5 item 12. Until it is built a tab has nothing of anybody's to show, and says so. */
-export const NO_SIGN_IN = "This copy of the app has no sign-in yet.";
+/** A tab's own feature comes with its own job; until then one line names it, with no made-up number. */
+export const COMING_SOON = "Coming soon";
 
-/** What a tab will hold, in the tab's own box, with no made-up number. */
-export function Soon({ icon, title, line }: { icon: IconName; title: string; line: string }) {
+export function Soon({ icon, title }: { icon: IconName; title: string }) {
   return (
-    <Card>
-      <View style={styles.head}>
-        <Badge icon={icon} />
-        <Txt kind="h3" style={styles.title}>
-          {title}
-        </Txt>
-      </View>
-      <Txt>{line}</Txt>
-      <Txt kind="small" colour="textFaint">
-        {NO_SIGN_IN}
+    <Card style={styles.row}>
+      <Badge icon={icon} />
+      <Txt kind="h3" style={styles.title}>
+        {title}
       </Txt>
+      {/* A pill keeps to its own top; this keeps it level with a title of two lines. */}
+      <View>
+        <Pill label={COMING_SOON} />
+      </View>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: 10 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
   title: { flex: 1 },
 });

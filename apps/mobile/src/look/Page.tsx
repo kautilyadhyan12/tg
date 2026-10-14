@@ -1,17 +1,18 @@
 import type { ReactNode } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colours, sizes } from "./colours";
 
-/** A tab's page: the near-black page, its boxes one under another, clear of the phone's own top bar. */
-export function Page({ children }: { children: ReactNode }) {
+/** A tab's page: the near-black page, its boxes one under another. `top` is its own picture, edge to
+ *  edge from the top of the phone; a page with none starts clear of the phone's own top bar. */
+export function Page({ top, children }: { top?: ReactNode; children: ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
-    <ScrollView
-      style={styles.page}
-      contentContainerStyle={[styles.boxes, { paddingTop: insets.top + sizes.edge }]}
-    >
-      {children}
+    <ScrollView style={styles.page} keyboardShouldPersistTaps="handled">
+      {top}
+      <View style={[styles.boxes, { paddingTop: top === undefined ? insets.top + sizes.edge : sizes.gap }]}>
+        {children}
+      </View>
     </ScrollView>
   );
 }

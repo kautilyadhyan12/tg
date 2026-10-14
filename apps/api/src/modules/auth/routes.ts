@@ -203,15 +203,15 @@ export function registerAuthRoutes(
   const googleRefusedKey = (req: FastifyRequest) => `rl:google_refused:ip:${req.ip}`;
 
   // ── sign-in by email code (Kd 2026-09-07) ─────────────────────────────────
-  // The per-ADDRESS limits are in the database (two unused codes a day, five
+  // The per-ADDRESS limits are in the database (three unused codes a day, five
   // guesses a code). These Redis buckets are the wall against a client that VARIES
   // the address, which the per-address rule cannot see: every send is an
   // email Kd pays for. A gym's wi-fi or a phone company's gateway puts a whole
   // gym on one internet address (ROADMAP Stage 4 item 10: 200 people in an hour),
   // so the address's first 20 sends an hour go straight through and every send
   // after needs the robot check (`codeRobotGate`), not a refusal. 500 an hour is
-  // the ceiling even with the check: 200 people at two codes a day each (the
-  // database's own limit), with room. On top sits ONE ceiling on sends a day
+  // the ceiling even with the check: 200 people at a code and a resend each, with
+  // room (all three of the database's own limit, from everybody, would be 600). On top sits ONE ceiling on sends a day
   // across everyone — the outage-and-bill stop.
   const codeSendLimit = createDualRateLimit({
     name: "code_send",

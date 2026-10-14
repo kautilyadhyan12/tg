@@ -1,8 +1,8 @@
 // SIGN-IN BY 6-DIGIT EMAIL CODE — the rules, in one place (Kd 2026-09-07):
 //   · a code lasts ten minutes and a resend REPLACES it
 //   · the resend is offered after sixty seconds
-//   · two UNUSED codes per address per rolling day (the first and its one
-//     resend); after that the address waits until tomorrow. A code that
+//   · three UNUSED codes per address per rolling day (the first and two
+//     resends, Kd 2026-10-13); after that the address waits until tomorrow. A code that
 //     signed the person in does not count (Kd 2026-09-08): signing in twice
 //     in a day is normal, and the cap is against emails nobody proved
 //   · five wrong guesses kill the code
@@ -88,7 +88,7 @@ function refuseIfOverRules(recent: SignInCodeRow[], now: number): void {
 
 /** Ask for a code. Enforces the day cap and the resend gap, mints and stores
  *  the code (hashed), sends it, and takes the row back if the send fails so a
- *  failed email never spends one of the day's two. Same outcome whether or not
+ *  failed email never spends one of the day's three. Same outcome whether or not
  *  the address has an account. */
 export async function requestCode(
   deps: CodeDeps,

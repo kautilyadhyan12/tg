@@ -320,7 +320,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 21c-iii. [x] **Tidy up members whose membership is over** — merged 2026-10-12 (PR #225).
        Reports keeps the day the membership ended for somebody removed later, never the day Remove was pressed. Risky (it removes people from the app). Its plan reads how Mindbody, PushPress and Gymdesk treat inactive members first.
    - 21d. **A period picker for Reports** (Kd, RULINGS 2026-10-10; Folder B, after 21b), split 2026-10-13 in two (the year earlier doubles what is read and has its own tests; the line as first written is in this job's file in `handoff/`):
-     - 21d-i. [ ] **The period picker**: Last 4 weeks · Last 3 months · Last 12 months at the top of Reports, followed by every part of the page. Built, in review (branch `reports-period`).
+     - 21d-i. [x] **The period picker** — merged 2026-10-13 (PR #241).
      - 21d-ii. [ ] **The same period a year earlier**, beside the figures the period moves; a gym with no figures for that year reads a sentence, never a zero. Its plan measures the cost again. Folder B, after 21d-i.
 22. **The console's new look** (Kd, RULINGS 2026-09-26; spec Part 3 §17; the drawings in `docs/design/console`). Screen jobs, Opus high, no review; a restyle keeps every button, field, message and permission its page has, and the last of R2–R8 built also turns on the Light · Dark · Auto switch (§17.7). **R4–R7, R9 and 19d-iv are built LAST (Kd, RULINGS 2026-10-08), when every web feature that can be built is built: those pages still get boxes from the features to come, so each is restyled once, as it will stay; a box added to one of them before then is built in the page's present look.**
    - R1. [x] **The menu, the font and the colours** — merged 2026-09-26 (PR #118).
@@ -407,7 +407,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 11b. [x] **The look in the app** — merged 2026-10-13 (PR #250).
 12. **Sign-in** (split 2026-10-13: the server part needs no phone). Risky; the two extra passes run once, after 12d and before anybody else uses the app. Apple sign-in comes with the iPhone version (item 21).
     - 12a. [x] **The server learns a phone, and one phone at a time** — merged 2026-10-13 (PR #254).
-    - 12b. [ ] **Sign in on the phone by email code**: the screen, the robot check, the sign-in kept in the phone's key store, staying signed in with no internet, Sign out on Me, and "You were signed out because your account was signed in on another phone". New packages need Kd's yes in its plan.
+    - 12b. **Sign in on the phone by email code** (split 2026-10-13: the robot check needs a package and a page of its own).
+        - 12b-i. [x] **The sign-in itself** — merged 2026-10-14 (PR #256).
+        - 12b-ii. [ ] **The robot check on the phone**: Cloudflare's box when the server asks for it (past 20 codes an hour from one internet address); until then the phone says why it must wait. A new package (a web view) needs Kd's yes in its plan. Merged before anybody but Kd uses the app: without it the 21st person in an hour on one gym's wi-fi cannot sign in.
     - 12c. [ ] **"Before you start" on the phone** (it reads the profile's `signUpDisclaimerAgreed`).
     - 12d. [ ] **Sign in with Google on the phone**: Google's own sign-in box, and a server route that takes its answer. Needs Kd's step in Google's console for each copy of the app, told to him in its plan.
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms; the invitation email's button opens the app.
@@ -418,7 +420,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message. Needs Kd's Firebase project.
 19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
 20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the referral link (20e), the member photo (5b-vi), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
-21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, Google's closed test, then the iPhone version with Apple sign-in.
+21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 
 **Feature folder 2 — `D:\Projects\ai-home-gym-b`: the member's own day.**
 
