@@ -585,7 +585,13 @@ The terminal's own choices, each a job's to better with a reason.
   address, and its answer sends the code with no second press. A failed check, a check that
   does not load and an answer that runs out each draw a new box; closing it leaves the
   server's sentence under the email box, and Continue opens it again. A link in the box
-  opens in the phone's browser.
+  opens in the phone's browser. **Built in 12c:** "Before you start". After sign-in
+  the phone asks the server (`signUpDisclaimerAgreed`); until this person has ticked today's
+  words, the browser's note stands in front of the tabs. The tick is kept on the server the
+  moment it is made and Continue waits for it; a tick the server confirmed is kept with the
+  sign-in, so a person who ticked opens with no internet. No answer, a late one or a refusal
+  is never a tick. A signed-in request (`session.signedIn`) is only ever sent, or sent again
+  after a refresh, as the person who made it.
 - **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a
   meal, a weigh-in, a run) is written to the phone first and sent when the internet is
   there, each route safe to call twice. Built once, with the workout (item 61), then used

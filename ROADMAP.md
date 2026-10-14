@@ -411,7 +411,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
     - 12b. **Sign in on the phone by email code** (split 2026-10-13: the robot check needs a package and a page of its own).
         - 12b-i. [x] **The sign-in itself** — merged 2026-10-14 (PR #256).
         - 12b-ii. [x] **The robot check on the phone** — merged 2026-10-14 (PR #263).
-    - 12c. [ ] **"Before you start" on the phone** (it reads the profile's `signUpDisclaimerAgreed`).
+    - 12c. [x] **"Before you start" on the phone** — merged 2026-10-14 (PR #271).
     - 12d. [ ] **Sign in with Google on the phone**: Google's own sign-in box, and a server route that takes its answer. Needs Kd's step in Google's console for each copy of the app, told to him in its plan.
 13. [ ] **Invitations and Join**, with what the gym can see (spec Part 3 §10.2); My Gyms; the invitation email's button opens the app.
 14. [ ] **Setup**: the eleven screens and the plan, the health question, Safe mode, the consent taps.
