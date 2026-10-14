@@ -20,6 +20,16 @@ export const OVERDUE_CHOICES = [
   { value: 'see_staff', label: 'Send them to staff' },
 ];
 
+/** Someone who has not signed the gym's waiver (3e-ii). */
+export const WAIVER_CHOICES = OVERDUE_CHOICES;
+
+/** What counts as signed, or why the choice stops nobody: the gym has no waiver in use. */
+export function waiverHint(waiverInUse) {
+  return waiverInUse
+    ? 'Someone has signed once they sign your waiver as it reads today, at the desk or in the app.'
+    : 'You have no waiver in use, so nobody is sent to staff for this.';
+}
+
 /** When a payment counts as overdue, by the gym's own days of grace. */
 export function overdueHint(overdueAfterDays) {
   const days = Number.isInteger(overdueAfterDays) && overdueAfterDays > 0 ? overdueAfterDays : 0;
@@ -31,11 +41,12 @@ export function overdueHint(overdueAfterDays) {
 export function rulesSummary(rules) {
   if (rules === null || typeof rules !== 'object') return undefined;
   const who = rules.who === 'current_membership' ? 'Only people with a current membership' : 'Everyone on your list';
-  return rules.overdue === 'see_staff' ? `${who} · overdue payments sent to staff` : who;
+  const sent = [rules.overdue === 'see_staff' ? 'overdue payments' : null, rules.waiver === 'see_staff' ? 'waivers not signed' : null].filter((x) => x !== null);
+  return sent.length === 0 ? who : `${who} · ${sent.join(' and ')} sent to staff`;
 }
 
 export function rulesChanged(draft, saved) {
-  return draft !== null && saved !== null && (draft.who !== saved.who || draft.overdue !== saved.overdue);
+  return draft !== null && saved !== null && (draft.who !== saved.who || draft.overdue !== saved.overdue || draft.waiver !== saved.waiver);
 }
 
 /** Why the desk stops somebody, inside a sentence: "membership ended". */
@@ -109,7 +120,7 @@ export function previewNames(preview, all) {
 }
 
 export function rulesSavedLine(rules, preview) {
-  if (rules.who === 'everyone' && rules.overdue === 'let_in') return 'Saved. Everyone on your list is checked in at the front desk.';
+  if (rules.who === 'everyone' && rules.overdue === 'let_in' && rules.waiver !== 'see_staff') return 'Saved. Everyone on your list is checked in at the front desk.';
   const stopped = typeof preview?.stopped === 'number' ? preview.stopped : null;
   if (stopped === null) return 'Saved. Your front desk follows this from the next scan.';
   return `Saved. Your front desk follows this from the next scan. ${people(stopped)} on your list would be sent to staff if they came today.`;

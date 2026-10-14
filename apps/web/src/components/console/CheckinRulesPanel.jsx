@@ -5,6 +5,7 @@ import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
   OVERDUE_CHOICES,
+  WAIVER_CHOICES,
   WHO_CHOICES,
   notListedLine,
   overdueHint,
@@ -13,12 +14,13 @@ import {
   rulesChanged,
   rulesSavedLine,
   rulesSummary,
+  waiverHint,
 } from '../../pages/console/checkinRulesView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
 // WHO CAN CHECK IN (ROADMAP 16d; spec Part 3 §12.4), on `org.manage` as the server gates
-// it. The gym picks whom its front desk checks in and what it does with an overdue
-// payment; both wait for one Save. Under the choices the box names who the desk would send
+// it. The gym picks whom its front desk checks in, what it does with an overdue payment
+// and with somebody who has not signed its waiver (3e-ii); all three wait for one Save. Under the choices the box names who the desk would send
 // to staff today and how many it would not, before anything is saved.
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
@@ -130,10 +132,12 @@ function Today({ preview, changed, attendanceTo }) {
 }
 
 // `startOpen`: the page was opened by a link to the front desk's part of Settings.
-export default function CheckinRulesPanel({ org, readOnly, startOpen = false, attendanceTo = '../attendance' }) {
+// `waiverTo`: the Waiver box in Settings, for a gym with no waiver in use.
+export default function CheckinRulesPanel({ org, readOnly, startOpen = false, attendanceTo = '../attendance', waiverTo = null }) {
   const gymId = org.id;
   const [saved, setSaved] = useState(null);
   const [overdueAfterDays, setOverdueAfterDays] = useState(0);
+  const [waiverInUse, setWaiverInUse] = useState(false);
   const [draft, setDraft] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
@@ -152,6 +156,7 @@ export default function CheckinRulesPanel({ org, readOnly, startOpen = false, at
           if (!isLive()) return;
           setSaved(res.data.rules);
           setOverdueAfterDays(res.data.overdueAfterDays);
+          setWaiverInUse(res.data.waiverInUse);
           setDraft(res.data.rules);
         })
         .catch((err) => {
@@ -170,15 +175,16 @@ export default function CheckinRulesPanel({ org, readOnly, startOpen = false, at
 
   const who = draft?.who ?? null;
   const overdue = draft?.overdue ?? null;
+  const waiver = draft?.waiver ?? null;
   // Who the choices on screen stop today: asked again each time one is picked. An answer
   // is drawn only for the choices on screen now, so an older one never stands under them.
-  const askedFor = who === null || overdue === null ? null : `${who}|${overdue}|${String(attempt)}`;
+  const askedFor = who === null || overdue === null || waiver === null ? null : `${who}|${overdue}|${waiver}|${String(attempt)}`;
   useEffect(() => {
-    if (who === null || overdue === null) return undefined;
+    if (who === null || overdue === null || waiver === null) return undefined;
     let live = true;
-    const key = `${who}|${overdue}|${String(attempt)}`;
+    const key = `${who}|${overdue}|${waiver}|${String(attempt)}`;
     void orgService
-      .previewCheckinRules(gymId, { who, overdue })
+      .previewCheckinRules(gymId, { who, overdue, waiver })
       .then((res) => {
         if (live) setAnswer({ key, data: res.data, error: null });
       })
@@ -188,7 +194,7 @@ export default function CheckinRulesPanel({ org, readOnly, startOpen = false, at
     return () => {
       live = false;
     };
-  }, [gymId, who, overdue, attempt]);
+  }, [gymId, who, overdue, waiver, attempt]);
   const preview =
     answer === null || answer.key !== askedFor
       ? { status: 'loading', data: null, error: null }
@@ -222,6 +228,7 @@ export default function CheckinRulesPanel({ org, readOnly, startOpen = false, at
       const res = await orgService.updateCheckinRules(gymId, draft);
       setSaved(res.data.rules);
       setOverdueAfterDays(res.data.overdueAfterDays);
+      setWaiverInUse(res.data.waiverInUse);
       setDraft(res.data.rules);
       setSavedLine(rulesSavedLine(res.data.rules, preview.data));
     } catch (err) {
@@ -245,7 +252,7 @@ export default function CheckinRulesPanel({ org, readOnly, startOpen = false, at
       ) : (
         <form onSubmit={save} className="flex flex-col gap-6">
           <p className="text-sm m-0" style={softStyle}>
-            Choose who your front desk checks in when they scan a pass or a key tag. This reads the memberships and payments you keep in
+            Choose who your front desk checks in when they scan a pass or a key tag. This reads the memberships, payments and waiver signatures you keep in
             this app.
           </p>
           <Choices legend="Who the front desk checks in" name={`checkin-who-${gymId}`} choices={WHO_CHOICES} value={draft.who} onPick={(value) => pick({ who: value })} disabled={off} />
@@ -258,9 +265,29 @@ export default function CheckinRulesPanel({ org, readOnly, startOpen = false, at
             disabled={off}
             hint={overdueHint(overdueAfterDays)}
           />
+          <div className="flex flex-col gap-1">
+            <Choices
+              legend="Someone who has not signed your waiver"
+              name={`checkin-waiver-${gymId}`}
+              choices={WAIVER_CHOICES}
+              value={draft.waiver}
+              onPick={(value) => pick({ waiver: value })}
+              disabled={off}
+              hint={waiverHint(waiverInUse)}
+            />
+            {!waiverInUse && waiverTo !== null ? (
+              <Link
+                to={waiverTo}
+                className="self-start rounded-xl px-3.5 text-sm font-semibold inline-flex items-center min-h-11"
+                style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
+              >
+                Set up your waiver
+              </Link>
+            ) : null}
+          </div>
 
           <Today
-            key={`${draft.who}-${draft.overdue}`}
+            key={`${draft.who}-${draft.overdue}-${draft.waiver}`}
             preview={{ ...preview, retry: () => setAttempt((n) => n + 1) }}
             changed={changed}
             attendanceTo={attendanceTo}

@@ -418,7 +418,7 @@ d("a gym's waiver (real Postgres)", () => {
       for (const body of [{}, { text: "" }, { text: "   \r\n  " }, { text: 7 }, { text: "x".repeat(WAIVER_MAX_CHARS + 1) }, { text: "Fine.", extra: true }]) {
         expect((await send("PUT", waiverUrl(gym), gym.owner.cookies, body)).statusCode).toBe(400);
       }
-      expect(await readGymWaiver(gym)).toEqual({ waiver: null, inUse: false, people: 0, signed: 0 });
+      expect(await readGymWaiver(gym)).toEqual({ waiver: null, inUse: false, people: 0, signed: 0, atDesk: 0 });
       // The longest waiver allowed is kept whole.
       const longest = "y".repeat(WAIVER_MAX_CHARS);
       expect((await save(gym, longest)).waiver?.text).toBe(longest);
@@ -487,7 +487,7 @@ d("a gym's waiver (real Postgres)", () => {
     "a gym with no waiver asks nobody; stopping keeps the words and the signatures, and the same words bring them back",
     async () => {
       const gym = await makeGym("Plain Gym");
-      expect(await readGymWaiver(gym)).toEqual({ waiver: null, inUse: false, people: 0, signed: 0 });
+      expect(await readGymWaiver(gym)).toEqual({ waiver: null, inUse: false, people: 0, signed: 0, atDesk: 0 });
       // Join with nothing to sign, as before this job; a signature sent anyway is not kept.
       const { who: ola, entryId } = await member(gym, "ola", "Ola Berg");
       await addInvited(gym, { fullName: "Uma Vance", email: addr("uma") });
@@ -537,7 +537,7 @@ d("a gym's waiver (real Postgres)", () => {
       const gym = await makeGym("Lapsed Gym", false);
       expect((await send("PUT", waiverUrl(gym), gym.owner.cookies, { text: KEPT })).statusCode).toBe(409);
       expect((await send("DELETE", waiverUrl(gym), gym.owner.cookies)).statusCode).toBe(409);
-      expect(await readGymWaiver(gym)).toEqual({ waiver: null, inUse: false, people: 0, signed: 0 });
+      expect(await readGymWaiver(gym)).toEqual({ waiver: null, inUse: false, people: 0, signed: 0, atDesk: 0 });
     },
     TEST_TIMEOUT_MS,
   );

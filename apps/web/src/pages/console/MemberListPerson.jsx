@@ -42,7 +42,8 @@ import SentencePlace from '../../components/console/SentencePlace';
 import PostalAddressBox from '../../components/console/PostalAddressBox';
 import { ShareInvite } from './ShareInvite';
 import { FIELD_LABELS, dayWords } from './memberListView';
-import { waiverLineParts, waiverNotInAppLine } from './waiverView';
+import { signedInApp, waiverLineParts } from './waiverView';
+import DeskWaiver from './DeskWaiver';
 import {
   DAY_FIELDS,
   HELD_ANSWERS,
@@ -433,9 +434,9 @@ function MergePreview({ keep, remove, fields, person }) {
  *  a coloured label, so it is seen at a glance, then the day and the name they typed. */
 const WAIVER_TAG = { good: 'c-tag-good', warn: 'c-tag-warn', plain: 'c-tag-plain' };
 
-function WaiverLine({ member, timeZone }) {
+function WaiverLine({ member, desk, timeZone }) {
   // The day is the gym's own, as a note's is.
-  const parts = waiverLineParts(member, (iso) => noteDay(iso, timeZone));
+  const parts = waiverLineParts(member, (iso) => noteDay(iso, timeZone), desk);
   return (
     <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5 c-s13 c-t2" data-testid="waiver-line">
       <span className={`c-tag ${WAIVER_TAG[parts.tone]}`}>{parts.label}</span>
@@ -1395,7 +1396,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
                   {/* The gym's waiver (3e-i): whether this person in the app has signed the
                       words the gym asks for today, and the name they typed. */}
                   {p.waiverInUse ? (
-                    <WaiverLine member={m} timeZone={gym?.timezone ?? null} />
+                    <WaiverLine member={m} desk={p.waiverDesk ?? null} timeZone={gym?.timezone ?? null} />
                   ) : null}
                 </div>
                 {canRemove && p.formerAt === null && !m.sharedEmail ? (
@@ -1415,14 +1416,20 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             ))}
           </section>
         ) : null}
-        {p.waiverInUse && p.members.length === 0 && p.formerAt === null ? (
-          // Nobody in the app uses this record, so nobody can have signed for it (3e-i).
-          <section className="c-card px-4 py-3 md:px-5 md:py-4">
-            <h3 className="c-h2 mb-1">Waiver</h3>
-            <p className="c-s14 c-t2 m-0" data-testid="waiver-line">
-              {waiverNotInAppLine(p.fullName)}
-            </p>
-          </section>
+        {p.waiverInUse && p.formerAt === null && !signedInApp(p) ? (
+          // Nobody whose record this is has signed in the app: signed at the desk, or the
+          // button to sign there now (3e-ii).
+          <DeskWaiver
+            key={`desk-waiver-${p.entryId}`}
+            gymId={gymId}
+            entry={p}
+            readOnly={readOnly}
+            when={(iso) => noteDay(iso, gym?.timezone ?? null)}
+            onSigned={(signed) => {
+              setEntry((e) => (e !== null && e.entryId === p.entryId ? { ...e, waiverDesk: signed } : e));
+              onChanged();
+            }}
+          />
         ) : null}
         {byHand.length > 0 ? (
           <p className="c-s13 c-t3 m-0">

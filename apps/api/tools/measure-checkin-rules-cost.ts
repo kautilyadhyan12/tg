@@ -9,6 +9,8 @@
 // where it starts (nothing extra is read) and with both choices on, for somebody let in
 // and somebody stopped; twenty read at the same moment; one at each of the 20 gyms at the
 // same moment; staff's search; the box in Settings naming who would be stopped; and Save.
+// Since 3e-ii, last: every gym asks for a waiver its people in the app on a record have
+// signed, and the desk sends whoever has not signed to staff.
 // Two numbers each: how long it takes, and how long the server's one thread is busy and
 // answers nobody.
 //
@@ -41,7 +43,7 @@ const BURST = 20;
 const PLAN = "zz_checkin_rules_cost";
 const PREFIX = "checkin-rules-cost-";
 const ZONE = "Europe/London";
-const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
 if (!Number.isInteger(PEOPLE) || PEOPLE < 200) {
   console.error("measure-checkin-rules-cost: --people= takes a whole number, 200 or more");
   process.exit(2);
@@ -49,6 +51,8 @@ if (!Number.isInteger(PEOPLE) || PEOPLE < 200) {
 
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
+  await sql`DELETE FROM gym_waiver_signatures WHERE gym_id IN (${gyms})`;
+  await sql`DELETE FROM gym_waivers WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${gyms})`;
   await sql`DELETE FROM audit_log WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_attendance WHERE gym_id IN (${gyms})`;
@@ -67,7 +71,7 @@ async function cleanup(): Promise<void> {
 /** A table filled seconds ago has no statistics, and a plan made without them is not the
  *  one a gym meets (`measure-bookings-cost.ts`). */
 async function analyse(): Promise<void> {
-  for (const table of ["users", "gyms", "gym_staff", "gym_members", "gym_member_list_entries", "gym_held_memberships", "gym_member_bills", "gym_membership_types", "gym_attendance"]) {
+  for (const table of ["users", "gyms", "gym_staff", "gym_members", "gym_member_list_entries", "gym_held_memberships", "gym_member_bills", "gym_membership_types", "gym_attendance", "gym_waivers", "gym_waiver_signatures"]) {
     await sql`VACUUM ANALYZE ${sql(table)}`;
   }
 }
@@ -259,7 +263,41 @@ await measure("all 20 gyms at one moment", async () => {
   await Promise.all(all.map((gym) => previewRules(deps(), gym.owner, gym.id, STRICT, yes)));
 });
 await measure("Save", async (i) => {
-  await saveRules(deps(), big.owner, big.id, i % 2 === 0 ? STRICT : { who: "everyone", overdue: "let_in" }, yes);
+  await saveRules(deps(), big.owner, big.id, i % 2 === 0 ? STRICT : { who: "everyone", overdue: "let_in", waiver: "let_in" }, yes);
+});
+
+console.log("a waiver not signed is sent to staff (3e-ii):");
+const WAIVER: CheckinRules = { who: "everyone", overdue: "let_in", waiver: "see_staff" };
+for (const gym of all) {
+  const [waiver] = await sql<{ id: string }[]>`
+    INSERT INTO gym_waivers (gym_id, version, body, saved_by) VALUES (${gym.id}, 1, 'I take part at my own risk.', ${gym.owner}) RETURNING id`;
+  await sql`
+    INSERT INTO gym_waiver_signatures (gym_id, waiver_id, user_id, signed_name)
+    SELECT m.gym_id, ${waiver?.id ?? null}, m.user_id, 'Person Cost' FROM gym_members m WHERE m.gym_id = ${gym.id} AND m.entry_id IS NOT NULL`;
+}
+await analyse();
+const waiverDesk = (gym: Gym): DeskDevice => ({ ...gym.device, rules: WAIVER });
+await empty();
+await measure("a key tag, somebody in the app who signed", async (i) => {
+  const answer = await scan(deps(), waiverDesk(big), tagOf(0, i));
+  if (answer.result !== "checked_in") throw new Error(`the scan answered ${answer.result}`);
+});
+await measure("a key tag, somebody with no app who has not", async (i) => {
+  const answer = await scan(deps(), waiverDesk(big), tagOf(8, i));
+  if (answer.result !== "see_staff") throw new Error(`the scan answered ${answer.result}`);
+});
+await empty();
+await measure("one key tag at each of the 20 gyms at the same moment", async (i) => {
+  const answers = await Promise.all([scan(deps(), waiverDesk(big), tagOf(4, i)), ...others.map((gym, n) => scan(deps(), waiverDesk(gym), `S${String(n)}x${String(i * 10 + 4)}`))]);
+  if (answers.some((answer) => answer.result !== "checked_in")) throw new Error("a scan at one of the gyms did not check in");
+}, 15);
+await measure(`the box in Settings, the gym of ${String(PEOPLE)}`, async () => {
+  const got = await previewRules(deps(), big.owner, big.id, WAIVER, yes);
+  if (got?.stopped !== Math.floor(PEOPLE / 10) * 4) throw new Error(`the box counted ${String(got?.stopped)}`);
+  if (got.notListed !== Math.floor(PEOPLE / 100)) throw new Error(`the box counted ${String(got.notListed)} people on no record`);
+});
+await measure("the box in Settings, all 20 gyms at one moment", async () => {
+  await Promise.all(all.map((gym) => previewRules(deps(), gym.owner, gym.id, WAIVER, yes)));
 });
 
 await cleanup();

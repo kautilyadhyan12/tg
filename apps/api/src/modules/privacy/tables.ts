@@ -494,6 +494,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // after they have left. It IS in the export (exportRepo.ts). How long a gym may keep
   // it is a question for the lawyer (ROADMAP Stage 4 item 3), with staff notes.
   "gym_waiver_signatures",
+  // gym_waiver_desk_signatures.witnessed_by — which member of staff opened the screen a
+  // person signed the waiver on at the desk (`0106`), on gym_waivers' footing: the gym's
+  // record; `ON DELETE set null`. Who signed is a record on the gym's list, not an account.
+  "gym_waiver_desk_signatures",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

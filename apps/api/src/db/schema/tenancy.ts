@@ -151,6 +151,9 @@ export const gyms = pgTable(
      *  Part 3 §12.4), under `gyms_checkin_rules_check`; `checkinRulesSchema` in `@app/shared`. */
     checkinWho: text("checkin_who").notNull().default("everyone"),
     checkinOverdue: text("checkin_overdue").notNull().default("let_in"),
+    /** What the desk does with somebody who has not signed the waiver in use (0106; 3e-ii),
+     *  under `gyms_checkin_waiver_check`. */
+    checkinWaiver: text("checkin_waiver").notNull().default("let_in"),
     createdAt: createdAt(),
   },
   (t) => [
