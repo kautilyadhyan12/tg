@@ -63,15 +63,15 @@ const ORDER: Record<HeldMembershipShown, number> = { active: 0, frozen: 0, upcom
  *  taken back now, the one bill that can be cancelled and what each payment can still be
  *  refunded: what the write will be decided by, worked out by the same rules. */
 function billingOf(
-  row: { id: string; priceMinor: number; membership: HeldMembership },
+  row: { id: string; nextBillMinor: number; membership: HeldMembership },
   bills: readonly BillRow[],
   payments: readonly PaymentRow[],
   refunds: readonly RefundRow[],
   ctx: { today: string; past: boolean; overdueAfterDays: number },
 ): MemberBilling {
   const view = heldMembershipView(row.membership, ctx.today);
-  const pay = memberPayTarget(row.membership, row.priceMinor, ctx.today, bills, ctx.past);
-  const cancel = memberCancelTarget(row.membership, row.priceMinor, ctx.today, bills, ctx.past);
+  const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
+  const cancel = memberCancelTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
   const cancelBill = cancel === null ? undefined : bills.find((b) => b.periodIndex === cancel.periodIndex);
   const back = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
   // A mark with no payment behind it: taken back as it always was. A period a bill
@@ -89,6 +89,7 @@ function billingOf(
       periodIndex: b.periodIndex,
       covers: b.covers,
       amountMinor: b.amountMinor,
+      tax: b.tax,
       paidMinor: b.paidMinor,
       dueOn: b.dueOn,
       state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
@@ -187,6 +188,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
       discount: row.discount,
+      tax: row.tax,
       view: viewOf(row, list.bills, today, list.past),
     }))
     .sort(
@@ -209,6 +211,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     types: list.types,
     listed: list.listed,
     canBill,
+    taxIncluded: list.taxIncluded,
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
   });
 }
@@ -321,6 +324,7 @@ export async function giveHeldMembership(
       paid: req.paid,
       method: req.method ?? null,
       shownPriceMinor: req.priceMinor ?? null,
+      shownTotalMinor: req.totalMinor ?? null,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
       today,
       actorUserId: userId,

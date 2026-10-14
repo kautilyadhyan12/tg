@@ -5,6 +5,7 @@
 // own word and no other, and the amount typed is the amount sent, to the penny.
 import { describe, expect, it } from 'vitest';
 import {
+  billTaxLine,
   CANCEL_REASONS,
   NO_PAYMENTS_LINE,
   PAYMENT_METHODS,
@@ -322,5 +323,15 @@ describe('Note a refund', () => {
       done: 'That refund was taken back.',
     });
     expect(undoRefundWords(with1, 'Ada Lovelace', paid.id, 'gone').question).toBe("Take back this refund for Ada Lovelace's Gold Monthly?");
+  });
+});
+
+describe('a bill says its tax (18b-iii)', () => {
+  const bill = (over = {}) => ({ amountMinor: 5900, tax: null, ...over });
+  it('on top: the price before it, the tax, and its name and rate; inside: how much of it is tax; none: nothing', () => {
+    expect(billTaxLine(bill({ tax: { name: 'GST', bp: 1800, included: false, minor: 900 } }), 'USD')).toBe('$50.00 plus $9.00 GST 18%');
+    expect(billTaxLine(bill({ amountMinor: 5000, tax: { name: 'VAT', bp: 2000, included: true, minor: 833 } }), 'GBP')).toBe('Includes £8.33 VAT 20%');
+    expect(billTaxLine(bill({ amountMinor: 5411, tax: { name: 'Sales tax', bp: 825, included: false, minor: 412 } }), 'USD')).toBe('$49.99 plus $4.12 Sales tax 8.25%');
+    expect(billTaxLine(bill(), 'USD')).toBeNull();
   });
 });

@@ -12,7 +12,9 @@
 // `classes/bookingsRepo.ts`) reads a record's memberships and takes a class off a pack or
 // gives it back through `heldForBooking`, `chargePack` and `givePackClassBack` below,
 // under that lock too. A membership given with a discount (18b-ii-b) reads and uses it
-// through `register/discountsRepo.ts`, in the giving's own transaction.
+// through `register/discountsRepo.ts`, in the giving's own transaction. A membership keeps
+// the tax rate its type charged when it was given (18b-iii), and every bill it opens charges
+// that rate's percentage as it is that day.
 //
 // `status` holds the last status written, and the clock ends a membership without
 // writing: every write first marks the record's memberships the clock has ended
@@ -38,20 +40,25 @@ import {
   membershipLimitPeriodSchema,
   membershipTermUnitSchema,
   moveHeldMembership,
+  taxIncludedForCountry,
   type DiscountRefusal,
   type HeldCover,
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTypeChoice,
+  type HeldTax,
   type ListedMembership,
   type MemberPaymentByHand,
   type MembershipPayments,
   type PtHeld,
+  type TaxApplied,
 } from "@app/shared";
 import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
 import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
+import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
 import {
+  billOf,
   billsFor,
   insertBills,
   insertPayment,
@@ -76,6 +83,12 @@ export interface HeldRow {
   fromList: boolean;
   /** The discount it was given with, as it was then (18b-ii-b). */
   discount: { name: string; offMinor: number; payments: MembershipPayments } | null;
+  /** The tax rate it was sold with, as the rate is now (18b-iii); null for none. */
+  tax: HeldTax | null;
+  /** That tax as a bill opened today charges it; null for none. */
+  taxApplied: TaxApplied | null;
+  /** What a bill opened today for a period comes to, its tax in; 0 for a free one. */
+  nextBillMinor: number;
   membership: HeldMembership;
 }
 
@@ -104,11 +117,20 @@ const rawSchema = z.object({
   discount_name: z.string().nullable(),
   discount_minor: z.number().int(),
   discount_payments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
+  tax_name: z.string().nullable(),
+  tax_bp: z.number().int().nullable(),
+  gym_country: z.string().nullable(),
+  gym_tax_included: z.boolean().nullable(),
 });
 
 function shape(row: unknown): HeldRow {
   const r = rawSchema.parse(row);
+  const tax = r.tax_name === null || r.tax_bp === null ? null : { name: r.tax_name, bp: r.tax_bp };
+  const taxApplied = tax === null ? null : { ...tax, included: r.gym_tax_included ?? taxIncludedForCountry(r.gym_country) };
   return {
+    tax,
+    taxApplied,
+    nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.price_minor, taxApplied).amountMinor,
     id: r.id,
     typeId: r.membership_type_id,
     typeName: r.type_name,
@@ -146,11 +168,20 @@ const typeSchema = z.object({
   term_unit: membershipTermUnitSchema.nullable(),
   pack_classes: z.number().int().nullable(),
   pack_days: z.number().int().nullable(),
+  tax_rate_id: z.string().nullable(),
+  tax_name: z.string().nullable(),
+  tax_bp: z.number().int().nullable(),
 });
+
+/** The tax rate a type charges, by id: what a membership given from it keeps. */
+export function typeTaxRateId(row: unknown): string | null {
+  return typeSchema.parse(row).tax_rate_id;
+}
 
 export function typeChoice(row: unknown): HeldMembershipTypeChoice {
   const t = typeSchema.parse(row);
   return {
+    tax: t.tax_name === null || t.tax_bp === null ? null : { name: t.tax_name, bp: t.tax_bp },
     id: t.id,
     name: t.name,
     kind: t.kind,
@@ -165,7 +196,9 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
-  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at
+  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id,
+         (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
+         (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_bp
   FROM gym_membership_types
   WHERE gym_id = ${gymId} AND archived_at IS NULL
     AND (${typeId}::uuid IS NULL OR id = ${typeId}::uuid)
@@ -177,7 +210,11 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.starts_on::text AS starts_on, h.frozen_days, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
-  h.discount_name, h.discount_minor, h.discount_payments`;
+  h.discount_name, h.discount_minor, h.discount_payments,
+  (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
+  (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
+  (SELECT g.country FROM gyms g WHERE g.id = h.gym_id) AS gym_country,
+  (SELECT g.sales_tax_included FROM gyms g WHERE g.id = h.gym_id) AS gym_tax_included`;
 
 /** The record's memberships of the statuses named, newest start first. */
 const held = (sql: Sql | TransactionSql, gymId: string, entryId: string, statuses: readonly string[], limit: number) => sql`
@@ -212,6 +249,8 @@ export interface HeldList {
   payments: PaymentRow[];
   refunds: RefundRow[];
   overdueAfterDays: number;
+  /** Whether the gym's prices hold its tax (18b-iii), for the Add form's total. */
+  taxIncluded: boolean;
 }
 
 /** What the list says this record's membership is, and how that name stands with the
@@ -279,6 +318,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       payments: await paymentsFor(tx, gymId, ids),
       refunds: await refundsFor(tx, gymId, ids),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
+      taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
     };
   });
 }
@@ -417,6 +457,8 @@ export async function giveHeld(
     shownPriceMinor: number | null;
     /** The gym's discount it is given with, and what the screen showed coming off. */
     discount: { id: string; shownOffMinor: number } | null;
+    /** What the screen showed its first bill comes to, tax in; null where it showed none. */
+    shownTotalMinor: number | null;
     /** The gym's own day. */
     today: string;
     actorUserId: string;
@@ -445,6 +487,12 @@ export async function giveHeld(
     if (rawType === undefined) return { kind: "type_not_found" };
     const type = typeChoice(rawType);
     if (input.shownPriceMinor !== null && input.shownPriceMinor !== type.priceMinor) return { kind: "price_changed" };
+    // The type's rate as it is now, read under the gym's lock that its changes take: the
+    // membership keeps it, and its first bill charges it.
+    const taxRateId = typeTaxRateId(rawType);
+    const rate = taxRateId === null ? null : await rateOf(tx, input.gymId, taxRateId);
+    const included = await taxIncludedOf(tx, input.gymId);
+    const tax: TaxApplied | null = rate === null || included === null ? null : { name: rate.name, bp: rate.bp, included };
 
     // The discount is this gym's own, read under its lock, judged on the gym's own day,
     // and what it takes off is worked out again here: nothing is given at any other price.
@@ -460,7 +508,10 @@ export async function giveHeld(
       used = { id: found.id, name: found.name, ...costs };
     }
     const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
-    const firstBillMinor = used === null ? type.priceMinor : used.firstBillMinor;
+    // The first bill: its price after any discount, with its tax. Nothing is given at a
+    // total the screen did not show.
+    const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(used === null ? type.priceMinor : used.firstBillMinor, tax);
+    if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
 
     // Worked out unpaid: the bill of the period owed is opened first, and a payment
     // recorded against it is what moves the count of paid periods on.
@@ -489,12 +540,12 @@ export async function giveHeld(
         (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
          term_count, term_unit, pack_classes, pack_days, starts_on, status,
          paid_periods, paid_floor, renews, classes_left,
-         discount_id, discount_name, discount_minor, discount_payments)
+         discount_id, discount_name, discount_minor, discount_payments, tax_rate_id)
       VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
               ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
               ${m.packDays}, ${m.startsOn}::date, ${m.status},
               ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
-              ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null})
+              ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null})
       RETURNING id`;
     if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -512,6 +563,7 @@ export async function giveHeld(
         priceMinor: String(priceMinor),
         currency: type.currency,
         ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
+        ...(tax === null ? {} : { tax: tax.name, taxBp: String(tax.bp) }),
       },
     });
 
@@ -520,7 +572,7 @@ export async function giveHeld(
       const [opened] = await insertBills(
         tx,
         input.gymId,
-        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBillMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
+        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, tax: firstBill.tax, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
         input.now,
       );
       if (opened === undefined) throw new Error("a new membership's bill was not opened");
@@ -530,7 +582,7 @@ export async function giveHeld(
           {
             gymId: input.gymId,
             billId: opened.id,
-            amountMinor: firstBillMinor,
+            amountMinor: firstBill.amountMinor,
             currency: type.currency,
             method: input.method,
             requestKey: input.requestKey,
@@ -553,7 +605,7 @@ export async function giveHeld(
             membershipId: created.id,
             billId: opened.id,
             period: String(due.periodIndex),
-            amountMinor: String(firstBillMinor),
+            amountMinor: String(firstBill.amountMinor),
             currency: type.currency,
             method: input.method,
           },

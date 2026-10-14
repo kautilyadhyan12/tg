@@ -42,6 +42,7 @@ const GOLD = {
   termUnit: 'month',
   packClasses: null,
   packDays: null,
+  tax: null,
 };
 const PACK = { ...GOLD, id: '22222222-2222-4222-8222-000000000002', name: '10 classes', kind: 'pack', termCount: null, termUnit: null, packClasses: 10, packDays: 60, priceMinor: 9000 };
 
@@ -73,6 +74,7 @@ function held(n, type, startsOn, paid, moves = []) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
+    tax: null,
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, made.membership, m, type.priceMinor, TODAY),
   };
@@ -87,6 +89,7 @@ const answer = (memberships, more = {}) => ({
     listed: null,
     canBill: true,
     discounts: [],
+    taxIncluded: false,
     ...more,
   }),
 });

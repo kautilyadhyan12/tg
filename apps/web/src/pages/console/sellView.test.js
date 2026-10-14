@@ -22,17 +22,23 @@ import {
   takingsNotes,
   takingsRows,
   takingsWords,
-  taxBody,
-  taxDraft,
+  draftFromRate,
+  emptyRateDraft,
+  rateBody,
+  rateProblems,
+  rateRemoveBlock,
+  rateUses,
+  saleTaxWords,
   taxLine,
   taxModes,
   undoSaleQuestion,
 } from './sellView';
 
-const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxed: true, stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
-const NO_TAX = { bp: 0, included: false };
-const TEXAS = { bp: 825, included: false };
-const UK = { bp: 2000, included: true };
+const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
+const rate = (over = {}) => ({ id: 'r1', name: 'Sales tax', bp: 825, products: 0, membershipTypes: 0, memberships: 0, ...over });
+const NO_TAX = { included: false, rates: [] };
+const TEXAS = { included: false, rates: [rate()] };
+const UK = { included: true, rates: [rate({ name: 'VAT', bp: 2000 })] };
 const sale = (over = {}) => ({
   id: 's1',
   itemName: 'Water',
@@ -42,6 +48,7 @@ const sale = (over = {}) => ({
   taxMinor: 33,
   totalMinor: 431,
   taxBp: 825,
+  taxName: 'Sales tax',
   taxIncluded: false,
   currency: 'USD',
   method: 'cash',
@@ -102,7 +109,7 @@ describe('the sale as it is shown', () => {
       total: '$4.31',
       lines: [
         { label: 'Price', value: '$3.98' },
-        { label: 'Tax (8.25%)', value: '$0.33' },
+        { label: 'Sales tax 8.25%', value: '$0.33' },
         { label: 'Total', value: '$4.31', strong: true },
       ],
     });
@@ -113,13 +120,24 @@ describe('the sale as it is shown', () => {
       total: '£1.99',
       lines: [
         { label: 'Total', value: '£1.99', strong: true },
-        { label: 'Includes tax (20%)', value: '£0.33' },
+        { label: 'Includes VAT 20%', value: '£0.33' },
       ],
     });
   });
   it('a product the gym does not tax shows no tax line, whatever the rate', () => {
-    expect(saleSummary(water({ taxed: false }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
-    expect(saleSummary(water({ taxed: false }), 1, UK).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary(water({ taxRateId: null }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary(water({ taxRateId: null }), 1, UK).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    // A rate since removed is no tax, never a guess at one.
+    expect(saleSummary(water({ taxRateId: 'r-gone' }), 1, TEXAS).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+  });
+  it('each product charges its own rate, by its own name', () => {
+    const two = { included: false, rates: [rate(), rate({ id: 'r2', name: 'Food tax', bp: 200 })] };
+    expect(saleSummary(water(), 1, two).lines[1]).toEqual({ label: 'Sales tax 8.25%', value: '$0.16' });
+    expect(saleSummary(water({ taxRateId: 'r2' }), 1, two).lines).toEqual([
+      { label: 'Price', value: '$1.99' },
+      { label: 'Food tax 2%', value: '$0.04' },
+      { label: 'Total', value: '$2.03', strong: true },
+    ]);
   });
   it('nothing to add up with no product, or a number that is not one', () => {
     expect(saleSummary(null, 1, NO_TAX)).toBeNull();
@@ -193,7 +211,10 @@ describe('today', () => {
     expect(undoSaleQuestion(sale())).toBe("Undo this sale? 2 × Water, $4.31. It will no longer count in today's total. If you took the money, give it back yourself.");
   });
   it('a purchase on a person’s page', () => {
-    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 tax', undone: false });
+    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false });
+    // A sale made before rates had names says "tax".
+    expect(saleTaxWords(sale({ taxName: null }))).toBe('$0.33 tax');
+    expect(saleTaxWords(sale({ taxMinor: 0 }))).toBeNull();
     expect(purchaseLine(sale({ taxMinor: 0, method: 'bank_transfer', undone: true }))).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Bank transfer', undone: true });
   });
 });
@@ -215,41 +236,59 @@ describe('products and tax', () => {
     expect(productProblems({ ...good, counts: true, stock: '0' }, 'USD')).toEqual({});
   });
   it('the form as the server takes it, new and changed', () => {
-    expect(productBody({ ...emptyProductDraft(), name: ' Water ', price: '1.99' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxed: true, stock: null });
-    const draft = draftFromProduct(water({ stock: 8, taxed: false }));
-    expect(draft).toEqual({ id: 'p1', name: 'Water', price: '1.99', taxed: false, counts: true, stock: '8', updatedAt: '2026-10-12T10:00:00.000Z' });
-    expect(productBody({ ...draft, stock: '12' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxed: false, stock: 12, updatedAt: '2026-10-12T10:00:00.000Z' });
+    // A new product charges the gym's one rate; with no rate, or several, it starts on No tax.
+    expect(productBody({ ...emptyProductDraft(TEXAS), name: ' Water ', price: '1.99' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxRateId: 'r1', stock: null });
+    expect(emptyProductDraft(NO_TAX).taxRateId).toBe('');
+    expect(emptyProductDraft({ included: false, rates: [rate(), rate({ id: 'r2', name: 'Food tax' })] }).taxRateId).toBe('');
+    expect(productBody({ ...emptyProductDraft(NO_TAX), name: 'Water', price: '1.99' }, 'USD').taxRateId).toBeNull();
+    const draft = draftFromProduct(water({ stock: 8, taxRateId: null }));
+    expect(draft).toEqual({ id: 'p1', name: 'Water', price: '1.99', taxRateId: '', counts: true, stock: '8', updatedAt: '2026-10-12T10:00:00.000Z' });
+    expect(productBody({ ...draft, stock: '12' }, 'USD')).toEqual({ name: 'Water', priceMinor: 199, taxRateId: null, stock: 12, updatedAt: '2026-10-12T10:00:00.000Z' });
   });
   it('a product in the list says its price, its tax only where the gym charges one, and its stock', () => {
     expect(productRow(water(), NO_TAX)).toBe('$1.99 · stock not counted');
-    expect(productRow(water({ stock: 8 }), TEXAS)).toBe('$1.99 · plus tax · 8 in stock');
-    expect(productRow(water({ stock: 0, currency: 'GBP' }), UK)).toBe('£1.99 · tax included · out of stock');
-    expect(productRow(water({ taxed: false }), TEXAS)).toBe('$1.99 · no tax · stock not counted');
+    expect(productRow(water({ stock: 8 }), TEXAS)).toBe('$1.99 · plus Sales tax 8.25% · 8 in stock');
+    expect(productRow(water({ stock: 0, currency: 'GBP' }), UK)).toBe('£1.99 · VAT 20% included · out of stock');
+    expect(productRow(water({ taxRateId: null }), TEXAS)).toBe('$1.99 · no tax · stock not counted');
     expect(productRow(water(), NO_TAX, 'USD')).toBe('$1.99 · stock not counted');
     expect(productRow(water(), NO_TAX, 'GBP')).toBe('$1.99 · priced in USD: save its price in GBP to sell it · stock not counted');
   });
-  it('the tax form', () => {
-    expect(taxDraft(TEXAS)).toEqual({ rate: '8.25', mode: 'added' });
-    expect(taxDraft(UK)).toEqual({ rate: '20', mode: 'included' });
-    expect(taxBody({ rate: '8.25', mode: 'added' })).toEqual({ ok: true, body: { bp: 825, included: false } });
-    expect(taxBody({ rate: ' 20 ', mode: 'included' })).toEqual({ ok: true, body: { bp: 2000, included: true } });
-    expect(taxBody({ rate: '', mode: 'added' })).toEqual({ ok: true, body: { bp: 0, included: false } });
-    for (const rate of ['8,25', '31', '8.255', '-1', 'ten']) {
-      expect(taxBody({ rate, mode: 'added' })).toEqual({ ok: false, problem: 'Enter the tax rate as a number from 0 to 30, like 8.25. Use 0 for no tax.' });
+  it('a tax rate form', () => {
+    expect(emptyRateDraft()).toEqual({ id: null, name: '', rate: '' });
+    expect(draftFromRate(rate())).toEqual({ id: 'r1', name: 'Sales tax', rate: '8.25' });
+    expect(rateProblems({ name: ' GST ', rate: '18' })).toEqual({});
+    expect(rateBody({ name: ' GST ', rate: ' 18 ' })).toEqual({ name: 'GST', bp: 1800 });
+    expect(rateBody({ name: 'Sales tax', rate: '8.25' })).toEqual({ name: 'Sales tax', bp: 825 });
+    expect(rateProblems({ name: '', rate: '18' })).toEqual({ name: 'Give the tax a name, such as GST, VAT or Sales tax.' });
+    expect(rateProblems({ name: 'x'.repeat(31), rate: '18' })).toEqual({ name: 'Keep the name to 30 characters.' });
+    expect(rateProblems({ name: `GST${String.fromCharCode(0x200b)}`, rate: '18' })).toEqual({ name: HIDDEN_TEXT });
+    for (const typed of ['', '0', '0.00', '8,25', '31', '8.255', '-1', 'ten']) {
+      expect(rateProblems({ name: 'GST', rate: typed })).toEqual({ rate: 'Enter the rate as a number above 0 and up to 30, like 8.25.' });
     }
   });
+  it('what a rate is charged on, and why one in use is not removed', () => {
+    expect(rateUses(rate())).toBe('Not charged on anything yet.');
+    expect(rateRemoveBlock(rate())).toBeNull();
+    expect(rateUses(rate({ products: 1 }))).toBe('Charged on 1 product.');
+    expect(rateUses(rate({ products: 3, membershipTypes: 1, memberships: 12 }))).toBe("Charged on 3 products, 1 membership type and 12 members' memberships.");
+    expect(rateRemoveBlock(rate({ products: 2 }))).toBe("Sales tax can't be removed: it is charged on 2 products. Change those to another rate or No tax first.");
+    expect(rateRemoveBlock(rate({ memberships: 1 }))).toBe(
+      "Sales tax can't be removed: it is charged on 1 member's membership. A membership keeps the tax it was sold with, so Sales tax can be removed once nobody holds one.",
+    );
+  });
   it('what the gym’s tax is, in one sentence', () => {
-    expect(taxLine(NO_TAX)).toBe('No tax is charged on what you sell here.');
-    expect(taxLine(TEXAS)).toBe('8.25% tax is added on top of the price of each taxed product.');
-    expect(taxLine(UK)).toBe('Your prices include 20% tax. Each sale shows how much of it is tax.');
+    expect(taxLine(NO_TAX)).toBe('You charge no tax. Add a tax rate if you need to charge one.');
+    expect(taxLine(TEXAS)).toBe('Tax is added on top of the price of each product and membership that charges it.');
+    expect(taxLine(UK)).toBe('Your prices include the tax. Each sale and each bill shows how much of it is tax.');
   });
   it('the two ways are explained in the gym’s own money, with sums that are true', () => {
     expect(taxModes('GBP').map((m) => [m.value, m.label, m.hint])).toEqual([
-      ['added', 'Added on top of the price', 'At 10% tax, a product priced £10.00 costs the customer £11.00. Usual in the United States and Canada.'],
-      ['included', 'Already included in the price', 'At 10% tax, a product priced £10.00 costs the customer £10.00, and £0.91 of it is tax. Usual where VAT or GST is charged.'],
+      ['added', 'Added on top of the price', 'At 10% tax, a price of £10.00 costs the customer £11.00. Usual in the United States and Canada.'],
+      ['included', 'Already included in the price', 'At 10% tax, a price of £10.00 costs the customer £10.00, and £0.91 of it is tax. Usual where VAT or GST is charged.'],
     ]);
     // The example's own numbers, by the rule the server uses.
-    expect(saleSummary(water({ priceMinor: 1000 }), 1, { bp: 1000, included: false }).totalMinor).toBe(1100);
-    expect(saleSummary(water({ priceMinor: 1000 }), 1, { bp: 1000, included: true }).lines[1]).toEqual({ label: 'Includes tax (10%)', value: '$0.91' });
+    const ten = [rate({ name: 'Tax', bp: 1000 })];
+    expect(saleSummary(water({ priceMinor: 1000 }), 1, { included: false, rates: ten }).totalMinor).toBe(1100);
+    expect(saleSummary(water({ priceMinor: 1000 }), 1, { included: true, rates: ten }).lines[1]).toEqual({ label: 'Includes Tax 10%', value: '$0.91' });
   });
 });

@@ -13,6 +13,7 @@ import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
+import TaxRates from './TaxRates';
 import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
 import {
   NO_SELLING_LINE,
@@ -679,6 +680,7 @@ export default function Sell() {
           <div ref={productsRef}>
             <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />
           </div>
+          <TaxRates key={`tax-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} onPage={setPage} />
           <SellDiscounts
             key={`discounts-${gymId}`}
             gymId={gymId}

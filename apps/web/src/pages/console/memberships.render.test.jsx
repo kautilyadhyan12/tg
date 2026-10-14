@@ -29,7 +29,17 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 });
 
 // The Discounts box under the price list (18b-ii-b) reads the Sell page's discounts.
-const register = { get: vi.fn(), addDiscount: vi.fn(), changeDiscount: vi.fn(), archiveDiscount: vi.fn(), restoreDiscount: vi.fn() };
+const register = {
+  get: vi.fn(),
+  addDiscount: vi.fn(),
+  changeDiscount: vi.fn(),
+  archiveDiscount: vi.fn(),
+  restoreDiscount: vi.fn(),
+  addTaxRate: vi.fn(),
+  changeTaxRate: vi.fn(),
+  removeTaxRate: vi.fn(),
+  saveTaxMode: vi.fn(),
+};
 vi.mock('../../api/registerApi', () => ({ registerService: register }));
 
 vi.mock('../../context/AuthContext', () => ({
@@ -144,7 +154,7 @@ describe('discounts for memberships (18b-ii-b)', () => {
   const sellPage = (discounts) => ({
     currency: 'USD',
     today: '2026-10-14',
-    tax: { bp: 0, included: false },
+    tax: { included: false, rates: [] },
     products: [],
     archived: [],
     archivedTotal: 0,
@@ -188,6 +198,83 @@ describe('discounts for memberships (18b-ii-b)', () => {
     draw([gym()]);
     const box = await screen.findByRole('region', { name: 'Discounts' });
     expect(await within(box).findByText('No discounts for memberships yet. Add one to take a percentage or a fixed amount off a membership, with a promo code if you want one.')).toBeTruthy();
+  });
+});
+
+describe('tax on memberships (18b-iii)', () => {
+  const GST = { id: '44444444-4444-4444-8444-000000000001', name: 'GST', bp: 1800 };
+  const VAT = { id: '44444444-4444-4444-8444-000000000002', name: 'VAT', bp: 2000 };
+  const rateRow = (r, over = {}) => ({ ...r, products: 0, membershipTypes: 1, memberships: 0, ...over });
+  const sellPage = (rates) => ({
+    currency: 'USD',
+    today: '2026-10-14',
+    tax: { included: false, rates },
+    products: [],
+    archived: [],
+    archivedTotal: 0,
+    discounts: [],
+    archivedDiscounts: [],
+    archivedDiscountsTotal: 0,
+    membershipTypes: [{ id: type().id, name: 'Gold Monthly' }],
+    canSell: true,
+    canManage: true,
+    sales: [],
+    salesNotShown: 0,
+    payments: [],
+    paymentsNotShown: 0,
+    totals: { count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 },
+  });
+
+  it('a taxed type says its tax on its row, and the Tax box is under the price list with the gym’s rates', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
+    register.get.mockResolvedValue(sellPage([rateRow(GST, { membershipTypes: 1, memberships: 12 })]));
+    draw([gym()]);
+    expect(await screen.findByText('Plus GST 18% on each payment')).toBeTruthy();
+    const box = await screen.findByRole('region', { name: 'Tax' });
+    expect(within(box).getAllByTestId('tax-rate-row').map((r) => r.textContent)).toEqual([expect.stringContaining("GST 18%Charged on 1 membership type and 12 members' memberships.")]);
+  });
+
+  it('where the gym’s prices hold the tax, the row says the price includes it', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: VAT.id })], taxRates: [VAT], taxIncluded: true }) });
+    draw([gym()]);
+    expect(await screen.findByText('Includes VAT 20%')).toBeTruthy();
+  });
+
+  it('the type form picks its tax, a rate added from inside it is picked there at once, and the save sends it', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: null })], taxRates: [GST], taxIncluded: false }) });
+    register.addTaxRate.mockResolvedValue(sellPage([rateRow(GST), rateRow(VAT, { membershipTypes: 0 })]));
+    orgService.updateMembershipType.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: VAT.id })], taxRates: [GST, VAT], taxIncluded: false }) });
+    draw([gym()]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    const form = within(screen.getByRole('form', { name: 'Change membership type' }));
+    const tax = form.getByLabelText('Tax');
+    expect(tax.value).toBe('');
+    expect([...tax.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['No tax', 'GST 18%']);
+    expect(form.getByText('Members who already hold it keep the tax they were sold with.')).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Add a tax rate' }));
+    const rate = within(form.getByRole('group', { name: 'Add a tax rate' }));
+    fireEvent.change(rate.getByLabelText('Tax name'), { target: { value: 'VAT' } });
+    fireEvent.change(rate.getByLabelText('Rate, in percent'), { target: { value: '20' } });
+    fireEvent.click(rate.getByRole('button', { name: 'Add tax rate' }));
+    await waitFor(() => expect(register.addTaxRate).toHaveBeenCalledWith(IRON, { name: 'VAT', bp: 2000 }));
+    await waitFor(() => expect(form.getByLabelText('Tax').value).toBe(VAT.id));
+    // Adding the rate saved nothing of the type.
+    expect(orgService.updateMembershipType).not.toHaveBeenCalled();
+    fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(orgService.updateMembershipType).toHaveBeenCalledTimes(1));
+    expect(orgService.updateMembershipType.mock.calls[0][2]).toMatchObject({ name: 'Gold Monthly', priceMinor: 4999, taxRateId: VAT.id });
+    expect(await screen.findByText('Plus VAT 20% on each payment')).toBeTruthy();
+  });
+
+  it('a taxed price too high to bill is said under the price, and nothing is sent', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ taxRateId: GST.id })], taxRates: [GST], taxIncluded: false }) });
+    draw([gym()]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Change Gold Monthly' }));
+    const form = within(screen.getByRole('form', { name: 'Change membership type' }));
+    fireEvent.change(form.getByLabelText('Price (USD)'), { target: { value: '800000' } });
+    fireEvent.click(form.getByRole('button', { name: 'Save changes' }));
+    expect(await form.findByText('A price with tax can be at most $769,230.76. Lower the price, or choose No tax.')).toBeTruthy();
+    expect(orgService.updateMembershipType).not.toHaveBeenCalled();
   });
 });
 

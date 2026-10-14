@@ -472,7 +472,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
         remoteAddress: nextIp(),
         headers: { "content-type": "application/json" },
         cookies: owner.cookies,
-        payload: JSON.stringify(monthly({ priceMinor: 9999, termUnit: "year", updatedAt: goldNow?.updatedAt })),
+        payload: JSON.stringify(monthly({ priceMinor: 9999, termUnit: "year", taxRateId: null, updatedAt: goldNow?.updatedAt })),
       });
       expect(repriced.statusCode, repriced.body).toBe(200);
       const repricedPress = await post(`${wordsUrl(gymId)}/link`, { word: "Gold", typeId: gold, groups: ALL, digest: preview.digest, paid: true }, owner.cookies);
@@ -488,7 +488,7 @@ d("a list's membership word linked to a type: who gets it, who may, and once is 
         remoteAddress: nextIp(),
         headers: { "content-type": "application/json" },
         cookies: owner.cookies,
-        payload: JSON.stringify(monthly({ updatedAt: again?.updatedAt })),
+        payload: JSON.stringify(monthly({ taxRateId: null, updatedAt: again?.updatedAt })),
       });
       expect(restored.statusCode, restored.body).toBe(200);
       const fresh = await previewOf(gymId, owner.cookies, "Gold", gold);

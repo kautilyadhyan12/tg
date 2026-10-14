@@ -16,6 +16,8 @@ import {
   isVisibleText,
   minorToPriceText,
   priceToMinor,
+  TAXED_PRICE_MINOR_MAX,
+  bpToTaxRateText,
 } from '@app/shared';
 
 /** Whether this person may change the price list. The tick, never the job title: an
@@ -158,6 +160,16 @@ export function archivedNote(list) {
   return `Showing the newest ${String(list.archived.length)} of ${String(list.archivedTotal)}.`;
 }
 
+/** The tax a type's bills charge, in one line; null for none. "Plus GST 18% on each
+ *  payment", or "Includes GST 18%" where the gym's prices hold the tax. */
+export function typeTaxLine(type, list) {
+  if (type.taxRateId === null || type.taxRateId === undefined || list === null) return null;
+  const rate = (list.taxRates ?? []).find((r) => r.id === type.taxRateId);
+  if (rate === undefined) return null;
+  const label = `${rate.name} ${bpToTaxRateText(rate.bp)}%`;
+  return list.taxIncluded ? `Includes ${label}` : `Plus ${label} on each payment`;
+}
+
 /** A new type's form, before anything is typed. */
 export function emptyDraft() {
   return {
@@ -180,6 +192,7 @@ export function emptyDraft() {
     ptAccess: 'none',
     ptLimit: '4',
     ptPeriod: 'month',
+    taxRateId: '',
   };
 }
 
@@ -208,6 +221,7 @@ export function draftFromType(type) {
     ptAccess: hasPtLimit(type) ? 'limited' : 'none',
     ptLimit: hasPtLimit(type) ? String(type.ptLimit) : base.ptLimit,
     ptPeriod: hasPtLimit(type) ? type.ptPeriod : base.ptPeriod,
+    taxRateId: type.taxRateId ?? '',
   };
 }
 
@@ -271,8 +285,11 @@ export function draftProblems(draft, currency) {
   } else if (!isVisibleText(draft.description.trim())) {
     problems.description = HIDDEN_TEXT;
   }
-  if (priceToMinor(draft.price, currency) === null) {
+  const priceMinor = priceToMinor(draft.price, currency);
+  if (priceMinor === null) {
     problems.price = `Type the price as a number, like ${priceExample(currency)}. Type 0 for free.`;
+  } else if (draft.taxRateId !== '' && priceMinor > TAXED_PRICE_MINOR_MAX) {
+    problems.price = `A price with tax can be at most ${formatMinor(TAXED_PRICE_MINOR_MAX, currency)}. Lower the price, or choose No tax.`;
   }
   if (usesTerm(draft.choice) && wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX) === null) {
     problems.termCount = `Type a whole number from 1 to ${String(MEMBERSHIP_TERM_COUNT_MAX)}.`;
@@ -353,6 +370,7 @@ export function draftBody(draft, currency) {
     includesPt: draftIncludesPt(draft),
     ptLimit: draftLimitsPt(draft) ? wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) : null,
     ptPeriod: draftLimitsPt(draft) ? draft.ptPeriod : null,
+    taxRateId: draft.taxRateId === '' ? null : draft.taxRateId,
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };

@@ -179,7 +179,7 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
     const [row] = await sql<{ at: string }[]>`
       SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at
       FROM gym_membership_types WHERE id = ${typeId.toLowerCase()}`;
-    return put(typeUrl(gymId, typeId), { ...body, updatedAt: row?.at ?? "2026-01-01T00:00:00.000Z" }, cookies);
+    return put(typeUrl(gymId, typeId), { taxRateId: null, ...body, updatedAt: row?.at ?? "2026-01-01T00:00:00.000Z" }, cookies);
   };
 
   const addType = async (gymId: string, cookies: Cookies, body: unknown) => {
@@ -650,16 +650,16 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       expect(gold.updatedAt).toEqual(expect.any(String));
 
       // A changes the price; B then saves a form that read the type before A did.
-      const byA = await put(typeUrl(gymId, gold.id), { ...monthly({ priceMinor: 6000 }), updatedAt: gold.updatedAt }, owner.cookies);
+      const byA = await put(typeUrl(gymId, gold.id), { ...monthly({ priceMinor: 6000 }), taxRateId: null, updatedAt: gold.updatedAt }, owner.cookies);
       expect(byA.statusCode, byA.body).toBe(200);
-      const byB = await put(typeUrl(gymId, gold.id), { ...monthly({ name: "Gold Plus" }), updatedAt: gold.updatedAt }, owner.cookies);
+      const byB = await put(typeUrl(gymId, gold.id), { ...monthly({ name: "Gold Plus" }), taxRateId: null, updatedAt: gold.updatedAt }, owner.cookies);
       expect(byB.statusCode).toBe(409);
       expect((JSON.parse(byB.body) as { error: string }).error).toBe("membership_type_changed");
       expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Monthly", price_minor: 6000 }]);
 
       // With the list as it now is, B's change goes through; a change with no stamp is refused outright.
       const fresh = list(byA).types[0]?.updatedAt;
-      expect((await put(typeUrl(gymId, gold.id), { ...monthly({ name: "Gold Plus", priceMinor: 6000 }), updatedAt: fresh }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(typeUrl(gymId, gold.id), { ...monthly({ name: "Gold Plus", priceMinor: 6000 }), taxRateId: null, updatedAt: fresh }, owner.cookies)).statusCode).toBe(200);
       expect((await put(typeUrl(gymId, gold.id), monthly({ name: "Gold Plus" }), owner.cookies)).statusCode).toBe(400);
       expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Plus", price_minor: 6000 }]);
     },

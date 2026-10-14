@@ -28,7 +28,11 @@ export const registerService = {
   /** One sale. `body.requestKey` is the form's own, so the same form pressed twice sells once. */
   sell: async (gymId, body) => read(sellProductResponseSchema, 'that sale', await authApi.post(`${gymPath(gymId)}/register/sales`, body)),
   undoSale: async (gymId, saleId) => page(await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/undo`, {})),
-  saveTax: async (gymId, tax) => page(await authApi.put(`${gymPath(gymId)}/register/tax`, tax)),
+  /** Whether the gym's prices hold the tax: `{ included }`. */
+  saveTaxMode: async (gymId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax`, body)),
+  addTaxRate: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/tax-rates`, body)),
+  changeTaxRate: async (gymId, rateId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax-rates/${encodeURIComponent(rateId)}`, body)),
+  removeTaxRate: async (gymId, rateId) => page(await authApi.delete(`${gymPath(gymId)}/register/tax-rates/${encodeURIComponent(rateId)}`)),
   addProduct: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/products`, body)),
   changeProduct: async (gymId, productId, body) => page(await authApi.put(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`, body)),
   archiveProduct: async (gymId, productId) => page(await authApi.delete(`${gymPath(gymId)}/register/products/${encodeURIComponent(productId)}`)),

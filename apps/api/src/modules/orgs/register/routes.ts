@@ -8,7 +8,10 @@
 //   GET    /v1/orgs/:gymId/register/people?query=           who a sale can be for (`billing.members`)
 //   POST   /v1/orgs/:gymId/register/sales                   one sale (`billing.members`)
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/undo      take it back, the same day
-//   PUT    /v1/orgs/:gymId/register/tax                     the gym's tax (`memberships.manage`)
+//   PUT    /v1/orgs/:gymId/register/tax                     whether prices hold the tax (`memberships.manage`)
+//   POST   /v1/orgs/:gymId/register/tax-rates               add a tax rate (`memberships.manage`)
+//   PUT    /v1/orgs/:gymId/register/tax-rates/:rateId       change its name or rate
+//   DELETE /v1/orgs/:gymId/register/tax-rates/:rateId       remove one nothing live charges
 //   POST   /v1/orgs/:gymId/register/products                add a product
 //   PUT    /v1/orgs/:gymId/register/products/:productId     change one, every field
 //   DELETE /v1/orgs/:gymId/register/products/:productId     archive it
@@ -25,7 +28,8 @@ import type { Sql } from "postgres";
 import { z } from "zod";
 import {
   salePeopleQuerySchema,
-  salesTaxSchema,
+  saveTaxRateRequestSchema,
+  taxModeRequestSchema,
   saveGymDiscountRequestSchema,
   saveGymProductRequestSchema,
   sellProductRequestSchema,
@@ -40,6 +44,7 @@ import * as service from "./service.js";
 const productParamsSchema = z.object({ gymId: z.string().uuid(), productId: z.string().uuid() }).strict();
 const discountParamsSchema = z.object({ gymId: z.string().uuid(), discountId: z.string().uuid() }).strict();
 const saleParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid() }).strict();
+const rateParamsSchema = z.object({ gymId: z.string().uuid(), rateId: z.string().uuid() }).strict();
 
 export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
   const registerDeps: service.RegisterDeps = { sql: deps.sql, now: deps.now };
@@ -129,12 +134,43 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
   app.put("/v1/orgs/:gymId/register/tax", pre, async (req, reply) => {
     const params = orgParamsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
-    const body = salesTaxSchema.safeParse(req.body);
+    const body = taxModeRequestSchema.safeParse(req.body);
     if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
     const userId = userOf(req);
     const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
     if (!(await within(manageLimit, req, reply))) return reply;
-    return reply.status(200).send(await service.saveTax(registerDeps, userId, params.data.gymId, viewer, body.data));
+    return reply.status(200).send(await service.saveTaxMode(registerDeps, userId, params.data.gymId, viewer, body.data));
+  });
+
+  app.post("/v1/orgs/:gymId/register/tax-rates", pre, async (req, reply) => {
+    const params = orgParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = saveTaxRateRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(201).send(await service.createTaxRate(registerDeps, userId, params.data.gymId, viewer, body.data));
+  });
+
+  app.put("/v1/orgs/:gymId/register/tax-rates/:rateId", pre, async (req, reply) => {
+    const params = rateParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = saveTaxRateRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(200).send(await service.updateTaxRate(registerDeps, userId, params.data.gymId, viewer, params.data.rateId, body.data));
+  });
+
+  app.delete("/v1/orgs/:gymId/register/tax-rates/:rateId", pre, async (req, reply) => {
+    const params = rateParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireManager(registerDeps, userId, params.data.gymId);
+    if (!(await within(manageLimit, req, reply))) return reply;
+    return reply.status(200).send(await service.removeTaxRate(registerDeps, userId, params.data.gymId, viewer, params.data.rateId));
   });
 
   app.post("/v1/orgs/:gymId/register/products", pre, async (req, reply) => {

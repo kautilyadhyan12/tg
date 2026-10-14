@@ -26,12 +26,14 @@ import {
   sellPageResponseSchema,
   salePeopleResponseSchema,
   sellProductResponseSchema,
+  taxRateInUseWords,
   type MemberPaymentMethod,
   type MemberPurchasesResponse,
   type OrgPrivilege,
   type SellPageResponse,
   type SalePeopleResponse,
-  type SalesTax,
+  type SaveTaxRateRequest,
+  type TaxModeRequest,
   type SaveGymDiscountRequest,
   type SaveGymProductRequest,
   type SellProductRequest,
@@ -45,6 +47,7 @@ import { OrgsError, requireStaff, requireWritablePrivilege } from "../service.js
 import { paymentsOn } from "../memberships/billsSql.js";
 import * as discounts from "./discountsRepo.js";
 import * as repo from "./repo.js";
+import * as tax from "./taxRepo.js";
 
 export interface RegisterDeps {
   sql: Sql;
@@ -183,6 +186,8 @@ function throwOnProductFailure(outcome: repo.ProductWriteOutcome): void {
       throw new OrgsError(409, "product_changed", REGISTER_WORDS.changed);
     case "no_currency":
       throw new OrgsError(409, "no_member_currency", REGISTER_WORDS.no_currency);
+    case "rate_not_found":
+      throw new OrgsError(409, "tax_rate_not_found", REGISTER_WORDS.rate_not_found);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled product outcome: ${JSON.stringify(never)}`);
@@ -207,7 +212,7 @@ export async function updateProduct(
     await repo.updateProduct(deps.sql, {
       name: req.name,
       priceMinor: req.priceMinor,
-      taxed: req.taxed,
+      taxRateId: req.taxRateId,
       stock: req.stock,
       gymId,
       productId,
@@ -229,8 +234,42 @@ export async function restoreProduct(deps: RegisterDeps, userId: string, gymId: 
   return await read(deps, gymId, viewer);
 }
 
-export async function saveTax(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, tax: SalesTax): Promise<SellPageResponse> {
-  await repo.saveTax(deps.sql, { gymId, tax, actorUserId: userId });
+export async function saveTaxMode(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, req: TaxModeRequest): Promise<SellPageResponse> {
+  await tax.saveTaxMode(deps.sql, { gymId, included: req.included, actorUserId: userId });
+  return await read(deps, gymId, viewer);
+}
+
+function throwOnRateFailure(outcome: tax.RateWriteOutcome): void {
+  switch (outcome.kind) {
+    case "ok":
+      return;
+    case "not_found":
+      throw new OrgsError(404, "tax_rate_not_found", REGISTER_WORDS.rate_not_found);
+    case "too_many":
+      throw new OrgsError(409, "too_many_tax_rates", REGISTER_WORDS.too_many_rates);
+    case "name_taken":
+      throw new OrgsError(409, "tax_rate_name_taken", REGISTER_WORDS.rate_name_taken);
+    case "in_use":
+      throw new OrgsError(409, "tax_rate_in_use", taxRateInUseWords(outcome.name, outcome));
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled tax rate outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+export async function createTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, req: SaveTaxRateRequest): Promise<SellPageResponse> {
+  throwOnRateFailure(await tax.createRate(deps.sql, { gymId, name: req.name, bp: req.bp, actorUserId: userId }));
+  return await read(deps, gymId, viewer);
+}
+
+export async function updateTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string, req: SaveTaxRateRequest): Promise<SellPageResponse> {
+  throwOnRateFailure(await tax.updateRate(deps.sql, { gymId, rateId, name: req.name, bp: req.bp, actorUserId: userId, now: deps.now() }));
+  return await read(deps, gymId, viewer);
+}
+
+export async function removeTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string): Promise<SellPageResponse> {
+  throwOnRateFailure(await tax.removeRate(deps.sql, { gymId, rateId, actorUserId: userId }));
   return await read(deps, gymId, viewer);
 }
 

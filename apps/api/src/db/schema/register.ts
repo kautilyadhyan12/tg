@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql` and `0107_membership_discounts.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0108_tax_rates.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -20,6 +20,7 @@ import {
 import { createdAt } from "./common.js";
 import { gymMemberListEntries } from "./memberList.js";
 import { gymMembershipTypes } from "./memberships.js";
+import { gymTaxRates } from "./tax.js";
 import { gyms } from "./tenancy.js";
 import { users } from "./identity.js";
 
@@ -35,7 +36,8 @@ export const gymProducts = pgTable(
     name: text("name").notNull(),
     priceMinor: integer("price_minor").notNull(),
     currency: text("currency").notNull(),
-    taxed: boolean("taxed").notNull().default(true),
+    /** The gym's tax rate it charges; null for none. */
+    taxRateId: uuid("tax_rate_id"),
     /** How many are left; null where the gym does not count it. */
     stock: integer("stock"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -51,6 +53,15 @@ export const gymProducts = pgTable(
     uniqueIndex("gym_products_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} IS NULL`),
+    // `0108` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
+    foreignKey({
+      name: "gym_products_tax_rate_fk",
+      columns: [t.gymId, t.taxRateId],
+      foreignColumns: [gymTaxRates.gymId, gymTaxRates.id],
+    }),
+    index("gym_products_tax_rate_idx")
+      .on(t.gymId, t.taxRateId)
+      .where(sql`${t.taxRateId} IS NOT NULL`),
   ],
 );
 
@@ -185,6 +196,7 @@ export const gymSales = pgTable(
     totalMinor: integer("total_minor").notNull(),
     taxBp: integer("tax_bp").notNull(),
     taxIncluded: boolean("tax_included").notNull(),
+    taxName: text("tax_name"),
     currency: text("currency").notNull(),
     method: text("method").notNull(),
     soldOn: date("sold_on").notNull(),
@@ -207,6 +219,7 @@ export const gymSales = pgTable(
       sql`${t.unitPriceMinor} BETWEEN 1 AND 99999999 AND ${t.netMinor} >= 0 AND ${t.taxMinor} >= 0 AND ${t.totalMinor} BETWEEN 1 AND 99999999 AND ${t.netMinor} + ${t.taxMinor} = ${t.totalMinor}`,
     ),
     check("gym_sales_tax_check", sql`${t.taxBp} BETWEEN 0 AND 3000 AND (${t.taxBp} > 0 OR ${t.taxMinor} = 0)`),
+    check("gym_sales_tax_name_check", sql`${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30`),
     check("gym_sales_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_sales_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer')`),
     foreignKey({

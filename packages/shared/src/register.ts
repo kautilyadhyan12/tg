@@ -27,6 +27,9 @@ export const SALE_PEOPLE_FOUND = 8;
 
 /** A tax rate in hundredths of a percent: 825 is 8.25%. 0 is no tax. */
 export const SALES_TAX_BP_MAX = 3000;
+/** How many named tax rates a gym can have (18b-iii). */
+export const TAX_RATES_MAX = 10;
+export const TAX_NAME_MAX = 30;
 
 /** Whether a country's shelf prices already hold the tax. In the United States and
  *  Canada sales tax is added at the till; where VAT or GST is charged the price shown is
@@ -62,6 +65,14 @@ export interface SaleAmounts {
 }
 
 export type SaleAmountsResult = ({ ok: true } & SaleAmounts) | { ok: false; reason: "not_an_amount" | "too_much" | "nothing_to_pay" };
+
+/** The tax a bill is opened with: the rate's name and percentage as they are that day, and
+ *  whether the gym's prices hold it. */
+export interface TaxApplied {
+  name: string;
+  bp: number;
+  included: boolean;
+}
 
 /** WHAT ONE SALE COMES TO. Whole-number arithmetic throughout, the tax rounded to the
  *  nearest minor unit (a half goes up).
@@ -107,12 +118,23 @@ export function saleAmounts(input: {
   return { ok: true, ...amounts };
 }
 
+/** WHAT ONE MEMBERSHIP BILL COMES TO (18b-iii): its price, after any discount, with the tax
+ *  of the rate its membership was sold with, by `saleAmounts`' own arithmetic. The bill's
+ *  amount is `totalMinor`, what the person pays; `taxMinor` is the part of it that is tax. */
+export function billAmounts(listedMinor: number, tax: TaxApplied | null): SaleAmountsResult {
+  return saleAmounts({ unitPriceMinor: listedMinor, quantity: 1, taxed: tax !== null, taxBp: tax?.bp ?? 0, taxIncluded: tax?.included ?? false });
+}
+
 // ── The wire ────────────────────────────────────────────────────────────────
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);
 const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 const taxBpSchema = z.number().int().min(0).max(SALES_TAX_BP_MAX);
+/** A named rate's percentage: a rate of 0 is no rate, and is "No tax" instead. */
+const rateBpSchema = z.number().int().min(1).max(SALES_TAX_BP_MAX);
+/** Trimmed, one line, nothing hidden: a tax's name is printed on a bill and a receipt. */
+const taxNameSchema = z.string().trim().min(1).max(TAX_NAME_MAX).regex(VISIBLE_TEXT);
 /** Trimmed, one line, nothing hidden: a product's name is printed on a receipt (18g). */
 const productNameSchema = z.string().trim().min(1).max(PRODUCT_NAME_MAX).regex(VISIBLE_TEXT);
 const stockSchema = z.number().int().min(0).max(PRODUCT_STOCK_MAX);
@@ -123,8 +145,8 @@ export const gymProductSchema = z
     name: z.string(),
     priceMinor: minorSchema,
     currency: currencySchema,
-    /** Whether the gym's tax is charged on it. */
-    taxed: z.boolean(),
+    /** The gym's tax rate charged on it; null for no tax. */
+    taxRateId: z.string().uuid().nullable(),
     /** How many are left; null where the gym does not count it. */
     stock: stockSchema.nullable(),
     archivedAt: z.string().datetime().nullable(),
@@ -137,7 +159,7 @@ export const saveGymProductRequestSchema = z
   .object({
     name: productNameSchema,
     priceMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX),
-    taxed: z.boolean(),
+    taxRateId: z.string().uuid().nullable(),
     stock: stockSchema.nullable(),
   })
   .strict();
@@ -148,8 +170,34 @@ export type SaveGymProductRequest = z.infer<typeof saveGymProductRequestSchema>;
 export const updateGymProductRequestSchema = saveGymProductRequestSchema.extend({ updatedAt: z.string().datetime() }).strict();
 export type UpdateGymProductRequest = z.infer<typeof updateGymProductRequestSchema>;
 
-export const salesTaxSchema = z.object({ bp: taxBpSchema, included: z.boolean() }).strict();
+/** One of the gym's named tax rates (18b-iii), with what charges it: so the screen can say
+ *  what a change reaches before it is made, and why one in use cannot be removed. */
+export const gymTaxRateSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string(),
+    bp: rateBpSchema,
+    /** Products on sale that charge it. */
+    products: z.number().int().min(0),
+    /** Membership types on the price list that charge it. */
+    membershipTypes: z.number().int().min(0),
+    /** Memberships people hold, not yet over, whose bills charge it. */
+    memberships: z.number().int().min(0),
+  })
+  .strict();
+export type GymTaxRate = z.infer<typeof gymTaxRateSchema>;
+
+/** The gym's tax: its rates, by name, and whether its prices already hold the tax or it is
+ *  added on top. One way for the whole gym, as a country charges it. */
+export const salesTaxSchema = z.object({ included: z.boolean(), rates: z.array(gymTaxRateSchema).max(TAX_RATES_MAX) }).strict();
 export type SalesTax = z.infer<typeof salesTaxSchema>;
+
+/** Whether the gym's prices hold the tax. */
+export const taxModeRequestSchema = z.object({ included: z.boolean() }).strict();
+export type TaxModeRequest = z.infer<typeof taxModeRequestSchema>;
+
+export const saveTaxRateRequestSchema = z.object({ name: taxNameSchema, bp: rateBpSchema }).strict();
+export type SaveTaxRateRequest = z.infer<typeof saveTaxRateRequestSchema>;
 
 export const gymSaleSchema = z
   .object({
@@ -162,6 +210,9 @@ export const gymSaleSchema = z
     taxMinor: minorSchema,
     totalMinor: minorSchema,
     taxBp: taxBpSchema,
+    /** The tax's name when it was sold; null where none was charged, or for a sale made
+     *  before a gym's rates had names. */
+    taxName: z.string().nullable(),
     taxIncluded: z.boolean(),
     /** The discount it was sold with, as it was named then, and what it took off; null and
      *  0 where there was none. */
@@ -312,6 +363,10 @@ export const REGISTER_WORDS = {
   product_not_found: "That product is no longer for sale. Pick another.",
   person_not_found: "That person was not found on your list. Pick them again, or sell to a walk-in.",
   price_changed: "The price or the tax changed while this was open. Nothing was sold: check the total and press again.",
+  rate_not_found: "That tax rate was not found. Pick another, or choose No tax.",
+  rate_name_taken: "You already have a tax rate with this name. Pick another name.",
+  too_many_rates: `You can have ${String(TAX_RATES_MAX)} tax rates. Remove one you no longer charge first.`,
+  taxed_price_too_high: "This price is too high to charge tax on. Lower the price, or choose No tax.",
   request_reused: "That form was already used for another sale. Nothing was sold: start the sale again.",
   sale_not_found: "That sale was not found.",
   sale_not_today: "Only a sale made today can be undone here.",
@@ -327,6 +382,25 @@ export const REGISTER_WORDS = {
 export function productCurrencyWords(name: string, was: string, now: string | null): string {
   if (now === null) return `${name} is priced in ${was}, and your country is not set. Nothing was sold: set your country in Settings first.`;
   return `${name} is priced in ${was}, and you now sell in ${now}. Nothing was sold: open ${name} under Products and save its price in ${now}.`;
+}
+
+const counted = (n: number, one: string, many: string): string => `${String(n)} ${n === 1 ? one : many}`;
+
+/** Why a tax rate was not removed: what still charges it, and what to do. */
+export function taxRateInUseWords(name: string, uses: { products: number; membershipTypes: number; memberships: number }): string {
+  const parts = [
+    uses.products > 0 ? counted(uses.products, "product", "products") : null,
+    uses.membershipTypes > 0 ? counted(uses.membershipTypes, "membership type", "membership types") : null,
+    uses.memberships > 0 ? counted(uses.memberships, "member's membership", "members' memberships") : null,
+  ].filter((p): p is string => p !== null);
+  const list = parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1] ?? ""}`;
+  const first = `${name} was not removed: it is charged on ${list}.`;
+  const change = uses.products > 0 || uses.membershipTypes > 0 ? " Change them to another rate or No tax first." : "";
+  const held =
+    uses.memberships > 0
+      ? ` A membership keeps the tax it was sold with, so ${name} can be removed once nobody holds one. You can still change its name or rate.`
+      : "";
+  return first + change + held;
 }
 
 /** How many are left, said to staff who asked for more. */

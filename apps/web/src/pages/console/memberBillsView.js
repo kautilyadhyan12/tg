@@ -4,6 +4,7 @@
 // what can still be refunded (`memberBillRules.ts` in `@app/shared`); this file only puts
 // them into words.
 import {
+  bpToTaxRateText,
   BILL_CANCEL_REASONS,
   BILL_CANCEL_REASON_WORDS,
   BILL_OVERDUE_DAYS_MAX,
@@ -74,8 +75,18 @@ export function billsToDraw(billing, all) {
   return { bills, hidden: billing.bills.length - bills.length };
 }
 
-/** One bill as a box: the days it is for, its amount and tag, when it is or was due, who
- *  cancelled it, and each payment in columns with the refunds noted against it. */
+/** The tax in a bill, in one line (18b-iii): "$45.00 plus $8.10 GST 18%", or "Includes $7.63
+ *  GST 18%" where the price held it; null for none. */
+export function billTaxLine(bill, currency) {
+  const t = bill.tax;
+  if (t === null || t === undefined) return null;
+  const label = `${t.name} ${bpToTaxRateText(t.bp)}%`;
+  if (t.included) return `Includes ${formatMinor(t.minor, currency)} ${label}`;
+  return `${formatMinor(bill.amountMinor - t.minor, currency)} plus ${formatMinor(t.minor, currency)} ${label}`;
+}
+
+/** One bill as a box: the days it is for, its amount and tag, its tax, when it is or was
+ *  due, who cancelled it, and each payment in columns with the refunds noted against it. */
 export function billRow(bill, currency, today) {
   const amount = formatMinor(bill.amountMinor, currency);
   // Some of what was paid has been given back, and not all: still paid, and said so.
@@ -100,6 +111,7 @@ export function billRow(bill, currency, today) {
     amount,
     tag: state.tag,
     tone: state.tone,
+    tax: billTaxLine(bill, currency),
     when,
     // Part paid: what is still owed, said in money.
     left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} left` : null,

@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { saveGymMembershipTypeRequestSchema, updateGymMembershipTypeRequestSchema } from '@app/shared';
 import {
+  typeTaxLine,
   archivedNote,
   canAddType,
   canLimitPt,
@@ -174,6 +175,7 @@ describe('the form', () => {
       includesPt: false,
       ptLimit: null,
       ptPeriod: null,
+      taxRateId: null,
     });
     expect(draftBody(named({ description: '  All classes and open gym  ' }), 'USD').description).toBe('All classes and open gym');
     expect(draftBody(named({ choice: 'pack' }), 'USD')).toMatchObject({ kind: 'pack', packClasses: 10, packDays: 60, termCount: null, termUnit: null, access: 'all_classes' });
@@ -261,6 +263,7 @@ describe('the form', () => {
       includesPt: false,
       ptLimit: null,
       ptPeriod: null,
+      taxRateId: null,
       // A change carries the stamp the list gave; a new type has none.
       updatedAt: '2026-10-04T09:00:00.000Z',
     });
@@ -359,5 +362,23 @@ describe('the form', () => {
     expect(wholeNumber('12', 1, 365)).toBe(12);
     expect(wholeNumber(' 12 ', 1, 365)).toBe(12);
     for (const bad of ['', '0', '366', '1.5', '1e2', '-3', 'ten', '12345']) expect(wholeNumber(bad, 1, 365), bad).toBeNull();
+  });
+});
+
+describe('a type’s tax (18b-iii)', () => {
+  const list = (over = {}) => ({ taxRates: [{ id: 'r1', name: 'GST', bp: 1800 }], taxIncluded: false, ...over });
+  it('says what its bills charge, on top or inside; nothing for no tax or a rate since removed', () => {
+    expect(typeTaxLine({ taxRateId: 'r1' }, list())).toBe('Plus GST 18% on each payment');
+    expect(typeTaxLine({ taxRateId: 'r1' }, list({ taxIncluded: true }))).toBe('Includes GST 18%');
+    expect(typeTaxLine({ taxRateId: null }, list())).toBeNull();
+    expect(typeTaxLine({ taxRateId: 'gone' }, list())).toBeNull();
+  });
+  it('the form keeps the tax, sends it, starts a new type on No tax, and refuses a taxed price too high to bill', () => {
+    expect(emptyDraft().taxRateId).toBe('');
+    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50' }, 'USD').taxRateId).toBeNull();
+    expect(draftBody({ ...emptyDraft(), name: 'Gold', price: '50', taxRateId: 'r1' }, 'USD').taxRateId).toBe('r1');
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '769230.76', taxRateId: 'r1' }, 'USD')).toBeNull();
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '769230.77', taxRateId: 'r1' }, 'USD')?.price).toBe('A price with tax can be at most $769,230.76. Lower the price, or choose No tax.');
+    expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '999999.99' }, 'USD')).toBeNull();
   });
 });

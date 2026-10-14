@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, orgWords } from '@app/shared';
+import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, bpToTaxRateText, orgWords } from '@app/shared';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -28,6 +28,7 @@ import {
   packForPtOnly,
   priceExample,
   termLine,
+  typeTaxLine,
   termUnitOptions,
   typesSummary,
   withChoice,
@@ -37,6 +38,7 @@ import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/co
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
 import BillSettingsCard from './BillSettingsCard';
 import MembershipDiscounts from '../../pages/console/MembershipDiscounts';
+import { NewRateInline } from '../../pages/console/TaxRates';
 import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { useListMemberships } from './useListMemberships';
@@ -91,7 +93,8 @@ function Part({ title, children }) {
 
 /** `inRow`: the form is inside a row of a list, under that list's own heading.
  *  `error`: why the server refused the last save, said beside the button that sent it. */
-function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
+function TypeForm({ gymId, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
+  const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
   const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
   const id = (name) => `membership-${name}-${gymId}`;
@@ -211,6 +214,36 @@ function TypeForm({ gymId, currency, options, draft, setDraft, problems, refused
             style={{ maxWidth: 240 }}
           />
         </Field>
+
+        <Field id={id('tax')} label="Tax">
+          <select id={id('tax')} value={draft.taxRateId} onChange={text('taxRateId')} className="c-input" style={{ maxWidth: 280 }}>
+            <option value="">No tax</option>
+            {taxRates.map((rate) => (
+              <option key={rate.id} value={rate.id}>
+                {`${rate.name} ${bpToTaxRateText(rate.bp)}%`}
+              </option>
+            ))}
+          </select>
+          {addingRate ? null : (
+            <p className="c-s13 c-t3 m-0 flex flex-wrap items-center gap-2">
+              {editing ? 'Members who already hold it keep the tax they were sold with.' : taxRates.length === 0 ? 'You have no tax rates yet.' : null}
+              <button type="button" className="c-btn-link c-s13 c-w6" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAddingRate(true)}>
+                Add a tax rate
+              </button>
+            </p>
+          )}
+        </Field>
+        {addingRate ? (
+          <NewRateInline
+            gymId={gymId}
+            onAdded={(rate) => {
+              setAddingRate(false);
+              onRateAdded(rate);
+              set({ taxRateId: rate.id });
+            }}
+            onCancel={() => setAddingRate(false)}
+          />
+        ) : null}
 
         {hasTerm ? (
           <Field
@@ -423,7 +456,7 @@ function RowNote({ error, done }) {
 
 /** `form`: this type's own form while it is being changed, or null. `box`: the box of
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
-function TypeRow({ type, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
+function TypeRow({ type, taxLine = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
@@ -435,6 +468,7 @@ function TypeRow({ type, readOnly, busy, formOpen, ties, form, box = null, note 
           </div>
           {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
+          {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type)}</p>
         </div>
         {asking ? null : (
@@ -674,6 +708,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
       gymId={gymId}
       currency={draftCurrency}
       options={classOptions(list, editing)}
+      taxRates={list?.taxRates ?? []}
+      onRateAdded={(rate) => setList((was) => (was === null ? was : { ...was, taxRates: [...was.taxRates.filter((r) => r.id !== rate.id), { id: rate.id, name: rate.name, bp: rate.bp }] }))}
       draft={draft}
       setDraft={setDraft}
       problems={showProblems ? problems : null}
@@ -764,6 +800,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                   <TypeRow
                     key={type.id}
                     type={type}
+                    taxLine={typeTaxLine(type, list)}
                     readOnly={readOnly}
                     busy={anyBusy}
                     formOpen={locked}
@@ -862,7 +899,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         </>
       )}
       {/* Discounts for memberships, beside the price list they come off (Kd, 2026-10-14). */}
-      {formOpen || list === null ? null : <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} />}
+      {formOpen || list === null ? null : <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} onTaxChanged={() => void load()} />}
       {/* The gym's one setting for bills (18a-i), under the price list they are made from. */}
       {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />}
     </div>
