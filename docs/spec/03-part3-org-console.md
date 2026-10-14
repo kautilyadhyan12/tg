@@ -5168,15 +5168,18 @@ two tiles says which days in its "how" ("A year earlier counts the same weekdays
 before: …" for four weeks). No other figure has a line, nothing in Attendance has one, and
 the reads work out no other year-earlier figure.
 **New members a year earlier** (`membersYearEarlierFrom`, `packages/shared/src/reports.ts`)
-are the people who started in those days and were on the list within 31 days of their last
-day (`REPORT_LIST_LAG_DAYS`): a gym that imports last month's joiners each month has the
-same lag today. There is no figure, and the line says why with the day, never a zero: where
-the list could not count new members from that span's first day (it began after it, or in
-its month: "Your member list started on …"); and where more of the people who started in
-those days reached the list only later than that than in time, as when one member is typed
-in by hand before the gym imports its real file ("Most of your member list was added on
-10 Sep 2026.", the day most of them were added, the earliest where days tie). The counts
-are `readMemberCounts`' `was` part, on the gym's own clock.
+are counted as today's are: the people who started in those days and were on the list on
+their last day, as it stood then. Today's figure has the same blind spot, joiners not yet
+imported, so a gym that imports each month reads the same in both years. There is no
+figure, and the line says why with the day, never a zero: where the list could not count new
+members from that span's first day (it began after it, or in its month: "Your member list
+started on …"); and where the list was not being kept then: more of the people who started
+in those days were added over a month after them (`REPORT_LIST_LAG_DAYS`, 31; the page asks
+a gym to import each month) than were on it in time, as when one member is typed in by hand
+before the gym imports its real file ("Most of your member list was added on 10 Sep 2026.",
+the day most of them were added, the earliest where days tie). People added within the
+month are an ordinary import and count on neither side. The counts are
+`readMemberCounts`' `was` and `late_days` parts, on the gym's own clock.
 **Collected a year earlier** is payments less refunds of those days in the gym's currency,
 as `readMoney` counts them (`readCollected`; a refund of a payment taken back is not
 money), and no figure where the first payment recorded here came after those days began
