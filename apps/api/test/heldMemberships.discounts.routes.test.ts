@@ -429,4 +429,61 @@ d("discounts on memberships (real Postgres)", () => {
     },
     T,
   );
+
+  it(
+    "only staff who may take payments read the discounts or give a membership with one; staff who may add memberships without that add them at the full price",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("who-owner");
+      const front = await makeUser("who-front");
+      const gymId = await makeGym(owner, "Hmd Who Gym");
+      await staffWith(gymId, front, "trainer", ["members.read", "members.confirm"]);
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const founders = await addDiscount(gymId, owner.cookies, "Founders", { code: "STAFFONLY", kind: "amount", percentBp: null, amountMinor: 1000, membershipPayments: "every" });
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+
+      // The person's page is theirs to read: with no discount and no promo code in it.
+      const page = held(await get(heldUrl(gymId, maya), front.cookies));
+      expect(page.canBill).toBe(false);
+      expect(page.discounts).toEqual([]);
+      expect(held(await get(heldUrl(gymId, maya), owner.cookies)).discounts.map((x) => x.code)).toEqual(["STAFFONLY"]);
+
+      // A give that names the discount is refused, unpaid as well as paid, and nothing is written or used.
+      for (const paid of [false, true]) {
+        const res = await give(gymId, maya, front.cookies, giveBody(gold, 5000, { paid, ...(paid ? {} : { method: undefined }), discountId: founders.id, discountMinor: 1000 }));
+        expect(res.statusCode, res.body).toBe(403);
+        expect(errorOf(res)).toBe("forbidden");
+      }
+      expect(await membershipsOf(gymId)).toEqual([]);
+      expect(await usesOf(founders.id)).toBe(0);
+      // Without the discount it is theirs to add, at the full price.
+      const plain = await give(gymId, maya, front.cookies, giveBody(gold, 5000, { paid: false, method: undefined }));
+      expect(plain.statusCode, plain.body).toBe(201);
+      expect((await membershipsOf(gymId)).map((m) => [m.price_minor, m.discount_id])).toEqual([[5000, null]]);
+    },
+    T,
+  );
+
+  it(
+    "a discount's first and last days are the gym's own: late evening in Chicago is still the last day, though it is the next day in UTC",
+    async () => {
+      // 22:00 in Chicago on 15 October is 03:00 UTC on the 16th.
+      clock = new Date("2026-10-16T03:00:00Z");
+      const owner = await makeUser("days-owner");
+      const gymId = await makeGym(owner, "Hmd Days Gym");
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const ends = await addDiscount(gymId, owner.cookies, "Ends today", { endsOn: "2026-10-15" });
+      const starts = await addDiscount(gymId, owner.cookies, "Starts tomorrow", { startsOn: "2026-10-16" });
+      const ava = await addPerson(gymId, owner.cookies, "Ava Wilson");
+      const ben = await addPerson(gymId, owner.cookies, "Ben Lee");
+      const ok = await give(gymId, ava, owner.cookies, giveBody(gold, 5000, { discountId: ends.id, discountMinor: 1000 }));
+      expect(ok.statusCode, ok.body).toBe(201);
+      const early = await give(gymId, ben, owner.cookies, giveBody(gold, 5000, { discountId: starts.id, discountMinor: 1000 }));
+      expect(early.statusCode, early.body).toBe(409);
+      expect(errorOf(early)).toBe("discount_not_started");
+      expect(await usesOf(ends.id)).toBe(1);
+      expect(await usesOf(starts.id)).toBe(0);
+    },
+    T,
+  );
 });

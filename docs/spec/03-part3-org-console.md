@@ -3634,6 +3634,10 @@ memberships.
   products alone, as it was. One for memberships says how often it comes off a
   membership that renews: **First payment only** or **Every payment**; a membership paid
   once (a day pass, a pack, a trial, a fixed term) gets it on that one payment.
+- **Who may use one**: whoever takes payments (`billing.members`), as on Sell. A person's
+  page sends the discounts to nobody else, and a membership given with a discount by
+  anybody else is refused (403), paid or not; staff who may add memberships without that
+  tick add them at the full price. A paid tick says the amount after the discount.
 - **Used** on a person's **Add membership**, from the same Discount list and Promo code
   box as a product sale, offering only what the server
   will take on that type today and what leaves something to pay. Price, Discount and

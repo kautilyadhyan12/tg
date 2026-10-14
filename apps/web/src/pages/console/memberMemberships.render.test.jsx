@@ -545,6 +545,35 @@ describe('adding a membership', () => {
     expect(box.getByText('£39.99 every month')).toBeTruthy();
   });
 
+  it('a discounted pack ticked as paid says the amount paid, the Total, never the full price', async () => {
+    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z' };
+    const reach = { forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+    const first = { ...base, ...reach, id: '66666666-6666-4666-8666-666666666666', name: 'First month', code: 'FIRST20', membershipPayments: 'first' };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { discounts: [first] }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: PACK.id } });
+    expect(form.getByText('They have paid the £90.00')).toBeTruthy();
+    // 20% of £90.00 is £18.00: £72.00 is what is recorded, and what the tick says.
+    fireEvent.change(form.getByLabelText('Discount'), { target: { value: first.id } });
+    expect(form.getByText('They have paid the £72.00')).toBeTruthy();
+    expect(form.queryByText('They have paid the £90.00')).toBeNull();
+    expect([...form.getByTestId('sale-summary').querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£90.00', '-£18.00', '£72.00']);
+  });
+
+  it('staff who cannot take payments are offered no discount, and are sent none', async () => {
+    const base = { kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [] };
+    // Even were one sent, the screen offers none.
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { canBill: false, discounts: [{ ...base, id: '77777777-7777-4777-8777-777777777777', name: 'Founders', code: 'STAFFONLY', membershipPayments: 'every' }] }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(form.queryByLabelText('Discount')).toBeNull();
+    expect(form.queryByLabelText('Promo code')).toBeNull();
+  });
+
   it('shows what the dates will be before it is added, and sends the type, the day and the tick once', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
     orgService.giveHeldMembership.mockRejectedValueOnce(refusal(500, { error: 'internal', message: 'Something went wrong.' }));

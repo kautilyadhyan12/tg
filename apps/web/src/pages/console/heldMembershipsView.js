@@ -276,7 +276,7 @@ export function startRange(today) {
 
 /** The Add form, worked out as staff choose: the line under the start date, and the
  *  words of the "paid" tick. `problem` is why it cannot be added as it stands. */
-export function givePreview(type, startsOn, paid, today) {
+export function givePreview(type, startsOn, paid, today, paidMinor = null) {
   if (type === null || startsOn === '') return { line: null, paidLabel: null, problem: null };
   const made = giveHeldMembership(type, startsOn, paid, today);
   if (!made.ok) {
@@ -296,7 +296,8 @@ export function givePreview(type, startsOn, paid, today) {
   // What the tick would mean, said with its date for a repeating membership.
   const ifPaid = giveHeldMembership(type, startsOn, true, today);
   const until = ifPaid.ok ? heldMembershipView(ifPaid.membership, today).payment : null;
-  const price = formatMinor(type.priceMinor, type.currency);
+  // With a discount the tick says what they pay, the Total under it (18b-ii-b).
+  const price = formatMinor(paidMinor ?? type.priceMinor, type.currency);
   const paidLabel =
     type.kind === 'recurring' && until !== null && until.state === 'paid' && until.until !== null
       ? `They have paid up to ${dayWords(until.until)}`
@@ -307,9 +308,9 @@ export function givePreview(type, startsOn, paid, today) {
 /** What a choice of membership comes to: the type, the line under the date, the words of
  *  the paid tick, and why it cannot be given. `value` is { typeId, startsOn, paid, method }.
  *  `methodNeeded`: it is ticked as paid and how they paid is not picked yet. */
-export function membershipChoice(types, value, today) {
+export function membershipChoice(types, value, today, paidMinor = null) {
   const type = types.find((t) => t.id === value.typeId) ?? null;
-  const preview = givePreview(type, value.startsOn, value.paid, today);
+  const preview = givePreview(type, value.startsOn, value.paid, today, paidMinor);
   const pays = type !== null && type.priceMinor > 0 && value.paid === true;
   return { type, ...preview, methodNeeded: pays && preview.problem === null && (value.method ?? '') === '' };
 }

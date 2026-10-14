@@ -855,7 +855,8 @@ export default function MemberMemberships({
     const choice = membershipChoice(types, form, today);
     const offers = { discounts: shown.discounts, today, currency: choice.type === null ? null : choice.type.currency, canManage: managesTypes };
     const free = choice.type !== null && choice.type.priceMinor === 0;
-    const discount = choice.type === null || free ? null : pickedDiscount(offers, choice.type, form.discountId);
+    // A discount is used by whoever takes payments; the server sends nobody else any.
+    const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
     const summary = discount === null ? null : membershipSummary(choice.type, discount);
     const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && (discount === null || summary !== null);
     return (
@@ -885,9 +886,10 @@ export default function MemberMemberships({
               today={today}
               value={form}
               canBill={shown.canBill}
+              paidMinor={summary === null ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null } } : {}) }))}
             />
-            {choice.type !== null && !free ? (
+            {choice.type !== null && !free && shown.canBill ? (
               <MembershipDiscountPicker
                 page={offers}
                 type={choice.type}

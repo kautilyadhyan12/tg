@@ -147,7 +147,8 @@ function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly
 }
 
 async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean): Promise<HeldMembershipsResponse> {
-  const [list, offered] = await Promise.all([repo.readHeld(deps.sql, gymId, entryId), membershipDiscounts(deps.sql, gymId)]);
+  // A discount and its promo code are read and used by whoever takes payments, as on Sell.
+  const [list, offered] = await Promise.all([repo.readHeld(deps.sql, gymId, entryId), canBill ? membershipDiscounts(deps.sql, gymId) : []]);
   if (list === null) throw notFound();
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays };
   // The page reads a membership as the next write will find it: with its count moved
@@ -304,8 +305,10 @@ export async function giveHeldMembership(
 ): Promise<HeldMembershipsResponse> {
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const canBill = privileges.includes(BILLING);
-  // Saying it is paid records a payment, which is the notebook's own tick.
+  // Saying it is paid records a payment, which is the notebook's own tick; so is using a
+  // discount, which is taken where payments are (18b-ii-a), paid or not.
   if (req.paid && !canBill) throw new OrgsError(403, "forbidden", NO_BILLING);
+  if (req.discountId !== undefined && !canBill) throw new OrgsError(403, "forbidden", NO_DISCOUNTS);
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
   throwOnFailure(
@@ -370,6 +373,7 @@ export async function moveHeldMembership(
 
 const BILLING = "billing.members";
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
+const NO_DISCOUNTS = "Using a discount isn't part of your role. Add the membership without one, or ask the owner to turn on \"Record members' payments\" for you.";
 
 async function requireBilling(deps: HeldDeps, userId: string, gymId: string): Promise<{ today: string; now: Date }> {
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
