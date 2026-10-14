@@ -6,9 +6,10 @@
 // Reformatted to house style at T3 (behavior unchanged; this is the file
 // where the tenancy WHEREs live — it must be reviewable at a glance).
 import type { Sql, TransactionSql } from "postgres";
-import { mealItemSchema, type MealItem, type MoreNutrients } from "@app/shared";
+import { mealItemSchema, type FoodDayTargets, type MealItem, type MoreNutrients } from "@app/shared";
 import { z } from "zod";
 import { dayInTz } from "../gamification/streak.js";
+import type { DayTotals } from "./foodWeek.js";
 import { itemsVersion } from "./mealEdit.js";
 import type { UsdaPortion } from "./measures.js";
 import { USDA_TIE_KCAL } from "./scanMatch.js";
@@ -539,6 +540,73 @@ export async function putRingTargets(
   const r = rows[0];
   if (r === undefined) throw new Error("ring targets upsert returned no row");
   return toRingTargets(r);
+}
+
+// ── your week in food (ROADMAP 34f-i) ───────────────────────────────────────
+
+/** Each day of `from` to `to` (the person's own time zone) on which they logged a
+ *  meal, added up by the database: the meals, the four figures, whether a food is the
+ *  scanner's estimate, and fibre and salt with the foods that lack them. The
+ *  taken_at bounds are a day wider each side, so the index serves and every zone's
+ *  day is inside them. */
+export async function foodDays(
+  sql: SqlOrTx,
+  userId: string,
+  timeZone: string,
+  from: string,
+  to: string,
+): Promise<DayTotals[]> {
+  const rows = await sql<{
+    day: string; meals: number; kcal: number; protein_g: string; carbs_g: string; fat_g: string; about: boolean;
+    fiber: string; fiber_unknown: number; sodium: string; sodium_unknown: number;
+  }[]>`
+    SELECT m.day::text AS day, count(*)::int AS meals, sum(m.kcal_point)::int AS kcal,
+           coalesce(sum(m.protein_g), 0)::text AS protein_g, coalesce(sum(m.carbs_g), 0)::text AS carbs_g,
+           coalesce(sum(m.fat_g), 0)::text AS fat_g, bool_or(i.estimate) AS about,
+           coalesce(sum(i.fiber), 0)::text AS fiber, sum(i.fiber_unknown)::int AS fiber_unknown,
+           coalesce(sum(i.sodium), 0)::text AS sodium, sum(i.sodium_unknown)::int AS sodium_unknown
+    FROM (
+      SELECT (taken_at AT TIME ZONE ${timeZone})::date AS day, kcal_point, protein_g, carbs_g, fat_g, items
+      FROM meal_logs
+      WHERE user_id = ${userId}
+        AND taken_at >= (${from}::date - 1)::timestamp AT TIME ZONE 'UTC'
+        AND taken_at < (${to}::date + 2)::timestamp AT TIME ZONE 'UTC'
+        AND (taken_at AT TIME ZONE ${timeZone})::date BETWEEN ${from}::date AND ${to}::date
+    ) m
+    CROSS JOIN LATERAL (
+      SELECT coalesce(bool_or(e->>'nutritionSource' = 'estimate'), false) AS estimate,
+             sum((e->'more'->>'fiberG')::numeric) AS fiber,
+             count(*) FILTER (WHERE e->'more'->>'fiberG' IS NULL) AS fiber_unknown,
+             sum((e->'more'->>'sodiumMg')::numeric) AS sodium,
+             count(*) FILTER (WHERE e->'more'->>'sodiumMg' IS NULL) AS sodium_unknown
+      FROM jsonb_array_elements(m.items) e
+    ) i
+    GROUP BY m.day
+    ORDER BY m.day`;
+  return rows.map((r) => ({
+    day: r.day, meals: r.meals, kcal: r.kcal,
+    proteinG: Number(r.protein_g), carbsG: Number(r.carbs_g), fatG: Number(r.fat_g), about: r.about,
+    fiberG: { amount: Number(r.fiber), notKnown: r.fiber_unknown },
+    sodiumMg: { amount: Number(r.sodium), notKnown: r.sodium_unknown },
+  }));
+}
+
+/** The targets kept on each of the days `from` to `to`. */
+export async function keptDayTargets(sql: SqlOrTx, userId: string, from: string, to: string): Promise<Map<string, FoodDayTargets>> {
+  const rows = await sql<{ day: string; kcal: number; protein_g: number; carbs_g: number; fat_g: number }[]>`
+    SELECT day::text AS day, kcal, protein_g, carbs_g, fat_g FROM food_day_targets
+    WHERE user_id = ${userId} AND day BETWEEN ${from}::date AND ${to}::date`;
+  return new Map(rows.map((r) => [r.day, { kcal: r.kcal, proteinG: r.protein_g, carbsG: r.carbs_g, fatG: r.fat_g }]));
+}
+
+/** Keep the day's targets as they are now; a later keep that day replaces them. */
+export async function keepDayTargets(sql: SqlOrTx, userId: string, day: string, t: FoodDayTargets): Promise<void> {
+  await sql`
+    INSERT INTO food_day_targets (user_id, day, kcal, protein_g, carbs_g, fat_g)
+    VALUES (${userId}, ${day}::date, ${t.kcal}, ${t.proteinG}, ${t.carbsG}, ${t.fatG})
+    ON CONFLICT (user_id, day) DO UPDATE SET
+      kcal = EXCLUDED.kcal, protein_g = EXCLUDED.protein_g, carbs_g = EXCLUDED.carbs_g,
+      fat_g = EXCLUDED.fat_g, updated_at = now()`;
 }
 
 

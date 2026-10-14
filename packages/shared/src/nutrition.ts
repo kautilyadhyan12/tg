@@ -682,3 +682,72 @@ export const swapDietPlanMealRequestSchema = z.object({
   meal: z.number().int().min(0).max(MOST_PLAN_MEALS - 1),
 }).strict();
 export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSchema>;
+
+// ── Your week in food (ROADMAP 34f-i) ──────────────────────────────────────────
+
+/** The two spans the screen offers: the last 7 days or the last 30, today the last. */
+const foodWeekSpanSchema = z.union([z.literal(7), z.literal(30)]);
+export const foodWeekQuerySchema = z.object({
+  days: z.enum(["7", "30"]).default("7").transform(Number).pipe(foodWeekSpanSchema),
+}).strict();
+export type FoodWeekQuery = z.infer<typeof foodWeekQuerySchema>;
+
+/** Where a day's figure sits against its target: within 10 % either way is "on". */
+export const foodBandSchema = z.enum(["under", "on", "over"]);
+export type FoodBand = z.infer<typeof foodBandSchema>;
+/** The four figures with a target. */
+export const FOOD_WEEK_FIGURES = ["kcal", "proteinG", "carbsG", "fatG"] as const;
+export type FoodWeekFigure = (typeof FOOD_WEEK_FIGURES)[number];
+
+const dayTargetsSchema = z.object({
+  kcal: z.number().int().nonnegative(), proteinG: z.number().int().nonnegative(),
+  carbsG: z.number().int().nonnegative(), fatG: z.number().int().nonnegative(),
+}).strict();
+export type FoodDayTargets = z.infer<typeof dayTargetsSchema>;
+
+const bandsSchema = z.object({
+  kcal: foodBandSchema, proteinG: foodBandSchema, carbsG: foodBandSchema, fatG: foodBandSchema,
+}).strict();
+
+export const foodWeekDaySchema = z.object({
+  /** A day of the person's own time zone, YYYY-MM-DD. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Today: still going, so it is shown and not counted in the facts. */
+  today: z.boolean(),
+  /** How many meals were logged that day; a day with none has no bands. */
+  meals: z.number().int().nonnegative(),
+  /** A food in the day is the scanner's own estimate: the day reads "about". */
+  about: z.boolean(),
+  kcal: z.number().int().nonnegative(),
+  proteinG: z.number().nonnegative(),
+  carbsG: z.number().nonnegative(),
+  fatG: z.number().nonnegative(),
+  /** No target exists for these two; `notKnown` counts the foods without the figure. */
+  fiberG: moreTotalSchema,
+  sodiumMg: moreTotalSchema,
+  /** The day's targets: kept that day, or today's for a day before they were kept.
+   *  Null while the person's plan has no numbers. */
+  targets: dayTargetsSchema.nullable(),
+  /** True when `targets` were kept on the day itself; false when they are today's. */
+  targetsOfTheDay: z.boolean(),
+  /** Null for a day with no meals, or with no targets. */
+  bands: bandsSchema.nullable(),
+}).strict();
+export type FoodWeekDay = z.infer<typeof foodWeekDaySchema>;
+
+/** For each figure, how many finished days with meals and targets were under, on and
+ *  over: "Protein was under target on 5 of 6 days" is `under` of `judged`. Today is
+ *  never judged, so a span of 7 judges 6 days at most, and of 30, 29. */
+const factSchema = z.object({
+  under: z.number().int().nonnegative(), on: z.number().int().nonnegative(),
+  over: z.number().int().nonnegative(), judged: z.number().int().nonnegative(),
+}).strict().refine((f) => f.under + f.on + f.over === f.judged, { message: "the three add up to judged" });
+export type FoodWeekFact = z.infer<typeof factSchema>;
+
+export const foodWeekResponseSchema = z.object({
+  span: foodWeekSpanSchema,
+  /** Oldest first; today is the last. */
+  days: z.array(foodWeekDaySchema).min(7).max(30),
+  facts: z.object({ kcal: factSchema, proteinG: factSchema, carbsG: factSchema, fatG: factSchema }).strict(),
+}).strict();
+export type FoodWeekResponse = z.infer<typeof foodWeekResponseSchema>;

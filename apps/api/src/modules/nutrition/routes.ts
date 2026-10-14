@@ -17,6 +17,7 @@ import {
   dietPlanDayParamsSchema,
   dishwareInputSchema,
   foodSearchQuerySchema,
+  foodWeekQuerySchema,
   makeDietPlanRequestSchema,
   mealEditPreviewRequestSchema,
   nutritionListQuerySchema,
@@ -222,6 +223,15 @@ export function registerNutritionRoutes(
    *  call and no quota: the ideas are drawn from the food list. */
   app.get("/v1/nutrition/suggestions", { preHandler: [app.authenticate] }, async (req, reply) => {
     return reply.send(await service.getMealIdeas(nutritionDeps, authedUserId(req)));
+  });
+
+  /** Your week in food (ROADMAP 34f-i): the last 7 or 30 days of the person's own
+   *  meals against each day's targets. The person is the session's own, so there is
+   *  no id to change; no model call and no quota. */
+  app.get("/v1/nutrition/food-week", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const q = parse(foodWeekQuerySchema, req.query, req, reply);
+    if (q === null) return;
+    return reply.send(await service.getFoodWeek(readDeps, authedUserId(req), q.days));
   });
 
   /** The person's own diet plan (ROADMAP 34e-i): one plan for each person, keyed on the
