@@ -2,7 +2,7 @@
 // module at sync (service interface, R7.1) and by its own /me route. All
 // mutations are retry-safe: streak transitions are day-idempotent and awards
 // upsert (R3.5).
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 import * as repo from "./repo.js";
 import { badgeXpForCodes, earnedCodes } from "./badges.js";
 import {
@@ -12,7 +12,9 @@ import {
   xpProgress,
 } from "./xp.js";
 import { dayInTz, reconcile, replayActivityDays, safeTimeZone, type StreakState } from "./streak.js";
-import type { GamificationMe } from "@app/shared";
+import { weeklyChallengeCodeSchema, type GamificationMe, type WeeklyChallengeCode, type WeeklyChallenges } from "@app/shared";
+import { getPlanHealth, getUserFitnessLevel, getUserSyncContext } from "../users/service.js";
+import { NO_FACTS, challengeXp, measureChallenge, pickChallenges, weekOf, type WeekFacts } from "./challenges.js";
 
 // Part of this module's service interface (R7.1) — other modules import the
 // tz helper from here, never from the internal streak.ts (T3 P2.3 nit).
@@ -77,13 +79,14 @@ async function recomputeXp(deps: GamificationDeps, userId: string, tz: string): 
     const counts = await repo.getXpAccrualCounts(tx, userId);
     const days = await repo.getActivityDays(tx, userId, zone);
     const earned = await repo.listEarned(tx, userId);
-    const total = computeTotalXp({
-      workoutCount: counts.workoutCount,
-      perfectFormWorkouts: counts.perfectFormWorkouts,
-      excellentFormWorkouts: counts.excellentFormWorkouts,
-      streakContinuationDays: countStreakContinuationDays(days),
-      badgeXp: badgeXpForCodes(earned.map((e) => e.code)),
-    });
+    const total =
+      computeTotalXp({
+        workoutCount: counts.workoutCount,
+        perfectFormWorkouts: counts.perfectFormWorkouts,
+        excellentFormWorkouts: counts.excellentFormWorkouts,
+        streakContinuationDays: countStreakContinuationDays(days),
+        badgeXp: badgeXpForCodes(earned.map((e) => e.code)),
+      }) + (await weeklyChallengeXp(tx, userId, zone));
     await repo.upsertXp(tx, userId, total);
     return total;
   });
@@ -226,5 +229,60 @@ export async function getMe(
       nextLevelAt: p.nextLevelAt,
     },
     achievements: earned.map((e) => ({ code: e.code, earnedAt: e.earnedAt.toISOString() })),
+  };
+}
+
+/** The week's codes as kept, minus any the app no longer has. */
+const codesOf = (stored: readonly string[]): WeeklyChallengeCode[] =>
+  stored.flatMap((c) => {
+    const parsed = weeklyChallengeCodeSchema.safeParse(c);
+    return parsed.success ? [parsed.data] : [];
+  });
+
+/** XP from every week's done challenges (ROADMAP 35b), worked out again from the person's
+ *  own workouts and meals, so a workout sent twice never pays twice. Inside recomputeXp's
+ *  lock. */
+async function weeklyChallengeXp(tx: TransactionSql, userId: string, zone: string): Promise<number> {
+  const weeks = (await repo.listWeekPicks(tx, userId)).map((w) => ({ weekStart: w.weekStart, codes: codesOf(w.codes) }));
+  const facts = await repo.weekFacts(tx, userId, zone, weeks.map((w) => w.weekStart));
+  return challengeXp(weeks, new Map<string, WeekFacts>(facts.map((f) => [f.weekStart, f])));
+}
+
+const CAMERA_LOOKBACK_MS = 28 * 86_400_000;
+
+/** This week's challenges (ROADMAP 35b): picked on the first read of the week and kept
+ *  until Sunday, then measured from the person's own workouts and meals. */
+export async function getWeeklyChallenges(
+  deps: GamificationDeps,
+  userId: string,
+  now: Date = new Date(),
+): Promise<WeeklyChallenges> {
+  const ctx = await getUserSyncContext(deps.sql, userId);
+  const tz = safeTimeZone(ctx.timezone);
+  const { weekStart, weekEnd } = weekOf(dayInTz(now, tz));
+  const safeMode = (await getPlanHealth(deps.sql, userId))?.safeMode === true;
+
+  let stored = await repo.getWeekPicks(deps.sql, userId, weekStart);
+  if (stored === null) {
+    const codes = pickChallenges({
+      userId,
+      weekStart,
+      fitnessLevel: await getUserFitnessLevel(deps.sql, userId),
+      safeMode,
+      weightKnown: ctx.weightKg !== null,
+      usedCamera: await repo.usedCameraSince(deps.sql, userId, new Date(now.getTime() - CAMERA_LOOKBACK_MS)),
+    });
+    // A week already part done pays at once, not at the next workout.
+    if (await repo.insertWeekPicks(deps.sql, userId, weekStart, codes)) await recomputeXp(deps, userId, tz);
+    stored = (await repo.getWeekPicks(deps.sql, userId, weekStart)) ?? codes;
+  }
+
+  const [facts] = await repo.weekFacts(deps.sql, userId, tz, [weekStart]);
+  const challenges = codesOf(stored).map((code) => measureChallenge(code, facts ?? NO_FACTS, safeMode));
+  return {
+    weekStart,
+    weekEnd,
+    challenges,
+    xpThisWeek: challenges.reduce((sum, c) => sum + (c.done ? c.xp : 0), 0),
   };
 }

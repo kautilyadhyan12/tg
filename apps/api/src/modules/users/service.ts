@@ -34,6 +34,7 @@ import {
   deriveHealthFlags,
   dietSchema,
   DISCLAIMER_WORDINGS,
+  fitnessLevelSchema,
   fitnessProfileSchema,
   healthScreeningSchema,
   mealsPerDaySchema,
@@ -121,6 +122,13 @@ export async function getPlanHealth(sql: repo.SqlOrTx, userId: string): Promise<
 export async function getUserFoodAnswers(sql: Sql, userId: string): Promise<{ diet: Diet | null; mealsPerDay: number | null }> {
   const profile = await repo.getFitnessProfile(sql, userId);
   return { diet: dietSchema.nullable().parse(profile?.diet ?? null), mealsPerDay: mealsPerDaySchema.nullable().parse(profile?.mealsPerDay ?? null) };
+}
+
+/** Setup's fitness level, for the weekly challenges (35b): null until answered.
+ *  Parsed through the shared enum, so a value outside it fails loud. */
+export async function getUserFitnessLevel(sql: Sql, userId: string): Promise<"beginner" | "intermediate" | "advanced" | null> {
+  const profile = await repo.getFitnessProfile(sql, userId);
+  return fitnessLevelSchema.nullable().parse(profile?.fitnessLevel ?? null);
 }
 
 /** Typed failure for the central error mapper (R8.1); message client-safe. */

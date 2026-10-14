@@ -116,3 +116,23 @@ export const leaderboardSnapshots = pgTable(
   },
   (t) => [unique("leaderboard_snapshots_gym_board_period_uq").on(t.gymId, t.board, t.period)],
 );
+
+// Each person's weekly challenges (migration 0111; ROADMAP 35b): the ones picked for a
+// week, kept so they stay the same until Sunday. Progress and XP are worked out on read.
+export const weeklyChallenges = pgTable(
+  "weekly_challenges",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // The week's Monday, in the person's own time zone.
+    weekStart: date("week_start").notNull(),
+    codes: text("codes").array().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "weekly_challenges_pkey", columns: [t.userId, t.weekStart] }),
+    check("weekly_challenges_monday_check", sql`extract(isodow FROM ${t.weekStart}) = 1`),
+    check("weekly_challenges_codes_check", sql`cardinality(${t.codes}) BETWEEN 1 AND 3`),
+  ],
+);

@@ -249,3 +249,122 @@ export async function getStats(
     photo_meals_logged: Number(meals?.photo_meals_logged ?? 0),
   };
 }
+
+// ── Weekly challenges (ROADMAP 35b) ─────────────────────────────────────────
+
+export interface WeekPicksRow {
+  weekStart: string; // 'YYYY-MM-DD', a Monday
+  codes: string[];
+}
+
+/** The week's challenges, kept; null when none were picked for it. */
+export async function getWeekPicks(sql: SqlOrTx, userId: string, weekStart: string): Promise<string[] | null> {
+  const rows = await sql<{ codes: string[] }[]>`
+    SELECT codes FROM weekly_challenges WHERE user_id = ${userId} AND week_start = ${weekStart}::date`;
+  return rows[0]?.codes ?? null;
+}
+
+/** Keeps the week's challenges unless another request kept some first: the first pick
+ *  stands. True when this call kept them. */
+export async function insertWeekPicks(sql: SqlOrTx, userId: string, weekStart: string, codes: readonly string[]): Promise<boolean> {
+  const rows = await sql`
+    INSERT INTO weekly_challenges (user_id, week_start, codes)
+    VALUES (${userId}, ${weekStart}::date, ${sql.array([...codes])}::text[])
+    ON CONFLICT (user_id, week_start) DO NOTHING
+    RETURNING 1`;
+  return rows.length > 0;
+}
+
+export async function listWeekPicks(sql: SqlOrTx, userId: string): Promise<WeekPicksRow[]> {
+  const rows = await sql<{ week_start: string; codes: string[] }[]>`
+    SELECT week_start::text AS week_start, codes FROM weekly_challenges
+    WHERE user_id = ${userId} ORDER BY week_start`;
+  return rows.map((r) => ({ weekStart: r.week_start, codes: r.codes }));
+}
+
+/** Whether the camera scored any of the person's workouts since `since`. */
+export async function usedCameraSince(sql: SqlOrTx, userId: string, since: Date): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM workouts
+    WHERE user_id = ${userId} AND started_at >= ${since} AND avg_form_score IS NOT NULL LIMIT 1`;
+  return rows.length > 0;
+}
+
+export interface WeekFactsRow {
+  weekStart: string;
+  trainingDays: number;
+  kcalBurned: number;
+  trainingMinutes: number;
+  form80Workouts: number;
+  form90Workouts: number;
+  families: number;
+  foodDays: number;
+}
+
+/** Each named week's facts from the person's own workouts, sets and meals, bucketed by
+ *  the Monday of the person's time zone. timeZone is a validated IANA name
+ *  (safeTimeZone), bound as a value. A week with nothing in it is absent. */
+export async function weekFacts(
+  sql: SqlOrTx,
+  userId: string,
+  timeZone: string,
+  weekStarts: readonly string[],
+): Promise<WeekFactsRow[]> {
+  if (weekStarts.length === 0) return [];
+  const weeks = sql.array([...weekStarts]);
+  const workouts = await sql<
+    { week: string; days: string; kcal: string; ms: string; form80: string; form90: string }[]
+  >`
+    SELECT date_trunc('week', started_at AT TIME ZONE ${timeZone})::date::text AS week,
+           count(DISTINCT (started_at AT TIME ZONE ${timeZone})::date) AS days,
+           coalesce(sum(kcal_point), 0) AS kcal,
+           coalesce(sum(duration_ms), 0) AS ms,
+           count(*) FILTER (WHERE avg_form_score >= 80) AS form80,
+           count(*) FILTER (WHERE avg_form_score >= 90) AS form90
+    FROM workouts
+    WHERE user_id = ${userId}
+      AND date_trunc('week', started_at AT TIME ZONE ${timeZone})::date = ANY(${weeks}::date[])
+    GROUP BY 1`;
+  const families = await sql<{ week: string; families: string }[]>`
+    SELECT date_trunc('week', s.started_at AT TIME ZONE ${timeZone})::date::text AS week,
+           count(DISTINCT e.family) AS families
+    FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
+    WHERE s.user_id = ${userId}
+      AND date_trunc('week', s.started_at AT TIME ZONE ${timeZone})::date = ANY(${weeks}::date[])
+    GROUP BY 1`;
+  const food = await sql<{ week: string; days: string }[]>`
+    SELECT date_trunc('week', taken_at AT TIME ZONE ${timeZone})::date::text AS week,
+           count(DISTINCT (taken_at AT TIME ZONE ${timeZone})::date) AS days
+    FROM meal_logs
+    WHERE user_id = ${userId}
+      AND date_trunc('week', taken_at AT TIME ZONE ${timeZone})::date = ANY(${weeks}::date[])
+    GROUP BY 1`;
+  const out = new Map<string, WeekFactsRow>();
+  const row = (week: string): WeekFactsRow => {
+    const found = out.get(week);
+    if (found !== undefined) return found;
+    const fresh: WeekFactsRow = {
+      weekStart: week,
+      trainingDays: 0,
+      kcalBurned: 0,
+      trainingMinutes: 0,
+      form80Workouts: 0,
+      form90Workouts: 0,
+      families: 0,
+      foodDays: 0,
+    };
+    out.set(week, fresh);
+    return fresh;
+  };
+  for (const w of workouts) {
+    const r = row(w.week);
+    r.trainingDays = Number(w.days);
+    r.kcalBurned = Number(w.kcal);
+    r.trainingMinutes = Math.floor(Number(w.ms) / 60_000);
+    r.form80Workouts = Number(w.form80);
+    r.form90Workouts = Number(w.form90);
+  }
+  for (const f of families) row(f.week).families = Number(f.families);
+  for (const f of food) row(f.week).foodDays = Number(f.days);
+  return [...out.values()];
+}
