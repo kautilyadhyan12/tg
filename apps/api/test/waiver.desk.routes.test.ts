@@ -10,6 +10,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import * as waiverRepo from "../src/modules/orgs/waiver/repo.js";
 import {
   WAIVER_DESK_WORDS,
   WAIVER_WORDS,
@@ -289,6 +290,14 @@ d("a waiver signed at the desk (real Postgres)", () => {
       const child = await signAtDesk(iron, kid.entryId, { waiverId: v1, signer: "person", name: "Mia Reyes" });
       expect(child.statusCode).toBe(409);
       expect(errorOf(child)).toMatchObject({ error: "guardian_needed", message: WAIVER_DESK_WORDS.guardian_needed("Mia Reyes") });
+      // An adult's record is never signed by a parent for them.
+      const adult = await signAtDesk(iron, ben.entryId, { waiverId: v1, signer: "guardian", name: "Ana Stone" });
+      expect(adult.statusCode).toBe(409);
+      expect(errorOf(adult)).toMatchObject({ error: "person_signs", message: WAIVER_DESK_WORDS.person_signs("Ben Stone") });
+      // The one statement itself refuses a date of birth that is no longer the record's:
+      // a check that read the old one writes nothing.
+      expect(await waiverRepo.signAtDesk(sql, { gymId: iron.id, waiverId: v1, entryId: kid.entryId, dateOfBirth: ADULT_BORN, signer: "person", name: "Mia Reyes", witnessedBy: iron.owner.userId, at: new Date() })).toBe(false);
+      expect(await waiverRepo.signAtDesk(sql, { gymId: iron.id, waiverId: v1, entryId: ben.entryId, dateOfBirth: null, signer: "person", name: "Ben Stone", witnessedBy: iron.owner.userId, at: new Date() })).toBe(false);
       expect(await deskRows(iron)).toEqual([]);
 
       // Ben signs; Mia's mother signs for her.
@@ -440,6 +449,17 @@ d("a waiver signed at the desk (real Postgres)", () => {
         JSON.parse((await get(`${rulesUrl}/preview?who=everyone&overdue=let_in&waiver=see_staff`, iron.owner.cookies)).body),
       );
       expect(preview).toMatchObject({ listed: 3, stopped: 1, notListed: 0, people: [{ entryId: cara.entryId, name: "Cara Lane", reason: "no_waiver" }] });
+      // Two people in the app who are on no record of the list: the one who has not signed
+      // is counted as sent to staff, the one who has is not.
+      const previewNow = async () =>
+        checkinRulesPreviewResponseSchema.parse(JSON.parse((await get(`${rulesUrl}/preview?who=everyone&overdue=let_in&waiver=see_staff`, iron.owner.cookies)).body));
+      const offList = await Promise.all(["zed4", "yan4"].map((local) => signIn(addr(local))));
+      for (const who of offList) await sql`INSERT INTO gym_members (gym_id, user_id) VALUES (${iron.id}, ${who.userId})`;
+      expect((await previewNow()).notListed).toBe(2);
+      const [zed] = offList;
+      if (zed === undefined) throw new Error("nobody off the list");
+      expect((await post(`${waiverUrl(iron)}/sign`, { waiverId: v1, name: "Zed Hart" }, zed.cookies)).statusCode).toBe(200);
+      expect(await previewNow()).toMatchObject({ listed: 3, stopped: 1, notListed: 1 });
       expect(checkinRulesResponseSchema.parse(JSON.parse((await get(rulesUrl, iron.owner.cookies)).body))).toMatchObject({ waiverInUse: true });
       const saved = await send("PUT", rulesUrl, iron.owner.cookies, strict);
       expect(saved.statusCode, saved.body).toBe(200);
@@ -511,8 +531,10 @@ d("a waiver signed at the desk (real Postgres)", () => {
 
       // The gym's plan lapses: its people can be read, and nothing is signed.
       await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${iron.id}`;
+      expect((await get(deskUrl(iron, cara.entryId), iron.owner.cookies)).statusCode).toBe(200);
       const lapsed = await signAtDesk(iron, cara.entryId, body);
-      expect(lapsed.statusCode).toBeGreaterThanOrEqual(400);
+      expect(lapsed.statusCode).toBe(409);
+      expect(errorOf(lapsed).error).toBe("gym_not_on_plan");
       expect(await deskRows(iron)).toEqual([]);
     },
     TEST_TIMEOUT_MS,

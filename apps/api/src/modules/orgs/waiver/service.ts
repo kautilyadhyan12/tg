@@ -180,8 +180,13 @@ export async function signAtDesk(
   const record = await repo.deskRecord(deps.sql, gymId, entryId);
   if (record === null) throw personNotFound();
   const at = deps.now();
-  if (body.signer === "person" && isUnder18(record.dateOfBirth, dayInTz(at, org.timezone)) === true) {
+  const minor = isUnder18(record.dateOfBirth, dayInTz(at, org.timezone));
+  if (body.signer === "person" && minor === true) {
     throw new OrgsError(409, "guardian_needed", WAIVER_DESK_WORDS.guardian_needed(record.fullName));
+  }
+  // The record says they are an adult: they sign themselves, never a parent for them.
+  if (body.signer === "guardian" && minor === false) {
+    throw new OrgsError(409, "person_signs", WAIVER_DESK_WORDS.person_signs(record.fullName));
   }
   await deps.sql.begin(async (tx) => {
     const input = { gymId, waiverId: body.waiverId, entryId, dateOfBirth: record.dateOfBirth, signer: body.signer, name: body.name, witnessedBy: userId, at };

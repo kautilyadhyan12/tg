@@ -73,9 +73,14 @@ export function waiverLine(member, when) {
  *
  *  ON AN EMAIL A FAMILY SHARES the page is one person's record and the signature may be
  *  another's, so it is never said that this record signed: the label is plain and names
- *  who typed the signature. */
-export function waiverLineParts(member, when) {
+ *  who typed the signature.
+ *
+ *  `desk`: the record's own signature made at the desk (3e-ii), or null. Somebody who
+ *  signed there and not in the app has signed, so the line never says otherwise; the app
+ *  still asks them, since a desk signature is the record's and not the account's. */
+export function waiverLineParts(member, when, desk = null) {
   const signed = member.waiverSigned ?? null;
+  if (signed === null && desk !== null) return { tone: 'plain', label: 'Signed at the desk', rest: ' · not signed in the app yet' };
   if (signed === null) return { tone: 'warn', label: 'Waiver not signed', rest: '' };
   const day = when(signed.at);
   const on = day === '' ? '' : ` on ${day}`;
@@ -98,7 +103,9 @@ export function deskWaiverParts(entry, when) {
   const desk = entry?.waiverDesk ?? null;
   const name = entry?.fullName === '' || entry?.fullName == null ? 'This person' : entry.fullName;
   if (desk === null) {
-    const inApp = (entry?.members ?? []).length > 0;
+    // Somebody on an email a family shares signs no record in the app (`signed.ts`).
+    const inApp = (entry?.members ?? []).some((member) => member.sharedEmail !== true);
+    if (!inApp && (entry?.members ?? []).length > 0) return { tone: 'warn', label: 'Waiver not signed', rest: `${name} can sign it here at the desk.` };
     return { tone: 'warn', label: 'Waiver not signed', rest: `${name} can sign it here at the desk, or in the app${inApp ? '' : ' when they join'}.` };
   }
   const day = when(desk.at);

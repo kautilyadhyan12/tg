@@ -89,7 +89,9 @@ export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned }) {
       setProblem(errorText(err, "We couldn't sign the waiver. Try again."));
       // New words, or the record now says under 18: the box reads again, and the tick is
       // pressed again for what is on screen.
-      if (code === 'waiver_changed' || code === 'guardian_needed') {
+      if (code === 'waiver_changed' || code === 'guardian_needed' || code === 'person_signs') {
+        // Somebody else signs now: the name typed was the other person's.
+        if (code !== 'waiver_changed') setName('');
         setAgreed(false);
         setAttempt((n) => n + 1);
       }
@@ -144,6 +146,7 @@ export default function DeskWaiver({ gymId, entry, readOnly, when, onSigned }) {
                         aria-checked={picked === choice.value}
                         onClick={() => {
                           setPicked(choice.value);
+                          setName('');
                           setAgreed(false);
                         }}
                         className={picked === choice.value ? 'c-chip c-chip-on' : 'c-chip'}

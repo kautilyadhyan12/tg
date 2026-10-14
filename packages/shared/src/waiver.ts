@@ -178,6 +178,8 @@ export type SignAtDeskResponse = z.infer<typeof signAtDeskResponseSchema>;
 export const WAIVER_DESK_WORDS = {
   /** The record says the person is under 18 and the box said they sign themselves. */
   guardian_needed: (name: string): string => `${name === "" ? "This person" : name} is under 18, so a parent or guardian signs for them.`,
+  /** The record says the person is 18 or over and the box said a parent or guardian signs. */
+  person_signs: (name: string): string => `${name === "" ? "This person" : name} is 18 or over, so they sign it themselves.`,
   /** The record is not on the list any more, or is another gym's. */
   person_not_found: "We couldn't find this person on your list.",
 } as const;

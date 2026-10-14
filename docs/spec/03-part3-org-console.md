@@ -2042,7 +2042,10 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   migration `0106`: the wording, the record, `signer` `person` or `guardian`, the name
   typed, the staff member who opened the screen, the time; one per record per wording). It
   never signs the person's app: somebody in the app still signs there, so a family on one
-  email is never marked signed by a relative.
+  email is never marked signed by a relative. **The app keeps asking somebody who signed at
+  the desk** until they sign in the app too; that is on purpose, not a fault. Their page's
+  App card says "Signed at the desk · not signed in the app yet", never "Waiver not signed"
+  (round one, High-1).
 - **A person's page** (`members.confirm`), on a current record of a gym with a waiver in use,
   shows a **Waiver** card unless the person the record certainly is signed in the app:
   "Waiver signed at the desk on 14 October 2026 as Ben Stone" (or "by Ana Reyes, parent or
@@ -2052,8 +2055,13 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   their record."
 - **Under 18** by the record's date of birth on the gym's own day (`isUnder18`; born 29
   February, 18 on 1 March of a year with no 29th): only a parent or guardian signs, and the
-  server refuses the person (`409 guardian_needed`). With no date of birth the box asks
-  "Who is signing?"; nothing is shown to sign until it is answered.
+  server refuses the person (`409 guardian_needed`); a record that says 18 or over is
+  signed by the person only (`409 person_signs`). With no date of birth the box asks "Who
+  is signing?"; nothing is shown to sign until it is answered, and a change of who signs
+  empties the name typed.
+- **"Or in the app"** is said only where somebody in the app whose signature would sign this
+  record is on it: with only a shared family email, the card says "{name} can sign it here
+  at the desk." (round one, High-2).
 - `GET` and `POST /v1/orgs/:gymId/member-list/entries/:entryId/waiver[/sign]` take
   `{ waiverId, signer, name }`. One statement writes it, only while that wording is the
   gym's newest in use, the record is on the list and its date of birth is the one checked;
@@ -2065,10 +2073,14 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   wording in use, or an app signature by the person the record certainly is (§18.4). An app
   signature on a shared family email signs no record. Members' Filter shows **Waiver not
   signed** with its count while the gym has a waiver in use (`?waiver=not_signed`; Select
-  all means the same people); Settings' Waiver box adds "and N at the desk".
+  all means the same people; a current member's word, so a page of past members is not
+  narrowed by it); Settings' Waiver box adds "and N at the desk".
 - **The desk's third choice** (§12.4): **Someone who has not signed your waiver**, Check them
   in (the start) or Send them to staff, by the same rule. With no waiver in use it stops
   nobody, and the box says so with **Set up your waiver**, which opens the Waiver box.
+  **A family on one email:** its records read not signed, so their key tags and staff's
+  search send them to staff and Settings counts them; the pass of the account that signed
+  is let in, since that signature is the account's own.
 - **Limits:** the desk's read 300 an hour a person (900 an address), signing 60 (180).
 - **Cost at full size** (2026-10-14, mains, 3,294 MHz; one gym of 2,000 with 1,200 in the
   app beside 19 of 200; 20 runs, medians; `tools/measure-waiver-cost.ts`,

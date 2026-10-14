@@ -1827,7 +1827,9 @@ export const memberListEntriesQuerySchema = z
     /** Only the people who hold this one of the gym's tags (5d-ii; §18.13). */
     tag: z.string().uuid().optional(),
     /** Only the current members who have not signed the waiver the gym asks for today
-     *  (3e-ii): no signature at the desk, and none in the app by the person the record is. */
+     *  (3e-ii): no signature at the desk, and none in the app by the person the record is.
+     *  A current member's word, as `app` and `membership` are: a page of past members is
+     *  not narrowed by it. */
     waiver: z.literal("not_signed").optional(),
     /** `over`: only the people the Members sign counts (21c-iii), whose last membership
      *  here has ended or been cancelled. `over_owing`: only the people left off it because
