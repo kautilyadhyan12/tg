@@ -49,3 +49,29 @@ export const gymWaiverSignatures = pgTable(
     index("gym_waiver_signatures_user_idx").on(t.userId),
   ],
 );
+
+/** A waiver signed at the desk (3e-ii; `0106_waiver_at_the_desk.sql`): a record's, never an
+ *  app account's. `signer` says whether the person or a parent or guardian signed;
+ *  `witnessedBy` is the staff member who opened the screen. */
+export const gymWaiverDeskSignatures = pgTable(
+  "gym_waiver_desk_signatures",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id").notNull(),
+    waiverId: uuid("waiver_id").notNull(),
+    entryId: uuid("entry_id"),
+    signer: text("signer").notNull(),
+    signedName: text("signed_name").notNull(),
+    witnessedBy: uuid("witnessed_by").references(() => users.id, { onDelete: "set null" }),
+    signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("gym_waiver_desk_signatures_signer_check", sql`${t.signer} IN ('person', 'guardian')`),
+    check("gym_waiver_desk_signatures_name_check", sql`char_length(${t.signedName}) BETWEEN 2 AND 100`),
+    foreignKey({ name: "gym_waiver_desk_signatures_waiver_fk", columns: [t.gymId, t.waiverId], foreignColumns: [gymWaivers.gymId, gymWaivers.id] }).onDelete(
+      "cascade",
+    ),
+    unique("gym_waiver_desk_signatures_one_uq").on(t.waiverId, t.entryId),
+    index("gym_waiver_desk_signatures_entry_idx").on(t.gymId, t.entryId),
+  ],
+);

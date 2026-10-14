@@ -1964,8 +1964,9 @@ device; the one-phone rule follows apps that fight shared accounts (WhatsApp).
 
 ### 10.10 A gym's waiver, signed in the app (3e)
 
-*(ADDED 2026-10-13 with 3e-i, as built. RULINGS 2026-10-08. 3e-ii adds signing at the
-desk with no app and the "Waiver not signed" choice in Members' Filter.)*
+*(ADDED 2026-10-13 with 3e-i, as built. RULINGS 2026-10-08. 3e-ii, as built 2026-10-14:
+signing at the desk, "Waiver not signed" in Members' Filter, and the desk's choice for
+somebody who has not signed — at the end of this section.)*
 
 **The worst thing it could do to a real person:** show somebody as having signed words
 they never saw, or put a signature on a relative when a family shares one email address.
@@ -2012,8 +2013,7 @@ they never saw, or put a signature on a relative when a family shares one email 
 - **Stop using this waiver** asks first, naming who changes and what is kept. Stopped,
   nobody is asked and nothing can be signed; the words and signatures are kept, and saving
   the same words starts it again with them.
-- **Not built here:** a missing signature stops nobody at the front desk; no list of who
-  has not signed (3e-ii); no drawn signature, and no IP address kept.
+- **Not built here:** no drawn signature, and no IP address kept.
 - **Privacy.** A person's "download my data" holds each waiver they signed with its words.
   A signature is kept with the gym after the person's account is deleted, on the consent
   log's footing: it is the gym's proof. **It is removed six years after the account is
@@ -2034,6 +2034,63 @@ they never saw, or put a signature on a relative when a family shares one email 
   change) · PushPress, "Digital documents overview" (Signed or Unsigned per member) ·
   Gymdesk, "Document Management" and "Gym Liability Waiver" (a dated record; re-signed when
   the terms change).
+
+**Signed at the desk, and who has not signed, as built (3e-ii; 2026-10-14; `rulings/2026-10-14-3e-ii.md`).**
+*The worst thing it could do to a real person: show somebody as signed who did not sign —
+a signature on the wrong record, on words they were not shown, or a child's own.*
+- **A desk signature is a record's, never an app account's** (`gym_waiver_desk_signatures`,
+  migration `0106`: the wording, the record, `signer` `person` or `guardian`, the name
+  typed, the staff member who opened the screen, the time; one per record per wording). It
+  never signs the person's app: somebody in the app still signs there, so a family on one
+  email is never marked signed by a relative. **The app keeps asking somebody who signed at
+  the desk** until they sign in the app too; that is on purpose, not a fault. Their page's
+  App card says "Signed at the desk · not signed in the app yet", never "Waiver not signed"
+  (round one, High-1).
+- **A person's page** (`members.confirm`), on a current record of a gym with a waiver in use,
+  shows a **Waiver** card unless the person the record certainly is signed in the app:
+  "Waiver signed at the desk on 14 October 2026 as Ben Stone" (or "by Ana Reyes, parent or
+  guardian"), or "Waiver not signed" with **Sign waiver**. The box opens under it: "Hand this
+  screen to {name}. They read the waiver and sign it themselves.", the gym's words, the
+  name, the tick, Sign and Cancel. Done, the card says "Signed. {name}'s waiver is kept with
+  their record."
+- **Under 18** by the record's date of birth on the gym's own day (`isUnder18`; born 29
+  February, 18 on 1 March of a year with no 29th): only a parent or guardian signs, and the
+  server refuses the person (`409 guardian_needed`); a record that says 18 or over is
+  signed by the person only (`409 person_signs`). With no date of birth the box asks "Who
+  is signing?"; nothing is shown to sign until it is answered, and a change of who signs
+  empties the name typed.
+- **"Or in the app"** is said only where somebody in the app whose signature would sign this
+  record is on it: with only a shared family email, the card says "{name} can sign it here
+  at the desk." (round one, High-2).
+- `GET` and `POST /v1/orgs/:gymId/member-list/entries/:entryId/waiver[/sign]` take
+  `{ waiverId, signer, name }`. One statement writes it, only while that wording is the
+  gym's newest in use, the record is on the list and its date of birth is the one checked;
+  otherwise `409 waiver_changed` / `waiver_not_in_use` or `404 person_not_found`, and
+  nothing is written. Twice is once. Two records joined: the kept one takes the other's
+  desk signatures it has none of; a record deleted for good lets go of its signature, which
+  stays as the gym's proof.
+- **Who has signed, by record** (`waiver/signed.ts`, one rule): a desk signature of the
+  wording in use, or an app signature by the person the record certainly is (§18.4). An app
+  signature on a shared family email signs no record. Members' Filter shows **Waiver not
+  signed** with its count while the gym has a waiver in use (`?waiver=not_signed`; Select
+  all means the same people; a current member's word, so a page of past members is not
+  narrowed by it); Settings' Waiver box adds "and N at the desk".
+- **The desk's third choice** (§12.4): **Someone who has not signed your waiver**, Check them
+  in (the start) or Send them to staff, by the same rule. With no waiver in use it stops
+  nobody, and the box says so with **Set up your waiver**, which opens the Waiver box.
+  **A family on one email:** its records read not signed, so their key tags and staff's
+  search send them to staff and Settings counts them; the pass of the account that signed
+  is let in, since that signature is the account's own.
+- **Limits:** the desk's read 300 an hour a person (900 an address), signing 60 (180).
+- **Cost at full size** (2026-10-14, mains, 3,294 MHz; one gym of 2,000 with 1,200 in the
+  app beside 19 of 200; 20 runs, medians; `tools/measure-waiver-cost.ts`,
+  `tools/measure-checkin-rules-cost.ts`): who has signed, by record, 29.6 ms, thread busy
+  11.0 ms · the list's numbers 42.2 ms, busy 25.4 ms · a page of Waiver not signed 45.3 ms,
+  busy 12.7 ms (a page with no filter 46.2 ms, busy 13.5 ms); all 20 gyms at one moment
+  189.0 ms, busy 147.8 ms (no filter 164.1 ms, busy 126.1 ms) · the desk's box 9.5 ms, busy
+  1.8 ms; signing 18.2 ms, busy 2.9 ms · a key tag with the waiver choice on 72.4 ms, busy
+  11.3 ms; one at each of 20 gyms 312.4 ms, busy 201.1 ms · the Settings box with it 61.7 ms,
+  busy 29.0 ms; 20 gyms 211.2 ms, busy 178.4 ms. Longest stall 19.9 ms.
 
 ---
 
@@ -2326,7 +2383,8 @@ has a box, **Who can check in** (`org.manage`, beside Check-in devices), with tw
 that wait for one Save: whom the front desk checks in, **Everyone on your list** (where
 every gym starts) or **Only people with a current membership**; and what it does with
 **someone with an overdue payment**, **Check them in** (the start) or **Send them to
-staff**. They are two columns on the gym (`checkin_who`, `checkin_overdue`, migration
+staff**; and since 3e-ii (§10.10) **someone who has not signed your waiver**, the same two
+(`checkin_waiver`, migration `0106`). They are columns on the gym (`checkin_who`, `checkin_overdue`, migration
 `0101`) and ONE pure rule, `checkinStop` in `@app/shared` (`checkinRules.ts`), which the
 desk's scan, staff's search and the box all read:
 - It reads what the app holds and never a word of the gym's file: the status the Members
@@ -3646,7 +3704,7 @@ memberships.
   lock, and gives nothing where the price or what comes off is not what the screen showed.
   A use is counted in the giving's own transaction by a statement that will not pass the
   limit. The membership keeps which discount, its name as it was, what came off and which
-  payments (`gym_held_memberships.discount_*`, `0106`). With Every payment its price is
+  payments (`gym_held_memberships.discount_*`, `0107`). With Every payment its price is
   the price after the discount, so every bill opened from it carries it; with First payment
   only its price stays the full price and only the bill opened when it was given is
   discounted. A later change of the discount or the type's price rewrites nobody's.

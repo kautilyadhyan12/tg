@@ -24,7 +24,7 @@ const CheckinRulesPanel = (await import('./CheckinRulesPanel')).default;
 const { readOnlyNote } = await import('../../pages/console/billingView');
 
 const ORG = { id: '11111111-1111-4111-8111-111111111111', orgType: 'gym', timezone: 'Europe/London', clockFormat: '24h' };
-const START = { who: 'everyone', overdue: 'let_in' };
+const START = { who: 'everyone', overdue: 'let_in', waiver: 'let_in' };
 
 const PEOPLE = [
   ['Cara Cancelled', 'cancelled'],
@@ -38,16 +38,17 @@ const PEOPLE = [
 function previewFor(rules) {
   const notCurrent = rules.who === 'current_membership' ? PEOPLE : [];
   const overdue = rules.overdue === 'see_staff' ? [{ entryId: '22222222-2222-4222-8222-0000000000aa', name: 'Owen Owes', reason: 'overdue' }] : [];
-  const people = [...notCurrent, ...overdue];
+  const unsigned = rules.waiver === 'see_staff' ? [{ entryId: '22222222-2222-4222-8222-0000000000bb', name: 'Wes Unsigned', reason: 'no_waiver' }] : [];
+  const people = [...notCurrent, ...overdue, ...unsigned];
   return { data: { rules, listed: 13, stopped: people.length, notListed: rules.who === 'current_membership' ? 2 : 0, people } };
 }
 
-function open({ rules = START, overdueAfterDays = 0, readOnly = false } = {}) {
-  orgService.getCheckinRules.mockResolvedValue({ data: { rules, overdueAfterDays } });
+function open({ rules = START, overdueAfterDays = 0, readOnly = false, waiverInUse = true } = {}) {
+  orgService.getCheckinRules.mockResolvedValue({ data: { rules, overdueAfterDays, waiverInUse } });
   orgService.previewCheckinRules.mockImplementation((_gymId, asked) => Promise.resolve(previewFor(asked)));
   render(
     <MemoryRouter>
-      <CheckinRulesPanel org={ORG} readOnly={readOnly} attendanceTo="/console/iron-house/attendance" />
+      <CheckinRulesPanel org={ORG} readOnly={readOnly} attendanceTo="/console/iron-house/attendance" waiverTo="/console/iron-house/settings#waiver" />
     </MemoryRouter>,
   );
   fireEvent.click(screen.getByRole('button', { name: /who can check in/i }));
@@ -94,7 +95,7 @@ describe('picking who can check in', () => {
     const box = await today();
     expect(within(box).getByText('All 13 people on your list are checked in at the front desk today.')).toBeTruthy();
     expect(screen.getByRole('radio', { name: /everyone on your list/i }).checked).toBe(true);
-    expect(screen.getByRole('radio', { name: /^check them in/i }).checked).toBe(true);
+    expect(within(screen.getByRole('group', { name: 'Someone with an overdue payment' })).getByRole('radio', { name: /^check them in/i }).checked).toBe(true);
     expect(saveButton().disabled).toBe(true);
     expect(screen.getByText('A payment is overdue from the day after it was due.')).toBeTruthy();
   });
@@ -132,9 +133,9 @@ describe('picking who can check in', () => {
     open();
     await today();
     fireEvent.click(screen.getByRole('radio', { name: /only people with a current membership/i }));
-    fireEvent.click(screen.getByRole('radio', { name: /send them to staff/i }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Someone with an overdue payment' })).getByRole('radio', { name: /send them to staff/i }));
     expect(await screen.findByText('Today 6 of the 13 people on your list would be sent to staff:')).toBeTruthy();
-    const strict = { who: 'current_membership', overdue: 'see_staff' };
+    const strict = { who: 'current_membership', overdue: 'see_staff', waiver: 'let_in' };
     orgService.updateCheckinRules.mockResolvedValue({ data: { rules: strict, overdueAfterDays: 0 } });
     fireEvent.click(saveButton());
     await waitFor(() => expect(orgService.updateCheckinRules).toHaveBeenCalledWith(ORG.id, strict));
@@ -155,11 +156,11 @@ describe('picking who can check in', () => {
     fireEvent.click(screen.getByRole('radio', { name: /only people with a current membership/i }));
     expect(await screen.findByText('Working out who this stops…')).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
-    answer(previewFor({ who: 'current_membership', overdue: 'let_in' }));
+    answer(previewFor({ who: 'current_membership', overdue: 'let_in', waiver: 'let_in' }));
     await waitFor(() => expect(saveButton().disabled).toBe(false));
 
     orgService.previewCheckinRules.mockRejectedValueOnce({ response: { status: 500, data: {} } });
-    fireEvent.click(screen.getByRole('radio', { name: /send them to staff/i }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Someone with an overdue payment' })).getByRole('radio', { name: /send them to staff/i }));
     expect(await screen.findByText("We couldn't work out who this stops.")).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /try again/i }));
@@ -170,12 +171,12 @@ describe('picking who can check in', () => {
   it('a refused save is said beside the button, and the choice stays picked', async () => {
     open();
     await today();
-    fireEvent.click(screen.getByRole('radio', { name: /send them to staff/i }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Someone with an overdue payment' })).getByRole('radio', { name: /send them to staff/i }));
     await screen.findByText('Today 1 of the 13 people on your list would be sent to staff:');
     orgService.updateCheckinRules.mockRejectedValue({ response: { status: 409, data: { message: 'Your plan has ended. Choose a plan to change this.' } } });
     fireEvent.click(saveButton());
     expect(await screen.findByText('Your plan has ended. Choose a plan to change this.')).toBeTruthy();
-    expect(screen.getByRole('radio', { name: /send them to staff/i }).checked).toBe(true);
+    expect(within(screen.getByRole('group', { name: 'Someone with an overdue payment' })).getByRole('radio', { name: /send them to staff/i }).checked).toBe(true);
     expect(saveButton().disabled).toBe(false);
   });
 
@@ -185,10 +186,43 @@ describe('picking who can check in', () => {
   });
 
   it('a gym on no plan reads its choice and cannot change it', async () => {
-    open({ rules: { who: 'current_membership', overdue: 'let_in' }, readOnly: true });
+    open({ rules: { who: 'current_membership', overdue: 'let_in', waiver: 'let_in' }, readOnly: true });
     expect(await screen.findByText(readOnlyNote('gym'))).toBeTruthy();
     await today();
     for (const radio of screen.getAllByRole('radio')) expect(radio.disabled).toBe(true);
     expect(saveButton().disabled).toBe(true);
+  });
+});
+
+describe('someone who has not signed the waiver (3e-ii)', () => {
+  const waiverGroup = () => screen.getByRole('group', { name: 'Someone who has not signed your waiver' });
+
+  it('names who it would send to staff before Save, and Save sends all three choices', async () => {
+    open();
+    await today();
+    expect(within(waiverGroup()).getByText('Someone has signed once they sign your waiver as it reads today, at the desk or in the app.')).toBeTruthy();
+    fireEvent.click(within(waiverGroup()).getByRole('radio', { name: 'Send them to staff' }));
+    await waitFor(() => expect(orgService.previewCheckinRules).toHaveBeenLastCalledWith(ORG.id, { who: 'everyone', overdue: 'let_in', waiver: 'see_staff' }));
+    expect(await screen.findByText('Today 1 of the 13 people on your list would be sent to staff:')).toBeTruthy();
+    expect(screen.getByText('Wes Unsigned')).toBeTruthy();
+    expect(screen.getByText('· Waiver not signed')).toBeTruthy();
+    const rules = { who: 'everyone', overdue: 'let_in', waiver: 'see_staff' };
+    orgService.updateCheckinRules.mockResolvedValue({ data: { rules, overdueAfterDays: 0, waiverInUse: true } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(orgService.updateCheckinRules).toHaveBeenCalledWith(ORG.id, rules));
+    expect(await screen.findByText('Everyone on your list · waivers not signed sent to staff')).toBeTruthy();
+  });
+
+  it('a gym with no waiver in use is told it stops nobody, with a button to set one up', async () => {
+    open({ waiverInUse: false });
+    await today();
+    expect(within(waiverGroup()).getByText('You have no waiver in use, so nobody is sent to staff for this.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Set up your waiver' }).getAttribute('href')).toBe('/console/iron-house/settings#waiver');
+  });
+
+  it('a gym with a waiver in use is not offered to set one up', async () => {
+    open();
+    await today();
+    expect(screen.queryByRole('link', { name: 'Set up your waiver' })).toBeNull();
   });
 });

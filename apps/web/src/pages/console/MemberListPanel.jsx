@@ -18,6 +18,7 @@ import { canOpenPlace, membershipBoxTo } from './consolePlaces';
 import {
   CHIP_KINDS,
   EMPTY_FILTERS,
+  WAIVER_NOT_SIGNED_WORDS,
   activeFilters,
   appView,
   chipText,
@@ -136,6 +137,15 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
                     {MEMBER_APP_FILTER_WORDS[w.word]} <span className="c-n">{count(w.count)}</span>
                   </Chip>
                 )),
+              )
+            : null}
+          {/* The gym's waiver (3e-ii): only while it asks people to sign one. */}
+          {list !== null && !past && typeof list.waiverNotSigned === 'number'
+            ? group(
+                'Waiver',
+                <Chip pressed={filters.waiverNotSigned} onClick={() => onChange({ ...filters, waiverNotSigned: !filters.waiverNotSigned })}>
+                  {WAIVER_NOT_SIGNED_WORDS} <span className="c-n">{count(list.waiverNotSigned)}</span>
+                </Chip>,
               )
             : null}
           {list !== null && !past

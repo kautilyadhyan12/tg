@@ -145,7 +145,7 @@ export const gymHeldMemberships = pgTable(
     renews: boolean("renews").notNull(),
     classesLeft: integer("classes_left"),
     fromList: boolean("from_list").notNull().default(false),
-    /** The discount it was given with (`0106`). Its key to `gym_discounts` is the
+    /** The discount it was given with (`0107`). Its key to `gym_discounts` is the
      *  migration's: declaring it here would import `register.ts`, which imports this file. */
     discountId: uuid("discount_id"),
     discountName: text("discount_name"),

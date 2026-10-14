@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql` and `0106_membership_discounts.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql` and `0107_membership_discounts.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -137,7 +137,7 @@ export const gymDiscountProducts = pgTable(
   ],
 );
 
-/** The membership types a discount is limited to (`0106`). */
+/** The membership types a discount is limited to (`0107`). */
 export const gymDiscountMembershipTypes = pgTable(
   "gym_discount_membership_types",
   {

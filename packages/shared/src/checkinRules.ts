@@ -1,8 +1,9 @@
 // WHO THE FRONT DESK LETS IN — Part 3 §12.4; ROADMAP Stage 2 item 16d.
 //
 // A gym chooses whom its desk checks in: everyone on its list (where every gym starts), or
-// only people with a current membership; and whether somebody with an overdue payment is
-// let in or sent to staff. `checkinStop` is the ONE rule that says who is stopped and why.
+// only people with a current membership; whether somebody with an overdue payment is
+// let in or sent to staff; and whether somebody who has not signed the gym's waiver is
+// (3e-ii). `checkinStop` is the ONE rule that says who is stopped and why.
 // The desk's scan, staff's search and the box in Settings that names who would be stopped
 // all read it.
 //
@@ -19,17 +20,21 @@ export type CheckinWho = z.infer<typeof checkinWhoSchema>;
 export const checkinOverdueSchema = z.enum(["let_in", "see_staff"]);
 export type CheckinOverdue = z.infer<typeof checkinOverdueSchema>;
 
-export const checkinRulesSchema = z.object({ who: checkinWhoSchema, overdue: checkinOverdueSchema }).strict();
+/** Somebody who has not signed the waiver the gym asks for today (3e-ii). */
+export const checkinWaiverSchema = z.enum(["let_in", "see_staff"]);
+export type CheckinWaiver = z.infer<typeof checkinWaiverSchema>;
+
+export const checkinRulesSchema = z.object({ who: checkinWhoSchema, overdue: checkinOverdueSchema, waiver: checkinWaiverSchema }).strict();
 export type CheckinRules = z.infer<typeof checkinRulesSchema>;
 
 /** Where every gym starts: nobody is stopped. */
-export const CHECKIN_RULES_START: CheckinRules = { who: "everyone", overdue: "let_in" };
+export const CHECKIN_RULES_START: CheckinRules = { who: "everyone", overdue: "let_in", waiver: "let_in" };
 
 /** Whether the gym's choices can stop anybody at all. */
-export const checkinRulesStopAnyone = (rules: CheckinRules): boolean => rules.who !== "everyone" || rules.overdue !== "let_in";
+export const checkinRulesStopAnyone = (rules: CheckinRules): boolean => rules.who !== "everyone" || rules.overdue !== "let_in" || rules.waiver !== "let_in";
 
 /** Why the desk sends somebody to staff. Staff are told; the desk's screen never is. */
-export const checkinStopReasonSchema = z.enum(["no_membership", "not_started", "frozen", "ended", "cancelled", "overdue"]);
+export const checkinStopReasonSchema = z.enum(["no_membership", "not_started", "frozen", "ended", "cancelled", "overdue", "no_waiver"]);
 export type CheckinStopReason = z.infer<typeof checkinStopReasonSchema>;
 
 export const CHECKIN_STOP_WORDS: Readonly<Record<CheckinStopReason, string>> = {
@@ -39,6 +44,7 @@ export const CHECKIN_STOP_WORDS: Readonly<Record<CheckinStopReason, string>> = {
   ended: "Membership ended",
   cancelled: "Membership cancelled",
   overdue: "Payment overdue",
+  no_waiver: "Waiver not signed",
 };
 
 export interface CheckinStopInput {
@@ -54,6 +60,9 @@ export interface CheckinStopInput {
   today: string;
   /** Days after its due date an unpaid bill reads Overdue (the gym's own number). */
   overdueAfterDays: number;
+  /** Whether the person signed the waiver the gym asks for today, at the desk or in the
+   *  app; null where the gym asks for none, which stops nobody. */
+  waiverSigned: boolean | null;
 }
 
 /** Why the desk sends this person to staff, or null where it lets them in.
@@ -62,7 +71,8 @@ export interface CheckinStopInput {
  *  ended or cancelled, and not a membership word on the gym's file. A payment is overdue
  *  as a bill reads Overdue on the person's page (`memberBillState`): a bill still open,
  *  and the gym's own days of grace passed since it fell due. A payment that is due and
- *  not yet overdue stops nobody. */
+ *  not yet overdue stops nobody. A waiver stops only somebody who has not signed the one
+ *  the gym asks for today. */
 export function checkinStop(input: CheckinStopInput): CheckinStopReason | null {
   if (input.staff) return null;
   if (input.rules.who === "current_membership") {
@@ -74,6 +84,7 @@ export function checkinStop(input: CheckinStopInput): CheckinStopReason | null {
   if (input.rules.overdue === "see_staff" && input.owedSince !== null && input.today > addDays(input.owedSince, input.overdueAfterDays)) {
     return "overdue";
   }
+  if (input.rules.waiver === "see_staff" && input.waiverSigned === false) return "no_waiver";
   return null;
 }
 
@@ -87,6 +98,9 @@ export const checkinRulesResponseSchema = z
     rules: checkinRulesSchema,
     /** The gym's days of grace before a bill reads Overdue, for the box's own sentence. */
     overdueAfterDays: z.number().int().min(0),
+    /** The gym asks people to sign a waiver today (3e-ii): without one, the waiver's
+     *  choice stops nobody, and the box says so. */
+    waiverInUse: z.boolean(),
   })
   .strict();
 export type CheckinRulesResponse = z.infer<typeof checkinRulesResponseSchema>;

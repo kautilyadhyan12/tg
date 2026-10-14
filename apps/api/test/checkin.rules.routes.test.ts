@@ -93,10 +93,10 @@ const type = (over: { name: string } & Record<string, unknown>) => ({
 });
 
 const EVERY_CHOICE: CheckinRules[] = [
-  { who: "everyone", overdue: "let_in" },
-  { who: "everyone", overdue: "see_staff" },
-  { who: "current_membership", overdue: "let_in" },
-  { who: "current_membership", overdue: "see_staff" },
+  { who: "everyone", overdue: "let_in", waiver: "let_in" },
+  { who: "everyone", overdue: "see_staff", waiver: "let_in" },
+  { who: "current_membership", overdue: "let_in", waiver: "let_in" },
+  { who: "current_membership", overdue: "see_staff", waiver: "let_in" },
 ];
 
 d("who the front desk lets in (real Postgres)", () => {
@@ -244,7 +244,7 @@ d("who the front desk lets in (real Postgres)", () => {
     return checkinRulesResponseSchema.parse(JSON.parse(res.body));
   };
   const preview = async (gymId: string, who: Person, rules: CheckinRules) => {
-    const res = await get(`${rulesUrl(gymId)}/preview?who=${rules.who}&overdue=${rules.overdue}`, who.cookies);
+    const res = await get(`${rulesUrl(gymId)}/preview?who=${rules.who}&overdue=${rules.overdue}&waiver=${rules.waiver}`, who.cookies);
     expect(res.statusCode, res.body).toBe(200);
     return checkinRulesPreviewResponseSchema.parse(JSON.parse(res.body));
   };
@@ -374,7 +374,7 @@ d("who the front desk lets in (real Postgres)", () => {
       const everybody = Object.entries(people);
       expect(everybody).toHaveLength(15);
       // Where the gym starts.
-      expect((await get(rulesUrl(ironHouse), owner.cookies)).json()).toEqual({ rules: EVERY_CHOICE[0], overdueAfterDays: 0 });
+      expect((await get(rulesUrl(ironHouse), owner.cookies)).json()).toEqual({ rules: EVERY_CHOICE[0], overdueAfterDays: 0, waiverInUse: false });
 
       for (const rules of EVERY_CHOICE) {
         const label = JSON.stringify(rules);
@@ -413,7 +413,7 @@ d("who the front desk lets in (real Postgres)", () => {
   it(
     "a member's pass: paid up is in, a membership that ended is sent to staff with the pass not used up, and the gym's owner and staff are never stopped",
     async () => {
-      await save(ironHouse, owner, { who: "current_membership", overdue: "see_staff" });
+      await save(ironHouse, owner, { who: "current_membership", overdue: "see_staff", waiver: "let_in" });
       await emptyTheGym(ironHouse);
       const desk = await makeDesk(ironHouse, owner);
 
@@ -456,9 +456,9 @@ d("who the front desk lets in (real Postgres)", () => {
       };
       const nobody = Object.fromEntries(Object.keys(people).map((first) => [first, null]));
 
-      await save(ironHouse, owner, { who: "current_membership", overdue: "see_staff" });
+      await save(ironHouse, owner, { who: "current_membership", overdue: "see_staff", waiver: "let_in" });
       expect(await reasons()).toEqual({ ...nobody, ...OVERDUE, ...NOT_CURRENT });
-      await save(ironHouse, owner, { who: "everyone", overdue: "let_in" });
+      await save(ironHouse, owner, { who: "everyone", overdue: "let_in", waiver: "let_in" });
       expect(await reasons()).toEqual(nobody);
     },
     TEST_TIMEOUT_MS,
@@ -467,7 +467,7 @@ d("who the front desk lets in (real Postgres)", () => {
   it(
     "a payment is overdue on the day its bill reads Overdue: the gym's own days of grace count",
     async () => {
-      const overdueOnly: CheckinRules = { who: "everyone", overdue: "see_staff" };
+      const overdueOnly: CheckinRules = { who: "everyone", overdue: "see_staff", waiver: "let_in" };
       await save(ironHouse, owner, overdueOnly);
       const names = async (): Promise<string[]> => (await preview(ironHouse, owner, overdueOnly)).people.map((p) => p.name).sort();
       // No grace: Owen's bill fell due on 1 October and Gus's on 8 October; Lena's is due today.
@@ -476,7 +476,7 @@ d("who the front desk lets in (real Postgres)", () => {
       // Seven days of grace: Gus's bill is overdue from 16 October, Owen's since 9 October.
       const grace = await put(`/v1/orgs/${ironHouse}/bill-settings`, { overdueAfterDays: 7 }, owner.cookies);
       expect(grace.statusCode, grace.body).toBe(200);
-      expect((await get(rulesUrl(ironHouse), owner.cookies)).json()).toEqual({ rules: overdueOnly, overdueAfterDays: 7 });
+      expect((await get(rulesUrl(ironHouse), owner.cookies)).json()).toEqual({ rules: overdueOnly, overdueAfterDays: 7, waiverInUse: false });
       expect(await names()).toEqual(["Owen Owes"]);
       await emptyTheGym(ironHouse);
       const desk = await makeDesk(ironHouse, owner);
@@ -517,7 +517,7 @@ d("who the front desk lets in (real Postgres)", () => {
   it(
     "one gym's choice stops nobody next door, and nobody but the gym's own Settings staff reads or changes it",
     async () => {
-      const strict: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+      const strict: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
       await save(ironHouse, owner, strict);
       // Next door never changed its choice: somebody there with no membership is checked in.
       const ben = await addPerson(nextDoor, nextDoorOwner, "Ben Nextdoor");
@@ -525,9 +525,9 @@ d("who the front desk lets in (real Postgres)", () => {
       expect((await scan(theirDesk, ben.tag)).answer).toMatchObject({ result: "checked_in", person: { name: "Ben Nextdoor" } });
       // Iron House's key tag is nobody at next door's desk.
       expect((await scan(theirDesk, people["Paula"]?.tag ?? "")).answer.result).toBe("not_a_member");
-      expect((await get(rulesUrl(nextDoor), nextDoorOwner.cookies)).json()).toEqual({ rules: EVERY_CHOICE[0], overdueAfterDays: 0 });
+      expect((await get(rulesUrl(nextDoor), nextDoorOwner.cookies)).json()).toEqual({ rules: EVERY_CHOICE[0], overdueAfterDays: 0, waiverInUse: false });
 
-      const query = "?who=current_membership&overdue=see_staff";
+      const query = "?who=current_membership&overdue=see_staff&waiver=see_staff";
       for (const who of [nextDoorOwner, stranger, maya]) {
         expect((await get(rulesUrl(ironHouse), who.cookies)).statusCode).toBe(404);
         expect((await put(rulesUrl(ironHouse), EVERY_CHOICE[0], who.cookies)).statusCode).toBe(404);
@@ -552,18 +552,18 @@ d("who the front desk lets in (real Postgres)", () => {
   it(
     "a choice the app does not know is refused, the same choice saved twice is noted once, and a gym on no plan cannot change it",
     async () => {
-      await save(ironHouse, owner, { who: "everyone", overdue: "let_in" });
-      for (const body of [{ who: "nobody", overdue: "let_in" }, { who: "everyone" }, { who: "everyone", overdue: "let_in", extra: 1 }, {}]) {
+      await save(ironHouse, owner, { who: "everyone", overdue: "let_in", waiver: "let_in" });
+      for (const body of [{ who: "nobody", overdue: "let_in", waiver: "let_in" }, { who: "everyone" }, { who: "everyone", overdue: "let_in", extra: 1 }, {}]) {
         expect((await put(rulesUrl(ironHouse), body, owner.cookies)).statusCode, JSON.stringify(body)).toBe(400);
       }
       expect((await get(`${rulesUrl(ironHouse)}/preview?who=everyone`, owner.cookies)).statusCode).toBe(400);
       expect((await get(`${rulesUrl(ironHouse)}/preview?who=members&overdue=let_in`, owner.cookies)).statusCode).toBe(400);
-      expect((await get(rulesUrl(ironHouse), owner.cookies)).json()).toMatchObject({ rules: { who: "everyone", overdue: "let_in" } });
+      expect((await get(rulesUrl(ironHouse), owner.cookies)).json()).toMatchObject({ rules: { who: "everyone", overdue: "let_in", waiver: "let_in" } });
 
       const noted = async (): Promise<unknown[]> =>
         (await sql<{ meta: unknown }[]>`SELECT meta FROM audit_log WHERE gym_id = ${ironHouse} AND action = 'org.checkin_rules_changed' ORDER BY at, id`).map((row) => row.meta);
       const before = (await noted()).length;
-      const strict: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+      const strict: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
       await save(ironHouse, owner, strict);
       await save(ironHouse, owner, strict);
       const both = await Promise.all([save(ironHouse, owner, strict), save(ironHouse, owner, strict)]);
@@ -576,7 +576,7 @@ d("who the front desk lets in (real Postgres)", () => {
       const lapsed = await makeGym(stranger, "No Plan Gym", false);
       expect((await get(rulesUrl(lapsed), stranger.cookies)).statusCode).toBe(200);
       expect((await put(rulesUrl(lapsed), strict, stranger.cookies)).statusCode).toBe(409);
-      expect((await get(rulesUrl(lapsed), stranger.cookies)).json()).toMatchObject({ rules: { who: "everyone", overdue: "let_in" } });
+      expect((await get(rulesUrl(lapsed), stranger.cookies)).json()).toMatchObject({ rules: { who: "everyone", overdue: "let_in", waiver: "let_in" } });
     },
     TEST_TIMEOUT_MS,
   );
@@ -584,7 +584,7 @@ d("who the front desk lets in (real Postgres)", () => {
   it(
     "when what a person holds cannot be read, the desk lets them in and says so in the log",
     async () => {
-      const strict: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+      const strict: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
       await save(ironHouse, owner, strict);
       await emptyTheGym(ironHouse);
       const made = await makeDesk(ironHouse, owner);
@@ -623,7 +623,7 @@ d("who the front desk lets in (real Postgres)", () => {
   // PEOPLE THE LIST CANNOT TIE TO ONE RECORD (round one: High-1, Low-1 to Low-3)
   // ===========================================================================
 
-  const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff" };
+  const STRICT: CheckinRules = { who: "current_membership", overdue: "see_staff", waiver: "let_in" };
   const SEE_STAFF = { result: "see_staff", gymName: "Iron House" };
   /** A pass is one a person for each half minute, and works once: a minute on, the same
    *  person shows a new one. */
@@ -678,7 +678,7 @@ d("who the front desk lets in (real Postgres)", () => {
       expect(JSON.parse((await scan(desk, await passOf(jo))).body)).toEqual(SEE_STAFF);
       expect(await stoppedInSearch()).toBe("cancelled");
       // Where the gym lets everyone in, they are in again.
-      await save(ironHouse, owner, { who: "everyone", overdue: "let_in" });
+      await save(ironHouse, owner, { who: "everyone", overdue: "let_in", waiver: "let_in" });
       expect((await scan(desk, await passOf(jo))).answer.result).toBe("checked_in");
     },
     TEST_TIMEOUT_MS,
@@ -689,7 +689,7 @@ d("who the front desk lets in (real Postgres)", () => {
     async () => {
       const lone = await makeUser("lone", "Lone Apponly");
       await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${ironHouse}, ${lone.userId}, ${null})`;
-      const everyone: CheckinRules = { who: "everyone", overdue: "see_staff" };
+      const everyone: CheckinRules = { who: "everyone", overdue: "see_staff", waiver: "let_in" };
       await save(ironHouse, owner, everyone);
       await emptyTheGym(ironHouse);
       expect((await preview(ironHouse, owner, everyone)).notListed).toBe(0);
