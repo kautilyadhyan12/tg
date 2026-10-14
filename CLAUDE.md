@@ -325,8 +325,10 @@ and the word list is the backstop, never the mechanism.
 carefully (Kd, 2026-10-12, `rulings/`): the package list is worked out refusing anything
 published in the last 14 days (`corepack pnpm@10.34.5 install --lockfile-only
 --ignore-scripts --config.minimum-release-age=20160
---config.manage-package-manager-versions=false`, then the usual `corepack pnpm install
---frozen-lockfile`), a main package is pinned to an exact version, and no added package
+--config.manage-package-manager-versions=false`, then the project's own pnpm rewrites it,
+`corepack pnpm install --lockfile-only --ignore-scripts`, since pnpm 10 writes the root
+`pnpm.packageExtensions` checksum in a way pnpm 9 refuses, then the usual `corepack pnpm
+install --frozen-lockfile`), a main package is pinned to an exact version, and no added package
 runs a script on install without being read first.
 
 **Cost at full size (Kd, 2026-09-20, after the member-list preview).** A card that
