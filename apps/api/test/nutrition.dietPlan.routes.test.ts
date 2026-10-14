@@ -370,6 +370,30 @@ d("diet plan routes (real Postgres)", () => {
       expect(cleared.days[0]?.meals).toEqual([]);
     });
 
+    it("a packaged product no longer remembered stays in the day while another meal changes; a new amount of it is refused, as for a logged meal", { timeout: 30_000 }, async () => {
+      const cookies = await eater("packaged", "non_vegetarian");
+      const made = parsed(await make(cookies));
+      const userId = await idOf("packaged");
+      const like = made.days[0]?.meals[0]?.items[0];
+      if (like === undefined) throw new Error("no planned food");
+      // An Open Food Facts product put in the day more than a day ago: its search is forgotten.
+      const bar = { ...like, name: "Zqxplan bar · Brand", canonical: "off_zqxplan_gone", gramsPoint: 50, gramsRange: [50, 50], nutritionSource: "openfoodfacts", kcalPoint: 200, kcalLow: 200, kcalHigh: 200 };
+      const stored = made.days.map((d, at) => d.meals.map((m, j) => ({ mealType: m.mealType, items: at === 0 && j === 0 ? [bar] : m.items })));
+      await sql`UPDATE diet_plans SET days = ${sql.json(stored)} WHERE user_id = ${userId}`;
+      const chosen = (meals: readonly { mealType: string; items: readonly { canonical: string; gramsPoint: number }[] }[]) =>
+        meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
+      const day = stored[0] ?? [];
+
+      // Another meal removed: the bar is kept at its saved price.
+      const after = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: chosen(day.slice(0, -1)) }));
+      expect(after.days[0]?.meals[0]?.items).toEqual([bar]);
+      expect(after.days[0]?.meals.length).toBe(day.length - 1);
+
+      const twoBars = await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: day[0]?.mealType, items: [{ canonical: "off_zqxplan_gone", grams: 100 }] }] });
+      expect(twoBars.statusCode).toBe(400);
+      expect(errorOf(twoBars)).toBe("unknown_food");
+    });
+
     it("sent twice, the second does not undo what came between", { timeout: 30_000 }, async () => {
       const cookies = await eater("puttwice", "non_vegetarian");
       const changeId = randomUUID();

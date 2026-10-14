@@ -67,7 +67,7 @@ export async function getDietPlan(deps: Pick<NutritionDeps, "sql">, userId: stri
 
 /** Each list of chosen foods priced, in one pass, as a logged meal's are. */
 async function priced(deps: NutritionDeps, userId: string, lists: readonly (readonly ChosenItem[])[]): Promise<MealItem[][]> {
-  const items = lists.length === 0 ? [] : await resolveChosenItems(deps, userId, lists.flat(), false);
+  const items = lists.every((list) => list.length === 0) ? [] : await resolveChosenItems(deps, userId, lists.flat(), false);
   let at = 0;
   return lists.map((list) => {
     const mine = items.slice(at, at + list.length);
@@ -133,15 +133,25 @@ export async function makeDietPlan(deps: NutritionDeps, userId: string, input: M
   return reply(week, who);
 }
 
-/** A day as the person sent it, whole. Their own foods need no setup answer. */
+/** A day as the person sent it, whole. Their own foods need no setup answer. A food
+ *  already in the day at the same amount keeps the price it was saved at: a packaged
+ *  product is remembered for a day only, and a change to another meal must not lose it. */
 export async function putDietPlanDay(
   deps: NutritionDeps,
   userId: string,
   day: number,
   input: PutDietPlanDayRequest,
 ): Promise<DietPlanResponse> {
-  const items = await priced(deps, userId, input.meals.map((m) => m.items));
-  const meals = input.meals.map((m, i) => ({ mealType: m.mealType, items: items[i] ?? [] }));
+  const plan = await readDietPlan(deps.sql, userId);
+  if (plan.recentChanges.includes(input.changeId)) return reply(plan.days, await person(deps, userId));
+  const kept = new Map((plan.days[day - 1] ?? []).flatMap((m) => m.items).map((i) => [`${i.canonical}|${String(i.gramsPoint)}`, i]));
+  const keptOf = (c: ChosenItem): MealItem | undefined => ("grams" in c ? kept.get(`${c.canonical}|${String(c.grams)}`) : undefined);
+  const fresh = await priced(deps, userId, input.meals.map((m) => m.items.filter((c) => keptOf(c) === undefined)));
+  const meals = input.meals.map((m, i) => {
+    const own = fresh[i] ?? [];
+    let at = 0;
+    return { mealType: m.mealType, items: m.items.flatMap((c) => { const item = keptOf(c) ?? own[at++]; return item === undefined ? [] : [item]; }) };
+  });
   const week = await changeDietPlan(deps.sql, userId, input.changeId, (current) => current.map((old, at) => (at === day - 1 ? meals : old)));
   return reply(week, await person(deps, userId));
 }
