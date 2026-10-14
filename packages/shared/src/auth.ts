@@ -176,6 +176,8 @@ export const apiRefusalSchema = z.object({
   error: z.string().min(1),
   message: z.string(),
   retryAfterSeconds: z.number().int().positive().optional(),
+  /** Sent with `robot_check` and `robot_failed`: the key the robot check's box draws with. */
+  robotCheckKey: z.string().min(1).max(100).optional(),
 });
 export type ApiRefusal = z.infer<typeof apiRefusalSchema>;
 

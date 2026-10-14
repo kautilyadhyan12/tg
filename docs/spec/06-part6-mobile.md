@@ -579,8 +579,13 @@ The terminal's own choices, each a job's to better with a reason.
   costs nothing, since the server takes the same token again (Part 3 §10.5). A code asked
   for inside the server's minute opens the code step as "Enter your code.", never as a
   code just sent. Sign out is on Me, asks first, and forgets on the phone before it tells
-  the server. A screen's signed-in requests take `session.accessToken()`. The robot
-  check on the phone is 12b-ii; until then a phone asked for it says why it must wait.
+  the server. A screen's signed-in requests take `session.accessToken()`. **Built in 12b-ii:** the robot check. Past 20 codes an hour from one
+  address the server asks for it; Cloudflare Turnstile's box opens in a box from the bottom,
+  in a small page the app writes (Cloudflare's script and nothing else) on the api's own
+  address, and its answer sends the code with no second press. A failed check, a check that
+  does not load and an answer that runs out each draw a new box; closing it leaves the
+  server's sentence under the email box, and Continue opens it again. A link in the box
+  opens in the phone's browser.
 - **Kept on the phone until the server has it** (§4): what a person DOES (a workout, a
   meal, a weigh-in, a run) is written to the phone first and sent when the internet is
   there, each route safe to call twice. Built once, with the workout (item 61), then used

@@ -14,5 +14,15 @@
   },
   "devDependencies": {
     "turbo": "^2.3.3"
+  },
+  "pnpm": {
+    "packageExtensions": {
+      "@expo-google-fonts/inter@0.4.2": {
+        "peerDependencies": {
+          "react": "*",
+          "expo-font": "*"
+        }
+      }
+    }
   }
 }
