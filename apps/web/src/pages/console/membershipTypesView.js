@@ -255,7 +255,7 @@ const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || 
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'tax', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -290,6 +290,8 @@ export function draftProblems(draft, currency) {
     problems.price = `Type the price as a number, like ${priceExample(currency)}. Type 0 for free.`;
   } else if (draft.taxRateId !== '' && priceMinor > TAXED_PRICE_MINOR_MAX) {
     problems.price = `A price with tax can be at most ${formatMinor(TAXED_PRICE_MINOR_MAX, currency)}. Lower the price, or choose No tax.`;
+  } else if (draft.taxRateId !== '' && priceMinor === 0) {
+    problems.tax = 'A free membership charges no tax. Choose No tax.';
   }
   if (usesTerm(draft.choice) && wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX) === null) {
     problems.termCount = `Type a whole number from 1 to ${String(MEMBERSHIP_TERM_COUNT_MAX)}.`;

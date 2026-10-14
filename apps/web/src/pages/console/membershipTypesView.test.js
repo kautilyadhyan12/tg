@@ -382,3 +382,11 @@ describe('a type’s tax (18b-iii)', () => {
     expect(draftProblems({ ...emptyDraft(), name: 'Gold', price: '999999.99' }, 'USD')).toBeNull();
   });
 });
+
+describe('a free type charges no tax (18b-iii, round one)', () => {
+  it('says so under Tax, first of its kind of problem', () => {
+    const problems = draftProblems({ ...emptyDraft(), name: 'Free week', price: '0', taxRateId: 'r1' }, 'USD');
+    expect(problems?.tax).toBe('A free membership charges no tax. Choose No tax.');
+    expect(firstProblem(problems)).toBe('tax');
+  });
+});

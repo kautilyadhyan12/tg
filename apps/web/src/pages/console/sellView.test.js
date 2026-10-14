@@ -8,6 +8,7 @@ import {
   canSell,
   canSellMemberships,
   chargeChoices,
+  rateChangeNote,
   chargedWords,
   draftFromProduct,
   emptyProductDraft,
@@ -317,5 +318,20 @@ describe('products and tax', () => {
     const ten = [rate({ name: 'Tax', bp: 1000 })];
     expect(saleSummary(water({ priceMinor: 1000 }), 1, { included: false, rates: ten }).totalMinor).toBe(1100);
     expect(saleSummary(water({ priceMinor: 1000 }), 1, { included: true, rates: ten }).lines[1]).toEqual({ label: 'Includes Tax 10%', value: '$0.91' });
+  });
+});
+
+describe('round one of 18b-iii', () => {
+  const r = (over = {}) => ({ id: 'r1', name: 'GST', bp: 1800, products: 0, membershipTypes: 0, memberships: 0, ...over });
+  it('a rate’s Change form says whose next bill a new percentage reaches', () => {
+    expect(rateChangeNote(r())).toBe('A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.');
+    expect(rateChangeNote(r({ memberships: 1 }))).toBe(
+      "A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with. The next bill of the 1 member's membership that charge GST changes too.",
+    );
+    expect(rateChangeNote(r({ memberships: 4 }))).toContain("The next bill of the 4 members' memberships that charge GST changes too.");
+  });
+  it('a free membership is not offered to charge a rate', () => {
+    const page = { tax: { included: false, rates: [r()] }, membershipTypes: [{ id: 't1', name: 'Gold', taxRateId: null, free: false }, { id: 't2', name: 'Free week', taxRateId: null, free: true }], products: [] };
+    expect(chargeChoices(page, r(), 'memberships').map((c) => c.name)).toEqual(['Gold']);
   });
 });

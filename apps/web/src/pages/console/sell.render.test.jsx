@@ -510,7 +510,7 @@ describe('products and tax', () => {
     expect(within(taxBox()).getByText('Not saved yet.')).toBeTruthy();
     fireEvent.click(save);
     await waitFor(() => expect(svc.saveTaxMode).toHaveBeenCalledWith('g1', { included: true }));
-    expect(await within(taxBox()).findByText('Saved. New sales and bills use this; the ones already made keep theirs.')).toBeTruthy();
+    expect(await within(taxBox()).findByText('Saved. New sales and new memberships use this. Members who already hold a membership keep how it was sold.')).toBeTruthy();
     expect(within(taxBox()).getByText('Your prices include the tax. Each sale and each bill shows how much of it is tax.')).toBeTruthy();
   });
 

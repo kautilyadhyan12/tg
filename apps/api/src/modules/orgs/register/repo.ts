@@ -159,7 +159,7 @@ export async function readRegister(sql: Sql, gymId: string, today: string, sales
   const [gymRows, included, rates, live, archived, archivedTotal, sales, totals] = await Promise.all([
     sql<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${gymId}`,
     taxIncludedOf(sql, gymId),
-    readRates(sql, gymId),
+    readRates(sql, gymId, today),
     readProducts(false, PRODUCTS_MAX),
     readProducts(true, PRODUCT_ARCHIVED_PAGE),
     sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_products WHERE gym_id = ${gymId} AND archived_at IS NOT NULL`,

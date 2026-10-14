@@ -9,6 +9,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { TAXED_PRICE_MINOR_MAX, TAX_RATES_MAX, taxIncludedForCountry, type GymTaxRate } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { taxedInUse } from "../memberships/heldRepo.js";
 
 /** Whether the gym's prices hold its tax: what it chose, else what its country does. */
 export async function taxIncludedOf(sql: Sql | TransactionSql, gymId: string): Promise<boolean | null> {
@@ -26,22 +27,24 @@ export async function rateOf(sql: Sql | TransactionSql, gymId: string, rateId: s
 }
 
 /** The gym's rates by name, each with what live charges it: products on sale, types on the
- *  price list, and memberships people hold that are not over. A gym has at most
- *  `TAX_RATES_MAX`. */
-export async function readRates(sql: Sql | TransactionSql, gymId: string): Promise<GymTaxRate[]> {
-  const rows = await sql<{ id: string; name: string; rate_bp: number; products: number; types: number; memberships: number }[]>`
-    SELECT r.id, r.name, r.rate_bp,
-           (SELECT count(*) FROM gym_products p
-            WHERE p.gym_id = r.gym_id AND p.tax_rate_id = r.id AND p.archived_at IS NULL)::int AS products,
-           (SELECT count(*) FROM gym_membership_types t
-            WHERE t.gym_id = r.gym_id AND t.tax_rate_id = r.id AND t.archived_at IS NULL)::int AS types,
-           (SELECT count(*) FROM gym_held_memberships h
-            WHERE h.gym_id = r.gym_id AND h.tax_rate_id = r.id AND h.status IN ('active','frozen'))::int AS memberships
-    FROM gym_tax_rates r
-    WHERE r.gym_id = ${gymId}
-    ORDER BY lower(r.name), r.id
-    LIMIT ${TAX_RATES_MAX}`;
-  return rows.map((r) => ({ id: r.id, name: r.name, bp: r.rate_bp, products: r.products, membershipTypes: r.types, memberships: r.memberships }));
+ *  price list, and memberships current members hold that will be billed again
+ *  (`taxedInUse`), counted on the gym's own day; with `today` null, those are not counted.
+ *  A gym has at most `TAX_RATES_MAX`. */
+export async function readRates(sql: Sql | TransactionSql, gymId: string, today: string | null): Promise<GymTaxRate[]> {
+  const [rows, held] = await Promise.all([
+    sql<{ id: string; name: string; rate_bp: number; products: number; types: number }[]>`
+      SELECT r.id, r.name, r.rate_bp,
+             (SELECT count(*) FROM gym_products p
+              WHERE p.gym_id = r.gym_id AND p.tax_rate_id = r.id AND p.archived_at IS NULL)::int AS products,
+             (SELECT count(*) FROM gym_membership_types t
+              WHERE t.gym_id = r.gym_id AND t.tax_rate_id = r.id AND t.archived_at IS NULL)::int AS types
+      FROM gym_tax_rates r
+      WHERE r.gym_id = ${gymId}
+      ORDER BY lower(r.name), r.id
+      LIMIT ${TAX_RATES_MAX}`,
+    today === null ? new Map<string, number>() : taxedInUse(sql, gymId, today),
+  ]);
+  return rows.map((r) => ({ id: r.id, name: r.name, bp: r.rate_bp, products: r.products, membershipTypes: r.types, memberships: held.get(r.id) ?? 0 }));
 }
 
 export type RateWriteOutcome =
@@ -109,10 +112,10 @@ export async function updateRate(sql: Sql, input: { gymId: string; rateId: strin
 
 /** Removes a rate nothing live charges. What is archived or over loses it (the foreign keys
  *  clear it); every sale and bill made with it keeps its name and percentage. */
-export async function removeRate(sql: Sql, input: { gymId: string; rateId: string; actorUserId: string }): Promise<RateWriteOutcome> {
+export async function removeRate(sql: Sql, input: { gymId: string; rateId: string; today: string; actorUserId: string }): Promise<RateWriteOutcome> {
   return await sql.begin(async (tx): Promise<RateWriteOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const rate = (await readRates(tx, input.gymId)).find((r) => r.id === input.rateId);
+    const rate = (await readRates(tx, input.gymId, input.today)).find((r) => r.id === input.rateId);
     if (rate === undefined) return { kind: "not_found" };
     if (rate.products > 0 || rate.membershipTypes > 0 || rate.memberships > 0) {
       return { kind: "in_use", name: rate.name, products: rate.products, membershipTypes: rate.membershipTypes, memberships: rate.memberships };
@@ -135,7 +138,9 @@ export type ChargeOutcome =
   /** An id on the list is not one of this gym's live types or products. */
   | { kind: "items_not_found" }
   /** A type on the list is priced too high to tax (`TAXED_PRICE_MINOR_MAX`). */
-  | { kind: "too_high"; name: string };
+  | { kind: "too_high"; name: string }
+  /** A type on the list is free, and opens no bill to tax. */
+  | { kind: "free"; name: string };
 
 /** WHAT CHARGES ONE RATE, in one press: every live type (or product) on the list charges
  *  it; one off the list that charged it charges none. Memberships people already hold keep
@@ -158,6 +163,9 @@ export async function chargeRate(
     if (input.use === "memberships") {
       const high = listed.find((row) => row.price_minor > TAXED_PRICE_MINOR_MAX);
       if (high !== undefined) return { kind: "too_high", name: high.name };
+      // A free membership opens no bill: it charges no tax.
+      const free = listed.find((row) => row.price_minor === 0);
+      if (free !== undefined) return { kind: "free", name: free.name };
     }
     const on = await tx<{ id: string }[]>`
       UPDATE ${table} SET tax_rate_id = ${input.rateId}, updated_at = ${input.now}

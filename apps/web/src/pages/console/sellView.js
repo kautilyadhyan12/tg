@@ -326,6 +326,13 @@ export const TOO_MANY_RATES = `You can have ${String(TAX_RATES_MAX)} tax rates. 
 export const RATE_HINT = 'Your accountant or tax office can tell you the name and rate of the tax you charge, such as GST 18% or Sales tax 8.25%.';
 export const RATE_CHANGE_NOTE = 'A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.';
 
+/** Said in a rate's Change form: who else a new percentage reaches (round one, L2). */
+export function rateChangeNote(rate) {
+  if (rate === null || rate === undefined || rate.memberships === 0) return RATE_CHANGE_NOTE;
+  const who = rate.memberships === 1 ? "the 1 member's membership" : `the ${String(rate.memberships)} members' memberships`;
+  return `${RATE_CHANGE_NOTE} The next bill of ${who} that charge ${rate.name} changes too.`;
+}
+
 /** The two ways a gym charges tax, each with an example in the gym's own money, at the
  *  gym's own first rate where it has one (Kd's click-through: "how is tax 10% decided"). */
 export function taxModes(currency, rate = null) {
@@ -354,10 +361,13 @@ export function taxModes(currency, rate = null) {
  *  ticked where it charges this rate, with the rate it charges now where that is another. */
 export function chargeChoices(page, rate, use) {
   const items = use === 'memberships' ? page.membershipTypes : page.products;
-  return items.map((item) => {
-    const other = item.taxRateId !== null && item.taxRateId !== rate.id ? rateById(page.tax, item.taxRateId) : null;
-    return { id: item.id, name: item.name, on: item.taxRateId === rate.id, note: other === null ? null : `Now charges ${rateLabel(other)}` };
-  });
+  // A free membership opens no bill, so it is not offered.
+  return items
+    .filter((item) => item.free !== true)
+    .map((item) => {
+      const other = item.taxRateId !== null && item.taxRateId !== rate.id ? rateById(page.tax, item.taxRateId) : null;
+      return { id: item.id, name: item.name, on: item.taxRateId === rate.id, note: other === null ? null : `Now charges ${rateLabel(other)}` };
+    });
 }
 
 /** Said once a rate's list is saved, in the box it was saved in. */

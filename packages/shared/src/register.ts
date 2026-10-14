@@ -313,6 +313,8 @@ export const sellPageResponseSchema = z
           name: z.string(),
           /** The tax rate its bills charge (18b-iii); null for none. */
           taxRateId: z.string().uuid().nullable(),
+          /** Free: it opens no bill, so it charges no tax. */
+          free: z.boolean(),
         })
         .strict(),
     ),

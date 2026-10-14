@@ -166,10 +166,14 @@ export const gymHeldMemberships = pgTable(
     /** The tax rate it was sold with (0109): every bill opened from it charges that rate's
      *  percentage as it is that day. Null for none. */
     taxRateId: uuid("tax_rate_id"),
+    /** Whether its price held that tax when it was sold (0109): kept, so a gym changing how
+     *  it charges tax later moves nobody's total. Null with no rate. */
+    taxIncluded: boolean("tax_included"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
     unique("gym_held_memberships_request_uq").on(t.gymId, t.requestKey),
     // What a bill's key points at, with its gym (0093).
     unique("gym_held_memberships_gym_id_uq").on(t.gymId, t.id),

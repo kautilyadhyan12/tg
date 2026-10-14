@@ -19,7 +19,6 @@ import {
   moveHeldMembership,
   payMemberBill,
   refundMemberPayment,
-  taxIncludedForCountry,
   type BillCancelReason,
   type HeldMembership,
   type MemberPaymentByHand,
@@ -290,7 +289,7 @@ export async function cancelMemberBill(
     if (bill === undefined) return { kind: "bill_not_found" };
     if (bill.status === "void" && bill.cancelled !== null) return { kind: "ok" };
     if (bill.status === "open" && bill.paidMinor > 0) return { kind: "bill_has_payment" };
-    const target = memberCancelTarget(row.membership, row.priceMinor, input.today, bills, entry.past);
+    const target = memberCancelTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
     if (target === null || target.periodIndex !== bill.periodIndex) return { kind: "not_allowed" };
     const count = countAfterPayment(row.membership, target, input.today);
     if (!count.ok) return { kind: "not_allowed" };
@@ -506,8 +505,7 @@ type Owing = ListHeldColumns & {
   /** The rate the membership was sold with, as it is now; null for none (18b-iii). */
   tax_name: string | null;
   tax_bp: number | null;
-  country: string | null;
-  sales_tax_included: boolean | null;
+  tax_included: boolean | null;
 };
 
 /** The memberships that may be owed a bill: stored active, with a price, of a current
@@ -519,7 +517,7 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
          h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
-         r.name AS tax_name, r.rate_bp AS tax_bp, g.country, g.sales_tax_included
+         r.name AS tax_name, r.rate_bp AS tax_bp, h.tax_included
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
@@ -584,7 +582,7 @@ function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<nu
     const opens = billsToOpen(membership, work.today, have);
     if (opens.length === 0) continue;
     // Each bill charges the rate its membership was sold with, at its percentage today.
-    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: row.sales_tax_included ?? taxIncludedForCountry(row.country) };
+    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: row.tax_included ?? false };
     const bill = billOf(row.price_minor, tax);
     for (const due of opens) {
       work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: bill.amountMinor, tax: bill.tax, currency: row.currency, dueOn: due.dueOn, covers: due.covers });

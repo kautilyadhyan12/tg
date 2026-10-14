@@ -98,7 +98,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
       SELECT id, name FROM gym_class_types
       WHERE gym_id = ${gymId} AND archived_at IS NULL
       ORDER BY lower(name), id`,
-    readRates(sql, gymId),
+    readRates(sql, gymId, null),
     taxIncludedOf(sql, gymId),
   ]);
   const gym = gymRows[0];

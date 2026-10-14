@@ -133,7 +133,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
     discounts: offered.live.map(isoDiscount),
     archivedDiscounts: offered.archived.map(isoDiscount),
     archivedDiscountsTotal: offered.archivedTotal,
-    membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId })),
+    membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId, free: t.free })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
     sales: row.sales.map((s) => shownSale(s, today, viewer.canSell)),
@@ -273,12 +273,14 @@ export async function chargeTaxRate(deps: RegisterDeps, userId: string, gymId: s
   const outcome = await tax.chargeRate(deps.sql, { gymId, rateId, use: req.use, ids: req.ids, actorUserId: userId, now: deps.now() });
   if (outcome.kind === "items_not_found") throw new OrgsError(409, "tax_charged_not_found", REGISTER_WORDS.charged_not_found);
   if (outcome.kind === "too_high") throw new OrgsError(409, "taxed_price_too_high", `${outcome.name}: ${REGISTER_WORDS.taxed_price_too_high}`);
+  if (outcome.kind === "free") throw new OrgsError(409, "taxed_price_free", `${outcome.name} is free, so it charges no tax. Untick it and save again.`);
   throwOnRateFailure(outcome);
   return await read(deps, gymId, viewer);
 }
 
 export async function removeTaxRate(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, rateId: string): Promise<SellPageResponse> {
-  throwOnRateFailure(await tax.removeRate(deps.sql, { gymId, rateId, actorUserId: userId }));
+  const today = dayInTz(deps.now(), viewer.timezone);
+  throwOnRateFailure(await tax.removeRate(deps.sql, { gymId, rateId, today, actorUserId: userId }));
   return await read(deps, gymId, viewer);
 }
 

@@ -194,6 +194,8 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
     wrong("classTypeIds");
   }
   if (value.taxRateId !== null && value.priceMinor > TAXED_PRICE_MINOR_MAX) wrong("priceMinor");
+  // A free type opens no bill: it charges no tax.
+  if (value.taxRateId !== null && value.priceMinor === 0) wrong("taxRateId");
 }
 
 /** What a gym types. Every field every time: an update replaces, it never merges,

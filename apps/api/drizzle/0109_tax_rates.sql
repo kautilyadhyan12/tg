@@ -32,8 +32,12 @@ ALTER TABLE "gym_membership_types" ADD CONSTRAINT "gym_membership_types_tax_rate
 CREATE INDEX "gym_membership_types_tax_rate_idx" ON "gym_membership_types" ("gym_id", "tax_rate_id") WHERE "tax_rate_id" IS NOT NULL;--> statement-breakpoint
 -- A membership keeps the rate it was sold with, as it keeps its price: a type changed later
 -- moves nobody's bills. The rate's percentage is read when each bill is opened, so a change
--- of the law reaches every bill from then on.
+-- of the law reaches every bill from then on. It keeps, too, whether its price held the tax
+-- when it was sold (`tax_included`): the gym changing how it charges tax later moves the
+-- total of nobody already holding one (round one of 18b-iii).
 ALTER TABLE "gym_held_memberships" ADD COLUMN "tax_rate_id" uuid;--> statement-breakpoint
+ALTER TABLE "gym_held_memberships" ADD COLUMN "tax_included" boolean;--> statement-breakpoint
+ALTER TABLE "gym_held_memberships" ADD CONSTRAINT "gym_held_memberships_tax_included_check" CHECK ("tax_rate_id" IS NULL OR "tax_included" IS NOT NULL);--> statement-breakpoint
 ALTER TABLE "gym_held_memberships" ADD CONSTRAINT "gym_held_memberships_tax_rate_fk" FOREIGN KEY ("gym_id", "tax_rate_id")
 	REFERENCES "gym_tax_rates"("gym_id", "id") ON DELETE SET NULL ("tax_rate_id");--> statement-breakpoint
 CREATE INDEX "gym_held_memberships_tax_rate_idx" ON "gym_held_memberships" ("gym_id", "tax_rate_id") WHERE "tax_rate_id" IS NOT NULL;--> statement-breakpoint

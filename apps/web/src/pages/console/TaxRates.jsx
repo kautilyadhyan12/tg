@@ -7,6 +7,7 @@ import { Refusal } from './MemberListTags';
 import { SavedNote } from './SellProducts';
 import {
   RATE_CHANGE_NOTE,
+  rateChangeNote,
   RATE_HINT,
   TOO_MANY_RATES,
   chargeChoices,
@@ -36,7 +37,7 @@ const BAD = { color: 'var(--bad)' };
 
 /** `nested`: drawn inside another form, so it is a group, not a form of its own, and Enter
  *  saves the rate rather than the form around it. */
-function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = false }) {
+function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = false, rates = [] }) {
   const problems = draft.pressed ? rateProblems(draft) : {};
   const id = useId();
   const set = (patch) => setDraft((was) => ({ ...was, ...patch }));
@@ -73,7 +74,7 @@ function RateForm({ draft, setDraft, busy, error, onSave, onCancel, nested = fal
         <input id={`${id}-rate`} className="c-input" style={{ maxWidth: 160 }} inputMode="decimal" value={draft.rate} disabled={busy} onChange={(e) => set({ rate: e.target.value })} placeholder="18" />
         {problems.rate ? <p className="c-s14 m-0" style={BAD}>{problems.rate}</p> : null}
       </div>
-      <p className="c-s13 c-t3 m-0">{draft.id === null ? RATE_HINT : RATE_CHANGE_NOTE}</p>
+      <p className="c-s13 c-t3 m-0">{draft.id === null ? RATE_HINT : rateChangeNote(rates.find((r) => r.id === draft.id))}</p>
       <div className="flex flex-wrap gap-2">
         <button type={nested ? 'button' : 'submit'} className="c-btn c-btn-p c-btn-lg" disabled={busy} onClick={nested ? onSave : undefined}>
           {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
@@ -220,7 +221,7 @@ function TaxMode({ gymId, page, locked, onPage }) {
           {state.saving ? 'Saving…' : 'Save'}
         </button>
         <p className="c-s13 c-t3 m-0" role="status">
-          {state.saved && !changed ? 'Saved. New sales and bills use this; the ones already made keep theirs.' : changed ? 'Not saved yet.' : ''}
+          {state.saved && !changed ? 'Saved. New sales and new memberships use this. Members who already hold a membership keep how it was sold.' : changed ? 'Not saved yet.' : ''}
         </p>
       </div>
       {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
@@ -311,7 +312,7 @@ export default function TaxRates({ gymId, page, locked, lockedNote = null, addAs
       {canManage && locked && lockedNote !== null ? <p className="c-s14 c-t3 m-0">{lockedNote}</p> : null}
       {canManage && full ? <p className="c-s14 c-t3 m-0">{TOO_MANY_RATES}</p> : null}
 
-      {draft !== null && draft.id === null ? <RateForm draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} /> : null}
+      {draft !== null && draft.id === null ? <RateForm rates={rates} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} /> : null}
       {state.done !== null && noteAt === null ? <SavedNote>{state.done}</SavedNote> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
 
@@ -322,7 +323,7 @@ export default function TaxRates({ gymId, page, locked, lockedNote = null, addAs
             return (
               <li key={rate.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="tax-rate-row">
                 {draft !== null && draft.id === rate.id ? (
-                  <RateForm draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} />
+                  <RateForm rates={rates} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={cancel} />
                 ) : (
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-col min-w-0">

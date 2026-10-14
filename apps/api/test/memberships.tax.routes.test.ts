@@ -10,6 +10,7 @@
 // hold the tax; and next door's rate.
 //
 // Every refusal is checked by reading the tables, not the reply.
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { heldMembershipsResponseSchema, sellPageResponseSchema, type GymMembershipTypesResponse, type GymTaxRate, type HeldMembershipsResponse, type SellPageResponse } from "@app/shared";
@@ -394,13 +395,153 @@ d("tax on memberships (real Postgres)", () => {
       expect(paid.statusCode, paid.body).toBe(200);
       expect((await bills(gymId, zoeGold.id))[1]).toEqual(["2026-11-15", 5000, 833, "VAT"]);
 
-      // The gym changes to tax on top: the next bill is £60.00, the ones made stay.
+      // The gym changes to tax on top (round one, H2): Zoe keeps the total she was sold,
+      // £50.00 with VAT in it, month after month; a member who joins after pays £60.00.
       expect((await put(`${register(gymId)}/tax`, { included: false }, owner.cookies)).statusCode).toBe(200);
+      const ian = await addPerson(gymId, owner.cookies, "Ian Ward");
+      expect((await give(gymId, ian, owner.cookies, giveBody(gold, 5000, 5000))).statusCode).toBe(409);
+      expect((await give(gymId, ian, owner.cookies, giveBody(gold, 5000, 6000))).statusCode).toBe(201);
+      const ianGold = await membershipOf(gymId, ian);
       expect((await run(gymId, "2026-12-15T17:00:00Z")).failed).toBe(0);
       expect(await bills(gymId, zoeGold.id)).toEqual([
         ["2026-10-15", 5000, 833, "VAT"],
         ["2026-11-15", 5000, 833, "VAT"],
+        ["2026-12-15", 5000, 833, "VAT"],
+      ]);
+      // (November, which the run never reached for him, is not billed: the app's rule for a
+      // month nobody was asked for.)
+      expect(await bills(gymId, ianGold.id)).toEqual([
+        ["2026-10-15", 6000, 1000, "VAT"],
         ["2026-12-15", 6000, 1000, "VAT"],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "tax on top: a period paid before its bill is opened is asked at its total, tax in, and opened with its tax",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("early-owner");
+      const gymId = await makeGym(owner, "Mtx Early Gym");
+      const gst = await addRate(gymId, owner.cookies, "GST", 1800);
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: gst.id }));
+      const zoe = await addPerson(gymId, owner.cookies, "Zoe Smith");
+      expect((await give(gymId, zoe, owner.cookies, giveBody(gold, 5000, 5900))).statusCode).toBe(201);
+      const zoeGold = await membershipOf(gymId, zoe);
+      // November, before the hourly run has opened its bill: $59.00 is asked, never $50.00.
+      const pay = held(await get(heldUrl(gymId, zoe), owner.cookies)).memberships[0]?.billing?.pay;
+      expect(pay).toMatchObject({ periodIndex: 1, leftMinor: 5900 });
+      const tooMuch = await post(`${heldUrl(gymId, zoe)}/${zoeGold.id}/payments`, { requestKey: nextForm(), periodIndex: 1, amountMinor: 5901, method: "cash" }, owner.cookies);
+      expect(tooMuch.statusCode).toBe(409);
+      const paid = await post(`${heldUrl(gymId, zoe)}/${zoeGold.id}/payments`, { requestKey: nextForm(), periodIndex: 1, amountMinor: 5900, method: "cash" }, owner.cookies);
+      expect(paid.statusCode, paid.body).toBe(200);
+      expect(await bills(gymId, zoeGold.id)).toEqual([
+        ["2026-10-15", 5900, 900, "GST"],
+        ["2026-11-15", 5900, 900, "GST"],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "a rate counts only memberships that will be billed again: not one the clock has ended, nor a past member's; a free type charges no tax",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("count-owner");
+      const gymId = await makeGym(owner, "Mtx Count Gym");
+      const gst = await addRate(gymId, owner.cookies, "GST", 1800);
+      const month = await addType(gymId, owner.cookies, monthly({ name: "One month", kind: "one_time", taxRateId: gst.id }));
+      const gold = await addType(gymId, owner.cookies, monthly({ name: "Gold Monthly", taxRateId: gst.id }));
+      // A free type cannot charge a rate, given or ticked.
+      expect((await post(typesUrl(gymId), monthly({ name: "Free week", kind: "trial", termCount: 7, termUnit: "day", priceMinor: 0, taxRateId: gst.id }), owner.cookies)).statusCode).toBe(400);
+      const free = await addType(gymId, owner.cookies, monthly({ name: "Free week", kind: "trial", termCount: 7, termUnit: "day", priceMinor: 0 }));
+      const freeRes = await put(`${register(gymId)}/tax-rates/${gst.id}/charged-on`, { use: "memberships", ids: [month, gold, free] }, owner.cookies);
+      expect(freeRes.statusCode).toBe(409);
+      expect(messageOf(freeRes)).toBe("Free week is free, so it charges no tax. Untick it and save again.");
+      // Ola: one month, over by the clock and never touched since. Bea: Gold, then taken
+      // off the list. Dan: Gold, a current member.
+      const ola = await addPerson(gymId, owner.cookies, "Ola Bello");
+      const bea = await addPerson(gymId, owner.cookies, "Bea Kane");
+      const dan = await addPerson(gymId, owner.cookies, "Dan Ross");
+      expect((await give(gymId, ola, owner.cookies, giveBody(month, 5000, 5900))).statusCode).toBe(201);
+      expect((await give(gymId, bea, owner.cookies, giveBody(gold, 5000, 5900))).statusCode).toBe(201);
+      expect((await give(gymId, dan, owner.cookies, giveBody(gold, 5000, 5900))).statusCode).toBe(201);
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gymId} AND id = ${bea}`;
+      const rateRow = async () => page(await get(register(gymId), owner.cookies)).tax.rates.find((r) => r.id === gst.id);
+      expect((await rateRow())?.memberships).toBe(2);
+      clock = new Date("2026-12-01T17:00:00Z");
+      // The stored status of Ola's still says active: the count asks the rule.
+      expect((await sql<{ status: string }[]>`SELECT status FROM gym_held_memberships WHERE entry_id = ${ola}`)[0]?.status).toBe("active");
+      expect((await rateRow())?.memberships).toBe(1);
+      // Both types moved off GST; Dan's Gold still charges it, so it stays, and says Dan's one.
+      expect((await put(`${register(gymId)}/tax-rates/${gst.id}/charged-on`, { use: "memberships", ids: [] }, owner.cookies)).statusCode).toBe(200);
+      const refused = await del(`${register(gymId)}/tax-rates/${gst.id}`, owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      expect(messageOf(refused)).toBe(
+        "GST was not removed: it is charged on 1 member's membership. A membership keeps the tax it was sold with, so GST can be removed once nobody holds one. You can still change its name or rate.",
+      );
+      // Dan leaves too: nobody is billed it again, and it is removed.
+      await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gymId} AND id = ${dan}`;
+      expect((await del(`${register(gymId)}/tax-rates/${gst.id}`, owner.cookies)).statusCode).toBe(200);
+    },
+    T,
+  );
+
+  it(
+    "a list word linked to a taxed type gives each person that type's rate, and how the gym charges it",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("word-owner");
+      const gymId = await makeGym(owner, "Mtx Word Gym");
+      const gst = await addRate(gymId, owner.cookies, "GST", 1800);
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: gst.id }));
+      const res = await post(`/v1/orgs/${gymId}/member-list/entries`, { fullName: "Pat Quinn", email: "mtx-p-word@example.com", membershipType: "Gold" }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(201);
+      const words = `/v1/orgs/${gymId}/membership-words`;
+      const preview = await post(`${words}/preview`, { word: "Gold", typeId: gold }, owner.cookies);
+      expect(preview.statusCode, preview.body).toBe(200);
+      const { digest } = JSON.parse(preview.body) as { digest: string };
+      const linked = await post(`${words}/link`, { word: "Gold", typeId: gold, groups: { settled: true, due: true, ask: true }, digest, paid: true }, owner.cookies);
+      expect(linked.statusCode, linked.body).toBe(200);
+      expect(await sql<{ tax_rate_id: string | null; tax_included: boolean | null }[]>`SELECT tax_rate_id, tax_included FROM gym_held_memberships WHERE gym_id = ${gymId}`).toEqual([
+        { tax_rate_id: gst.id, tax_included: false },
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "migration 0109 moves a gym's one rate into a rate named Tax, charged on the products that charged it; a gym at 0 gets none",
+    async () => {
+      // The two data statements of the migration, as written, run against temporary tables
+      // of the shape they read (a temporary table hides the real one of its name), then dropped.
+      const text = readFileSync(new URL("../drizzle/0109_tax_rates.sql", import.meta.url), "utf8");
+      const statements = text.split("--> statement-breakpoint").map((s) => s.replace(/^\s*--.*$/gm, "").trim());
+      const insert = statements.find((s) => s.startsWith('INSERT INTO "gym_tax_rates"'));
+      const update = statements.find((s) => s.startsWith('UPDATE "gym_products"'));
+      if (insert === undefined || update === undefined) throw new Error("the migration's data statements were not found");
+      const got = await sql.begin(async (tx) => {
+        await tx`CREATE TEMP TABLE gyms (id uuid PRIMARY KEY, sales_tax_bp integer NOT NULL) ON COMMIT DROP`;
+        await tx`CREATE TEMP TABLE gym_tax_rates (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), gym_id uuid NOT NULL, name text NOT NULL, rate_bp integer NOT NULL) ON COMMIT DROP`;
+        await tx`CREATE TEMP TABLE gym_products (id uuid PRIMARY KEY, gym_id uuid NOT NULL, taxed boolean NOT NULL, tax_rate_id uuid) ON COMMIT DROP`;
+        const [a, b] = ["00000000-0000-4000-8000-0000000000a1", "00000000-0000-4000-8000-0000000000b1"];
+        await tx`INSERT INTO gyms (id, sales_tax_bp) VALUES (${a}, 825), (${b}, 0)`;
+        await tx`INSERT INTO gym_products (id, gym_id, taxed) VALUES
+          ('00000000-0000-4000-8000-0000000000a2', ${a}, true), ('00000000-0000-4000-8000-0000000000a3', ${a}, false),
+          ('00000000-0000-4000-8000-0000000000b2', ${b}, true)`;
+        await tx.unsafe(insert);
+        await tx.unsafe(update);
+        const rates = await tx<{ gym_id: string; name: string; rate_bp: number }[]>`SELECT gym_id, name, rate_bp FROM gym_tax_rates ORDER BY gym_id`;
+        const products = await tx<{ id: string; rate: string | null }[]>`
+          SELECT p.id, r.name AS rate FROM gym_products p LEFT JOIN gym_tax_rates r ON r.id = p.tax_rate_id ORDER BY p.id`;
+        return { rates, products };
+      });
+      expect(got.rates).toEqual([{ gym_id: "00000000-0000-4000-8000-0000000000a1", name: "Tax", rate_bp: 825 }]);
+      expect(got.products).toEqual([
+        { id: "00000000-0000-4000-8000-0000000000a2", rate: "Tax" },
+        { id: "00000000-0000-4000-8000-0000000000a3", rate: null },
+        { id: "00000000-0000-4000-8000-0000000000b2", rate: null },
       ]);
     },
     T,

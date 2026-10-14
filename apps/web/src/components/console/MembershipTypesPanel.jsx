@@ -215,8 +215,8 @@ function TypeForm({ gymId, currency, options, taxRates, onRateAdded, draft, setD
           />
         </Field>
 
-        <Field id={id('tax')} label="Tax">
-          <select id={id('tax')} value={draft.taxRateId} onChange={text('taxRateId')} className="c-input" style={{ maxWidth: 280 }}>
+        <Field id={id('tax')} label="Tax" problem={problems?.tax}>
+          <select id={id('tax')} aria-invalid={problems?.tax ? 'true' : undefined} value={draft.taxRateId} onChange={text('taxRateId')} className="c-input" style={{ maxWidth: 280 }}>
             <option value="">No tax</option>
             {taxRates.map((rate) => (
               <option key={rate.id} value={rate.id}>
@@ -655,6 +655,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
         busy={fromList.busy}
         error={fromList.error}
         inRow={inRow}
+        taxLine={typeTaxLine((list?.types ?? []).find((t) => t.id === fromList.preview.type.id) ?? { taxRateId: null }, list)}
         onGive={(body) => void fromList.give(body)}
         onCancel={fromList.closeBox}
       />
