@@ -72,6 +72,7 @@ function held(n, type, startsOn, paid, moves = []) {
     fromList: false,
     notCharged: false,
     refundedInFull: false,
+    discount: null,
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, made.membership, m, type.priceMinor, TODAY),
   };
@@ -85,6 +86,7 @@ const answer = (memberships, more = {}) => ({
     types: [GOLD, PACK],
     listed: null,
     canBill: true,
+    discounts: [],
     ...more,
   }),
 });

@@ -987,7 +987,7 @@ describe("purge shortfall (no database)", () => {
 });
 
 // A SIGNED WAIVER, REMOVED SIX YEARS AFTER ITS PERSON IS GONE (ROADMAP Stage 2 item 3e-iii;
-// needs migration 0107). In this file, not its own, because the expiry is one statement over
+// needs migration 0108). In this file, not its own, because the expiry is one statement over
 // every gym: another file's purge run at the same moment would remove these fixtures under
 // the assertions. The first test is the worst thing the job could do to a real person
 // (CLAUDE.md §2.1): remove a gym's proof too early — while the person still has an account,

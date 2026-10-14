@@ -748,7 +748,14 @@
       "idx": 106,
       "version": "7",
       "when": 1790208000107,
-      "tag": "0107_waiver_record_deleted",
+      "tag": "0107_membership_discounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1790294400108,
+      "tag": "0108_waiver_record_deleted",
       "breakpoints": true
     }
   ]

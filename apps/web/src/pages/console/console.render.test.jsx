@@ -299,7 +299,8 @@ describe('Your organisations', () => {
     // screen, not on an empty list.
     orgService.getMine.mockResolvedValue({ data: { orgs: [] } });
     drawConsoleFrom('/console');
-    expect(await screen.findByText('Create your organisation')).toBeTruthy();
+    // The second test of a long file draws past the default second on GitHub's slower machines.
+    expect(await screen.findByText('Create your organisation', {}, { timeout: 5000 })).toBeTruthy();
     expect(screen.queryByText('Your organisations')).toBeNull();
   });
 

@@ -11,7 +11,8 @@
 // one of the list's words, under the same gym lock. A class booking (17c-i,
 // `classes/bookingsRepo.ts`) reads a record's memberships and takes a class off a pack or
 // gives it back through `heldForBooking`, `chargePack` and `givePackClassBack` below,
-// under that lock too.
+// under that lock too. A membership given with a discount (18b-ii-b) reads and uses it
+// through `register/discountsRepo.ts`, in the giving's own transaction.
 //
 // `status` holds the last status written, and the clock ends a membership without
 // writing: every write first marks the record's memberships the clock has ended
@@ -22,28 +23,34 @@ import { z } from "zod";
 import {
   HELD_EARLIER_PAGE,
   HELD_LIVE_MAX,
+  MEMBERSHIP_PAYMENTS,
   billsAtCancel,
   billsToOpen,
   countAfterGap,
+  discountFits,
   giveHeldMembership,
   heldMembershipStatusSchema,
   heldMembershipView,
   sameTypeTwice,
   membershipAccessSchema,
+  membershipDiscount,
   membershipKindSchema,
   membershipLimitPeriodSchema,
   membershipTermUnitSchema,
   moveHeldMembership,
+  type DiscountRefusal,
   type HeldCover,
   type HeldMembership,
   type HeldMembershipEvent,
   type HeldMembershipTypeChoice,
   type ListedMembership,
   type MemberPaymentByHand,
+  type MembershipPayments,
   type PtHeld,
 } from "@app/shared";
 import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
+import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
 import {
   billsFor,
   insertBills,
@@ -67,6 +74,8 @@ export interface HeldRow {
   priceMinor: number;
   currency: string;
   fromList: boolean;
+  /** The discount it was given with, as it was then (18b-ii-b). */
+  discount: { name: string; offMinor: number; payments: MembershipPayments } | null;
   membership: HeldMembership;
 }
 
@@ -92,6 +101,9 @@ const rawSchema = z.object({
   renews: z.boolean(),
   classes_left: z.number().int().nullable(),
   from_list: z.boolean(),
+  discount_name: z.string().nullable(),
+  discount_minor: z.number().int(),
+  discount_payments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
 });
 
 function shape(row: unknown): HeldRow {
@@ -103,6 +115,7 @@ function shape(row: unknown): HeldRow {
     priceMinor: r.price_minor,
     currency: r.currency,
     fromList: r.from_list,
+    discount: r.discount_name === null || r.discount_payments === null ? null : { name: r.discount_name, offMinor: r.discount_minor, payments: r.discount_payments },
     membership: {
       kind: r.kind,
       termCount: r.term_count,
@@ -163,7 +176,8 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.term_count, h.term_unit, h.pack_classes, h.pack_days,
   h.starts_on::text AS starts_on, h.frozen_days, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
-  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list`;
+  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
+  h.discount_name, h.discount_minor, h.discount_payments`;
 
 /** The record's memberships of the statuses named, newest start first. */
 const held = (sql: Sql | TransactionSql, gymId: string, entryId: string, statuses: readonly string[], limit: number) => sql`
@@ -291,6 +305,16 @@ export type HeldWriteOutcome =
   | { kind: "method_needed" }
   /** The type's price is no longer the one the screen showed. */
   | { kind: "price_changed" }
+  /** The discount named is not one of this gym's. */
+  | { kind: "discount_not_found" }
+  /** The gym's own discount, and it cannot be used on this membership today. */
+  | { kind: "discount_refused"; name: string; reason: DiscountRefusal }
+  /** The discount rounds to nothing on this price. */
+  | { kind: "discount_nothing_off"; name: string }
+  /** The discount takes off the whole price. */
+  | { kind: "discount_nothing_to_pay" }
+  /** What the discount takes off is no longer what the screen showed. */
+  | { kind: "discount_changed" }
   /** A cancel, and a payment stands on a bill for days after the membership's last day. */
   | { kind: "early_payment" };
 
@@ -391,6 +415,8 @@ export async function giveHeld(
     method: MemberPaymentByHand | null;
     /** The price the screen showed; null where it showed none. */
     shownPriceMinor: number | null;
+    /** The gym's discount it is given with, and what the screen showed coming off. */
+    discount: { id: string; shownOffMinor: number } | null;
     /** The gym's own day. */
     today: string;
     actorUserId: string;
@@ -420,6 +446,22 @@ export async function giveHeld(
     const type = typeChoice(rawType);
     if (input.shownPriceMinor !== null && input.shownPriceMinor !== type.priceMinor) return { kind: "price_changed" };
 
+    // The discount is this gym's own, read under its lock, judged on the gym's own day,
+    // and what it takes off is worked out again here: nothing is given at any other price.
+    let used: { id: string; name: string; offMinor: number; payments: MembershipPayments; heldPriceMinor: number; firstBillMinor: number } | null = null;
+    if (input.discount !== null) {
+      const found = await lockedDiscount(tx, input.gymId, input.discount.id);
+      if (found === null) return { kind: "discount_not_found" };
+      const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, membershipTypeId: type.id, currency: type.currency });
+      if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
+      const costs = membershipDiscount(found, type);
+      if (!costs.ok) return costs.reason === "nothing_off" ? { kind: "discount_nothing_off", name: found.name } : { kind: "discount_nothing_to_pay" };
+      if (costs.offMinor !== input.discount.shownOffMinor) return { kind: "discount_changed" };
+      used = { id: found.id, name: found.name, ...costs };
+    }
+    const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
+    const firstBillMinor = used === null ? type.priceMinor : used.firstBillMinor;
+
     // Worked out unpaid: the bill of the period owed is opened first, and a payment
     // recorded against it is what moves the count of paid periods on.
     const given = giveHeldMembership(type, input.startsOn, false, input.today);
@@ -439,15 +481,20 @@ export async function giveHeld(
       return { kind: "already_held", typeName: type.name, ends };
     }
 
+    // One use, in one statement that will not pass the limit, in this same transaction.
+    if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
+
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_held_memberships
         (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
          term_count, term_unit, pack_classes, pack_days, starts_on, status,
-         paid_periods, paid_floor, renews, classes_left)
+         paid_periods, paid_floor, renews, classes_left,
+         discount_id, discount_name, discount_minor, discount_payments)
       VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
-              ${type.priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
+              ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
               ${m.packDays}, ${m.startsOn}::date, ${m.status},
-              ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft})
+              ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
+              ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null})
       RETURNING id`;
     if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -462,8 +509,9 @@ export async function giveHeld(
         type: type.name,
         startsOn: m.startsOn,
         paidPeriods: String(m.paidPeriods),
-        priceMinor: String(type.priceMinor),
+        priceMinor: String(priceMinor),
         currency: type.currency,
+        ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
       },
     });
 
@@ -472,7 +520,7 @@ export async function giveHeld(
       const [opened] = await insertBills(
         tx,
         input.gymId,
-        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: type.priceMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
+        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBillMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
         input.now,
       );
       if (opened === undefined) throw new Error("a new membership's bill was not opened");
@@ -482,7 +530,7 @@ export async function giveHeld(
           {
             gymId: input.gymId,
             billId: opened.id,
-            amountMinor: type.priceMinor,
+            amountMinor: firstBillMinor,
             currency: type.currency,
             method: input.method,
             requestKey: input.requestKey,
@@ -505,7 +553,7 @@ export async function giveHeld(
             membershipId: created.id,
             billId: opened.id,
             period: String(due.periodIndex),
-            amountMinor: String(type.priceMinor),
+            amountMinor: String(firstBillMinor),
             currency: type.currency,
             method: input.method,
           },
@@ -513,6 +561,9 @@ export async function giveHeld(
       }
     } else if (pays) {
       throw new Error("a membership given as paid had no bill to pay");
+    } else if (used !== null && used.payments === "first") {
+      // Its discount rides on the bill opened now; every later one is opened at the full price.
+      throw new Error("a membership given with a first-payment discount had no bill to carry it");
     }
     return { kind: "ok" };
   });
