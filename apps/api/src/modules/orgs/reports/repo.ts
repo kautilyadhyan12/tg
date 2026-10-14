@@ -69,7 +69,8 @@ export function listPeople(sql: Sql | TransactionSql, gymId: string, timezone: s
  *  from `periodFrom`, the first day of the period the page shows; new never in the month
  *  the list began (`newCountedFrom`). The same three over `earlier`, the same days a
  *  year back, both ends among them: the caller gives that figure only where the list
- *  covers every one of its days. */
+ *  covers every one of its days. New there is somebody the list held by its last day: a
+ *  file imported since with last year's join dates fills no year earlier. */
 export async function readMemberCounts(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -108,7 +109,7 @@ export async function readMemberCounts(
     ),
     shown AS (SELECT ${periodFrom}::date AS from_day),
     was AS MATERIALIZED (
-      SELECT p.started, p.left_on FROM people p
+      SELECT p.started, p.listed_on, p.left_on FROM people p
       WHERE (p.started >= ${earlier.from}::date AND p.started <= ${earlier.to}::date)
          OR (p.left_on >= ${earlier.from}::date AND p.left_on <= ${earlier.to}::date)
     )
@@ -129,7 +130,8 @@ export async function readMemberCounts(
       (SELECT count(*)::int FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_leavers,
       (SELECT COALESCE(sum(GREATEST(p.left_on - p.started, 0)), 0)::float8
        FROM people p, shown s WHERE p.left_on >= s.from_day) AS stay_days,
-      (SELECT count(*)::int FROM was WHERE started >= ${earlier.from}::date AND started <= ${earlier.to}::date) AS earlier_joined,
+      (SELECT count(*)::int FROM was
+       WHERE started >= ${earlier.from}::date AND started <= ${earlier.to}::date AND listed_on <= ${earlier.to}::date) AS earlier_joined,
       (SELECT count(*)::int FROM was WHERE left_on >= ${earlier.from}::date AND left_on <= ${earlier.to}::date) AS earlier_left,
       (SELECT COALESCE(sum(GREATEST(left_on - started, 0)), 0)::float8
        FROM was WHERE left_on >= ${earlier.from}::date AND left_on <= ${earlier.to}::date) AS earlier_stay_days

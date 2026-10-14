@@ -279,6 +279,12 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
 
       // The list began in January 2024. On each of the nine days one person joins and one leaves.
       await add(["First On The List"], "2024-01-10");
+      // A file imported last week gave a join date inside every span: nobody the list held a
+      // year earlier, so never new then.
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, created_at, joined_on)
+        VALUES (${gym}, 'Imported Late', 'rep-y-imported-late@example.com', ${"f".repeat(64)}, 'upload', '2026-10-13T11:00:00Z', '2025-10-01')`;
+      people.push({ listed: "2026-10-13", left: null });
       for (const day of DAYS) {
         await add([`Joined ${day}`], day);
         await add([`Left ${day}`], "2024-02-01", day);
