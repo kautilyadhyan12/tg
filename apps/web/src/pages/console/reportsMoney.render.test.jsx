@@ -315,7 +315,13 @@ describe('products sold at the desk, and who took the money (21b-ii)', () => {
     open();
     await screen.findByTestId('tile-recurring');
     expect(within(tile('collected')).getByText('£382.00')).toBeTruthy();
-    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment recorded here: £380.00 memberships, £37.00 product sales, £35.00 refunded · October, so far: £57.00')).toBeTruthy();
+    expect(within(tile('collected')).getByText('since 10 Jun 2026, the first payment recorded here · October, so far: £57.00')).toBeTruthy();
+    // What came from where is its own lines under the figure, not inside a sentence.
+    expect([...screen.getByTestId('split-collected').querySelectorAll('div')].map((row) => row.textContent)).toEqual([
+      'Memberships£380.00',
+      'Product sales£37.00',
+      'Refunded-£35.00',
+    ]);
     expect(tableRows('Money, month by month')).toEqual([
       ['Month', 'Memberships', 'Product sales', 'Refunded', 'Collected'],
       ['Oct 2026 (so far)', '£60.00', '£12.00', '£15.00', '£57.00'],
@@ -335,13 +341,13 @@ describe('products sold at the desk, and who took the money (21b-ii)', () => {
       ['Water', '14', '£21.00'],
       ['Shake', '4', '£16.00'],
     ]);
-    expect(tableRows('Money taken, by staff')).toEqual([
-      ['Staff', 'Memberships', 'Product sales', 'Total'],
+    expect(tableRows('Sales by staff')).toEqual([
+      ['Staff member', 'Membership payments', 'Product sales', 'Total'],
       ['Ravi Kumar', '£200.00', '£37.00', '£237.00'],
       ['Asha', '£120.00', '£0.00', '£120.00'],
       ['Deleted account', '£60.00', '£0.00', '£60.00'],
     ]);
-    expect(within(screen.getByTestId('money-by-staff')).getByText('Who recorded each payment and sale. Refunds are taken off Collected, not off anybody here.')).toBeTruthy();
+    expect(within(screen.getByTestId('money-by-staff')).getByText('The membership payments and product sales each staff member recorded. Refunds are taken off Collected, not off anybody here.')).toBeTruthy();
   });
 
   it('the staff and product tables download as CSV, a name a spreadsheet would run saved as words', async () => {
@@ -360,7 +366,7 @@ describe('products sold at the desk, and who took the money (21b-ii)', () => {
     vi.unstubAllGlobals();
     expect(saved).toEqual([
       '"Product","Sold","Collected, last 12 months (GBP)"\r\n"\'=SUM(1)","1","1.00"\r\n',
-      '"Staff","Memberships (GBP)","Product sales (GBP)","Total (GBP)"\r\n"\'+Bad","0.00","1.00","1.00"\r\n',
+      '"Staff member","Membership payments (GBP)","Product sales (GBP)","Total (GBP)"\r\n"\'+Bad","0.00","1.00","1.00"\r\n',
     ]);
   });
 
@@ -369,18 +375,19 @@ describe('products sold at the desk, and who took the money (21b-ii)', () => {
     await screen.findByTestId('tile-recurring');
     expect(tableRows('Money, month by month')[0]).toEqual(['Month', 'Paid', 'Refunded', 'Collected']);
     expect(screen.queryByTestId('money-by-product')).toBeNull();
-    expect(screen.queryByText(/product sales/)).toBeNull();
+    expect(screen.queryByText(/product sales/i)).toBeNull();
+    expect(screen.queryByTestId('split-collected')).toBeNull();
   });
 
   it('a gym that only sells at the desk has its figures, with no membership table', async () => {
     svc.money.mockResolvedValue(money({ ...desk, anyMembership: false, firstPaidOn: null, held: [], months: [], staff: [{ userId: 'u1', name: 'Ravi Kumar', paidMinor: 0, soldMinor: 3700 }] }));
     open();
     await screen.findByTestId('tile-collected');
-    expect(within(tile('collected')).getByText('£37.00')).toBeTruthy();
+    expect(tile('collected').querySelector('.c-big-sm').textContent).toBe('£37.00');
     expect(moneyPart().getByText('These figures come from the payments and sales your staff record in the app. The first was recorded on 2 Aug 2026.')).toBeTruthy();
     expect(screen.queryByTestId('money-by-membership')).toBeNull();
-    expect(tableRows('Money taken, by staff')).toEqual([
-      ['Staff', 'Memberships', 'Product sales', 'Total'],
+    expect(tableRows('Sales by staff')).toEqual([
+      ['Staff member', 'Membership payments', 'Product sales', 'Total'],
       ['Ravi Kumar', '£0.00', '£37.00', '£37.00'],
     ]);
   });

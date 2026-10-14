@@ -77,12 +77,6 @@ export function moneyTiles(report, words, orgSlug) {
   const soFar = `${month}, so far: ${moneyText(report.thisMonth.netMinor, cur)}`;
   const refunded = report.inPeriod.refundedMinor > 0;
   const sold = report.inPeriod.soldMinor > 0;
-  const parts = [
-    ...(sold
-      ? [`${moneyText(report.inPeriod.paidMinor, cur)} memberships`, `${moneyText(report.inPeriod.soldMinor, cur)} product sales`]
-      : [`${moneyText(report.inPeriod.paidMinor, cur)} paid`]),
-    ...(refunded ? [`${moneyText(report.inPeriod.refundedMinor, cur)} refunded`] : []),
-  ];
   const owedMinor = report.owed.minor + report.owed.pastMinor;
   // People the Members page also shows as Payment due, with no amount in the app.
   const listOnly = report.owed.listOnlyPeople;
@@ -129,7 +123,18 @@ export function moneyTiles(report, words, orgSlug) {
         (f) => `Your first payment was recorded on ${dayText(f.since)}.`,
         (f) => `${moneyText(f.netMinor, cur)} · ${changeWords(report.inPeriod.netMinor, f.netMinor, (n) => moneyText(n, cur))}`,
       ),
-      note: refunded || sold ? `${span}: ${parts.join(', ')} · ${soFar}` : `${span} · ${soFar}`,
+      // With desk sales, what came from where is its own lines under the figure.
+      split: sold
+        ? [
+            { label: 'Memberships', value: moneyText(report.inPeriod.paidMinor, cur) },
+            { label: 'Product sales', value: moneyText(report.inPeriod.soldMinor, cur) },
+            ...(refunded ? [{ label: 'Refunded', value: `-${moneyText(report.inPeriod.refundedMinor, cur)}` }] : []),
+          ]
+        : null,
+      note:
+        refunded && !sold
+          ? `${span}: ${moneyText(report.inPeriod.paidMinor, cur)} paid, ${moneyText(report.inPeriod.refundedMinor, cur)} refunded · ${soFar}`
+          : `${span} · ${soFar}`,
       how: `Membership payments and product sales your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment, sale or refund that was undone is not counted. ${earlierDays(report.period, report.yearEarlier)}`,
       links: [],
     },
@@ -206,7 +211,7 @@ export function moneyProductRows(report) {
 /** What an account that has since been deleted is called in the staff table. */
 export const DELETED_STAFF = 'Deleted account';
 
-export const MONEY_STAFF_NOTE = 'Who recorded each payment and sale. Refunds are taken off Collected, not off anybody here.';
+export const MONEY_STAFF_NOTE = 'The membership payments and product sales each staff member recorded. Refunds are taken off Collected, not off anybody here.';
 
 /** A row for each staff member who recorded a payment or a sale in the period. */
 export function moneyStaffRows(report) {
@@ -267,7 +272,7 @@ export function moneyProductsCsv(report) {
 export function moneyStaffCsv(report) {
   const cur = report.currency;
   return csv([
-    ['Staff', `Memberships (${cur})`, `Product sales (${cur})`, `Total (${cur})`],
+    ['Staff member', `Membership payments (${cur})`, `Product sales (${cur})`, `Total (${cur})`],
     ...report.staff.map((m) => [csvWords(m.name ?? DELETED_STAFF), plain(m.paidMinor, cur), plain(m.soldMinor, cur), plain(m.totalMinor, cur)]),
   ]);
 }
