@@ -70,6 +70,7 @@ export const gymWaiverDeskSignatures = pgTable(
   (t) => [
     check("gym_waiver_desk_signatures_signer_check", sql`${t.signer} IN ('person', 'guardian')`),
     check("gym_waiver_desk_signatures_name_check", sql`char_length(${t.signedName}) BETWEEN 2 AND 100`),
+    check("gym_waiver_desk_signatures_deleted_day_check", sql`${t.entryId} IS NOT NULL OR ${t.recordDeletedAt} IS NOT NULL`),
     foreignKey({ name: "gym_waiver_desk_signatures_waiver_fk", columns: [t.gymId, t.waiverId], foreignColumns: [gymWaivers.gymId, gymWaivers.id] }).onDelete(
       "cascade",
     ),

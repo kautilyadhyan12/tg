@@ -1085,9 +1085,13 @@ d("a signed waiver removed six years after its person is gone (real Postgres)", 
     const restored = await appSignature(gymId, waiverId, await person(CONSENT_PROOF_RETENTION_DAYS + 30, "active"));
     const onTheList = await deskSignature(gymId, waiverId, null);
     const deskNearly = await deskSignature(gymId, waiverId, CONSENT_PROOF_RETENTION_DAYS - 5);
-    // A record that let go of its signature with no day kept: never counted from nothing.
+    // A signature can never lose its record with no day kept (it would be kept for ever):
+    // letting go without the day, or deleting the record without letting go, is refused.
     const noDay = await deskSignature(gymId, waiverId, null);
-    await sql`UPDATE gym_waiver_desk_signatures SET entry_id = NULL WHERE id = ${noDay}`;
+    await expect(sql`UPDATE gym_waiver_desk_signatures SET entry_id = NULL WHERE id = ${noDay}`).rejects.toThrow(/deleted_day_check/);
+    await expect(
+      sql.begin((tx) => tx`DELETE FROM gym_member_list_entries WHERE id = (SELECT entry_id FROM gym_waiver_desk_signatures WHERE id = ${noDay})`),
+    ).rejects.toThrow(/gym_waiver_desk_signatures_entry_fk/);
     // Removed: past six years.
     const gone = await appSignature(gymId, waiverId, await person(CONSENT_PROOF_RETENTION_DAYS + 1));
     const deskGone = await deskSignature(gymId, waiverId, CONSENT_PROOF_RETENTION_DAYS + 1);
@@ -1098,7 +1102,7 @@ d("a signed waiver removed six years after its person is gone (real Postgres)", 
     expect((await appLeft([live, nearly, restored, gone])).sort()).toEqual([live, nearly, restored].sort());
     expect((await deskLeft([onTheList, deskNearly, noDay, deskGone])).sort()).toEqual([onTheList, deskNearly, noDay].sort());
 
-    // Six days later the nearly-due two go; the live, restored, listed and dayless never do.
+    // Six days later the nearly-due two go; the live, restored and listed never do.
     await deleteExpiredWaiverSignatures(sql, cutoffAt(new Date(Date.now() + 6 * DAY_MS)));
     expect((await appLeft([live, nearly, restored])).sort()).toEqual([live, restored].sort());
     expect((await deskLeft([onTheList, deskNearly, noDay])).sort()).toEqual([onTheList, noDay].sort());
@@ -1108,9 +1112,10 @@ d("a signed waiver removed six years after its person is gone (real Postgres)", 
     const { gymId, waiverId } = await gymWithWaiver();
     const kept = await deskSignature(gymId, waiverId, null);
     const deleted = await deskSignature(gymId, waiverId, null);
+    const at = new Date("2027-03-04T05:06:07.000Z");
     const deletedEntry = (await sql<{ entry_id: string }[]>`SELECT entry_id FROM gym_waiver_desk_signatures WHERE id = ${deleted}`)[0]?.entry_id ?? "";
 
-    await sql.begin((tx) => deleteEntry(tx, gymId, deletedEntry));
+    await sql.begin((tx) => deleteEntry(tx, gymId, deletedEntry, at));
 
     const rows = await sql<{ id: string; entry_id: string | null; record_deleted_at: Date | null }[]>`
       SELECT id, entry_id, record_deleted_at FROM gym_waiver_desk_signatures WHERE id IN (${kept}, ${deleted})`;
@@ -1118,7 +1123,8 @@ d("a signed waiver removed six years after its person is gone (real Postgres)", 
     expect(byId.get(kept)?.entry_id).not.toBeNull();
     expect(byId.get(kept)?.record_deleted_at).toBeNull();
     expect(byId.get(deleted)?.entry_id).toBeNull();
-    expect(Math.abs((byId.get(deleted)?.record_deleted_at?.getTime() ?? 0) - Date.now())).toBeLessThan(60_000);
+    // The run's own clock, never the database's.
+    expect(byId.get(deleted)?.record_deleted_at).toEqual(at);
   });
 
   it("a gym's whole list deleted with the gym keeps each desk signature with that day", { timeout: 60_000 }, async () => {
@@ -1128,10 +1134,11 @@ d("a signed waiver removed six years after its person is gone (real Postgres)", 
     const b = await deskSignature(gymId, waiverId, null);
     const elsewhere = await deskSignature(other.gymId, other.waiverId, null);
 
-    await sql.begin((tx) => deleteListForGym(tx, gymId));
+    const at = new Date("2027-03-04T05:06:07.000Z");
+    await sql.begin((tx) => deleteListForGym(tx, gymId, at));
 
     const rows = await sql<{ id: string; gone: boolean; dated: boolean }[]>`
-      SELECT id, entry_id IS NULL AS gone, record_deleted_at IS NOT NULL AS dated
+      SELECT id, entry_id IS NULL AS gone, record_deleted_at IS NOT DISTINCT FROM ${at} AS dated
       FROM gym_waiver_desk_signatures WHERE id IN (${a}, ${b}, ${elsewhere}) ORDER BY id`;
     expect(rows.map((r) => ({ id: r.id, gone: r.gone, dated: r.dated }))).toEqual(
       [
@@ -1150,6 +1157,7 @@ d("a signed waiver removed six years after its person is gone (real Postgres)", 
     const dry = await purgeDueUsers({ sql, log: quiet, photos: noPhotos }, { dryRun: true });
     expect(dry.waiverSignaturesExpired).toBe(0);
     expect(await appLeft([app])).toEqual([app]);
+    expect(await deskLeft([desk])).toEqual([desk]);
 
     // A client that throws for the waiver statement only: the run says it fell short and
     // nothing of the waivers is removed (one transaction), so the next run tries again.

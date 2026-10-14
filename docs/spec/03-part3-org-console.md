@@ -2072,7 +2072,9 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   stays as the gym's proof with the day the record was deleted (`record_deleted_at`,
   `0107`), and the purge removes it six years after that day (Kd,
   `rulings/2026-10-14-3e-ii.md`; 3e-iii). A gym's whole list deleted with the gym
-  (`deleteListForGym`) is the same.
+  (`deleteListForGym`) is the same. A record cannot be deleted any other way while a
+  signature points at it (the link is checked when the change is saved), and a signature
+  with neither a record nor a day is refused, so none is ever kept for ever by mistake.
 - **Who has signed, by record** (`waiver/signed.ts`, one rule): a desk signature of the
   wording in use, or an app signature by the person the record certainly is (§18.4). An app
   signature on a shared family email signs no record. Members' Filter shows **Waiver not

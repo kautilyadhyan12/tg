@@ -327,7 +327,7 @@ export async function archiveLapsedGyms(
       // notice, and a separate statement is one timeout away from producing it.
       await deleteLeadsForGym(tx, row.id);
       await deleteStaffInvitesForGym(tx, row.id);
-      await deleteMemberListForGym(tx, row.id);
+      await deleteMemberListForGym(tx, row.id, now);
     }
     return rows;
   });

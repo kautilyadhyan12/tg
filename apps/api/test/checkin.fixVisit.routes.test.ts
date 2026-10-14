@@ -687,7 +687,7 @@ d("fixing a visit (real Postgres)", () => {
       expect(moved).toEqual([{ entry_id: to }, { entry_id: to }]);
 
       await sql.begin(async (tx) => {
-        await deleteEntry(tx, gym.id, to);
+        await deleteEntry(tx, gym.id, to, new Date());
       });
       const left = await sql<{ id: string; entry_id: string | null; user_id: string | null }[]>`
         SELECT id, entry_id, user_id FROM gym_attendance_removed WHERE gym_id = ${gym.id}`;
@@ -706,7 +706,7 @@ d("fixing a visit (real Postgres)", () => {
       const b = await visit(gym, { entryId, userId: withAccount.userId }, ago(4));
       for (const id of [a, b]) expect((await remove(gym.id, gym.owner.cookies, id)).statusCode).toBe(200);
       await sql.begin(async (tx) => {
-        await deleteListForGym(tx, gym.id);
+        await deleteListForGym(tx, gym.id, new Date());
       });
       const left = await sql<{ id: string; entry_id: string | null; user_id: string | null }[]>`
         SELECT id, entry_id, user_id FROM gym_attendance_removed WHERE gym_id = ${gym.id}`;
