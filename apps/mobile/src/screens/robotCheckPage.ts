@@ -10,7 +10,7 @@ const CLOUDFLARE = "https://challenges.cloudflare.com/";
 
 /** The page's address: the api's origin, with a slash. Null for anything that is not one. */
 export function pageAddress(apiUrl: string): string | null {
-  const origin = /^https?:\/\/[^/?#@\s]+/i.exec(apiUrl)?.[0];
+  const origin = /^(https?:\/\/[^/?#@\s]+)(?:[/?#]|$)/i.exec(apiUrl)?.[1];
   return origin === undefined ? null : `${origin}/`;
 }
 

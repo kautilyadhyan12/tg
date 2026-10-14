@@ -62,8 +62,9 @@ export function RobotCheck({ siteKey, apiUrl, line, onToken, onClose }: RobotChe
             allowFileAccess={false}
             mixedContentMode="never"
             onMessage={(event) => {
-              // Only the page itself speaks for the box, never a frame inside it.
-              if (!event.nativeEvent.url.startsWith(address)) return;
+              // Only the page itself speaks for the box, never a frame inside it. Android names
+              // the page with no slash, an iPhone with one: the site is compared, not the text.
+              if (pageAddress(event.nativeEvent.url) !== address) return;
               let said: unknown;
               try {
                 said = JSON.parse(event.nativeEvent.data);

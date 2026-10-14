@@ -182,10 +182,21 @@ describe("what the box says back is read, never trusted", () => {
     expect(screen.getByTestId("robot-check-box")).toBeTruthy();
   });
 
+  // Android names the whole page for every message, with no slash (seen on the phone); an iPhone names the frame.
+  it("the page's answer as Android names it sends the code", async () => {
+    const server = await openAndAsk(busyNetwork(["answer-10"]));
+    await screen.findByText("Security check");
+    await say({ kind: "token", token: "answer-10" }, "http://localhost:3000");
+    expect(await screen.findByText("Check your email.")).toBeTruthy();
+    expect(sends(server).at(-1)).toEqual({ email: "ravi@example.com", robotToken: "answer-10" });
+  });
+
   it("an answer from another frame in the box is not the page's, and nothing is sent", async () => {
     const server = await openAndAsk(busyNetwork(["answer-8"]));
     await screen.findByText("Security check");
     await say({ kind: "token", token: "answer-8" }, "https://example.com/frame");
+    await say({ kind: "token", token: "answer-8" }, "http://localhost:3000@example.com/frame");
+    await say({ kind: "token", token: "answer-8" }, "about:blank");
     expect(sends(server)).toHaveLength(1);
     expect(screen.getByText("Security check")).toBeTruthy();
   });
