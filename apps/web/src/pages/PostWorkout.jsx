@@ -846,6 +846,8 @@ export default function PostWorkout() {
                 keeps its existing silent section (pre-existing, reported). */}
             {summary.mealSuggestions === null ? (
               <p className="text-gray-500 text-sm">Suggestions unavailable right now.</p>
+            ) : summary.mealSuggestions.length === 0 ? (
+              <p className="text-gray-500 text-sm">You have eaten today&apos;s calories, so there is no meal to suggest.</p>
             ) : summary.mealSuggestions.map((meal, i) => (
               <div key={i} className="flex items-start justify-between p-3 bg-dark-200 rounded-xl">
                 <div>
@@ -862,6 +864,9 @@ export default function PostWorkout() {
                 Drawn only under ideas that are there. */}
             {Array.isArray(summary.mealSuggestions) && summary.mealSuggestions.length > 0 && (
               <p className="text-gray-400 text-xs">{FOOD_ALLERGY_CAUTION}</p>
+            )}
+            {Array.isArray(summary.mealSuggestions) && summary.mealSuggestions.length > 0 && summary.mealLabelCaution !== null && (
+              <p className="text-gray-400 text-xs">{summary.mealLabelCaution}</p>
             )}
           </div>
         </motion.div>

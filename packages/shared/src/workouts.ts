@@ -2,6 +2,7 @@
 // Part 4 §3.5 columns). List = keyset cursor on (started_at, id) DESC.
 import { z } from "zod";
 import { setModeSchema } from "./events.js";
+import { DIET_LABEL_CAUTION, mealIdeaSchema } from "./nutrition.js";
 import { instantSchema } from "./time.js";
 
 export const workoutListQuerySchema = z
@@ -160,7 +161,10 @@ export type WorkoutDetail = z.infer<typeof workoutDetailSchema>;
 // reason this endpoint exists rather than the page assembling it from three
 // other reads: two surfaces computing one number is how they come to disagree.
 
-export const mealSuggestionSchema = z.object({ meal: z.string(), timing: z.string() });
+/** One idea of what to eat after the workout (ROADMAP 34d-ii). `meal` is the
+ *  idea's foods in one line; `idea` is the same foods one by one, each at its
+ *  amount, from the same rule as the day's meal ideas, so it is logged as it stands. */
+export const mealSuggestionSchema = z.object({ meal: z.string().min(1), timing: z.string().min(1), idea: mealIdeaSchema });
 export type MealSuggestion = z.infer<typeof mealSuggestionSchema>;
 
 export const workoutSummarySchema = z.object({
@@ -213,7 +217,10 @@ export const workoutSummarySchema = z.object({
   /** Display strings, already chosen server-side — empty array means "no record
    *  set", which is a fact, not a failed read. */
   personalRecords: z.array(z.string()),
-  mealSuggestions: z.array(mealSuggestionSchema),
+  /** Empty once the day's calories are eaten. */
+  mealSuggestions: z.array(mealSuggestionSchema).max(2),
+  /** The line a vegetarian or vegan reads under the ideas; null for somebody who eats meat. */
+  mealLabelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
   stretches: z.array(z.string()),
 });
 export type WorkoutSummary = z.infer<typeof workoutSummarySchema>;

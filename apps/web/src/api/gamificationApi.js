@@ -711,6 +711,8 @@ export function readSummaryView(data) {
     // apps/web. Round 6 F2's class, three sites along.
     personalRecords: records === null ? null : records.map(readPersonalRecord),
     mealSuggestions: meals   === null ? null : meals.map(readMealSuggestion),
+    // A vegetarian's or vegan's second line under the ideas (Kd, 2026-10-14); null for anybody else.
+    mealLabelCaution: typeof data.mealLabelCaution === 'string' && data.mealLabelCaution !== '' ? data.mealLabelCaution : null,
     stretches:       stretch === null ? null : stretch.map((v) => text(v)),
   };
 }
