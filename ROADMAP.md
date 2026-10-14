@@ -134,7 +134,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 3e. **A gym's waiver, signed in the app** (RULINGS 2026-10-08; spec Part 3 §10.10): split 2026-10-13 in two, built back to back (the line as first written is in `handoff/2026-10-13-3e-i.md`). The words are the gym's, never ours.
      - 3e-i. [x] **The gym writes it, and people sign in the app** — merged 2026-10-13 (PR #239).
      - 3e-ii. [x] **Signed at the desk, and who has not signed** — merged 2026-10-14 (PR #262).
-     - 3e-iii. [ ] **A signed waiver is removed six years after its person deletes their account** (Kd, `rulings/2026-10-13-3e-i.md`): the purge that removes the consent log's proof after six years (`purge.ts`, `deleteExpiredConsentProof`) removes these signatures too; kept until then, and while the person has an account. **Also a signature made at the desk (3e-ii) whose record was deleted for good: removed six years after that deletion** (Kd, `rulings/2026-10-14-3e-ii.md`; it needs the day the record was deleted kept with it). Ordinary; no screen.
+     - 3e-iii. [x] **A signed waiver is removed six years after its person is gone** — merged 2026-10-14 (PR #265).
    - ~~3c. **The code admits at once**~~ **(STRUCK 2026-09-21, never built)**; its plan of 2026-09-19 (spec Part 3 §9.13) went with it.
    - The line as Kd ruled it (RULINGS 2026-09-17): a roster upload that reconciles, invitations by email, and a code that admits at once — the code part reversed 2026-09-21; the rest is the lines above.
 4. **Staff, seats and the gym's own details** (split 2026-09-21; 4a and 4c are Part 1 of the re-plan and are built right after item 5, RULINGS 2026-09-21).
