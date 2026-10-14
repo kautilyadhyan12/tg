@@ -311,7 +311,12 @@ export async function weekFacts(
   weekStarts: readonly string[],
 ): Promise<WeekFactsRow[]> {
   if (weekStarts.length === 0) return [];
-  const weeks = sql.array([...weekStarts]);
+  // A range the index can use: a day either side covers every time zone. Weeks inside it
+  // that were not asked for are dropped below.
+  const sorted = [...weekStarts].sort();
+  const from = new Date(Date.parse(`${sorted[0] ?? ""}T00:00:00Z`) - 86_400_000);
+  const to = new Date(Date.parse(`${sorted[sorted.length - 1] ?? ""}T00:00:00Z`) + 8 * 86_400_000);
+  const asked = new Set(weekStarts);
   const workouts = await sql<
     { week: string; days: string; kcal: string; ms: string; form80: string; form90: string }[]
   >`
@@ -323,21 +328,21 @@ export async function weekFacts(
            count(*) FILTER (WHERE avg_form_score >= 90) AS form90
     FROM workouts
     WHERE user_id = ${userId}
-      AND date_trunc('week', started_at AT TIME ZONE ${timeZone})::date = ANY(${weeks}::date[])
+      AND started_at >= ${from} AND started_at < ${to}
     GROUP BY 1`;
   const families = await sql<{ week: string; families: string }[]>`
     SELECT date_trunc('week', s.started_at AT TIME ZONE ${timeZone})::date::text AS week,
            count(DISTINCT e.family) AS families
     FROM workout_sets s JOIN exercises e ON e.id = s.exercise_id
     WHERE s.user_id = ${userId}
-      AND date_trunc('week', s.started_at AT TIME ZONE ${timeZone})::date = ANY(${weeks}::date[])
+      AND s.started_at >= ${from} AND s.started_at < ${to}
     GROUP BY 1`;
   const food = await sql<{ week: string; days: string }[]>`
     SELECT date_trunc('week', taken_at AT TIME ZONE ${timeZone})::date::text AS week,
            count(DISTINCT (taken_at AT TIME ZONE ${timeZone})::date) AS days
     FROM meal_logs
     WHERE user_id = ${userId}
-      AND date_trunc('week', taken_at AT TIME ZONE ${timeZone})::date = ANY(${weeks}::date[])
+      AND taken_at >= ${from} AND taken_at < ${to}
     GROUP BY 1`;
   const out = new Map<string, WeekFactsRow>();
   const row = (week: string): WeekFactsRow => {
@@ -366,5 +371,5 @@ export async function weekFacts(
   }
   for (const f of families) row(f.week).families = Number(f.families);
   for (const f of food) row(f.week).foodDays = Number(f.days);
-  return [...out.values()];
+  return [...out.values()].filter((r) => asked.has(r.weekStart));
 }

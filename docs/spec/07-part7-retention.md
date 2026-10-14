@@ -192,6 +192,16 @@ org counters, Part 3 §3.2); completion → badge + share card +
 pace, max once per challenge): *"You're 40 squats behind pace — one solid
 session catches you up."*
 
+**Weekly challenges (built in 35b, `GET /v1/gamification/challenges`).** Not the joined
+challenges above: three a week for everybody, Monday to Sunday in their own time zone,
+picked on the first read of the week and kept (`weekly_challenges`), from the old app's
+list, targets, XP and mix by fitness level (easy, medium, hard). Measured on every read
+from the person's own workouts and meals; a done one adds its XP, worked out again from
+history like all XP. Never two counting the same thing; calories only with a weight,
+form only after the camera in the last 28 days; Safe mode gets only training on 3 days
+and food on 5 days, and holds the rest of a week picked before it. Rule:
+`gamification/challenges.ts`.
+
 ### 4.2 Org challenges (console Slice B/C)
 
 Owner creates from templates (Part 3 §2.3 gating: clinics off), appears on
