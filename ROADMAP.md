@@ -322,7 +322,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        Reports keeps the day the membership ended for somebody removed later, never the day Remove was pressed. Risky (it removes people from the app). Its plan reads how Mindbody, PushPress and Gymdesk treat inactive members first.
    - 21d. **A period picker for Reports** (Kd, RULINGS 2026-10-10; Folder B, after 21b), split 2026-10-13 in two (the year earlier doubles what is read and has its own tests; the line as first written is in this job's file in `handoff/`):
      - 21d-i. [x] **The period picker** — merged 2026-10-13 (PR #241).
-     - 21d-ii. [ ] **The same period a year earlier**, beside the figures the period moves; a gym with no figures for that year reads a sentence, never a zero. Its plan measures the cost again. Folder B, after 21d-i.
+     - 21d-ii. [x] **The same period a year earlier** — merged 2026-10-14 (PR #260).
 22. **The console's new look** (Kd, RULINGS 2026-09-26; spec Part 3 §17; the drawings in `docs/design/console`). Screen jobs, Opus high, no review; a restyle keeps every button, field, message and permission its page has, and the last of R2–R8 built also turns on the Light · Dark · Auto switch (§17.7). **R4–R7, R9 and 19d-iv are built LAST (Kd, RULINGS 2026-10-08), when every web feature that can be built is built: those pages still get boxes from the features to come, so each is restyled once, as it will stay; a box added to one of them before then is built in the page's present look.**
    - R1. [x] **The menu, the font and the colours** — merged 2026-09-26 (PR #118).
    - R2. [x] **Classes and the Calendar** — merged 2026-09-26 (PR #119).
