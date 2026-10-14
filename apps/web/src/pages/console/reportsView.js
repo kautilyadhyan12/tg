@@ -1,7 +1,7 @@
 import { REPORT_FULL_MONTHS_NEEDED, REPORT_PERIODS } from '@app/shared';
 import { sourceWord } from './leadsView';
 
-// The Reports page's words (spec Part 3 §16.5; ROADMAP 21a-i, 21d-i). Every figure says how it is
+// The Reports page's words (spec Part 3 §16.5; ROADMAP 21a-i, 21d-i, 21d-ii). Every figure says how it is
 // worked out and which days it counts, and a figure the gym's list cannot give is a sentence,
 // never a zero.
 
@@ -47,6 +47,41 @@ export function periodLine(period, words, seesMoney) {
   const still = [`${words.peopleCap} now`, 'churn', 'retention', ...(seesMoney ? ['monthly recurring revenue', 'payment due', 'lifetime value'] : [])];
   return `Showing ${periodSpan(period)}. ${still.slice(0, -1).join(', ')} and ${still[still.length - 1]} are today's figures, so they stay the same whichever period you choose.`;
 }
+
+// A YEAR EARLIER. Under New members and Collected only (Kd, 2026-10-14), the same figure
+// for the same days a year before; where the app has no records of all those days, why
+// there is none.
+
+/** "up 3", "down 3" or "the same", with `text` writing the difference. */
+export function changeWords(now, then, text = (n) => n.toLocaleString('en-GB')) {
+  if (now === then) return 'the same';
+  return now > then ? `up ${text(now - then)}` : `down ${text(then - now)}`;
+}
+
+/** The line under a figure: "A year earlier: 9 · up 3", from `said`, the year-earlier
+ *  figure's words. Without the records for those days, `why` says why, with the day. */
+export function earlierLine(yearEarlier, why, said) {
+  if (yearEarlier.state === 'ok') return `A year earlier: ${said(yearEarlier)}`;
+  if (yearEarlier.state === 'no_history' && yearEarlier.since === null) return 'A year earlier: no figures.';
+  return `A year earlier: no figures. ${why(yearEarlier)}`;
+}
+
+/** Which days "a year earlier" counts, said under a figure's "how": four weeks are set
+ *  beside the same weekdays 52 weeks before, so their dates are a day or two apart. */
+export function earlierDays(period, yearEarlier) {
+  const same = period.key === '4w' ? 'the same weekdays 52 weeks before' : 'the same days a year before';
+  return `A year earlier counts ${same}: ${periodSpan(yearEarlier)}.`;
+}
+
+/** Why the member list has no figure a year earlier: it began after those days did, or in
+ *  the month they began, whose people are not new members; or most of the people who
+ *  joined in those days were added to it only later. */
+const listBegan = (words) => (yearEarlier) => {
+  if (yearEarlier.state === 'added_later') return `Most of your ${words.person} list was added on ${dayText(yearEarlier.on)}.`;
+  return yearEarlier.since > yearEarlier.from
+    ? `Your ${words.person} list started on ${dayText(yearEarlier.since)}.`
+    : `Your ${words.person} list started on ${dayText(yearEarlier.since)}, and the people on it in its first month are not counted as new.`;
+};
 /** Under a month-by-month table when the period begins inside a month: the rows are whole
  *  months, so they do not add up to the period's own figure. Null where they do. */
 export function wholeMonthsNote(period) {
@@ -146,6 +181,8 @@ export function memberTiles(report, words) {
   // New is counted from the month after the list began, when that is inside the period.
   const newFrom = report.inPeriod.joinedFrom;
   const newSpan = countedSpan(report.period, newFrom, `the month after your ${words.person} list started`);
+  const was = report.yearEarlier;
+  const began = listBegan(words);
 
   return [
     {
@@ -162,7 +199,8 @@ export function memberTiles(report, words) {
       value: started ? null : count(report.inPeriod.joined),
       line: started ? `Your ${words.person} list started this month, so new ${words.people} are counted from next month.` : null,
       note: started ? null : newSpan,
-      how: `${words.peopleCap} whose join date is from ${dayText(newFrom ?? report.period.from)} to today. Where your list gave no join date, or one later than the day they were added here, it is the day they were added. The month your list started is not counted.`,
+      earlier: started ? null : earlierLine(was, began, (f) => `${count(f.joined)} · ${changeWords(report.inPeriod.joined ?? 0, f.joined)}`),
+      how: `${words.peopleCap} whose join date is from ${dayText(newFrom ?? report.period.from)} to today. Where your list gave no join date, or one later than the day they were added here, it is the day they were added. The month your list started is not counted.${started ? '' : ` ${earlierDays(report.period, was)} It counts only ${words.people} who were on your list by the last of those days.`}`,
     },
     {
       key: 'left',
@@ -239,7 +277,11 @@ export function leadsHeadline(report) {
   if (!everJoined(report)) {
     return { value: null, line: 'No lead has been marked Joined yet. Press Joined on a lead when they sign up.', note: `${leadsWord(report.leads.total)} added · ${periodSpan(report.period)}` };
   }
-  return { value: percentText(report.leads.percent), line: null, note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined · added ${periodSpan(report.period)}` };
+  return {
+    value: percentText(report.leads.percent),
+    line: null,
+    note: `${count(report.leads.joined)} of ${leadsWord(report.leads.total)} joined · added ${periodSpan(report.period)}`,
+  };
 }
 
 /** How the leads figure is worked out, for the period shown. */

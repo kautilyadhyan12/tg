@@ -58,7 +58,7 @@ import {
   wholeMonthsNote,
 } from './reportsView';
 
-// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): the gym's figures about its members,
+// REPORTS (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i, 21d-ii): the gym's figures about its members,
 // its leads, its visits, its classes and its money, over the period picked at the top, each with how it is worked out, and a CSV of the counts. The menu draws the line
 // for `reports.read`; the address can be typed by anybody, so somebody without the tick is
 // told, and nothing is asked for them.
@@ -99,6 +99,11 @@ function Tile({ tile, className = '', children = null }) {
       </div>
       {tile.value !== null ? <p className="c-big-sm c-t1">{tile.value}</p> : <p className="c-s14 c-t2">{tile.line}</p>}
       {tile.note !== null ? <p className="c-s13 c-t3">{tile.note}</p> : null}
+      {tile.earlier ? (
+        <p className="c-s13 c-t3" data-testid="year-earlier">
+          {tile.earlier}
+        </p>
+      ) : null}
       {how.line}
       {children}
     </section>

@@ -5259,6 +5259,34 @@ value that is not one of the three is refused (400). Cost at twelve months, a gy
 beside 19 of 200 (the three `tools/measure-reports-*-cost.ts`, `--period=`): HANDOFF has
 the table. Not in this job (21d-ii): the same period a year earlier beside the figures.
 
+**Built by 21d-ii (2026-10-14): a year earlier.** Under two figures, New members and,
+for staff shown money, Collected (Kd, 2026-10-14, `rulings/2026-10-14-21d-ii.md`), one
+small line: "A year earlier: 9 · up 3", "down 3" or "the same", for the same days a year
+before (`yearEarlierOf`, `packages/shared/src/reportPeriod.ts`). Four weeks go back 52
+weeks, so a Monday is set beside a Monday; three and twelve months go back a calendar year,
+the same months up to the same day of the month (29 February is 28 February). Each of the
+two tiles says which days in its "how" ("A year earlier counts the same weekdays 52 weeks
+before: …" for four weeks). No other figure has a line, nothing in Attendance has one, and
+the reads work out no other year-earlier figure.
+**New members a year earlier** (`membersYearEarlierFrom`, `packages/shared/src/reports.ts`)
+are counted as today's are: the people who started in those days and were on the list on
+their last day, as it stood then. Today's figure has the same blind spot, joiners not yet
+imported, so a gym that imports each month reads the same in both years. There is no
+figure, and the line says why with the day, never a zero: where the list could not count new
+members from that span's first day (it began after it, or in its month: "Your member list
+started on …"); and where the list was not being kept then: more of the people who started
+in those days were added over a month after them (`REPORT_LIST_LAG_DAYS`, 31; the page asks
+a gym to import each month) than were on it in time, as when one member is typed in by hand
+before the gym imports its real file ("Most of your member list was added on 10 Sep 2026.",
+the day most of them were added, the earliest where days tie). People added within the
+month are an ordinary import and count on neither side. The counts are
+`readMemberCounts`' `was` and `late_days` parts, on the gym's own clock.
+**Collected a year earlier** is payments less refunds of those days in the gym's currency,
+as `readMoney` counts them (`readCollected`; a refund of a payment taken back is not
+money), and no figure where the first payment recorded here came after those days began
+("Your first payment was recorded on …"). Every read names the gym in its WHERE. The cost
+tools seed two years of visits and payments: HANDOFF has the table.
+
 ### 16.6 Cards
 
 **20a** the inbox and the message rule (its table test first) · **20b** the automatic

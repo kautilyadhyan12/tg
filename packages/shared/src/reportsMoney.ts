@@ -5,7 +5,7 @@
 // gym that records no payment here has no figures and is told why, never shown a zero.
 import { z } from "zod";
 import { heldMembershipView, type HeldMembership } from "./heldMemberships.js";
-import { reportPeriodOf, reportPeriodSchema, type ReportPeriodKey } from "./reportPeriod.js";
+import { coversFrom, reportPeriodOf, reportPeriodSchema, yearEarlierFigureSchema, yearEarlierOf, type ReportPeriodKey } from "./reportPeriod.js";
 import { churnBasis, type MembersReportFacts } from "./reports.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -71,6 +71,8 @@ export interface MoneyReportFacts {
   };
   /** The list's own counts, for churn: lifetime value divides by it. */
   members: Pick<MembersReportFacts, "today" | "firstListedOn" | "everLeft" | "months">;
+  /** Payments and refunds that stand, over the same days a year earlier (`yearEarlierOf`). */
+  yearEarlier: { paidMinor: number; refundedMinor: number };
 }
 
 const lifetimeSchema = z.discriminatedUnion("state", [
@@ -95,6 +97,9 @@ const moneyFiguresSchema = z
     thisMonth: z.object({ month: monthSchema, paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }).strict(),
     /** Payments that stand less refunds that stand, over the period's days. */
     inPeriod: z.object({ paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }).strict(),
+    /** The same over the same days a year earlier; no figure where the first payment
+     *  recorded here came after they began. */
+    yearEarlier: yearEarlierFigureSchema({ paidMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema }),
     owed: z
       .object({
         minor: minorSchema,
@@ -168,6 +173,7 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
   const base = { timezone: facts.timezone, today: facts.today };
   if (facts.currency === null || !facts.anyMembership) return { state: "no_memberships", ...base };
   if (facts.firstPaidOn === null) return { state: "no_payments", ...base };
+  const earlier = yearEarlierOf(period);
 
   const thisMonth = monthOf(facts.today);
   const firstMonth = monthOf(facts.firstPaidOn);
@@ -237,6 +243,9 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     recurring: { monthlyMinor, memberships },
     thisMonth: monthSums(thisMonth),
     inPeriod: { ...inPeriod, netMinor: inPeriod.paidMinor - inPeriod.refundedMinor },
+    yearEarlier: coversFrom(facts.firstPaidOn, earlier.from)
+      ? { state: "ok", ...earlier, ...facts.yearEarlier, netMinor: facts.yearEarlier.paidMinor - facts.yearEarlier.refundedMinor }
+      : { state: "no_history", ...earlier, since: facts.firstPaidOn },
     owed: {
       minor: facts.owed.currentMinor,
       people: facts.owed.currentPeople,
