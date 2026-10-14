@@ -36,6 +36,7 @@ import { MEMBER_LIST_MAX_STATUS_CHARS } from '@app/shared';
 import { formWordsFor, notSetUp, typeTies, withSetUpCount } from '../../pages/console/membershipWordsView';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from './ConsoleStates';
 import BillSettingsCard from './BillSettingsCard';
+import MembershipDiscounts from '../../pages/console/MembershipDiscounts';
 import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
 import { useListMemberships } from './useListMemberships';
@@ -860,6 +861,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
           ) : null}
         </>
       )}
+      {/* Discounts for memberships, beside the price list they come off (Kd, 2026-10-14). */}
+      {formOpen || list === null ? null : <MembershipDiscounts org={org} readOnly={readOnly} typesKey={list} />}
       {/* The gym's one setting for bills (18a-i), under the price list they are made from. */}
       {formOpen ? null : <BillSettingsCard gymId={gymId} readOnly={readOnly} readOnlyLine={readOnlyNote(org.orgType)} />}
     </div>

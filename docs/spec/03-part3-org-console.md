@@ -2017,8 +2017,9 @@ they never saw, or put a signature on a relative when a family shares one email 
 - **Privacy.** A person's "download my data" holds each waiver they signed with its words.
   A signature is kept with the gym after the person's account is deleted, on the consent
   log's footing: it is the gym's proof. **It is removed six years after the account is
-  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years). Not built
-  yet: ROADMAP Stage 2 item 3e-iii.
+  deleted** (Kd, `rulings/2026-10-13-3e-i.md`; the consent log's own six years), by the
+  nightly purge's own step beside the consent log's (3e-iii,
+  `privacy/repo.ts` `deleteExpiredWaiverSignatures`).
 - **Limits:** staff reads 300 an hour a person (900 an address), saves and stops 30 (90);
   a member's read 120 (6,000 an address, a gym's wi-fi), signing 10 (600).
 - **Cost at full size** (2026-10-13, mains, 3,294 MHz, local database, a waiver of 29,990
@@ -2068,7 +2069,12 @@ a signature on the wrong record, on words they were not shown, or a child's own.
   otherwise `409 waiver_changed` / `waiver_not_in_use` or `404 person_not_found`, and
   nothing is written. Twice is once. Two records joined: the kept one takes the other's
   desk signatures it has none of; a record deleted for good lets go of its signature, which
-  stays as the gym's proof.
+  stays as the gym's proof with the day the record was deleted (`record_deleted_at`,
+  `0108`), and the purge removes it six years after that day (Kd,
+  `rulings/2026-10-14-3e-ii.md`; 3e-iii). A gym's whole list deleted with the gym
+  (`deleteListForGym`) is the same. A record cannot be deleted any other way while a
+  signature points at it (the link is checked when the change is saved), and a signature
+  with neither a record nor a day is refused, so none is ever kept for ever by mistake.
 - **Who has signed, by record** (`waiver/signed.ts`, one rule): a desk signature of the
   wording in use, or an app signature by the person the record certainly is (§18.4). An app
   signature on a shared family email signs no record. Members' Filter shows **Waiver not
@@ -3629,7 +3635,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   draws its newest 10 rows, with Show all.
 - **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
   in nothing, and what it took from the stock count goes back.
-- **A membership** is sold from the same box by giving it as paid (§14.2): the notebook's
+- **A membership** was sold from the same box (moved to the member's own page on 2026-10-14, 18b-ii-b, below) by giving it as paid (§14.2): the notebook's
   own bill and payment, starting today, to a person on the list. No `gym_sales` row.
 - **Today**: the day's product sales and the membership payments recorded that day (here
   or on a person's page), newest first, with one total and how it was paid. A refund noted
@@ -3682,8 +3688,45 @@ codes on products, as Gymdesk and Mindbody do them.
   (`discount_id`, `discount_name`, `discount_minor`); a later change or an archive
   rewrites no sale, and the database refuses to delete a discount a sale points at. The day's list, a person's purchases and the note under the day's
   total say it; the total is what was paid.
-- **Not built**: discounts on memberships (18b-ii-b); two discounts on one sale; a sale
+- **Not built**: discounts on memberships (18b-ii-b, below); two discounts on one sale; a sale
   for nothing; a code a member types in their own app (18k); discounts in Reports.
+
+**As built, 18b-ii-b (2026-10-14; `rulings/2026-10-14-18b-ii-b.md`).** The same discounts on
+memberships.
+- **What a discount applies to**: products (all, or the ones ticked), memberships (all
+  membership types, or the ones ticked), or both. A discount made before this job is for
+  products alone, as it was. One for memberships says how often it comes off a
+  membership that renews: **First payment only** or **Every payment**; a membership paid
+  once (a day pass, a pack, a trial, a fixed term) gets it on that one payment.
+- **Who may use one**: whoever takes payments (`billing.members`), as on Sell. A person's
+  page sends the discounts to nobody else, and a membership given with a discount by
+  anybody else is refused (403), paid or not; staff who may add memberships without that
+  tick add them at the full price. A paid tick says the amount after the discount.
+- **Used** on a person's **Add membership**, from the same Discount list and Promo code
+  box as a product sale, offering only what the server
+  will take on that type today and what leaves something to pay. Price, Discount and
+  Total are shown above the button, and what every later payment is.
+- **The server** works out what comes off again (`membershipDiscount`) under the gym's
+  lock, and gives nothing where the price or what comes off is not what the screen showed.
+  A use is counted in the giving's own transaction by a statement that will not pass the
+  limit. The membership keeps which discount, its name as it was, what came off and which
+  payments (`gym_held_memberships.discount_*`, `0107`). With Every payment its price is
+  the price after the discount, so every bill opened from it carries it; with First payment
+  only its price stays the full price and only the bill opened when it was given is
+  discounted. A later change of the discount or the type's price rewrites nobody's.
+- **One Discounts list, drawn on two pages** (Kd, 2026-10-14): the Memberships page, under
+  the price list, holds the discounts for memberships, and a new one there starts on
+  memberships; the Sell page holds the ones for products. One for both is on both, and one
+  saved that no longer applies to the page it was saved on says where it is listed, with
+  a button to that page.
+- **Sell sells products alone** (Kd, 2026-10-14): its New sale box has no membership
+  choice. A **Sell a membership** box under it finds the member and opens their page
+  with Add membership already open.
+- **A person's page** says it under the membership: "Sold with First month: $10.00 off the
+  first payment. Every payment after it is $50.00."
+- **Not built**: a use given back when a membership is cancelled (it stands, as a redeemed
+  code does); a discount for a set number of months; a discount added to a membership
+  already given; discounts in Reports.
 
 ### 14.4 Pay by the gym's own link
 

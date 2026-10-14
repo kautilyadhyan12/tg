@@ -384,6 +384,23 @@ d("a waiver signed at the desk (real Postgres)", () => {
       const deleted = await send("DELETE", `/v1/orgs/${iron.id}/member-list/former/${keptOne.entryId}`, iron.owner.cookies);
       expect(deleted.statusCode, deleted.body).toBe(200);
       expect(await deskRows(iron)).toMatchObject([{ entry_id: null, signed_name: "Fay Moss" }]);
+      // ...with the day its record was deleted, which the purge counts six years from (3e-iii).
+      const dated = async (name: string) =>
+        (await sql<{ dated: boolean }[]>`
+          SELECT record_deleted_at IS NOT NULL AS dated FROM gym_waiver_desk_signatures
+          WHERE gym_id = ${iron.id} AND signed_name = ${name} AND entry_id IS NULL`).map((row) => row.dated);
+      expect(await dated("Fay Moss")).toEqual([true]);
+
+      // Joined where the kept record has signed the same words: the other's signature lets
+      // go of its record, dated, and the kept one keeps its own.
+      const twinA = await addPerson(iron, "Gus Reed", { email: addr("gus-1") });
+      const twinB = await addPerson(iron, "Gus Reid", { email: addr("gus-2") });
+      expect((await signAtDesk(iron, twinA.entryId, { waiverId: v1, signer: "person", name: "Gus Reed" })).statusCode).toBe(200);
+      expect((await signAtDesk(iron, twinB.entryId, { waiverId: v1, signer: "person", name: "Gus Reid" })).statusCode).toBe(200);
+      const joined = await post(`/v1/orgs/${iron.id}/member-list/entries/${twinA.entryId}/merge`, { keepEntryId: twinB.entryId, acknowledgeLeavesList: true }, iron.owner.cookies);
+      expect(joined.statusCode, joined.body).toBe(200);
+      expect(await dated("Gus Reed")).toEqual([true]);
+      expect((await personPage(iron, twinB.entryId)).waiverDesk).toMatchObject({ name: "Gus Reid" });
     },
     TEST_TIMEOUT_MS,
   );

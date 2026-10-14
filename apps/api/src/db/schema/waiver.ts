@@ -64,10 +64,13 @@ export const gymWaiverDeskSignatures = pgTable(
     signedName: text("signed_name").notNull(),
     witnessedBy: uuid("witnessed_by").references(() => users.id, { onDelete: "set null" }),
     signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The day its record was deleted for good (`0108`): the purge removes it six years later. */
+    recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
   },
   (t) => [
     check("gym_waiver_desk_signatures_signer_check", sql`${t.signer} IN ('person', 'guardian')`),
     check("gym_waiver_desk_signatures_name_check", sql`char_length(${t.signedName}) BETWEEN 2 AND 100`),
+    check("gym_waiver_desk_signatures_deleted_day_check", sql`${t.entryId} IS NOT NULL OR ${t.recordDeletedAt} IS NOT NULL`),
     foreignKey({ name: "gym_waiver_desk_signatures_waiver_fk", columns: [t.gymId, t.waiverId], foreignColumns: [gymWaivers.gymId, gymWaivers.id] }).onDelete(
       "cascade",
     ),

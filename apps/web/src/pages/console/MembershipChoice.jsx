@@ -11,8 +11,8 @@ import { NO_PAYMENTS_LINE, PAYMENT_METHODS } from './memberBillsView';
 // '' for the method that how they paid is not picked yet. Saying it is paid records a
 // payment (18a-i), so the tick is offered only to staff who may record one (`canBill`).
 
-export default function MembershipChoice({ types, today, value, onChange, allowNone = false, canBill = true }) {
-  const { type, line, paidLabel, problem } = membershipChoice(types, value, today);
+export default function MembershipChoice({ types, today, value, onChange, allowNone = false, canBill = true, paidMinor = null }) {
+  const { type, line, paidLabel, problem } = membershipChoice(types, value, today, paidMinor);
   const range = startRange(today);
   return (
     <>

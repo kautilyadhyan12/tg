@@ -844,7 +844,7 @@ d("staff notes and tags: whose they are, and what is kept (real Postgres)", { ti
     const omar = await addPerson(beside, "Omar Haddad");
     await tag(gym, maya, "VIP").then(() => note(gym, maya, "Goes with the list"));
     await tag(beside, omar, "VIP").then(() => note(beside, omar, "Stays"));
-    await sql.begin((tx) => deleteListForGym(tx, gym.id));
+    await sql.begin((tx) => deleteListForGym(tx, gym.id, new Date()));
     expect(await tagRows(gym)).toEqual([]);
     expect(await noteRows(gym)).toEqual([]);
     expect(await tagRows(beside)).toEqual(["VIP"]);

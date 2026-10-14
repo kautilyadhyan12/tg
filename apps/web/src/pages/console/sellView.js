@@ -136,12 +136,6 @@ export function saleDiscountWords(sale) {
   return `${sale.discountName}: ${formatMinor(sale.discountMinor, sale.currency)} off`;
 }
 
-/** Said once a membership is given as paid from this page. */
-export function membershipSoldWords(type, personName, method) {
-  if (type.priceMinor === 0) return `${type.name} given to ${personName}. Nothing to pay.`;
-  return `${type.name} given to ${personName} and recorded as paid. ${formatMinor(type.priceMinor, type.currency)}, ${methodWords(method).toLowerCase()}.`;
-}
-
 /** One person the search found, as their button reads. */
 export function personOption(person) {
   const parts = [person.name];
