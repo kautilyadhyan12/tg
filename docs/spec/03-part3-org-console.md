@@ -4956,7 +4956,8 @@ the gym's Google "Ask for reviews" link.
   review." Under them, in the inbox, a **Leave a review** button opens the link in a new tab.
   The link is kept on the message as it was sent; a link changed later is for later people.
   The inbox reply carries `link` (null on every other kind), and the browser draws a button
-  only for a review whose link passes the same rule. The phone's inbox reads the same field.
+  only for a review whose link passes the same rule; the server sends a stored link the rule
+  does not take as none. The phone's inbox, when it is built, reads the same field.
 - **A member's switch**: it is in **News and greetings**, whose line says so.
 
 ### 16.3 Leads

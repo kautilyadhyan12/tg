@@ -248,7 +248,7 @@ export function messageMissing(kind, orgType, use) {
 /** The three messages that count visits. */
 export const needsCheckIn = (kind) => kind === 'milestone' || kind === 'miss_you' || kind === 'review';
 
-/** Said on those two when nobody has been checked in lately. */
+/** Said on those three when nobody has been checked in lately. */
 export function noCheckInNote(orgType) {
   return `This one counts check-ins. Nobody has been checked in at your ${orgWords(orgType).it} in the last ${String(GYM_MESSAGE_CHECK_IN_DAYS)} days, so nobody will get it yet.`;
 }

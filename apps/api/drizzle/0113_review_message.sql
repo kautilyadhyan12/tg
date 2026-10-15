@@ -20,4 +20,14 @@ ALTER TABLE "gym_message_settings" ADD CONSTRAINT "gym_message_settings_link_che
 -- The link a message's button opens, kept with the message as it was sent: the gym's own
 -- review link, read from that gym's row by the sender.
 ALTER TABLE "gym_member_messages" ADD COLUMN "link" text;--> statement-breakpoint
-ALTER TABLE "gym_member_messages" ADD CONSTRAINT "gym_member_messages_link_check" CHECK ("link" IS NULL OR ("kind" = 'review' AND length("link") BETWEEN 9 AND 500 AND "link" LIKE 'https://%'));
+ALTER TABLE "gym_member_messages" ADD CONSTRAINT "gym_member_messages_link_check" CHECK ("link" IS NULL OR ("kind" = 'review' AND length("link") BETWEEN 9 AND 500 AND "link" LIKE 'https://%'));--> statement-breakpoint
+
+-- Ask for a review joins a member's News and greetings switch, which is kept as one row a
+-- kind. Whoever had the whole of that switch's four kinds off before this has review off
+-- too, so nobody who switched News off is sent this new one. Run twice, it adds nothing.
+INSERT INTO "gym_member_messages_off" ("gym_id", "user_id", "kind", "created_at")
+SELECT "gym_id", "user_id", 'review', now() FROM "gym_member_messages_off"
+WHERE "kind" IN ('trial_check_in','birthday','milestone','miss_you')
+GROUP BY "gym_id", "user_id"
+HAVING count(*) = 4
+ON CONFLICT ("gym_id", "user_id", "kind") DO NOTHING;

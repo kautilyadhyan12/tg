@@ -4,6 +4,7 @@
 // The worst thing this job could do to a real person: a member shown ANOTHER gym's review
 // link, or a link that is not a plain web page. That is the first test below.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { GYM_MESSAGE_SETTING_KINDS, type GymInboxResponse, type GymMessageSettingsRequest, type GymMessageSettingsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -223,7 +224,8 @@ d("ask for a review (real Postgres)", () => {
     async () => {
       const iron = await makeGym("Review Iron House");
       const next = await makeGym("Review Next Door");
-      await saved(iron, ONLY_REVIEW);
+      // Welcome on as well at Iron House, so a message of another kind is sent beside the reviews.
+      await saved(iron, { ...ONLY_REVIEW, messages: ONLY_REVIEW.messages.map((m) => (m.kind === "welcome" ? { ...m, on: true } : m)) });
       await saved(next, { ...ONLY_REVIEW, reviewLink: NEXT_LINK });
 
       const maya = await member(iron, "Maya Rao");
@@ -250,10 +252,13 @@ d("ask for a review (real Postgres)", () => {
       expect((await inject("PUT", `/v1/orgs/${iron.id}/inbox/switches`, omar.cookies, { group: "news", on: false })).statusCode).toBe(200);
       const nina = await member(iron, "Nina Nine");
       await visits(iron, nina, 9);
+      // Joined half an hour ago: her Welcome carries no link.
+      const wen = await member(iron, "Wen Welcome");
+      await sql`UPDATE gym_members SET joined_at = ${minutes(NOON, -30)} WHERE gym_id = ${iron.id} AND user_id = ${wen.userId}`;
 
       // Two runs at one instant, then two more.
       const both = await Promise.all([run([iron, next]), run([iron, next])]);
-      expect(both.map((r) => r.sent).reduce((a, b) => a + b, 0)).toBe(4);
+      expect(both.map((r) => r.sent).reduce((a, b) => a + b, 0)).toBe(5);
       expect((await run([iron, next], minutes(NOON, 15))).sent).toBe(0);
       expect((await run([iron, next], days(NOON, 1))).sent).toBe(0);
 
@@ -275,7 +280,8 @@ d("ask for a review (real Postgres)", () => {
       expect(reviewIn(await inbox(next, sam))).toEqual([{ body: "Hi Sam, thanks for coming to Review Next Door. If you have a minute, we'd love a review.", link: NEXT_LINK }]);
       for (const who of [omar, nina, tara]) expect(reviewIn(await inbox(iron, who)), who.userId).toEqual([]);
       // Every other message's link is none.
-      const allLinks = await sql<{ kind: string; link: string | null }[]>`SELECT kind, link FROM gym_member_messages WHERE gym_id IN (${iron.id}, ${next.id})`;
+      const allLinks = await sql<{ user_id: string; kind: string; link: string | null }[]>`SELECT user_id, kind, link FROM gym_member_messages WHERE gym_id IN (${iron.id}, ${next.id}) ORDER BY kind`;
+      expect(allLinks.filter((row) => row.kind !== "review")).toEqual([{ user_id: wen.userId, kind: "welcome", link: null }]);
       expect(allLinks.every((row) => (row.kind === "review") === (row.link !== null))).toBe(true);
     },
     T,
@@ -303,6 +309,13 @@ d("ask for a review (real Postgres)", () => {
       await expect(
         sql`INSERT INTO gym_message_settings (gym_id, kind, is_on, link) VALUES (${gym.id}, 'birthday', true, ${IRON_LINK})`,
       ).rejects.toThrow(/gym_message_settings_link_check/);
+      // A link the database's check lets in but the rule does not: that message has no
+      // button, and the rest of the inbox still reads.
+      await sql`
+        INSERT INTO gym_member_messages (gym_id, user_id, kind, occasion, body, link, gym_day, sent_at, expires_at)
+        VALUES (${gym.id}, ${bo.userId}, 'review', 'review', 'Thanks for coming.', 'https://localhost/review', ${TODAY}::date, ${minutes(NOON, -5)}, ${days(NOON, 30)})`;
+      const box = await inbox(gym, bo);
+      expect(box.messages.map((m) => [m.kind, m.link])).toEqual([["review", null]]);
     },
     T,
   );
@@ -387,6 +400,49 @@ d("ask for a review (real Postgres)", () => {
       await visits(gym, zed, 5, 2);
       await saved(gym, { ...ONLY_REVIEW, messages: ONLY_REVIEW.messages.map((m) => ({ ...m, on: false })), reviewLink: NEW_LINK });
       expect((await run([gym], days(NOON, 2))).sent).toBe(0);
+    },
+    T,
+  );
+
+  it(
+    "somebody who switched News and greetings off before this message existed is not asked: the migration switches it off for them too",
+    async () => {
+      // The migration's own statement, as it runs on every database.
+      const migration = readFileSync(new URL("../drizzle/0113_review_message.sql", import.meta.url), "utf8");
+      const backfill = migration.split("--> statement-breakpoint").find((part) => part.includes('INSERT INTO "gym_member_messages_off"'));
+      expect(backfill, "the migration switches review off for whoever had News off").toBeDefined();
+      /** The rows the News switch wrote before this job: four kinds and the messages to groups, no review. */
+      const newsOffBefore = async (gym: Gym, who: Member) => {
+        for (const kind of ["trial_check_in", "birthday", "milestone", "miss_you", "group"]) {
+          await sql`INSERT INTO gym_member_messages_off (gym_id, user_id, kind) VALUES (${gym.id}, ${who.userId}, ${kind})`;
+        }
+      };
+
+      // Without the statement, the fault: their switch is off and they are asked.
+      const before = await makeGym("Review Old Switch Before");
+      await saved(before, ONLY_REVIEW);
+      const ola = await member(before, "Ola Old");
+      await visits(before, ola, 10);
+      await newsOffBefore(before, ola);
+      expect((await run([before])).sent).toBe(1);
+
+      // With it: nobody whose News was off is asked, and their inbox says review is off.
+      const gym = await makeGym("Review Old Switch Gym");
+      await saved(gym, ONLY_REVIEW);
+      const old = await member(gym, "Old Off");
+      await visits(gym, old, 10);
+      await newsOffBefore(gym, old);
+      // Only one kind off, by the older one-kind switch: not the whole group, so they are still asked.
+      const one = await member(gym, "One Off");
+      await visits(gym, one, 10);
+      await sql`INSERT INTO gym_member_messages_off (gym_id, user_id, kind) VALUES (${gym.id}, ${one.userId}, 'birthday')`;
+      await sql.unsafe(backfill ?? "");
+      // Run twice, it changes nothing more.
+      await sql.unsafe(backfill ?? "");
+      expect((await run([gym])).sent).toBe(1);
+      expect((await reviews(gym)).map((r) => r.user_id)).toEqual([one.userId]);
+      expect((await inbox(gym, old)).off).toEqual(["birthday", "milestone", "miss_you", "review", "trial_check_in"]);
+      expect((await inbox(gym, one)).off).toEqual(["birthday"]);
     },
     T,
   );
