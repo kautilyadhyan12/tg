@@ -26,6 +26,7 @@ import {
   entriesQueryString,
   filtersAreEmpty,
   filtersWithTags,
+  goneForGoodLine,
   gymToday,
   inviteQueryString,
   isTicked,
@@ -792,6 +793,7 @@ export default function MemberListPanel({
 
   const noList = list !== null && !list.hasList && list.counts.entries === 0 && former === 0;
   const today = gymToday(gym?.timezone);
+  const goneLine = noList ? goneForGoodLine(list, gym?.timezone, words.it) : null;
   const needsCheck = list?.appWords.find((w) => w.word === 'needs_check')?.count ?? 0;
   const seeWho = (word) => {
     setTyped('');
@@ -804,6 +806,7 @@ export default function MemberListPanel({
         <section className="c-card px-6 py-12 flex flex-col items-center gap-3 text-center">
           <UserPlus aria-hidden="true" className="w-7 h-7 c-t3" />
           <h2 className="c-h2">Your list is empty</h2>
+          {goneLine ? <p className="c-s15 c-t1 max-w-[460px]" data-testid="members-gone-for-good">{goneLine}</p> : null}
           <p className="c-s15 c-t2 max-w-[460px]">Import your {words.people} from a spreadsheet, or add them one at a time.</p>
           <div className="flex flex-col sm:flex-row gap-2 pt-2 w-full sm:w-auto">
             <button type="button" onClick={() => setImporting(true)} disabled={readOnly} className="c-btn c-btn-soft c-btn-lg">
