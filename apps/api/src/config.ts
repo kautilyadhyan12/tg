@@ -27,18 +27,9 @@ const envSchema = z.object({
   // P2.4: quota counters + entitlement cache (v1 §7.2). Optional in dev/test
   // (in-memory adapter); REQUIRED in production — refinement below.
   REDIS_URL: z.string().url().optional(),
-  // P2.5b: coach LLM gateway (v1 §6.1 "Groq primary → OpenRouter fallback").
-  // GROQ_API_KEY unset = coach feature 503s cleanly, rest of the app runs;
-  // OPENROUTER_API_KEY unset = fallback simply not attempted.
+  // Groq: the meal scanner's spare model (below). Unset = that model 503s
+  // cleanly, the rest of the app runs.
   GROQ_API_KEY: z.string().min(1).optional(),
-  OPENROUTER_API_KEY: z.string().min(1).optional(),
-  // Coach-model migration 2026-07-22 (supersedes the P2.5b GAP-2 salvage
-  // default): Groq deprecated llama-3.1-8b-instant and DECOMMISSIONS it
-  // 2026-08-16 — after that date requests to it are not served and the coach
-  // goes dark. openai/gpt-oss-20b is Groq's own recommended replacement (per
-  // the deprecation email + console.groq.com supported-models page, the exact
-  // id verified 2026-07-22). Overridable via COACH_MODEL.
-  COACH_MODEL: z.string().min(1).default("openai/gpt-oss-20b"),
   // The meal scanner on Gemini (RULINGS 2026-08-24). Its 2.5 Flash-Lite
   // answers "no longer available to new users" (HTTP 404, 2026-09-15), so it
   // runs on 3.5 Flash-Lite, with Groq's qwen3.6-27b kept as the spare. A

@@ -7,7 +7,6 @@ import postgres from "postgres";
 import { insertUser, transformUser } from "../tools/migrate-mongo/collections/users.js";
 import { insertCoach, transformCoach } from "../tools/migrate-mongo/collections/coach.js";
 import { insertRoute, insertRun, transformRoute, transformRun } from "../tools/migrate-mongo/collections/running.js";
-import { getRecentMessages } from "../src/modules/coach/repo.js";
 import { uuidv5 } from "../tools/migrate-mongo/uuid5.js";
 
 const url = process.env["DATABASE_URL"];
@@ -53,10 +52,10 @@ d("migration coach + running stages: persistence + ordering + idempotency (real 
     expect(await insertCoach(sql, data)).toEqual({ threadInserted: 1, messagesInserted: 2 });
     expect(await insertCoach(sql, data)).toEqual({ threadInserted: 0, messagesInserted: 0 }); // idempotent
 
-    // read through the REAL production read path (getRecentMessages), whose
-    // outer sort is `created_at ASC` with no id tiebreaker — this is exactly
-    // what GAP-I's monotonic created_at must satisfy (T3 advisory 2).
-    const msgs = await getRecentMessages(sql, data.thread.id, 10);
+    // read in time order with no id tiebreaker — this is exactly what
+    // GAP-I's monotonic created_at must satisfy (T3 advisory 2).
+    const msgs = await sql<{ role: string; content: string }[]>`
+      SELECT role, content FROM coach_messages WHERE thread_id = ${data.thread.id} ORDER BY created_at ASC`;
     expect(msgs.map((m) => m.content)).toEqual(["How do I squat?", "Keep your back neutral."]);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
   }, 60_000);

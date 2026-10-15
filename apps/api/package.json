@@ -15,8 +15,7 @@
     "_test:local_why": "DECISIONS :5857 rule 4a asked for a local-Postgres switch and left the saving UNVERIFIED. Measured 2026-08-21: a round-trip `select 1` is 202.9 ms median to the Neon branch in ap-southeast-1 (Singapore) and 2.7 ms to a local docker Postgres; orgs.sweep.test.ts is 158.2 s against Neon and 10.8 s locally (14.7x), and a two-suite Neon run DID NOT FINISH in 10 minutes. Use this for mutation sweeps above all — the harness runs the suite once per mutant, and the clock card's audit had its control abort twice under Singapore contention (:13336). Needs `docker compose -f infra/docker-compose.dev.yml up -d postgres redis`; the script refuses to run against a missing or unseeded database rather than failing forty tests confusingly. KNOWN AND NOT HIDDEN: the FULL api suite flakes on a fast database — nine test files call seed() against one shared database while two assert exact global counts. Pre-existing, made visible rather than caused by the switch; own OWED line. Scoped runs (a file, a -t filter) are unaffected, which is what a mutation sweep does.",
     "db:generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "seed": "tsx src/db/seed.ts",
-    "coach:ingest": "tsx src/modules/coach/ingest.ts"
+    "seed": "tsx src/db/seed.ts"
   },
   "devDependencies": {
     "@app/config": "workspace:*",
@@ -37,7 +36,6 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/rate-limit": "^11.1.0",
     "@fastify/sensible": "^6.0.4",
-    "@huggingface/transformers": "^4.2.0",
     "@node-rs/argon2": "^2.0.2",
     "@sentry/node": "^10.63.0",
     "bcryptjs": "3.0.2",

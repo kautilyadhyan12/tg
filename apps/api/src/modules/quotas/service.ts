@@ -1,8 +1,9 @@
 // P2.4 — quota middleware, generalizing quotas.py (v1 §6.1: "limits read
 // from plan entitlements; Redis atomic counters; fail-open/closed per
 // feature (keep your philosophy verbatim)"). Ported doctrine (quotas.py:7-11):
-//   · cheap features (coach) fail OPEN when Redis is down — availability
-//     wins, worst case a few dollars;
+//   · cheap features fail OPEN when Redis is down — availability wins,
+//     worst case a few dollars (the chat coach was one; deleted 2026-10-15,
+//     its `coach` limit kept in the plans until ROADMAP 9b);
 //   · expensive features (meal_scan vision, route_gen ORS) fail CLOSED —
 //     an unmetered hour of these is the actual bankruptcy scenario.
 // Increment-before-run (quotas.py:43-46): one atomic Redis op counts the use
@@ -54,8 +55,7 @@ export interface QuotaDeps {
 }
 
 /** preHandler factory — MUST be listed after app.authenticate (R3.3 order:
- *  authn → … → entitlement → quota). Wired to coach/meal/route routes when
- *  those modules land (P2.5/P2.6). `onCounted` hears the key a request's use
+ *  authn → … → entitlement → quota). Wired to the meal and route routes. `onCounted` hears the key a request's use
  *  was counted under, for refundQuota. */
 export function requireQuota(
   feature: MeteredFeatureName,

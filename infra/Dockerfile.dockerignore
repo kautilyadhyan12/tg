@@ -6,8 +6,7 @@
 # every workspace manifest), so everything the API image does not need is excluded
 # explicitly.
 
-# Host node_modules are win32-native (@node-rs/argon2-win32-x64-msvc, onnxruntime,
-# sharp). Copying them in would shadow the linux install and break at runtime.
+# Host node_modules are win32-native (@node-rs/argon2-win32-x64-msvc). Copying them in would shadow the linux install and break at runtime.
 **/node_modules
 **/.turbo
 **/dist
@@ -43,9 +42,7 @@ apps/web/vite.config.js
 **/test
 apps/api/tools
 
-# Root-level prose only — deliberately NOT a blanket `*.md`, which would have
-# stripped apps/api/src/modules/coach/knowledge/*.md, the five knowledge guides
-# the coach KB is ingested from (P2.5a).
+# Root-level prose only.
 /*.md
 docs
 RUNBOOK

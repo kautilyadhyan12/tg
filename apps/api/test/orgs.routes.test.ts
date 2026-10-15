@@ -36,7 +36,6 @@ import { restoreUser, softDeleteUser } from "../src/modules/users/repo.js";
 // The REAL spend-attribution readers, called by the permanent guard rather
 // than re-typed into it (T3 security-pass note). Three imports because R7.1
 // keeps them module-local — that duplication is the reason to name all three.
-import * as coachRepo from "../src/modules/coach/repo.js";
 import * as geoRepo from "../src/modules/geo/repo.js";
 import * as nutritionRepo from "../src/modules/nutrition/repo.js";
 
@@ -2056,27 +2055,25 @@ d("orgs routes (real Postgres)", () => {
       WHERE gym_id = ${org.org.id} AND removed_at IS NULL`;
     expect(seats[0]?.n).toBe(0);
 
-    // 5. The three per-module spend-attribution lookups — a pending applicant
+    // 5. The per-module spend-attribution lookups — a pending applicant
     //    must not cause a gym to be BILLED for their API calls.
     //
     //    T3 SECURITY-PASS NOTE, fixed here: this check used to assert a
     //    HAND-WRITTEN COPY of the query, which is a guard that cannot see the
     //    thing it guards — if any of the three modules changed, the copy would
     //    keep passing while the real reader drifted. The REAL functions are
-    //    called instead. They are three separate implementations by R7.1
-    //    (module-local), so all three are named individually rather than
+    //    called instead. They are separate implementations by R7.1
+    //    (module-local), so each is named individually rather than
     //    trusting that "they are the same query": the day one of them changes
     //    is exactly the day this check has to notice.
-    expect(await coachRepo.getLiveGymId(sql, waiting.userId)).toBeNull();
     expect(await geoRepo.getLiveGymId(sql, waiting.userId)).toBeNull();
     expect(await nutritionRepo.getLiveGymId(sql, waiting.userId)).toBeNull();
 
-    // Positive control: the same three must find the gym for a CONFIRMED
-    // member, or all three assertions above are satisfied by a function that
+    // Positive control: the same two must find the gym for a CONFIRMED
+    // member, or both assertions above are satisfied by a function that
     // returns null for everybody.
     const confirmed = await makeUser("guard-confirmed");
     await joinAsMember(confirmed.cookies, org, owner.cookies);
-    expect(await coachRepo.getLiveGymId(sql, confirmed.userId)).toBe(org.org.id);
     expect(await geoRepo.getLiveGymId(sql, confirmed.userId)).toBe(org.org.id);
     expect(await nutritionRepo.getLiveGymId(sql, confirmed.userId)).toBe(org.org.id);
   });
