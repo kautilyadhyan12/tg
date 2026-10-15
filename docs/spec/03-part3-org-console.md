@@ -2345,7 +2345,12 @@ is never on this page: it is staff's, in the console (12.5). The cookie holds th
 and the server's own mark on it, which opens nothing and only lets the rate limits count
 a desk on its own (12.8). A device's name is its own among the gym's switched-on devices,
 and a second "New link" within 10 seconds of the first is refused, so two staff pressing
-together are not each shown a link of which one is dead.
+together are not each shown a link of which one is dead. **A gym with no plan has its devices
+paused** (Kd, 2026-10-15, `rulings/`; a gym without a live plan gets nothing, RULINGS
+2026-08-28): the scan answers 409 `checkin_paused` and writes nothing, the desk shows "Check-in
+is unavailable · Please see a member of staff", Settings shows each device as Paused, and the
+desk works again the moment the gym has a plan. A payment that failed (`past_due`) is still a
+plan.
 
 **Sound, and the camera in poor light (ROADMAP 16f; RULINGS 2026-10-03).** Each answer
 has a sound, so staff hear the desk without watching it: two rising notes for somebody

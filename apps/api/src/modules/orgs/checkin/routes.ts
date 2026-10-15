@@ -394,6 +394,9 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     if (device === null) {
       return reply.status(401).send({ error: "device_not_recognised", message: CHECKIN_WORDS.device_not_recognised, requestId: req.id });
     }
+    if (!(await service.deviceGymOnPlan(checkinDeps, device))) {
+      return reply.status(409).send({ error: "checkin_paused", message: CHECKIN_WORDS.checkin_paused, requestId: req.id });
+    }
     if (!(await service.deviceRoom(checkinDeps, device)())) {
       return reply.status(429).send({ error: "rate_limited", message: "Too many scans. Please try again in a minute.", requestId: req.id });
     }

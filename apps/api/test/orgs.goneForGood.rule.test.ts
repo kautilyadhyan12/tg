@@ -24,12 +24,13 @@ const round = (r: Partial<Round> = {}): Round => ({
 
 const monthSent = (sentAt: Date, deletesAt: Date): Partial<Round> => ({ monthClaimedAt: sentAt, monthSentAt: sentAt, deletesAt });
 
-const cases: { name: string; round: Round; now: Date; step: Step }[] = [
+const cases: { name: string; round: Round; now: Date; claimNow?: Date; step: Step }[] = [
   // The first email.
   { name: "a day before the month window: nothing", round: round(), now: plus(DUE, -31), step: { kind: "wait" } },
   { name: "the month window opens: the month email names the due day", round: round(), now: plus(DUE, -30), step: { kind: "month", deletesAt: DUE } },
   { name: "the worker was off for months: the day named is 30 days on, never the past", round: round(), now: plus(DUE, 90), step: { kind: "month", deletesAt: plus(DUE, 120) } },
   { name: "a month email claimed a minute ago: nothing (another run is sending it)", round: round({ monthClaimedAt: plus(DUE, -30) }), now: new Date(plus(DUE, -30).getTime() + 60_000), step: { kind: "wait" } },
+  { name: "a month claim a minute old by the claims' clock is fresh, however late the night's clock", round: round({ monthClaimedAt: plus(DUE, -30) }), now: new Date(plus(DUE, -30).getTime() + 3 * CLAIM_STALE_MS), claimNow: new Date(plus(DUE, -30).getTime() + 60_000), step: { kind: "wait" } },
   { name: "a month claim an hour old with nothing sent: taken again", round: round({ monthClaimedAt: plus(DUE, -30) }), now: new Date(plus(DUE, -30).getTime() + CLAIM_STALE_MS), step: { kind: "month", deletesAt: plus(new Date(plus(DUE, -30).getTime() + CLAIM_STALE_MS), 30) } },
   // The second email.
   { name: "month email sent, 8 days before the day: nothing", round: round(monthSent(plus(DUE, -30), DUE)), now: plus(DUE, -8), step: { kind: "wait" } },
@@ -67,7 +68,7 @@ const cases: { name: string; round: Round; now: Date; step: Step }[] = [
 describe("a gym gone for good: the rule", () => {
   for (const c of cases) {
     it(c.name, () => {
-      expect(nextStep(c.round, DUE, c.now)).toEqual(c.step);
+      expect(nextStep(c.round, DUE, c.now, c.claimNow ?? c.now)).toEqual(c.step);
     });
   }
 
