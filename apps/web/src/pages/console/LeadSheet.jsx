@@ -252,6 +252,8 @@ function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
 export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly, onClose, onChanged, onAdded = () => undefined }) {
   const adding = leadId === null;
   const [lead, setLead] = useState(null);
+  // The panel's Save, which a status pressed far above points to.
+  const saveRef = useRef(null);
   /** Refer a friend's gift, for a joined lead a member invited (20e-ii-b-i): read again when
    *  the lead joins, so the line says where it will be filled in. */
   const [giftRead, setGiftRead] = useState(null);
@@ -320,8 +322,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
     setLead(next);
     if (saved === 'details') setDraft(leadDraft(next));
     if (saved === 'notes') setNotes(next.notes);
-    // A status saved on its own keeps whatever else is being typed.
-    if (saved === 'joined' || saved === 'status') setDraft((d) => ({ ...d, status: next.status }));
+    if (saved === 'joined') setDraft((d) => ({ ...d, status: next.status }));
     return true;
   };
 
@@ -544,24 +545,22 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
             </div>
           ) : null}
 
-          {/* A status pressed is saved right here, under the buttons (Kd at 20e-ii-b-ii-b's
-              click-through: the panel's Save is far below, past the details). */}
+          {/* A status pressed says where it is saved: the panel's Save, far below past the
+              details, one press away (Kd at 20e-ii-b-ii-b's click-through). */}
           {lead !== null && draft.status !== lead.status && draft.status !== 'joined' ? (
-            <div className="flex flex-wrap items-center gap-2" data-testid="status-save">
-              <span className="c-s14 c-t1">{`${lead.fullName} becomes ${statusWord(draft.status)} when you save.`}</span>
+            <p className="c-s14 c-t1 m-0" data-testid="status-save">
+              {`${lead.fullName} becomes ${statusWord(draft.status)} when you press Save. `}
               <button
                 type="button"
-                disabled={off}
-                onClick={() => void save({ status: draft.status }, `Saved. ${lead.fullName} is now ${statusWord(draft.status)}.`, 'status')}
-                className="c-btn c-btn-p"
+                className="c-lk"
+                onClick={() => {
+                  saveRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                  saveRef.current?.focus({ preventScroll: true });
+                }}
               >
-                {working === 'status' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                Save status
+                Go to Save
               </button>
-              <button type="button" disabled={off} onClick={() => setDraft((d) => ({ ...d, status: lead.status }))} className="c-btn c-btn-s">
-                {`Keep as ${statusWord(lead.status)}`}
-              </button>
-            </div>
+            </p>
           ) : null}
 
           {askJoin === 'unsaved' && !joined ? (
@@ -648,7 +647,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
                 onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
               />
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p">
+                <button type="button" ref={saveRef} onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p">
                   {working === 'details' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
                   Save
                 </button>
