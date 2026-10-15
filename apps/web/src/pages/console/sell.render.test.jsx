@@ -11,7 +11,7 @@ const svc = {
   get: vi.fn(),
   findPeople: vi.fn(),
   sell: vi.fn(),
-  undoSale: vi.fn(),
+  voidSale: vi.fn(),
   saveTaxMode: vi.fn(),
   addTaxRate: vi.fn(),
   changeTaxRate: vi.fn(),
@@ -82,6 +82,7 @@ const sale = (over = {}) => ({
   by: 'Sam Desk',
   person: null,
   undone: false,
+  voided: null,
   canUndo: true,
   receiptNumber: 41,
   ...over,
@@ -175,7 +176,7 @@ describe('a product sale', () => {
     finish({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
 
     const done = await within(newSale()).findByTestId('sale-done');
-    expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. To take it back, press Undo sale on its row.New saleView receipt");
+    expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. If it was a mistake, press Void sale on its row.New saleView receipt");
     // The form is gone: there is nothing to press a second time by mistake.
     expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
     expect(screen.queryByLabelText('Product')).toBeNull();
@@ -292,24 +293,39 @@ describe('today', () => {
     expect(svc.sell).not.toHaveBeenCalled();
   });
 
-  it('a sale is undone only after the box is answered, and Keep it sends nothing', async () => {
+  it('a sale is voided only after the box is answered with a reason, and Keep it sends nothing', async () => {
     svc.get.mockResolvedValue(withSale(sale({ person: { entryId: 'e-maya', name: 'Maya Patel' } })));
-    svc.undoSale.mockResolvedValue(page({ sales: [sale({ undone: true, canUndo: false })] }));
+    svc.voidSale.mockResolvedValue(page({ sales: [sale({ undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Sam Desk' }, canUndo: false })] }));
     open();
     const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
     expect(row.textContent).toContain('Maya Patel · Cash · 9:05 AM · by Sam Desk');
-    fireEvent.click(within(row).getByRole('button', { name: 'Undo sale of 2 × Water' }));
-    expect(within(row).getByText("Undo this sale? 2 × Water, $4.31. It will no longer count in today's total. If you took the money, give it back yourself.")).toBeTruthy();
+    fireEvent.click(within(row).getByRole('button', { name: 'Void sale of 2 × Water' }));
+    expect(
+      within(row).getByText("Void this sale? 2 × Water, $4.31. It will no longer count in today's total, and it stays in the list crossed out. If you took the money, give it back yourself."),
+    ).toBeTruthy();
     fireEvent.click(within(row).getByRole('button', { name: 'Keep it' }));
-    expect(svc.undoSale).not.toHaveBeenCalled();
-    fireEvent.click(within(row).getByRole('button', { name: 'Undo sale of 2 × Water' }));
-    fireEvent.click(within(row).getByRole('button', { name: 'Undo sale' }));
-    await waitFor(() => expect(svc.undoSale).toHaveBeenCalledWith('g1', 's1'));
-    expect(await within(today()).findByText("Sale undone: 2 × Water. It no longer counts in today's total.")).toBeTruthy();
+    expect(svc.voidSale).not.toHaveBeenCalled();
+    fireEvent.click(within(row).getByRole('button', { name: 'Void sale of 2 × Water' }));
+    // No reason picked: nothing is sent, and the box says what is missing.
+    fireEvent.click(within(row).getByRole('button', { name: 'Void sale' }));
+    expect(within(row).getByRole('alert').textContent).toBe('Pick why you are voiding it.');
+    expect(svc.voidSale).not.toHaveBeenCalled();
+    expect(within(within(row).getByLabelText('Why are you voiding it?')).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Choose one',
+      'Recorded by mistake',
+      'Wrong product or quantity',
+      'Brought back',
+      'Something else',
+    ]);
+    fireEvent.change(within(row).getByLabelText('Why are you voiding it?'), { target: { value: 'returned' } });
+    fireEvent.click(within(row).getByRole('button', { name: 'Void sale' }));
+    await waitFor(() => expect(svc.voidSale).toHaveBeenCalledWith('g1', 's1', { reason: 'returned' }));
+    expect(await within(today()).findByText("Sale voided: 2 × Water. It no longer counts in today's total.")).toBeTruthy();
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');
     const after = within(today()).getAllByTestId('takings-row')[0];
-    expect(after.textContent).toContain('Undone');
-    expect(within(after).queryByRole('button', { name: /Undo sale/ })).toBeNull();
+    expect(after.textContent).toContain('Voided');
+    expect(after.textContent).toContain('Voided 12 October 2026 by Sam Desk · Brought back');
+    expect(within(after).queryByRole('button', { name: /Void sale/ })).toBeNull();
   });
 
   it('a long day shows its newest ten rows, with one button for the rest; the total counts every one', async () => {
@@ -325,14 +341,14 @@ describe('today', () => {
     expect(within(today()).getAllByTestId('takings-row')).toHaveLength(10);
   });
 
-  it('a membership payment is in the list with no Undo, and says where it is undone; a name opens their page', async () => {
+  it('a membership payment is in the list with no Void, and says where it is voided; a name opens their page', async () => {
     const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 40 };
     svc.get.mockResolvedValue(page({ payments: [payment], totals: totals({ payments: 1, totalMinor: 4999, card_at_desk: 4999 }) }));
     open();
     const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
     expect(row.textContent).toContain('1 Month (membership) · $49.99');
-    expect(within(row).queryByRole('button', { name: /Undo/ })).toBeNull();
-    expect(within(today()).getByText("To undo or refund a membership payment, open the member's page.")).toBeTruthy();
+    expect(within(row).queryByRole('button', { name: /Void/ })).toBeNull();
+    expect(within(today()).getByText("To void or refund a membership payment, open the member's page.")).toBeTruthy();
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $49.99 from 1 membership payment. Card at the desk $49.99.');
     fireEvent.click(within(row).getByRole('button', { name: "Open Maya Patel's page" }));
     expect(screen.getByRole('dialog', { name: 'person e-maya' })).toBeTruthy();
@@ -647,7 +663,7 @@ describe('who sees what', () => {
     pick('Product', 'p-towel');
     expect(screen.getByLabelText('Product').disabled).toBe(true);
     expect(takeButton().disabled).toBe(true);
-    expect(within(today()).getByRole('button', { name: 'Undo sale of 2 × Water' }).disabled).toBe(true);
+    expect(within(today()).getByRole('button', { name: 'Void sale of 2 × Water' }).disabled).toBe(true);
     expect(within(products()).getByRole('button', { name: 'Add a product' }).disabled).toBe(true);
     expect(within(products()).getByRole('button', { name: 'Change Water' }).disabled).toBe(true);
     expect(within(taxBox()).getByRole('button', { name: 'Add a tax rate' }).disabled).toBe(true);

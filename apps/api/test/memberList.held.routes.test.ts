@@ -799,7 +799,7 @@ d("the Members list says what each person holds (real Postgres)", () => {
       await change(gymId, ann, hers, "payments", { requestKey: nextKey(), periodIndex: 0, amountMinor: 4500, method: "cash" }, owner);
       const bobs = (JSON.parse((await get(heldUrl(gymId, bob), owner.cookies)).body) as HeldMembershipsResponse).memberships[0]?.billing?.undo;
       if (bobs?.kind !== "payment") throw new Error("Bob has no payment to take back");
-      await change(gymId, bob, his, `payments/${bobs.paymentId}/undo`, {}, owner);
+      await change(gymId, bob, his, `payments/${bobs.paymentId}/void`, { reason: "mistake" }, owner);
       const second = await previewOf(gymId, owner, due);
       expect(second).toMatchObject({ reach: 1, version: first.version });
       expect(second.digest).not.toBe(first.digest);

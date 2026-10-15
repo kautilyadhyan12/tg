@@ -160,7 +160,7 @@ describe('each bill reads the word the server sent, under its own membership', (
 describe('what the bills show', () => {
   it('a part-paid bill says what is left, and the form starts at that', async () => {
     const pack = held(2, PACK, '2026-10-10', false);
-    const bill = { ...pack.billing.bills[0], paidMinor: 4000, payments: [{ id: '66666666-6666-4666-8666-000000000009', amountMinor: 4000, method: 'bank_transfer', paidOn: '2026-10-12', by: null, refunds: [], refundableMinor: 0, receiptNumber: 9 }] };
+    const bill = { ...pack.billing.bills[0], paidMinor: 4000, payments: [{ id: '66666666-6666-4666-8666-000000000009', amountMinor: 4000, method: 'bank_transfer', paidOn: '2026-10-12', by: null, refunds: [], voidedRefunds: [], refundableMinor: 0, receiptNumber: 9 }] };
     const part = { ...pack, billing: { ...pack.billing, bills: [bill], pay: { ...pack.billing.pay, leftMinor: 5000 }, cancel: null, undo: { kind: 'payment', paymentId: bill.payments[0].id } } };
     orgService.getHeldMemberships.mockResolvedValue(answer([part]));
     render(draw());
@@ -227,42 +227,56 @@ describe('what the bills show', () => {
 });
 
 describe('a membership that is over', () => {
-  it('a payment recorded on it by mistake can be taken back: the Undo link is drawn beside Record payment, and alone once nothing is owed', async () => {
+  it('a payment recorded on it by mistake can be voided: Void payment is drawn beside Record payment, and alone once nothing is owed', async () => {
     // A fixed term that ended unpaid: its one bill is still owed.
     const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: 'One week', kind: 'one_time', termCount: 1, termUnit: 'week', priceMinor: 2000 };
     const owing = held(3, TERM, '2026-10-01', false);
     expect(owing.view.status).toBe('ended');
     // Part of it recorded: the rest is owed, and that payment can be taken back.
-    const bill = { ...owing.billing.bills[0], paidMinor: 500, payments: [{ id: '66666666-6666-4666-8666-000000000031', amountMinor: 500, method: 'cash', paidOn: '2026-10-19', by: 'Sam Owner', refunds: [], refundableMinor: 0, receiptNumber: 31 }] };
+    const bill = { ...owing.billing.bills[0], paidMinor: 500, payments: [{ id: '66666666-6666-4666-8666-000000000031', amountMinor: 500, method: 'cash', paidOn: '2026-10-19', by: 'Sam Owner', refunds: [], voidedRefunds: [], refundableMinor: 0, receiptNumber: 31 }] };
     const part = { ...owing, billing: { ...owing.billing, bills: [bill], pay: { ...owing.billing.pay, leftMinor: 1500 }, cancel: null, undo: { kind: 'payment', paymentId: bill.payments[0].id } } };
     orgService.getHeldMemberships.mockResolvedValue(answer([part], { types: [GOLD, PACK, TERM] }));
     orgService.changeHeldMembership.mockResolvedValue(answer([owing], { types: [GOLD, PACK, TERM] }));
     const view = render(draw());
     const [row] = await rowsSoon();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Record payment', 'Undo last payment']);
-    fireEvent.click(within(row).getByRole('button', { name: 'Undo last payment' }));
-    fireEvent.click(within(screen.getByTestId('held-ask-undo')).getByRole('button', { name: 'Take it back' }));
-    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, part.id, `payments/${bill.payments[0].id}/undo`));
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Record payment', 'Void payment']);
+    fireEvent.click(within(row).getByRole('button', { name: 'Void payment' }));
+    const voidBox = within(screen.getByTestId('held-void-payment'));
+    expect(voidBox.getByText("Void the £5.00 recorded on 19 October 2026 for Ada Lovelace's One week?")).toBeTruthy();
+    // Nothing is sent until a reason is picked.
+    fireEvent.click(voidBox.getByRole('button', { name: 'Void payment' }));
+    expect(voidBox.getByRole('alert').textContent).toBe('Pick why you are voiding it.');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    expect(within(voidBox.getByLabelText('Why are you voiding it?')).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Choose one',
+      'Recorded by mistake',
+      'Wrong amount',
+      'Wrong person',
+      'Something else',
+    ]);
+    fireEvent.change(voidBox.getByLabelText('Why are you voiding it?'), { target: { value: 'wrong_amount' } });
+    fireEvent.click(voidBox.getByRole('button', { name: 'Void payment' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, part.id, `payments/${bill.payments[0].id}/void`, { reason: 'wrong_amount' }));
     view.unmount();
 
-    // Settled in full: nothing is owed, it is folded away, and its Undo is still there.
+    // Settled in full: nothing is owed, it is folded away, and its Void payment is still there.
     const settled = held(3, TERM, '2026-10-01', true);
     expect(settled.billing).toMatchObject({ pay: null, undo: { kind: 'payment' } });
     orgService.getHeldMemberships.mockResolvedValue(answer([settled], { types: [GOLD, PACK, TERM] }));
     render(draw());
     fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier membership' }));
     const [folded] = await rowsSoon();
-    expect(within(folded).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Undo last payment']);
+    expect(within(folded).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Void payment']);
   });
 
-  it('a past member is offered no Undo: they are put back on the list first', async () => {
+  it('a past member is offered no Void payment: they are put back on the list first', async () => {
     const TERM = { ...GOLD, id: '22222222-2222-4222-8222-000000000003', name: 'One week', kind: 'one_time', termCount: 1, termUnit: 'week', priceMinor: 2000 };
     const settled = held(3, TERM, '2026-10-01', true);
     orgService.getHeldMemberships.mockResolvedValue(answer([{ ...settled, billing: { ...settled.billing, undo: { kind: 'payment', paymentId: settled.billing.bills[0].payments[0].id } } }], { types: [GOLD, PACK, TERM] }));
     render(draw());
     fireEvent.click(await screen.findByRole('button', { name: 'Show 1 earlier membership' }));
     const [row] = await rowsSoon();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Undo last payment']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Void payment']);
     cleanup();
     // The same page for a past member.
     orgService.getHeldMemberships.mockResolvedValue(answer([{ ...settled, billing: { ...settled.billing, undo: { kind: 'payment', paymentId: settled.billing.bills[0].payments[0].id } } }], { types: [GOLD, PACK, TERM], past: true }));
@@ -332,7 +346,7 @@ describe('an older mark with no payment behind it', () => {
   });
 });
 
-// ── 18a-ii: Cancel this bill, Note a refund, Undo refund ────────────────────
+// ── 18a-ii: Cancel this bill, Note a refund, Void refund (18o) ──────────────
 //
 // The worst this screen could do: cancel a bill or note a refund against a membership,
 // a bill or a payment other than the one on screen, or without saying what it changes.
@@ -447,14 +461,14 @@ describe('Note a refund', () => {
     // The bill says part went back, with the refund on its own line; the membership's dates and "Paid" line stay.
     const [now] = await rowsSoon();
     expect(billsOf(now)).toEqual([
-      '4 Oct – 3 Nov 2026£49.99Part refunded£49.99Cash · 4 Oct 2026 · by Sam OwnerView receiptNote a refund£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerView receiptUndo refund',
+      '4 Oct – 3 Nov 2026£49.99Part refunded£49.99Cash · 4 Oct 2026 · by Sam OwnerView receiptNote a refund£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerView receiptVoid refund',
     ]);
     expect(within(now).getByTestId('held-payment').textContent).toBe('Paid · next payment due 4 November 2026');
-    // A payment with a refund on it is not offered to be taken back.
-    expect(within(now).queryByRole('button', { name: 'Undo last payment' })).toBeNull();
+    // A payment with a refund on it is not offered to be voided.
+    expect(within(now).queryByRole('button', { name: 'Void payment' })).toBeNull();
   });
 
-  it('a payment refunded in full has no Note a refund; Undo refund asks, names the refund and sends it', async () => {
+  it('a payment refunded in full has no Note a refund; Void refund asks, names the refund, asks why and sends it', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const refunded = { ...gold, refundedInFull: true, billing: withRefund(gold.billing, 4999) };
     orgService.getHeldMemberships.mockResolvedValue(answer([refunded]));
@@ -465,14 +479,52 @@ describe('Note a refund', () => {
     // All of it went back: the line above the bills never says Paid.
     expect(within(row).getByTestId('held-payment').textContent).toBe('Refunded · next payment due 4 November 2026');
     expect(within(row).queryByRole('button', { name: 'Note a refund' })).toBeNull();
-    fireEvent.click(within(row).getByRole('button', { name: 'Undo refund' }));
-    const box = within(within(row).getByTestId('held-ask-undoRefund'));
-    expect(box.getByText("Take back the £49.99 refund noted on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
-    fireEvent.click(box.getByRole('button', { name: 'Take it back' }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Void refund' }));
+    const box = within(within(row).getByTestId('held-void-refund'));
+    expect(box.getByText("Void the £49.99 refund noted on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
+    fireEvent.click(box.getByRole('button', { name: 'Void refund' }));
+    expect(box.getByRole('alert').textContent).toBe('Pick why you are voiding it.');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    expect(within(box.getByLabelText('Why are you voiding it?')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose one', 'Noted by mistake', 'Wrong amount', 'Something else']);
+    fireEvent.change(box.getByLabelText('Why are you voiding it?'), { target: { value: 'mistake' } });
+    fireEvent.click(box.getByRole('button', { name: 'Void refund' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     const payment = refunded.billing.bills[0].payments[0];
-    expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `payments/${payment.id}/refunds/${payment.refunds[0].id}/undo`);
-    expect(await screen.findByText('That refund was taken back.')).toBeTruthy();
+    expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `payments/${payment.id}/refunds/${payment.refunds[0].id}/void`, { reason: 'mistake' });
+    expect(await screen.findByText('That refund was voided.')).toBeTruthy();
+  });
+
+  it('a voided payment and a voided refund stay in their bill, crossed out, with who, when and why, and nothing to press but the receipt', async () => {
+    const gold = held(1, GOLD, '2026-10-04', false);
+    const voidedRefund = { id: '77777777-7777-4777-8777-000000000041', amountMinor: 2000, method: 'cash', refundedOn: '2026-10-04', reason: 'charged_too_much', by: 'Sam Owner', receiptNumber: 42, voided: { reason: 'mistake', on: '2026-10-05', by: 'Priya Desk' } };
+    const voidedPayment = {
+      id: '66666666-6666-4666-8666-000000000041',
+      amountMinor: 4999,
+      method: 'cash',
+      paidOn: '2026-10-04',
+      by: 'Sam Owner',
+      voidedRefunds: [voidedRefund],
+      receiptNumber: 41,
+      voided: { reason: 'wrong_person', on: '2026-10-06', by: 'Priya Desk' },
+    };
+    // One voided before reasons were kept, by somebody who has since left the app.
+    const older = { ...voidedPayment, id: '66666666-6666-4666-8666-000000000040', voidedRefunds: [], receiptNumber: 40, voided: { reason: null, on: '2026-10-04', by: null } };
+    const bill = { ...gold.billing.bills[0], voidedPayments: [older, voidedPayment] };
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...gold, billing: { ...gold.billing, bills: [bill] } }]));
+    render(draw());
+    const [row] = await rowsSoon();
+    expect(billsOf(row)).toEqual([
+      '4 Oct – 3 Nov 2026£49.99OverdueWas due 4 October 2026' +
+        '£49.99Cash · 4 Oct 2026 · by Sam OwnerVoidedVoided 4 October 2026View receipt' +
+        '£49.99Cash · 4 Oct 2026 · by Sam OwnerVoidedVoided 6 October 2026 by Priya Desk · Wrong personView receipt' +
+        '£20.00 refundedCash · 4 Oct 2026 · Charged too much · by Sam OwnerVoidedVoided 5 October 2026 by Priya Desk · Noted by mistakeView receipt' +
+        'Record paymentCancel this bill',
+    ]);
+    const [, struck] = within(row).getAllByTestId('held-voided-payment');
+    expect(within(struck).getByText('£49.99').style.textDecoration).toBe('line-through');
+    expect(within(struck).getByText('£20.00 refunded').style.textDecoration).toBe('line-through');
+    expect(within(struck).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'View receipt']);
+    expect(within(row).queryByTestId('held-bill-payment')).toBeNull();
   });
 
   it('a gym with no live plan and staff without the tick have neither button', async () => {
@@ -483,7 +535,7 @@ describe('Note a refund', () => {
     await rowsSoon();
     expect(screen.getByText('Part refunded')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Note a refund' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Undo refund' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Void refund' })).toBeNull();
     first.unmount();
     orgService.getHeldMemberships.mockResolvedValue(withoutBills([gold]));
     render(draw());

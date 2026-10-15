@@ -138,7 +138,7 @@ export function moneyTiles(report, words, orgSlug) {
         refunded && !sold
           ? `${span}: ${moneyText(report.inPeriod.paidMinor, cur)} paid, ${moneyText(report.inPeriod.refundedMinor, cur)} refunded · ${soFar}`
           : `${span} · ${soFar}`,
-      how: `Membership payments and product sales your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment, sale or refund that was undone is not counted. ${earlierDays(report.period, report.yearEarlier)}`,
+      how: `Membership payments and product sales your staff recorded from ${dayText(paidFrom)} to today, less refunds noted in those days. A payment, sale or refund that was voided is not counted. ${earlierDays(report.period, report.yearEarlier)}`,
       links: [],
     },
     {

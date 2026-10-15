@@ -600,7 +600,7 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       expect((await settings(gym)).payments).toBe(false);
       const paymentId = await pay(gym, who.entryId, membershipId, 1000);
       expect((await settings(gym)).payments).toBe(true);
-      await act(gym, who.entryId, membershipId, `payments/${paymentId}/undo`, { paymentId });
+      await act(gym, who.entryId, membershipId, `payments/${paymentId}/void`, { reason: "mistake" });
       expect((await settings(gym)).payments).toBe(false);
       // Forty-six days ago is too long ago.
       await pay(gym, who.entryId, membershipId, 1000);

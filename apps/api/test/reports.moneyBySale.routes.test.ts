@@ -244,7 +244,7 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       await sell(gym, ravi, shake, "2026-10-01", 1, 500);
       // Taken back the same day: not money, and not Ravi's.
       const back = await sell(gym, ravi, towel, "2026-10-20", 1, 1200);
-      const undo = await post(`/v1/orgs/${gym}/register/sales/${back}/undo`, {}, ravi.cookies);
+      const undo = await post(`/v1/orgs/${gym}/register/sales/${back}/void`, { reason: "mistake" }, ravi.cookies);
       expect(undo.statusCode, undo.body).toBe(200);
       // A membership payment Ravi took in the period.
       await givePaid(gym, ravi, owner, "2026-10-05");

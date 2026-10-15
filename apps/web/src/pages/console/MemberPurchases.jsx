@@ -57,7 +57,8 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
                     <span className="c-s14 c-w6 c-t1" style={line.undone ? { textDecoration: 'line-through' } : undefined}>
                       {line.title}
                     </span>
-                    <span className="c-s13 c-t3">{line.undone ? `${line.facts} · Undone` : line.facts}</span>
+                    <span className="c-s13 c-t3">{line.facts}</span>
+                    {line.voided !== null ? <span className="c-s13 c-t3">{line.voided}</span> : null}
                   </span>
                   <span className="flex flex-col items-end gap-1 flex-shrink-0">
                     <span className="c-s14 c-t1 c-num" style={line.undone ? { textDecoration: 'line-through' } : undefined}>

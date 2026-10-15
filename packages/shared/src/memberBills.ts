@@ -58,6 +58,29 @@ export const REFUND_REASON_WORDS: Readonly<Record<RefundReason, string>> = {
   other: "Something else",
 };
 
+/** Why staff voided a payment (18o): picked, never typed. */
+export const PAYMENT_VOID_REASONS = ["mistake", "wrong_amount", "wrong_person", "other"] as const;
+export const paymentVoidReasonSchema = z.enum(PAYMENT_VOID_REASONS);
+export type PaymentVoidReason = z.infer<typeof paymentVoidReasonSchema>;
+
+export const PAYMENT_VOID_REASON_WORDS: Readonly<Record<PaymentVoidReason, string>> = {
+  mistake: "Recorded by mistake",
+  wrong_amount: "Wrong amount",
+  wrong_person: "Wrong person",
+  other: "Something else",
+};
+
+/** Why staff voided a refund (18o): picked, as above. */
+export const REFUND_VOID_REASONS = ["mistake", "wrong_amount", "other"] as const;
+export const refundVoidReasonSchema = z.enum(REFUND_VOID_REASONS);
+export type RefundVoidReason = z.infer<typeof refundVoidReasonSchema>;
+
+export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidReason, string>> = {
+  mistake: "Noted by mistake",
+  wrong_amount: "Wrong amount",
+  other: "Something else",
+};
+
 /** How many days after its due date an unpaid bill reads Overdue: the gym's own number. */
 export const BILL_OVERDUE_DAYS_DEFAULT = 0;
 export const BILL_OVERDUE_DAYS_MAX = 60;
@@ -94,6 +117,14 @@ export const memberRefundSchema = z
   .strict();
 export type MemberRefund = z.infer<typeof memberRefundSchema>;
 
+/** Who voided a row, on the gym's own day, and why; the reason is null for one voided
+ *  before reasons were kept, `by` where that member of staff has since left the app. */
+const voidedBy = <T extends z.ZodTypeAny>(reason: T) => z.object({ reason: reason.nullable(), on: daySchema, by: z.string().nullable() }).strict();
+
+/** A refund staff voided (18o): kept on the page, struck through, and counted in nothing. */
+export const voidedMemberRefundSchema = memberRefundSchema.extend({ voided: voidedBy(refundVoidReasonSchema) }).strict();
+export type VoidedMemberRefund = z.infer<typeof voidedMemberRefundSchema>;
+
 export const memberPaymentSchema = z
   .object({
     id: z.string().uuid(),
@@ -105,6 +136,8 @@ export const memberPaymentSchema = z
     by: z.string().nullable(),
     /** The refunds that stand against it, oldest first. */
     refunds: z.array(memberRefundSchema),
+    /** The refunds against it that staff voided, oldest first: counted in nothing. */
+    voidedRefunds: z.array(voidedMemberRefundSchema),
     /** What a refund can still be noted for; 0 where none can (`refundMemberPayment`). */
     refundableMinor: minorSchema,
     /** Its receipt's number, the gym's own (18g-i). */
@@ -112,6 +145,14 @@ export const memberPaymentSchema = z
   })
   .strict();
 export type MemberPayment = z.infer<typeof memberPaymentSchema>;
+
+/** A payment staff voided (18o): kept on the page, struck through, and counted in nothing.
+ *  A payment is voided only once no refund stands on it, so it carries voided ones alone. */
+export const voidedMemberPaymentSchema = memberPaymentSchema
+  .omit({ refunds: true, refundableMinor: true })
+  .extend({ voided: voidedBy(paymentVoidReasonSchema) })
+  .strict();
+export type VoidedMemberPayment = z.infer<typeof voidedMemberPaymentSchema>;
 
 export const memberBillSchema = z
   .object({
@@ -135,6 +176,8 @@ export const memberBillSchema = z
      *  membership, and for every bill that is not cancelled. */
     cancelled: z.object({ reason: billCancelReasonSchema, on: daySchema, by: z.string().nullable() }).strict().nullable(),
     payments: z.array(memberPaymentSchema),
+    /** The payments on it that staff voided, in the order they were recorded. */
+    voidedPayments: z.array(voidedMemberPaymentSchema),
   })
   .strict();
 export type MemberBill = z.infer<typeof memberBillSchema>;
@@ -183,8 +226,11 @@ export const recordMemberPaymentRequestSchema = z
   .strict();
 export type RecordMemberPaymentRequest = z.infer<typeof recordMemberPaymentRequestSchema>;
 
-export const undoMemberPaymentRequestSchema = z.object({ paymentId: z.string().uuid() }).strict();
-export type UndoMemberPaymentRequest = z.infer<typeof undoMemberPaymentRequestSchema>;
+export const voidMemberPaymentRequestSchema = z.object({ reason: paymentVoidReasonSchema }).strict();
+export type VoidMemberPaymentRequest = z.infer<typeof voidMemberPaymentRequestSchema>;
+
+export const voidMemberRefundRequestSchema = z.object({ reason: refundVoidReasonSchema }).strict();
+export type VoidMemberRefundRequest = z.infer<typeof voidMemberRefundRequestSchema>;
 
 export const cancelMemberBillRequestSchema = z.object({ reason: billCancelReasonSchema }).strict();
 export type CancelMemberBillRequest = z.infer<typeof cancelMemberBillRequestSchema>;

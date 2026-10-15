@@ -211,6 +211,18 @@ export const chargeTaxRateRequestSchema = z
   .strict();
 export type ChargeTaxRateRequest = z.infer<typeof chargeTaxRateRequestSchema>;
 
+/** Why staff voided a sale (18o): picked, never typed. */
+export const SALE_VOID_REASONS = ["mistake", "wrong_item", "returned", "other"] as const;
+export const saleVoidReasonSchema = z.enum(SALE_VOID_REASONS);
+export type SaleVoidReason = z.infer<typeof saleVoidReasonSchema>;
+
+export const SALE_VOID_REASON_WORDS: Readonly<Record<SaleVoidReason, string>> = {
+  mistake: "Recorded by mistake",
+  wrong_item: "Wrong product or quantity",
+  returned: "Brought back",
+  other: "Something else",
+};
+
 export const gymSaleSchema = z
   .object({
     id: z.string().uuid(),
@@ -241,15 +253,21 @@ export const gymSaleSchema = z
      *  since (`personDeleted`). */
     person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable(),
     personDeleted: z.boolean(),
-    /** Staff took the sale back: kept, and counted in nothing. */
+    /** Staff voided the sale: kept, and counted in nothing. */
     undone: z.boolean(),
-    /** Whether it can still be taken back: a sale of the gym's own today. */
+    /** Who voided it, on the gym's own day, and why (18o); null while it stands. The reason
+     *  is null for one voided before reasons were kept. */
+    voided: z.object({ reason: saleVoidReasonSchema.nullable(), on: daySchema, by: z.string().nullable() }).strict().nullable(),
+    /** Whether it can still be voided: a sale of the gym's own today. */
     canUndo: z.boolean(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
   })
   .strict();
 export type GymSale = z.infer<typeof gymSaleSchema>;
+
+export const voidSaleRequestSchema = z.object({ reason: saleVoidReasonSchema }).strict();
+export type VoidSaleRequest = z.infer<typeof voidSaleRequestSchema>;
 
 /** A payment for a membership recorded today, here or on the person's page: the
  *  notebook's own row (`memberBills.ts`), listed so the day's takings are whole. */
@@ -401,7 +419,7 @@ export const REGISTER_WORDS = {
   taxed_price_too_high: "This price is too high to charge tax on. Lower the price, or choose No tax.",
   request_reused: "That form was already used for another sale. Nothing was sold: start the sale again.",
   sale_not_found: "That sale was not found.",
-  sale_not_today: "Only a sale made today can be undone here.",
+  sale_not_today: "Only a sale made today can be voided here.",
   no_currency: "Set your country in Settings before adding a product.",
   name_taken: "You already have a product with this name. Pick another name.",
   changed: "This product changed while you had it open, or one was sold. Nothing was saved: check it and try again.",

@@ -39,6 +39,8 @@ import {
   type MemberBilling,
   type NoteMemberRefundRequest,
   type RecordMemberPaymentRequest,
+  type VoidMemberPaymentRequest,
+  type VoidMemberRefundRequest,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -47,7 +49,7 @@ import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
 import { membershipDiscounts } from "../register/discountsRepo.js";
-import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow } from "./billsSql.js";
+import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 
 export interface HeldDeps {
   sql: Sql;
@@ -67,6 +69,7 @@ function billingOf(
   bills: readonly BillRow[],
   payments: readonly PaymentRow[],
   refunds: readonly RefundRow[],
+  voided: { payments: readonly VoidedPaymentRow[]; refunds: readonly VoidedRefundRow[] },
   ctx: { today: string; past: boolean; overdueAfterDays: number },
 ): MemberBilling {
   const view = heldMembershipView(row.membership, ctx.today);
@@ -83,6 +86,8 @@ function billingOf(
   const owedBill = pay === null ? undefined : bills.find((b) => b.periodIndex === pay.periodIndex);
   const sent = owedBill === undefined || newest.includes(owedBill) ? newest : [...newest, owedBill];
   const mark = !ctx.past && back === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
+  const refundOf = (r: RefundRow) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by, receiptNumber: r.receiptNumber });
+  const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));
   return {
     bills: sent.map((b) => ({
       id: b.id,
@@ -103,11 +108,22 @@ function billingOf(
           method: p.method,
           paidOn: p.paidOn,
           by: p.by,
-          refunds: refunds
-            .filter((r) => r.paymentId === p.id)
-            .map((r) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by, receiptNumber: r.receiptNumber })),
+          refunds: refunds.filter((r) => r.paymentId === p.id).map(refundOf),
+          voidedRefunds: voidedRefundsOf(p.id),
           refundableMinor: refundableMinor(b.status, p),
           receiptNumber: p.receiptNumber,
+        })),
+      voidedPayments: voided.payments
+        .filter((p) => p.billId === b.id)
+        .map((p) => ({
+          id: p.id,
+          amountMinor: p.amountMinor,
+          method: p.method,
+          paidOn: p.paidOn,
+          by: p.by,
+          voidedRefunds: voidedRefundsOf(p.id),
+          receiptNumber: p.receiptNumber,
+          voided: p.voided,
         })),
     })),
     billsNotShown: bills.length - sent.length,
@@ -169,6 +185,10 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
             list.bills.filter((b) => b.membershipId === row.id),
             list.payments.filter((p) => p.membershipId === row.id),
             list.refunds.filter((r) => r.membershipId === row.id),
+            {
+              payments: list.voidedPayments.filter((p) => p.membershipId === row.id),
+              refunds: list.voidedRefunds.filter((r) => r.membershipId === row.id),
+            },
             ctx,
           )
         : null,
@@ -275,7 +295,7 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(
         409,
         "early_payment_stands",
-        "A payment is recorded for a month after its last day. Take that payment back first (Undo last payment), then cancel.",
+        "A payment is recorded for a month after its last day. Void that payment first, then cancel.",
       );
     case "not_allowed":
       throw new OrgsError(
@@ -409,13 +429,13 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(
         409,
         "bill_has_payment",
-        "A payment is recorded on this bill. Take it back first (Undo last payment), or record the rest.",
+        "A payment is recorded on this bill. Void it first, or record the rest.",
       );
     case "refund_not_settled":
       throw new OrgsError(
         409,
         "refund_not_settled",
-        "This bill isn't fully paid, so there is nothing to refund yet. To take a payment back, use Undo last payment.",
+        "This bill isn't fully paid, so there is nothing to refund yet. If a payment was recorded by mistake, void it.",
       );
     case "refund_too_much":
       throw new OrgsError(
@@ -470,16 +490,17 @@ export async function recordMemberPayment(
   return await readOr404(deps, gymId, entryId, today, true);
 }
 
-export async function undoMemberPayment(
+export async function voidMemberPayment(
   deps: HeldDeps,
   userId: string,
   gymId: string,
   entryId: string,
   membershipId: string,
   paymentId: string,
+  req: VoidMemberPaymentRequest,
 ): Promise<HeldMembershipsResponse> {
   const { today, now } = await requireBilling(deps, userId, gymId);
-  throwOnBillFailure(await billsRepo.undoPayment(deps.sql, { gymId, entryId, membershipId, paymentId, today, actorUserId: userId, now }));
+  throwOnBillFailure(await billsRepo.voidPayment(deps.sql, { gymId, entryId, membershipId, paymentId, reason: req.reason, today, actorUserId: userId, now }));
   return await readOr404(deps, gymId, entryId, today, true);
 }
 
@@ -527,7 +548,7 @@ export async function noteMemberRefund(
   return await readOr404(deps, gymId, entryId, today, true);
 }
 
-export async function undoMemberRefund(
+export async function voidMemberRefund(
   deps: HeldDeps,
   userId: string,
   gymId: string,
@@ -535,9 +556,10 @@ export async function undoMemberRefund(
   membershipId: string,
   paymentId: string,
   refundId: string,
+  req: VoidMemberRefundRequest,
 ): Promise<HeldMembershipsResponse> {
   const { today, now } = await requireBilling(deps, userId, gymId);
-  throwOnBillFailure(await billsRepo.undoRefund(deps.sql, { gymId, entryId, membershipId, paymentId, refundId, actorUserId: userId, now }));
+  throwOnBillFailure(await billsRepo.voidRefund(deps.sql, { gymId, entryId, membershipId, paymentId, refundId, reason: req.reason, actorUserId: userId, now }));
   return await readOr404(deps, gymId, entryId, today, true);
 }
 

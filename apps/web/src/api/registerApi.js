@@ -27,7 +27,8 @@ export const registerService = {
     read(salePeopleResponseSchema, 'that search', await authApi.get(`${gymPath(gymId)}/register/people`, { params: { query } })).people,
   /** One sale. `body.requestKey` is the form's own, so the same form pressed twice sells once. */
   sell: async (gymId, body) => read(sellProductResponseSchema, 'that sale', await authApi.post(`${gymPath(gymId)}/register/sales`, body)),
-  undoSale: async (gymId, saleId) => page(await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/undo`, {})),
+  /** Voids one sale of today: `body` is `{ reason }`, picked from a list. */
+  voidSale: async (gymId, saleId, body) => page(await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/void`, body)),
   /** Whether the gym's prices hold the tax: `{ included }`. */
   saveTaxMode: async (gymId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax`, body)),
   addTaxRate: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/tax-rates`, body)),

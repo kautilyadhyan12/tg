@@ -400,7 +400,7 @@ d("payments kept when a record is deleted for good (real Postgres)", () => {
       const samGold = await membershipNamed(gymId, sam, owner.cookies, "Gold Monthly");
       const payment = samGold.billing?.bills[0]?.payments[0];
       if (payment === undefined) throw new Error("Sam's payment is missing");
-      const undone = await post(`${heldUrl(gymId, sam)}/${samGold.id}/payments/${payment.id}/undo`, {}, owner.cookies);
+      const undone = await post(`${heldUrl(gymId, sam)}/${samGold.id}/payments/${payment.id}/void`, { reason: "mistake" }, owner.cookies);
       expect(undone.statusCode, undone.body).toBe(200);
       await give(gymId, kim, owner.cookies, gold, 5000, false);
       // Zoe's Gold is refunded in full: its bill reads refunded, and stays so.

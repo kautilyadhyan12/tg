@@ -3534,7 +3534,7 @@ with the payment that settles the bill of the first unpaid period.
   reads Overdue once the gym's **grace period** has passed after its due date: 0 to 60
   days, starting at 0, set in the Bills box on Memberships (as Gymdesk lets a gym set
   when a manual payment turns overdue).
-- **Undo last payment** takes back the newest payment on a membership, one at a time;
+- **Void payment** (named Undo last payment until 18o, below) takes back the newest payment on a membership, one at a time;
   its row is kept, marked. A period counted paid before bills were kept, or on the word
   of the gym's own list, has no payment behind it and is taken back as it always was.
 - **Who**: `billing.members` (owner and manager by default; "Record members' payments"
@@ -3572,8 +3572,8 @@ list's Payment reads the bills.
   money has gone back, the membership's line reads "Refunded · next payment due …" and
   the Members list reads "Free": never "Paid". Asked again of a bill refunded in full,
   the server says "All of that payment has already been refunded."
-- **Undo refund** takes back one refund noted by mistake; its row is kept, marked. While a
-  refund stands on a bill, **Undo last payment** is not offered for that bill's payments:
+- **Void refund** (Undo refund until 18o) takes back one refund noted by mistake; its row is kept, marked. While a
+  refund stands on a bill, **Void payment** is not offered for that bill's payments:
   the refund is taken back first, so a refund only ever stands on a settled bill.
 - **The Members list's Payment** (§18.2) is "Payment due" wherever a bill of the person's
   is still open and has fallen due, whichever membership it is for: one that is over
@@ -3633,7 +3633,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   New sale; the form is gone until it is pressed, so a second press cannot sell again, and
   the new form has no product picked (Kd's click-through, RULINGS 2026-10-12). Today's list
   draws its newest 10 rows, with Show all.
-- **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
+- **Void sale** (Undo sale until 18o): the same day only, by whoever may sell. The row is kept, marked, counted
   in nothing, and what it took from the stock count goes back.
 - **A membership** was sold from the same box (moved to the member's own page on 2026-10-14, 18b-ii-b, below) by giving it as paid (§14.2): the notebook's
   own bill and payment, starting today, to a person on the list. No `gym_sales` row.
@@ -3805,6 +3805,26 @@ record deleted for good keeps its money.
   records have Gold Monthly. Cancel it on one of them first, then merge."
 - **A gym's whole list deleted** (Stage 4 item 14) takes every payment, those kept from records
   deleted earlier too (`deleteListForGym`): the gym is warned first, and downloading them is 18n.
+
+**As built, 18o (2026-10-15; `rulings/2026-10-15-18m.md`, `rulings/2026-10-15-18o.md`).** A
+payment, a refund or a sale recorded by mistake is **voided**, as gym software does.
+- **The buttons**: Void payment and Void refund on a person's page, Void sale on Sell's list of
+  today. Who may, and which one may, are as before; only the name and the reason are new.
+- **A reason is picked, never typed** (migration `0117`, `void_reason`, a CHECK on each table):
+  a payment: Recorded by mistake · Wrong amount · Wrong person · Something else; a refund:
+  Noted by mistake · Wrong amount · Something else; a sale: Recorded by mistake · Wrong product
+  or quantity · Brought back · Something else. Nothing is sent until one is picked.
+- **What was voided stays where it was**, crossed out, tagged Voided, with one line: "Voided 15
+  October 2026 by Priya Desk · Wrong amount" (the gym's own day; the reason is left out for one
+  voided before 18o, the name for staff who have since left the app). A voided payment keeps its
+  voided refunds under it; it offers only View receipt. On Sell and a person's Purchases a
+  voided sale reads the same. It counts in nothing: takings, reports and what is owed read only
+  what stands, as before.
+- **Its receipt** keeps its number and reads "Voided. This payment was voided, so nothing was paid
+  on it." (a refund, a sale: the same in their words).
+- **Left as it is**: a membership payment voided leaves Sell's list of today's takings, as
+  before; it is shown, crossed out, on the person's page. A payment taken by a connected company
+  (18d) is given back through that company, not voided here.
 
 ### 14.4 Pay by the gym's own link
 

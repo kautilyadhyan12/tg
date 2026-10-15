@@ -38,6 +38,7 @@ const sale = (over = {}) => ({
   by: 'Sam Desk',
   person: { entryId: 'e1', name: 'Maya Patel' },
   undone: false,
+  voided: null,
   canUndo: true,
   receiptNumber: 7,
   ...over,
@@ -112,12 +113,12 @@ describe('a receipt', () => {
     for (const console of ['View receipt', 'Bought at the desk', 'Close', 'c-btn']) expect(html).not.toContain(console);
   });
 
-  it('a sale taken back reads Cancelled on its receipt', async () => {
-    svc.purchases.mockResolvedValue({ sales: [sale({ undone: true, canUndo: false })], notShown: 0 });
+  it('a sale voided reads Voided on its receipt', async () => {
+    svc.purchases.mockResolvedValue({ sales: [sale({ undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Sam Owner' }, canUndo: false })], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt({ cancelled: true }));
     open();
     const row = await pressReceipt();
-    expect((await within(row).findByTestId('receipt-cancelled')).textContent).toBe('Cancelled. This sale was undone, so nothing was paid on it.');
+    expect((await within(row).findByTestId('receipt-cancelled')).textContent).toBe('Voided. This sale was voided, so nothing was paid on it.');
   });
 
   it('a gym with no address: the owner types it in the box, and the receipt is read again with it', async () => {

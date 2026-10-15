@@ -204,6 +204,8 @@ export const gymSales = pgTable(
     stockCounted: boolean("stock_counted").notNull().default(false),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Why staff voided it, picked from a list (0117; 18o); null for one voided before. */
+    voidReason: text("void_reason"),
     discountId: uuid("discount_id"),
     discountName: text("discount_name"),
     discountMinor: integer("discount_minor").notNull().default(0),
@@ -214,6 +216,10 @@ export const gymSales = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_sales_void_reason_check",
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_item','returned','other'))`,
+    ),
     unique("gym_sales_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_sales_receipt_check", sql`${t.receiptNumber} >= 1`),
     check("gym_sales_for_member_check", sql`${t.entryId} IS NULL OR ${t.forMember}`),

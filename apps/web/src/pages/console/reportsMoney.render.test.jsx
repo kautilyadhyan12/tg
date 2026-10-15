@@ -462,7 +462,7 @@ describe('the period', () => {
     await screen.findByTestId('tile-recurring');
     expect(tile('collected').textContent).toBe('Collected£95.0023 Sep 2026 to 20 Oct 2026: £110.00 paid, £15.00 refunded · October, so far: £45.00A year earlier: £0.00 · up £95.00');
     fireEvent.click(within(tile('collected')).getByRole('button', { name: 'How Collected is worked out' }));
-    expect(within(tile('collected')).getByText('Membership payments and product sales your staff recorded from 23 Sep 2026 to today, less refunds noted in those days. A payment, sale or refund that was undone is not counted. A year earlier counts the same weekdays 52 weeks before: 24 Sep 2025 to 21 Oct 2025.')).toBeTruthy();
+    expect(within(tile('collected')).getByText('Membership payments and product sales your staff recorded from 23 Sep 2026 to today, less refunds noted in those days. A payment, sale or refund that was voided is not counted. A year earlier counts the same weekdays 52 weeks before: 24 Sep 2025 to 21 Oct 2025.')).toBeTruthy();
     // Whole months, each its own figure; and each membership's money in the four weeks.
     expect(tableRows('Money, month by month')).toEqual([
       ['Month', 'Paid', 'Refunded', 'Collected'],

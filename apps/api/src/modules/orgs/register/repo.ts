@@ -16,9 +16,11 @@ import {
   memberCurrencyForCountry,
   memberPaymentByHandSchema,
   saleAmounts,
+  saleVoidReasonSchema,
   type DiscountRefusal,
   type SalesTax,
   type MemberPaymentByHand,
+  type SaleVoidReason,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { nextReceipt } from "../receipts/repo.js";
@@ -80,6 +82,8 @@ export interface SaleRow {
   /** Sold to somebody whose record was deleted for good since: no person, not a walk-in. */
   personDeleted: boolean;
   undone: boolean;
+  /** Who voided it, on the gym's own day, and why (18o); null while it stands. */
+  voided: { reason: SaleVoidReason | null; on: string; by: string | null } | null;
   receiptNumber: number;
 }
 
@@ -105,6 +109,9 @@ interface RawSale {
   person_name: string | null;
   for_member: boolean;
   undone: boolean;
+  void_reason: string | null;
+  voided_on: string | null;
+  voided_by: string | null;
   receipt_number: number;
 }
 
@@ -133,14 +140,22 @@ const sale = (r: RawSale): SaleRow => ({
   person: r.entry_id === null ? null : { entryId: r.entry_id, name: r.person_name === null || r.person_name.trim() === "" ? NO_NAME : r.person_name },
   personDeleted: r.entry_id === null && r.for_member,
   undone: r.undone,
+  voided:
+    r.undone && r.voided_on !== null
+      ? { reason: r.void_reason === null ? null : saleVoidReasonSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by }
+      : null,
   receiptNumber: r.receipt_number,
 });
 
-/** The columns every read of a sale takes, from `gym_sales s` with its two joins. */
+/** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who
+ *  voided one and on what day are read on their own, for the few that were. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
   s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
   s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
-  e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.receipt_number`;
+  e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.void_reason,
+  CASE WHEN s.undone_at IS NOT NULL THEN (s.undone_at AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = s.gym_id))::date::text END AS voided_on,
+  CASE WHEN s.undone_by IS NOT NULL THEN (SELECT v.display_name FROM users v WHERE v.id = s.undone_by) END AS voided_by,
+  s.receipt_number`;
 
 export interface RegisterRow {
   country: string | null;
@@ -523,13 +538,16 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
   });
 }
 
-export type UndoSaleOutcome = { kind: "ok" } | { kind: "sale_not_found" } | { kind: "not_today" };
+export type VoidSaleOutcome = { kind: "ok" } | { kind: "sale_not_found" } | { kind: "not_today" };
 
-/** Takes one sale back: its row is kept, marked, what it took from the stock count is
- *  returned where the product is still counted, and the use of its discount is given
- *  back. Pressed twice it is taken back once. */
-export async function undoSale(sql: Sql, input: { gymId: string; saleId: string; today: string; actorUserId: string; now: Date }): Promise<UndoSaleOutcome> {
-  return await sql.begin(async (tx): Promise<UndoSaleOutcome> => {
+/** Voids one sale (18o): its row is kept, marked with who, when and why, what it took
+ *  from the stock count is returned where the product is still counted, and the use of
+ *  its discount is given back. Pressed twice it is voided once. */
+export async function voidSale(
+  sql: Sql,
+  input: { gymId: string; saleId: string; reason: SaleVoidReason; today: string; actorUserId: string; now: Date },
+): Promise<VoidSaleOutcome> {
+  return await sql.begin(async (tx): Promise<VoidSaleOutcome> => {
     await lockOrgRow(tx, input.gymId);
     const [row] = await tx<{ product_id: string; quantity: number; sold_on: string; stock_counted: boolean; undone: boolean; total_minor: number; currency: string; item_name: string; discount_id: string | null }[]>`
       SELECT product_id, quantity, sold_on::text AS sold_on, stock_counted, undone_at IS NOT NULL AS undone, total_minor, currency, item_name, discount_id
@@ -538,7 +556,7 @@ export async function undoSale(sql: Sql, input: { gymId: string; saleId: string;
     if (row.undone) return { kind: "ok" };
     if (row.sold_on !== input.today) return { kind: "not_today" };
     await tx`
-      UPDATE gym_sales SET undone_at = ${input.now}, undone_by = ${input.actorUserId}
+      UPDATE gym_sales SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.saleId} AND undone_at IS NULL`;
     if (row.stock_counted) {
       await tx`
@@ -552,7 +570,7 @@ export async function undoSale(sql: Sql, input: { gymId: string; saleId: string;
       action: "org.sale_undone",
       targetType: "gym_sale",
       targetId: input.saleId,
-      meta: { product: row.item_name, quantity: String(row.quantity), totalMinor: String(row.total_minor), currency: row.currency },
+      meta: { product: row.item_name, quantity: String(row.quantity), totalMinor: String(row.total_minor), currency: row.currency, reason: input.reason },
     });
     return { kind: "ok" };
   });

@@ -5,6 +5,8 @@ import {
   PRODUCT_NAME_MAX,
   PRODUCT_STOCK_MAX,
   SALE_QUANTITY_MAX,
+  SALE_VOID_REASONS,
+  SALE_VOID_REASON_WORDS,
   TAX_NAME_MAX,
   TAX_RATES_MAX,
   billAmounts,
@@ -18,6 +20,7 @@ import {
   taxRateToBp,
 } from '@app/shared';
 import { sentTime } from './memberListPeople';
+import { voidedLine } from './memberBillsView';
 
 // THE SELL PAGE'S WORDS AND SUMS (spec Part 3 §14.3; ROADMAP 18b-i). Every sentence the
 // page says is made here, from what the server sent; the page only draws them. The total
@@ -218,6 +221,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     facts: facts(takingsPerson(sale.person, sale.personDeleted === true), sale.method, sale.soldAt, sale.by, saleDiscountWords(sale)),
     person: sale.person,
     undone: sale.undone,
+    voided: saleVoidedLine(sale),
     canUndo: sale.canUndo,
     receiptNumber: sale.receiptNumber,
     sale,
@@ -231,6 +235,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     facts: facts(takingsPerson(payment.person, true), payment.method, payment.paidAt, payment.by),
     person: payment.person,
     undone: false,
+    voided: null,
     canUndo: false,
     receiptNumber: payment.receiptNumber,
     sale: null,
@@ -238,9 +243,24 @@ export function takingsRows(page, timeZone, clockFormat) {
   return [...sales, ...payments].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 
-/** What the Undo box asks. */
-export function undoSaleQuestion(sale) {
-  return `Undo this sale? ${String(sale.quantity)} × ${sale.itemName}, ${formatMinor(sale.totalMinor, sale.currency)}. It will no longer count in today's total. If you took the money, give it back yourself.`;
+/** Why a sale was voided, for a list to pick from (18o). */
+export const SALE_VOID_CHOICES = SALE_VOID_REASONS.map((value) => ({ value, label: SALE_VOID_REASON_WORDS[value] }));
+
+/** "Voided 15 Oct 2026 by Priya Desk · Brought back", or null for a sale that stands. */
+export function saleVoidedLine(sale) {
+  if (!sale.undone) return null;
+  // A sale read before the server sent who voided it says only that it was.
+  return sale.voided === null || sale.voided === undefined ? 'Voided' : voidedLine(sale.voided, SALE_VOID_REASON_WORDS);
+}
+
+/** What the Void sale box asks. */
+export function voidSaleQuestion(sale) {
+  return `Void this sale? ${String(sale.quantity)} × ${sale.itemName}, ${formatMinor(sale.totalMinor, sale.currency)}. It will no longer count in today's total, and it stays in the list crossed out. If you took the money, give it back yourself.`;
+}
+
+/** The done line of a void. */
+export function saleVoidedWords(sale) {
+  return `Sale voided: ${String(sale.quantity)} × ${sale.itemName}. It no longer counts in today's total.`;
 }
 
 /** "$0.18 GST": the tax in a sale, by the name it was charged under; null for none. */
@@ -259,6 +279,7 @@ export function purchaseLine(sale) {
     amount: formatMinor(sale.totalMinor, sale.currency),
     facts: [when, methodWords(sale.method), saleDiscountWords(sale), saleTaxWords(sale)].filter((x) => x !== null).join(' · '),
     undone: sale.undone,
+    voided: saleVoidedLine(sale),
     receiptNumber: sale.receiptNumber,
   };
 }

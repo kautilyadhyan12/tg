@@ -408,7 +408,7 @@ describe('what the box draws', () => {
     expect(within(row).getByText('Frozen')).toBeTruthy();
     expect(within(row).getByText('£49.99 every month')).toBeTruthy();
     expect(within(row).getByText('Started 4 October 2026 · Frozen since 10 October 2026')).toBeTruthy();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Record payment early', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Record payment early', 'Unfreeze', 'Cancel membership', 'Void payment']);
 
     // The cancelled one is behind one line: what was paid for it can be refunded, and nothing else.
     fireEvent.click(box().getByRole('button', { name: 'Show 5 earlier memberships' }));
@@ -725,7 +725,7 @@ describe('changing a membership', () => {
     expect(box().getByText("Started 4 October 2026 · Ends 3 November 2026, won't renew")).toBeTruthy();
   });
 
-  it('Freeze, Unfreeze and Undo last payment each send their own step', async () => {
+  it('Freeze, Unfreeze and Void payment each send their own step', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
@@ -742,14 +742,15 @@ describe('changing a membership', () => {
     fireEvent.click(within(screen.getByTestId('held-ask-unfreeze')).getByRole('button', { name: 'Unfreeze' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'unfreeze', undefined));
 
-    // The payment taken back is named: its amount and its day.
-    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Undo last payment' }));
-    const ask = within(screen.getByTestId('held-ask-undo'));
-    expect(ask.getByText("Take back the £49.99 recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
-    fireEvent.click(ask.getByRole('button', { name: 'Take it back' }));
+    // The payment voided is named: its amount and its day; why is picked.
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Void payment' }));
+    const ask = within(screen.getByTestId('held-void-payment'));
+    expect(ask.getByText("Void the £49.99 recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
+    fireEvent.change(ask.getByLabelText('Why are you voiding it?'), { target: { value: 'mistake' } });
+    fireEvent.click(ask.getByRole('button', { name: 'Void payment' }));
     const paymentId = gold.billing.bills[0].payments[0].id;
-    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/undo`));
-    expect(await (await boxSoon()).findByText('The last payment for Gold Monthly was taken back.')).toBeTruthy();
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/void`, { reason: 'mistake' }));
+    expect(await (await boxSoon()).findByText('The payment for Gold Monthly was voided. That bill is owed again.')).toBeTruthy();
   });
 
   it('a membership somebody else changed first is said so, and read again', async () => {

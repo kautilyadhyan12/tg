@@ -34,7 +34,8 @@ import {
   saleTaxWords,
   taxLine,
   taxModes,
-  undoSaleQuestion,
+  saleVoidedLine,
+  voidSaleQuestion,
 } from './sellView';
 
 const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
@@ -60,6 +61,7 @@ const sale = (over = {}) => ({
   by: 'Sam Desk',
   person: { entryId: 'e1', name: 'Maya Patel' },
   undone: false,
+  voided: null,
   canUndo: true,
   ...over,
 });
@@ -202,12 +204,15 @@ describe('today', () => {
   });
   it('product sales and membership payments are one list, newest first, on the gym’s own clock', () => {
     const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: { entryId: 'e2', name: 'Omar Diaz' } };
-    const rows = takingsRows(page({ sales: [sale(), sale({ id: 's0', soldAt: '2026-10-12T09:00:00.000Z', person: null, by: null, undone: true, canUndo: false })], payments: [payment] }), 'America/Chicago', '12h');
-    expect(rows.map((r) => [r.kind, r.title, r.amount, r.facts, r.canUndo, r.undone])).toEqual([
-      ['payment', '1 Month (membership)', '$49.99', 'Omar Diaz · Card at the desk · 10:30 AM', false, false],
-      ['sale', '2 × Water', '$4.31', 'Maya Patel · Cash · 9:05 AM · by Sam Desk', true, false],
-      ['sale', '2 × Water', '$4.31', 'Walk-in · Cash · 4:00 AM', false, true],
+    const rows = takingsRows(page({ sales: [sale(), sale({ id: 's0', soldAt: '2026-10-12T09:00:00.000Z', person: null, by: null, undone: true, voided: { reason: 'wrong_item', on: '2026-10-12', by: 'Priya Desk' }, canUndo: false })], payments: [payment] }), 'America/Chicago', '12h');
+    expect(rows.map((r) => [r.kind, r.title, r.amount, r.facts, r.canUndo, r.undone, r.voided])).toEqual([
+      ['payment', '1 Month (membership)', '$49.99', 'Omar Diaz · Card at the desk · 10:30 AM', false, false, null],
+      ['sale', '2 × Water', '$4.31', 'Maya Patel · Cash · 9:05 AM · by Sam Desk', true, false, null],
+      ['sale', '2 × Water', '$4.31', 'Walk-in · Cash · 4:00 AM', false, true, 'Voided 12 October 2026 by Priya Desk · Wrong product or quantity'],
     ]);
+    // One voided before reasons were kept says who and when; one whose voider left the app, when.
+    expect(saleVoidedLine(sale({ undone: true, voided: { reason: null, on: '2026-10-12', by: 'Sam Desk' } }))).toBe('Voided 12 October 2026 by Sam Desk');
+    expect(saleVoidedLine(sale({ undone: true, voided: { reason: 'returned', on: '2026-10-12', by: null } }))).toBe('Voided 12 October 2026 · Brought back');
     expect(takingsRows(page({ sales: [sale()], payments: null }), 'Europe/London', '24h').map((r) => r.facts)).toEqual(['Maya Patel · Cash · 15:05 · by Sam Desk']);
   });
   it('a sale or payment of somebody deleted for good since reads "A deleted member", never Walk-in, and has no page to open', () => {
@@ -223,15 +228,23 @@ describe('today', () => {
       ['sale', 'Walk-in · Cash · 4:00 AM', null],
     ]);
   });
-  it('the Undo box says what goes and who gives the money back', () => {
-    expect(undoSaleQuestion(sale())).toBe("Undo this sale? 2 × Water, $4.31. It will no longer count in today's total. If you took the money, give it back yourself.");
+  it('the Void box says what goes, that it stays crossed out, and who gives the money back', () => {
+    expect(voidSaleQuestion(sale())).toBe(
+      "Void this sale? 2 × Water, $4.31. It will no longer count in today's total, and it stays in the list crossed out. If you took the money, give it back yourself.",
+    );
   });
   it('a purchase on a person’s page', () => {
-    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false });
+    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false, voided: null });
     // A sale made before rates had names says "tax".
     expect(saleTaxWords(sale({ taxName: null }))).toBe('$0.33 tax');
     expect(saleTaxWords(sale({ taxMinor: 0 }))).toBeNull();
-    expect(purchaseLine(sale({ taxMinor: 0, method: 'bank_transfer', undone: true }))).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Bank transfer', undone: true });
+    expect(purchaseLine(sale({ taxMinor: 0, method: 'bank_transfer', undone: true, voided: { reason: 'mistake', on: '2026-10-12', by: 'Sam Desk' } }))).toEqual({
+      title: '2 × Water',
+      amount: '$4.31',
+      facts: '12 Oct 2026 · Bank transfer',
+      undone: true,
+      voided: 'Voided 12 October 2026 by Sam Desk · Recorded by mistake',
+    });
   });
 });
 

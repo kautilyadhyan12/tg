@@ -117,11 +117,11 @@ describe('the rest of a receipt', () => {
     expect(receiptPerson(sale({ personDeleted: true }))).toBe('A deleted member');
   });
 
-  it('a receipt taken back says Cancelled, in words for what it was', () => {
+  it('a receipt voided says Voided, in words for what it was', () => {
     expect(cancelledLine(payment())).toBeNull();
-    expect(cancelledLine(payment({ cancelled: true }))).toBe('Cancelled. This payment was taken back, so nothing was paid on it.');
-    expect(cancelledLine(sale({ cancelled: true }))).toBe('Cancelled. This sale was undone, so nothing was paid on it.');
-    expect(cancelledLine(refund({ cancelled: true }))).toBe('Cancelled. This refund was taken back, so nothing was given back on it.');
+    expect(cancelledLine(payment({ cancelled: true }))).toBe('Voided. This payment was voided, so nothing was paid on it.');
+    expect(cancelledLine(sale({ cancelled: true }))).toBe('Voided. This sale was voided, so nothing was paid on it.');
+    expect(cancelledLine(refund({ cancelled: true }))).toBe('Voided. This refund was voided, so nothing was given back on it.');
   });
 
   it('the notes: refunds against a payment, and who took it', () => {
@@ -161,8 +161,8 @@ describe('the receipt on paper', () => {
     expect(gst).toContain('<tr class="plain"><td>Includes GST 18%</td><td class="amt">$7.63</td></tr>');
   });
 
-  it('a receipt taken back says so at the top', () => {
-    expect(receiptPrintHtml(sale({ cancelled: true }))).toContain('<div class="cancel">Cancelled. This sale was undone, so nothing was paid on it.</div>');
+  it('a receipt voided says so at the top', () => {
+    expect(receiptPrintHtml(sale({ cancelled: true }))).toContain('<div class="cancel">Voided. This sale was voided, so nothing was paid on it.</div>');
   });
 
   it("what staff or a member typed is printed as words, never as the page's own markup", () => {

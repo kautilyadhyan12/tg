@@ -326,11 +326,17 @@ export const gymMemberPayments = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Why staff voided it, picked from a list (0117; 18o); null for one voided before. */
+    voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_member_payments_void_reason_check",
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','wrong_person','other'))`,
+    ),
     unique("gym_member_payments_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_payments_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_payments_request_uq").on(t.gymId, t.requestKey),
@@ -371,11 +377,17 @@ export const gymMemberRefunds = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Why staff voided it, picked from a list (0117; 18o); null for one voided before. */
+    voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_member_refunds_void_reason_check",
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other'))`,
+    ),
     unique("gym_member_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_refunds_request_uq").on(t.gymId, t.requestKey),
