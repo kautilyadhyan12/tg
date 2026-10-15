@@ -137,7 +137,9 @@ export const gymHeldMemberships = pgTable(
     gymId: uuid("gym_id")
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
-    entryId: uuid("entry_id").notNull(),
+    /** Null once its record was deleted for good with a payment on it (0116): kept for the
+     *  gym's takings, with no name. */
+    entryId: uuid("entry_id"),
     membershipTypeId: uuid("membership_type_id").notNull(),
     requestKey: uuid("request_key").notNull(),
     kind: text("kind").notNull(),
@@ -169,10 +171,16 @@ export const gymHeldMemberships = pgTable(
     /** Whether its price held that tax when it was sold (0112): kept, so a gym changing how
      *  it charges tax later moves nobody's total. Null with no rate. */
     taxIncluded: boolean("tax_included"),
+    /** When its record was deleted for good (0116); set exactly when `entry_id` is null. */
+    recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "gym_held_memberships_record_deleted_check",
+      sql`(${t.entryId} IS NULL) = (${t.recordDeletedAt} IS NOT NULL) AND (${t.entryId} IS NOT NULL OR ${t.status} IN ('ended','cancelled'))`,
+    ),
     check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
     unique("gym_held_memberships_request_uq").on(t.gymId, t.requestKey),
     // What a bill's key points at, with its gym (0093).

@@ -205,7 +205,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
 
   /** What is in the table, read directly. */
   const rowsOf = (gymId: string) => sql<
-    { id: string; entry_id: string; status: string; paid_periods: number; renews: boolean; frozen_days: number; frozen_on: string | null }[]
+    { id: string; entry_id: string | null; status: string; paid_periods: number; renews: boolean; frozen_days: number; frozen_on: string | null }[]
   >`
     SELECT id, entry_id, status, paid_periods, renews, frozen_days, frozen_on::text AS frozen_on
     FROM gym_held_memberships WHERE gym_id = ${gymId} ORDER BY created_at, id`;
@@ -696,10 +696,11 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       expect((await get(heldUrl(gymId, person), owner.cookies)).statusCode).toBe(404);
       expect(list(await get(heldUrl(gymId, twin), owner.cookies)).memberships.map((m) => m.id)).toEqual([id]);
 
-      // Removed and deleted for good: its memberships go with it.
+      // Removed and deleted for good: a membership with a payment on it stays, with no
+      // record, over (18m); paymentsKept.routes.test.ts has the rest.
       expect((await del(entryUrl(gymId, twin), owner.cookies)).statusCode).toBe(200);
       expect((await del(`/v1/orgs/${gymId}/member-list/former/${twin}`, owner.cookies)).statusCode).toBe(200);
-      expect(await rowsOf(gymId)).toEqual([]);
+      expect(await rowsOf(gymId)).toMatchObject([{ id, entry_id: null, status: "cancelled" }]);
     },
     TEST_TIMEOUT_MS,
   );

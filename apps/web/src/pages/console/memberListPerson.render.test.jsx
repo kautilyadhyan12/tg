@@ -380,6 +380,8 @@ describe('round one: a confirm only ever sends what was refused', () => {
     fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
     expect(await dialog().findByText(/Their details are kept/)).toBeTruthy();
     await pickMore('Delete for good');
+    // Before it goes, the box says what stays: the money, with no name (18m).
+    expect(within(screen.getByTestId('confirm-delete')).getByText(/Payments they made stay in your takings and reports, as “A deleted member”./)).toBeTruthy();
     fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
     await screen.findByTestId('deleted-note');
     expect(dialog().queryByText(/Their details are kept/)).toBeNull();

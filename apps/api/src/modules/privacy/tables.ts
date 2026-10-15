@@ -482,7 +482,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_member_payments.recorded_by and undone_by — which member of staff recorded a
   // payment in the gym's notebook and who took it back (`0093`), on gym_leads' footing:
   // the gym's record; `ON DELETE set null`. The person who paid is a record on the gym's
-  // list, not an account, and a payment goes with that record's membership.
+  // list, not an account; a record deleted for good leaves its payments with no name (0116).
   "gym_member_payments",
   // gym_member_bills.voided_by, and gym_member_refunds.recorded_by and undone_by — which
   // member of staff cancelled a bill, noted a refund or took one back (`0094`), on the

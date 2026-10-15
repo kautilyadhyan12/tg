@@ -237,8 +237,10 @@ export const gymSaleSchema = z
     soldAt: z.string().datetime(),
     /** The member of staff who sold it; null where they have since left the app. */
     by: z.string().nullable(),
-    /** Who bought it; null for a walk-in. */
+    /** Who bought it; null for a walk-in, or for somebody whose record was deleted for good
+     *  since (`personDeleted`). */
     person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable(),
+    personDeleted: z.boolean(),
     /** Staff took the sale back: kept, and counted in nothing. */
     undone: z.boolean(),
     /** Whether it can still be taken back: a sale of the gym's own today. */
@@ -261,7 +263,9 @@ export const dayPaymentSchema = z
     method: memberPaymentMethodSchema,
     paidAt: z.string().datetime(),
     by: z.string().nullable(),
-    person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict(),
+    /** Who paid; null where their record was deleted for good since (18m): the payment
+     *  stays in the day's takings, with no name. */
+    person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
   })

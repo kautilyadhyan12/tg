@@ -198,6 +198,13 @@ export function takingsNotes(page) {
   return notes;
 }
 
+/** Who a sale or payment was for: their name, a walk-in, or somebody whose record was
+ *  deleted for good since (18m), whose money still counts. */
+export function takingsPerson(person, deleted) {
+  if (person !== null) return person.name;
+  return deleted ? 'A deleted member' : 'Walk-in';
+}
+
 /** Today's product sales and membership payments as one list, newest first. */
 export function takingsRows(page, timeZone, clockFormat) {
   const facts = (who, method, at, by, discount = null) =>
@@ -208,7 +215,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     at: sale.soldAt,
     title: `${String(sale.quantity)} × ${sale.itemName}`,
     amount: formatMinor(sale.totalMinor, sale.currency),
-    facts: facts(sale.person === null ? 'Walk-in' : sale.person.name, sale.method, sale.soldAt, sale.by, saleDiscountWords(sale)),
+    facts: facts(takingsPerson(sale.person, sale.personDeleted === true), sale.method, sale.soldAt, sale.by, saleDiscountWords(sale)),
     person: sale.person,
     undone: sale.undone,
     canUndo: sale.canUndo,
@@ -221,7 +228,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     at: payment.paidAt,
     title: `${payment.typeName} (membership)`,
     amount: formatMinor(payment.amountMinor, payment.currency),
-    facts: facts(payment.person.name, payment.method, payment.paidAt, payment.by),
+    facts: facts(takingsPerson(payment.person, true), payment.method, payment.paidAt, payment.by),
     person: payment.person,
     undone: false,
     canUndo: false,
