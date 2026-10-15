@@ -14,7 +14,10 @@ import {
   ENQUIRY_WORDS,
   GYM_PAGE_PHOTO_MAX_BYTES,
   gymEnquiryRequestSchema,
+  inviteEnquiryRequestSchema,
   orderGymPagePhotosRequestSchema,
+  REFERRAL_WORDS,
+  referralCodeSchema,
   setGymPageRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
@@ -22,6 +25,7 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
 import type { PhotoStore } from "./photoStore.js";
 import type { RobotCheck } from "./robotCheck.js";
+import * as referrals from "../referrals/service.js";
 import * as service from "./service.js";
 import { pageTurnedAwayKey } from "./service.js";
 
@@ -78,6 +82,11 @@ export interface GymPageRouteDeps {
   photos: PhotoStore;
   addressKey: Buffer | null;
 }
+
+/** An invite link's code; one the schema refuses is the same 404 as one that is not there. */
+const inviteParamsSchema = z.object({ code: referralCodeSchema }).strict();
+const inviteNotFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
+  reply.status(404).send({ error: "invite_not_found", message: REFERRAL_WORDS.not_found, requestId: req.id });
 
 const photoParamsSchema = z.object({ gymId: z.string().uuid(), photoId: z.string().uuid() }).strict();
 const publicPhotoParamsSchema = slugParamsSchema.extend({ photoId: z.string().uuid() }).strict();
@@ -139,12 +148,42 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
    *  every page together, spent only once the robot check passed. Per page, never one
    *  allowance for the whole app: a mobile carrier puts thousands of phones behind one
    *  address (the security pass over 20c, 2026-09-30). */
-  const enquiryAddressLimit = createDualRateLimit({
-    name: "gym_enquiry",
-    max: 60,
-    ipMax: 600,
+  const enquiryAddressLimitFor = (slug: string) =>
+    createDualRateLimit({
+      name: "gym_enquiry",
+      max: 60,
+      ipMax: 600,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => `${slug}:${req.ip}`,
+      redis: deps.redis,
+    });
+  /** Invite pages opened: 600 an hour of one link from one address, and 6,000 an hour of
+   *  every link together from one address. Per link, never one allowance for the whole app:
+   *  a mobile carrier puts thousands of phones behind one address, and one person reloading
+   *  a page must not close every business's invite there (round one of 20e-ii-a, H3). A
+   *  code is 80 random bits, so guessing one is out of reach either way. The form spends
+   *  only the page form's own limits, counted against the business. */
+  const inviteReadLimit = createDualRateLimit({
+    name: "referral_invite_read",
+    max: 600,
+    ipMax: 6000,
     windowMs: 60 * 60 * 1000,
-    identifier: (req) => `${slugOf(req) ?? ""}:${req.ip}`,
+    identifier: (req) => {
+      const parsed = inviteParamsSchema.safeParse(req.params);
+      return parsed.success ? `${parsed.data.code}:${req.ip}` : null;
+    },
+    redis: deps.redis,
+  });
+  /** The invite form, before its link is looked up: 3,000 an hour from one address, so a
+   *  flood of made-up links cannot make every request three reads (the re-check of round
+   *  one, L6). Far over what people at one shared address send; the page form's own limits
+   *  follow, counted against the business. */
+  const inviteFormLimit = createDualRateLimit({
+    name: "referral_invite_form",
+    max: 3000,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: () => null,
     redis: deps.redis,
   });
   /** …and 120 messages an hour to one page, counted only once the robot check passed. Once
@@ -286,9 +325,50 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     const done = await service.sendEnquiry(pageDeps, slug, body, {
       robotRoom: robotRoom(req, reply, slug),
       robotFailed: robotFailed(req, slug),
-      address: gate(enquiryAddressLimit)(req, reply),
+      address: gate(enquiryAddressLimitFor(slug))(req, reply),
       page: pageRoom(req, slug),
     });
+    if (done === null) return;
+    return reply.status(202).send({ received: true });
+  });
+
+  // ── A MEMBER'S INVITE LINK (20e-ii-a): every business has this page, its own page or not ──
+
+  app.get("/v1/public/invites/:code", async (req, reply) => {
+    await inviteReadLimit(req, reply);
+    if (reply.sent) return;
+    const parsed = inviteParamsSchema.safeParse(req.params);
+    if (!parsed.success) return inviteNotFound(req, reply);
+    const invite = await referrals.publicInvite({ sql: deps.sql, now: pageDeps.now, robotCheckKey: deps.robotCheck.siteKey }, parsed.data.code);
+    return reply.status(200).header("cache-control", "no-store").send({ invite });
+  });
+
+  // The invite page's form: the business's page form, under the same limits, counted
+  // against the same business. The invite is found again here, and asked again in the
+  // write's own transaction.
+  app.post("/v1/public/invites/:code/enquiries", async (req, reply) => {
+    await inviteFormLimit(req, reply);
+    if (reply.sent) return;
+    const parsed = inviteParamsSchema.safeParse(req.params);
+    if (!parsed.success) return inviteNotFound(req, reply);
+    const body = parseOr400(inviteEnquiryRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const invite = await referrals.liveInvite(deps.sql, parsed.data.code);
+    if (invite === null) return inviteNotFound(req, reply);
+    const done = await service.takeEnquiry(
+      pageDeps,
+      body,
+      {
+        robotRoom: robotRoom(req, reply, invite.slug),
+        robotFailed: robotFailed(req, invite.slug),
+        address: gate(enquiryAddressLimitFor(invite.slug))(req, reply),
+        page: pageRoom(req, invite.slug),
+      },
+      async () => {
+        const now = await referrals.liveInvite(deps.sql, parsed.data.code);
+        return now === null ? null : { gymId: now.gymId, country: now.country, timezone: now.timezone, referrerId: now.referrerId };
+      },
+    );
     if (done === null) return;
     return reply.status(202).send({ received: true });
   });

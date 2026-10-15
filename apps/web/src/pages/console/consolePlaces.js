@@ -25,6 +25,7 @@ export const SETTINGS_SECTION = {
   frontDesk: 'check-in-devices',
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
+  referrals: 'refer-a-friend',
 };
 
 /** The sections of Settings that the gym's details box holds. */
@@ -49,7 +50,10 @@ const PLACES = {
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   waiver: { path: `/settings#${SETTINGS_SECTION.waiver}`, may: canManageOrg },
+  referrals: { path: `/settings#${SETTINGS_SECTION.referrals}`, may: canManageOrg },
   memberships: { path: '/memberships', may: canManageMemberships },
+  // The Discounts box on Memberships, where a promo code for a membership is made.
+  membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },
   sell: { path: '/sell', may: canOpenSell },
   members: { path: '/members', may: onStaff },
   importMembers: { path: '/members?open=import', may: onStaff },

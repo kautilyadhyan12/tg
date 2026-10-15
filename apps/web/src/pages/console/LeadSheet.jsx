@@ -24,7 +24,7 @@ import {
   MAY_EMAIL_LABEL,
   leadDraft,
   leadProblem,
-  sourceWord,
+  leadSourceLine,
 } from './leadsView';
 
 // One lead (ROADMAP 20c-i; its follow-up emails 20c-ii): add a new one, or open one to
@@ -458,7 +458,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               </h2>
               {lead !== null ? (
                 <span className="c-s14 c-t2">
-                  {addedWords(lead.createdAt)} · {sourceWord(lead.source)}
+                  {addedWords(lead.createdAt)} · {leadSourceLine(lead)}
                 </span>
               ) : null}
             </div>

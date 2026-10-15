@@ -61,6 +61,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       closeDay: vi.fn(),
       removeClosure: vi.fn(),
       /** Settings' follow-up emails box (20c-v) reads on mount too: switched off. */
+      /** Settings' Refer a friend box (20e-ii-a) reads on mount too: a business that never switched it on. */
+      getReferralSettings: vi.fn(() => Promise.resolve({ data: { settings: { on: false, member: null, friend: null, currency: null, memberLines: [] } } })),
+      saveReferralSettings: vi.fn(),
       getLeadEmailSettings: vi.fn(() =>
         Promise.resolve({
           data: { settings: { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false, appSending: 'on' } },
@@ -1032,9 +1035,9 @@ describe('a step already open when the gym lapses', () => {
  *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
 describe('every Settings panel that greys a control explains itself, in its own section', () => {
   // Staff left Settings for Members → Staff (23c-ii); its own cases are "the staff list" above.
-  const GREYING_SECTIONS = ['gym details', "when we're open", 'how members reach you', 'automatic messages', 'check-in devices', 'who can check in', 'waiver', 'follow-up emails to leads'];
+  const GREYING_SECTIONS = ['gym details', "when we're open", 'how members reach you', 'automatic messages', 'refer a friend', 'check-in devices', 'who can check in', 'waiver', 'follow-up emails to leads'];
 
-  it('draws exactly these eight sections and no ninth one nobody is checking', async () => {
+  it('draws exactly these nine sections and no tenth one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');

@@ -50,6 +50,10 @@ export const gymLeads = pgTable(
     fromPage: boolean("from_page").notNull().default(false),
     /** "Happy to hear from us" ticked by the person on the page form, not by staff (0055). */
     emailOkByPage: boolean("email_ok_by_page").notNull().default(false),
+    /** The member whose invite link the lead came by, and when (20e-ii-a, `0117`). Written
+     *  only when the form makes a new lead. */
+    referredBy: uuid("referred_by").references(() => users.id, { onDelete: "set null" }),
+    referredAt: timestamp("referred_at", { withTimezone: true }),
   },
   (t) => [
     check("gym_leads_name_len_check", sql`char_length(${t.fullName}) BETWEEN 1 AND 120`),
@@ -76,6 +80,8 @@ export const gymLeads = pgTable(
     ),
     index("gym_leads_follow_up_due_order_idx").on(t.gymId, t.followUpDueOn, t.createdAt, t.id).where(sql`${t.followUpDueOn} IS NOT NULL`),
     uniqueIndex("gym_leads_gym_id_uq").on(t.gymId, t.id),
+    check("gym_leads_referred_check", sql`${t.referredBy} IS NULL OR ${t.referredAt} IS NOT NULL`),
+    index("gym_leads_referred_by_idx").on(t.gymId, t.referredBy).where(sql`${t.referredBy} IS NOT NULL`),
   ],
 );
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  leadSourceLine,
   addedDay,
   addedWords,
   deleteGoneLine,
@@ -332,5 +333,17 @@ describe('deleting many leads (20c-vii)', () => {
     expect(deleteGoneLine(3)).toBe('3 leads you selected were already deleted.');
     expect(deletedLine({ deleted: 37, alreadyDeleted: false })).toBe('37 leads deleted.');
     expect(deletedLine({ deleted: 1, alreadyDeleted: true })).toBe('1 lead was already deleted.');
+  });
+});
+
+describe('who invited a lead (20e-ii-a)', () => {
+  it.each([
+    [{ source: 'friend', invitedBy: null }, 'A friend'],
+    [{ source: 'walk_in', invitedBy: undefined }, 'Walked in'],
+    [{ source: 'friend', invitedBy: { name: 'Maya Patel', member: true } }, 'Invited by Maya Patel'],
+    [{ source: 'friend', invitedBy: { name: 'Maya Patel', member: false } }, 'Invited by Maya Patel, who is no longer a member'],
+    [{ source: 'friend', invitedBy: { name: null, member: false } }, 'Invited by a member who has since deleted their account'],
+  ])('%j reads %s', (lead, words) => {
+    expect(leadSourceLine(lead)).toBe(words);
   });
 });

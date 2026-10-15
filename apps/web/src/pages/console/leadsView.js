@@ -5,6 +5,7 @@ import {
   LEAD_FOLLOW_UPS,
   LEAD_SOURCES,
   LEAD_SOURCE_WORDS,
+  invitedByWords,
   LEAD_STATUSES,
   LEAD_STATUS_WORDS,
   LEADS_TICKED_MAX,
@@ -95,6 +96,10 @@ export const STATUS_CHOICES = ['new', 'contacted', 'on_trial', 'lost'].map((stat
 
 export const statusWord = (status) => LEAD_STATUS_WORDS[status] ?? status;
 export const sourceWord = (source) => LEAD_SOURCE_WORDS[source] ?? source;
+
+/** Where a lead came from as Leads says it: the member who invited them, by name, where
+ *  they came by a member's invite link (20e-ii-a); else where they heard of you. */
+export const leadSourceLine = (lead) => (lead.invitedBy ? invitedByWords(lead.invitedBy) : sourceWord(lead.source));
 
 /** The day a lead was added, in the viewer's own calendar: "Today", "Yesterday",
  *  "3 Sept" (this year) or "3 Sept 2025". */

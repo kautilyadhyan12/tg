@@ -43,9 +43,11 @@ export const EMPTY_ENQUIRY = { fullName: '', email: '', phone: '', source: '', m
 
 /** What stops the form being sent, in the words the server would use; null when it
  *  may go. The server checks it all again. */
-export function enquiryProblem(form) {
+export function enquiryProblem(form, { requireEmail = false } = {}) {
   if (form.fullName.trim() === '') return ENQUIRY_WORDS.needs_name;
   const email = form.email.trim();
+  // A member's invite page asks for an email address (Kd, 2026-10-15).
+  if (requireEmail && email === '') return 'Add your email address.';
   if (email === '' && form.phone.trim() === '') return ENQUIRY_WORDS.needs_contact;
   if (form.mayEmail && email === '') return ENQUIRY_WORDS.needs_email;
   return null;

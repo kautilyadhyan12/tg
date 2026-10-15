@@ -88,6 +88,8 @@ import {
   billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
   gymMessageSettingsResponseSchema,
+  publicInviteResponseSchema,
+  referralSettingsResponseSchema,
   classBookingsEndingResponseSchema,
   classSessionBookingsResponseSchema,
   classOnlineAffectedSchema,
@@ -1032,6 +1034,21 @@ export const orgService = {
       'your message',
       authApi.post(`/v1/public/gyms/${encodeURIComponent(slug)}/enquiries`, body),
     ),
+
+  /** GET /v1/public/invites/:code — a member's invite link (20e-ii-a), as the friend sees it. */
+  getPublicInvite: (code) =>
+    readThrough(publicInviteResponseSchema, 'this invite', authApi.get(`/v1/public/invites/${encodeURIComponent(code)}`)),
+
+  /** POST /v1/public/invites/:code/enquiries — the invite page's form. */
+  sendInviteEnquiry: (code, body) =>
+    readThrough(gymEnquiryResponseSchema, 'your message', authApi.post(`/v1/public/invites/${encodeURIComponent(code)}/enquiries`, body)),
+
+  /** GET and PUT …/referral-settings — Refer a friend (20e-ii-a), the owner's; the switch
+   *  and both codes every time. */
+  getReferralSettings: (gymId) =>
+    readThrough(referralSettingsResponseSchema, 'Refer a friend', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/referral-settings`)),
+  saveReferralSettings: (gymId, body) =>
+    readThrough(referralSettingsResponseSchema, 'Refer a friend', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/referral-settings`, body)),
 
   createLead: (gymId, body) =>
     readThrough(leadResponseSchema, 'this lead', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/leads`, body)),

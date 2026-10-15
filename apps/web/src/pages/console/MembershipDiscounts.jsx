@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useInRouterContext } from 'react-router-dom';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -6,6 +7,7 @@ import { readOnlyNote } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import SellDiscounts from './SellDiscounts';
+import { useSectionLink } from './useSectionLink';
 import TaxRates from './TaxRates';
 
 // TAX AND DISCOUNTS FOR MEMBERSHIPS, on the Memberships page (Kd, 2026-10-14; ROADMAP 18b-ii-b
@@ -31,11 +33,15 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
   }, [gymId, typesKey, attempt]);
 
   const mine = state.gymId === gymId ? state : { page: null, error: null };
+  // Drawn outside the app's router (older tests draw the price list alone) it has no
+  // address to read.
+  const routed = useInRouterContext();
   if (mine.page === null) {
     return mine.error !== null ? <ConsoleFailed message={mine.error} onRetry={() => setAttempt((n) => n + 1)} newLook /> : <ConsoleLoading label="Loading your discounts…" newLook />;
   }
   return (
     <>
+      {routed ? <ToDiscounts /> : null}
       <TaxRates
         gymId={gymId}
         page={mine.page}
@@ -58,4 +64,11 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
       />
     </>
   );
+}
+
+/** "/memberships#discounts" (Refer a friend's Open Memberships) brings Discounts into view
+ *  once they have loaded: this is drawn only then. */
+function ToDiscounts() {
+  useSectionLink(true);
+  return null;
 }

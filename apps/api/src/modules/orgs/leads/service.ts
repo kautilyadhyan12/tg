@@ -48,6 +48,7 @@ import * as emailsRepo from "./emailsRepo.js";
 import { followUpDueOn } from "./followUp.js";
 import { leadJoinDecision, sharesContact, type ListRecord } from "./joinRule.js";
 import * as repo from "./repo.js";
+import { invitersFor, type Inviter } from "../referrals/repo.js";
 
 export interface LeadsDeps {
   sql: Sql;
@@ -218,15 +219,37 @@ async function sendingViews(
   );
 }
 
+/** The members who sent these leads by their invite links (20e-ii-a), by id. */
+async function invitersOf(sql: Parameters<typeof invitersFor>[0], gymId: string, rows: readonly repo.LeadRow[]): Promise<Map<string, Inviter>> {
+  return await invitersFor(
+    sql,
+    gymId,
+    rows.flatMap((row) => (row.referredBy === null ? [] : [row.referredBy])),
+  );
+}
+
 /** One lead as a reply shows it, with who sends its next follow-up. */
 async function leadWithSending(deps: LeadsDeps, gymId: string, row: repo.LeadRow, today: string): Promise<Lead> {
   const app = appSending(await emailsRepo.gymSendingFacts(deps.sql, gymId, deps.now()), deps.sending);
-  const views = await sendingViews(deps, gymId, [row], app, today);
-  return toLead(row, today, views.get(row.id));
+  const [views, inviters] = await Promise.all([sendingViews(deps, gymId, [row], app, today), invitersOf(deps.sql, gymId, [row])]);
+  return toLead(row, today, views.get(row.id), inviters);
+}
+
+/** Who sent a lead, from the members looked up for it. A lead whose member is not among
+ *  them (their account has since gone) reads as such, never as nobody's. */
+function invitedBy(row: repo.LeadRow, inviters: ReadonlyMap<string, Inviter>): Lead["invitedBy"] {
+  if (row.referredAt === null) return null;
+  const by = row.referredBy === null ? undefined : inviters.get(row.referredBy);
+  return by === undefined ? { name: null, member: false } : { name: by.name, member: by.member };
 }
 
 /** `today` is the gym's day, which says whether a follow-up is due now. */
-export function toLead(row: repo.LeadRow, today: string, sending: LeadSendingView = NOBODY_SENDING): Lead {
+export function toLead(
+  row: repo.LeadRow,
+  today: string,
+  sending: LeadSendingView = NOBODY_SENDING,
+  inviters: ReadonlyMap<string, Inviter> = new Map(),
+): Lead {
   return {
     id: row.id,
     fullName: row.fullName,
@@ -255,6 +278,7 @@ export function toLead(row: repo.LeadRow, today: string, sending: LeadSendingVie
     },
     enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
     emailProblem: sending.emailProblem,
+    invitedBy: invitedBy(row, inviters),
   };
 }
 
@@ -387,9 +411,9 @@ export async function listLeads(
   ]);
   const shown = page.rows.slice(0, LEADS_PAGE);
   const last = page.rows.length > LEADS_PAGE ? shown[shown.length - 1] : undefined;
-  const views = await sendingViews(deps, gymId, shown, app, today);
+  const [views, inviters] = await Promise.all([sendingViews(deps, gymId, shown, app, today), invitersOf(deps.sql, gymId, shown)]);
   return {
-    leads: shown.map((row) => toLead(row, today, views.get(row.id))),
+    leads: shown.map((row) => toLead(row, today, views.get(row.id), inviters)),
     total: page.total,
     cursor: last === undefined ? null : encodeCursor({ at: last.cursorAt, id: last.id }),
     counts,
@@ -698,7 +722,7 @@ export async function joinLead(
     const stored = await repo.lockLead(tx, gymId, leadId);
     if (stored === null) throw notFound();
     if (stored.status === "joined" && stored.entryId !== null && stored.onList) {
-      return { kind: "joined", body: { lead: toLead(stored, dayInTz(at, org.timezone)), outcome: "already_joined" } };
+      return { kind: "joined", body: { lead: toLead(stored, dayInTz(at, org.timezone), undefined, await invitersOf(tx, gymId, [stored])), outcome: "already_joined" } };
     }
     const lead = { fullName: stored.fullName, email: stored.email, phone: stored.phone };
     const records = await repo.recordsSharingContact(tx, gymId, lead, RECORDS_READ);
@@ -759,6 +783,9 @@ export async function joinLead(
       targetId: leadId,
       meta: { outcome: placed.outcome, entryId: placed.entryId },
     });
-    return { kind: "joined", body: { lead: toLead(written, dayInTz(at, org.timezone)), outcome: placed.outcome } };
+    return {
+      kind: "joined",
+      body: { lead: toLead(written, dayInTz(at, org.timezone), undefined, await invitersOf(tx, gymId, [written])), outcome: placed.outcome },
+    };
   });
 }
