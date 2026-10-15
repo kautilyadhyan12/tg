@@ -321,7 +321,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 20e-ii-a. [x] **The offer, the invite link and the lead marked** — merged 2026-10-15 (PR #279).
       - 20e-ii-b. **Both gifts given by themselves**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-ii-b-i.md`):
         - 20e-ii-b-i. [x] **The friend's gift, and Add member finds the person in Leads** — merged 2026-10-15 (PR #284).
-        - 20e-ii-b-ii. [ ] **The member's gift**: once, off the next bill on the membership they have when their friend joins and pays (else credit for their next payment), or, as the owner picks, free days added to their membership (Kd, 2026-10-15); told in their inbox; a voided payment takes back a gift not yet used; the lead says so. Risky. Both before anybody uses Refer a friend.
+        - 20e-ii-b-ii. **The member's gift**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-ii-b-ii-a.md`):
+          - 20e-ii-b-ii-a. [ ] **Money off**: once, off their next bill by itself, else filled in at Add membership or Sell; told in their inbox; a voided or refunded payment takes back a gift not yet used; the lead says so. Risky.
+          - 20e-ii-b-ii-b. [ ] **Free days, the owner's second choice** (Kd, 2026-10-15): days added to the member's membership; a member with none gets the money gift. Risky. Both before anybody uses Refer a friend.
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
      - 20f-ii. [x] **Sent messages** — merged 2026-10-10 (PR #217).
