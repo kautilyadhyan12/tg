@@ -16,9 +16,26 @@ const dayAt = (number) => new Date(number * 86_400_000).toISOString().slice(0, 1
 /** The staff count it, and type each person's number. */
 const staffCount = (challenge) => challenge.countedBy === 'staff';
 
+/** A challenge's number as it is printed (`words.print`, spec §15.10.2): a whole number;
+ *  a time kept in seconds ("45 s", "2 min 05 s", "1 h 02 min"); a distance kept in metres,
+ *  in km cut to a tenth, never rounded up past a target ("12.4 km"). */
+export function printed(n, words) {
+  if (words?.print === 'time') {
+    const h = Math.floor(n / 3600);
+    const min = Math.floor((n % 3600) / 60);
+    const s = n % 60;
+    if (h > 0) return `${h.toLocaleString('en')} h ${String(min).padStart(2, '0')} min`;
+    return min > 0 ? `${min} min ${String(s).padStart(2, '0')} s` : `${s} s`;
+  }
+  if (words?.print === 'km') return `${(Math.floor(n / 100) / 10).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+  return n.toLocaleString('en');
+}
+/** A printed time or distance carries its own unit; a whole number is followed by its word. */
+const whole = (challenge) => (challenge.words?.print ?? 'whole') === 'whole';
+
 /** The word after a number, as the server sent it: "gym days", "gym day", "push-ups". */
 const wordFor = (challenge, n) => (n === 1 ? challenge.words.one : challenge.words.many);
-const amount = (challenge, n) => `${n.toLocaleString('en')} ${wordFor(challenge, n)}`;
+const amount = (challenge, n) => (whole(challenge) ? `${printed(n, challenge.words)} ${wordFor(challenge, n)}` : printed(n, challenge.words));
 
 /** People are in it in teams (19d-ii-a): a team's number is its people's added together. */
 export const inTeams = (challenge) => (challenge.teams ?? 'none') !== 'none' && (challenge.teamBoard ?? null) !== null;
@@ -85,12 +102,12 @@ export function progress(challenge) {
   // The gym's own count: nothing is theirs until staff have added it.
   const waiting = staffCount(challenge) && me.value === 0 && challenge.state === 'running' ? "The staff haven't added your number yet." : null;
   // In teams the number to reach is the team's: a person's own number has no bar.
-  if (challenge.target === null || inTeams(challenge)) return { big: me.value, of: null, unit: wordFor(challenge, me.value), percent: null, note: waiting, done: false };
-  const unit = wordFor(challenge, 2);
+  if (challenge.target === null || inTeams(challenge)) return { big: me.value, of: null, unit: whole(challenge) ? wordFor(challenge, me.value) : '', percent: null, note: waiting, done: false };
+  const unit = whole(challenge) ? wordFor(challenge, 2) : '';
   const percent = Math.min(100, Math.round((me.value / challenge.target) * 100));
   if (me.reached) return { big: me.value, of: challenge.target, unit, percent: 100, note: `Done. You reached ${amount(challenge, challenge.target)}.`, done: true };
   const toGo = challenge.target - me.value;
-  const note = waiting ?? (challenge.state === 'ended' ? null : `${toGo.toLocaleString('en')} to go`);
+  const note = waiting ?? (challenge.state === 'ended' ? null : `${printed(toGo, challenge.words)} to go`);
   return { big: me.value, of: challenge.target, unit, percent, note, done: false };
 }
 
@@ -102,7 +119,11 @@ export function placeLine(challenge) {
   const where = `${ordinal(me.place)} of ${challenge.board.ranked.toLocaleString('en')}`;
   if (challenge.state === 'ended' || me.toNextPlace === null || me.nextPlace === null) return where;
   const less = challenge.lowestWins ? 'fewer' : 'more';
-  const gap = staffCount(challenge) ? `${me.toNextPlace.toLocaleString('en')} ${less} ${challenge.words.many}` : `${me.toNextPlace.toLocaleString('en')} more ${wordFor(challenge, me.toNextPlace)}`;
+  const gap = !whole(challenge)
+    ? `${printed(me.toNextPlace, challenge.words)} ${less}`
+    : staffCount(challenge)
+      ? `${me.toNextPlace.toLocaleString('en')} ${less} ${challenge.words.many}`
+      : `${me.toNextPlace.toLocaleString('en')} more ${wordFor(challenge, me.toNextPlace)}`;
   return `${where} · ${gap} to reach ${ordinal(me.nextPlace)}`;
 }
 
@@ -155,7 +176,7 @@ export function resultOf(challenge, at = null) {
   }
   let mine = null;
   if (me !== null) {
-    if (target !== null) mine = me.reached ? `You reached it: ${said(me.value)}.` : `You got to ${me.value.toLocaleString('en')} of ${target.toLocaleString('en')}.`;
+    if (target !== null) mine = me.reached ? `You reached it: ${said(me.value)}.` : `You got to ${printed(me.value, challenge.words)} of ${printed(target, challenge.words)}.`;
     else if (me.value === 0) mine = staffCount(challenge) ? 'No number was added for you.' : `You had no ${challenge.words.many} in it.`;
     else if (me.place !== null && me.hidden === null && me.place > 1) mine = `You finished ${ordinal(me.place)}, with ${said(me.value)}.`;
     else if (me.place === null || me.hidden !== null) mine = `You had ${said(me.value)}.`;
@@ -247,7 +268,7 @@ function teamResult(challenge, at = null) {
   const my = rows.find((row) => row.isMine);
   if (my !== undefined && teamBoard.status === 'shown') {
     const own = me !== null && me.value > 0 ? ` You had ${said(me.value)}.` : '';
-    if (target !== null) mine = my.reached ? `Your team, ${my.name}, reached it: ${said(my.value)}.${own}` : `Your team, ${my.name}, got to ${my.value.toLocaleString('en')} of ${target.toLocaleString('en')}.${own}`;
+    if (target !== null) mine = my.reached ? `Your team, ${my.name}, reached it: ${said(my.value)}.${own}` : `Your team, ${my.name}, got to ${printed(my.value, challenge.words)} of ${printed(target, challenge.words)}.${own}`;
     else if (my.place === null && (my.waiting ?? 0) > 0) mine = `Your team, ${my.name}, had no place: ${my.waiting === 1 ? '1 of its people' : `${my.waiting.toLocaleString('en')} of its people`} had no number.${own}`;
     else if (my.place === null) mine = `Your team, ${my.name}, had no number.`;
     else if (my.place === 1) mine = `Your team, ${my.name}, ${rows.filter((row) => row.place === 1).length > 1 ? 'was joint first' : 'won'}.${own}`;

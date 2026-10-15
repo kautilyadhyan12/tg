@@ -4502,7 +4502,9 @@ can work out for it, each with its id, its words, the word after a number, how t
 number is printed, how it is counted (`desk` · `app` · `camera` · `gps`), which ways to
 win it allows (most · target · fewest), and whether one a day is the most, so that a
 target cannot pass the challenge's days. A subject with no measure can only be counted
-by staff.
+by staff. The staff may count any subject on the list, in their own word ("always possible",
+above): "Gym visits · Counted by the staff at {gym}" (19d-iii-a-i; the form offers it from
+19d-iii-a-ii only where it offers the subject).
 
 | Subject (`id`) | What the app can count (measure) | Counted how | Job |
 |---|---|---|---|

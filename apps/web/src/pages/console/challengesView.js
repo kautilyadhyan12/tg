@@ -61,8 +61,8 @@ const choiceOf = (kind) => (kind.countedBy === 'staff' ? 'own' : kind.subject ==
 const isOwn = (draft) => draft.counts === 'own';
 /** A challenge the server sent is counted by the staff. */
 const staffCount = (c) => c.countedBy === 'staff';
-/** The words of the form's choice, as the server will send them once it is saved. */
-const draftWords = (draft) => challengeWords({ ...FORM_KINDS[draft.counts], unit: (draft.unit ?? '').trim() }, '');
+/** The words of what the form will send (`kindOf`), as the server will send them once it is saved. */
+const draftWords = (draft) => challengeWords({ ...kindOf(draft), unit: (draft.unit ?? '').trim() }, '');
 /** The word after a number: a sent challenge's own; the form's, '' until the staff's is typed. */
 const wordsOf = (c) => (c.words !== undefined ? c.words.many : isOwn(c) ? (c.unit ?? '').trim() : draftWords(c).many);
 const capital = (text) => (text === '' ? text : text.charAt(0).toUpperCase() + text.slice(1));

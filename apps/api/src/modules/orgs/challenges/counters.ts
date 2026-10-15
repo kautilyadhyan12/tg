@@ -19,3 +19,7 @@ const COUNTERS: ReadonlyMap<string, Counter> = new Map<string, Counter>([
 export const counterKey = (subject: string, measure: string): string => `${subject}.${measure}`;
 
 export const counterFor = (subject: string, measure: string): Counter | undefined => COUNTERS.get(counterKey(subject, measure));
+
+/** Every key a counter is kept under: each must be a measure on the list, and each measure on
+ *  the list must have one (`challenges.counters.unit.test.ts`). */
+export const counterKeys = (): string[] => [...COUNTERS.keys()];

@@ -39,7 +39,9 @@ export interface ChallengeMeasure {
   print: ChallengePrint;
   how: Exclude<ChallengeCountedHow, "staff">;
   wins: readonly ChallengeWin[];
-  /** One a day is the most, so a target cannot pass the challenge's days. */
+  /** One a day is the most, so a target cannot pass the challenge's days. The database's
+   *  target check (`0118`) knows such a measure by its id, `days`: the two agree
+   *  (`challengeSubjects.test.ts`). */
   perDay: boolean;
   /** What a member is told counts. */
   explain: (gymName: string) => string;
@@ -180,9 +182,22 @@ export function challengeWords(kind: ChallengeKind & { unit: string }, gymName: 
       perDay: measure.perDay,
     };
   }
-  // The staff count it, in the gym's own word. An app count of a kind no longer on the list
-  // counts nothing (`counters.ts`) and is said as the staff's, never as something else.
   const subject = challengeSubject(kind.subject);
+  // An app count of a kind no longer on the list counts nothing (`counters.ts`): it says so,
+  // and is never said as the staff's or as something else.
+  if (kind.countedBy === "app") {
+    return {
+      about: subject?.title ?? "Challenge",
+      one: "point",
+      many: "points",
+      print: "whole",
+      how: "app",
+      howLine: "Not counted yet",
+      explain: `This challenge isn't being counted yet. Ask the staff at ${gymName} about it.`,
+      perDay: false,
+    };
+  }
+  // The staff count it, in the gym's own word.
   const word = unit === "" ? "points" : unit;
   return {
     about: subject === undefined || subject.id === "own" ? capital(word) : subject.title,

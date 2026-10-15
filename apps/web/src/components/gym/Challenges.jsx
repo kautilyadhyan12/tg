@@ -22,6 +22,7 @@ import {
   notCountingNote,
   pickBox,
   placeLine,
+  printed,
   progress,
   resultOf,
   teamRows,
@@ -112,9 +113,9 @@ function Mine({ challenge, today, gymName }) {
       <div className="flex-1" style={{ minWidth: 200 }}>
       <div className="flex items-end justify-between gap-3">
         <p className="text-white leading-none">
-          <span className="text-4xl font-bold tabular-nums">{mine.big.toLocaleString('en')}</span>
+          <span className="text-4xl font-bold tabular-nums">{printed(mine.big, challenge.words)}</span>
           <span className="text-sm ml-1.5" style={{ color: SOFT }}>
-            {mine.of === null ? mine.unit : `of ${mine.of.toLocaleString('en')} ${mine.unit}`}
+            {mine.of === null ? mine.unit : `of ${printed(mine.of, challenge.words)}${mine.unit === '' ? '' : ` ${mine.unit}`}`}
           </span>
         </p>
         {mine.done && (
@@ -169,7 +170,7 @@ function Podium({ challenge }) {
               <Initials text={row.initials} />
             </span>
             <span className="text-sm text-white font-semibold mt-1.5 max-w-full truncate">{row.isMe ? 'You' : row.name}</span>
-            <span className="text-xl font-bold text-white tabular-nums mt-0.5">{row.value.toLocaleString('en')}</span>
+            <span className="text-xl font-bold text-white tabular-nums mt-0.5">{printed(row.value, challenge.words)}</span>
             {row.reached && (
               <span className="flex items-center gap-0.5 text-[11px] font-semibold mt-0.5" style={{ color: ORANGE }}>
                 <Check aria-hidden="true" className="w-3 h-3" strokeWidth={3} /> Reached
@@ -304,7 +305,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                     <Initials text={row.initials} />
                     <span className="flex-1 min-w-0 text-sm text-white truncate">{row.isMe ? 'You' : row.name}</span>
                     {row.reached && <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={3} style={{ color: ORANGE }} />}
-                    <span className="w-10 text-right text-sm font-semibold text-white tabular-nums">{row.value}</span>
+                    <span className="w-10 text-right text-sm font-semibold text-white tabular-nums">{printed(row.value, challenge.words)}</span>
                   </button>
                 </li>
               ))}
@@ -316,7 +317,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                 <span className="w-9 text-right font-bold" style={{ color: MUTED }}>{me.place === null ? '—' : ordinal(me.place)}</span>
                 <Initials text="You" greyed={me.hidden !== null} />
                 <span className="flex-1">You</span>
-                <span className="w-10 text-right font-semibold tabular-nums">{me.value}</span>
+                <span className="w-10 text-right font-semibold tabular-nums">{printed(me.value, challenge.words)}</span>
               </p>
               {me.hidden !== null && <p className="text-xs mt-1 pl-12" style={{ color: MUTED }}>{hiddenText(me.hidden, gym.name)}</p>}
               {me.hidden === null && me.place !== null && <p className="text-xs mt-1 pl-12" style={{ color: MUTED }}>The board shows the first 100; your place is shown here.</p>}

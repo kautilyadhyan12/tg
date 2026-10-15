@@ -784,7 +784,7 @@ export async function addChallenge(deps: ChallengesDeps, staffId: string, gymId:
     if (!(await repo.insertChallenge(tx, gymId, { id, ...body }, staffId, at))) return;
     // Every team of a new challenge is new, whatever id was sent with it.
     await repo.setTeams(tx, gymId, id, body.teamList.map((team) => ({ id: null, name: team.name })), at);
-    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_added", targetType: "challenge", targetId: id, meta: { subject: body.subject, countedBy: body.countedBy, who: body.who, teams: body.teams } });
+    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_added", targetType: "challenge", targetId: id, meta: { subject: body.subject, measure: body.measure, countedBy: body.countedBy, who: body.who, teams: body.teams } });
   });
   const kept = await repo.challengeIdByKey(deps.sql, gymId, body.challengeKey);
   if (kept === null) throw challengeNotFound();

@@ -107,6 +107,20 @@ describe('the form', () => {
     });
   });
 
+  it('a kind the form does not offer keeps its kind when changed, and is never called gym days', () => {
+    const steps = challenge({
+      counts: undefined,
+      subject: 'steps',
+      measure: 'steps',
+      countedBy: 'app',
+      words: { about: 'Steps', one: 'step', many: 'steps', print: 'whole', how: 'app', howLine: 'Counted by your phone', explain: 'Steps.', perDay: false },
+    });
+    const kept = draftOf(steps);
+    expect(fieldsOf(kept)).toMatchObject({ subject: 'steps', measure: 'steps', countedBy: 'app' });
+    const said = JSON.stringify([draftSummary(kept, { today: TODAY, inApp: 4 }, WORDS), targetHint(kept), startHint({ ...kept, startsOn: '2026-10-01' }, TODAY)]);
+    expect(said).not.toMatch(/gym day|Gym visits|Gym days/u);
+  });
+
   it('a first day moves a last day that is before it, and leaves a later one', () => {
     expect(withStartDay(draft({ endsOn: '' }), '2026-10-12').endsOn).toBe('2026-10-12');
     expect(withStartDay(draft({ endsOn: '2026-10-10' }), '2026-10-12').endsOn).toBe('2026-10-12');

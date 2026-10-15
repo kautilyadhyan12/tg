@@ -2,7 +2,7 @@
 // gym may ask for, how each may be won, and the words each is sent with. The expected
 // answers are written out from the spec's table and words, case by case.
 import { describe, expect, it } from "vitest";
-import { addGymChallengeRequestSchema, challengeWords, kindOnTheList, oneOf, type ChallengeKind } from "../src/index.js";
+import { CHALLENGE_SUBJECTS, addGymChallengeRequestSchema, challengeWords, kindOnTheList, oneOf, type ChallengeKind } from "../src/index.js";
 
 const body = (over: Record<string, unknown> = {}) => ({
   challengeKey: "00000000-0000-4000-8000-000000000118",
@@ -119,10 +119,26 @@ describe("the words a challenge is sent with", () => {
     expect(challengeWords({ subject: "workouts", measure: null, countedBy: "staff", unit: "sessions" }, "Iron Gym")).toMatchObject({ about: "Workouts in the app", one: "session", many: "sessions", how: "staff" });
   });
 
-  it("an app count of a kind no longer on the list is never said as something else", () => {
+  it("an app count of a kind no longer on the list says it is not counted, never the staff's words or another kind's", () => {
     const words = challengeWords({ subject: "steps", measure: "steps", countedBy: "app", unit: "" }, "Iron Gym");
-    expect([words.about, words.one, words.many, words.how, words.perDay]).toEqual(["Points", "point", "points", "staff", false]);
-    expect(JSON.stringify(words)).not.toMatch(/gym day|workout day|Checked in|Counted by the app/u);
+    expect(words).toEqual({
+      about: "Challenge",
+      one: "point",
+      many: "points",
+      print: "whole",
+      how: "app",
+      howLine: "Not counted yet",
+      explain: "This challenge isn't being counted yet. Ask the staff at Iron Gym about it.",
+      perDay: false,
+    });
+    expect(challengeWords({ subject: "gym_visits", measure: "reps", countedBy: "app", unit: "" }, "Iron Gym")).toMatchObject({ about: "Gym visits", howLine: "Not counted yet", perDay: false });
+    expect(JSON.stringify(words)).not.toMatch(/gym day|workout day|Checked in|Counted by/u);
+  });
+
+  it("a measure is one a day exactly when its id is days, as the database's target check reads it", () => {
+    const measures = CHALLENGE_SUBJECTS.flatMap((subject) => subject.measures.map((m) => [`${subject.id}.${m.id}`, m.perDay, m.id === "days"]));
+    expect(measures.length).toBeGreaterThan(0);
+    for (const [key, perDay, days] of measures) expect([key, perDay]).toEqual([key, days]);
   });
 });
 

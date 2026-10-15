@@ -756,15 +756,22 @@ d("every kind of challenge reads the same numbers (real Postgres)", () => {
       for (const [name, c] of Object.entries({ gymMost, gymTarget, workMost, workJoined, gymTeams, gymEnded })) read[name] = { member: of(c), staff: await card(c) };
       expect(read).toEqual(APP_COUNTS);
       // Each is sent as what it is about, who counts it, and the words that say so.
-      const about = (c: MemberGymChallenge) => [c.name, c.subject, c.measure, c.countedBy, c.words.about, c.words.howLine, c.words.one, c.words.perDay];
+      const about = (c: MemberGymChallenge) => [c.name, c.subject, c.measure, c.countedBy, c.words.about, c.words.howLine, c.words.one, c.words.many, c.words.perDay];
+      const GYM_DAYS = ["Gym visits", "Checked in at the front desk", "gym day", "gym days", true];
+      const WORKOUT_DAYS = ["Workouts in the app", "Counted by the app", "workout day", "workout days", true];
       expect(mine.challenges.map(about).sort()).toEqual([
-        ["Gym days in teams", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
-        ["Last week", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
-        ["Most gym days", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
-        ["Most workout days", "workouts", "days", "app", "Workouts in the app", "Counted by the app", "workout day", true],
-        ["Two gym days", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
-        ["Two workout days, joiners", "workouts", "days", "app", "Workouts in the app", "Counted by the app", "workout day", true],
+        ["Gym days in teams", "gym_visits", "days", "app", ...GYM_DAYS],
+        ["Last week", "gym_visits", "days", "app", ...GYM_DAYS],
+        ["Most gym days", "gym_visits", "days", "app", ...GYM_DAYS],
+        ["Most workout days", "workouts", "days", "app", ...WORKOUT_DAYS],
+        ["Two gym days", "gym_visits", "days", "app", ...GYM_DAYS],
+        ["Two workout days, joiners", "workouts", "days", "app", ...WORKOUT_DAYS],
       ]);
+      const explained = new Map(mine.challenges.map((c) => [c.name, c.words.explain]));
+      expect(explained.get("Most gym days")).toBe(
+        "A gym day is a day you're checked in at Kinds Hall: a scan at the front desk, or a check-in by staff. Two visits on one day are one. It is the same count as the Leaderboard.",
+      );
+      expect(explained.get("Most workout days")).toBe("A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.");
     },
     T,
   );
@@ -800,13 +807,19 @@ d("every kind of challenge reads the same numbers (real Postgres)", () => {
       const read: Record<string, unknown> = {};
       for (const [name, c] of Object.entries({ most, target, lowest, teams })) read[name] = { member: of(c), staff: await card(c) };
       expect(read).toEqual(OWN_COUNTS);
-      const about = (c: MemberGymChallenge) => [c.name, c.subject, c.measure, c.countedBy, c.words.about, c.words.howLine, c.words.one, c.words.perDay];
+      const about = (c: MemberGymChallenge) => [c.name, c.subject, c.measure, c.countedBy, c.words.about, c.words.howLine, c.words.one, c.words.many, c.words.perDay];
+      const STAFF = "Counted by the staff at Own Count Hall";
       expect(mine.challenges.map(about).sort()).toEqual([
-        ["5 km race", "own", null, "staff", "Seconds", "Counted by the staff at Own Count Hall", "second", false],
-        ["Fifty boxes", "own", null, "staff", "Boxes", "Counted by the staff at Own Count Hall", "box", false],
-        ["Push-up week", "own", null, "staff", "Push-ups", "Counted by the staff at Own Count Hall", "push-up", false],
-        ["Rowing teams", "own", null, "staff", "Metres", "Counted by the staff at Own Count Hall", "metre", false],
+        ["5 km race", "own", null, "staff", "Seconds", STAFF, "second", "seconds", false],
+        ["Fifty boxes", "own", null, "staff", "Boxes", STAFF, "box", "boxes", false],
+        ["Push-up week", "own", null, "staff", "Push-ups", STAFF, "push-up", "push-ups", false],
+        ["Rowing teams", "own", null, "staff", "Metres", STAFF, "metre", "metres", false],
       ]);
+      expect(mine.challenges.find((c) => c.name === "Push-up week")?.words.explain).toBe(
+        "The staff at Own Count Hall count the push-ups and add each person's number. If yours is missing or wrong, ask at the front desk.",
+      );
+      // The replies staff are sent when they add a challenge carry the gym's own name too.
+      expect([most.words.howLine, lowest.words.howLine]).toEqual([STAFF, STAFF]);
     },
     T,
   );
