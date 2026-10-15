@@ -7,7 +7,8 @@ import ReceiptBox from '../../components/console/ReceiptBox';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
 import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
-import { NO_CODE, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
+import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
+import { FriendGiftNote } from './FriendGift';
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
@@ -104,7 +105,9 @@ const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bi
 // names it only for somebody who can, and `membershipsTo` is the page's address for the
 // button under that sentence (null: no button).
 /** The Add membership form as it opens: the gym's one type already picked, from today. */
-const addForm = (types, today) => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '', discountId: '', code: NO_CODE });
+/** Refer a friend's gift is filled in for the friend it is for (20e-ii-b-i), with Remove. */
+const giftId = (shown) => (shown?.friendGift?.discount.forMemberships === true ? shown.friendGift.discount.id : '');
+const addForm = (types, today, discountId = '') => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '', discountId, code: NO_CODE });
 
 export default function MemberMemberships({
   gymId,
@@ -176,7 +179,7 @@ export default function MemberMemberships({
       .sort((a, b) => (lastDayOf(a) < lastDayOf(b) ? 1 : lastDayOf(a) > lastDayOf(b) ? -1 : 0))
       .slice(0, 1)
       .find((m) => shown.types.some((t) => t.id === m.typeId));
-    const form = addForm(shown.types, shown.today);
+    const form = addForm(shown.types, shown.today, giftId(shown));
     setForm(had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId });
     setOpen({ what: 'add' });
   }, [addsNow, shown]);
@@ -279,7 +282,7 @@ export default function MemberMemberships({
   const startAdd = () => {
     setNotice(null);
     setRefusal(null);
-    setForm(addForm(types, today));
+    setForm(addForm(types, today, giftId(shown)));
     setOpen({ what: 'add' });
   };
 
@@ -880,7 +883,14 @@ export default function MemberMemberships({
 
   const renderAdd = () => {
     const choice = membershipChoice(types, form, today);
-    const offers = { discounts: shown.discounts, today, currency: choice.type === null ? null : choice.type.currency, canManage: managesTypes };
+    const gift = shown.canBill && shown.friendGift?.discount.forMemberships === true ? shown.friendGift : null;
+    const offers = {
+      discounts: gift === null ? shown.discounts : [...shown.discounts, gift.discount],
+      friendGiftId: gift === null ? null : gift.discount.id,
+      today,
+      currency: choice.type === null ? null : choice.type.currency,
+      canManage: managesTypes,
+    };
     const free = choice.type !== null && choice.type.priceMinor === 0;
     // A discount is used by whoever takes payments; the server sends nobody else any.
     const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
@@ -916,6 +926,17 @@ export default function MemberMemberships({
               paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null } } : {}) }))}
             />
+            {gift !== null && choice.type !== null && !free ? (
+              <FriendGiftNote
+                gift={gift}
+                applied={discount !== null && discount.id === gift.discount.id}
+                fits={discountsForType(offers, choice.type).some((d) => d.id === gift.discount.id)}
+                what={choice.type.name}
+                onRemove={() => setForm((f) => ({ ...f, discountId: '', code: NO_CODE }))}
+                onPutBack={() => setForm((f) => ({ ...f, discountId: gift.discount.id, code: NO_CODE }))}
+                disabled={busy}
+              />
+            ) : null}
             {choice.type !== null && !free && shown.canBill ? (
               <MembershipDiscountPicker
                 page={offers}

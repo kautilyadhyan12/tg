@@ -10,6 +10,7 @@
 import type { Sql } from "postgres";
 import {
   DISCOUNT_WORDS,
+  FRIEND_GIFT_WORDS,
   BILLS_SHOWN,
   BILL_OVERDUE_DAYS_MAX,
   HELD_EARLIER_PAGE,
@@ -47,6 +48,7 @@ import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
 import { membershipDiscounts } from "../register/discountsRepo.js";
+import { friendGiftOffer } from "../referrals/friendGift.js";
 import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow } from "./billsSql.js";
 
 export interface HeldDeps {
@@ -150,7 +152,12 @@ function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly
 
 async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean): Promise<HeldMembershipsResponse> {
   // A discount and its promo code are read and used by whoever takes payments, as on Sell.
-  const [list, offered] = await Promise.all([repo.readHeld(deps.sql, gymId, entryId), canBill ? membershipDiscounts(deps.sql, gymId) : []]);
+  const [list, offered, friendGift] = await Promise.all([
+    repo.readHeld(deps.sql, gymId, entryId),
+    canBill ? membershipDiscounts(deps.sql, gymId) : [],
+    // Refer a friend's gift, for the friend it is for (20e-ii-b-i): filled in on Add.
+    canBill ? friendGiftOffer(deps.sql, gymId, entryId, today) : null,
+  ]);
   if (list === null) throw notFound();
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays };
   // The page reads a membership as the next write will find it: with its count moved
@@ -214,6 +221,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     canBill,
     taxIncluded: list.taxIncluded,
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
+    friendGift: list.past ? null : friendGift,
   });
 }
 
@@ -271,6 +279,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "discount_nothing_to_pay", DISCOUNT_WORDS.membership_nothing_to_pay);
     case "discount_changed":
       throw new OrgsError(409, "membership_discount_changed", DISCOUNT_WORDS.membership_discount_changed);
+    case "friend_gift_not_theirs":
+      throw new OrgsError(409, "friend_gift_not_theirs", FRIEND_GIFT_WORDS.not_theirs);
     case "early_payment":
       throw new OrgsError(
         409,

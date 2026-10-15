@@ -630,3 +630,37 @@ export async function enquiriesFor(sql: SqlOrTx, gymId: string, leadId: string, 
     createdAt: row.created_at,
   }));
 }
+
+export interface OpenLead {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  referredBy: string | null;
+  referredAt: Date | null;
+}
+
+/** The gym's leads not yet joined with this email or this phone (Add member, 20e-ii-b-i):
+ *  at most two, as a gym's leads hold each email and each phone once. */
+export async function openLeadsSharingContact(sql: SqlOrTx, gymId: string, contact: { email: string | null; phone: string | null }): Promise<OpenLead[]> {
+  if (contact.email === null && contact.phone === null) return [];
+  return await sql<OpenLead[]>`
+    SELECT id, full_name AS "fullName", email::text AS email, phone_e164 AS phone, referred_by AS "referredBy", referred_at AS "referredAt"
+    FROM gym_leads
+    WHERE gym_id = ${gymId} AND status <> 'joined'
+      AND ((${contact.email}::citext IS NOT NULL AND email = ${contact.email}::citext)
+        OR (${contact.phone}::text IS NOT NULL AND phone_e164 = ${contact.phone}::text))
+    ORDER BY (email IS NOT DISTINCT FROM ${contact.email}::citext) DESC, id
+    LIMIT 2`;
+}
+
+/** Joined as this record, where the lead is not joined yet; false otherwise. No follow-up is
+ *  due for a joined lead. */
+export async function markLeadJoined(tx: TransactionSql, gymId: string, leadId: string, entryId: string, at: Date): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_leads
+    SET status = 'joined', entry_id = ${entryId}, status_changed_at = ${at}, follow_up_due_on = NULL, updated_at = ${at}
+    WHERE gym_id = ${gymId} AND id = ${leadId} AND status <> 'joined'
+    RETURNING id`;
+  return rows.length === 1;
+}

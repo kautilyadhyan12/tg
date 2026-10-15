@@ -71,6 +71,7 @@ export * from "./atRisk.js";
 export * from "./register.js";
 export * from "./discounts.js";
 export * from "./referrals.js";
+export * from "./friendGift.js";
 export * from "./gymWeek.js";
 export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";

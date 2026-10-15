@@ -230,6 +230,8 @@ export const gymDiscountSchema = z
     membershipTypeIds: z.array(z.string().uuid()),
     /** How often it comes off a repeating membership; null where it is not for memberships. */
     membershipPayments: z.enum(MEMBERSHIP_PAYMENTS).nullable(),
+    /** Refer a friend's own friend's gift (20e-ii-b-i): offered only to the friend it is for. */
+    referralGift: z.boolean().default(false),
     archivedAt: z.string().datetime().nullable(),
     updatedAt: z.string().datetime(),
   })

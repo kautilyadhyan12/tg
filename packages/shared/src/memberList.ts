@@ -2320,6 +2320,9 @@ export const memberListEntryInputSchema = z
     /** "Add anyway" (5b-iv-b): the records the warning named. The add goes ahead only if
      *  every record alike now is one of them; the exact "already on your list" still stops it. */
     acknowledgedDuplicates: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
+    /** The lead staff were shown as this person (20e-ii-b-i), marked Joined with the new
+     *  record where it still shares the email or phone typed. Left out, no lead is changed. */
+    leadId: z.string().uuid().optional(),
   })
   .strict();
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
@@ -2442,6 +2445,8 @@ export const memberListEntryWrittenSchema = z
     /** Put back, when staff had removed someone in the app with this record: their app
      *  access given back, or no free place on the plan for it. Absent otherwise. */
     app: z.enum(["back", "no_place"]).optional(),
+    /** Add member: the lead marked Joined as this person (20e-ii-b-i). Absent otherwise. */
+    lead: z.object({ id: z.string().uuid(), fullName: z.string() }).strict().optional(),
   })
   .strict();
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;

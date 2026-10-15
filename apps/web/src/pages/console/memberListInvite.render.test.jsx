@@ -35,6 +35,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       resendMemberListInvite: vi.fn(),
       getMemberListEntry: vi.fn(),
       addMemberListEntry: vi.fn(),
+      matchLead: vi.fn(() => Promise.resolve({ data: { lead: null } })),
       // The postal address typed in place (23d): the save, and the console's own re-read.
       updateOrg: vi.fn(),
       getMine: vi.fn(),
@@ -117,6 +118,7 @@ beforeEach(() => {
   onClose = vi.fn();
   onChanged = vi.fn();
   for (const fn of Object.values(orgService)) fn.mockReset();
+  orgService.matchLead.mockResolvedValue({ data: { lead: null } });
 });
 afterEach(() => cleanup());
 

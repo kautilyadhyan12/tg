@@ -43,6 +43,7 @@ import {
   createOrgResponseSchema,
   declineInvitationResponseSchema,
   joinLeadResponseSchema,
+  leadMatchResponseSchema,
   leadFileAddResponseSchema,
   leadFileCheckResponseSchema,
   leadResponseSchema,
@@ -977,6 +978,14 @@ export const orgService = {
       leadsResponseSchema,
       'your leads',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads${query ? `?${query}` : ''}`),
+    ),
+
+  /** GET …/leads/match — Add member: the lead with the email or phone being typed (20e-ii-b-i). */
+  matchLead: (gymId, query) =>
+    readThrough(
+      leadMatchResponseSchema,
+      'your leads',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads/match?${new URLSearchParams(query).toString()}`),
     ),
 
   getLead: (gymId, leadId) =>
