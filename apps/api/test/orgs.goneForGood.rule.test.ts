@@ -115,7 +115,7 @@ describe("a gym gone for good: the email", () => {
     expect(mail.text).toContain("Iron House has had no paid plan, and nobody from Iron House has signed in to AI Home Gym, since 10 Jan 2026.");
     expect(mail.text).toContain("On 10 Jul 2026 we will delete its member list, its leads and its staff invitations. Your members keep their own accounts, workouts and visits.");
     expect(mail.text).toContain("To keep everything, sign in to your gym console before 10 Jul 2026.");
-    expect(mail.text).toContain("open Members and press Download CSV:\nhttps://app.example/console/iron-house/members");
+    expect(mail.text).toContain("To keep a copy of your list, sign in and press Download member list:\nhttps://app.example/console/iron-house/members");
     expect(mail.html).toContain('<a href="https://app.example/console/iron-house/members">');
   });
 

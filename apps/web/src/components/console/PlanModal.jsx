@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
+import ListDownload from './ListDownload';
 import ManagePaymentButton from './ManagePaymentButton';
 import RazorpayPlanActions from './RazorpayPlanActions';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
@@ -486,6 +487,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                     : `There's no way to pay online yet. We'll be in touch about setting your ${words.it} up.`}
           </p>
         )}
+
+        {/* A gym on no plan may still take a copy of its own list (Stage 4 item 14). */}
+        {showing === 'trial' ? null : <ListDownload org={org} />}
 
         {/* ── The two ways out, and neither is a way past ─────────────────── */}
         <div

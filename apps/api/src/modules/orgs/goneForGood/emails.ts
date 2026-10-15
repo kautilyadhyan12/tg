@@ -32,7 +32,7 @@ export interface GoneForGoodWords {
   /** Since when the gym has had no paid plan and no sign-in. */
   countedFrom: Date;
   deletesAt: Date;
-  /** The console's member list, where Download CSV is. */
+  /** The console's member list. With no plan, the plan box there has Download member list. */
   membersLink: string;
 }
 
@@ -45,7 +45,7 @@ export function goneForGoodEmail(w: GoneForGoodWords): EmailMessage {
     `${gym} has had no paid plan, and nobody from ${gym} has signed in to ${APP_NAME}, since ${since}.`,
     `On ${day} we will delete its ${words.person} list, its leads and its staff invitations. Your ${words.people} keep their own accounts, workouts and visits.`,
     `To keep everything, sign in to your ${words.it} console before ${day}.`,
-    `To keep a copy of your list, open ${words.peopleCap} and press Download CSV:`,
+    `To keep a copy of your list, sign in and press Download ${words.person} list:`,
   ];
   const link = 3;
   const text = `${lines.map((line, i) => (i === link ? `${line}\n${w.membersLink}` : line)).join("\n\n")}\n\n— ${APP_NAME}`;

@@ -1,0 +1,7 @@
+# Rulings · 2026-10-15 · Stage 4 item 14, a gym gone for good (Folder C)
+
+## Gyms and the console
+
+- 2026-10-15 · **Stage 4 item 14, the plan.** Kd asked whether a gym with no paid plan uses the app free or is blocked; told it is locked (staff can look, members get the free app, paying brings it all back) and that the sign-in half keeps a gym that still looks in. Kd: *"go"*. Six months with no paid plan and no sign-in from its staff: emailed a month and a week before, then its member list, leads and staff invitations deleted; members' own accounts and history kept; a sign-in or a plan starts the six months again. **Risky.** Recommended Opus xhigh; built at Kd's setting, high.
+- The terminal's own choices, not his: the emails go to everyone at the gym who may manage its billing (the owner, and staff given that tick); a gym that never had a plan counts from its start; an ended plan nobody dated is never counted; a sign-in is any refresh of a session by its staff; nothing is deleted until a week after the second email, and an email sent late moves the day it names; a gym whose staff have no address is not emailed and its days run the same.
+- **Correction, found by the terminal's browser walk:** the plan said a gym with no plan can still download its list; the owner meets the plan box Kd ruled cannot be skipped, so it could not. The box now holds **Download member list** (everyone, current and past) for staff who may read the list, and, once the list is deleted, the sentence saying when and why. The box still cannot be skipped.

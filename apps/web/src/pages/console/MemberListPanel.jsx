@@ -12,6 +12,7 @@ import MemberListRemove from './MemberListRemove';
 import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
 import MemberListMessage from './MemberListMessage';
 import MemberListUpload from './MemberListUpload';
+import { saveFile } from './saveFile';
 import { staffTag, viewerPrivileges } from './consoleView';
 import { renewalsWaiting } from './membershipWordsView';
 import { canOpenPlace, membershipBoxTo } from './consolePlaces';
@@ -232,18 +233,6 @@ export function Tick({ state, label, onClick }) {
       </span>
     </button>
   );
-}
-
-/** A file the browser saves under the name the server gave it. */
-function saveFile(blob, filename) {
-  const link = document.createElement('a');
-  const href = URL.createObjectURL(blob);
-  link.href = href;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
 /** Whether the screen is phone-sized (under 768 px), following resizes; a computer
