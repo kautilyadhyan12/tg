@@ -308,39 +308,42 @@ d("member list: the app numbers members itself (real Postgres)", () => {
       const gym = (await makeOrg(owner, "Numbers Gone Gym")).org.id;
       const a = await add(gym, owner, { fullName: "Esha One", email: "esha@members.example" });
       const b = await add(gym, owner, { fullName: "Farah Two", email: "farah@members.example" });
-      const c = await add(gym, owner, { fullName: "Gita Three", email: "gita@members.example" });
-      expect([a.number, b.number, c.number]).toEqual(["1", "2", "3"]);
+      expect([a.number, b.number]).toEqual(["1", "2"]);
+      // A number the app gave is remembered when it is given. Each number that goes below
+      // was TYPED, so only the step that keeps it as it goes stops it being given again.
 
-      // The highest, deleted for good: 3 is not given again.
-      expect((await del(`${entriesUrl(gym)}/${c.id}`, owner.cookies)).statusCode).toBe(200);
-      const deleted = await del(`${listUrl(gym)}/former/${c.id}`, owner.cookies);
+      // The highest, typed, then deleted for good: 900 is not given again.
+      const typed = await add(gym, owner, { fullName: "Gita Typed", email: "gita@members.example", memberNumber: "900" });
+      expect(await offered(gym, owner)).toBe("901");
+      expect((await del(`${entriesUrl(gym)}/${typed.id}`, owner.cookies)).statusCode).toBe(200);
+      const deleted = await del(`${listUrl(gym)}/former/${typed.id}`, owner.cookies);
       expect(deleted.statusCode, deleted.body).toBe(200);
       expect(await numbersIn(gym)).toEqual(["1", "2"]);
-      expect(await offered(gym, owner)).toBe("4");
-      const d4 = await add(gym, owner, { fullName: "Hari Four", email: "hari@members.example" });
-      expect(d4.number).toBe("4");
+      expect(await offered(gym, owner)).toBe("901");
+      const given = await add(gym, owner, { fullName: "Hari Given", email: "hari@members.example" });
+      expect(given.number).toBe("901");
 
-      // The highest, changed to a word: 4 is not given again.
-      expect((await patch(`${entriesUrl(gym)}/${d4.id}`, { memberNumber: "Guest" }, owner.cookies)).statusCode).toBe(200);
-      expect(await offered(gym, owner)).toBe("5");
+      // The highest, typed, then changed to a word: 950 is not given again.
+      const changed = await add(gym, owner, { fullName: "Ira Changed", email: "ira@members.example", memberNumber: "950" });
+      expect((await patch(`${entriesUrl(gym)}/${changed.id}`, { memberNumber: "Guest" }, owner.cookies)).statusCode).toBe(200);
+      expect(await numberOf(changed.id)).toBe("Guest");
+      expect(await offered(gym, owner)).toBe("951");
 
-      // The highest, merged away: 6 is not given again.
-      const e = await add(gym, owner, { fullName: "Isha Five", email: "isha@members.example" });
+      // The highest, typed, then merged away: 990 is not given again.
+      const kept = await add(gym, owner, { fullName: "Isha Merged", email: "isha@members.example", memberNumber: "980" });
       // The same name: a second record on purpose, past Add member's warning.
       const second = await post(
         entriesUrl(gym),
-        { fullName: "Isha Five", email: "isha.five@members.example", acknowledgedDuplicates: [e.id] },
+        { fullName: "Isha Merged", email: "isha.two@members.example", memberNumber: "990", acknowledgedDuplicates: [kept.id] },
         owner.cookies,
       );
       expect(second.statusCode, second.body).toBe(201);
-      const secondEntry = memberListEntryWrittenSchema.parse(JSON.parse(second.body)).entry;
-      const f = { id: secondEntry.entryId, number: secondEntry.memberNumber };
-      expect([e.number, f.number]).toEqual(["5", "6"]);
-      const merged = await post(`${entriesUrl(gym)}/${f.id}/merge`, { keepEntryId: e.id }, owner.cookies);
+      const gone = memberListEntryWrittenSchema.parse(JSON.parse(second.body)).entry.entryId;
+      const merged = await post(`${entriesUrl(gym)}/${gone}/merge`, { keepEntryId: kept.id }, owner.cookies);
       expect(merged.statusCode, merged.body).toBe(200);
-      expect(await numberOf(e.id)).toBe("5");
-      expect(await offered(gym, owner)).toBe("7");
-      expect(await numbersIn(gym)).toEqual(["1", "2", "5", "Guest"]);
+      expect(await numberOf(kept.id)).toBe("980");
+      expect(await numbersIn(gym)).toEqual(["1", "2", "901", "980", "Guest"]);
+      expect(await offered(gym, owner)).toBe("991");
     },
     TEST_TIMEOUT_MS,
   );
