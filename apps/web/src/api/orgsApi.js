@@ -72,6 +72,7 @@ import {
   memberListEntryDeletedSchema,
   memberListEntryResponseSchema,
   memberListEntryWrittenSchema,
+  memberListNextNumberSchema,
   memberListReviewPageResponseSchema,
   memberListDuplicatesPageResponseSchema,
   memberListNotDuplicatesResponseSchema,
@@ -734,6 +735,14 @@ export const orgService = {
       memberListEntryResponseSchema,
       'this person',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`),
+    ),
+
+  /** GET …/member-list/next-number — the member number Add member fills in (5e-i). */
+  getNextMemberNumber: (gymId) =>
+    readThrough(
+      memberListNextNumberSchema,
+      'the next member number',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/next-number`),
     ),
 
   /** POST …/member-list/entries — add one person by hand. */

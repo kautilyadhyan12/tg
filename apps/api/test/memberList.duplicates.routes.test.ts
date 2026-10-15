@@ -364,7 +364,11 @@ d("member list: possible duplicates (real Postgres)", () => {
       await p("Priya Sha", { phone: "9876500002" });
       await p("Priyanka Shah", { phone: "9876500002", email: "priyanka@members.example" });
       await p("Tom Reed", { memberNumber: "M-1001", ...own() });
-      await p("Thomas Reed", { memberNumber: "m-1001", ...own() });
+      // Add member refuses a number somebody holds (5e-i): two records with one come from a file.
+      await importFile(gym, owner, [
+        ["Name", "Email", "Member number"],
+        ["Thomas Reed", own().email, "m-1001"],
+      ]);
       // A family's landline pairs them; staff answer Different people.
       await p("Gus Tan", { phone: "9876500003" });
       await p("Hana Tan", { phone: "9876500003", email: "hana@members.example" });

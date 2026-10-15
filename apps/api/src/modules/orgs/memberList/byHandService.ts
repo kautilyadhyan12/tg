@@ -23,6 +23,7 @@ import {
   type MemberListEntryOutcome,
   type MemberListEntryPatch,
   type MemberListEntryWritten,
+  type MemberListNextNumber,
   type MemberListNotThemRequest,
   type MemberListPossibleMatch,
   type MemberListReviewCheckedRequest,
@@ -244,6 +245,18 @@ export async function readEntry(
   return await detailAfter(deps, gymId, entryId, privileges.includes("staff.manage"));
 }
 
+/** The member number Add member fills in (5e-i). */
+export async function readNextNumber(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  limit: () => Promise<boolean>,
+): Promise<MemberListNextNumber | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  return { memberNumber: await repo.offeredMemberNumber(deps.sql, gymId) };
+}
+
 export type WriteAnswer =
   | { kind: "written"; status: 200 | 201; written: MemberListEntryWritten }
   /** The change would make this record the same person as another one, current or
@@ -254,6 +267,8 @@ export type WriteAnswer =
   | { kind: "may_be_on_list"; people: MemberListPossibleMatch[] }
   /** The write would leave this many app members reached by no record. */
   | { kind: "leaves_list"; members: number; by: "change" | "merge" }
+  /** The member number typed is another record's (5e-i). Nothing was written. */
+  | ({ kind: "number_taken" } & NumberTaken["taken"])
   | { kind: "rate_limited" };
 
 /** A write's transaction, with a `LeavesList` refusal turned into its answer. */
@@ -290,6 +305,34 @@ async function finish(deps: MemberListDeps, gymId: string, done: Done): Promise<
   return { kind: "written", status: done.outcome === "added" ? 201 : 200, written };
 }
 
+/** These values with the gym's next member number where they have none (5e-i), under the
+ *  gym's lock. A next number too long to store leaves them without one. */
+async function numbered(tx: TransactionSql, gymId: string, values: EntryValues): Promise<EntryValues> {
+  if (values.memberNumber !== null) return values;
+  const given = await repo.giveMemberNumber(tx, gymId);
+  return given === null ? values : { ...values, memberNumber: given };
+}
+
+/** Add member or Change with a member number another record holds: refused (5e-i). */
+interface NumberTaken {
+  taken: { entryId: string; fullName: string; former: boolean; memberNumber: string };
+}
+
+async function numberTaken(tx: TransactionSql, gymId: string, memberNumber: string | null, exceptId: string | null): Promise<NumberTaken | null> {
+  if (memberNumber === null) return null;
+  const holder = await repo.memberNumberHolder(tx, gymId, memberNumber, exceptId);
+  return holder === null ? null : { taken: { entryId: holder.id, fullName: holder.fullName, former: holder.former, memberNumber } };
+}
+
+/** The record that is this person: the one holding these very details, or, with no number
+ *  typed, the one holding them with the number the app gave it (5e-i), so somebody typed
+ *  again is found as they were before records had numbers. */
+async function holderOf(tx: TransactionSql, gymId: string, values: EntryValues): Promise<{ id: string; former: boolean } | null> {
+  const exact = await repo.entryHolding(tx, gymId, identityKey(values));
+  if (exact !== null || values.memberNumber !== null) return exact;
+  return await repo.entryWithDetails(tx, gymId, values, null);
+}
+
 /** Put a person on the list whose key nobody holds, or bring back the FORMER record
  *  that holds it. Shared by "Add member" and "put an app member on the list". */
 async function placeOnList(
@@ -297,23 +340,25 @@ async function placeOnList(
   input: { gymId: string; userId: string; at: Date; values: EntryValues; source: "typed" | "member"; revive: (stored: repo.StoredEntry) => EntryValues },
 ): Promise<Done> {
   const { gymId, values, at } = input;
-  const key = identityKey(values);
-  const holder = await repo.entryHolding(tx, gymId, key);
+  const holder = await holderOf(tx, gymId, values);
   if (holder !== null && !holder.former) return { outcome: "already_on_list", entryId: holder.id, version: await listVersion(tx, gymId) };
 
   let entryId: string;
   let written: EntryValues;
   if (holder === null) {
-    written = values;
-    entryId = await repo.insertEntry(tx, gymId, values, key, input.source);
+    // Somebody new with no number typed is given the gym's next one (5e-i). The record is
+    // found by the details staff typed, above; its key holds the number it is given.
+    written = await numbered(tx, gymId, values);
+    entryId = await repo.insertEntry(tx, gymId, written, identityKey(written), input.source);
   } else {
     const stored = await repo.entryFor(tx, gymId, holder.id);
     if (stored === null) throw new Error(`member-list entry ${holder.id} vanished under the gym's lock`);
-    written = input.revive(stored);
+    // A past member coming back keeps their number, and is given one if they had none.
+    written = await numbered(tx, gymId, input.revive(stored));
     entryId = holder.id;
     // Whatever the new values change, what an import found wrong there goes with it.
     const review = reviewAfterEdit(stored.review, changedFields(stored.values, written));
-    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: key, handEdited: stored.handEdited, review, formerAt: null });
+    await repo.writeEntry(tx, gymId, entryId, { values: written, identityKey: identityKey(written), handEdited: stored.handEdited, review, formerAt: null });
   }
   await repo.stampListedByContact(tx, gymId, currentContacts({ values: written, current: true }), [entryId], at);
   const version = await repo.bumpListVersion(tx, gymId);
@@ -342,7 +387,7 @@ export async function addEntry(
   const settings = input.invite === true ? await readyToSend(deps, gymId) : null;
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
-  const done = await deps.sql.begin(async (tx): Promise<Done | { alike: MemberListPossibleMatch[] }> => {
+  const done = await deps.sql.begin(async (tx): Promise<Done | NumberTaken | { alike: MemberListPossibleMatch[] }> => {
     await repo.lockGym(tx, gymId);
     const context = await typedContext(tx, gymId, org.country);
     const applied = applyTyped(EMPTY_VALUES, input, context);
@@ -352,7 +397,11 @@ export async function addEntry(
     // whose every detail matches is already on the list, or a past member coming back, as
     // before. Add anyway covers the records staff were shown; one alike since is shown too.
     const { values } = applied;
-    if ((await repo.entryHolding(tx, gymId, identityKey(values))) === null) {
+    if ((await holderOf(tx, gymId, values)) === null) {
+      // A number typed that another record holds is refused first, Add anyway or not: two
+      // people with one number is the front desk finding the wrong one (5e-i).
+      const taken = await numberTaken(tx, gymId, values.memberNumber, null);
+      if (taken !== null) return taken;
       const alike = await repo.possibleMatches(tx, gymId, {
         nameKey: nameKey(values.fullName),
         phone: values.phone,
@@ -387,6 +436,7 @@ export async function addEntry(
     return { ...done, invited: invited.outcome };
   });
   if ("alike" in done) return { kind: "may_be_on_list", people: done.alike };
+  if ("taken" in done) return { kind: "number_taken", ...done.taken };
   return await finish(deps, gymId, done);
 }
 
@@ -421,7 +471,7 @@ export async function placeLeadInTx(
   const context = await typedContext(tx, gymId, input.country);
   const applied = applyTyped(EMPTY_VALUES, typed, context);
   if (!applied.ok) throw new OrgsError(400, applied.refusal.code, applied.refusal.message);
-  const holder = await repo.entryHolding(tx, gymId, identityKey(applied.values));
+  const holder = await holderOf(tx, gymId, applied.values);
   if (holder !== null) return { outcome: "held", entryId: holder.id };
   const placed = await placeOnList(tx, {
     gymId,
@@ -450,7 +500,7 @@ export async function changeEntry(
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
   const at = deps.now();
-  const done = await guarded(() => deps.sql.begin(async (tx): Promise<Done | { clash: string; former: boolean }> => {
+  const done = await guarded(() => deps.sql.begin(async (tx): Promise<Done | NumberTaken | { clash: string; former: boolean }> => {
     await repo.lockGym(tx, gymId);
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
@@ -463,6 +513,19 @@ export async function changeEntry(
     if (key !== stored.identityKey) {
       const holder = await repo.entryHolding(tx, gymId, key);
       if (holder !== null && holder.id !== entryId) return { clash: holder.id, former: holder.former };
+    }
+    // Changed into another record's name, email and phone: that person, whatever number
+    // each was given (5e-i).
+    if (applied.identityFields.some((field) => field !== "memberNumber")) {
+      const holder = await repo.entryWithDetails(tx, gymId, applied.values, entryId);
+      if (holder !== null) return { clash: holder.id, former: holder.former };
+    }
+    if (applied.identityFields.includes("memberNumber")) {
+      // A number another record holds is refused (5e-i); the one this record had is kept as
+      // the highest where it was, so it is not given to somebody new.
+      const taken = await numberTaken(tx, gymId, applied.values.memberNumber, entryId);
+      if (taken !== null) return taken;
+      await repo.keepHighestMemberNumber(tx, gymId);
     }
     // Only the email and the phone decide who a record reaches (§9.7).
     const contactMoved = applied.identityFields.includes("email") || applied.identityFields.includes("phone");
@@ -494,6 +557,7 @@ export async function changeEntry(
   }));
   if ("kind" in done) return done;
   if ("clash" in done) return { kind: "already_on_list", entryId: done.clash, former: done.former };
+  if ("taken" in done) return { kind: "number_taken", ...done.taken };
   return await finish(deps, gymId, done);
 }
 
@@ -783,6 +847,8 @@ export async function deleteFormer(
     const stored = await repo.entryFor(tx, gymId, entryId);
     if (stored === null) throw notFound();
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
+    // Their number is never given to somebody new (5e-i).
+    await repo.keepHighestMemberNumber(tx, gymId);
     await repo.deleteEntry(tx, gymId, entryId, deps.now());
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
@@ -865,6 +931,9 @@ export async function mergeEntries(
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);
     await repo.movePtLinks(tx, gymId, goneId, keepId);
     await moveNotesAndTags(tx, gymId, goneId, keepId);
+    // The record not kept may take a number with it, which is never given to somebody new
+    // (5e-i).
+    await repo.keepHighestMemberNumber(tx, gymId);
     await repo.deleteEntry(tx, gymId, goneId, at);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");

@@ -66,12 +66,16 @@ export const gymMemberLists = pgTable("gym_member_lists", {
   /** When the pairs were last worked out, and how long it took (0057). */
   pairsBuiltAt: timestamp("pairs_built_at", { withTimezone: true }),
   pairsCostMs: integer("pairs_cost_ms"),
+  /** The highest member number of the gym's sequence, kept when a number goes, so the
+   *  next one given is never one somebody had (5e-i, `memberNumbers.ts`; 0122). */
+  memberNumberKept: text("member_number_kept"),
   createdAt: createdAt(),
 }, (t) => [
   check(
     "gym_member_lists_pairs_count_check",
     sql`${t.pairsCount} IS NULL OR (${t.pairsCount} >= 0 AND ${t.pairsKept} BETWEEN 0 AND ${t.pairsCount})`,
   ),
+  check("gym_member_lists_member_number_kept_check", sql`${t.memberNumberKept} IS NULL OR length(${t.memberNumberKept}) <= 64`),
 ]);
 
 /** THE GYM'S PEOPLE. Every row with `former_at IS NULL` is the newest confirmed

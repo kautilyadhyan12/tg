@@ -346,7 +346,13 @@ d("member list: may already be on your list (real Postgres)", () => {
       await check({ fullName: "Liam  Hughes", phone: "9876500101" }, ["HUGHES, LIAM | name"]);
       await check({ fullName: "Jose Alvarez", phone: "9876500102" }, ["José Álvarez | name"]);
       await check({ fullName: "P. Shah", phone: "098765 00001" }, ["Priya Shah | phone"]);
-      await check({ fullName: "N Brooks", email: "nb@members.example", memberNumber: "GG-0042" }, ["Noah Brooks | number"]);
+      // A member number somebody holds, in another case, is refused rather than warned about
+      // (5e-i): nobody is added with it, Add anyway or not.
+      const noah = await post(entriesUrl(gym), { fullName: "N Brooks", email: "nb@members.example", memberNumber: "GG-0042" }, owner.cookies);
+      expect(noah.statusCode, noah.body).toBe(409);
+      expect((JSON.parse(noah.body) as { error: string; message: string }).message).toBe(
+        "Member number GG-0042 belongs to Noah Brooks. Use another number, or open their record.",
+      );
       await check({ fullName: "Ella Rose", phone: "9876500103" }, ["Ella Rose | name"]);
       await check({ fullName: "Mary Jane Watson", phone: "9876500105" }, ["Mary-Jane Watson | name"]);
 
@@ -377,20 +383,22 @@ d("member list: may already be on your list (real Postgres)", () => {
       if (!("added" in sixth)) throw new Error(`the sixth on one phone was warned about: ${JSON.stringify(sixth)}`);
       expect(await pairedWith(gym, owner, sixth.added)).toEqual([]);
 
-      // The same for a name ("Guest", typed for every walk-in) and a member number printed on
-      // five cards in two cases: four warn, the fifth makes the value nobody's.
+      // The same for a name ("Guest", typed for every walk-in): four warn, the fifth makes the
+      // value nobody's.
       for (const i of [1, 2, 3, 4]) await add(gym, owner, { fullName: "Guest", phone: `98765001${String(i).padStart(2, "0")}` });
       expect(await warned(gym, owner, { fullName: "guest", phone: "9876500105" })).toHaveLength(4);
       await add(gym, owner, { fullName: "Guest", phone: "9876500105" });
       const sixthGuest = await tryAdd(gym, owner, { fullName: "GUEST", phone: "9876500106" });
       if (!("added" in sixthGuest)) throw new Error(`a sixth Guest was warned about: ${JSON.stringify(sixthGuest)}`);
-      for (const [i, number] of ["GG-0000", "gg-0000", "GG-0000", "gg-0000"].entries()) {
-        await add(gym, owner, { fullName: `Card ${String(i)}`, email: `card${String(i)}@members.example`, memberNumber: number });
-      }
-      expect((await warned(gym, owner, { fullName: "Card Four", email: "card4@members.example", memberNumber: "Gg-0000" })).map(said)).toHaveLength(4);
-      await add(gym, owner, { fullName: "Card Four", email: "card4@members.example", memberNumber: "Gg-0000" });
-      const sixthCard = await tryAdd(gym, owner, { fullName: "Card Five", email: "card5@members.example", memberNumber: "GG-0000" });
-      if (!("added" in sixthCard)) throw new Error(`a sixth card was warned about: ${JSON.stringify(sixthCard)}`);
+      // A member number printed on five cards, from a file: Add member gives it to nobody
+      // else, however many hold it (5e-i).
+      await importFile(gym, owner, [
+        ["Name", "Email", "Member number"],
+        ...["GG-0000", "gg-0000", "GG-0000", "gg-0000", "Gg-0000"].map((number, i) => [`Card ${String(i)}`, `card${String(i)}@members.example`, number]),
+      ]);
+      const sixthCard = await post(entriesUrl(gym), { fullName: "Card Five", email: "card5@members.example", memberNumber: "GG-0000" }, owner.cookies);
+      expect(sixthCard.statusCode, sixthCard.body).toBe(409);
+      expect((JSON.parse(sixthCard.body) as { error: string }).error).toBe("member_number_taken");
 
       // A past member of the same name is named, marked past.
       const gone = await add(gym, owner, { fullName: "Gus Tan", email: "gus@members.example" });

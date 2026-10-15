@@ -56,6 +56,8 @@ import { endLeaversSessions } from "../pt/changes.js";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import type { ReviewState } from "./review.js";
+import { identityKey } from "./fields.js";
+import { highestMemberNumber, nextMemberNumber } from "./memberNumbers.js";
 import { nameKey, sameName } from "./samePerson.js";
 
 export type SqlOrTx = Sql | TransactionSql;
@@ -3262,4 +3264,91 @@ export async function writeNameKeys(sql: SqlOrTx, rows: readonly { id: string; f
       AS v(id, full_name, name_key)
     WHERE e.id = v.id AND e.name_key IS NULL AND e.full_name = v.full_name`;
   return written.count;
+}
+
+// ── MEMBER NUMBERS (5e-i) ────────────────────────────────────────────────────
+//
+// Read and written under the gym's lock (`lockGym`), so two staff adding at once are
+// given two numbers.
+
+/** Every member number of the gym that ends in a digit, current and past records, and the
+ *  highest one kept from numbers that have gone. */
+async function numbersOf(sql: SqlOrTx, gymId: string): Promise<string[]> {
+  const rows = await sql<{ n: string }[]>`
+    SELECT member_number AS n FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND member_number ~ '[0-9]$'
+    UNION ALL
+    SELECT member_number_kept AS n FROM gym_member_lists
+    WHERE gym_id = ${gymId} AND member_number_kept IS NOT NULL`;
+  return rows.map((row) => row.n);
+}
+
+async function keepNumber(tx: TransactionSql, gymId: string, kept: string): Promise<void> {
+  await tx`
+    INSERT INTO gym_member_lists (gym_id, member_number_kept)
+    VALUES (${gymId}, ${kept})
+    ON CONFLICT (gym_id) DO UPDATE SET member_number_kept = EXCLUDED.member_number_kept`;
+}
+
+/** The number "Add member" offers: read on the pool, so it is a suggestion; the number a
+ *  person is given is `giveMemberNumber`'s, under the lock. */
+export async function offeredMemberNumber(sql: SqlOrTx, gymId: string): Promise<string | null> {
+  return nextMemberNumber(await numbersOf(sql, gymId));
+}
+
+/** The gym's next member number, given: kept as the highest, so it is never given twice.
+ *  Null where the next would be longer than a member number may be. */
+export async function giveMemberNumber(tx: TransactionSql, gymId: string): Promise<string | null> {
+  const next = nextMemberNumber(await numbersOf(tx, gymId));
+  if (next !== null) await keepNumber(tx, gymId, next);
+  return next;
+}
+
+/** Before a number goes (a record deleted for good, a number changed or merged away): the
+ *  highest of the gym's sequence is kept, so it is not given again. */
+export async function keepHighestMemberNumber(tx: TransactionSql, gymId: string): Promise<void> {
+  const highest = highestMemberNumber(await numbersOf(tx, gymId));
+  if (highest !== null) await keepNumber(tx, gymId, highest);
+}
+
+/** The record, other than `exceptId`, with these very name, email and phone and ANY member
+ *  number: the person typed again without the number the app gave them. Found by the same
+ *  key a record is held by, with each candidate's own number put in. A current record
+ *  before a past one, then the one that came on the list first. */
+export async function entryWithDetails(
+  tx: TransactionSql,
+  gymId: string,
+  values: { fullName: string; email: string | null; phone: string | null },
+  exceptId: string | null,
+): Promise<{ id: string; former: boolean } | null> {
+  if (values.email === null && values.phone === null) return null;
+  // One lookup on the email's index, or the phone's where there is no email.
+  const rows = await tx<{ id: string; identity_key: string; member_number: string; former: boolean }[]>`
+    SELECT id, identity_key, member_number, (former_at IS NOT NULL) AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND member_number IS NOT NULL
+      AND ${values.email === null ? tx`email IS NULL AND phone_e164 = ${values.phone}` : tx`email = ${values.email} AND phone_e164 IS NOT DISTINCT FROM ${values.phone}::text`}
+      AND (${exceptId}::uuid IS NULL OR id <> ${exceptId}::uuid)
+    ORDER BY (former_at IS NOT NULL), listed_seq`;
+  const found = rows.find((row) => identityKey({ ...values, memberNumber: row.member_number }) === row.identity_key);
+  return found === undefined ? null : { id: found.id, former: found.former };
+}
+
+/** The record, other than `exceptId`, that holds this member number, case folded as the
+ *  index folds it: a current one before a past one. */
+export async function memberNumberHolder(
+  tx: TransactionSql,
+  gymId: string,
+  memberNumber: string,
+  exceptId: string | null,
+): Promise<{ id: string; fullName: string; former: boolean } | null> {
+  const rows = await tx<{ id: string; full_name: string; former: boolean }[]>`
+    SELECT id, full_name, (former_at IS NOT NULL) AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND lower(member_number) = lower(${memberNumber})
+      AND (${exceptId}::uuid IS NULL OR id <> ${exceptId}::uuid)
+    ORDER BY (former_at IS NOT NULL), full_name, id
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, fullName: row.full_name, former: row.former };
 }
