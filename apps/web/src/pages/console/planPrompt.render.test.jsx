@@ -554,6 +554,8 @@ describe('the forced subscribe prompt', () => {
 
     await screen.findByTestId('plan-list');
     expect(screen.getByText(/already used your one free trial/i)).toBeTruthy();
+    // With no plan the front desk is paused too (Kd, 2026-10-15).
+    expect(screen.getByText('Until it has one, nobody can be checked in at your front desk.')).toBeTruthy();
     expect(orgService.getPlans).toHaveBeenCalledWith(GYM_ID);
 
     // Each row is the server's own price string beside the only human fact the

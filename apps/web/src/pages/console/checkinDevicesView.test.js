@@ -51,6 +51,16 @@ describe('deviceState', () => {
   ])('%#', (d, expected) => {
     expect(deviceState(d, LONDON, NOW)).toMatchObject(expected);
   });
+
+  it('a gym with no plan: an on device is paused, and says it starts again by itself; others are as they were', () => {
+    expect(deviceState(device({ state: 'on', lastSeenAt: '2026-10-02T12:31:00.000Z' }), LONDON, NOW, 'gym')).toEqual({
+      tag: 'Paused',
+      tone: 'plain',
+      line: 'Not checking anybody in while this gym has no plan. It starts again by itself once the gym has one.',
+    });
+    expect(deviceState(device({ state: 'off' }), LONDON, NOW, 'gym')).toMatchObject({ tag: 'Off' });
+    expect(deviceState(device({ state: 'waiting', linkExpiresAt: null }), LONDON, NOW, 'gym')).toMatchObject({ tag: 'Waiting' });
+  });
 });
 
 describe('keyTagPauseLine', () => {
@@ -76,6 +86,11 @@ describe('devicesSummary', () => {
     [[device({}), device({ state: 'off' }), device({ state: 'waiting' })], '3 devices · 1 on'],
   ])('%#', (list, expected) => {
     expect(devicesSummary(list)).toBe(expected);
+  });
+
+  it('a gym with no plan: its on devices are paused', () => {
+    expect(devicesSummary([device({}), device({ state: 'off' })], true)).toBe('2 devices · paused');
+    expect(devicesSummary([device({ state: 'off' })], true)).toBe('1 device · 0 on');
   });
 });
 
