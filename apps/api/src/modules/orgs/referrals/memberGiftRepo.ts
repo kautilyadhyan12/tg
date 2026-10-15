@@ -439,6 +439,9 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
   } else if (r.used) {
     // What it was taken off has since been deleted for good with its record: nothing to say.
     return null;
+  } else if (r.member_name === null) {
+    // Their account is deleted: nothing will ever take it.
+    gift = { state: "account_gone", words };
   } else if (!r.in_app) {
     // Removed from the app, or their account is gone: nothing takes it unless they come back.
     gift = { state: "waiting_left", words };

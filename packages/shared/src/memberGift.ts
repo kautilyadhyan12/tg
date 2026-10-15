@@ -77,6 +77,8 @@ export const leadMemberGiftSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("waiting_past"), words: z.string().min(1) }).strict(),
   /** The member left the app here, or their account is gone: nothing takes it unless they return. */
   z.object({ state: z.literal("waiting_left"), words: z.string().min(1) }).strict(),
+  /** The member deleted their account: nothing will take it. */
+  z.object({ state: z.literal("account_gone"), words: z.string().min(1) }).strict(),
   z
     .object({
       state: z.literal("taken_back"),
@@ -105,6 +107,8 @@ export function memberGiftLine(g: LeadMemberGift, member: string, friend: string
       return `${gift} is waiting: ${member} is a past member, so there is no bill to take it off. It comes off their next bill if they come back.`;
     case "waiting_left":
       return `${gift} is waiting: ${member} is no longer a member here. It comes off their next bill if they come back.`;
+    case "account_gone":
+      return `${gift} will not be used: they have deleted their account.`;
     case "taken_back":
       return g.why === "voided"
         ? `${gift} was taken back: ${friend}'s payment of ${fullDay(g.day)} was voided.`

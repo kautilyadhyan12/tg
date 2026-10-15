@@ -539,6 +539,9 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         await sql`UPDATE gym_member_list_entries SET former_at = NULL WHERE gym_id = ${gymA.org.id} AND id = ${lee.entryId}`;
         await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gymA.org.id} AND user_id = ${lee.person.id}`;
         expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_left", words: "£10.00 off" }, memberName: "Lee Six" });
+        // Their account deleted: it will not be used, and nothing promises it might.
+        await sql`UPDATE users SET status = 'deleted' WHERE id = ${lee.person.id}`;
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "account_gone", words: "£10.00 off" }, memberName: null });
       },
       TIMEOUT_MS,
     );

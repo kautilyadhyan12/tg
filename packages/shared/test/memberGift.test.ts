@@ -91,6 +91,9 @@ describe("the words", () => {
     expect(memberGiftLine({ state: "waiting_left", words }, "Maya Rao", "Tara")).toBe(
       "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is no longer a member here. It comes off their next bill if they come back.",
     );
+    expect(memberGiftLine({ state: "account_gone", words }, "The inviting member", "Tara")).toBe(
+      "The inviting member's gift for inviting Tara (£10.00 off) will not be used: they have deleted their account.",
+    );
     expect(memberGiftLine({ state: "taken_back", words, why: "voided", day: "2026-10-15" }, "Maya Rao", "Tara")).toBe(
       "Maya Rao's gift for inviting Tara (£10.00 off) was taken back: Tara's payment of 15 October 2026 was voided.",
     );
