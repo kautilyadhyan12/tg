@@ -98,7 +98,7 @@ export const DIRECT_DELETE_TABLES = [
   // Which team of a challenge a person is in (migration 0086; ROADMAP 19d-ii-a): about
   // the person, deleted at Day 14 and exported.
   "gym_challenge_team_people",
-  // A member's own invite link at a business (migration 0116; ROADMAP 20e-ii-a): a random
+  // A member's own invite link at a business (migration 0117; ROADMAP 20e-ii-a): a random
   // code that stands for the person, deleted at Day 14 and exported.
   "gym_referral_links",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
@@ -422,7 +422,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_leads.added_by — which member of staff added a lead (`0046`), on
   // gym_member_list_uploads' footing: the gym's record, and the lead itself is a
   // person the gym told us about, not an account. Deleted when the gym closes.
-  // gym_leads.referred_by — the member whose invite link brought the lead (`0116`), on the
+  // gym_leads.referred_by — the member whose invite link brought the lead (`0117`), on the
   // same footing: the gym's record of where a lead came from; `ON DELETE set null`, and a
   // deleted account's name is never shown (referrals/repo.invitersFor).
   "gym_leads",
@@ -488,7 +488,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_member_payments.recorded_by and undone_by — which member of staff recorded a
   // payment in the gym's notebook and who took it back (`0093`), on gym_leads' footing:
   // the gym's record; `ON DELETE set null`. The person who paid is a record on the gym's
-  // list, not an account, and a payment goes with that record's membership.
+  // list, not an account; a record deleted for good leaves its payments with no name (0116).
   "gym_member_payments",
   // gym_member_bills.voided_by, and gym_member_refunds.recorded_by and undone_by — which
   // member of staff cancelled a bill, noted a refund or took one back (`0094`), on the
@@ -516,7 +516,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // the purge deletes it six years after that record is deleted for good (3e-iii).
   "gym_waiver_desk_signatures",
   // gym_referral_settings.updated_by — which member of staff last set the business's
-  // Refer a friend offer (`0116`), on gym_leads' footing: the gym's record; `ON DELETE set
+  // Refer a friend offer (`0117`), on gym_leads' footing: the gym's record; `ON DELETE set
   // null`.
   "gym_referral_settings",
   "api_cost_events",

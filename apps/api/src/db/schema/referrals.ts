@@ -1,4 +1,4 @@
-// Refer a friend (ROADMAP 20e-ii-a; spec Part 3 §16.3). Mirrors `0116_refer_a_friend.sql`.
+// Refer a friend (ROADMAP 20e-ii-a; spec Part 3 §16.3). Mirrors `0117_refer_a_friend.sql`.
 //
 // A business's offer (its switch and its two gifts), and each member's own
 // invite link at that business. The lead a link brings keeps who sent it on `gym_leads`.

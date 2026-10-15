@@ -50,7 +50,7 @@ export const gymLeads = pgTable(
     fromPage: boolean("from_page").notNull().default(false),
     /** "Happy to hear from us" ticked by the person on the page form, not by staff (0055). */
     emailOkByPage: boolean("email_ok_by_page").notNull().default(false),
-    /** The member whose invite link the lead came by, and when (20e-ii-a, `0116`). Written
+    /** The member whose invite link the lead came by, and when (20e-ii-a, `0117`). Written
      *  only when the form makes a new lead. */
     referredBy: uuid("referred_by").references(() => users.id, { onDelete: "set null" }),
     referredAt: timestamp("referred_at", { withTimezone: true }),

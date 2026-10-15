@@ -1147,6 +1147,9 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string, at: Da
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, null, at);
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
+  // What records deleted for good earlier left behind (18m) goes with the rest of the list:
+  // their bills, payments and refunds by the keys' cascade. The gym was warned it would.
+  await tx`DELETE FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id IS NULL`;
   // The gym's own column headings (3a-v-b). Nothing points at them once the entries
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of
   // this feature the archive sweep left behind.
@@ -2246,7 +2249,8 @@ async function letGoOfDeskSignatures(tx: TransactionSql, gymId: string, entryId:
 /** A record deleted for good: a former one deleted, or the one not kept when two
  *  are joined. A membership linked to it keeps its membership and loses the link (the
  *  foreign key's ON DELETE SET NULL); the last test in
- *  `memberList.byHand.routes.test.ts` lists every table that points at a record. */
+ *  `memberList.byHand.routes.test.ts` lists every table that points at a record. What
+ *  it paid stays (`keepPaidMemberships`). */
 export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string, at: Date): Promise<boolean> {
   // A visit that also names an app account stays that person's visit; the visits only
   // the record holds go with it (`gym_attendance_entry_fk`, ON DELETE CASCADE).
@@ -2258,11 +2262,40 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, entryId, at);
+  await keepPaidMemberships(tx, gymId, entryId, at);
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId}
     RETURNING id`;
   return rows.length === 1;
+}
+
+/** A record deleted for good keeps the money it paid (18m): each of its memberships with a
+ *  payment on it, one taken back too (it has a receipt number), lets go of the record and
+ *  stays, over, with its bills, payments, refunds and receipts, read as "A deleted member".
+ *  Its unpaid bills are cancelled, since nobody is left to pay them, and a booking or a
+ *  session no longer counts against it, as when it went with the record. A membership with
+ *  no payment goes with the record. */
+async function keepPaidMemberships(tx: TransactionSql, gymId: string, entryId: string, at: Date): Promise<void> {
+  const kept = await tx<{ id: string }[]>`
+    UPDATE gym_held_memberships h
+    SET entry_id = NULL, record_deleted_at = ${at}, updated_at = ${at}, frozen_on = NULL,
+        status = CASE WHEN h.status IN ('active','frozen') THEN 'cancelled' ELSE h.status END,
+        cancelled_on = CASE WHEN h.status IN ('active','frozen') THEN (${at}::timestamptz AT TIME ZONE g.timezone)::date
+                            ELSE h.cancelled_on END
+    FROM gyms g
+    WHERE g.id = h.gym_id AND h.gym_id = ${gymId} AND h.entry_id = ${entryId}
+      AND EXISTS (SELECT 1 FROM gym_member_bills b
+                  JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id
+                  WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id)
+    RETURNING h.id`;
+  if (kept.length === 0) return;
+  const ids = kept.map((row) => row.id);
+  await tx`
+    UPDATE gym_member_bills SET status = 'void', updated_at = ${at}
+    WHERE gym_id = ${gymId} AND held_membership_id = ANY(${ids}::uuid[]) AND status = 'open'`;
+  await tx`UPDATE gym_class_bookings SET held_membership_id = NULL WHERE gym_id = ${gymId} AND held_membership_id = ANY(${ids}::uuid[])`;
+  await tx`UPDATE gym_pt_appointments SET held_membership_id = NULL WHERE gym_id = ${gymId} AND held_membership_id = ANY(${ids}::uuid[])`;
 }
 
 /** Two records joined: the memberships linked to the one not kept — joined with it, or
@@ -2369,29 +2402,37 @@ export async function moveLeadLinks(tx: TransactionSql, gymId: string, fromEntry
 
 /** Two records joined: the memberships the one not kept holds become the kept one's
  *  (17a-ii), each as it is. One taken from the list (17a-iii) is NOT moved where the kept
- *  record has that type IN USE: a list with one person on it twice gave both records the
- *  type, and moving it would leave that person two of it running, both asking to be
- *  paid. It goes with its record. Where the kept record's one is over (cancelled, or
- *  ended), the other record's is the person's running membership and moves like any
- *  other. The caller marks what the clock has ended on the kept record first, so
- *  `status` here is what it is today. Answers how many moved and how many were left. */
+ *  record has that type IN USE and it is in use itself: a list with one person on it twice
+ *  gave both records the type, and moving it would leave that person two of it running,
+ *  both asking to be paid. It goes with its record. Where either one is over (cancelled,
+ *  or ended), nothing runs twice and it moves like any other. The caller marks what the
+ *  clock has ended on both records first, so `status` here is what it is today. Answers
+ *  how many moved, how many were left, and the type of one left with a payment on it. */
 export async function moveHeldMemberships(
   tx: TransactionSql,
   gymId: string,
   fromEntryId: string,
   toEntryId: string,
-): Promise<{ moved: number; left: number }> {
+): Promise<{ moved: number; left: number; leftPaid: string | null }> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_held_memberships h SET entry_id = ${toEntryId}
     WHERE h.gym_id = ${gymId} AND h.entry_id = ${fromEntryId}
-      AND NOT (h.from_list AND EXISTS (
+      AND NOT (h.from_list AND h.status IN ('active','frozen') AND EXISTS (
         SELECT 1 FROM gym_held_memberships k
         WHERE k.gym_id = h.gym_id AND k.entry_id = ${toEntryId} AND k.membership_type_id = h.membership_type_id
           AND k.status IN ('active','frozen')))
     RETURNING h.id`;
-  const [rest] = await tx<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
-  return { moved: rows.length, left: rest?.n ?? 0 };
+  // One left with a payment on it would be kept as a deleted member's while its person
+  // is still on the list: the caller refuses the join instead.
+  const [rest] = await tx<{ n: number; paid: string | null }[]>`
+    SELECT count(*)::int AS n,
+           min(t.name) FILTER (WHERE EXISTS (SELECT 1 FROM gym_member_bills b
+                                             JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id
+                                             WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id)) AS paid
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.entry_id = ${fromEntryId}`;
+  return { moved: rows.length, left: rest?.n ?? 0, leftPaid: rest?.paid ?? null };
 }
 
 /** The list moved by hand: its version up by one, and the list created for a gym

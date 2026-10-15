@@ -1586,7 +1586,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     }
     return (
       <Ask testId="confirm-delete" question={`Delete ${name}'s record for good?`}>
-        <p className="c-s14 c-t2 m-0">Everything on it is gone and can&apos;t be brought back.</p>
+        <p className="c-s14 c-t2 m-0">
+          Their details and history are gone and can&apos;t be brought back. Payments they made stay in your takings and
+          reports, as &ldquo;A deleted member&rdquo;.
+        </p>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
             Delete for good
