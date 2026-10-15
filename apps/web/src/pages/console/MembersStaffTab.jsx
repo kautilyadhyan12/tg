@@ -118,7 +118,7 @@ function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, o
 
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
-export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged }) {
+export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null }) {
   const [staff, setStaff] = useState({ loading: true, error: null, list: [] });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
@@ -464,6 +464,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           onChangeRole={(target) => changeRole(open, target)}
           onSavePrivileges={(privileges) => savePrivileges(open, privileges)}
           onRemove={(options) => remove(open, options)}
+          onSeeActivity={onSeeActivity === null ? null : () => onSeeActivity(open.userId)}
         />
       ) : null}
       {ready && inviting ? (

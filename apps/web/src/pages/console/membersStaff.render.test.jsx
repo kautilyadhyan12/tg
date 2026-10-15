@@ -37,6 +37,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   };
 });
 
+const activity = { list: vi.fn() };
+vi.mock('../../api/staffActivityApi', () => ({ staffActivityService: activity }));
+
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1' }, logout: vi.fn() }),
 }));
@@ -1477,5 +1480,46 @@ describe('Remove from staff names the personal training sessions booked with a t
     expect(screen.queryByTestId('pt-sessions-end-box')).toBeNull();
     expect(orgService.removeStaff).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Rita Sen was removed from staff.')).toBeNull();
+  });
+});
+
+// ── Staff activity (4d): the owner's tab beside Staff ──────────────────────
+
+describe('staff activity', () => {
+  beforeEach(() => {
+    activity.list.mockResolvedValue({
+      lines: [{ id: '1', day: '2026-10-15', minute: 600, workerId: 'u2', worker: 'Rita Sen', line: 'Added a note to Amit Rao' }],
+      next: null,
+      workers: [
+        { userId: 'u1', name: 'Kd Owner', current: true },
+        { userId: 'u2', name: 'Rita Sen', current: true },
+      ],
+      today: '2026-10-15',
+    });
+  });
+
+  it("a person's See activity opens Staff activity already showing them alone", async () => {
+    const panel = await drawPerson();
+    fireEvent.click(panel.getByRole('button', { name: 'See activity' }));
+    expect(await screen.findByText('Added a note to Amit Rao', { exact: false })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Staff activity' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('address').textContent).toBe('?view=activity&worker=u2');
+    expect(activity.list).toHaveBeenLastCalledWith(ORG.id, { worker: 'u2', from: null, to: null, after: null });
+    expect(screen.getByLabelText('Who').value).toBe('u2');
+  });
+
+  it('leaving the tab drops its who and when from the address', async () => {
+    drawStaff('/console/iron-house/members?view=activity&worker=u2&when=7');
+    expect(await screen.findByText('Added a note to Amit Rao', { exact: false })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Staff' }));
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('?view=staff'));
+  });
+
+  it("is the owner's alone: a manager has no tab, and its address opens their own list instead", async () => {
+    orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
+    drawStaff('/console/iron-house/members?view=activity');
+    expect(await screen.findByRole('tab', { name: 'In the app' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Staff activity' })).toBeNull();
+    expect(activity.list).not.toHaveBeenCalled();
   });
 });

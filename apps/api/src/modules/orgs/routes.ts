@@ -59,6 +59,7 @@ import { registerMemberListRoutes } from "./memberList/routes.js";
 import { registerStartHereRoutes } from "./startHere/routes.js";
 import { registerReportsRoutes } from "./reports/routes.js";
 import { registerAtRiskRoutes } from "./atRisk/routes.js";
+import { registerStaffActivityRoutes } from "./staffActivity/routes.js";
 import { registerRegisterRoutes } from "./register/routes.js";
 import { registerReceiptRoutes } from "./receipts/routes.js";
 import { registerWeekRoutes } from "./week/routes.js";
@@ -188,6 +189,8 @@ export function registerOrgRoutes(
   registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerReportsRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerAtRiskRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  // Staff activity: which worker did what, for the owner (ROADMAP 4d).
+  registerStaffActivityRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   // The desk's Sell page: products, sales and the gym's tax (ROADMAP 18b-i).
   registerRegisterRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerReceiptRoutes(app, { sql: deps.sql, redis: deps.redis });
