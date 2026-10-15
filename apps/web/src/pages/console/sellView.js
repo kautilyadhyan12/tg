@@ -330,7 +330,8 @@ export const RATE_CHANGE_NOTE = 'A new rate is charged on sales and bills from n
 export function rateChangeNote(rate) {
   if (rate === null || rate === undefined || rate.memberships === 0) return RATE_CHANGE_NOTE;
   const who = rate.memberships === 1 ? "the 1 member's membership" : `the ${String(rate.memberships)} members' memberships`;
-  return `${RATE_CHANGE_NOTE} The next bill of ${who} that charge ${rate.name} changes too.`;
+  const verb = rate.memberships === 1 ? 'charges' : 'charge';
+  return `${RATE_CHANGE_NOTE} The next bill of ${who} that ${verb} ${rate.name} changes too.`;
 }
 
 /** The two ways a gym charges tax, each with an example in the gym's own money, at the

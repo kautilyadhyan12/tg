@@ -326,7 +326,7 @@ describe('round one of 18b-iii', () => {
   it('a rate’s Change form says whose next bill a new percentage reaches', () => {
     expect(rateChangeNote(r())).toBe('A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.');
     expect(rateChangeNote(r({ memberships: 1 }))).toBe(
-      "A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with. The next bill of the 1 member's membership that charge GST changes too.",
+      "A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with. The next bill of the 1 member's membership that charges GST changes too.",
     );
     expect(rateChangeNote(r({ memberships: 4 }))).toContain("The next bill of the 4 members' memberships that charge GST changes too.");
   });
