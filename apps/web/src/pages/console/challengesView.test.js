@@ -672,6 +672,9 @@ describe('every number with its word, and every choice in plain words', () => {
     // Not typed yet: said in general words, never a half sentence.
     expect(said({ counts: 'own', unit: '' })).toMatchObject({ About: 'Not said yet · counted by your staff', 'How it is won': 'Highest number wins' });
     expect(said({ counts: 'own', unit: '', win: 'lowest' })['How it is won']).toBe('Lowest number wins');
+    // An exercise not picked yet says so; picked, its name.
+    expect(said({ subject: 'exercise', measure: null, countedBy: 'staff', unit: '' }).About).toBe('Exercise not picked yet · counted by your staff');
+    expect(said({ subject: 'exercise', measure: null, countedBy: 'staff', exercise: 'plank', unit: 'seconds' }).About).toBe('Plank · counted by your staff');
     expect(said({ counts: 'own', unit: '', win: 'most', teams: 'staff' })['How it is won']).toBe('The team with the highest number wins');
     expect(said({ counts: 'own', unit: '', win: 'target', target: '100' })['How it is won']).toBe('Reach 100');
     expect(said({ win: 'target', target: '' })['How it is won']).toBe('Reach a target');

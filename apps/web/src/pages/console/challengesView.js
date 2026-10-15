@@ -752,7 +752,9 @@ export function draftSummary(draft, list, words) {
   const lines = [
     { label: 'Name', value: name === '' ? 'Not named yet' : name, empty: name === '' },
     { label: 'When', value: days === null ? 'Days not picked yet' : datesLine(draft, list.today), empty: days === null },
-    { label: 'About', value: unit === '' ? 'Not said yet · counted by your staff' : `${about.about} · ${counted}`, empty: unit === '' },
+    picksExercise(draft) && (draft.exercise ?? '') === ''
+      ? { label: 'About', value: `Exercise not picked yet · ${counted}`, empty: true }
+      : { label: 'About', value: unit === '' ? 'Not said yet · counted by your staff' : `${about.about} · ${counted}`, empty: unit === '' },
     { label: 'How it is won', value: draftWon(draft), empty: false },
     { label: 'Who is in it', value: draft.who === 'everyone' ? `Everyone in the app · ${peopleCount(list.inApp)}` : `${words.peopleCap} who join`, empty: false },
     {
