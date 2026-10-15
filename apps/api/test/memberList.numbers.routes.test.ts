@@ -74,16 +74,16 @@ d("member list: the app numbers members itself (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, cookies: Record<string, string>, payload?: unknown) =>
+  const send = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, cookies: Record<string, string>, payload?: unknown, ip = nextIp()) =>
     api().inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress: ip,
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
-  const post = async (path: string, payload: unknown, cookies: Record<string, string>) =>
-    send("POST", path, cookies, await everyoneLeft(api(), path, payload, cookies));
+  const post = async (path: string, payload: unknown, cookies: Record<string, string>, ip?: string) =>
+    send("POST", path, cookies, await everyoneLeft(api(), path, payload, cookies), ip);
   const patch = (path: string, payload: unknown, cookies: Record<string, string>) => send("PATCH", path, cookies, payload);
   const get = (path: string, cookies: Record<string, string>) => send("GET", path, cookies);
   const del = (path: string, cookies: Record<string, string>) => send("DELETE", path, cookies);
@@ -131,8 +131,8 @@ d("member list: the app numbers members itself (real Postgres)", () => {
   const nextUrl = (gymId: string) => `${listUrl(gymId)}/next-number`;
 
   /** Add member as staff press it, with nobody alike on the list. */
-  const add = async (gymId: string, who: User, person: Record<string, string>): Promise<{ id: string; number: string | null }> => {
-    const res = await post(entriesUrl(gymId), person, who.cookies);
+  const add = async (gymId: string, who: User, person: Record<string, string>, ip?: string): Promise<{ id: string; number: string | null }> => {
+    const res = await post(entriesUrl(gymId), person, who.cookies, ip);
     expect(res.statusCode, res.body).toBe(201);
     const { entry } = memberListEntryWrittenSchema.parse(JSON.parse(res.body));
     return { id: entry.entryId, number: entry.memberNumber };
@@ -184,9 +184,10 @@ d("member list: the app numbers members itself (real Postgres)", () => {
       const owner = await makeUser("worst-owner");
       const gym = (await makeOrg(owner, "Numbers Worst Gym")).org.id;
 
-      // Eight people added at once, from eight requests.
+      // Eight people added at once, from eight requests at ONE front desk's address.
+      const desk = "10.66.250.250";
       const added = await Promise.all(
-        Array.from({ length: 8 }, (_, i) => add(gym, owner, { fullName: `Front Desk ${String(i + 1)}`, email: `desk${String(i + 1)}@members.example` })),
+        Array.from({ length: 8 }, (_, i) => add(gym, owner, { fullName: `Front Desk ${String(i + 1)}`, email: `desk${String(i + 1)}@members.example` }, desk)),
       );
       const stored = await numbersIn(gym);
       expect(new Set(stored).size).toBe(8);
@@ -344,6 +345,37 @@ d("member list: the app numbers members itself (real Postgres)", () => {
       expect(await numberOf(kept.id)).toBe("980");
       expect(await numbersIn(gym)).toEqual(["1", "2", "901", "980", "Guest"]);
       expect(await offered(gym, owner)).toBe("991");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym that switches its numbers' style and back is never given a deleted number (round one, High-1)",
+    async () => {
+      const owner = await makeUser("style-owner");
+      const gym = (await makeOrg(owner, "Numbers Style Gym")).org.id;
+      const plain = [];
+      for (const name of ["Ann One", "Ben Two", "Cee Three"]) plain.push(await add(gym, owner, { fullName: name, email: `${name.split(" ")[0]?.toLowerCase() ?? ""}@style.example` }));
+      expect(plain.map((p) => p.number)).toEqual(["1", "2", "3"]);
+      const cee = plain[2];
+      if (cee === undefined) throw new Error("no Cee");
+      expect((await del(`${entriesUrl(gym)}/${cee.id}`, owner.cookies)).statusCode).toBe(200);
+      expect((await del(`${listUrl(gym)}/former/${cee.id}`, owner.cookies)).statusCode).toBe(200);
+
+      // The gym moves to M numbers: four typed, the fifth given M5.
+      const ms = [];
+      for (const [i, name] of ["Dee", "Eve", "Fay", "Gus"].entries()) ms.push(await add(gym, owner, { fullName: name, email: `${name.toLowerCase()}@style.example`, memberNumber: `M${String(i + 1)}` }));
+      ms.push(await add(gym, owner, { fullName: "Hal", email: "hal@style.example" }));
+      expect(ms.map((p) => p.number)).toEqual(["M1", "M2", "M3", "M4", "M5"]);
+
+      // Every M number changed to a word: the plain numbers are the gym's again, and 3 is not given.
+      for (const [i, p] of ms.entries()) expect((await patch(`${entriesUrl(gym)}/${p.id}`, { memberNumber: `Guest ${"ABCDE".charAt(i)}` }, owner.cookies)).statusCode).toBe(200);
+      expect(await offered(gym, owner)).toBe("4");
+      expect((await add(gym, owner, { fullName: "Ivy", email: "ivy@style.example" })).number).toBe("4");
+
+      // M numbers come back: M5 is not given again either.
+      for (const [i, name] of ["Jo", "Kai", "Lu"].entries()) await add(gym, owner, { fullName: name, email: `${name.toLowerCase()}@style.example`, memberNumber: `M${String(i + 1)}` });
+      expect((await add(gym, owner, { fullName: "Mo", email: "mo@style.example" })).number).toBe("M6");
     },
     TEST_TIMEOUT_MS,
   );

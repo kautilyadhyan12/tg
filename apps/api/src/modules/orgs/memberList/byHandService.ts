@@ -521,11 +521,11 @@ export async function changeEntry(
       if (holder !== null) return { clash: holder.id, former: holder.former };
     }
     if (applied.identityFields.includes("memberNumber")) {
-      // A number another record holds is refused (5e-i); the one this record had is kept as
-      // the highest where it was, so it is not given to somebody new.
+      // A number another record holds is refused (5e-i); the one this record had is kept, so
+      // it is not given to somebody new.
       const taken = await numberTaken(tx, gymId, applied.values.memberNumber, entryId);
       if (taken !== null) return taken;
-      await repo.keepHighestMemberNumber(tx, gymId);
+      await repo.keepGoingMemberNumber(tx, gymId, stored.values.memberNumber);
     }
     // Only the email and the phone decide who a record reaches (§9.7).
     const contactMoved = applied.identityFields.includes("email") || applied.identityFields.includes("phone");
@@ -848,7 +848,7 @@ export async function deleteFormer(
     if (stored === null) throw notFound();
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
     // Their number is never given to somebody new (5e-i).
-    await repo.keepHighestMemberNumber(tx, gymId);
+    await repo.keepGoingMemberNumber(tx, gymId, stored.values.memberNumber);
     await repo.deleteEntry(tx, gymId, entryId, deps.now());
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
@@ -933,7 +933,7 @@ export async function mergeEntries(
     await moveNotesAndTags(tx, gymId, goneId, keepId);
     // The record not kept may take a number with it, which is never given to somebody new
     // (5e-i).
-    await repo.keepHighestMemberNumber(tx, gymId);
+    await repo.keepGoingMemberNumber(tx, gymId, gone.values.memberNumber);
     await repo.deleteEntry(tx, gymId, goneId, at);
     const lost = await leftOff(tx, gymId, gone.values, [keepId], reached);
     if (lost > 0 && !acknowledgeLeavesList) throw new LeavesList(lost, "merge");

@@ -18,6 +18,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   MEMBER_LIST_DUPLICATES_KEPT,
   MEMBER_LIST_MAX_EDITED_FIELDS,
+  MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS,
   MEMBER_LIST_MAX_ENTRY_MEMBERS,
   MEMBER_LIST_MAX_REVIEW_ITEMS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
@@ -57,7 +58,7 @@ import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import type { ReviewState } from "./review.js";
 import { identityKey } from "./fields.js";
-import { highestMemberNumber, nextMemberNumber } from "./memberNumbers.js";
+import { keptWith, nextMemberNumber } from "./memberNumbers.js";
 import { nameKey, sameName } from "./samePerson.js";
 
 export type SqlOrTx = Sql | TransactionSql;
@@ -3271,44 +3272,54 @@ export async function writeNameKeys(sql: SqlOrTx, rows: readonly { id: string; f
 // Read and written under the gym's lock (`lockGym`), so two staff adding at once are
 // given two numbers.
 
-/** Every member number of the gym that ends in a digit, current and past records, and the
- *  highest one kept from numbers that have gone. */
+/** Every member number of the gym that ends in a digit, current and past records. */
 async function numbersOf(sql: SqlOrTx, gymId: string): Promise<string[]> {
   const rows = await sql<{ n: string }[]>`
     SELECT member_number AS n FROM gym_member_list_entries
-    WHERE gym_id = ${gymId} AND member_number ~ '[0-9]$'
-    UNION ALL
-    SELECT member_number_kept AS n FROM gym_member_lists
-    WHERE gym_id = ${gymId} AND member_number_kept IS NOT NULL`;
+    WHERE gym_id = ${gymId} AND member_number ~ '[0-9]$'`;
   return rows.map((row) => row.n);
 }
 
-async function keepNumber(tx: TransactionSql, gymId: string, kept: string): Promise<void> {
+const keptSchema = z.record(z.string(), z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS));
+
+/** The highest number kept of each sequence, by the prefix folded (`memberNumbers.ts`). */
+async function keptOf(sql: SqlOrTx, gymId: string): Promise<Record<string, string>> {
+  const rows = await sql<{ kept: unknown }[]>`
+    SELECT member_numbers_kept AS kept FROM gym_member_lists WHERE gym_id = ${gymId}`;
+  const row = rows[0];
+  return row === undefined ? {} : keptSchema.parse(row.kept);
+}
+
+/** This number kept as its sequence's highest, where it is higher than what is kept. */
+async function keepNumber(tx: TransactionSql, gymId: string, number: string): Promise<void> {
+  const kept = keptWith(await keptOf(tx, gymId), number);
+  if (kept === null) return;
   await tx`
-    INSERT INTO gym_member_lists (gym_id, member_number_kept)
-    VALUES (${gymId}, ${kept})
-    ON CONFLICT (gym_id) DO UPDATE SET member_number_kept = EXCLUDED.member_number_kept`;
+    INSERT INTO gym_member_lists (gym_id, member_numbers_kept)
+    VALUES (${gymId}, ${tx.json(kept)})
+    ON CONFLICT (gym_id) DO UPDATE SET member_numbers_kept = EXCLUDED.member_numbers_kept`;
 }
 
 /** The number "Add member" offers: read on the pool, so it is a suggestion; the number a
  *  person is given is `giveMemberNumber`'s, under the lock. */
 export async function offeredMemberNumber(sql: SqlOrTx, gymId: string): Promise<string | null> {
-  return nextMemberNumber(await numbersOf(sql, gymId));
+  const [numbers, kept] = await Promise.all([numbersOf(sql, gymId), keptOf(sql, gymId)]);
+  return nextMemberNumber(numbers, Object.values(kept));
 }
 
-/** The gym's next member number, given: kept as the highest, so it is never given twice.
- *  Null where the next would be longer than a member number may be. */
+/** The gym's next member number, given: kept as its sequence's highest, so it is never
+ *  given twice. Null where the next would be longer than a member number may be. */
 export async function giveMemberNumber(tx: TransactionSql, gymId: string): Promise<string | null> {
-  const next = nextMemberNumber(await numbersOf(tx, gymId));
+  const next = nextMemberNumber(await numbersOf(tx, gymId), Object.values(await keptOf(tx, gymId)));
   if (next !== null) await keepNumber(tx, gymId, next);
   return next;
 }
 
-/** Before a number goes (a record deleted for good, a number changed or merged away): the
- *  highest of the gym's sequence is kept, so it is not given again. */
-export async function keepHighestMemberNumber(tx: TransactionSql, gymId: string): Promise<void> {
-  const highest = highestMemberNumber(await numbersOf(tx, gymId));
-  if (highest !== null) await keepNumber(tx, gymId, highest);
+/** Before a number goes (a record deleted for good, a number changed or merged away): it
+ *  is kept as its own sequence's highest, so it is not given again whichever sequence the
+ *  gym uses later. */
+export async function keepGoingMemberNumber(tx: TransactionSql, gymId: string, memberNumber: string | null): Promise<void> {
+  if (memberNumber !== null) await keepNumber(tx, gymId, memberNumber);
 }
 
 /** The record, other than `exceptId`, with these very name, email and phone and ANY member

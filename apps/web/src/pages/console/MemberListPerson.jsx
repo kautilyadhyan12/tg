@@ -865,6 +865,12 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         }
       }
       written(null, res);
+      // The number shown was given to somebody else a moment before (5e-i): said where the
+      // person added is, so a desk that wrote it down knows.
+      const givenNumber = res.data.entry.memberNumber;
+      if (res.data.outcome === 'added' && input.memberNumber === undefined && offered !== null && givenNumber !== null && givenNumber !== offered) {
+        setNotice((said) => `${said} Their member number is ${givenNumber}, as ${offered} was given to someone else a moment ago.`);
+      }
       if (notGiven !== null) setRefusal({ message: notGiven, openId: null, ack: null });
     } catch (err) {
       if (wanted.current !== null) return;
@@ -1130,8 +1136,17 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   // ── What the panel draws ──
 
   const textBox = (f) => {
-    // Add member fills in the next member number (5e-i), and says so under the box.
-    const filled = id === null && f.key === 'memberNumber' && offered !== null && form.memberNumber === offered;
+    // Add member fills in the next member number (5e-i), and says so under the box; emptied,
+    // the box says the person is still given one, as the app numbers everybody.
+    const numberBox = id === null && f.key === 'memberNumber';
+    const hint = !numberBox
+      ? null
+      : offered !== null && form.memberNumber === offered
+        ? 'Your next member number. You can type a different one.'
+        : form.memberNumber.trim() === ''
+          ? 'Left empty, they are given your next member number.'
+          : null;
+    const filled = hint !== null;
     const hintId = `${titleId}-${f.key}-hint`;
     // The hint is outside the label, so the box's name stays "Member number"; the box is
     // wrapped the same way with or without it, so typing in it never moves the focus.
@@ -1150,7 +1165,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         </label>
         {filled ? (
           <span id={hintId} className="c-hint">
-            Your next member number. You can change it.
+            {hint}
           </span>
         ) : null}
       </div>

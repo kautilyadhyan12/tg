@@ -1189,14 +1189,34 @@ describe('Add member', () => {
     openBox(null);
     const box = dialog().getByLabelText('Member number');
     await waitFor(() => expect(box.value).toBe('M0042'));
-    expect(dialog().getByText('Your next member number. You can change it.')).toBeTruthy();
+    expect(dialog().getByText('Your next member number. You can type a different one.')).toBeTruthy();
     fireEvent.change(dialog().getByLabelText('Name'), { target: { value: 'Bea Hart' } });
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' }));
     expect(orgService.getNextMemberNumber).toHaveBeenCalledWith(GYM);
-    // The number given is the one on their page.
+    // The number given is the one on their page, and why it is not the one shown.
     expect(await dialog().findByText('M0043')).toBeTruthy();
+    expect(dialog().getByText('Member added. Their member number is M0043, as M0042 was given to someone else a moment ago.')).toBeTruthy();
+  });
+
+  it('given the number shown, says nothing more than that they were added', async () => {
+    orgService.getNextMemberNumber.mockResolvedValue({ data: { memberNumber: 'M0042' } });
+    orgService.addMemberListEntry.mockResolvedValue(written('added', person(BEA, 'Bea Hart', { memberNumber: 'M0042' })));
+    openBox(null);
+    await waitFor(() => expect(dialog().getByLabelText('Member number').value).toBe('M0042'));
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    expect(await dialog().findByText('Member added.')).toBeTruthy();
+  });
+
+  it('an emptied number box says the person is still given the next number', async () => {
+    openBox(null);
+    const box = dialog().getByLabelText('Member number');
+    await waitFor(() => expect(box.value).toBe('1'));
+    fireEvent.change(box, { target: { value: '' } });
+    expect(dialog().getByText('Left empty, they are given your next member number.')).toBeTruthy();
+    expect(dialog().queryByText('Your next member number. You can type a different one.')).toBeNull();
   });
 
   it('sends a member number staff changed, as they typed it', async () => {
@@ -1205,7 +1225,7 @@ describe('Add member', () => {
     const box = dialog().getByLabelText('Member number');
     await waitFor(() => expect(box.value).toBe('1'));
     fireEvent.change(box, { target: { value: 'M0100' } });
-    expect(dialog().queryByText('Your next member number. You can change it.')).toBeNull();
+    expect(dialog().queryByText('Your next member number. You can type a different one.')).toBeNull();
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { email: 'bea@members.example', memberNumber: 'M0100' }));

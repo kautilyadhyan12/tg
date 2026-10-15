@@ -13,7 +13,7 @@
 // Membership software continues from the highest number taken, never fills a gap, and
 // keeps the zeros in front (Tendenci, Yapla, Centerbase's numbering help, 2026-10-16).
 import { describe, expect, it } from "vitest";
-import { highestMemberNumber, nextMemberNumber } from "../src/modules/orgs/memberList/memberNumbers.js";
+import { keptWith, nextMemberNumber } from "../src/modules/orgs/memberList/memberNumbers.js";
 
 interface Case {
   name: string;
@@ -83,10 +83,72 @@ describe("the next member number never belongs to anybody (the worst thing)", ()
     expect(taken.has(given.toLowerCase())).toBe(false);
   });
 
-  it("the number a gym kept from a record deleted for good is never given again", () => {
-    // 1050 was deleted for good; the records left stop at 1049.
-    expect(nextMemberNumber(["1048", "1049", "1050"])).toBe("1051");
-    expect(highestMemberNumber(["1048", "1049", "1050"])).toBe("1050");
+  /** A gym's life, step by step: each number given or gone is kept by `keptWith`, as the
+   *  server keeps it, and no number given is ever one somebody had. */
+  const lifeOf = (steps: ({ give: true } | { type: string } | { gone: string })[]): string[] => {
+    const members: string[] = [];
+    let kept: Record<string, string> = {};
+    const ever = new Set<string>();
+    const given: string[] = [];
+    const keep = (number: string) => {
+      kept = keptWith(kept, number) ?? kept;
+    };
+    for (const step of steps) {
+      if ("give" in step) {
+        const next = nextMemberNumber(members, Object.values(kept));
+        if (next === null) throw new Error("no number");
+        expect(ever.has(next.toLowerCase()), `${next} was somebody's`).toBe(false);
+        members.push(next);
+        ever.add(next.toLowerCase());
+        given.push(next);
+        keep(next);
+      } else if ("type" in step) {
+        members.push(step.type);
+        ever.add(step.type.toLowerCase());
+      } else {
+        members.splice(members.indexOf(step.gone), 1);
+        keep(step.gone);
+      }
+    }
+    return given;
+  };
+
+  it("a gym that switches style and back never gets a deleted number again (round one, High-1)", () => {
+    // The reviewer's run: 1 2 3 given, 3 deleted for good, M1..M4 typed, M5 given, every M
+    // number changed to a word: the plain sequence is the gym's again, and 3 is not given.
+    const given = lifeOf([
+      { give: true },
+      { give: true },
+      { give: true },
+      { gone: "3" },
+      { type: "M1" },
+      { type: "M2" },
+      { type: "M3" },
+      { type: "M4" },
+      { give: true },
+      { gone: "M1" },
+      { gone: "M2" },
+      { gone: "M3" },
+      { gone: "M4" },
+      { gone: "M5" },
+      { give: true },
+      // And M comes back: M5 is not given again either.
+      { type: "M1" },
+      { type: "M2" },
+      { type: "M3" },
+      { give: true },
+    ]);
+    expect(given).toEqual(["1", "2", "3", "M5", "4", "M6"]);
+  });
+
+  it("a number that goes from a style that is not the gym's is kept too", () => {
+    // A typed A900 deleted while the gym's numbers are plain; later the gym moves to A.
+    const given = lifeOf([{ give: true }, { type: "A900" }, { gone: "A900" }, { type: "A1" }, { type: "A2" }, { give: true }]);
+    expect(given).toEqual(["1", "A901"]);
+  });
+
+  it("a gym whose members all went continues where it was", () => {
+    expect(lifeOf([{ give: true }, { give: true }, { gone: "1" }, { gone: "2" }, { give: true }])).toEqual(["1", "2", "3"]);
   });
 });
 
@@ -98,26 +160,37 @@ describe("the next member number", () => {
   it("is the same whatever order the numbers come in", () => {
     const held = ["SOK1233", "XSOK1236", "SOK1235", "SOK1234", "A1"];
     expect(nextMemberNumber([...held].reverse())).toBe(nextMemberNumber(held));
+    expect(nextMemberNumber(held, ["A7", "SOK2000"])).toBe(nextMemberNumber([...held].reverse(), ["SOK2000", "A7"]));
+  });
+
+  it("the kept numbers raise a sequence and never choose it (round one, Low-1)", () => {
+    // The only member holds A1; a kept 7 of the plain sequence does not make it the gym's.
+    expect(nextMemberNumber(["A1"], ["7"])).toBe("A2");
+    // The plain sequence's kept 1050 lifts it above its members' 1049.
+    expect(nextMemberNumber(["1048", "1049"], ["1050"])).toBe("1051");
+    // Kept zeros in front outlive the members that had them.
+    expect(nextMemberNumber(["124"], ["000123"])).toBe("000125");
+    // A kept number of another case is the same sequence.
+    expect(nextMemberNumber(["M0040"], ["m0050"])).toBe("M0051");
   });
 });
 
-describe("the highest member number, kept so a deleted one is never reused", () => {
-  it("is the highest of the style the next number follows", () => {
-    expect(highestMemberNumber(["101", "102", "103", "A1", "A2"])).toBe("103");
-    // Written as wide as the widest, so the zeros in front outlive the records that had them.
-    expect(highestMemberNumber(["000123", "124"])).toBe("000124");
+describe("the kept numbers, one per sequence", () => {
+  it("keeps a number in its own sequence and leaves the others", () => {
+    expect(keptWith({}, "3")).toEqual({ "": "3" });
+    expect(keptWith({ "": "3" }, "M5")).toEqual({ "": "3", m: "M5" });
+    expect(keptWith({ "": "3", m: "M5" }, "4")).toEqual({ "": "4", m: "M5" });
   });
 
-  it("is none where nothing is a sequence", () => {
-    expect(highestMemberNumber([])).toBeNull();
-    expect(highestMemberNumber(["GOLD", "17B"])).toBeNull();
+  it("never lowers what is kept, and keeps the wider width", () => {
+    expect(keptWith({ "": "9" }, "4")).toBeNull();
+    expect(keptWith({ "": "124" }, "000124")).toEqual({ "": "000124" });
+    expect(keptWith({ "": "000124" }, "124")).toBeNull();
+    expect(keptWith({ "": "000124" }, "130")).toEqual({ "": "000130" });
   });
 
-  it("the next number after it is the next number after the whole list", () => {
-    for (const held of [["SOK1233", "SOK1234", "SOK1235", "XSOK1236", "GOLD"], ["000123", "124"], ["0999"], ["M0039", "M0040", "m0041"]]) {
-      const kept = highestMemberNumber(held);
-      expect(kept).not.toBeNull();
-      expect(nextMemberNumber([kept ?? ""])).toBe(nextMemberNumber(held));
-    }
+  it("keeps nothing for a number in no sequence", () => {
+    expect(keptWith({ "": "3" }, "Guest")).toBeNull();
+    expect(keptWith({}, "17B")).toBeNull();
   });
 });
