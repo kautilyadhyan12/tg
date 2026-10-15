@@ -225,8 +225,10 @@ async function placeGift(
     if (done.kind !== "ok") throw refused(done);
     return live.id;
   }
-  if (live !== undefined) await archive(live);
+  // The code is picked while the replaced one still counts, so the new gift never takes its
+  // code or name: WELCOME20B, never a second WELCOME20 (the re-check of round one, L7).
   const code = await freeCode(tx, ctx.gymId, gift, ctx.currency, null);
+  if (live !== undefined) await archive(live);
   const made = await createDiscountInTx(tx, { ...want, name: giftName(code), code, gymId: ctx.gymId, actorUserId: ctx.userId });
   if (made.kind !== "created") throw refused(made);
   return made.id;

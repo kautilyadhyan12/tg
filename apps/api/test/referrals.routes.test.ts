@@ -421,6 +421,11 @@ d("Refer a friend (real Postgres)", () => {
         expect((await at("POST", formUrl(codeA), enquiry({ fullName: "Shared Two", email: "shared.two@example.com" }))).statusCode).toBe(202);
         const names = (await storedLeads(gymA.org.id)).map((l) => l.full_name);
         expect(names).toContain("Shared Two");
+        // The form has a light allowance of its own per address, ahead of the link's lookup
+        // (the re-check, L6): past it, refused there and nowhere else.
+        for (let i = 0; i < 3000; i += 1) await redis.incrWithTtl(`rl:referral_invite_form:ip:${shared}`, 3600);
+        expect((await at("POST", formUrl(codeB), enquiry({ fullName: "Shared Three", email: "shared.three@example.com" }))).statusCode).toBe(429);
+        expect((await post(formUrl(codeB), enquiry({ fullName: "Elsewhere", email: "elsewhere@example.com" }))).statusCode).toBe(202);
       },
       TIMEOUT_MS,
     );
@@ -549,6 +554,15 @@ d("Refer a friend (real Postgres)", () => {
         const kept = await sql<{ code: string; percent_bp: number; archived: boolean }[]>`
           SELECT code, percent_bp, archived_at IS NOT NULL AS archived FROM gym_discounts WHERE id = ${same?.friend_discount_id ?? ""}`;
         expect(kept).toEqual([{ code: "WELCOME25", percent_bp: 2500, archived: true }]);
+        // Used, and changed to a gift whose code would be the same: the new one never takes the
+        // old one's code or name (the re-check, L7).
+        const [used] = await sql<{ friend_discount_id: string }[]>`SELECT friend_discount_id FROM gym_referral_settings WHERE gym_id = ${gymA.org.id}`;
+        await sql`UPDATE gym_discounts SET uses = 1 WHERE id = ${used?.friend_discount_id ?? ""}`;
+        const every = await switchOn(gymA, ownerA.cookies, mine(10), pct(20, "every"));
+        expect(every.friend?.code).toBe("WELCOME20B");
+        expect(await sql`SELECT code, archived_at IS NOT NULL AS archived FROM gym_discounts WHERE id = ${used?.friend_discount_id ?? ""}`).toEqual([
+          { code: "WELCOME20", archived: true },
+        ]);
         // Used, and then no gift at all: archived too, and the box and the Discounts list agree.
         const [now] = await sql<{ friend_discount_id: string }[]>`SELECT friend_discount_id FROM gym_referral_settings WHERE gym_id = ${gymA.org.id}`;
         await sql`UPDATE gym_discounts SET uses = 1 WHERE id = ${now?.friend_discount_id ?? ""}`;

@@ -174,6 +174,18 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     },
     redis: deps.redis,
   });
+  /** The invite form, before its link is looked up: 3,000 an hour from one address, so a
+   *  flood of made-up links cannot make every request three reads (the re-check of round
+   *  one, L6). Far over what people at one shared address send; the page form's own limits
+   *  follow, counted against the business. */
+  const inviteFormLimit = createDualRateLimit({
+    name: "referral_invite_form",
+    max: 3000,
+    ipMax: 3000,
+    windowMs: 60 * 60 * 1000,
+    identifier: () => null,
+    redis: deps.redis,
+  });
   /** …and 120 messages an hour to one page, counted only once the robot check passed. Once
    *  the page has taken half its hour, one address may take only 10 of it: nobody can keep a
    *  gym's page "busy" alone, and a quiet page never refuses people sharing one address (the
@@ -335,6 +347,8 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
   // against the same business. The invite is found again here, and asked again in the
   // write's own transaction.
   app.post("/v1/public/invites/:code/enquiries", async (req, reply) => {
+    await inviteFormLimit(req, reply);
+    if (reply.sent) return;
     const parsed = inviteParamsSchema.safeParse(req.params);
     if (!parsed.success) return inviteNotFound(req, reply);
     const body = parseOr400(inviteEnquiryRequestSchema, req.body, req, reply);
