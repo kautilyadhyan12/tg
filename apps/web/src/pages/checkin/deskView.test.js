@@ -156,12 +156,22 @@ describe('the sound for an answer', () => {
     }
   });
 
+  it('a gym with no plan: check-in is unavailable, see staff, and the desk keeps trying (it works again once the gym has a plan)', () => {
+    expect(deskTrouble(failed(409, 'checkin_paused'))).toEqual({
+      tone: 'bad',
+      title: 'Check-in is unavailable',
+      message: 'Please see a member of staff.',
+      stop: false,
+    });
+  });
+
   it.each([
     ['an answer this page has never heard of', deskAnswer({ ...person, result: 'checked_in_maybe' })],
     ['no answer at all', deskAnswer(null)],
     ['a read that is no pass', NOT_A_SCAN],
     ['a device switched off', deskTrouble(failed(401, 'device_not_recognised'))],
     ['key tags paused', deskTrouble(failed(429, 'key_tags_paused'))],
+    ['a gym with no plan', deskTrouble(failed(409, 'checkin_paused'))],
     ['the server down', deskTrouble(failed(500, 'internal'))],
     ['no connection', deskTrouble(new Error('Network Error'))],
     ['nothing', null],

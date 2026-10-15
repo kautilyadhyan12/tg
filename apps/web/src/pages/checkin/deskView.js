@@ -111,6 +111,10 @@ export function deskTrouble(err) {
   if (status === 401 || code === 'device_not_recognised') {
     return { tone: 'bad', title: "This device can't check people in", message: CHECKIN_WORDS.device_not_recognised, stop: true };
   }
+  if (code === 'checkin_paused') {
+    // The gym has no plan. Not `stop`: the desk works again the moment it has one.
+    return { tone: 'bad', title: 'Check-in is unavailable', message: 'Please see a member of staff.', stop: false };
+  }
   if (err?.isContractError === true) {
     return { tone: 'warn', title: 'Please scan again', message: CHECKIN_WORDS.checkin_unavailable, stop: false };
   }

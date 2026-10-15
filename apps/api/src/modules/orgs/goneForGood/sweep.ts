@@ -16,7 +16,15 @@
 // waits. A sign-in takes no gym lock: one in the same instant as the deletion, a week
 // after the last email, is not seen. The email goes after that transaction, so no lock is held over the network; a
 // claim made first stops a second run sending it again, and a claim an hour old with
-// nothing marked sent is tried once more (a second email over none).
+// nothing marked sent is tried once more (a second email over none). Claims are stamped
+// and timed by the database's clock, never the night's: a run that started long ago does
+// not make another run's claim look old.
+//
+// Only a proved address is emailed (`repo.staffWithEmail`), and one address gets one of
+// these emails a night (`repo.toldElsewhereTonight`, kept in the database so a retry of the
+// night sees it): a person with several gyms gone dark hears of one a night, and the others
+// wait, their days moving with them. The worker sends them from the invitations'
+// sender, never the sign-in codes' (`worker.ts`).
 //
 // The worker runs it nightly (`worker.ts`); `nextStep` is the rule, pure, table-tested.
 import type { Sql } from "postgres";
@@ -48,18 +56,19 @@ const later = (a: Date, b: Date): Date => (a.getTime() >= b.getTime() ? a : b);
 const plusDays = (at: Date, days: number): Date => new Date(at.getTime() + days * DAY_MS);
 const fresh = (claimedAt: Date | null, now: Date): boolean => claimedAt !== null && now.getTime() - claimedAt.getTime() < CLAIM_STALE_MS;
 
-/** What this gym's round does now. `dueAt` is six months from `round.countedFrom`. */
-export function nextStep(round: repo.Round, dueAt: Date, now: Date): Step {
+/** What this gym's round does now. `dueAt` is six months from `round.countedFrom`;
+ *  `claimNow` is the clock claims are stamped with (`repo.claimClock`), `now` the night's. */
+export function nextStep(round: repo.Round, dueAt: Date, now: Date, claimNow: Date = now): Step {
   if (round.monthSentAt === null) {
     if (now.getTime() < plusDays(dueAt, -repo.FIRST_NOTICE_DAYS).getTime()) return { kind: "wait" };
-    if (fresh(round.monthClaimedAt, now)) return { kind: "wait" };
+    if (fresh(round.monthClaimedAt, claimNow)) return { kind: "wait" };
     return { kind: "month", deletesAt: later(dueAt, plusDays(now, repo.FIRST_NOTICE_DAYS)) };
   }
   // The month email names a day; it is set whenever that email is.
   const named = round.deletesAt ?? plusDays(round.monthSentAt, repo.FIRST_NOTICE_DAYS);
   if (round.weekSentAt === null) {
     if (now.getTime() < plusDays(named, -LAST_NOTICE_DAYS).getTime()) return { kind: "wait" };
-    if (fresh(round.weekClaimedAt, now)) return { kind: "wait" };
+    if (fresh(round.weekClaimedAt, claimNow)) return { kind: "wait" };
     return { kind: "week", deletesAt: later(named, plusDays(now, LAST_NOTICE_DAYS)) };
   }
   if (now.getTime() >= named.getTime() && now.getTime() >= plusDays(round.weekSentAt, LAST_NOTICE_DAYS).getTime()) {
@@ -91,6 +100,8 @@ export interface GoneForGoodResult {
   weekSent: number;
   /** An email that could not go to anybody it was meant for; tried again next run. */
   notSent: number;
+  /** Waiting a night: one of its addresses was emailed about another gym tonight. */
+  held: number;
   deleted: number;
   /** Gyms whose step raised; the worker fails the run so it is seen, and it is retried. */
   failed: number;
@@ -99,18 +110,20 @@ export interface GoneForGoodResult {
 type Decided =
   | { kind: "none" }
   | { kind: "deleted" }
-  | { kind: "send"; notice: repo.Notice; countedFrom: Date; deletesAt: Date };
+  | { kind: "send"; notice: repo.Notice; countedFrom: Date; deletesAt: Date; claimedAt: Date };
+
+type Sent = { kind: "sent"; count: number } | { kind: "none" } | { kind: "held" };
 
 /** Everyone at the gym who may both pay for its plan and download its list, the two things
  *  the email offers: the owner, and staff given both ticks. */
-async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<string[]> {
-  const out: string[] = [];
+async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<{ userId: string; email: string }[]> {
+  const out: { userId: string; email: string }[] = [];
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
     if (
       (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) &&
       (await holdsPrivilege(deps, gymId, staff.userId, "members.confirm"))
     ) {
-      out.push(staff.email);
+      out.push(staff);
     }
   }
   return out;
@@ -123,14 +136,15 @@ async function decide(deps: GoneForGoodDeps, gymId: string, now: Date): Promise<
     const [fact] = await repo.dueGyms(tx, now, [gymId]);
     if (fact === undefined) return { kind: "none" };
     const round = await repo.roundFor(tx, gymId, fact.countedFrom);
-    const step = nextStep(round, fact.dueAt, now);
+    const clock = await repo.claimClock(tx);
+    const step = nextStep(round, fact.dueAt, now, clock);
     switch (step.kind) {
       case "wait":
         return { kind: "none" };
       case "month":
       case "week":
-        await repo.claimNotice(tx, gymId, step.kind, now, step.deletesAt);
-        return { kind: "send", notice: step.kind, countedFrom: fact.countedFrom, deletesAt: step.deletesAt };
+        await repo.claimNotice(tx, gymId, step.kind, clock, step.deletesAt);
+        return { kind: "send", notice: step.kind, countedFrom: fact.countedFrom, deletesAt: step.deletesAt, claimedAt: clock };
       case "delete":
         await deleteLeadsForGym(tx, gymId);
         await deleteStaffInvitesForGym(tx, gymId);
@@ -150,19 +164,26 @@ async function decide(deps: GoneForGoodDeps, gymId: string, now: Date): Promise<
   });
 }
 
-/** Sends one email to each recipient: how many went, or null when none went, nobody can be
- *  emailed included. A failure for some of them counts as sent: the others were told. */
-async function send(deps: GoneForGoodDeps, gymId: string, decided: Extract<Decided, { kind: "send" }>): Promise<number | null> {
+/** Sends one email to each recipient: how many went; none, nobody can be emailed included;
+ *  or held, when one of them was emailed tonight already. A failure for some of them counts
+ *  as sent: the others were told. */
+async function send(
+  deps: GoneForGoodDeps,
+  gymId: string,
+  decided: Extract<Decided, { kind: "send" }>,
+  now: Date,
+): Promise<Sent> {
   const gym = await repo.noticeGym(deps.sql, gymId);
-  if (gym === null) return null;
+  if (gym === null) return { kind: "none" };
   const to = await recipients(deps, gymId);
   if (to.length === 0) {
     deps.log.info({ event: "orgs.gone_for_good.nobody_to_email", gymId, notice: decided.notice }, "a gym gone for good has nobody to email, so it is kept");
-    return null;
+    return { kind: "none" };
   }
+  if (await repo.toldElsewhereTonight(deps.sql, gymId, to.map((staff) => staff.userId), now)) return { kind: "held" };
   const membersLink = `${deps.mail.webOrigin}/console/${encodeURIComponent(gym.slug)}/members`;
   let sent = 0;
-  for (const address of to) {
+  for (const { email: address } of to) {
     try {
       await deps.mail.transport.send(
         goneForGoodEmail({
@@ -185,40 +206,49 @@ async function send(deps: GoneForGoodDeps, gymId: string, decided: Extract<Decid
       );
     }
   }
-  return sent > 0 ? sent : null;
+  return sent > 0 ? { kind: "sent", count: sent } : { kind: "none" };
+}
+
+/** One gym's night: decided under its lock, then its email, if one is due. */
+async function gymNight(deps: GoneForGoodDeps, gymId: string, now: Date, result: GoneForGoodResult): Promise<void> {
+  const decided = await decide(deps, gymId, now);
+  if (decided.kind === "deleted") {
+    result.deleted += 1;
+    deps.log.info({ event: "orgs.gone_for_good.list_deleted", gymId }, "a gym gone for good had its list deleted");
+    return;
+  }
+  if (decided.kind !== "send") return;
+  const claim = { gymId, notice: decided.notice, countedFrom: decided.countedFrom, claimedAt: decided.claimedAt };
+  const sent = await send(deps, gymId, decided, now);
+  if (sent.kind !== "sent") {
+    await repo.releaseClaim(deps.sql, claim);
+    if (sent.kind === "held") result.held += 1;
+    else result.notSent += 1;
+    return;
+  }
+  if (!(await repo.markSent(deps.sql, { ...claim, recipients: sent.count, at: now }))) {
+    // Another run took the claim over, or the round started again, while this one sent.
+    deps.log.info({ event: "orgs.gone_for_good.sent_not_marked", gymId, notice: decided.notice }, "a gone-for-good email went under a claim no longer held");
+    return;
+  }
+  if (decided.notice === "month") result.monthSent += 1;
+  else result.weekSent += 1;
 }
 
 export async function sweepGoneForGood(deps: GoneForGoodDeps, opts: GoneForGoodOptions = {}): Promise<GoneForGoodResult> {
   const now = opts.now ?? new Date();
-  const result: GoneForGoodResult = { due: 0, monthSent: 0, weekSent: 0, notSent: 0, deleted: 0, failed: 0 };
+  const result: GoneForGoodResult = { due: 0, monthSent: 0, weekSent: 0, notSent: 0, held: 0, deleted: 0, failed: 0 };
   const due = await repo.dueGyms(deps.sql, now, opts.gymIds ?? null);
   result.due = due.length;
   for (const { gymId } of due) {
-    let decided: Decided;
     try {
-      decided = await decide(deps, gymId, now);
+      await gymNight(deps, gymId, now, result);
     } catch (err) {
-      // One gym's fault never stops the rest; it is tried again on the next run.
+      // One gym's fault never stops the rest; it is tried again on the next run. A claim
+      // left behind is taken again once it is an hour old.
       result.failed += 1;
       deps.log.error({ event: "orgs.gone_for_good.gym_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "a gym gone for good could not be decided");
-      continue;
     }
-    if (decided.kind === "deleted") {
-      result.deleted += 1;
-      deps.log.info({ event: "orgs.gone_for_good.list_deleted", gymId }, "a gym gone for good had its list deleted");
-      continue;
-    }
-    if (decided.kind !== "send") continue;
-    const claim = { gymId, notice: decided.notice, countedFrom: decided.countedFrom, claimedAt: now };
-    const sent = await send(deps, gymId, decided);
-    if (sent === null) {
-      await repo.releaseClaim(deps.sql, claim);
-      result.notSent += 1;
-      continue;
-    }
-    await repo.markSent(deps.sql, { ...claim, recipients: sent, at: now });
-    if (decided.notice === "month") result.monthSent += 1;
-    else result.weekSent += 1;
   }
   deps.log.info({ ...result, event: "orgs.gone_for_good.finished" }, "gone-for-good sweep finished");
   return result;

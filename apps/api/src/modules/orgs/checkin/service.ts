@@ -63,7 +63,7 @@ import { streakHasDay } from "../../gamification/repo.js";
 import { onAttendanceMarked } from "../../gamification/service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { getUserSyncContext } from "../../users/service.js";
-import { insertAudit, lockOrgRow } from "../repo.js";
+import { gymHasLivePlan, insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { gymTimeZone, membersAgainstList } from "../memberList/repo.js";
 import { sameName } from "../memberList/samePerson.js";
@@ -274,6 +274,13 @@ export async function claimDevice(
 export async function deviceFor(deps: Pick<CheckinDeps, "sql">, key: string | undefined): Promise<repo.DeskDevice | null> {
   if (key === undefined || !/^[A-Za-z0-9_-]{43}$/.test(key)) return null;
   return await repo.deviceByKey(deps.sql, sha256(key));
+}
+
+/** Whether the device's gym is on a plan. A gym with no plan gets nothing (RULINGS
+ *  2026-08-28), its desk included (Kd, 2026-10-15): the tablet is paused, not forgotten, and
+ *  works again the moment the gym has a plan. A payment that failed is still a plan. */
+export async function deviceGymOnPlan(deps: Pick<CheckinDeps, "sql">, device: repo.DeskDevice): Promise<boolean> {
+  return await gymHasLivePlan(deps.sql, device.gymId);
 }
 
 /** One device's scans this minute; Redis down lets the scan through with a log, as every

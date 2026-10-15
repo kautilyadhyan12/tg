@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CHECKIN_DEVICE_NAME_MAX, CHECKIN_WORDS } from '@app/shared';
+import { CHECKIN_DEVICE_NAME_MAX, CHECKIN_WORDS, orgWords } from '@app/shared';
 import { Copy, Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -17,7 +17,8 @@ import { ConfirmInline, ConsoleFailed, ConsoleLoading, ConsoleSection } from './
 // CHECK-IN DEVICES (spec Part 3 §12.3; ROADMAP 16b-i), on `org.manage` as the server gates
 // it. A device is a tablet or computer at the front desk; adding one gives a one-time link
 // to open ON it, shown here once and never again. Switch off works on a lapsed plan, so an
-// owner can always stop a lost tablet; adding and new links wait for a live plan.
+// owner can always stop a lost tablet; adding and new links wait for a live plan, and a gym
+// with no plan has every device paused (Kd, 2026-10-15).
 
 const inputStyle = {
   background: '#0A0908',
@@ -78,10 +79,10 @@ function LinkBox({ shown, clock, onDone }) {
   );
 }
 
-function DeviceRow({ device, clock, readOnly, busy, onNewLink, onSwitchOff }) {
+function DeviceRow({ device, clock, readOnly, pausedFor, busy, onNewLink, onSwitchOff }) {
   const [asking, setAsking] = useState(null);
-  const state = deviceState(device, clock);
-  const pause = keyTagPauseLine(device, clock);
+  const state = deviceState(device, clock, new Date(), pausedFor);
+  const pause = pausedFor === null ? keyTagPauseLine(device, clock) : null;
 
   const askOrDo = (kind) => {
     // A device that is not checking anybody in loses nothing to a new link.
@@ -151,6 +152,8 @@ function DeviceRow({ device, clock, readOnly, busy, onNewLink, onSwitchOff }) {
 export default function CheckinDevicesPanel({ org, readOnly, startOpen = false }) {
   const gymId = org.id;
   const clock = { timezone: org.timezone, clockFormat: org.clockFormat };
+  // No plan: the server pauses every device (`checkin_paused`), and the rows say so.
+  const pausedFor = readOnly ? orgWords(org.orgType).it : null;
   const [devices, setDevices] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [name, setName] = useState('');
@@ -232,7 +235,7 @@ export default function CheckinDevicesPanel({ org, readOnly, startOpen = false }
   return (
     <ConsoleSection
       title="Check-in devices"
-      summary={devices === null ? undefined : devicesSummary(devices)}
+      summary={devices === null ? undefined : devicesSummary(devices, pausedFor !== null)}
       forceOpen={loadError !== null}
       defaultOpen={startOpen}
     >
@@ -272,6 +275,7 @@ export default function CheckinDevicesPanel({ org, readOnly, startOpen = false }
                   device={device}
                   clock={clock}
                   readOnly={readOnly}
+                  pausedFor={pausedFor}
                   busy={busy}
                   onNewLink={(d) => void newLink(d)}
                   onSwitchOff={(d) => void switchOff(d)}

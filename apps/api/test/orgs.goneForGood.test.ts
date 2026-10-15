@@ -7,6 +7,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { EmailMessage } from "../src/email/resend.js";
 import { sweepGoneForGood, type GoneForGoodResult } from "../src/modules/orgs/goneForGood/sweep.js";
+import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -64,11 +65,18 @@ d("a gym gone for good (real Postgres)", () => {
     await sql.end();
   }, TIMEOUT);
 
-  const user = async (email: string | null): Promise<string> => {
+  /** An account; its address proved (a sign-in code, Google or the link) unless `proved` is false. */
+  const user = async (email: string | null, proved = true): Promise<string> => {
     const [row] = await sql<{ id: string }[]>`
       INSERT INTO users (email, display_name) VALUES (${email}, ${`${PREFIX}${String(seq++)}`}) RETURNING id`;
     if (row === undefined) throw new Error("no user");
+    if (proved) await prove(row.id);
     return row.id;
+  };
+  const prove = async (userId: string): Promise<void> => {
+    await sql`
+      INSERT INTO one_time_tokens (user_id, purpose, token_hash, expires_at, used_at)
+      VALUES (${userId}, 'verify_email', md5(random()::text || ${userId}), now(), now())`;
   };
 
   /** The account used at `at`, as a sign-in or a renewed session marks it (`auth/repo.ts`). */
@@ -85,10 +93,11 @@ d("a gym gone for good (real Postgres)", () => {
   /** A gym with an owner; a list of two records: one whose person has the app and came
    *  once, one whose person has no app, came once and bought a membership, billed and paid
    *  in cash; a lead and a staff invitation. `created` is the gym's start. */
-  const makeGym = async (opts: { created: Date; ownerEmail?: string | null }): Promise<Gym> => {
+  const makeGym = async (opts: { created: Date; ownerEmail?: string | null; proved?: boolean; owner?: { id: string; email: string } }): Promise<Gym> => {
     const n = String(seq++);
-    const ownerEmail = opts.ownerEmail === undefined ? `${PREFIX}owner${n}-${String(Date.now() % 100000)}@example.com` : opts.ownerEmail;
-    const ownerId = await user(ownerEmail);
+    const ownerEmail =
+      opts.owner !== undefined ? opts.owner.email : opts.ownerEmail === undefined ? `${PREFIX}owner${n}-${String(Date.now() % 100000)}@example.com` : opts.ownerEmail;
+    const ownerId = opts.owner !== undefined ? opts.owner.id : await user(ownerEmail, opts.proved ?? true);
     const [gym] = await sql<{ id: string }[]>`
       INSERT INTO gyms (slug, name, owner_user_id, timezone, created_at)
       VALUES (${`${PREFIX}${n}-${String(Date.now() % 100000)}`}, ${`Gone Gym ${n}`}, ${ownerId}, 'UTC', ${opts.created})
@@ -116,6 +125,10 @@ d("a gym gone for good (real Postgres)", () => {
     await sql`
       INSERT INTO gym_attendance (gym_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key)
       VALUES (${gymId}, ${walkIn.id}, ${ownerId}, '2029-12-02', 'manual', 'hours_unset', 'hours_unset')`;
+    // A kept Possible duplicate: the names of two records, with no key to them.
+    await sql`
+      INSERT INTO gym_member_list_pairs (gym_id, first_entry_id, second_entry_id, first_name, same_name, same_phone, same_number)
+      VALUES (${gymId}, ${entry.id}, ${walkIn.id}, 'Priya Member', false, false, false)`;
     const [type] = await sql<{ id: string }[]>`
       INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, access, term_count, term_unit)
       VALUES (${gymId}, 'Day pass', 'one_time', 5000, 'USD', 'gym_only', 1, 'day') RETURNING id`;
@@ -166,7 +179,7 @@ d("a gym gone for good (real Postgres)", () => {
     return sweepGoneForGood({ sql, log, mail: rec.mail }, { now: at, gymIds });
   };
 
-  type Counts = { entries: number; lists: number; leads: number; invites: number; visits: number; walkInVisits: number; held: number; bills: number; payments: number; gym: number };
+  type Counts = { entries: number; lists: number; leads: number; invites: number; visits: number; walkInVisits: number; held: number; bills: number; payments: number; pairs: number; gym: number };
   const what = async (g: Gym): Promise<Counts & { member: string | null | undefined; deletedAt: Date | null }> => {
     const [row] = await sql<(Counts & { deleted_at: Date | null })[]>`
       SELECT
@@ -175,6 +188,7 @@ d("a gym gone for good (real Postgres)", () => {
         (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ${g.gymId}) AS bills,
         (SELECT count(*)::int FROM gym_member_payments WHERE gym_id = ${g.gymId}) AS payments,
         (SELECT count(*)::int FROM gym_member_list_entries WHERE gym_id = ${g.gymId}) AS entries,
+        (SELECT count(*)::int FROM gym_member_list_pairs WHERE gym_id = ${g.gymId}) AS pairs,
         (SELECT count(*)::int FROM gym_member_lists WHERE gym_id = ${g.gymId}) AS lists,
         (SELECT count(*)::int FROM gym_leads WHERE gym_id = ${g.gymId}) AS leads,
         (SELECT count(*)::int FROM gym_staff_invites WHERE gym_id = ${g.gymId}) AS invites,
@@ -223,7 +237,7 @@ d("a gym gone for good (real Postgres)", () => {
       });
 
       for (const kept of [paying, pastDue, signsIn, undated]) {
-        expect(await what(kept)).toMatchObject({ entries: 2, lists: 1, leads: 1, invites: 1, member: kept.entryId, visits: 1, walkInVisits: 1, held: 1, bills: 1, payments: 1, deletedAt: null });
+        expect(await what(kept)).toMatchObject({ entries: 2, lists: 1, leads: 1, invites: 1, member: kept.entryId, visits: 1, walkInVisits: 1, held: 1, bills: 1, payments: 1, pairs: 1, deletedAt: null });
       }
       // Nobody but the gone gym's owner was emailed, twice.
       expect(rec.sent.map((m) => m.to)).toEqual([gone.ownerEmail, gone.ownerEmail]);
@@ -237,7 +251,22 @@ d("a gym gone for good (real Postgres)", () => {
       const after = await what(gone);
       // With the list go the memberships, bills and payments recorded for its people, and the
       // visits of people who are not in the app (Kd, 2026-10-15: deleted, and the emails say so).
-      expect(after).toMatchObject({ entries: 0, lists: 0, leads: 0, invites: 0, member: null, visits: 1, walkInVisits: 0, held: 0, bills: 0, payments: 0, gym: 1 });
+      expect(after).toMatchObject({ entries: 0, lists: 0, leads: 0, invites: 0, member: null, visits: 1, walkInVisits: 0, held: 0, bills: 0, payments: 0, pairs: 0, gym: 1 });
+      // Nothing of the list's people is left in ANY table of the gym's that names a record,
+      // whether or not it has a key to the records (the kept duplicates had none).
+      const naming = await sql<{ table_name: string; column_name: string }[]>`
+        SELECT c.table_name, c.column_name FROM information_schema.columns c
+        WHERE c.table_schema = 'public' AND c.column_name LIKE '%entry_id'
+          AND EXISTS (
+            SELECT 1 FROM information_schema.columns g
+            WHERE g.table_schema = 'public' AND g.table_name = c.table_name AND g.column_name = 'gym_id')
+        ORDER BY c.table_name, c.column_name`;
+      expect(naming.map((c) => c.table_name)).toContain("gym_member_list_pairs");
+      for (const c of naming) {
+        const [left] = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM ${sql(c.table_name)} WHERE gym_id = ${gone.gymId} AND ${sql(c.column_name)} IS NOT NULL`;
+        expect(left?.n, `${c.table_name}.${c.column_name}`).toBe(0);
+      }
       expect(month?.text).toContain("with the memberships, bills and payments recorded for those people");
       expect(after.deletedAt).toEqual(deleteDay);
       const [audit] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gone.gymId} AND action = 'org.member_list_deleted'`;
@@ -469,6 +498,166 @@ d("a gym gone for good (real Postgres)", () => {
     TIMEOUT,
   );
 
+  it(
+    "an address nobody proved is never emailed, so its gym is never emptied; once it is proved, the emails start a full month ahead",
+    async () => {
+      const rec = recorder();
+      const g = await makeGym({ created: addMonths(T0, -12), proved: false });
+      await plan(g.gymId, "expired", T0);
+      const deleteDay = addMonths(T0, 6);
+      let last: GoneForGoodResult | undefined;
+      for (let night = -30; night <= 60; night += 1) last = await run(rec, [g.gymId], plus(deleteDay, night));
+      expect(rec.sent).toHaveLength(0);
+      expect(last).toMatchObject({ due: 1, notSent: 1, monthSent: 0, deleted: 0 });
+      expect(await what(g)).toMatchObject({ entries: 2, leads: 1, invites: 1, pairs: 1, deletedAt: null });
+      await prove(g.ownerId);
+      const later = plus(deleteDay, 61);
+      await run(rec, [g.gymId], later);
+      expect(rec.sent.map((m) => m.to)).toEqual([g.ownerEmail]);
+      const named = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(plus(later, 30));
+      expect(rec.sent[0]?.subject).toContain(named);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "one person with three gyms gone dark gets one email a night; each gym still gets both emails a month and a week before its own day",
+    async () => {
+      const rec = recorder();
+      const email = `${PREFIX}many${String(seq)}-${String(Date.now() % 100000)}@example.com`;
+      const owner = { id: await user(email), email };
+      const gyms = [await makeGym({ created: addMonths(T0, -12), owner }), await makeGym({ created: addMonths(T0, -12), owner }), await makeGym({ created: addMonths(T0, -12), owner })];
+      for (const g of gyms) await plan(g.gymId, "expired", T0);
+      const ids = gyms.map((g) => g.gymId);
+      const deleteDay = addMonths(T0, 6);
+      const held: number[] = [];
+      for (let i = -30; i <= 40; i += 1) held.push((await run(rec, ids, plus(deleteDay, i))).held);
+      expect(held.slice(0, 2)).toEqual([2, 1]);
+      expect(rec.sent).toHaveLength(6);
+      expect(rec.sent.every((m) => m.to === email)).toBe(true);
+      const nightsSent = rec.sent.map((m) => m.night.getTime());
+      expect(new Set(nightsSent).size).toBe(nightsSent.length);
+      const nameOf = async (gymId: string): Promise<string> => (await sql<{ name: string }[]>`SELECT name FROM gyms WHERE id = ${gymId}`)[0]?.name ?? "";
+      for (const g of gyms) {
+        const name = await nameOf(g.gymId);
+        const mine = rec.sent.filter((m) => m.subject.includes(`${name}:`) || m.subject.includes(`${name}'s`));
+        expect(mine.map((m) => m.subject.startsWith("Last reminder"))).toEqual([false, true]);
+        const after = await what(g);
+        expect(after.entries).toBe(0);
+        const deletedAt = after.deletedAt?.getTime() ?? 0;
+        expect(deletedAt - (mine[0]?.night.getTime() ?? 0)).toBeGreaterThanOrEqual(30 * DAY);
+        expect(deletedAt - (mine[1]?.night.getTime() ?? 0)).toBeGreaterThanOrEqual(7 * DAY);
+        const named = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(after.deletedAt ?? T0);
+        for (const m of mine) expect(m.subject).toContain(named);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "one email to an address a night holds across a retry of the night and two runs at once, not only within one run",
+    async () => {
+      const email = `${PREFIX}retry${String(seq)}-${String(Date.now() % 100000)}@example.com`;
+      const owner = { id: await user(email), email };
+      const first = await makeGym({ created: addMonths(T0, -12), owner });
+      const second = await makeGym({ created: addMonths(T0, -12), owner });
+      const faulty = await makeGym({ created: addMonths(T0, -12), ownerEmail: null });
+      for (const g of [first, second, faulty]) await plan(g.gymId, "expired", T0);
+      const ids = [first.gymId, second.gymId, faulty.gymId];
+      const night = plus(addMonths(T0, 6), -30);
+      // A gym's fault fails the run, and the worker runs it again a minute later.
+      const failing = {
+        info: (obj: object): void => {
+          if ((obj as { event?: string }).event === "orgs.gone_for_good.nobody_to_email") throw new Error("connection lost");
+        },
+        error: (): void => undefined,
+      };
+      const rec = recorder();
+      rec.night.at = night;
+      const run1 = await sweepGoneForGood({ sql, log: failing, mail: rec.mail }, { now: night, gymIds: ids });
+      expect(run1).toMatchObject({ monthSent: 1, held: 1, failed: 1 });
+      const retry = await sweepGoneForGood({ sql, log, mail: rec.mail }, { now: new Date(night.getTime() + 60_000), gymIds: ids });
+      expect(retry).toMatchObject({ monthSent: 0, held: 1 });
+      expect(rec.sent.filter((m) => m.to === email)).toHaveLength(1);
+      // The next night the other gym's email goes.
+      await run(rec, ids, plus(night, 1));
+      expect(rec.sent.filter((m) => m.to === email)).toHaveLength(2);
+
+      // Two runs at once, for two more gyms of one person: never two emails that night.
+      const email2 = `${PREFIX}twice${String(seq)}-${String(Date.now() % 100000)}@example.com`;
+      const owner2 = { id: await user(email2), email: email2 };
+      const a = await makeGym({ created: addMonths(T0, -12), owner: owner2 });
+      const b = await makeGym({ created: addMonths(T0, -12), owner: owner2 });
+      for (const g of [a, b]) await plan(g.gymId, "expired", T0);
+      const both = recorder();
+      await Promise.all([run(both, [a.gymId, b.gymId], night), run(both, [a.gymId, b.gymId], night)]);
+      expect(both.sent.length).toBeLessThanOrEqual(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a run that starts more than an hour after another, while that one is still sending, does not send the same email again",
+    async () => {
+      const g = await makeGym({ created: addMonths(T0, -12) });
+      await plan(g.gymId, "expired", T0);
+      const night = plus(addMonths(T0, 6), -30);
+      const slowSent: EmailMessage[] = [];
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let sending: () => void = () => undefined;
+      const isSending = new Promise<void>((resolve) => {
+        sending = resolve;
+      });
+      const slow = {
+        webOrigin: "http://localhost:5173",
+        transport: {
+          send: async (m: EmailMessage): Promise<void> => {
+            slowSent.push(m);
+            sending();
+            await held;
+          },
+        },
+      };
+      const first = sweepGoneForGood({ sql, log, mail: slow }, { now: night, gymIds: [g.gymId] });
+      await isSending;
+      const rec = recorder();
+      const second = await run(rec, [g.gymId], new Date(night.getTime() + 61 * 60_000));
+      expect(rec.sent).toHaveLength(0);
+      expect(second).toMatchObject({ due: 1, monthSent: 0 });
+      release();
+      expect(await first).toMatchObject({ monthSent: 1 });
+      expect(slowSent).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "one gym's fault while its email is being sent does not stop the next gym's email",
+    async () => {
+      const rec = recorder();
+      const quiet = await makeGym({ created: addMonths(T0, -12), ownerEmail: null });
+      await plan(quiet.gymId, "expired", T0);
+      const told = await makeGym({ created: addMonths(T0, -12) });
+      await plan(told.gymId, "expired", T0);
+      const night = plus(addMonths(T0, 6), -30);
+      rec.night.at = night;
+      // The quiet gym's step raises (its log line stands in for a lost connection).
+      const faulty = {
+        info: (obj: object): void => {
+          if ((obj as { event?: string }).event === "orgs.gone_for_good.nobody_to_email") throw new Error("connection lost");
+        },
+        error: (): void => undefined,
+      };
+      const result = await sweepGoneForGood({ sql, log: faulty, mail: rec.mail }, { now: night, gymIds: [quiet.gymId, told.gymId] });
+      expect(result).toMatchObject({ due: 2, failed: 1, monthSent: 1 });
+      expect(rec.sent.map((m) => m.to)).toEqual([told.ownerEmail]);
+    },
+    TIMEOUT,
+  );
+
   describe("the Members page", () => {
     type App = Awaited<ReturnType<typeof buildApp>>;
     let app: App | undefined;
@@ -497,6 +686,7 @@ d("a gym gone for good (real Postgres)", () => {
       });
       expect(reg.statusCode).toBe(201);
       const { userId } = JSON.parse(reg.body) as { userId: string };
+      await proveAddress(sql, email);
       const login = await api().inject({
         method: "POST",
         url: "/v1/auth/login",
