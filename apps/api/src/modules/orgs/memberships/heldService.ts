@@ -50,7 +50,7 @@ import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
 import { membershipDiscounts } from "../register/discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
-import { giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
+import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow } from "./billsSql.js";
 
 export interface HeldDeps {
@@ -164,9 +164,14 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   if (list === null) throw notFound();
   // A member's own Refer a friend gift (20e-ii-b-ii-a): what it took off a bill, and the one
   // waiting, filled in on Add.
-  const [gifts, memberGift] = await Promise.all([
+  // One off a membership is the one Add membership fills in; else one off products is said.
+  const [gifts, memberGift, freeDays] = await Promise.all([
     canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string; friendName: string | null }>(),
-    canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId) : null,
+    canBill && !list.past
+      ? waitingGiftFor(deps.sql, gymId, entryId, "membership").then(async (g) => g ?? (await waitingGiftFor(deps.sql, gymId, entryId, "products")))
+      : null,
+    // Refer a friend's free days on each (20e-ii-b-ii-b): why its dates moved.
+    giftDaysOn(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)),
   ]);
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts };
   // The page reads a membership as the next write will find it: with its count moved
@@ -205,6 +210,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
       refundedInFull: list.bills.some((b) => b.membershipId === row.id && b.status === "refunded" && b.periodIndex === row.membership.paidPeriods - 1),
       discount: row.discount,
+      freeDays: freeDays.get(row.id) ?? [],
       tax: row.tax,
       view: viewOf(row, list.bills, today, list.past),
     }))

@@ -12,6 +12,7 @@ import { z } from "zod";
 import { bpToPercentText, DISCOUNT_KINDS, DISCOUNT_PERCENT_BP_MAX, discountStatus, type DiscountKind, type MembershipPayments } from "./discounts.js";
 import { MEMBER_LIST_MAX_EMAIL_CHARS, MEMBER_LIST_MAX_NAME_CHARS, MEMBER_LIST_MAX_TYPED_PHONE_CHARS } from "./memberList.js";
 import { formatMinor, MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { GIFT_DAYS_MAX, giftDaysWords, memberGiftOnSchema, type MemberGiftOn } from "./memberGift.js";
 import { orgTypeSchema } from "./orgs.js";
 import { GYM_ENQUIRY_MAX_MESSAGE_CHARS } from "./gymPage.js";
 import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
@@ -101,20 +102,39 @@ export type ReferralGift = z.infer<typeof referralGiftSchema>;
 
 // ── WHAT A MEMBER READS (the phone app's Invite a friend, Stage 5 item 20) ──
 
-/** The member's gift, off their next payment (20e-ii-b gives it): "10% off your next
- *  payment", "₹500.00 off your next payment". */
-export function referralMemberGiftWords(g: { kind: DiscountKind; percentBp: number | null; amountMinor: number | null; currency: string | null }): string {
+/** The member's gift in their words: "10% off your next membership payment", "₹500.00 off
+ *  your next purchase at the desk", or "14 free days on your membership" with, in `instead`,
+ *  the money off a member with no membership then gets. */
+export function referralMemberGiftWords(g: {
+  kind: DiscountKind;
+  percentBp: number | null;
+  amountMinor: number | null;
+  currency: string | null;
+  on?: MemberGiftOn;
+  days?: number | null;
+}): { gift: string; instead: string | null } {
   const off = g.kind === "percent" ? `${bpToPercentText(g.percentBp ?? 0)}% off` : `${formatMinor(g.amountMinor ?? 0, g.currency ?? "USD")} off`;
-  return `${off} your next payment`;
+  const money = `${off} ${g.on === "products" ? "your next purchase at the desk" : "your next membership payment"}`;
+  if (g.days === undefined || g.days === null) return { gift: money, instead: null };
+  return { gift: `${giftDaysWords(g.days)} on your membership`, instead: money };
 }
 
-/** The offer in the member's words. No code: the member's gift comes off their next payment
- *  by itself. `firstName`: the name their link shows; null in the owner's preview. */
-export function referralOfferLines(gymName: string, memberGift: string | null, friendGift: string | null, firstName: string | null = null): string[] {
+/** The offer in the member's words. No code: the member's gift comes off, or its days are
+ *  added, by itself. `firstName`: the name their link shows; null in the owner's preview. */
+export function referralOfferLines(
+  gymName: string,
+  memberGift: { gift: string; instead: string | null } | null,
+  friendGift: string | null,
+  firstName: string | null = null,
+): string[] {
   const gym = gymName.trim();
   const lines: string[] = [];
-  if (memberGift !== null) {
-    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift}. It comes off by itself, and we'll tell you in your inbox.`);
+  const instead = memberGift?.instead ?? null;
+  if (memberGift !== null && instead === null) {
+    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift.gift}. It comes off by itself, and we'll tell you in your inbox.`);
+  } else if (memberGift !== null && instead !== null) {
+    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift.gift}. They are added by themselves, and we'll tell you in your inbox.`);
+    lines.push(`If you have no membership then, you get ${instead} instead.`);
   }
   if (friendGift !== null) lines.push(`Your friend gets ${friendGift} when they join.`);
   if (memberGift === null && friendGift === null) lines.push(`Send your link to a friend who'd like to join ${gym}.`);
@@ -211,8 +231,13 @@ const giftAmountFields = {
 const oneAmount = (g: { kind: DiscountKind; percentBp: number | null; amountMinor: number | null }): boolean =>
   g.kind === "percent" ? g.percentBp !== null && g.amountMinor === null : g.amountMinor !== null && g.percentBp === null;
 
-/** The member's gift: a percentage or an amount off their next payment. */
-export const referralMemberGiftInputSchema = z.object(giftAmountFields).strict().refine(oneAmount, { message: "invalid_gift" });
+/** The member's gift: a percentage or an amount off their next membership payment or their
+ *  next purchase at the desk (`on`); or, with `days`, that many free days added to their
+ *  membership, the money being for a member who has none then. */
+export const referralMemberGiftInputSchema = z
+  .object({ ...giftAmountFields, on: memberGiftOnSchema, days: z.number().int().min(1).max(GIFT_DAYS_MAX).nullable() })
+  .strict()
+  .refine(oneAmount, { message: "invalid_gift" });
 export type ReferralMemberGiftInput = z.infer<typeof referralMemberGiftInputSchema>;
 
 /** The friend's gift: a percentage or an amount, and what it comes off. */
@@ -229,6 +254,9 @@ export const referralMemberGiftViewSchema = z
     percentBp: z.number().int().nullable(),
     amountMinor: z.number().int().nullable(),
     currency: z.string().nullable(),
+    on: memberGiftOnSchema,
+    days: z.number().int().nullable(),
+    /** "14 free days on your membership", or "£10.00 off your next membership payment". */
     words: z.string(),
   })
   .strict();
