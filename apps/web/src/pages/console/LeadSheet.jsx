@@ -488,7 +488,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               ) : null}
               {lead !== null && memberGift !== null ? (
                 <span className="c-s14 c-t2" data-testid="member-gift-line">
-                  {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
+                  {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName, memberGift.on ?? 'membership')}
                 </span>
               ) : null}
               {lead !== null && memberGift !== null && memberGift.gift.state === 'waiting_no_record' ? (

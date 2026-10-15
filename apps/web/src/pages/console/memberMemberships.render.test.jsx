@@ -592,13 +592,13 @@ describe('adding a membership', () => {
   });
 
   it("a member's own Refer a friend gift waits on their page, is filled in on Add membership off the first payment, and Remove keeps it (20e-ii-b-ii-a)", async () => {
-    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', words: '£10.00 off', friendName: 'Tara Shah' };
+    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', on: 'membership', words: '£10.00 off', friendName: 'Tara Shah' };
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift }));
     orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, false)]));
     render(draw(ADA, 'Ada Lovelace'));
     const box = await boxSoon();
     expect((await box.findByTestId('member-gift-waiting')).textContent).toBe(
-      'Refer a friend gift, £10.00 off, for inviting Tara Shah. It comes off their next bill by itself, or is filled in when you add a membership or sell to them.',
+      'Refer a friend gift, £10.00 off a membership, for inviting Tara Shah. It comes off their next bill by itself, or is filled in when you add a membership.',
     );
     fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
     const form = within(screen.getByTestId('held-add'));
@@ -623,8 +623,31 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2].discountId).toBeUndefined();
   });
 
+  it("a member's gift off products waits on their page for Sell, and Add membership does not fill it in (20e-ii-b-ii-b)", async () => {
+    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', on: 'products', words: '£10.00 off', friendName: 'Tara Shah' };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift }));
+    render(draw(ADA, 'Ada Lovelace'));
+    const box = await boxSoon();
+    expect((await box.findByTestId('member-gift-waiting')).textContent).toBe(
+      'Refer a friend gift, £10.00 off products, for inviting Tara Shah. It is filled in when you sell to them at Sell.',
+    );
+    fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(form.queryByTestId('member-gift')).toBeNull();
+  });
+
+  it("Refer a friend's free days are said under the membership they moved, with whom they were for (20e-ii-b-ii-b)", async () => {
+    const gold = { ...held(1, GOLD, TODAY, true), freeDays: [{ days: 14, friendName: 'Tara Shah' }, { days: 1, friendName: null }] };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const box = await boxSoon();
+    const lines = (await box.findAllByTestId('held-free-days')).map((x) => x.textContent);
+    expect(lines).toEqual(['Refer a friend gift for inviting Tara Shah: 14 days added', 'Refer a friend gift: 1 day added']);
+  });
+
   it("a member's gift larger than the price is not filled in, and says it is kept", async () => {
-    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 6000, currency: 'GBP', words: '£60.00 off', friendName: null };
+    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 6000, currency: 'GBP', on: 'membership', words: '£60.00 off', friendName: null };
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift }));
     render(draw(ADA, 'Ada Lovelace'));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
