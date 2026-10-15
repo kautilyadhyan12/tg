@@ -306,7 +306,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 20d-ii. [x] **The weekly summary, as a box on Overview** — merged 2026-10-12 (PR #229).
      - 20d-iii. [ ] **The weekly summary by email** (kept from 20d-ii, RULINGS 2026-10-12; later, once the gyms are enough to pay for the email service): the same figures to the owner each Monday, a switch, an unsubscribe link. Risky. Not on a folder's list until Kd places it.
    - 20e. **Review and referral messages**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-i.md`):
-     - 20e-i. [ ] **Ask for a review** — PR #275.
+     - 20e-i. [x] **Ask for a review** — merged 2026-10-15 (PR #275).
      - 20e-ii. [ ] **Refer a friend**: a member's link to the gym's enquiry form; the lead marked with who sent them; the gym's promo code as the reward when they join. Risky; its plan reads Mindbody's and PushPress's tools.
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
