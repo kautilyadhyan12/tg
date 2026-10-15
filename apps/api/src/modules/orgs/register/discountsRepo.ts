@@ -129,6 +129,21 @@ export async function membershipDiscounts(sql: Sql, gymId: string): Promise<Disc
   return rows.map(discount);
 }
 
+/** Refer a friend's own discounts (20e-ii-a), by id, whatever they are now: only this
+ *  gym's. */
+export async function referralDiscounts(sql: Sql | TransactionSql, gymId: string, ids: readonly string[]): Promise<DiscountRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await sql<RawDiscount[]>`
+    SELECT ${columns(sql)} FROM gym_discounts d
+    WHERE d.gym_id = ${gymId} AND d.id = ANY(${[...ids]}::uuid[])`;
+  return rows.map(discount);
+}
+
+/** Whether a discount in use, other than `exceptId`, has this promo code or this name. */
+export async function codeOrNameTaken(tx: TransactionSql, gymId: string, code: string, name: string, exceptId: string | null): Promise<boolean> {
+  return (await clash(tx, gymId, name, code, exceptId)) !== null;
+}
+
 /** The gym's membership types on its price list, by name; a gym has at most 60. */
 export async function membershipTypeNames(sql: Sql | TransactionSql, gymId: string): Promise<{ id: string; name: string; taxRateId: string | null; free: boolean }[]> {
   return await sql<{ id: string; name: string; taxRateId: string | null; free: boolean }[]>`
@@ -269,33 +284,43 @@ const what = (input: DiscountInput, currency: string | null): Record<string, str
 export async function createDiscount(sql: Sql, input: DiscountInput & { gymId: string; actorUserId: string }): Promise<DiscountWriteOutcome> {
   return await sql.begin(async (tx): Promise<DiscountWriteOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const money = await currencyFor(tx, input.gymId, input.kind);
-    if (!money.ok) return { kind: "no_currency" };
-    if ((await liveCount(tx, input.gymId)) >= DISCOUNTS_MAX) return { kind: "too_many", cap: DISCOUNTS_MAX };
-    const taken = await clash(tx, input.gymId, input.name, input.code, null);
-    if (taken !== null) return { kind: taken };
-    if (!(await productsAreLive(tx, input.gymId, input.productIds))) return { kind: "product_not_found" };
-    if (!(await typesAreLive(tx, input.gymId, input.membershipTypeIds))) return { kind: "membership_type_not_found" };
-    const [created] = await tx<{ id: string }[]>`
-      INSERT INTO gym_discounts (gym_id, name, code, kind, percent_bp, amount_minor, currency, starts_on, ends_on, max_uses,
-                                 for_products, all_products, for_memberships, all_membership_types, membership_payments)
-      VALUES (${input.gymId}, ${input.name}, ${input.code}, ${input.kind}, ${input.percentBp}, ${input.amountMinor}, ${money.currency},
-              ${input.startsOn}::date, ${input.endsOn}::date, ${input.maxUses}, ${input.forProducts}, ${input.allProducts},
-              ${input.forMemberships}, ${input.allMembershipTypes}, ${input.membershipPayments})
-      RETURNING id`;
-    if (created === undefined) throw new Error("discount insert returned no row");
-    await setProducts(tx, input.gymId, created.id, input.productIds);
-    await setMembershipTypes(tx, input.gymId, created.id, input.membershipTypeIds);
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.discount_created",
-      targetType: "gym_discount",
-      targetId: created.id,
-      meta: what(input, money.currency),
-    });
-    return { kind: "ok" };
+    const made = await createDiscountInTx(tx, input);
+    return made.kind === "created" ? { kind: "ok" } : made;
   });
+}
+
+/** The same, inside the caller's transaction, which already holds the gym's row lock
+ *  (Refer a friend makes its own codes, 20e-ii-a). Answers the new discount's id. */
+export async function createDiscountInTx(
+  tx: TransactionSql,
+  input: DiscountInput & { gymId: string; actorUserId: string },
+): Promise<Exclude<DiscountWriteOutcome, { kind: "ok" }> | { kind: "created"; id: string }> {
+  const money = await currencyFor(tx, input.gymId, input.kind);
+  if (!money.ok) return { kind: "no_currency" };
+  if ((await liveCount(tx, input.gymId)) >= DISCOUNTS_MAX) return { kind: "too_many", cap: DISCOUNTS_MAX };
+  const taken = await clash(tx, input.gymId, input.name, input.code, null);
+  if (taken !== null) return { kind: taken };
+  if (!(await productsAreLive(tx, input.gymId, input.productIds))) return { kind: "product_not_found" };
+  if (!(await typesAreLive(tx, input.gymId, input.membershipTypeIds))) return { kind: "membership_type_not_found" };
+  const [created] = await tx<{ id: string }[]>`
+    INSERT INTO gym_discounts (gym_id, name, code, kind, percent_bp, amount_minor, currency, starts_on, ends_on, max_uses,
+                               for_products, all_products, for_memberships, all_membership_types, membership_payments)
+    VALUES (${input.gymId}, ${input.name}, ${input.code}, ${input.kind}, ${input.percentBp}, ${input.amountMinor}, ${money.currency},
+            ${input.startsOn}::date, ${input.endsOn}::date, ${input.maxUses}, ${input.forProducts}, ${input.allProducts},
+            ${input.forMemberships}, ${input.allMembershipTypes}, ${input.membershipPayments})
+    RETURNING id`;
+  if (created === undefined) throw new Error("discount insert returned no row");
+  await setProducts(tx, input.gymId, created.id, input.productIds);
+  await setMembershipTypes(tx, input.gymId, created.id, input.membershipTypeIds);
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.discount_created",
+    targetType: "gym_discount",
+    targetId: created.id,
+    meta: what(input, money.currency),
+  });
+  return { kind: "created", id: created.id };
 }
 
 /** Replace a discount's fields. No sale or membership already made is touched: each keeps
@@ -306,59 +331,73 @@ export async function updateDiscount(
 ): Promise<DiscountWriteOutcome> {
   return await sql.begin(async (tx): Promise<DiscountWriteOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const [before] = await tx<{ name: string; updated_at: Date }[]>`
-      SELECT name, updated_at FROM gym_discounts
-      WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
-    if (before === undefined) return { kind: "not_found" };
-    // To the millisecond, which is what the list sends and a form can send back.
-    if (before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
-    const money = await currencyFor(tx, input.gymId, input.kind);
-    if (!money.ok) return { kind: "no_currency" };
-    const taken = await clash(tx, input.gymId, input.name, input.code, input.discountId);
-    if (taken !== null) return { kind: taken };
-    if (!(await productsAreLive(tx, input.gymId, input.productIds))) return { kind: "product_not_found" };
-    if (!(await typesAreLive(tx, input.gymId, input.membershipTypeIds))) return { kind: "membership_type_not_found" };
-    await tx`
-      UPDATE gym_discounts
-      SET name = ${input.name}, code = ${input.code}, kind = ${input.kind}, percent_bp = ${input.percentBp},
-          amount_minor = ${input.amountMinor}, currency = ${money.currency}, starts_on = ${input.startsOn}::date,
-          ends_on = ${input.endsOn}::date, max_uses = ${input.maxUses}, for_products = ${input.forProducts},
-          all_products = ${input.allProducts}, for_memberships = ${input.forMemberships},
-          all_membership_types = ${input.allMembershipTypes}, membership_payments = ${input.membershipPayments}, updated_at = ${input.now}
-      WHERE id = ${input.discountId} AND gym_id = ${input.gymId}`;
-    await setProducts(tx, input.gymId, input.discountId, input.productIds);
-    await setMembershipTypes(tx, input.gymId, input.discountId, input.membershipTypeIds);
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.discount_updated",
-      targetType: "gym_discount",
-      targetId: input.discountId,
-      meta: { before: before.name, ...what(input, money.currency) },
-    });
-    return { kind: "ok" };
+    return await updateDiscountInTx(tx, input);
   });
+}
+
+/** The same, inside the caller's transaction, which already holds the gym's row lock.
+ *  `readAt` null: the caller read the discount under that lock itself. */
+export async function updateDiscountInTx(
+  tx: TransactionSql,
+  input: DiscountInput & { gymId: string; discountId: string; readAt: Date | null; actorUserId: string; now: Date },
+): Promise<DiscountWriteOutcome> {
+  const [before] = await tx<{ name: string; updated_at: Date }[]>`
+    SELECT name, updated_at FROM gym_discounts
+    WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
+  if (before === undefined) return { kind: "not_found" };
+  // To the millisecond, which is what the list sends and a form can send back.
+  if (input.readAt !== null && before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
+  const money = await currencyFor(tx, input.gymId, input.kind);
+  if (!money.ok) return { kind: "no_currency" };
+  const taken = await clash(tx, input.gymId, input.name, input.code, input.discountId);
+  if (taken !== null) return { kind: taken };
+  if (!(await productsAreLive(tx, input.gymId, input.productIds))) return { kind: "product_not_found" };
+  if (!(await typesAreLive(tx, input.gymId, input.membershipTypeIds))) return { kind: "membership_type_not_found" };
+  await tx`
+    UPDATE gym_discounts
+    SET name = ${input.name}, code = ${input.code}, kind = ${input.kind}, percent_bp = ${input.percentBp},
+        amount_minor = ${input.amountMinor}, currency = ${money.currency}, starts_on = ${input.startsOn}::date,
+        ends_on = ${input.endsOn}::date, max_uses = ${input.maxUses}, for_products = ${input.forProducts},
+        all_products = ${input.allProducts}, for_memberships = ${input.forMemberships},
+        all_membership_types = ${input.allMembershipTypes}, membership_payments = ${input.membershipPayments}, updated_at = ${input.now}
+    WHERE id = ${input.discountId} AND gym_id = ${input.gymId}`;
+  await setProducts(tx, input.gymId, input.discountId, input.productIds);
+  await setMembershipTypes(tx, input.gymId, input.discountId, input.membershipTypeIds);
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.discount_updated",
+    targetType: "gym_discount",
+    targetId: input.discountId,
+    meta: { before: before.name, ...what(input, money.currency) },
+  });
+  return { kind: "ok" };
 }
 
 /** Archive: the discount can no longer be used, and is kept with the sales made with it. */
 export async function archiveDiscount(sql: Sql, input: { gymId: string; discountId: string; actorUserId: string; now: Date }): Promise<DiscountWriteOutcome> {
   return await sql.begin(async (tx): Promise<DiscountWriteOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const [before] = await tx<{ name: string }[]>`
-      UPDATE gym_discounts SET archived_at = ${input.now}, updated_at = ${input.now}
-      WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL
-      RETURNING name`;
-    if (before === undefined) return { kind: "not_found" };
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.discount_archived",
-      targetType: "gym_discount",
-      targetId: input.discountId,
-      meta: { name: before.name },
-    });
-    return { kind: "ok" };
+    return await archiveDiscountInTx(tx, input);
   });
+}
+
+/** The same, inside the caller's transaction, which already holds the gym's row lock. */
+export async function archiveDiscountInTx(tx: TransactionSql, input: { gymId: string; discountId: string; actorUserId: string; now: Date }): Promise<DiscountWriteOutcome> {
+  const [before] = await tx<{ name: string }[]>`
+    UPDATE gym_discounts SET archived_at = ${input.now}, updated_at = ${input.now}
+    WHERE id = ${input.discountId} AND gym_id = ${input.gymId} AND archived_at IS NULL
+    RETURNING name`;
+  if (before === undefined) return { kind: "not_found" };
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.discount_archived",
+    targetType: "gym_discount",
+    targetId: input.discountId,
+    meta: { name: before.name },
+  });
+  return { kind: "ok" };
 }
 
 /** Put an archived discount back. It counts against the cap, and a discount in use may

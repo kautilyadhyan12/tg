@@ -30,6 +30,9 @@ export interface LeadRow {
   followUpDueOn: string | null;
   /** When the person last sent the gym page's form. */
   enquiredAt: Date | null;
+  /** The member whose invite link brought the lead (20e-ii-a), or null. */
+  referredBy: string | null;
+  referredAt: Date | null;
 }
 
 interface DbLead {
@@ -50,6 +53,8 @@ interface DbLead {
   follow_up_last_at: Date | null;
   follow_up_due_on: string | null;
   enquired_at: Date | null;
+  referred_by: string | null;
+  referred_at: Date | null;
 }
 
 const toRow = (row: DbLead): LeadRow => ({
@@ -70,6 +75,8 @@ const toRow = (row: DbLead): LeadRow => ({
   followUpLastAt: row.follow_up_last_at,
   followUpDueOn: row.follow_up_due_on,
   enquiredAt: row.enquired_at,
+  referredBy: row.referred_by,
+  referredAt: row.referred_at,
 });
 
 export interface LeadValues {
@@ -136,17 +143,21 @@ export async function insertLead(
   enquiredAt: Date | null = null,
   /** Made by the gym's page form: its tick, if any, is the person's own on the form. */
   fromPage = false,
+  /** The member whose invite link the form was sent from (20e-ii-a). */
+  referredBy: string | null = null,
 ): Promise<LeadRow> {
   const rows = await tx<DbLead[]>`
     INSERT INTO gym_leads (gym_id, full_name, email, email_hmac, phone_e164, source, notes, email_ok_at, added_by,
-                           follow_ups_sent, follow_up_last_at, follow_up_due_on, enquired_at, from_page, email_ok_by_page)
+                           follow_ups_sent, follow_up_last_at, follow_up_due_on, enquired_at, from_page, email_ok_by_page,
+                           referred_by, referred_at)
     VALUES (${gymId}, ${values.fullName}, ${values.email}, ${leadEmailHmac(addressKey, values.email)}, ${values.phone}, ${values.source},
             ${values.notes}, ${values.emailOkAt}, ${addedBy},
             ${values.followUpsSent}, ${values.followUpLastAt}, ${values.followUpDueOn}::date, ${enquiredAt},
-            ${fromPage}, ${fromPage && values.emailOkAt !== null})
+            ${fromPage}, ${fromPage && values.emailOkAt !== null},
+            ${referredBy}, ${referredBy === null ? null : enquiredAt})
     RETURNING id, full_name, email, phone_e164, source, status, notes, email_ok_at, email_ok_by_page, entry_id, false AS on_list,
               created_at, status_changed_at, follow_ups_sent, follow_up_last_at, follow_up_due_on::text AS follow_up_due_on,
-              enquired_at`;
+              enquired_at, referred_by, referred_at`;
   const row = rows[0];
   if (row === undefined) throw new Error("inserting a lead returned no row");
   return toRow(row);
@@ -156,7 +167,7 @@ export async function leadFor(sql: SqlOrTx, gymId: string, leadId: string): Prom
   const rows = await sql<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at, l.referred_by, l.referred_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.id = ${leadId}`;
@@ -169,7 +180,7 @@ export async function lockLead(tx: TransactionSql, gymId: string, leadId: string
   const rows = await tx<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at, l.referred_by, l.referred_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.id = ${leadId}
@@ -211,7 +222,7 @@ export async function writeLead(
     )
     SELECT w.id, w.full_name, w.email, w.phone_e164, w.source, w.status, w.notes, w.email_ok_at, w.email_ok_by_page, w.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, w.created_at, w.status_changed_at,
-           w.follow_ups_sent, w.follow_up_last_at, w.follow_up_due_on::text AS follow_up_due_on, w.enquired_at
+           w.follow_ups_sent, w.follow_up_last_at, w.follow_up_due_on::text AS follow_up_due_on, w.enquired_at, w.referred_by, w.referred_at
     FROM written w
     LEFT JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = w.entry_id`;
   const row = rows[0];
@@ -339,7 +350,7 @@ export async function leadsPage(
   const rows = await sql<(DbLead & { cursor_at: string })[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at,
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at, l.referred_by, l.referred_at,
            to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
@@ -518,7 +529,7 @@ export async function lockLeadForContact(
   const rows = await tx<DbLead[]>`
     SELECT l.id, l.full_name, l.email, l.phone_e164, l.source, l.status, l.notes, l.email_ok_at, l.email_ok_by_page, l.entry_id,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS on_list, l.created_at, l.status_changed_at,
-           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at
+           l.follow_ups_sent, l.follow_up_last_at, l.follow_up_due_on::text AS follow_up_due_on, l.enquired_at, l.referred_by, l.referred_at
     FROM gym_leads l
     LEFT JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId}

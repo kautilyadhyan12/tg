@@ -110,6 +110,8 @@ describe("Staff activity's sentences", () => {
       ["org.member_list_unlisted_removed", { meta: { removed: "12" } }, "Removed 12 members who are no longer on the list from the app"],
       ["org.group_message_sent", { meta: { people: "1" } }, "Sent a message to 1 member"],
       ["org.waiver_signed", { about: "Riya", meta: { via: "desk", signer: "guardian" } }, "Had Riya's parent or guardian sign the waiver at the desk"],
+      ["org.referrals_changed", { meta: { on: "false", memberGift: "true", friendGift: "true" } }, "Switched off Refer a friend"],
+      ["org.referrals_changed", { meta: { on: "true", memberGift: "true", friendGift: "false" } }, "Changed Refer a friend"],
     ];
     for (const [action, over, line] of cases) expect(STAFF_LINES[action]?.(said(over)), action).toBe(line);
     // A studio's people are clients.

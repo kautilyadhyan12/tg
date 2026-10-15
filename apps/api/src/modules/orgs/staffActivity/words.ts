@@ -286,6 +286,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.leads_selected_deleted": (s) => `Deleted ${plural(count(s, "deleted"), "lead", "leads")}`,
   "org.lead_joined": (s) => `Marked ${lead(s)} as Joined`,
   "org.lead_emails_changed": () => "Changed the follow-up emails to leads",
+  "org.referrals_changed": (s) => (text(s, "on") === "false" ? "Switched off Refer a friend" : "Changed Refer a friend"),
   "org.leads_imported": (s) => `Added ${plural(count(s, "added"), "lead", "leads")} from a file`,
 
   // Updates, events and challenges

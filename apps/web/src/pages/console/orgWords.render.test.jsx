@@ -42,6 +42,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       closeDay: vi.fn(),
       removeClosure: vi.fn(),
       // Settings' follow-up emails box (20c-v) reads on mount: switched off.
+      /** Settings' Refer a friend box (20e-ii-a) reads on mount too: a business that never switched it on. */
+      getReferralSettings: vi.fn(() => Promise.resolve({ data: { settings: { on: false, member: null, friend: null, currency: null, memberLines: [] } } })),
+      saveReferralSettings: vi.fn(),
       getLeadEmailSettings: vi.fn(() =>
         Promise.resolve({
           data: { settings: { sendForMe: false, replyTo: null, perMonth: 100, usedThisMonth: 0, hasPostalAddress: true, stopped: false, appSending: 'on' } },

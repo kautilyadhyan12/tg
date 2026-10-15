@@ -202,6 +202,23 @@ export const LEAD_SOURCE_WORDS: Record<LeadSource, string> = {
   other: "Other",
 };
 
+/** Who sent a lead, as Leads shows it. */
+export const leadInvitedBySchema = z
+  .object({
+    /** Null where the member has since deleted their account. */
+    name: z.string().nullable(),
+    /** They are still a member of this business. */
+    member: z.boolean(),
+  })
+  .strict();
+export type LeadInvitedBy = z.infer<typeof leadInvitedBySchema>;
+
+/** "Invited by Maya Patel", and what has changed about them since. */
+export function invitedByWords(by: LeadInvitedBy): string {
+  if (by.name === null) return "Invited by a member who has since deleted their account";
+  return by.member ? `Invited by ${by.name}` : `Invited by ${by.name}, who is no longer a member`;
+}
+
 export const leadSchema = z
   .object({
     id: z.string().uuid(),
@@ -232,6 +249,8 @@ export const leadSchema = z
      *  been ticked again since (20c-v-b). Shown on the list, so staff need not open each
      *  lead to find it. */
     emailProblem: z.enum(["bounced", "refused", "complained"]).nullable().default(null),
+    /** The member whose invite link brought the lead (20e-ii-a), or null. */
+    invitedBy: leadInvitedBySchema.nullable().default(null),
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;

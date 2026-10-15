@@ -5141,6 +5141,74 @@ the rest in a row; a tap opens one full size. A photo is served at
 `/v1/public/gyms/{slug}/photos/{id}` only while the page shows (the same 404 otherwise),
 as its checked type with `nosniff` and a sandboxing CSP, cached five minutes.
 
+**Built in 20e-ii-a (2026-10-15; RULINGS 2026-10-08 and `rulings/2026-10-15-20e-ii-a.md`):
+Refer a friend, the offer, the invite link and the lead marked.** Read first: Mindbody's
+Branded App gives each client a referral code, and both rewards are issued by themselves
+once the new client makes a qualifying visit or purchase; PushPress marks each lead with
+where it came from ("Referred by"). Migration `0117`.
+- **The offer** (Settings → **Refer a friend**, `org.manage`; `gym_referral_settings`): a
+  switch and two gifts, set in the box itself (Kd at the click-through: setting it up across
+  two pages was too complicated), either alone or both. Each is "No gift", a percentage or an
+  amount (in the business's money; with no country set, only a percentage). On with neither
+  is refused (`no_gift`), said under the switch and beside Save. Save stays in view at the
+  foot of the screen (above the phone's tabs) while anything is not saved, and closing the tab
+  then asks first. Below the boxes, what a member and a friend will read.
+- **The member's gift comes off their next payment, by itself** (Kd, "A yes"): kept on the
+  offer (`member_gift_kind`, `member_percent_bp`, `member_amount_minor`, `member_currency`),
+  no code. A code only takes money off something new (a membership given, a product sold),
+  never a payment owed on the membership a member already has, so a code was the wrong gift
+  for a member. 20e-ii-b gives it: their next bill on the membership they have, else credit
+  on their page for the next thing they pay for.
+- **The friend's gift is a promo code the app makes, for the business, never shown to the
+  friend** (the invite reply carries the gift's words alone; 20e-ii-b fills it in when staff
+  add the friend's membership, with Remove, and matches Add member to Leads by email or phone
+  so the chain holds): off the first payment of a new
+  membership, every payment of one, or products sold at the desk. On Save it is kept as a
+  discount of its own, "Refer a friend: friend's gift, WELCOME20", listed under Discounts like
+  any other, with a **See it in Discounts** button beside its code. A code is unique within a
+  business only; the app takes the next free one (WELCOME20B…) where the business already uses
+  it. Saved again with the same gift, the same code. A changed gift nobody has used changes
+  its discount and code; once somebody has used it, it is archived (its sales keep what they
+  were sold at) and the new gift gets its own. "No gift" archives it. No friend holds the code,
+  so no replaced code is left in use. A code never shows a number the gift is not: 12.5% or
+  £5.50 is plain WELCOME. The offer and the code
+  are written in one transaction under the gym's row lock. A code archived under Discounts is
+  promised to nobody until the box is saved again.
+- **A gift in words** (`referralGiftWords`) is said from the discount as it is: "10% off the
+  first payment of a membership, until 31 December 2026". A gift whose code cannot be used
+  today (ended, used up, archived, not started, no code) is promised to nobody.
+- **The member's link** (`GET /v1/orgs/{gym}/referral`, a live member only; 404 for anybody
+  else): a random code of 16 of `a-z2-7` (80 bits), one per member per business
+  (`gym_referral_links`), made the first time and the same after. The reply carries the
+  link's path and the offer's lines, among them "Your link shows your first name, Maya, to
+  whoever opens it." and, last, "This offer is set by {business} and may change." The phone's
+  Invite a friend (Stage 5 item 20) reads this route.
+- **The invite page** (`/invite/{code}`, public; `GET /v1/public/invites/{code}`): every
+  business has it, with or without a page of its own. A welcome, not a form (Kd: "the form
+  looks really generic"): a warm header, "**Maya** invited you to join {business}." (the
+  member's **first name only**, Kd "B yes": never their surname, email or id), the friend's gift
+  as a ticket with no code to remember ("{business} adds it for you when you join."; Kd: the
+  friend should not have to tell staff anything), three steps, then the form, and a button to the
+  business's own page where it has one. Its form is the page's form with **Email *** required
+  (Kd) and without "How did you hear about us?"
+  (`POST …/enquiries`, the same robot check and the same limits, counted against the same
+  business), and its lead's source is A friend. The page is opened at most 600 times an hour
+  per link from one address, and 6,000 an hour from one address in all (a carrier puts
+  thousands of phones behind one address); the form spends only the page form's own limits. A code that is not one, of a member who has
+  left, of a business that switched the offer off, is closed or on no plan: the same 404,
+  "This invite link isn't working. Ask the person who sent it for a new one."
+- **The lead marked** (`gym_leads.referred_by`, `referred_at`): only a NEW lead, and only
+  while the member still is one and the offer is still on, asked again in the write's own
+  transaction. A lead already there is never changed by the form, so nobody is claimed by a
+  second member. A member using their own link with their own email (a "+tag" address counts
+  as theirs) or phone is not their own friend: a backstop, since the member's gift still waits
+  for a second person to join and pay. Leads and the lead's page say **Invited by Maya Rao** (the gym's list's name where
+  that record is theirs alone, else their app name; the invite page and the member's own line
+  use their app name); one who left reads "…, who is no longer a member"; one whose
+  account is deleted reads "Invited by a member who has since deleted their account".
+- **Privacy**: a link is the member's own (deleted at Day 14, exported); the lead's
+  `referred_by` is the gym's record, `ON DELETE set null`.
+
 ### 16.4 At risk
 
 The console lists members whose visits have dropped — came in at least 2 of the last

@@ -49,6 +49,7 @@ import { registerPostRoutes } from "./posts/routes.js";
 import { registerEventRoutes } from "./events/routes.js";
 import { registerChallengeRoutes } from "./challenges/routes.js";
 import { registerMessageRoutes } from "./messages/routes.js";
+import { registerReferralRoutes } from "./referrals/routes.js";
 import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
@@ -174,6 +175,9 @@ export function registerOrgRoutes(
 
   // A member's inbox from their gym (Part 3 §16.1).
   registerMessageRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+
+  // Refer a friend: the owner's offer and a member's own invite link (Part 3 §16.3).
+  registerReferralRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).

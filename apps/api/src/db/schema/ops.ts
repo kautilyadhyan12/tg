@@ -45,7 +45,7 @@ export const auditLog = pgTable(
   },
   (t) => [
     index("audit_log_gym_at_idx").on(t.gymId, t.at.desc()),
-    // Staff activity's former staff (0117).
+    // Staff activity's former staff (0118).
     index("audit_log_staff_removed_idx").on(t.gymId).where(sql`${t.action} = 'org.staff_removed'`),
   ],
 );
