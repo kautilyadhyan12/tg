@@ -90,8 +90,8 @@ export interface InviteRow {
   timezone: string;
   /** The business has its own page switched on. */
   pageShown: boolean;
-  /** The member's name as the gym's list has it, else as they use it in the app; the
-   *  caller says only its first word. */
+  /** The name the member uses in the app: their own, never a list record two accounts may
+   *  share. The caller says only its first word. */
   referrerName: string | null;
 }
 
@@ -115,7 +115,7 @@ export async function liveInvite(sql: SqlOrTx, code: string): Promise<InviteRow 
   >`
     SELECT g.id AS gym_id, l.user_id, g.name, g.slug, g.city, g.org_type, g.country, g.timezone,
            COALESCE((SELECT p.shown FROM gym_pages p WHERE p.gym_id = g.id), false) AS page_shown,
-           ${memberName(sql, sql`l.gym_id`, sql`l.user_id`)} AS referrer_name
+           (SELECT u.display_name FROM users u WHERE u.id = l.user_id AND u.status = 'active') AS referrer_name
     FROM gym_referral_links l
     JOIN gyms g ON g.id = l.gym_id AND g.status = 'active'
     JOIN gym_referral_settings s ON s.gym_id = l.gym_id AND s.switched_on
@@ -140,19 +140,10 @@ export async function liveInvite(sql: SqlOrTx, code: string): Promise<InviteRow 
   };
 }
 
-/** A member's name at this gym: the gym's list's name for them, else the one they use in
- *  the app. */
-const memberName = (sql: SqlOrTx, gymId: ReturnType<SqlOrTx>, userId: ReturnType<SqlOrTx>) => sql`
-  (SELECT COALESCE(NULLIF(btrim(e.full_name), ''), u.display_name)
-   FROM users u
-   LEFT JOIN gym_members m ON m.gym_id = ${gymId} AND m.user_id = u.id AND m.removed_at IS NULL
-   LEFT JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
-   WHERE u.id = ${userId} AND u.status = 'active'
-   LIMIT 1)`;
-
-/** A live member's own name at this gym, for the line saying what their link shows. */
-export async function memberNameAt(sql: SqlOrTx, gymId: string, userId: string): Promise<string | null> {
-  const rows = await sql<{ name: string | null }[]>`SELECT ${memberName(sql, sql`${gymId}::uuid`, sql`${userId}::uuid`)} AS name`;
+/** The name a member uses in the app, for the line saying what their link shows: their own,
+ *  as the invite page shows it. */
+export async function memberNameAt(sql: SqlOrTx, userId: string): Promise<string | null> {
+  const rows = await sql<{ name: string }[]>`SELECT display_name AS name FROM users WHERE id = ${userId} AND status = 'active'`;
   return rows[0]?.name ?? null;
 }
 
@@ -180,8 +171,10 @@ export interface Inviter {
   member: boolean;
 }
 
-/** The members who sent this gym's leads, by id: the name the gym's own list has for them,
- *  else the name they use in the app. Only people who sent this gym's leads are asked. */
+/** The members who sent this gym's leads, by id: the name the gym's own list has for them
+ *  where that record is theirs alone (no other live account holds it, and it is not a former
+ *  member's; `pt/repo.memberRecord`'s rule), else the name they use in the app. Only people
+ *  who sent this gym's leads are asked. */
 export async function invitersFor(sql: SqlOrTx, gymId: string, userIds: readonly string[]): Promise<Map<string, Inviter>> {
   if (userIds.length === 0) return new Map();
   const rows = await sql<{ id: string; name: string | null; member: boolean }[]>`
@@ -192,9 +185,13 @@ export async function invitersFor(sql: SqlOrTx, gymId: string, userIds: readonly
     LEFT JOIN LATERAL (
       SELECT e.full_name
       FROM gym_members m
-      JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id
-      WHERE m.gym_id = ${gymId} AND m.user_id = u.id
-      ORDER BY (m.removed_at IS NULL) DESC, m.joined_at DESC
+      JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
+      WHERE m.gym_id = ${gymId} AND m.user_id = u.id AND m.removed_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_members o
+          JOIN users ou ON ou.id = o.user_id AND ou.status = 'active'
+          WHERE o.gym_id = m.gym_id AND o.entry_id = m.entry_id AND o.user_id <> m.user_id AND o.removed_at IS NULL
+        )
       LIMIT 1
     ) listed ON true
     WHERE u.id = ANY(${[...new Set(userIds)]}::uuid[])

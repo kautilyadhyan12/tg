@@ -10,6 +10,8 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { RobotCheck } from "../src/modules/orgs/gymPage/robotCheck.js";
+import { takeEnquiry } from "../src/modules/orgs/gymPage/service.js";
+import { createMemoryRedis } from "../src/redis.js";
 import { REFERRAL_WORDS, type Lead, type MemberReferralResponse, type PublicInvite, type ReferralSettings } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
@@ -49,6 +51,8 @@ const robotCheck: RobotCheck = { siteKey: "test-site-key", verify: () => Promise
 
 d("Refer a friend (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  /** One Redis for both servers, so a limit can be counted into before a request. */
+  const redis = createMemoryRedis();
   let app: App | undefined;
   /** A second api on the same database, so two requests can race. */
   let second: App | undefined;
@@ -208,6 +212,7 @@ d("Refer a friend (real Postgres)", () => {
         sendSignInCodeEmail: () => Promise.resolve(),
       },
       robotCheck,
+      redis,
     };
     app = await buildApp(loadConfig(baseEnv), deps);
     await api().ready();
@@ -359,6 +364,113 @@ d("Refer a friend (real Postgres)", () => {
       },
       TIMEOUT_MS,
     );
+    it(
+      "two accounts on one list record: each link shows its own member's first name, and Leads credits the member the database holds (round one, H1)",
+      async () => {
+        const rajesh = await makeUser("rajesh", "Rajesh Kumar");
+        const priya = await makeUser("priya", "Priya Sharma");
+        await join(gymA, ownerA.cookies, rajesh);
+        await join(gymA, ownerA.cookies, priya);
+        // The console's join of two records leaves both accounts on one record: written here
+        // as that merge leaves it.
+        const [entry] = await sql<{ id: string }[]>`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+          VALUES (${gymA.org.id}, 'Rajesh Kumar', ${rajesh.email}, encode(sha256(${`h1-${rajesh.id}`}::bytea), 'hex'), 'typed') RETURNING id`;
+        await sql`UPDATE gym_members SET entry_id = ${entry?.id ?? null} WHERE gym_id = ${gymA.org.id} AND user_id IN (${rajesh.id}, ${priya.id}) AND removed_at IS NULL`;
+
+        const own = JSON.parse((await get(memberUrl(gymA.org.id), priya.cookies)).body) as MemberReferralResponse;
+        expect(own.status === "on" && own.lines.includes("Your link shows your first name, Priya, to whoever opens it.")).toBe(true);
+        const code = await linkOf(gymA, priya);
+        const invite = (JSON.parse((await get(inviteUrl(code))).body) as { invite: PublicInvite }).invite;
+        expect(invite.inviterFirstName).toBe("Priya");
+        expect((await post(formUrl(code), enquiry({ fullName: "Priya's Friend", email: "priyas.friend@example.com" }))).statusCode).toBe(202);
+        const leads = (JSON.parse((await get(`/v1/orgs/${gymA.org.id}/leads`, ownerA.cookies)).body) as { leads: Lead[] }).leads;
+        expect(leads.find((l) => l.fullName === "Priya's Friend")?.invitedBy).toEqual({ name: "Priya Sharma", member: true });
+
+        // A record that is one member's alone is what Leads calls them by; the invite page
+        // still says only the first name they use in the app.
+        const anil = await makeUser("anil", "Anil");
+        await join(gymA, ownerA.cookies, anil);
+        const [own2] = await sql<{ id: string }[]>`
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source)
+          VALUES (${gymA.org.id}, 'Anil Mehta', ${anil.email}, encode(sha256(${`h1-${anil.id}`}::bytea), 'hex'), 'typed') RETURNING id`;
+        await sql`UPDATE gym_members SET entry_id = ${own2?.id ?? null} WHERE gym_id = ${gymA.org.id} AND user_id = ${anil.id} AND removed_at IS NULL`;
+        const anilCode = await linkOf(gymA, anil);
+        expect(((JSON.parse((await get(inviteUrl(anilCode))).body) as { invite: PublicInvite }).invite).inviterFirstName).toBe("Anil");
+        expect((await post(formUrl(anilCode), enquiry({ fullName: "Anil's Friend", email: "anils.friend@example.com" }))).statusCode).toBe(202);
+        const after = (JSON.parse((await get(`/v1/orgs/${gymA.org.id}/leads`, ownerA.cookies)).body) as { leads: Lead[] }).leads;
+        expect(after.find((l) => l.fullName === "Anil's Friend")?.invitedBy).toEqual({ name: "Anil Mehta", member: true });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "at one shared address, one link opened past its allowance closes only that link's page; other businesses' pages and every form stay open (round one, H3)",
+      async () => {
+        const shared = "10.99.0.1";
+        const codeA = await linkOf(gymA, maya);
+        const codeB = await linkOf(gymB, maya);
+        const at = (method: "GET" | "POST", path: string, payload?: unknown) =>
+          api().inject({ method, url: path, remoteAddress: shared, ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }) });
+        // Counted into the limit's own key, not looped: the app's floor answers a loop first.
+        for (let i = 0; i < 600; i += 1) await redis.incrWithTtl(`rl:referral_invite_read:id:${codeA}:${shared}`, 3600);
+        expect((await at("GET", inviteUrl(codeA))).statusCode).toBe(429);
+        expect((await at("GET", inviteUrl(codeB))).statusCode).toBe(200);
+        expect((await at("POST", formUrl(codeB), enquiry({ fullName: "Shared One", email: "shared.one@example.com" }))).statusCode).toBe(202);
+        // The form never spends the page's allowance: A's friend can still send it from there.
+        expect((await at("POST", formUrl(codeA), enquiry({ fullName: "Shared Two", email: "shared.two@example.com" }))).statusCode).toBe(202);
+        const names = (await storedLeads(gymA.org.id)).map((l) => l.full_name);
+        expect(names).toContain("Shared Two");
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "the write's own transaction asks again: a member who left after their link was read marks nobody (round one, tests)",
+      async () => {
+        const gone = await makeUser("gone", "Gone Member");
+        await join(gymA, ownerA.cookies, gone);
+        await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gymA.org.id} AND user_id = ${gone.id} AND removed_at IS NULL`;
+        const [gym] = await sql<{ country: string | null; timezone: string }[]>`SELECT country, timezone FROM gyms WHERE id = ${gymA.org.id}`;
+        // The link was read while they were a member: the form's own `find` answers them as
+        // the inviter, and only the transaction can tell they have left.
+        const passes = () => Promise.resolve(true);
+        const done = await takeEnquiry(
+          {
+            sql,
+            now: () => new Date(),
+            robotCheck,
+            photos: { put: () => Promise.resolve(), get: () => Promise.resolve(null), remove: () => Promise.resolve(false) },
+            log: { warn: () => undefined },
+            addressKey: null,
+          },
+          { fullName: "Late Friend", email: "late.friend@example.com", robotToken: "ok-token" },
+          { robotRoom: passes, robotFailed: () => Promise.resolve(), address: passes, page: passes },
+          () => Promise.resolve({ gymId: gymA.org.id, country: gym?.country ?? null, timezone: gym?.timezone ?? "UTC", referrerId: gone.id }),
+        );
+        expect(done).toBe("received");
+        const late = (await storedLeads(gymA.org.id)).find((l) => l.email === "late.friend@example.com");
+        expect(late).toMatchObject({ source: "friend", referred_by: null, referred: false });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "a member's own phone, or their own email with a +tag, through their own link is not their friend",
+      async () => {
+        const codeA = await linkOf(gymA, maya);
+        await sql`UPDATE gym_members SET stated_phone_e164 = '+447700900777' WHERE gym_id = ${gymA.org.id} AND user_id = ${maya.id} AND removed_at IS NULL`;
+        expect((await post(formUrl(codeA), enquiry({ fullName: "Maya Again", email: "someone.else@example.com", phone: "07700 900777" }))).statusCode).toBe(202);
+        const byPhone = (await storedLeads(gymA.org.id)).find((l) => l.email === "someone.else@example.com");
+        expect(byPhone).toMatchObject({ referred_by: null, referred: false });
+
+        const tagged = maya.email.replace("@", "+gym@");
+        expect((await post(formUrl(codeA), enquiry({ fullName: "Maya Tagged", email: tagged }))).statusCode).toBe(202);
+        const byTag = (await storedLeads(gymA.org.id)).find((l) => l.email === tagged);
+        expect(byTag).toMatchObject({ referred_by: null, referred: false });
+      },
+      TIMEOUT_MS,
+    );
   });
 
   describe("who may read and set it", () => {
@@ -420,7 +532,7 @@ d("Refer a friend (real Postgres)", () => {
     );
 
     it(
-      "a changed friend's gift nobody has used changes its code; one somebody has used is left as it was given, and the new gift gets its own",
+      "a changed friend's gift nobody has used changes its code; one somebody has used is archived (round one, H2), and the new gift gets its own",
       async () => {
         const [first] = await sql<{ friend_discount_id: string }[]>`SELECT friend_discount_id FROM gym_referral_settings WHERE gym_id = ${gymA.org.id}`;
         const changed = await switchOn(gymA, ownerA.cookies, mine(10), pct(25, "every"));
@@ -429,19 +541,27 @@ d("Refer a friend (real Postgres)", () => {
         expect(same?.friend_discount_id).toBe(first?.friend_discount_id);
         expect(await sql`SELECT 1 FROM gym_discounts WHERE gym_id = ${gymA.org.id} AND code = 'WELCOME20'`).toHaveLength(0);
 
-        // Somebody used WELCOME25 at the desk: changing the gift leaves it exactly as given.
+        // Somebody used WELCOME25 at the desk: changing the gift archives it, so it takes nothing
+        // off any more; its sale keeps what it was sold at.
         await sql`UPDATE gym_discounts SET uses = 1 WHERE id = ${same?.friend_discount_id ?? ""}`;
         const moved = await switchOn(gymA, ownerA.cookies, mine(10), pct(20));
         expect(moved.friend?.code).toBe("WELCOME20");
         const kept = await sql<{ code: string; percent_bp: number; archived: boolean }[]>`
           SELECT code, percent_bp, archived_at IS NOT NULL AS archived FROM gym_discounts WHERE id = ${same?.friend_discount_id ?? ""}`;
-        expect(kept).toEqual([{ code: "WELCOME25", percent_bp: 2500, archived: false }]);
+        expect(kept).toEqual([{ code: "WELCOME25", percent_bp: 2500, archived: true }]);
+        // Used, and then no gift at all: archived too, and the box and the Discounts list agree.
+        const [now] = await sql<{ friend_discount_id: string }[]>`SELECT friend_discount_id FROM gym_referral_settings WHERE gym_id = ${gymA.org.id}`;
+        await sql`UPDATE gym_discounts SET uses = 1 WHERE id = ${now?.friend_discount_id ?? ""}`;
+        const none = await put(settingsUrl(gymA.org.id), { on: false, member: null, friend: null }, ownerA.cookies);
+        expect((JSON.parse(none.body) as { settings: ReferralSettings }).settings.friend).toBeNull();
+        expect(await sql`SELECT 1 FROM gym_discounts WHERE gym_id = ${gymA.org.id} AND archived_at IS NULL AND name LIKE 'Refer a friend:%'`).toHaveLength(0);
+        await switchOn(gymA, ownerA.cookies, mine(10), pct(20));
       },
       TIMEOUT_MS,
     );
 
     it(
-      "No gift archives a code nobody used; an amount needs the gym's country; a code archived under Discounts is promised to nobody until saved again",
+      "No gift archives the code; an amount needs the gym's country; a code never shows a number the gift is not; a code archived under Discounts is promised to nobody until saved again",
       async () => {
         const off = await put(settingsUrl(gymA.org.id), { on: true, member: mine(10), friend: null }, ownerA.cookies);
         expect(off.statusCode).toBe(200);
@@ -461,6 +581,11 @@ d("Refer a friend (real Postgres)", () => {
         const pounds = await switchOn(gymA, ownerA.cookies, { kind: "amount", percentBp: null, amountMinor: 500 }, { kind: "amount", percentBp: null, amountMinor: 500, on: "products" });
         expect(pounds.member).toMatchObject({ words: "£5.00 off your next payment", currency: "GBP" });
         expect(pounds.friend).toMatchObject({ code: "WELCOME5", words: "£5.00 off products" });
+        // 12.5% and £5.50 are not whole: the code says no number rather than a wrong one (L2).
+        const half = await switchOn(gymA, ownerA.cookies, mine(10), pct(12.5));
+        expect(half.friend).toMatchObject({ code: "WELCOME", words: "12.5% off the first payment of a membership" });
+        const pence = await switchOn(gymA, ownerA.cookies, mine(10), { kind: "amount", percentBp: null, amountMinor: 550, on: "products" });
+        expect(pence.friend).toMatchObject({ code: "WELCOME", words: "£5.50 off products" });
         await switchOn(gymA, ownerA.cookies, mine(10), pct(20));
 
         // The owner archives the friend's code under Discounts: nobody is promised it.

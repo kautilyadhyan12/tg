@@ -175,11 +175,13 @@ function sameGift(d: DiscountRow, want: DiscountInput, currency: string | null):
   );
 }
 
-/** "WELCOME20" for 20%, "WELCOME500" for ₹500: the first of it, then B, C… that no other
- *  discount of this gym in use has as its code or its name. */
+/** "WELCOME20" for 20%, "WELCOME500" for ₹500, plain "WELCOME" for 12.5% or £5.50 (a code
+ *  never shows a number the gift is not): the first of it, then B, C… that no other discount
+ *  of this gym in use has as its code or its name. */
 async function freeCode(tx: TransactionSql, gymId: string, gift: ReferralGiftInput, currency: string | null, exceptId: string | null): Promise<string> {
-  const amount = gift.kind === "percent" ? Math.trunc((gift.percentBp ?? 0) / 100) : Number.parseInt(minorToPriceText(gift.amountMinor ?? 0, currency ?? "USD"), 10);
-  const base = `${CODE_START}${String(Number.isFinite(amount) && amount > 0 ? amount : "")}`.slice(0, 16);
+  const bp = gift.percentBp ?? 0;
+  const whole = gift.kind === "percent" ? (bp % 100 === 0 ? String(bp / 100) : "") : (/^(\d+)(?:\.0+)?$/.exec(minorToPriceText(gift.amountMinor ?? 0, currency ?? "USD"))?.[1] ?? "");
+  const base = `${CODE_START}${whole}`.slice(0, 16);
   for (const end of CODE_ENDS) {
     const code = `${base}${end}`;
     if (!(await codeOrNameTaken(tx, gymId, code, giftName(code), exceptId))) return code;
@@ -194,10 +196,12 @@ function refused(outcome: { kind: string }): OrgsError {
   return new OrgsError(409, outcome.kind, "We couldn't save that. Please try again.");
 }
 
-/** The friend's gift, kept as its own discount. The same gift keeps its discount and code. A changed
- *  gift changes its discount, and its code, where nobody has used it yet; once somebody has,
- *  that discount is left exactly as it was given and the new gift gets a discount of its
- *  own. "No gift" archives a discount nobody has used. */
+/** The friend's gift, kept as its own discount. The same gift keeps its discount and code.
+ *  A changed gift nobody has used changes its discount and code in place; one somebody has
+ *  used is archived (its sales keep what they were sold at) and the new gift gets a discount
+ *  of its own. "No gift" archives it. No friend holds the code (the invite page shows the
+ *  gift's words alone), so no replaced code is left in use for anybody to honour (round one
+ *  of 20e-ii-a, H2). */
 async function placeGift(
   tx: TransactionSql,
   ctx: { gymId: string; userId: string; at: Date; currency: string | null },
@@ -205,8 +209,11 @@ async function placeGift(
   current: DiscountRow | undefined,
 ): Promise<string | null> {
   const live = current !== undefined && current.archivedAt === null ? current : undefined;
+  const archive = async (d: DiscountRow): Promise<void> => {
+    await archiveDiscountInTx(tx, { gymId: ctx.gymId, discountId: d.id, actorUserId: ctx.userId, now: ctx.at });
+  };
   if (gift === null) {
-    if (live !== undefined && live.uses === 0) await archiveDiscountInTx(tx, { gymId: ctx.gymId, discountId: live.id, actorUserId: ctx.userId, now: ctx.at });
+    if (live !== undefined) await archive(live);
     return null;
   }
   if (gift.kind === "amount" && ctx.currency === null) throw new OrgsError(409, "no_currency", REFERRAL_WORDS.no_currency);
@@ -218,6 +225,7 @@ async function placeGift(
     if (done.kind !== "ok") throw refused(done);
     return live.id;
   }
+  if (live !== undefined) await archive(live);
   const code = await freeCode(tx, ctx.gymId, gift, ctx.currency, null);
   const made = await createDiscountInTx(tx, { ...want, name: giftName(code), code, gymId: ctx.gymId, actorUserId: ctx.userId });
   if (made.kind !== "created") throw refused(made);
@@ -278,7 +286,7 @@ export async function getMemberReferral(deps: ReferralDeps, userId: string, gymI
   const member = memberWords(settings.member);
   const friend = liveGift(discounts, settings.friendDiscountId, today);
   const code = await repo.linkCode(deps.sql, gymId, userId, freshCode);
-  const firstName = greetingName(await repo.memberNameAt(deps.sql, gymId, userId));
+  const firstName = greetingName(await repo.memberNameAt(deps.sql, userId));
   return {
     status: "on",
     gymName: gate.name,

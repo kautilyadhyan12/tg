@@ -458,7 +458,17 @@ async function inviter(
 ): Promise<string | null> {
   const now = await referralsRepo.referrerNow(tx, gymId, referrerId);
   if (now === null) return null;
-  const sameEmail = contact.email !== null && now.email !== null && contact.email.toLowerCase() === now.email.toLowerCase();
+  // An address with a "+tag" is the same mailbox: maya+gym@ is maya@ (round one, L1). A
+  // backstop, not the gate: the member's gift still waits for a second person to join and pay.
+  const sameEmail = contact.email !== null && now.email !== null && mailbox(contact.email) === mailbox(now.email);
   const samePhone = contact.phone !== null && now.statedPhone !== null && contact.phone === now.statedPhone;
   return sameEmail || samePhone ? null : referrerId;
+}
+
+/** An address as one mailbox: lower case, without a "+tag" before the "@". */
+function mailbox(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1) return email.toLowerCase();
+  const local = email.slice(0, at).split("+")[0] ?? "";
+  return `${local}${email.slice(at)}`.toLowerCase();
 }

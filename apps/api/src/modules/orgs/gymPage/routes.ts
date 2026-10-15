@@ -157,14 +157,21 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
       identifier: (req) => `${slug}:${req.ip}`,
       redis: deps.redis,
     });
-  /** Invite pages opened, by address alone: a code is 80 random bits, and this keeps
-   *  anybody from trying many. A page opened is one read; its form is the page's form. */
+  /** Invite pages opened: 600 an hour of one link from one address, and 6,000 an hour of
+   *  every link together from one address. Per link, never one allowance for the whole app:
+   *  a mobile carrier puts thousands of phones behind one address, and one person reloading
+   *  a page must not close every business's invite there (round one of 20e-ii-a, H3). A
+   *  code is 80 random bits, so guessing one is out of reach either way. The form spends
+   *  only the page form's own limits, counted against the business. */
   const inviteReadLimit = createDualRateLimit({
     name: "referral_invite_read",
-    max: 300,
-    ipMax: 300,
+    max: 600,
+    ipMax: 6000,
     windowMs: 60 * 60 * 1000,
-    identifier: () => null,
+    identifier: (req) => {
+      const parsed = inviteParamsSchema.safeParse(req.params);
+      return parsed.success ? `${parsed.data.code}:${req.ip}` : null;
+    },
     redis: deps.redis,
   });
   /** …and 120 messages an hour to one page, counted only once the robot check passed. Once
@@ -320,7 +327,7 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     if (reply.sent) return;
     const parsed = inviteParamsSchema.safeParse(req.params);
     if (!parsed.success) return inviteNotFound(req, reply);
-    const invite = await referrals.publicInvite({ sql: deps.sql, now: () => new Date(), robotCheckKey: deps.robotCheck.siteKey }, parsed.data.code);
+    const invite = await referrals.publicInvite({ sql: deps.sql, now: pageDeps.now, robotCheckKey: deps.robotCheck.siteKey }, parsed.data.code);
     return reply.status(200).header("cache-control", "no-store").send({ invite });
   });
 
@@ -328,8 +335,6 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
   // against the same business. The invite is found again here, and asked again in the
   // write's own transaction.
   app.post("/v1/public/invites/:code/enquiries", async (req, reply) => {
-    await inviteReadLimit(req, reply);
-    if (reply.sent) return;
     const parsed = inviteParamsSchema.safeParse(req.params);
     if (!parsed.success) return inviteNotFound(req, reply);
     const body = parseOr400(inviteEnquiryRequestSchema, req.body, req, reply);
