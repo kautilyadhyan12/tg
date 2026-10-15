@@ -8,12 +8,13 @@
 // Never earlier than promised: the first email names a day at least 30 days on, the
 // second at least 7 days on, and the list goes only once that day has come and the
 // second email went a week before. An email that could not go is tried again by the next
-// run, and the day moves with it. A gym whose staff have no address is not emailed, and
-// its days are counted the same way.
+// run, and the day moves with it. A gym with nobody who can be emailed is never emptied:
+// its first email waits, and is tried again every night.
 //
 // Each gym is decided under its own row's lock, the lock a payment takes (`billing/repo.ts`)
 // and a member-list write takes, so a plan starting at that instant is either seen or
-// waits. The email goes after that transaction, so no lock is held over the network; a
+// waits. A sign-in takes no gym lock: one in the same instant as the deletion, a week
+// after the last email, is not seen. The email goes after that transaction, so no lock is held over the network; a
 // claim made first stops a second run sending it again, and a claim an hour old with
 // nothing marked sent is tried once more (a second email over none).
 //
@@ -100,11 +101,17 @@ type Decided =
   | { kind: "deleted" }
   | { kind: "send"; notice: repo.Notice; countedFrom: Date; deletesAt: Date };
 
-/** Everyone at the gym who may manage its billing: the owner, and staff given that tick. */
+/** Everyone at the gym who may both pay for its plan and download its list, the two things
+ *  the email offers: the owner, and staff given both ticks. */
 async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<string[]> {
   const out: string[] = [];
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
-    if (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) out.push(staff.email);
+    if (
+      (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) &&
+      (await holdsPrivilege(deps, gymId, staff.userId, "members.confirm"))
+    ) {
+      out.push(staff.email);
+    }
   }
   return out;
 }
@@ -112,7 +119,7 @@ async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<string[
 async function decide(deps: GoneForGoodDeps, gymId: string, now: Date): Promise<Decided> {
   return await deps.sql.begin(async (tx): Promise<Decided> => {
     await lockOrgRow(tx, gymId);
-    // Asked again under the lock: a payment or a sign-in since the list was read wins.
+    // Asked again under the lock: a payment, or a sign-in committed, since the list was read wins.
     const [fact] = await repo.dueGyms(tx, now, [gymId]);
     if (fact === undefined) return { kind: "none" };
     const round = await repo.roundFor(tx, gymId, fact.countedFrom);
@@ -143,15 +150,15 @@ async function decide(deps: GoneForGoodDeps, gymId: string, now: Date): Promise<
   });
 }
 
-/** Sends one email to each recipient: how many went, 0 for nobody to send to, or null when
- *  none of them went. */
+/** Sends one email to each recipient: how many went, or null when none went, nobody can be
+ *  emailed included. A failure for some of them counts as sent: the others were told. */
 async function send(deps: GoneForGoodDeps, gymId: string, decided: Extract<Decided, { kind: "send" }>): Promise<number | null> {
   const gym = await repo.noticeGym(deps.sql, gymId);
   if (gym === null) return null;
   const to = await recipients(deps, gymId);
   if (to.length === 0) {
-    deps.log.info({ event: "orgs.gone_for_good.nobody_to_email", gymId, notice: decided.notice }, "a gym gone for good has nobody to email");
-    return 0;
+    deps.log.info({ event: "orgs.gone_for_good.nobody_to_email", gymId, notice: decided.notice }, "a gym gone for good has nobody to email, so it is kept");
+    return null;
   }
   const membersLink = `${deps.mail.webOrigin}/console/${encodeURIComponent(gym.slug)}/members`;
   let sent = 0;

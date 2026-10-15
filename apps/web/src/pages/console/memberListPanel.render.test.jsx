@@ -515,7 +515,7 @@ describe("the gym's own list", () => {
     orgService.getMemberListEntries.mockResolvedValue(pageOf([]));
     draw({ gym: { timezone: 'Asia/Kolkata' } });
     expect(await screen.findByRole('heading', { name: 'Your list is empty' })).toBeTruthy();
-    expect(screen.getByTestId('members-gone-for-good').textContent).toBe('Your list was deleted on 10 Jul 2030 because your gym had no paid plan and nobody signed in for 6 months.');
+    expect(screen.getByTestId('members-gone-for-good').textContent).toBe('Your list, with its memberships and payments, was deleted on 10 Jul 2030 because your gym had no paid plan and nobody signed in for 6 months.');
     expect(screen.getByRole('button', { name: 'Import members' })).toBeTruthy();
     cleanup();
     orgService.getMemberList.mockResolvedValue({ data: { list: view(empty) } });

@@ -71,10 +71,9 @@ d("a gym gone for good (real Postgres)", () => {
     return row.id;
   };
 
+  /** The account used at `at`, as a sign-in or a renewed session marks it (`auth/repo.ts`). */
   const signIn = async (userId: string, at: Date): Promise<void> => {
-    await sql`
-      INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, created_at)
-      VALUES (${userId}, ${randomUUID()}, ${randomUUID()}, ${plus(at, 30)}, ${at})`;
+    await sql`UPDATE users SET last_active_at = ${at} WHERE id = ${userId} AND (last_active_at IS NULL OR last_active_at < ${at})`;
   };
 
   const plan = async (gymId: string, status: string, endedAt: Date | null): Promise<void> => {
@@ -83,8 +82,9 @@ d("a gym gone for good (real Postgres)", () => {
       VALUES ('gym', ${gymId}, ${planId}, ${status}, 'paddle', ${endedAt})`;
   };
 
-  /** A gym with an owner, a list of one record whose person has the app and came once, a
-   *  lead and a staff invitation. `created` is the gym's start. */
+  /** A gym with an owner; a list of two records: one whose person has the app and came
+   *  once, one whose person has no app, came once and bought a membership, billed and paid
+   *  in cash; a lead and a staff invitation. `created` is the gym's start. */
   const makeGym = async (opts: { created: Date; ownerEmail?: string | null }): Promise<Gym> => {
     const n = String(seq++);
     const ownerEmail = opts.ownerEmail === undefined ? `${PREFIX}owner${n}-${String(Date.now() % 100000)}@example.com` : opts.ownerEmail;
@@ -108,6 +108,29 @@ d("a gym gone for good (real Postgres)", () => {
     await sql`
       INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key)
       VALUES (${gymId}, ${memberId}, ${entry.id}, ${ownerId}, '2029-12-01', 'manual', 'hours_unset', 'hours_unset')`;
+    const [walkIn] = await sql<{ id: string }[]>`
+      INSERT INTO gym_member_list_entries (gym_id, identity_key, source, full_name, email)
+      VALUES (${gymId}, ${"b".repeat(63) + n.slice(-1)}, 'upload', 'Omar Walkin', 'omar@example.com')
+      RETURNING id`;
+    if (walkIn === undefined) throw new Error("no walk-in");
+    await sql`
+      INSERT INTO gym_attendance (gym_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key)
+      VALUES (${gymId}, ${walkIn.id}, ${ownerId}, '2029-12-02', 'manual', 'hours_unset', 'hours_unset')`;
+    const [type] = await sql<{ id: string }[]>`
+      INSERT INTO gym_membership_types (gym_id, name, kind, price_minor, currency, access, term_count, term_unit)
+      VALUES (${gymId}, 'Day pass', 'one_time', 5000, 'USD', 'gym_only', 1, 'day') RETURNING id`;
+    if (type === undefined) throw new Error("no type");
+    const [held] = await sql<{ id: string }[]>`
+      INSERT INTO gym_held_memberships (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, starts_on, renews, term_count, term_unit)
+      VALUES (${gymId}, ${walkIn.id}, ${type.id}, ${randomUUID()}, 'one_time', 5000, 'USD', '2029-12-01', false, 1, 'day') RETURNING id`;
+    if (held === undefined) throw new Error("no membership");
+    const [bill] = await sql<{ id: string }[]>`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on)
+      VALUES (${gymId}, ${held.id}, 0, 5000, 'USD', '2029-12-01') RETURNING id`;
+    if (bill === undefined) throw new Error("no bill");
+    await sql`
+      INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on)
+      VALUES (${gymId}, ${bill.id}, 5000, 'USD', 'cash', ${randomUUID()}, '2029-12-01')`;
     await sql`INSERT INTO gym_leads (gym_id, full_name, source, email) VALUES (${gymId}, 'Sam Lead', 'walk_in', 'sam@example.com')`;
     await sql`
       INSERT INTO gym_staff_invites (gym_id, email, role, privileges, created_at, expires_at)
@@ -143,9 +166,14 @@ d("a gym gone for good (real Postgres)", () => {
     return sweepGoneForGood({ sql, log, mail: rec.mail }, { now: at, gymIds });
   };
 
-  const what = async (g: Gym): Promise<{ entries: number; lists: number; leads: number; invites: number; member: string | null | undefined; visits: number; gym: number; deletedAt: Date | null }> => {
-    const [row] = await sql<{ entries: number; lists: number; leads: number; invites: number; visits: number; gym: number; deleted_at: Date | null }[]>`
+  type Counts = { entries: number; lists: number; leads: number; invites: number; visits: number; walkInVisits: number; held: number; bills: number; payments: number; gym: number };
+  const what = async (g: Gym): Promise<Counts & { member: string | null | undefined; deletedAt: Date | null }> => {
+    const [row] = await sql<(Counts & { deleted_at: Date | null })[]>`
       SELECT
+        (SELECT count(*)::int FROM gym_attendance WHERE gym_id = ${g.gymId} AND user_id IS NULL) AS "walkInVisits",
+        (SELECT count(*)::int FROM gym_held_memberships WHERE gym_id = ${g.gymId}) AS held,
+        (SELECT count(*)::int FROM gym_member_bills WHERE gym_id = ${g.gymId}) AS bills,
+        (SELECT count(*)::int FROM gym_member_payments WHERE gym_id = ${g.gymId}) AS payments,
         (SELECT count(*)::int FROM gym_member_list_entries WHERE gym_id = ${g.gymId}) AS entries,
         (SELECT count(*)::int FROM gym_member_lists WHERE gym_id = ${g.gymId}) AS lists,
         (SELECT count(*)::int FROM gym_leads WHERE gym_id = ${g.gymId}) AS leads,
@@ -155,7 +183,8 @@ d("a gym gone for good (real Postgres)", () => {
         (SELECT list_deleted_at FROM gym_gone_for_good WHERE gym_id = ${g.gymId}) AS deleted_at`;
     const [member] = await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_members WHERE gym_id = ${g.gymId} AND user_id = ${g.memberId}`;
     if (row === undefined) throw new Error("no counts");
-    return { entries: row.entries, lists: row.lists, leads: row.leads, invites: row.invites, member: member === undefined ? undefined : member.entry_id, visits: row.visits, gym: row.gym, deletedAt: row.deleted_at };
+    const { deleted_at: deletedAt, ...counts } = row;
+    return { ...counts, member: member === undefined ? undefined : member.entry_id, deletedAt };
   };
 
   /** Every night from `from` for `nights` nights. */
@@ -194,7 +223,7 @@ d("a gym gone for good (real Postgres)", () => {
       });
 
       for (const kept of [paying, pastDue, signsIn, undated]) {
-        expect(await what(kept)).toMatchObject({ entries: 1, lists: 1, leads: 1, invites: 1, member: kept.entryId, visits: 1, deletedAt: null });
+        expect(await what(kept)).toMatchObject({ entries: 2, lists: 1, leads: 1, invites: 1, member: kept.entryId, visits: 1, walkInVisits: 1, held: 1, bills: 1, payments: 1, deletedAt: null });
       }
       // Nobody but the gone gym's owner was emailed, twice.
       expect(rec.sent.map((m) => m.to)).toEqual([gone.ownerEmail, gone.ownerEmail]);
@@ -206,7 +235,10 @@ d("a gym gone for good (real Postgres)", () => {
       expect(week?.subject).toContain(named);
       // Gone: the gym's list, leads and invitations; kept: the gym, the member and their visit.
       const after = await what(gone);
-      expect(after).toMatchObject({ entries: 0, lists: 0, leads: 0, invites: 0, member: null, visits: 1, gym: 1 });
+      // With the list go the memberships, bills and payments recorded for its people, and the
+      // visits of people who are not in the app (Kd, 2026-10-15: deleted, and the emails say so).
+      expect(after).toMatchObject({ entries: 0, lists: 0, leads: 0, invites: 0, member: null, visits: 1, walkInVisits: 0, held: 0, bills: 0, payments: 0, gym: 1 });
+      expect(month?.text).toContain("with the memberships, bills and payments recorded for those people");
       expect(after.deletedAt).toEqual(deleteDay);
       const [audit] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gone.gymId} AND action = 'org.member_list_deleted'`;
       expect(audit?.n).toBe(1);
@@ -225,7 +257,7 @@ d("a gym gone for good (real Postgres)", () => {
       await run(rec, [g.gymId], plus(deleteDay, -30));
       await run(rec, [g.gymId], plus(deleteDay, -7));
       await run(rec, [g.gymId], plus(deleteDay, -1));
-      expect((await what(g)).entries).toBe(1);
+      expect((await what(g)).entries).toBe(2);
       await run(rec, [g.gymId], deleteDay);
       expect(rec.sent).toHaveLength(2);
       expect((await what(g)).entries).toBe(0);
@@ -246,14 +278,14 @@ d("a gym gone for good (real Postgres)", () => {
       await signIn(g.ownerId, back);
       await nights(rec, [g.gymId], plus(deleteDay, -19), 60);
       expect(rec.sent).toHaveLength(1);
-      expect((await what(g)).entries).toBe(1);
+      expect((await what(g)).entries).toBe(2);
       // The new round: six months from the sign-in, the same two emails first.
       const newDay = addMonths(new Date(back.getTime()), 6);
       await run(rec, [g.gymId], plus(newDay, -30));
       await run(rec, [g.gymId], plus(newDay, -7));
       expect(rec.sent).toHaveLength(3);
       await run(rec, [g.gymId], plus(newDay, -1));
-      expect((await what(g)).entries).toBe(1);
+      expect((await what(g)).entries).toBe(2);
       await run(rec, [g.gymId], newDay);
       expect((await what(g)).entries).toBe(0);
     },
@@ -272,7 +304,7 @@ d("a gym gone for good (real Postgres)", () => {
       await plan(g.gymId, "active", null);
       await run(rec, [g.gymId], deleteDay);
       await run(rec, [g.gymId], plus(deleteDay, 30));
-      expect((await what(g)).entries).toBe(1);
+      expect((await what(g)).entries).toBe(2);
       expect(rec.sent).toHaveLength(2);
     },
     TIMEOUT,
@@ -324,20 +356,95 @@ d("a gym gone for good (real Postgres)", () => {
   );
 
   it(
-    "a gym whose owner has no address is not emailed, and its days are counted the same way",
+    "a gym nobody can be emailed is never emptied: its first email waits, night after night",
     async () => {
       const rec = recorder();
       const g = await makeGym({ created: addMonths(T0, -12), ownerEmail: null });
       await plan(g.gymId, "expired", T0);
       const deleteDay = addMonths(T0, 6);
+      let last: GoneForGoodResult | undefined;
+      for (let night = -30; night <= 60; night += 1) last = await run(rec, [g.gymId], plus(deleteDay, night));
+      expect(rec.sent).toHaveLength(0);
+      expect(last).toMatchObject({ due: 1, notSent: 1, monthSent: 0, deleted: 0 });
+      const [row] = await sql<{ month_sent_at: Date | null; month_claimed_at: Date | null }[]>`
+        SELECT month_sent_at, month_claimed_at FROM gym_gone_for_good WHERE gym_id = ${g.gymId}`;
+      expect(row).toEqual({ month_sent_at: null, month_claimed_at: null });
+      expect(await what(g)).toMatchObject({ entries: 2, leads: 1, invites: 1, held: 1, payments: 1 });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "the emails go to staff who may both pay and download; staff who may only pay are not told to press a button they lack",
+    async () => {
+      const rec = recorder();
+      const g = await makeGym({ created: addMonths(T0, -12) });
+      await plan(g.gymId, "expired", T0);
+      const bothEmail = `${PREFIX}both${String(seq)}@example.com`;
+      const both = await user(bothEmail);
+      const payOnly = await user(`${PREFIX}payonly${String(seq)}@example.com`);
+      await sql`
+        INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES
+          (${g.gymId}, ${both}, 'manager', ${["billing.manage", "members.confirm", "members.read"]}),
+          (${g.gymId}, ${payOnly}, 'manager', ${["billing.manage", "members.read"]})`;
+      await run(rec, [g.gymId], plus(addMonths(T0, 6), -30));
+      expect(rec.sent.map((m) => m.to).sort()).toEqual([bothEmail, g.ownerEmail].sort());
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a gym kept alive only by a member of staff who is not the owner is kept",
+    async () => {
+      const rec = recorder();
+      const g = await makeGym({ created: addMonths(T0, -24) });
+      await plan(g.gymId, "expired", addMonths(T0, -20));
+      const coach = await user(`${PREFIX}coach${String(seq)}@example.com`);
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${g.gymId}, ${coach}, 'trainer')`;
+      await signIn(coach, plus(T0, -1));
+      await nights(rec, [g.gymId], T0, 120, async (night) => {
+        if (Math.round((night.getTime() - T0.getTime()) / DAY) % 60 === 0) await signIn(coach, night);
+      });
+      expect(rec.sent).toHaveLength(0);
+      expect(await what(g)).toMatchObject({ entries: 2, held: 1, payments: 1, deletedAt: null });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a plan bought while the gym is being emptied: the deletion waits for it, sees it, and keeps everything",
+    async () => {
+      const rec = recorder();
+      const g = await makeGym({ created: addMonths(T0, -12) });
+      await plan(g.gymId, "expired", T0);
+      const deleteDay = addMonths(T0, 6);
       await run(rec, [g.gymId], plus(deleteDay, -30));
       await run(rec, [g.gymId], plus(deleteDay, -7));
-      await run(rec, [g.gymId], deleteDay);
-      expect(rec.sent).toHaveLength(0);
-      const [row] = await sql<{ month_recipients: number; week_recipients: number }[]>`
-        SELECT month_recipients, week_recipients FROM gym_gone_for_good WHERE gym_id = ${g.gymId}`;
-      expect(row).toEqual({ month_recipients: 0, week_recipients: 0 });
-      expect((await what(g)).entries).toBe(0);
+      // A payment holds the gym's row, as `billing/repo.ts` does, while the night's run starts.
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let locked: () => void = () => undefined;
+      const isLocked = new Promise<void>((resolve) => {
+        locked = resolve;
+      });
+      const payment = sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM gyms WHERE id = ${g.gymId} FOR UPDATE`;
+        locked();
+        await held;
+        await tx`
+          INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+          VALUES ('gym', ${g.gymId}, ${planId}, 'active', 'paddle')`;
+      });
+      await isLocked;
+      const sweep = run(rec, [g.gymId], deleteDay);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      release();
+      await payment;
+      const result = await sweep;
+      expect(result.deleted).toBe(0);
+      expect(await what(g)).toMatchObject({ entries: 2, leads: 1, invites: 1, held: 1, bills: 1, payments: 1, deletedAt: null });
     },
     TIMEOUT,
   );
@@ -356,7 +463,7 @@ d("a gym gone for good (real Postgres)", () => {
       await run(rec, [g.gymId, other.gymId], plus(deleteDay, -7));
       await run(rec, [g.gymId, other.gymId], deleteDay);
       expect((await what(g)).entries).toBe(0);
-      expect(await what(other)).toMatchObject({ entries: 1, leads: 1, invites: 1, lists: 1 });
+      expect(await what(other)).toMatchObject({ entries: 2, leads: 1, invites: 1, lists: 1 });
       expect(rec.sent.every((m) => m.to === g.ownerEmail)).toBe(true);
     },
     TIMEOUT,
@@ -403,6 +510,45 @@ d("a gym gone for good (real Postgres)", () => {
 
     const read = (gymId: string, cookies: Record<string, string>) =>
       api().inject({ method: "GET", url: `/v1/orgs/${gymId}/member-list`, remoteAddress: `10.44.1.${String(++ip % 250)}`, cookies });
+
+    it(
+      "a sign-in and a renewed session are kept on the account, so a gym whose session rows are all gone is still kept",
+      async () => {
+        const owner = await account();
+        const lastUsed = async (): Promise<Date | null> => {
+          const [row] = await sql<{ last_active_at: Date | null }[]>`SELECT last_active_at FROM users WHERE id = ${owner.userId}`;
+          return row?.last_active_at ?? null;
+        };
+        const signedIn = await lastUsed();
+        expect(signedIn).not.toBeNull();
+        expect(Date.now() - (signedIn?.getTime() ?? 0)).toBeLessThan(60_000);
+        // Renewed within the hour: not written again. Renewed after it: written.
+        const halfHour = new Date(Date.now() - 30 * 60_000);
+        await sql`UPDATE users SET last_active_at = ${halfHour} WHERE id = ${owner.userId}`;
+        const first = await api().inject({ method: "POST", url: "/v1/auth/refresh", remoteAddress: `10.44.2.${String(++ip % 250)}`, cookies: owner.cookies });
+        expect(first.statusCode).toBe(204);
+        expect(await lastUsed()).toEqual(halfHour);
+        const cookies = { ...owner.cookies, ...Object.fromEntries(first.cookies.map((c) => [c.name, c.value])) };
+        await sql`UPDATE users SET last_active_at = ${new Date(Date.now() - 2 * 3_600_000)} WHERE id = ${owner.userId}`;
+        const second = await api().inject({ method: "POST", url: "/v1/auth/refresh", remoteAddress: `10.44.2.${String(++ip % 250)}`, cookies });
+        expect(second.statusCode).toBe(204);
+        expect(Date.now() - ((await lastUsed())?.getTime() ?? 0)).toBeLessThan(60_000);
+
+        // Its gym's plan ended two years ago; every session row is then deleted, as the
+        // spec's retention will: the gym still counts from the owner's last use.
+        const g = await makeGym({ created: addMonths(new Date(), -30) });
+        await sql`UPDATE gyms SET owner_user_id = ${owner.userId} WHERE id = ${g.gymId}`;
+        await sql`DELETE FROM gym_staff WHERE gym_id = ${g.gymId}`;
+        await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${g.gymId}, ${owner.userId}, 'owner')`;
+        await plan(g.gymId, "expired", addMonths(new Date(), -24));
+        await sql`DELETE FROM refresh_tokens WHERE user_id = ${owner.userId}`;
+        const rec = recorder();
+        const result = await run(rec, [g.gymId], new Date());
+        expect(result.due).toBe(0);
+        expect(rec.sent).toHaveLength(0);
+      },
+      TIMEOUT,
+    );
 
     it(
       "says when the list was deleted while there is no list, says nothing once a list is made again, and tells a stranger nothing",

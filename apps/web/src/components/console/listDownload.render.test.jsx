@@ -71,7 +71,7 @@ describe('Download member list in the plan box', () => {
   it('says when and why the list was deleted, where the download would be', async () => {
     orgService.getMemberList.mockResolvedValue({ data: { list: { counts: { entries: 0, former: 0 }, goneForGoodDeletedAt: '2030-07-09T20:00:00.000Z' } } });
     render(<ListDownload org={{ ...OWNER, timezone: 'Asia/Kolkata' }} />);
-    expect((await screen.findByTestId('plan-gone-for-good')).textContent).toBe('Your list was deleted on 10 Jul 2030 because your gym had no paid plan and nobody signed in for 6 months.');
+    expect((await screen.findByTestId('plan-gone-for-good')).textContent).toBe('Your list, with its memberships and payments, was deleted on 10 Jul 2030 because your gym had no paid plan and nobody signed in for 6 months.');
     expect(screen.queryByRole('button')).toBeNull();
   });
 });

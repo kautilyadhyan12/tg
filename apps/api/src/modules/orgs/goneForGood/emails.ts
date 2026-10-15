@@ -43,7 +43,7 @@ export function goneForGoodEmail(w: GoneForGoodWords): EmailMessage {
   const day = fullDay(w.deletesAt, w.timezone);
   const lines = [
     `${gym} has had no paid plan, and nobody from ${gym} has signed in to ${APP_NAME}, since ${since}.`,
-    `On ${day} we will delete its ${words.person} list, its leads and its staff invitations. Your ${words.people} keep their own accounts, workouts and visits.`,
+    `On ${day} we will delete its ${words.person} list, with the memberships, bills and payments recorded for those people, its leads and its staff invitations. ${words.peopleCap} who use the app keep their own accounts, workouts and visits.`,
     `To keep everything, sign in to your ${words.it} console before ${day}.`,
     `To keep a copy of your list, sign in and press Download ${words.person} list:`,
   ];

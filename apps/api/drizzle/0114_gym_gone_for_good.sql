@@ -24,3 +24,10 @@ CREATE TABLE "gym_gone_for_good" (
 );
 --> statement-breakpoint
 ALTER TABLE "gym_gone_for_good" ADD CONSTRAINT "gym_gone_for_good_gym_id_gyms_id_fk" FOREIGN KEY ("gym_id") REFERENCES "public"."gyms"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
+-- A gym's staff being used is read from `users.last_active_at` (written at every sign-in and
+-- session renewal from now on, `auth/repo.ts`), never from `refresh_tokens`, whose rows the
+-- spec's retention removes (Part 4 §5.1). The sign-ins already kept are carried in.
+UPDATE "users" u SET "last_active_at" = r.last_used
+FROM (SELECT "user_id", max("created_at") AS last_used FROM "refresh_tokens" GROUP BY "user_id") r
+WHERE r."user_id" = u."id" AND (u."last_active_at" IS NULL OR u."last_active_at" < r.last_used);

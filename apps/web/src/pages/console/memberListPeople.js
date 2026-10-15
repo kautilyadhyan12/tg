@@ -1147,5 +1147,5 @@ export function goneForGoodLine(list, timeZone, it = 'gym') {
   const at = list?.goneForGoodDeletedAt;
   if (!at) return null;
   const day = gymToday(timeZone, new Date(at));
-  return `Your list was deleted on ${shortDay(day)} because your ${it} had no paid plan and nobody signed in for 6 months.`;
+  return `Your list, with its memberships and payments, was deleted on ${shortDay(day)} because your ${it} had no paid plan and nobody signed in for 6 months.`;
 }

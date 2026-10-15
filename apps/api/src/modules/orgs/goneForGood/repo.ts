@@ -22,8 +22,9 @@ export interface DueGym {
  *  already deleted. A gym on a live plan is never here; nor is a gym with an ended plan
  *  nobody dated, since its six months cannot be counted.
  *
- *  A sign-in is a refresh token made for any of its staff (a sign-in, and every time a
- *  signed-in console or app renews its session); `refresh_tokens` keeps its rows. */
+ *  A sign-in is `users.last_active_at` of any of its staff: written at every sign-in and
+ *  session renewal, at most once an hour (`auth/repo.ts` `markUsed`). Never the
+ *  `refresh_tokens` rows, which the spec's retention deletes 30 days after they expire. */
 export async function dueGyms(sql: SqlOrTx, now: Date, gymIds: readonly string[] | null): Promise<DueGym[]> {
   const rows = await sql<{ gym_id: string; counted_from: Date; due_at: Date }[]>`
     WITH plans AS (
@@ -42,7 +43,7 @@ export async function dueGyms(sql: SqlOrTx, now: Date, gymIds: readonly string[]
       SELECT g.id,
         date_trunc('milliseconds', GREATEST(
           CASE WHEN p.owner_id IS NULL THEN g.created_at ELSE p.ended_at END,
-          (SELECT max(r.created_at) FROM gym_staff st JOIN refresh_tokens r ON r.user_id = st.user_id
+          (SELECT max(u.last_active_at) FROM gym_staff st JOIN users u ON u.id = st.user_id
             WHERE st.gym_id = g.id)
         )) AS counted_from
       FROM gyms g LEFT JOIN plans p ON p.owner_id = g.id
@@ -169,7 +170,7 @@ export async function noticeGym(sql: SqlOrTx, gymId: string): Promise<NoticeGym 
   return row === undefined ? null : { name: row.name, slug: row.slug, orgType: row.org_type, timezone: row.timezone };
 }
 
-/** The gym's staff who have an address, for the billing check the sweep makes. */
+/** The gym's staff who have an address, for the ticks the sweep checks. */
 export async function staffWithEmail(sql: SqlOrTx, gymId: string): Promise<{ userId: string; email: string }[]> {
   const rows = await sql<{ user_id: string; email: string }[]>`
     SELECT s.user_id, u.email FROM gym_staff s JOIN users u ON u.id = s.user_id
