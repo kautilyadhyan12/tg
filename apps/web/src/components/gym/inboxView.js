@@ -1,4 +1,4 @@
-import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_MESSAGE_MEMBER_SWITCH_GROUPS, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords } from '@app/shared';
+import { GYM_COME_BACK_LINES, GYM_MESSAGE_KEPT_DAYS, GYM_MESSAGE_MEMBER_SWITCH_GROUPS, GYM_PINNED_NOTE_DAYS, gymContactTel, orgWords, reviewLinkSchema } from '@app/shared';
 import { cheerLine } from '../../utils/cheerPresets';
 import { cheerAge } from './gymMembershipView';
 import { placeFor } from '../../pages/console/consolePlaces';
@@ -57,7 +57,9 @@ export function pinnedNote(gym, now = Date.now()) {
 
 /** One message as the list draws it. */
 export function messageRow(message, now = Date.now()) {
-  return { id: message.id, body: message.body, when: cheerAge(message.sentAt, now), isNew: !message.read };
+  // Only a plain https web page is ever a button: the server's own rule, read again here.
+  const link = message.kind === 'review' && reviewLinkSchema.safeParse(message.link).success ? message.link : null;
+  return { id: message.id, body: message.body, when: cheerAge(message.sentAt, now), isNew: !message.read, link, linkLabel: link === null ? null : 'Leave a review' };
 }
 
 /** The line under an inbox with nothing in it. */
@@ -98,7 +100,7 @@ export function memberSwitches(gym, off, groupMessages) {
       label: `News and greetings from ${gym.name}`,
       on: newsOn,
       line: newsOn
-        ? `Messages the ${it} sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, and a note if you haven't been in for a while.`
+        ? `Messages the ${it} sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, a note if you haven't been in for a while, and once, a request for a review.`
         : news.some(Boolean)
           ? SOME
           : `Off. You won't get these. Messages about your own membership and bookings still come if that switch is on.`,

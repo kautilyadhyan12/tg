@@ -71,7 +71,7 @@ describe('the pinned note', () => {
 describe('a message, and the lines around the list', () => {
   it('is new until it has been read, with how long ago it came', () => {
     const message = { id: 'm1', kind: 'welcome', body: 'Welcome to Iron House, Maya.', sentAt: ago(26), read: false };
-    expect(messageRow(message, NOW)).toEqual({ id: 'm1', body: 'Welcome to Iron House, Maya.', when: '1 day ago', isNew: true });
+    expect(messageRow(message, NOW)).toEqual({ id: 'm1', body: 'Welcome to Iron House, Maya.', when: '1 day ago', isNew: true, link: null, linkLabel: null });
     expect(messageRow({ ...message, read: true, sentAt: ago(0) }, NOW)).toMatchObject({ when: 'just now', isNew: false });
     expect(messageRow({ ...message, sentAt: 'x' }, NOW).when).toBeNull();
   });

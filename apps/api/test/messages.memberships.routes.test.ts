@@ -230,7 +230,7 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
   const START: GymMessageSettingsRequest = {
-    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null })),
+    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind !== "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
     trialCheckInDay: 2,

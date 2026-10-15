@@ -1,4 +1,4 @@
-// A gym gone for good (ROADMAP Stage 4 item 14). Mirrors `0113_gym_gone_for_good.sql`.
+// A gym gone for good (ROADMAP Stage 4 item 14). Mirrors `0114_gym_gone_for_good.sql`.
 //
 // One row a gym, made the first time it comes due: the two emails of this round and the
 // day its list was deleted. A sign-in or a plan since `countedFrom` starts a new round.

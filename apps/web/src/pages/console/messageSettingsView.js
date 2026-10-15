@@ -4,6 +4,7 @@ import {
   GYM_MESSAGE_KIND_NAMES,
   GYM_MESSAGE_MEMBERSHIP_ENDING_CHOICES,
   GYM_MESSAGE_MISS_YOU_CHOICES,
+  GYM_MESSAGE_MILESTONE_DAYS,
   GYM_MESSAGE_MISS_YOU_LATE_DAYS,
   GYM_MESSAGE_OVERDUE_LATE_DAYS,
   GYM_MESSAGE_OVERDUE_WAIT_DAYS,
@@ -13,7 +14,9 @@ import {
   GYM_MESSAGE_REMINDER_EVENING_HOUR,
   GYM_MESSAGE_REMINDER_LATE_HOURS,
   GYM_MESSAGE_REMINDER_HOURS_CHOICES,
+  GYM_MESSAGE_REVIEW_CHOICES,
   GYM_MESSAGE_STARTING_NUMBERS,
+  GYM_MESSAGE_STARTING_ON,
   GYM_MESSAGE_TRIAL_CHECK_IN_CHOICES,
   GYM_MESSAGE_TRIAL_ENDING_CHOICES,
   GYM_MESSAGE_OWN_LINE_MAX,
@@ -26,6 +29,7 @@ import {
   ownLineProblem,
   paymentNoticeAfterDays,
   reminderClock,
+  reviewLinkSchema,
   tidyOwnLine,
 } from '@app/shared';
 
@@ -73,22 +77,25 @@ const DAY_PICKERS = {
     after: 'before it starts',
     field: 'classReminderHours',
   },
+  review: { choices: GYM_MESSAGE_REVIEW_CHOICES, before: 'After', label: 'Visits before asking', option: (n) => `${String(n)} visits`, after: '', field: 'reviewVisits' },
 };
 /** The picker one message has, with the field of the draft it changes; null for a message
  *  with none. */
 export function dayPicker(kind) {
   return Object.hasOwn(DAY_PICKERS, kind) ? { field: GYM_MESSAGE_DAYS_OF[kind], ...DAY_PICKERS[kind] } : null;
 }
-const DAY_FIELDS = [...Object.values(GYM_MESSAGE_DAYS_OF), DAY_PICKERS.class_reminder.field];
+const DAY_FIELDS = [...Object.values(GYM_MESSAGE_DAYS_OF), DAY_PICKERS.class_reminder.field, DAY_PICKERS.review.field];
 
 /** The box's fields, from what the server holds. */
 export function messageDraft(settings) {
   const by = Object.fromEntries((settings?.messages ?? []).map((m) => [m.kind, m]));
   return {
-    on: Object.fromEntries(MESSAGE_KINDS.map((kind) => [kind, by[kind]?.on !== false])),
+    // A kind the server did not name has its starting switch: Ask for a review starts off.
+    on: Object.fromEntries(MESSAGE_KINDS.map((kind) => [kind, typeof by[kind]?.on === 'boolean' ? by[kind].on : GYM_MESSAGE_STARTING_ON[kind]])),
     lines: Object.fromEntries(MESSAGE_KINDS.map((kind) => [kind, typeof by[kind]?.ownLine === 'string' ? by[kind].ownLine : ''])),
     ...Object.fromEntries(DAY_FIELDS.map((field) => [field, settings?.[field] ?? GYM_MESSAGE_STARTING_NUMBERS[field]])),
     milestones: [...(settings?.milestones ?? [50, 100])].sort((a, b) => a - b),
+    reviewLink: typeof settings?.reviewLink === 'string' ? settings.reviewLink : '',
   };
 }
 
@@ -99,6 +106,7 @@ export function messageDraftChanged(draft, kept) {
   return (
     MESSAGE_KINDS.some((kind) => draft.on[kind] !== kept.on[kind] || tidyOwnLine(draft.lines[kind]) !== tidyOwnLine(kept.lines[kind])) ||
     DAY_FIELDS.some((field) => draft[field] !== kept[field]) ||
+    draft.reviewLink.trim() !== kept.reviewLink.trim() ||
     !sameList(draft.milestones, kept.milestones)
   );
 }
@@ -108,8 +116,18 @@ export function messageProblem(kind, draft) {
   const problem = ownLineProblem(tidyOwnLine(draft.lines[kind]));
   if (problem !== null) return GYM_MESSAGE_OWN_LINE_WORDS[problem];
   if (kind === 'milestone' && draft.milestones.length === 0) return 'Tick at least one number of visits, or switch this message off.';
+  if (kind === 'review') {
+    const link = draft.reviewLink.trim();
+    if (link !== '' && !reviewLinkSchema.safeParse(link).success) return REVIEW_LINK_WRONG;
+    if (link === '' && draft.on.review) return 'Add your review link to switch this on, or switch it off.';
+  }
   return null;
 }
+
+/** Said under a review link that is not one the app can send. */
+export const REVIEW_LINK_WRONG = 'Paste the whole link, starting with https://, as your review page gives it.';
+/** Where a gym finds its link, said under the box. */
+export const REVIEW_LINK_HELP = 'The page where people write a review of you. On Google, open your Business Profile, press Ask for reviews and copy the link.';
 
 /** True when nothing in the box stops a save. */
 export function messageDraftFine(draft) {
@@ -125,6 +143,7 @@ export function messageSettingsBody(draft) {
     }),
     ...Object.fromEntries(DAY_FIELDS.map((field) => [field, draft[field]])),
     milestones: [...draft.milestones].sort((a, b) => a - b),
+    reviewLink: draft.reviewLink.trim() === '' ? null : draft.reviewLink.trim(),
   };
 }
 
@@ -184,6 +203,9 @@ export function messageWhen(kind, orgType, use = {}) {
   }
   if (kind === 'welcome') return `Sent when somebody joins your ${words.it} in the app: within a quarter of an hour by day, and the next morning if they join at night. Not sent to your own staff.`;
   if (kind === 'birthday') return `Sent on a ${words.person}'s birthday, in the morning, when the date of birth is already on your Members list. Nobody gets one for 1 January or 31 December, or for a date that makes them under 18: lists often hold those when the real date is not known.`;
+  if (kind === 'review') {
+    return `Sent once, in the morning, when a ${words.person} has made the number of visits you pick here. A visit is a day the front desk or staff checked them in. Only to people who came in during the last ${String(GYM_MESSAGE_MILESTONE_DAYS)} days, never to your staff, and never twice. Under the words, a Leave a review button opens your review link.`;
+  }
   if (kind === 'milestone') return `Sent in the morning, once a ${words.person} has reached a number of visits you tick here. A visit is a day the front desk or staff checked them in.`;
   return `Sent once, in the morning, when a ${words.person} hasn't checked in for the number of days you pick here. Somebody who stopped coming more than ${String(GYM_MESSAGE_MISS_YOU_LATE_DAYS)} days before that gets none.`;
 }
@@ -223,10 +245,10 @@ export function messageMissing(kind, orgType, use) {
   return null;
 }
 
-/** The two messages that count visits. */
-export const needsCheckIn = (kind) => kind === 'milestone' || kind === 'miss_you';
+/** The three messages that count visits. */
+export const needsCheckIn = (kind) => kind === 'milestone' || kind === 'miss_you' || kind === 'review';
 
-/** Said on those two when nobody has been checked in lately. */
+/** Said on those three when nobody has been checked in lately. */
 export function noCheckInNote(orgType) {
   return `This one counts check-ins. Nobody has been checked in at your ${orgWords(orgType).it} in the last ${String(GYM_MESSAGE_CHECK_IN_DAYS)} days, so nobody will get it yet.`;
 }

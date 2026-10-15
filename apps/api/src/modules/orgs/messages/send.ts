@@ -159,7 +159,10 @@ async function dueForGym(sql: Sql | TransactionSql, gymId: string, now: Date, ev
     if (send === null) continue;
     const body = automaticMessage(send, gym.name, person.displayName, settings.ownLines[send.kind] ?? null);
     if (body === null) continue;
-    due.push({ gymId, userId: person.userId, kind: send.kind, occasion: send.occasion, body, gymDay: gym.today });
+    // A request for a review carries this gym's own link, read with its settings; with none, it is not sent.
+    const link = send.kind === "review" ? settings.reviewLink : null;
+    if (send.kind === "review" && link === null) continue;
+    due.push({ gymId, userId: person.userId, kind: send.kind, occasion: send.occasion, body, link, gymDay: gym.today });
     sentNow.set(person.userId, [...before, { kind: send.kind, occasion: send.occasion, day: gym.today }]);
   }
   return { gym, due };

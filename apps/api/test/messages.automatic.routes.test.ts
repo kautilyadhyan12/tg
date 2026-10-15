@@ -197,13 +197,15 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
   const START: GymMessageSettingsRequest = {
-    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null })),
+    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind !== "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
     trialCheckInDay: 2,
     trialEndingDays: 2,
     membershipEndingDays: 7,
     classReminderHours: 2,
+    reviewVisits: 10,
+    reviewLink: null,
   };
   /** What the box is told of a gym that checks nobody in, sells nothing, takes no payment and has nothing to book. */
   const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0, bookings: false };

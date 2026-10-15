@@ -144,6 +144,25 @@ describe("a member's inbox from their gym", () => {
     expect(screen.queryByRole('list')).toBeNull();
   });
 
+  it("a request for a review has one button, Leave a review, that opens the gym's own link in a new tab; nothing else is ever a button", async () => {
+    const LINK = 'https://g.page/r/CbX1aBcDeFgHEBM/review';
+    svc.read.mockResolvedValue(
+      inboxOf([
+        message('m3', "Hi Maya, thanks for coming to Iron House. If you have a minute, we'd love a review.", { kind: 'review', link: LINK, sentAt: ago(1) }),
+        // A link on any other message, or one that is not a plain https page, is never drawn.
+        message('m2', 'Closed on Monday.', { kind: 'group', link: LINK, sentAt: ago(2) }),
+        message('m1', 'Thanks for coming.', { kind: 'review', link: 'javascript:alert(1)', sentAt: ago(3) }),
+      ]),
+    );
+    svc.markRead.mockResolvedValue(0);
+    render(<Page />);
+    const button = await screen.findByRole('link', { name: 'Leave a review' });
+    expect([button.getAttribute('href'), button.getAttribute('target'), button.getAttribute('rel')]).toEqual([LINK, '_blank', 'noopener noreferrer']);
+    expect(screen.getAllByRole('link', { name: 'Leave a review' })).toHaveLength(1);
+    expect(rows()[0]).toBe("Hi Maya, thanks for coming to Iron House. If you have a minute, we'd love a review.Leave a reviewNew · 1 hour ago");
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull();
+  });
+
   it("another gym's page reads that gym's inbox, and shows none of the first one's", async () => {
     svc.read.mockImplementation((gymId) =>
       Promise.resolve(gymId === 'g1' ? inboxOf([message('m1', 'From Iron House', { read: true })]) : inboxOf([], { gymId: 'g2', gymName: 'Steel Yard' })),
@@ -263,7 +282,7 @@ describe("the member's two switches", () => {
   const news = () => screen.getByRole('switch', { name: /^News and greetings from Iron House/ });
   const MEMBERSHIP_ON = 'About your membership and bookingsA message before a trial or a membership of yours ends, and a reminder before a class or a personal training session you booked.';
   const NEWS_ON =
-    "News and greetings from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, and a note if you haven't been in for a while.";
+    "News and greetings from Iron HouseMessages the gym sends to many people at once, like a closed day or a new class, and its greetings: how your trial is going, your birthday, a number of visits you reach, a note if you haven't been in for a while, and once, a request for a review.";
 
   it('shut behind one button until it is pressed; then two, each saying what is in it, and none for Welcome or a payment', async () => {
     svc.read.mockResolvedValue(inboxOf([message('m1', 'Closed on Monday.', { kind: 'group' })], { groupMessages: true }));
@@ -298,7 +317,7 @@ describe("the member's two switches", () => {
     expect(membership().textContent).toBe("About your membership and bookingsOff. Iron House won't send you these. A message about a payment you owe is still sent.");
     expect(news().getAttribute('aria-checked')).toBe('true');
 
-    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_ending', 'membership_ending', 'class_reminder', 'trial_check_in', 'birthday', 'milestone', 'miss_you'], groupMessages: false });
+    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_ending', 'membership_ending', 'class_reminder', 'trial_check_in', 'birthday', 'milestone', 'miss_you', 'review'], groupMessages: false });
     fireEvent.click(news());
     await waitFor(() => expect(news().getAttribute('aria-checked')).toBe('false'));
     expect(svc.setSwitchGroup).toHaveBeenLastCalledWith('g1', 'news', false);
@@ -306,7 +325,7 @@ describe("the member's two switches", () => {
     // What was already sent stays.
     expect(rows()).toEqual(['Closed on Monday.New · 2 hours ago']);
 
-    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_check_in', 'birthday', 'milestone', 'miss_you'], groupMessages: false });
+    svc.setSwitchGroup.mockResolvedValue({ off: ['trial_check_in', 'birthday', 'milestone', 'miss_you', 'review'], groupMessages: false });
     fireEvent.click(membership());
     await waitFor(() => expect(membership().getAttribute('aria-checked')).toBe('true'));
     expect(svc.setSwitchGroup).toHaveBeenLastCalledWith('g1', 'membership', true);
