@@ -354,8 +354,9 @@ export async function giftUseUndone(tx: TransactionSql, gymId: string, on: { bil
 
 /** Two records joined: a gift given for the friend on the record not kept is the kept one's,
  *  so the friend's next payment never gives a second (once a friend). Where the kept record
- *  already has a gift standing (two members invited what were two records of one person), the
- *  other stays with the record not kept and is let go with it; one taken back always moves. */
+ *  already has a gift standing (two members each invited what were two records of one person,
+ *  and each record paid), the other is kept for its own member: it loses its friend when the
+ *  record not kept is deleted, and still waits for that member. One taken back always moves. */
 export async function moveGiftLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<void> {
   await tx`
     UPDATE gym_referral_member_gifts g SET friend_entry_id = ${toEntryId}
@@ -390,6 +391,8 @@ interface RawLeadGift extends RawTerms {
   taken_back_why: string | null;
   taken_back_payment_day: string | null;
   member_name: string | null;
+  in_app: boolean;
+  past: boolean;
   listed: boolean;
 }
 
@@ -407,6 +410,8 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
            g.taken_back_why,
            COALESCE(gp.paid_on, gs.sold_on, g.taken_back_on)::text AS taken_back_payment_day,
            CASE WHEN u.status = 'active' THEN COALESCE(NULLIF(btrim(e.full_name), ''), u.display_name) END AS member_name,
+           (m.id IS NOT NULL AND u.status = 'active') AS in_app,
+           (e.id IS NOT NULL AND e.former_at IS NOT NULL) AS past,
            (e.id IS NOT NULL AND e.former_at IS NULL) AS listed
     FROM gym_referral_member_gifts g
     LEFT JOIN gym_member_bills b ON b.gym_id = g.gym_id AND b.id = g.used_bill_id
@@ -434,9 +439,15 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
   } else if (r.used) {
     // What it was taken off has since been deleted for good with its record: nothing to say.
     return null;
-  } else if (!r.listed && r.member_name !== null) {
-    // In the app, but no record of theirs on Members: no bill or sale of theirs can take it
-    // until staff put them on the list (round one, H3).
+  } else if (!r.in_app) {
+    // Removed from the app, or their account is gone: nothing takes it unless they come back.
+    gift = { state: "waiting_left", words };
+  } else if (r.past) {
+    // In the app, with a record that is a past member's: nothing takes it until they are back.
+    gift = { state: "waiting_past", words };
+  } else if (!r.listed) {
+    // In the app, with no record on Members: nothing takes it until staff put them on the
+    // list (round one, H3).
     gift = { state: "waiting_no_record", words };
   } else {
     gift = { state: "waiting", words };

@@ -85,11 +85,17 @@ describe("the words", () => {
     expect(memberGiftLine({ state: "waiting_no_record", words }, "Maya Rao", "Tara")).toBe(
       "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.",
     );
+    expect(memberGiftLine({ state: "waiting_past", words }, "Maya Rao", "Tara")).toBe(
+      "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is a past member, so there is no bill to take it off. It comes off their next bill if they come back.",
+    );
+    expect(memberGiftLine({ state: "waiting_left", words }, "Maya Rao", "Tara")).toBe(
+      "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is no longer a member here. It comes off their next bill if they come back.",
+    );
     expect(memberGiftLine({ state: "taken_back", words, why: "voided", day: "2026-10-15" }, "Maya Rao", "Tara")).toBe(
-      "Maya Rao's gift for inviting Tara (£10.00 off) was taken back: Tara's payment of 15 October 2026 was voided before the gift was used.",
+      "Maya Rao's gift for inviting Tara (£10.00 off) was taken back: Tara's payment of 15 October 2026 was voided.",
     );
     expect(memberGiftLine({ state: "taken_back", words, why: "refunded", day: "2026-10-15" }, "Maya Rao", "Tara")).toBe(
-      "Maya Rao's gift for inviting Tara (£10.00 off) was taken back: Tara's payment of 15 October 2026 was refunded in full before the gift was used.",
+      "Maya Rao's gift for inviting Tara (£10.00 off) was taken back: Tara's payment of 15 October 2026 was refunded in full.",
     );
   });
 

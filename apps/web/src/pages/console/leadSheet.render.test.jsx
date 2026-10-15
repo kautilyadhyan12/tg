@@ -266,7 +266,7 @@ describe('adding and keeping a lead', () => {
     orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift: back } } });
     render(sheet(TOM));
     expect((await screen.findByTestId('member-gift-line')).textContent).toBe(
-      "The inviting member's gift for inviting Tom (£10.00 off) was taken back: Tom's payment of 15 October 2026 was voided before the gift was used.",
+      "The inviting member's gift for inviting Tom (£10.00 off) was taken back: Tom's payment of 15 October 2026 was voided.",
     );
   });
 

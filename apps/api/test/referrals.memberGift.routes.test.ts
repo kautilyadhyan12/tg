@@ -527,6 +527,23 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     );
 
     it(
+      "re-check: a member who left the app, or is a past member, is never told to staff as 'in the app but not on your list'",
+      async () => {
+        const lee = await memberWithBill("lee", "Lee Six", true);
+        const friend = await friendJoins(lee.code, "Uma Dale", "uma.dale@example.com", true);
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift?.gift).toEqual({ state: "waiting", words: "£10.00 off" });
+        // A past member: their record is still on the list, marked past.
+        await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gymA.org.id} AND id = ${lee.entryId}`;
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift?.gift).toEqual({ state: "waiting_past", words: "£10.00 off" });
+        // Removed from the app.
+        await sql`UPDATE gym_member_list_entries SET former_at = NULL WHERE gym_id = ${gymA.org.id} AND id = ${lee.entryId}`;
+        await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gymA.org.id} AND user_id = ${lee.person.id}`;
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_left", words: "£10.00 off" }, memberName: "Lee Six" });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
       "a member is not their own friend; once a friend holds in the database itself; L1's words",
       async () => {
         // A lead marked as invited by the member and joined to the member's own record.
@@ -688,6 +705,8 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         expect((await memberships(gymA.org.id, ola.entryId, owner.cookies)).memberGift).toBeNull();
         const lead = await leadPage(gymA.org.id, friend.leadId, owner.cookies);
         expect(lead.memberGift?.gift).toEqual({ state: "taken_back", words: "£10.00 off", why: "voided", day: today });
+        if (lead.memberGift === null) throw new Error("no line");
+        expect(memberGiftLine(lead.memberGift.gift, "Ola Berg", "Finn")).toMatch(/^Ola Berg's gift for inviting Finn \(£10\.00 off\) was taken back: Finn's payment of \d{1,2} [A-Z][a-z]+ \d{4} was voided\.$/);
 
         // Paid again: given again, and Ola is not told a second time.
         const again = await post(`${heldUrl(gymA.org.id, friend.entryId)}/${m.id}/payments`, { requestKey: nextForm(), periodIndex: 0, amountMinor: 4000, method: "cash" }, owner.cookies);

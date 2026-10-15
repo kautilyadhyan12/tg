@@ -73,6 +73,10 @@ export const leadMemberGiftSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("waiting"), words: z.string().min(1) }).strict(),
   /** The member is in the app but has no record on the gym's list: nothing can take it off yet. */
   z.object({ state: z.literal("waiting_no_record"), words: z.string().min(1) }).strict(),
+  /** The member's record is a past member's: nothing takes it until they are back. */
+  z.object({ state: z.literal("waiting_past"), words: z.string().min(1) }).strict(),
+  /** The member left the app here, or their account is gone: nothing takes it unless they return. */
+  z.object({ state: z.literal("waiting_left"), words: z.string().min(1) }).strict(),
   z
     .object({
       state: z.literal("taken_back"),
@@ -97,10 +101,14 @@ export function memberGiftLine(g: LeadMemberGift, member: string, friend: string
       return `${gift} comes off their next bill, or is filled in when they next add a membership or buy at Sell.`;
     case "waiting_no_record":
       return `${gift} is waiting: ${member} is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.`;
+    case "waiting_past":
+      return `${gift} is waiting: ${member} is a past member, so there is no bill to take it off. It comes off their next bill if they come back.`;
+    case "waiting_left":
+      return `${gift} is waiting: ${member} is no longer a member here. It comes off their next bill if they come back.`;
     case "taken_back":
       return g.why === "voided"
-        ? `${gift} was taken back: ${friend}'s payment of ${fullDay(g.day)} was voided before the gift was used.`
-        : `${gift} was taken back: ${friend}'s payment of ${fullDay(g.day)} was refunded in full before the gift was used.`;
+        ? `${gift} was taken back: ${friend}'s payment of ${fullDay(g.day)} was voided.`
+        : `${gift} was taken back: ${friend}'s payment of ${fullDay(g.day)} was refunded in full.`;
   }
 }
 
