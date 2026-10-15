@@ -25,6 +25,7 @@ import {
   leadDraft,
   leadProblem,
   leadSourceLine,
+  statusWord,
 } from './leadsView';
 
 // One lead (ROADMAP 20c-i; its follow-up emails 20c-ii): add a new one, or open one to
@@ -319,7 +320,8 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
     setLead(next);
     if (saved === 'details') setDraft(leadDraft(next));
     if (saved === 'notes') setNotes(next.notes);
-    if (saved === 'joined') setDraft((d) => ({ ...d, status: next.status }));
+    // A status saved on its own keeps whatever else is being typed.
+    if (saved === 'joined' || saved === 'status') setDraft((d) => ({ ...d, status: next.status }));
     return true;
   };
 
@@ -539,6 +541,26 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               >
                 Joined
               </Choice>
+            </div>
+          ) : null}
+
+          {/* A status pressed is saved right here, under the buttons (Kd at 20e-ii-b-ii-b's
+              click-through: the panel's Save is far below, past the details). */}
+          {lead !== null && draft.status !== lead.status && draft.status !== 'joined' ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="status-save">
+              <span className="c-s14 c-t1">{`${lead.fullName} becomes ${statusWord(draft.status)} when you save.`}</span>
+              <button
+                type="button"
+                disabled={off}
+                onClick={() => void save({ status: draft.status }, `Saved. ${lead.fullName} is now ${statusWord(draft.status)}.`, 'status')}
+                className="c-btn c-btn-p"
+              >
+                {working === 'status' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                Save status
+              </button>
+              <button type="button" disabled={off} onClick={() => setDraft((d) => ({ ...d, status: lead.status }))} className="c-btn c-btn-s">
+                {`Keep as ${statusWord(lead.status)}`}
+              </button>
             </div>
           ) : null}
 

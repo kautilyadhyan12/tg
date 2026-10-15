@@ -371,6 +371,30 @@ describe('the details open beside the status (R3)', () => {
     expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
   });
 
+  it('a status pressed is saved right under the buttons, alone, keeping what else is typed (Kd at 20e-ii-b-ii-b)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'contacted' } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    const status = (name) => within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name });
+    expect(screen.queryByTestId('status-save')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '07700 900456' } });
+    fireEvent.click(status('Lost'));
+    const bar = within(screen.getByTestId('status-save'));
+    expect(bar.getByText('Tom Reid becomes Lost when you save.')).toBeTruthy();
+    fireEvent.click(bar.getByRole('button', { name: 'Keep as New' }));
+    expect(screen.queryByTestId('status-save')).toBeNull();
+    expect(status('New').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(status('Contacted'));
+    fireEvent.click(within(screen.getByTestId('status-save')).getByRole('button', { name: 'Save status' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'contacted', fromStatus: 'new' }));
+    await screen.findByText('Saved. Tom Reid is now Contacted.');
+    expect(screen.queryByTestId('status-save')).toBeNull();
+    expect(status('Contacted').getAttribute('aria-pressed')).toBe('true');
+    // The phone typed before is still there, waiting for the panel's own Save.
+    expect(screen.getByLabelText('Phone').value).toBe('07700 900456');
+  });
+
   it('Save sends only the details that moved, never the notes; Cancel puts the typing back', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.updateLead
