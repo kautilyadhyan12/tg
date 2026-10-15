@@ -5303,7 +5303,7 @@ gift, money off.** Migration `0121`. Free days, the owner's second choice, is 20
   each), 7 to 9 ms with nothing waiting.
 
 **Built in 20e-ii-b-ii-b (2026-10-16; `rulings/2026-10-16-20e-ii-b-ii-b.md`): the member's
-gift as free days, and what money off comes off.** Migration `0122`.
+gift as free days, and what money off comes off.** Migration `0123`.
 - **Four choices** for the member's gift in Settings → Refer a friend (Kd: "money off" alone
   was vague): No gift · money off **their next membership payment** (their next bill by itself,
   else filled in at Add membership) · money off **products bought at the desk** (filled in at

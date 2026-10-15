@@ -175,7 +175,10 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 5d-i. [x] **Notes and tags on a person's page** — merged 2026-10-08 (PR #196).
      - 5d-ii. [x] **Tags on the Members list** — merged 2026-10-09 (PR #199).
      - 5d-iii. [x] **The two extra passes' fixes** over notes and tags — merged 2026-10-09 (PR #201).
-   - 5e. [ ] **The app numbers members itself** (Kd, 2026-10-15, `rulings/2026-10-15-20e-ii-b-i.md`): Add member fills in the next member number, staff may change it; an import keeps its numbers and new people continue from the highest; a file with none gives numbers once to everyone without one. Web folder 2, after item 20's two extra passes.
+   - 5e. **The app numbers members itself** (Kd, 2026-10-15; built in web folder 1, Kd 2026-10-16), split 2026-10-16 in two (the line as first written is in `handoff/2026-10-16-5e-i.md`):
+     - 5e-i. [x] **Add member numbers people** — merged 2026-10-16 (PR #288).
+     - 5e-ii. [ ] **An import's numbers**: kept and continued from; the file wins a mismatch, shown on Review; everyone without a number given one; a blank never wipes one (`rulings/2026-10-16-5e-i.md`).
+   - 5f. [ ] **Five kinds of business at sign-up** (Kd, 2026-10-16, `rulings/2026-10-16-5e-i.md`): Gym · Boutique studio · CrossFit box · Yoga studio · Pilates studio, each in its own words; a personal trainer working alone is closed at sign-up as clinics were, nothing already made breaking. Web folder 1, after 5e-ii.
 6. [ ] Gym profile page for members; ~~gym announcements feed~~ (**item 19b since 2026-09-22**); gym greeting and branding on the member home.
 7. [ ] Member-to-coach / gym messaging. **2026-09-22: no private chat now** (RULINGS that day: reactions, no comments, no private chat — it needs far more safety work); a gym talks to its members on the shared page (item 19) and by the messages of Part 7.
 8. ~~Classes, schedules and booking (the largest gym item).~~ **Planned 2026-09-21 as item 17 (17b–17f).**

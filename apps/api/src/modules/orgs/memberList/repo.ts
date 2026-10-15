@@ -18,6 +18,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   MEMBER_LIST_DUPLICATES_KEPT,
   MEMBER_LIST_MAX_EDITED_FIELDS,
+  MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS,
   MEMBER_LIST_MAX_ENTRY_MEMBERS,
   MEMBER_LIST_MAX_REVIEW_ITEMS,
   MEMBER_LIST_STATUS_CHIPS_MAX,
@@ -56,6 +57,8 @@ import { endLeaversSessions } from "../pt/changes.js";
 import type { EntryValues } from "./byHand.js";
 import type { CarriedFields, ListEntry, ListMember } from "./reconcile.js";
 import type { ReviewState } from "./review.js";
+import { identityKey } from "./fields.js";
+import { keptWith, nextMemberNumber } from "./memberNumbers.js";
 import { nameKey, sameName } from "./samePerson.js";
 
 export type SqlOrTx = Sql | TransactionSql;
@@ -3262,4 +3265,101 @@ export async function writeNameKeys(sql: SqlOrTx, rows: readonly { id: string; f
       AS v(id, full_name, name_key)
     WHERE e.id = v.id AND e.name_key IS NULL AND e.full_name = v.full_name`;
   return written.count;
+}
+
+// ── MEMBER NUMBERS (5e-i) ────────────────────────────────────────────────────
+//
+// Read and written under the gym's lock (`lockGym`), so two staff adding at once are
+// given two numbers.
+
+/** Every member number of the gym that ends in a digit, current and past records. */
+async function numbersOf(sql: SqlOrTx, gymId: string): Promise<string[]> {
+  const rows = await sql<{ n: string }[]>`
+    SELECT member_number AS n FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND member_number ~ '[0-9]$'`;
+  return rows.map((row) => row.n);
+}
+
+const keptSchema = z.record(z.string(), z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS));
+
+/** The highest number kept of each sequence, by the prefix folded (`memberNumbers.ts`). */
+async function keptOf(sql: SqlOrTx, gymId: string): Promise<Record<string, string>> {
+  const rows = await sql<{ kept: unknown }[]>`
+    SELECT member_numbers_kept AS kept FROM gym_member_lists WHERE gym_id = ${gymId}`;
+  const row = rows[0];
+  return row === undefined ? {} : keptSchema.parse(row.kept);
+}
+
+/** This number kept as its sequence's highest, where it is higher than what is kept. */
+async function keepNumber(tx: TransactionSql, gymId: string, number: string): Promise<void> {
+  const kept = keptWith(await keptOf(tx, gymId), number);
+  if (kept === null) return;
+  await tx`
+    INSERT INTO gym_member_lists (gym_id, member_numbers_kept)
+    VALUES (${gymId}, ${tx.json(kept)})
+    ON CONFLICT (gym_id) DO UPDATE SET member_numbers_kept = EXCLUDED.member_numbers_kept`;
+}
+
+/** The number "Add member" offers: read on the pool, so it is a suggestion; the number a
+ *  person is given is `giveMemberNumber`'s, under the lock. */
+export async function offeredMemberNumber(sql: SqlOrTx, gymId: string): Promise<string | null> {
+  const [numbers, kept] = await Promise.all([numbersOf(sql, gymId), keptOf(sql, gymId)]);
+  return nextMemberNumber(numbers, Object.values(kept));
+}
+
+/** The gym's next member number, given: kept as its sequence's highest, so it is never
+ *  given twice. Null where the next would be longer than a member number may be. */
+export async function giveMemberNumber(tx: TransactionSql, gymId: string): Promise<string | null> {
+  const next = nextMemberNumber(await numbersOf(tx, gymId), Object.values(await keptOf(tx, gymId)));
+  if (next !== null) await keepNumber(tx, gymId, next);
+  return next;
+}
+
+/** Before a number goes (a record deleted for good, a number changed or merged away): it
+ *  is kept as its own sequence's highest, so it is not given again whichever sequence the
+ *  gym uses later. */
+export async function keepGoingMemberNumber(tx: TransactionSql, gymId: string, memberNumber: string | null): Promise<void> {
+  if (memberNumber !== null) await keepNumber(tx, gymId, memberNumber);
+}
+
+/** The record, other than `exceptId`, with these very name, email and phone and ANY member
+ *  number: the person typed again without the number the app gave them. Found by the same
+ *  key a record is held by, with each candidate's own number put in. A current record
+ *  before a past one, then the one that came on the list first. */
+export async function entryWithDetails(
+  tx: TransactionSql,
+  gymId: string,
+  values: { fullName: string; email: string | null; phone: string | null },
+  exceptId: string | null,
+): Promise<{ id: string; former: boolean } | null> {
+  if (values.email === null && values.phone === null) return null;
+  // One lookup on the email's index, or the phone's where there is no email.
+  const rows = await tx<{ id: string; identity_key: string; member_number: string; former: boolean }[]>`
+    SELECT id, identity_key, member_number, (former_at IS NOT NULL) AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND member_number IS NOT NULL
+      AND ${values.email === null ? tx`email IS NULL AND phone_e164 = ${values.phone}` : tx`email = ${values.email} AND phone_e164 IS NOT DISTINCT FROM ${values.phone}::text`}
+      AND (${exceptId}::uuid IS NULL OR id <> ${exceptId}::uuid)
+    ORDER BY (former_at IS NOT NULL), listed_seq`;
+  const found = rows.find((row) => identityKey({ ...values, memberNumber: row.member_number }) === row.identity_key);
+  return found === undefined ? null : { id: found.id, former: found.former };
+}
+
+/** The record, other than `exceptId`, that holds this member number, case folded as the
+ *  index folds it: a current one before a past one. */
+export async function memberNumberHolder(
+  tx: TransactionSql,
+  gymId: string,
+  memberNumber: string,
+  exceptId: string | null,
+): Promise<{ id: string; fullName: string; former: boolean } | null> {
+  const rows = await tx<{ id: string; full_name: string; former: boolean }[]>`
+    SELECT id, full_name, (former_at IS NOT NULL) AS former
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND lower(member_number) = lower(${memberNumber})
+      AND (${exceptId}::uuid IS NULL OR id <> ${exceptId}::uuid)
+    ORDER BY (former_at IS NOT NULL), full_name, id
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : { id: row.id, fullName: row.full_name, former: row.former };
 }

@@ -364,10 +364,11 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await read(gymId, pricer.cookies)).canSell).toBe(false);
       // A seller who does not keep the list is sent no email, and is not found by one.
       const found = JSON.parse((await get(`${base(gymId)}/people?query=pat`, seller.cookies)).body) as SalePeopleResponse;
-      expect(found.people).toEqual([{ entryId: person, name: "Pat Quinn", email: null, memberNumber: null, past: false }]);
+      // Added by hand, Pat was given the gym's first member number (5e-i).
+      expect(found.people).toEqual([{ entryId: person, name: "Pat Quinn", email: null, memberNumber: "1", past: false }]);
       expect((JSON.parse((await get(`${base(gymId)}/people?query=reg-p-pat`, seller.cookies)).body) as SalePeopleResponse).people).toEqual([]);
       expect((JSON.parse((await get(`${base(gymId)}/people?query=reg-p-pat`, owner.cookies)).body) as SalePeopleResponse).people).toEqual([
-        { entryId: person, name: "Pat Quinn", email: "reg-p-pat-quinn@example.com", memberNumber: null, past: false },
+        { entryId: person, name: "Pat Quinn", email: "reg-p-pat-quinn@example.com", memberNumber: "1", past: false },
       ]);
 
       // What is not a sale or a product is refused before anybody's tick is asked.

@@ -12,6 +12,7 @@ import type { z } from "zod";
 import {
   MEMBER_FILE_MAX_BASE64_CHARS,
   MEMBER_LIST_BY_HAND_WORDS,
+  memberNumberTakenWords,
   MEMBER_LIST_CONFIRM_REFUSAL_WORDS,
   MEMBER_INVITE_WORDS,
   GYM_GROUP_MESSAGE_WORDS,
@@ -505,6 +506,13 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
           people: answer.people,
           requestId: req.id,
         });
+      case "number_taken":
+        return reply.status(409).send({
+          error: "member_number_taken",
+          message: memberNumberTakenWords(answer.memberNumber, answer.fullName, answer.former),
+          entryId: answer.entryId,
+          requestId: req.id,
+        });
       case "leaves_list":
         return reply.status(409).send({
           error: "leaves_list",
@@ -514,6 +522,14 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
         });
     }
   };
+
+  app.get("/v1/orgs/:gymId/member-list/next-number", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const next = await byHand.readNextNumber(listDeps, requireUserId(req), params.gymId, readGate(req, reply));
+    if (next === null) return;
+    return reply.status(200).send(next);
+  });
 
   app.get("/v1/orgs/:gymId/member-list/entries/:entryId", { preHandler: [app.authenticate] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
