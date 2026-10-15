@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarDays, Check, Flag, Flame, Gift, Info, Loader2, Medal, Target, Trophy, Users } from 'lucide-react';
+import { Activity, CalendarDays, Check, Flag, Flame, Gift, Info, Loader2, Medal, Target, Trophy, Users } from 'lucide-react';
 import { challengesService } from '../../api/challengesApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PersonProfile from './PersonProfile';
 import Sheet, { Initials } from './Sheet';
 import {
+  aboutLine,
   boardNote,
   challengeChip,
   challengeDates,
@@ -26,7 +27,6 @@ import {
   teamRows,
   teamRuleNote,
   teamsLine,
-  unitOf,
   whatCounts,
   whoLine,
 } from './challengesView';
@@ -80,7 +80,7 @@ function Flames({ challenge, today }) {
                 : cell.state === 'ahead'
                   ? { color: 'rgba(255,255,255,0.12)' }
                   : { color: 'rgba(255,255,255,0.28)' };
-          const label = markLabel(cell, challenge.counts);
+          const label = markLabel(cell, challenge.words);
           return (
             <span key={cell.day} role="img" aria-label={label} title={label} className="flex justify-center">
               <Flame aria-hidden="true" className="w-4 h-4" style={style} />
@@ -89,7 +89,7 @@ function Flames({ challenge, today }) {
         })}
       </div>
       <p aria-hidden="true" className="flex items-center gap-1 text-[10px] mt-1.5" style={{ color: MUTED }}>
-        <Flame className="w-3 h-3" style={{ color: ORANGE, fill: ORANGE }} /> {`a ${unitOf(challenge.counts)}`}
+        <Flame className="w-3 h-3" style={{ color: ORANGE, fill: ORANGE }} /> {`a ${challenge.words.one}`}
       </p>
       {!marks.whole && <p className="text-xs mt-1" style={{ color: MUTED, maxWidth: 170 }}>This week. Your number counts every day of the challenge.</p>}
     </div>
@@ -298,7 +298,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                     disabled={row.isMe}
                     className="w-full flex items-center gap-3 rounded-xl px-2 py-1.5 text-left min-h-11"
                     style={{ background: row.isMe ? 'rgba(255,138,31,0.08)' : 'transparent' }}
-                    aria-label={`${ordinal(row.place)}: ${row.isMe ? 'You' : row.name}, ${countText(row.value, challenge.counts, challenge.unit)}${row.reached ? ', reached the target' : ''}`}
+                    aria-label={`${ordinal(row.place)}: ${row.isMe ? 'You' : row.name}, ${countText(row.value, challenge.words)}${row.reached ? ', reached the target' : ''}`}
                   >
                     <span className="w-9 text-sm font-bold text-right" style={{ color: MEDAL[row.place] ?? MUTED }}>{ordinal(row.place)}</span>
                     <Initials text={row.initials} />
@@ -370,6 +370,10 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
         <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} />
         {challengeDates(challenge, list.today)}
       </p>
+      <p className="text-sm flex items-center gap-1.5" style={{ color: SOFT }}>
+        <Activity aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} />
+        <span className="break-words min-w-0">{aboutLine(challenge)}</span>
+      </p>
       {challenge.prize !== '' && (
         <p className="text-sm flex items-start gap-1.5" style={{ color: SOFT }}>
           <Gift aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: ORANGE }} />
@@ -391,7 +395,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
           {teamsSaid}
         </p>
       )}
-      {info && <p className="text-xs rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.65)' }}>{whatCounts(challenge, gym.name)}</p>}
+      {info && <p className="text-xs rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.65)' }}>{whatCounts(challenge)}</p>}
       {challenge.details !== '' && <p className="text-sm whitespace-pre-wrap break-words" style={{ color: 'rgba(255,255,255,0.65)' }}>{challenge.details}</p>}
 
       {challenge.cancelled ? (

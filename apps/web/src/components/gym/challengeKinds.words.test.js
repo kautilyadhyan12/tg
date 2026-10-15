@@ -32,13 +32,14 @@ import {
   withNumberLine,
   wonLine,
 } from '../../pages/console/challengesView';
+import { sentChallenge } from './__fixtures__/sentChallenge';
 
 const TODAY = '2026-10-07';
 const GYM = 'Iron Gym';
 const WORDS = { people: 'members', peopleCap: 'Members', person: 'member' };
 
-/** A kind as the screen is sent it. */
-const kind = (counts, unit = '') => ({ counts, unit });
+/** A kind as the screen is sent it: since 19d-iii-a-i, as the list keeps it, with its words. */
+const kind = (counts, unit = '') => sentChallenge({ counts, unit }, GYM);
 
 const me = (over = {}) => ({ value: 0, place: null, hidden: null, toNextPlace: null, nextPlace: null, reached: false, days: [], ...over });
 const row = (name, place, value, over = {}) => ({ userId: `u-${name}`, name, initials: name.slice(0, 1), place, value, reached: false, isMe: false, ...over });
@@ -152,18 +153,18 @@ const CELLS = [
 
 /** Every sentence the member's card, its result post and the console say of a challenge. */
 function said(c) {
-  const days = c.counts !== 'own';
+  const days = c.words.perDay;
   return {
     member: {
       howToWin: howToWin(c),
-      whatCounts: whatCounts(c, GYM),
+      whatCounts: whatCounts(c),
       placeLine: placeLine(c),
       boardNote: boardNote(c),
       progress: progress(c),
       result: resultOf(c, { today: TODAY, gymName: GYM }),
       joinNote: joinNote(c),
       leaveBox: leaveBox(c).line,
-      marks: days ? CELLS.map((cell) => markLabel(cell, c.counts)) : null,
+      marks: days ? CELLS.map((cell) => markLabel(cell, c.words)) : null,
       notCounting: notCountingNote(c, { checkingIn: false, gymName: GYM }),
       teamRows: teamRows(c).map((t) => [t.number, t.label]),
       myTeam: myTeam(c),
@@ -171,6 +172,7 @@ function said(c) {
     },
     console: {
       won: wonLine(c),
+      // Its first line, what it is about, is new in 19d-iii-a-i: tested on its own.
       facts: cardFacts(c, 143, WORDS).slice(1),
       withNumber: withNumberLine(c),
       leaders: leadersLine(c, WORDS),

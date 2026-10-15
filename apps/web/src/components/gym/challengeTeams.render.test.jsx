@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { howToWin, myTeam, myTeamNote, pickBox, resultOf, teamRows, teamsLine } from './challengesView';
+import { sentChallenge } from './__fixtures__/sentChallenge';
 
 const svc = { list: vi.fn(), board: vi.fn(), join: vi.fn(), leave: vi.fn(), pickTeam: vi.fn() };
 vi.mock('../../api/challengesApi', () => ({ challengesService: svc }));
@@ -27,7 +28,7 @@ const teamBoard = (over = {}) => ({
   mine: { teamId: BLUE, people: [mate('u2', 'Chen W.', 6), mate('me', 'Maya K.', 5, true), mate('u3', 'Tom B.', 3)], more: 0, counted: true },
   ...over,
 });
-const challenge = (id, name, over = {}) => ({
+const challenge = (id, name, over = {}) => sentChallenge({
   id,
   name,
   details: '',

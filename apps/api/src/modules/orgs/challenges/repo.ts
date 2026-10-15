@@ -6,7 +6,7 @@ import {
   GYM_CHALLENGES_ENDED_SHOWN,
   GYM_CHALLENGE_CANCELLED_DAYS,
   GYM_CHALLENGE_ENDED_DAYS,
-  type GymChallengeCounts,
+  type ChallengeCountedBy,
   type GymChallengeTeams,
   type GymChallengeWho,
 } from "@app/shared";
@@ -18,13 +18,17 @@ export interface ChallengeRow {
   name: string;
   details: string;
   prize: string;
-  counts: GymChallengeCounts;
+  /** What it is about, from the list; the number the app counts for it, null where the
+   *  staff count; and who counts it. */
+  subject: string;
+  measure: string | null;
+  countedBy: ChallengeCountedBy;
   /** Days on the gym's own calendar, as `YYYY-MM-DD`, both counted. */
   startsOn: string;
   endsOn: string;
   target: number | null;
   who: GymChallengeWho;
-  /** The gym's own count: its word for what is counted, and whether the lowest wins. */
+  /** Where the staff count: its word for what is counted, and whether the lowest wins. */
   unit: string;
   lowestWins: boolean;
   /** Alone ('none'), or in teams the staff make or members pick. */
@@ -37,7 +41,9 @@ interface RawChallenge {
   name: string;
   details: string;
   prize: string;
-  counts: GymChallengeCounts;
+  subject: string;
+  measure: string | null;
+  counted_by: ChallengeCountedBy;
   starts_on: string;
   ends_on: string;
   target: number | null;
@@ -53,7 +59,9 @@ const toRow = (r: RawChallenge): ChallengeRow => ({
   name: r.name,
   details: r.details,
   prize: r.prize,
-  counts: r.counts,
+  subject: r.subject,
+  measure: r.measure,
+  countedBy: r.counted_by,
   startsOn: r.starts_on,
   endsOn: r.ends_on,
   target: r.target,
@@ -65,7 +73,7 @@ const toRow = (r: RawChallenge): ChallengeRow => ({
 });
 
 const columns = (sql: SqlOrTx) => sql`
-  c.id, c.name, c.details, c.prize, c.counts, c.starts_on::text AS starts_on, c.ends_on::text AS ends_on,
+  c.id, c.name, c.details, c.prize, c.subject, c.measure, c.counted_by, c.starts_on::text AS starts_on, c.ends_on::text AS ends_on,
   c.target, c.who, c.unit, c.lowest_wins, c.teams, (c.cancelled_at IS NOT NULL) AS cancelled`;
 
 /** What a member is sent: every challenge that has not ended (a cancelled one for a week
@@ -157,7 +165,9 @@ export interface ChallengeFields {
   name: string;
   details: string;
   prize: string;
-  counts: GymChallengeCounts;
+  subject: string;
+  measure: string | null;
+  countedBy: ChallengeCountedBy;
   startsOn: string;
   endsOn: string;
   target: number | null;
@@ -176,8 +186,8 @@ export async function insertChallenge(
   at: Date,
 ): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
-    INSERT INTO gym_challenges (id, gym_id, challenge_key, name, details, prize, counts, starts_on, ends_on, target, who, unit, lowest_wins, teams, created_by_user_id, created_at, updated_at)
-    VALUES (${challenge.id}, ${gymId}, ${challenge.challengeKey}, ${challenge.name}, ${challenge.details}, ${challenge.prize}, ${challenge.counts},
+    INSERT INTO gym_challenges (id, gym_id, challenge_key, name, details, prize, subject, measure, counted_by, starts_on, ends_on, target, who, unit, lowest_wins, teams, created_by_user_id, created_at, updated_at)
+    VALUES (${challenge.id}, ${gymId}, ${challenge.challengeKey}, ${challenge.name}, ${challenge.details}, ${challenge.prize}, ${challenge.subject}, ${challenge.measure}, ${challenge.countedBy},
             ${challenge.startsOn}::date, ${challenge.endsOn}::date, ${challenge.target}, ${challenge.who}, ${challenge.unit}, ${challenge.lowestWins}, ${challenge.teams}, ${byUserId}, ${at}, ${at})
     ON CONFLICT (gym_id, challenge_key) DO NOTHING
     RETURNING id`;
@@ -187,7 +197,8 @@ export async function insertChallenge(
 export async function updateChallenge(tx: TransactionSql, gymId: string, challengeId: string, challenge: ChallengeFields, at: Date): Promise<void> {
   await tx`
     UPDATE gym_challenges SET
-      name = ${challenge.name}, details = ${challenge.details}, prize = ${challenge.prize}, counts = ${challenge.counts},
+      name = ${challenge.name}, details = ${challenge.details}, prize = ${challenge.prize},
+      subject = ${challenge.subject}, measure = ${challenge.measure}, counted_by = ${challenge.countedBy},
       starts_on = ${challenge.startsOn}::date, ends_on = ${challenge.endsOn}::date, target = ${challenge.target}, who = ${challenge.who},
       unit = ${challenge.unit}, lowest_wins = ${challenge.lowestWins}, teams = ${challenge.teams}, updated_at = ${at}
     WHERE gym_id = ${gymId} AND id = ${challengeId}`;
@@ -259,7 +270,7 @@ export async function inAppCount(sql: SqlOrTx, gymId: string): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-// ── THE GYM'S OWN COUNT: NUMBERS STAFF TYPE ──
+// ── WHERE THE STAFF COUNT: NUMBERS THEY TYPE ──
 
 /** Each person's typed number in each of the gym's `challengeIds`. Somebody who is not a
  *  live member now may still be listed; the caller keeps only the people it knows. */

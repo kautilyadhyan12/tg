@@ -16,6 +16,7 @@ import {
   challengeSaveProblem,
   challengeTakesNumbers,
   challengeTakesTeams,
+  challengeWords,
   eventNameIsSeen,
   postLength,
   teamNameKey,
@@ -27,6 +28,10 @@ import { HIDDEN_TAG } from './leaderboardStaffView';
 // THE CONSOLE'S CHALLENGES PAGE, IN WORDS AND RULES (spec Part 3 §15.6; ROADMAP 19d-i).
 // Pure. The form's draft, what is wrong with it in a sentence staff can act on, what is
 // sent, and every line the page says. Written for someone who opened a gym last week.
+//
+// A challenge the server sent is said in its own words (`words`, spec §15.10.1). The form
+// still offers its three choices (`counts` in the draft) and sends each as the list's kind;
+// 19d-iii-a-ii reads the list from the server instead.
 
 export function canManageChallenges(privileges) {
   return Array.isArray(privileges) && privileges.includes('leaderboard.manage');
@@ -35,7 +40,6 @@ export function canManageChallenges(privileges) {
 export const TEAM_LIMITS = { min: GYM_CHALLENGE_TEAMS_MIN, max: GYM_CHALLENGE_TEAMS_MAX, name: GYM_CHALLENGE_TEAM_NAME_MAX };
 export const CHALLENGE_LIMITS = { unit: GYM_CHALLENGE_UNIT_MAX, score: GYM_CHALLENGE_SCORE_MAX, name: GYM_CHALLENGE_NAME_MAX, details: GYM_CHALLENGE_DETAILS_MAX, prize: GYM_CHALLENGE_PRIZE_MAX, days: GYM_CHALLENGE_MAX_DAYS, back: GYM_CHALLENGE_MAX_DAYS_BACK, ahead: GYM_CHALLENGE_MAX_DAYS_AHEAD };
 
-const UNIT = { gym_days: 'gym day', workout_days: 'workout day' };
 const count = (n) => n.toLocaleString('en');
 const plural = (n, unit) => `${count(n)} ${unit}${n === 1 ? '' : 's'}`;
 const peopleCount = (n) => (n === 1 ? '1 person' : `${count(n)} people`);
@@ -44,13 +48,28 @@ const dayNumber = (day) => Date.parse(`${day}T00:00:00Z`) / 86_400_000;
 /** The day `days` after `day`. */
 export const dayAfter = (day, days) => new Date((dayNumber(day) + days) * 86_400_000).toISOString().slice(0, 10);
 
-const isOwn = (c) => c.counts === 'own';
-/** The word after a number, for the app's counts or the gym's own. */
-const wordsOf = (c) => (isOwn(c) ? (c.unit ?? '').trim() : `${UNIT[c.counts]}s`);
+/** The form's three choices, as the list keeps each. */
+const FORM_KINDS = {
+  gym_days: { subject: 'gym_visits', measure: 'days', countedBy: 'app' },
+  workout_days: { subject: 'workouts', measure: 'days', countedBy: 'app' },
+  own: { subject: 'own', measure: null, countedBy: 'staff' },
+};
+/** The form's choice for a challenge as the server keeps it. */
+const choiceOf = (kind) => (kind.countedBy === 'staff' ? 'own' : kind.subject === 'workouts' ? 'workout_days' : 'gym_days');
+
+/** The form's draft is counted by the staff: its own word is typed. */
+const isOwn = (draft) => draft.counts === 'own';
+/** A challenge the server sent is counted by the staff. */
+const staffCount = (c) => c.countedBy === 'staff';
+/** The words of the form's choice, as the server will send them once it is saved. */
+const draftWords = (draft) => challengeWords({ ...FORM_KINDS[draft.counts], unit: (draft.unit ?? '').trim() }, '');
+/** The word after a number: a sent challenge's own; the form's, '' until the staff's is typed. */
+const wordsOf = (c) => (c.words !== undefined ? c.words.many : isOwn(c) ? (c.unit ?? '').trim() : draftWords(c).many);
 const capital = (text) => (text === '' ? text : text.charAt(0).toUpperCase() + text.slice(1));
+const lower = (text) => (text === '' ? text : text.charAt(0).toLowerCase() + text.slice(1));
 
 /** A number with its word, as members read it: "4 gym days", "1 gym day", "55 push-ups". */
-export const amountOf = (challenge, n) => countText(n, challenge.counts, (challenge.unit ?? '').trim());
+export const amountOf = (challenge, n) => countText(n, challenge.words);
 
 /** Who counts a challenge: the app by itself, or the gym's staff by hand. */
 export const COUNTED_BY_CHOICES = [
@@ -114,9 +133,11 @@ export function whoChoices(words, inApp, teams = 'none') {
 }
 
 /** An empty form: the commonest challenge, most gym days, everyone in. `appCounts`: what
- *  the app was last picked to count, kept for coming back from Your staff; never sent. */
+ *  the app was last picked to count, kept for coming back from Your staff; never sent.
+ *  `kept`: what the challenge being changed is about and who counts it, sent again as it is
+ *  while the form's choice stays the one it opened with; null for a new one. */
 export function newChallengeDraft() {
-  return { name: '', details: '', prize: '', counts: 'gym_days', appCounts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: blankTeams() };
+  return { name: '', details: '', prize: '', counts: 'gym_days', appCounts: 'gym_days', kept: null, unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: blankTeams() };
 }
 
 /** Two empty teams: the fewest a challenge in teams has. */
@@ -130,12 +151,14 @@ const teamsOf = (challenge) => (challenge.teamList ?? []).map((team) => ({ id: t
 
 /** The form filled in from a challenge as the server has it. */
 export function draftOf(challenge) {
+  const counts = choiceOf(challenge);
   return {
     name: challenge.name,
     details: challenge.details,
     prize: challenge.prize,
-    counts: challenge.counts,
-    appCounts: challenge.counts === 'own' ? 'gym_days' : challenge.counts,
+    counts,
+    appCounts: counts === 'own' ? 'gym_days' : counts,
+    kept: { subject: challenge.subject, measure: challenge.measure, countedBy: challenge.countedBy },
     unit: challenge.unit ?? '',
     startsOn: challenge.startsOn,
     endsOn: challenge.endsOn,
@@ -172,9 +195,12 @@ export function draftDays(draft) {
 
 const wholeNumber = (text) => (/^\d{1,7}$/.test(text.trim()) ? Number(text.trim()) : null);
 
+/** What the draft is about and who counts it, as it is sent. */
+const kindOf = (draft) => ((draft.kept ?? null) !== null && choiceOf(draft.kept) === draft.counts ? draft.kept : FORM_KINDS[draft.counts]);
+
 /** The rules a draft would be saved with; `target` null where the most wins. */
 const rulesOf = (draft) => ({
-  counts: draft.counts,
+  ...kindOf(draft),
   startsOn: draft.startsOn,
   endsOn: draft.endsOn,
   target: draft.win === 'target' ? wholeNumber(draft.target) : null,
@@ -232,7 +258,7 @@ export function challengeProblem(draft, today, before = null) {
     before:
       before === null
         ? null
-        : { counts: before.counts, startsOn: before.startsOn, endsOn: before.endsOn, target: before.target, who: before.who, lowestWins: before.lowestWins === true, teams: before.teams ?? 'none', teamList: teamsOf(before) },
+        : { subject: before.subject, measure: before.measure, countedBy: before.countedBy, startsOn: before.startsOn, endsOn: before.endsOn, target: before.target, who: before.who, lowestWins: before.lowestWins === true, teams: before.teams ?? 'none', teamList: teamsOf(before) },
     next: rulesOf(draft),
   });
   if (rule === null) return null;
@@ -248,7 +274,7 @@ export function fieldsOf(draft) {
 /** Whether the challenge the server kept is the one this form holds: a save whose reply
  *  was lost and whose form was then changed is answered with the first one. */
 export function sameAsSent(challenge, fields) {
-  const same = ['name', 'details', 'prize', 'counts', 'unit', 'startsOn', 'endsOn', 'target', 'who', 'lowestWins'].every((key) => challenge[key] === fields[key]);
+  const same = ['name', 'details', 'prize', 'subject', 'measure', 'countedBy', 'unit', 'startsOn', 'endsOn', 'target', 'who', 'lowestWins'].every((key) => challenge[key] === fields[key]);
   const names = (list) => (list ?? []).map((team) => team.name).join('\n');
   return same && (challenge.teams ?? 'none') === (fields.teams ?? 'none') && names(challenge.teamList) === names(fields.teamList);
 }
@@ -279,7 +305,7 @@ export function targetHint(draft) {
   if (hasTeams(draft)) return "A team's number is its people's numbers added together. Every team that reaches this wins.";
   if (isOwn(draft)) return 'Everybody whose number reaches this wins.';
   const days = draftDays(draft);
-  const unit = UNIT[draft.counts];
+  const unit = draftWords(draft).one;
   if (days === null) return `One ${unit} a day is the most anybody can get.`;
   return `One ${unit} a day is the most anybody can get, and this challenge is ${plural(days, 'day')} long: ${count(days)} is the highest number that can be reached.`;
 }
@@ -287,7 +313,7 @@ export function targetHint(draft) {
 /** Under the first day: a start in the past already counts. */
 export function startHint(draft, today) {
   if (draft.startsOn === '' || draft.startsOn >= today || isOwn(draft)) return null;
-  return `${UNIT[draft.counts] === 'gym day' ? 'Gym days' : 'Workout days'} since ${dayLabel(draft.startsOn)} already count.`;
+  return `${capital(draftWords(draft).many)} since ${dayLabel(draft.startsOn)} already count.`;
 }
 
 /** A gym that checks nobody in gets no gym days: said under the choice, before it is saved. */
@@ -319,13 +345,12 @@ export function datesLine(challenge, today) {
 
 /** How a challenge is won, in the line its members read: "Most gym days wins". */
 export function wonLine(challenge) {
-  return winLine({ counts: challenge.counts, unit: wordsOf(challenge), target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: hasTeams(challenge) });
+  return winLine({ words: challenge.words, target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: hasTeams(challenge) });
 }
 
 /** The three facts on a challenge's page: each says what, then one thing worth knowing
  *  about it. A number never stands without its word. */
 export function cardFacts(challenge, inApp, words) {
-  const counts = isOwn(challenge) ? capital(wordsOf(challenge)) : challenge.counts === 'gym_days' ? 'Gym days' : 'Workout days';
   const teamed = hasTeams(challenge);
   const wonNote = challenge.target !== null ? (teamed ? 'Every team that gets there wins' : 'Everyone who gets there wins') : teamed ? "A team's number is its people's added together" : 'Equal numbers share a place';
   const who =
@@ -333,7 +358,7 @@ export function cardFacts(challenge, inApp, words) {
       ? { value: 'Everyone in the app', note: peopleCount(inApp) }
       : { value: `${words.peopleCap} who join`, note: challenge.joinedCount === 0 ? 'Nobody has joined yet' : `${peopleCount(challenge.joinedCount)} ${challenge.joinedCount === 1 ? 'has' : 'have'} joined` };
   return [
-    { label: 'Counts', value: counts, note: isOwn(challenge) ? 'Counted by your staff' : 'Counted by the app' },
+    { label: 'About', value: challenge.words.about, note: staffCount(challenge) ? 'Counted by your staff' : challenge.words.howLine },
     { label: 'How it is won', value: wonLine(challenge), note: wonNote },
     { label: 'Who is in it', value: who.value, note: who.note },
   ];
@@ -349,11 +374,14 @@ export function daysBar(challenge, today) {
   return { percent: Math.round((day / days) * 100), text: `Day ${count(day)} of ${count(days)}` };
 }
 
+/** What somebody "has" once something of theirs counts: "a gym day"; "a number" where the staff count. */
+const aThing = (challenge) => (staffCount(challenge) ? 'a number' : `a ${challenge.words.one}`);
+
 /** How many people have a number so far, in the challenge's own words; null where the
  *  card was not sent it. */
 export function withNumberLine(challenge) {
   if (challenge.withNumber === null || challenge.withNumber === undefined) return null;
-  const what = isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`;
+  const what = aThing(challenge);
   if (challenge.withNumber === 0) return `Nobody has ${what} yet`;
   return `${peopleCount(challenge.withNumber)} ${challenge.withNumber === 1 ? 'has' : 'have'} ${what}`;
 }
@@ -366,7 +394,7 @@ export function leadersLine(challenge, words) {
   if (hasTeams(challenge)) return null;
   if ((challenge.top ?? []).length > 0) return 'In the lead';
   if (challenge.withNumber === 0) return null;
-  return `${words.peopleCap} see no places until 3 people they can see have ${isOwn(challenge) ? 'a number' : `a ${UNIT[challenge.counts]}`}.`;
+  return `${words.peopleCap} see no places until 3 people they can see have ${aThing(challenge)}.`;
 }
 
 /** What staff are told about a challenge's result post in Updates (ROADMAP 19d-ii-b), or
@@ -384,7 +412,7 @@ export function resultPostNote(challenge, mayPost, words, readOnly = false) {
   return { text: 'Its result is posted in Updates.', link: mayPost, who };
 }
 
-/** Whether staff type this challenge's numbers on `today`: the gym's own count, from its
+/** Whether staff type this challenge's numbers on `today`: where they count it, from its
  *  first day until members stop seeing its result; never a cancelled one (the server's rule). */
 export function takesNumbers(challenge, today) {
   return challengeTakesNumbers(challenge, today);
@@ -467,7 +495,7 @@ export function boardLines(board, challenge, words) {
   }
   const hidden = board.hidden;
   if (board.memberStatus === 'too_few') {
-    lines.push(`${words.peopleCap} see no places yet: fewer than 3 people they can see have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]} in it.`);
+    lines.push(`${words.peopleCap} see no places yet: fewer than 3 people they can see have ${aThing(challenge)} in it.`);
   } else {
     lines.push(`${words.peopleCap} see ${peopleCount(board.ranked)} on its board${hidden > 0 ? `; ${count(hidden)} more ${hidden === 1 ? 'is' : 'are'} listed here and hidden from them` : ''}.`);
   }
@@ -483,7 +511,7 @@ export function rowNote(row, challenge = null) {
   // The name's own place already reads "No name yet": the tag says what follows from it.
   if (row.hidden === 'no_name') return 'Hidden until they add a name';
   if (row.hidden !== null) return HIDDEN_TAG[row.hidden];
-  if (row.value === 0) return challenge !== null && isOwn(challenge) ? 'No number yet' : 'Nothing counted yet';
+  if (row.value === 0) return challenge !== null && staffCount(challenge) ? 'No number yet' : 'Nothing counted yet';
   return null;
 }
 
@@ -491,7 +519,7 @@ export function rowNote(row, challenge = null) {
 export function emptyBoard(board, challenge) {
   if (board.memberStatus === 'not_started' && challenge.who === 'joined') return 'Nobody has joined yet.';
   if (board.memberStatus === 'not_started') return null;
-  return challenge.who === 'joined' ? 'Nobody has joined yet.' : isOwn(challenge) ? 'Nobody is in the app here yet.' : `Nobody has a ${UNIT[challenge.counts]} in it yet.`;
+  return challenge.who === 'joined' ? 'Nobody has joined yet.' : staffCount(challenge) ? 'Nobody is in the app here yet.' : `Nobody has ${aThing(challenge)} in it yet.`;
 }
 
 /** "Showing 1–100 of 240" */
@@ -665,7 +693,7 @@ function draftWon(draft) {
     const which = draft.win === 'lowest' ? 'lowest' : 'highest';
     return teamed ? `The team with the ${which} number wins` : `${capital(which)} number wins`;
   }
-  return winLine({ counts: draft.counts, unit: u, target, lowestWins: isOwn(draft) && draft.win === 'lowest', teamed });
+  return winLine({ words: draftWords(draft), target, lowestWins: isOwn(draft) && draft.win === 'lowest', teamed });
 }
 
 /** The challenge the form holds, said back in a few lines as it is filled in. `empty`:
@@ -676,11 +704,12 @@ export function draftSummary(draft, list, words) {
   const unit = wordsOf(draft);
   const teamed = hasTeams(draft);
   const named = draft.teamList.map((team) => team.name.trim()).filter((team) => team !== '');
-  const counted = isOwn(draft) ? 'counted by your staff' : 'counted by the app';
+  const about = draftWords(draft);
+  const counted = isOwn(draft) ? 'counted by your staff' : lower(about.howLine);
   const lines = [
     { label: 'Name', value: name === '' ? 'Not named yet' : name, empty: name === '' },
     { label: 'When', value: days === null ? 'Days not picked yet' : datesLine(draft, list.today), empty: days === null },
-    { label: 'Counts', value: unit === '' ? 'Not said yet · counted by your staff' : `${capital(unit)} · ${counted}`, empty: unit === '' },
+    { label: 'About', value: unit === '' ? 'Not said yet · counted by your staff' : `${about.about} · ${counted}`, empty: unit === '' },
     { label: 'How it is won', value: draftWon(draft), empty: false },
     { label: 'Who is in it', value: draft.who === 'everyone' ? `Everyone in the app · ${peopleCount(list.inApp)}` : `${words.peopleCap} who join`, empty: false },
     {

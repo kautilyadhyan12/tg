@@ -44,9 +44,15 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }): Cookies
 let seq = 0;
 const uniq = (): string => `${String(Date.now())}${String(seq++)}`;
 
-/** The three kinds a gym could make before 19d-iii-a-i, as a challenge is asked for. */
+/** The three kinds a gym could make before 19d-iii-a-i, as a challenge is now asked for:
+ *  as `0118` moves the ones already made. */
 type Kind = "gym_days" | "workout_days" | "own";
-const kind = (k: Kind): Record<string, unknown> => ({ counts: k });
+const KINDS: Record<Kind, Record<string, unknown>> = {
+  gym_days: { subject: "gym_visits", measure: "days", countedBy: "app" },
+  workout_days: { subject: "workouts", measure: "days", countedBy: "app" },
+  own: { subject: "own", measure: null, countedBy: "staff" },
+};
+const kind = (k: Kind): Record<string, unknown> => KINDS[k];
 
 /** What the code that stored `counts` gave, read on 2026-10-15 before the change. */
 const APP_COUNTS = {
@@ -749,6 +755,16 @@ d("every kind of challenge reads the same numbers (real Postgres)", () => {
       const read: Record<string, unknown> = {};
       for (const [name, c] of Object.entries({ gymMost, gymTarget, workMost, workJoined, gymTeams, gymEnded })) read[name] = { member: of(c), staff: await card(c) };
       expect(read).toEqual(APP_COUNTS);
+      // Each is sent as what it is about, who counts it, and the words that say so.
+      const about = (c: MemberGymChallenge) => [c.name, c.subject, c.measure, c.countedBy, c.words.about, c.words.howLine, c.words.one, c.words.perDay];
+      expect(mine.challenges.map(about).sort()).toEqual([
+        ["Gym days in teams", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
+        ["Last week", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
+        ["Most gym days", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
+        ["Most workout days", "workouts", "days", "app", "Workouts in the app", "Counted by the app", "workout day", true],
+        ["Two gym days", "gym_visits", "days", "app", "Gym visits", "Checked in at the front desk", "gym day", true],
+        ["Two workout days, joiners", "workouts", "days", "app", "Workouts in the app", "Counted by the app", "workout day", true],
+      ]);
     },
     T,
   );
@@ -784,6 +800,13 @@ d("every kind of challenge reads the same numbers (real Postgres)", () => {
       const read: Record<string, unknown> = {};
       for (const [name, c] of Object.entries({ most, target, lowest, teams })) read[name] = { member: of(c), staff: await card(c) };
       expect(read).toEqual(OWN_COUNTS);
+      const about = (c: MemberGymChallenge) => [c.name, c.subject, c.measure, c.countedBy, c.words.about, c.words.howLine, c.words.one, c.words.perDay];
+      expect(mine.challenges.map(about).sort()).toEqual([
+        ["5 km race", "own", null, "staff", "Seconds", "Counted by the staff at Own Count Hall", "second", false],
+        ["Fifty boxes", "own", null, "staff", "Boxes", "Counted by the staff at Own Count Hall", "box", false],
+        ["Push-up week", "own", null, "staff", "Push-ups", "Counted by the staff at Own Count Hall", "push-up", false],
+        ["Rowing teams", "own", null, "staff", "Metres", "Counted by the staff at Own Count Hall", "metre", false],
+      ]);
     },
     T,
   );

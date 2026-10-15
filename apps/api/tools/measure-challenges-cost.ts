@@ -123,9 +123,9 @@ async function seed(): Promise<Seeded> {
   // count workout days; every second pair is a challenge people join.
   const running = Math.min(CHALLENGES, GYM_CHALLENGES_CURRENT_MAX) - 1;
   const made = await sql<{ id: string; n: number; who: string }[]>`
-    INSERT INTO gym_challenges (gym_id, challenge_key, name, details, prize, counts, starts_on, ends_on, target, who)
+    INSERT INTO gym_challenges (gym_id, challenge_key, name, details, prize, subject, measure, counted_by, starts_on, ends_on, target, who)
     SELECT ${gymId}, gen_random_uuid(), 'Challenge ' || n, repeat('Words of a challenge. ', 22), repeat('P', 120),
-           CASE WHEN n % 2 = 0 THEN 'gym_days' ELSE 'workout_days' END,
+           CASE WHEN n % 2 = 0 THEN 'gym_visits' ELSE 'workouts' END, 'days', 'app',
            t.today - 300 - CASE WHEN n > ${running} THEN n ELSE 0 END,
            CASE WHEN n > ${running} THEN t.today - (n - ${running}) ELSE t.today + 60 END,
            CASE WHEN n % 3 = 0 THEN 80 END,
@@ -136,15 +136,15 @@ async function seed(): Promise<Seeded> {
   // Challenges that ended three weeks ago, off a member's list, for the result posts.
   if (RESULTS > 0) {
     await sql`
-      INSERT INTO gym_challenges (gym_id, challenge_key, name, prize, counts, starts_on, ends_on, who)
+      INSERT INTO gym_challenges (gym_id, challenge_key, name, prize, subject, measure, counted_by, starts_on, ends_on, who)
       SELECT ${gymId}, gen_random_uuid(), 'Ended ' || n, repeat('P', 120),
-             CASE WHEN n % 2 = 0 THEN 'gym_days' ELSE 'workout_days' END, t.today - 321 - n, t.today - 21 - n, 'everyone'
+             CASE WHEN n % 2 = 0 THEN 'gym_visits' ELSE 'workouts' END, 'days', 'app', t.today - 321 - n, t.today - 21 - n, 'everyone'
       FROM generate_series(1, ${RESULTS}) AS n, LATERAL (SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today) AS t`;
   }
   // One challenge people join that nobody has: the crowd below joins it.
   const [empty] = await sql<{ id: string }[]>`
-    INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
-    SELECT ${gymId}, gen_random_uuid(), 'Nobody yet', 'gym_days', t.today - 20, t.today + 10, 'joined'
+    INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, measure, counted_by, starts_on, ends_on, who)
+    SELECT ${gymId}, gen_random_uuid(), 'Nobody yet', 'gym_visits', 'days', 'app', t.today - 20, t.today + 10, 'joined'
     FROM (SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today) AS t
     RETURNING id`;
   if (joinedOnes.length > 0) {
@@ -319,7 +319,7 @@ try {
     let id = "";
     adds.push(
       await time(async () => {
-        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", counts: "gym_days", startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false, teams: "none", teamList: [] }, allowed);
+        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", subject: "gym_visits", measure: "days", countedBy: "app", startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false, teams: "none", teamList: [] }, allowed);
         id = made?.id ?? "";
       }),
     );
@@ -328,8 +328,8 @@ try {
   }
   // The gym's own count: staff save a page's worth of typed numbers, under the gym's row.
   const [own] = await sql<{ id: string }[]>`
-    INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)
-    VALUES (${gymId}, gen_random_uuid(), 'Own count', 'own', 'push-ups', ${today}::date, ${today}::date, 'everyone') RETURNING id`;
+    INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, counted_by, unit, starts_on, ends_on, who)
+    VALUES (${gymId}, gen_random_uuid(), 'Own count', 'own', 'staff', 'push-ups', ${today}::date, ${today}::date, 'everyone') RETURNING id`;
   const typed = [];
   for (let i = 0; i < RUNS; i++) {
     const scores = crowd.map((userId, n) => ({ userId, value: 1 + ((n + i) % 90) }));

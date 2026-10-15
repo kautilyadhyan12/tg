@@ -27,6 +27,7 @@ import {
   challengeState,
   challengeTakesNumbers,
   challengeTakesTeams,
+  challengeWords,
   placeTeams,
   gymChallengeBoardResponseSchema,
   gymChallengesResponseSchema,
@@ -60,6 +61,7 @@ import { fullName, hiddenReason, rankStaffBoard, shownName, type BoardPerson } f
 import * as boards from "../leaderboard/repo.js";
 import { lockGym } from "../memberList/repo.js";
 import * as posts from "../posts/repo.js";
+import { counterFor, type Counter } from "./counters.js";
 import { placeEntrants, type Entrant } from "./place.js";
 import * as repo from "./repo.js";
 
@@ -90,13 +92,18 @@ function refused(problem: GymChallengeSaveProblem): OrgsError {
   return new OrgsError(SAVE_STATUS[problem].status, SAVE_STATUS[problem].code, GYM_CHALLENGE_WORDS[problem]);
 }
 
-function shaped(row: repo.ChallengeRow, today: string): GymChallenge {
+/** A challenge as it is sent, with the words that say what it is about and how it is
+ *  counted (`challengeWords`): a screen prints them and never looks its subject up. */
+function shaped(row: repo.ChallengeRow, today: string, gymName: string): GymChallenge {
   return {
     id: row.id,
     name: row.name,
     details: row.details,
     prize: row.prize,
-    counts: row.counts,
+    subject: row.subject,
+    measure: row.measure,
+    countedBy: row.countedBy,
+    words: challengeWords(row, gymName),
     startsOn: row.startsOn,
     endsOn: row.endsOn,
     target: row.target,
@@ -144,8 +151,8 @@ interface Member {
   shown: { name: string; initials: string } | null;
 }
 
-/** One kind's read: each live member with a counted day, and their number in each of that
- *  kind's challenges. */
+/** One counter's read: each live member with a number, and their number in each of the
+ *  challenges it counts. */
 interface Numbers {
   rows: { member: Member; counts: number[] }[];
   /** The asker's own numbers, when they have a counted day; and those days, oldest first. */
@@ -154,6 +161,8 @@ interface Numbers {
 }
 
 interface Counted {
+  /** The gym's name, for the words a challenge is sent with. */
+  gymName: string;
   /** Every live app member of the gym now. */
   members: Map<string, Member>;
   /** Where each started challenge's numbers are: its kind's read, and its place in it. */
@@ -169,30 +178,38 @@ interface Counted {
 
 const person = (facts: boards.MemberFacts, value: number): BoardPerson => ({ ...facts, value, circles: null });
 
-/** One read of everything the challenges' boards are made of: the leaderboard's own count
- *  over each challenge's dates. A cancelled challenge and one not started count nothing. */
+/** One read of everything the challenges' boards are made of: each counter the app counts
+ *  with (`counters.ts`) asked once, over the dates of every challenge it counts; and where
+ *  the staff count, the numbers they typed. A cancelled challenge, one not started, and one
+ *  whose kind has no counter count nothing. */
 async function countFor(deps: ChallengesDeps, read: Read, rows: readonly repo.ChallengeRow[], daysOf: string | null): Promise<Counted> {
   const counting = rows.filter((row) => !row.cancelled && row.startsOn <= read.gym.today);
-  const ofKind = (counts: repo.ChallengeRow["counts"]): repo.ChallengeRow[] => counting.filter((row) => row.counts === counts);
   const ranges = (kind: readonly repo.ChallengeRow[]): boards.DayRange[] => kind.map((row) => ({ from: row.startsOn, to: row.endsOn }));
-  const gymKind = ofKind("gym_days");
-  const workoutKind = ofKind("workout_days");
+  const byCounter = new Map<Counter, repo.ChallengeRow[]>();
+  for (const row of counting) {
+    const counter = row.countedBy === "app" && row.measure !== null ? counterFor(row.subject, row.measure) : undefined;
+    if (counter === undefined) continue;
+    const kind = byCounter.get(counter);
+    if (kind === undefined) byCounter.set(counter, [row]);
+    else kind.push(row);
+  }
+  const kinds = [...byCounter];
   const input = { gymId: read.gymId, at: read.at, today: read.gym.today, daysOf };
-  const ownKind = ofKind("own");
+  const staffKind = counting.filter((row) => row.countedBy === "staff");
   const inTeams = rows.filter((row) => row.teams !== "none").map((row) => row.id);
-  const [facts, joinedIds, gymDays, workoutDays, typed, teams, teamOf] = await Promise.all([
+  const [facts, joinedIds, counted, typed, teams, teamOf] = await Promise.all([
     boards.allMemberFacts(deps.sql, read.gymId, read.at),
     repo.joinedBy(deps.sql, read.gymId, rows.filter((row) => row.who === "joined").map((row) => row.id)),
-    boards.gymDaysInRanges(deps.sql, { ...input, ranges: ranges(gymKind) }),
-    boards.workoutDaysInRanges(deps.sql, { ...input, ranges: ranges(workoutKind) }),
-    repo.scoresOf(deps.sql, read.gymId, ownKind.map((row) => row.id)),
+    Promise.all(kinds.map(([counter, kind]) => counter(deps.sql, { ...input, ranges: ranges(kind) }))),
+    repo.scoresOf(deps.sql, read.gymId, staffKind.map((row) => row.id)),
     repo.teamsOf(deps.sql, read.gymId, inTeams),
     repo.teamPeopleOf(deps.sql, read.gymId, inTeams),
   ]);
   const members = new Map<string, Member>();
   for (const f of facts) members.set(f.userId, { facts: f, hidden: hiddenReason(person(f, 1)), shown: shownName(f) });
   const numbers = new Map<string, { of: Numbers; at: number }>();
-  for (const [kind, counts] of [[gymKind, gymDays], [workoutKind, workoutDays]] as const) {
+  for (const [i, [, kind]] of kinds.entries()) {
+    const counts = counted[i] ?? { rows: [], days: [] };
     // Only a live app member of the gym now is counted: anybody else's days are dropped here.
     const of: Numbers = { rows: [], mine: null, days: counts.days };
     for (const row of counts.rows) {
@@ -203,8 +220,8 @@ async function countFor(deps: ChallengesDeps, read: Read, rows: readonly repo.Ch
     }
     kind.forEach((row, at) => numbers.set(row.id, { of, at }));
   }
-  // The gym's own count: each person's number is the one staff typed.
-  for (const row of ownKind) {
+  // Where the staff count: each person's number is the one they typed.
+  for (const row of staffKind) {
     const of: Numbers = { rows: [], mine: null, days: [] };
     for (const score of typed.get(row.id) ?? []) {
       const member = members.get(score.userId);
@@ -223,7 +240,7 @@ async function countFor(deps: ChallengesDeps, read: Read, rows: readonly repo.Ch
     }
     joined.set(challengeId, of);
   }
-  return { members, numbers, joined, teams, teamOf, values: new Map() };
+  return { gymName: read.gym.name, members, numbers, joined, teams, teamOf, values: new Map() };
 }
 
 /** Who joined a challenge people join; null for everyone's. */
@@ -392,7 +409,7 @@ interface MemberView {
 /** A challenge as one member reads it, with the first `limit` rows of its board. Nothing
  *  here about other people is computed from somebody they may not see. */
 function memberView(row: repo.ChallengeRow, today: string, counted: Counted, viewerId: string, limit: number): MemberView {
-  const base = shaped(row, today);
+  const base = shaped(row, today, counted.gymName);
   const joined = joinedOf(row, counted);
   const viewer = counted.members.get(viewerId);
   const iJoined = viewer !== undefined && (joined?.has(viewer) ?? false);
@@ -608,7 +625,7 @@ const resultPostOf = (of: Map<string, posts.ResultPostRow>, challengeId: string)
   return post === undefined ? null : { postedAt: post.postedAt.toISOString(), removed: post.removed, hidden: post.hidden };
 };
 
-async function staffChallenge(deps: ChallengesDeps, gymId: string, challengeId: string): Promise<StaffGymChallenge> {
+async function staffChallenge(deps: ChallengesDeps, gymId: string, gymName: string, challengeId: string): Promise<StaffGymChallenge> {
   const [row, today, counts, resultPosts] = await Promise.all([
     repo.challengeById(deps.sql, gymId, challengeId),
     gymToday(deps.sql, gymId, deps.now()),
@@ -617,7 +634,7 @@ async function staffChallenge(deps: ChallengesDeps, gymId: string, challengeId: 
   ]);
   if (row === null || today === null) throw challengeNotFound();
   const teamList = (await staffTeams(deps, gymId, [row]))(row);
-  return staffGymChallengeSchema.parse({ ...shaped(row, today), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null, top: [], withNumber: null, teamList, resultPost: resultPostOf(resultPosts, row.id) });
+  return staffGymChallengeSchema.parse({ ...shaped(row, today, gymName), joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null, top: [], withNumber: null, teamList, resultPost: resultPostOf(resultPosts, row.id) });
 }
 
 /** The gym's challenges, current and ended, for its staff holding the tick. */
@@ -654,7 +671,7 @@ export async function getStaffChallenges(deps: ChallengesDeps, staffId: string, 
     return { top: places.top.map((p) => ({ userId: p.userId, name: p.name, initials: p.initials, place: p.place, value: turned(row, p.value) })), withNumber: entrants.length, teamList };
   };
   const sent = (row: repo.ChallengeRow): StaffGymChallenge => ({
-    ...shaped(row, gym.today),
+    ...shaped(row, gym.today, gym.name),
     joinedCount: row.who === "joined" ? (counts.get(row.id) ?? 0) : null,
     top: [],
     withNumber: null,
@@ -717,9 +734,9 @@ export async function getStaffBoard(
     teamId: teamOf.get(r.userId) ?? null,
   }));
   const has = new Set(numbered.map((r) => r.userId));
-  // At 0: everyone who joined; and for the gym's own count everyone in it, so staff have
+  // At 0: everyone who joined; and where the staff count, everyone in it, so staff have
   // each person's row to type a number in.
-  const atNothing = joinedOf(row, counted) ?? (row.counts === "own" || row.teams !== "none" ? counted.members.values() : []);
+  const atNothing = joinedOf(row, counted) ?? (row.countedBy === "staff" || row.teams !== "none" ? counted.members.values() : []);
   const waiting: StaffGymChallengeRow[] = [...atNothing]
     .flatMap((member) => {
       const userId = member.facts.userId;
@@ -751,7 +768,7 @@ export async function getStaffBoard(
 
 /** A new challenge. Sent twice under one key (a reply lost on the way back), it is one. */
 export async function addChallenge(deps: ChallengesDeps, staffId: string, gymId: string, body: AddGymChallengeRequest, limit: Limit): Promise<StaffGymChallenge | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, TICK);
+  const { org } = await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const at = deps.now();
   const id = randomUUID();
@@ -767,11 +784,11 @@ export async function addChallenge(deps: ChallengesDeps, staffId: string, gymId:
     if (!(await repo.insertChallenge(tx, gymId, { id, ...body }, staffId, at))) return;
     // Every team of a new challenge is new, whatever id was sent with it.
     await repo.setTeams(tx, gymId, id, body.teamList.map((team) => ({ id: null, name: team.name })), at);
-    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_added", targetType: "challenge", targetId: id, meta: { counts: body.counts, who: body.who, teams: body.teams } });
+    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_added", targetType: "challenge", targetId: id, meta: { subject: body.subject, countedBy: body.countedBy, who: body.who, teams: body.teams } });
   });
   const kept = await repo.challengeIdByKey(deps.sql, gymId, body.challengeKey);
   if (kept === null) throw challengeNotFound();
-  return await staffChallenge(deps, gymId, kept);
+  return await staffChallenge(deps, gymId, org.name, kept);
 }
 
 /** Staff change a challenge that has not ended. Once it has started only its name, words,
@@ -784,7 +801,7 @@ export async function changeChallenge(
   body: ChangeGymChallengeRequest,
   limit: Limit,
 ): Promise<StaffGymChallenge | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, TICK);
+  const { org } = await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const at = deps.now();
   await deps.sql.begin(async (tx) => {
@@ -803,7 +820,7 @@ export async function changeChallenge(
     }
     await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_changed", targetType: "challenge", targetId: challengeId, meta: {} });
   });
-  return await staffChallenge(deps, gymId, challengeId);
+  return await staffChallenge(deps, gymId, org.name, challengeId);
 }
 
 /** Staff cancel a challenge that has not ended, or un-cancel it. Everybody who joined
@@ -816,7 +833,7 @@ export async function setCancelled(
   cancelled: boolean,
   limit: Limit,
 ): Promise<StaffGymChallenge | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, TICK);
+  const { org } = await requireWritablePrivilege(deps, gymId, staffId, TICK);
   if (!(await limit())) return null;
   const at = deps.now();
   await deps.sql.begin(async (tx) => {
@@ -830,10 +847,10 @@ export async function setCancelled(
     await repo.setCancelled(tx, gymId, challengeId, cancelled ? at : null, at);
     await insertAudit(tx, { actorUserId: staffId, gymId, action: cancelled ? "org.challenge_cancelled" : "org.challenge_uncancelled", targetType: "challenge", targetId: challengeId, meta: {} });
   });
-  return await staffChallenge(deps, gymId, challengeId);
+  return await staffChallenge(deps, gymId, org.name, challengeId);
 }
 
-/** Staff type people's numbers for a challenge of the gym's own count: a number replaces
+/** Staff type people's numbers for a challenge they count: a number replaces
  *  the one before, null or 0 takes it off. Only for people in the challenge now. Sent
  *  twice it leaves the same numbers. */
 export async function setScores(
@@ -854,7 +871,7 @@ export async function setScores(
     const row = await repo.lockChallenge(tx, gymId, challengeId);
     const today = await gymToday(tx, gymId, at);
     if (row === null || today === null) throw challengeNotFound();
-    if (row.counts !== "own") throw new OrgsError(409, "challenge_not_own", GYM_CHALLENGE_WORDS.scores_not_own);
+    if (row.countedBy !== "staff") throw new OrgsError(409, "challenge_not_own", GYM_CHALLENGE_WORDS.scores_not_own);
     if (row.cancelled) throw new OrgsError(409, "challenge_cancelled", GYM_CHALLENGE_WORDS.cancelled);
     if (challengeState(row, today) === "coming") throw new OrgsError(409, "challenge_not_started", GYM_CHALLENGE_WORDS.scores_not_started);
     if (!challengeTakesNumbers(row, today)) throw new OrgsError(409, "challenge_numbers_closed", GYM_CHALLENGE_WORDS.scores_closed);

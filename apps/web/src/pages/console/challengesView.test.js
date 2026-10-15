@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { GYM_CHALLENGE_WORDS, ROLE_PRIVILEGES } from '@app/shared';
 import { howToWin } from '../../components/gym/challengesView';
+import { sentChallenge } from '../../components/gym/__fixtures__/sentChallenge';
 import {
   CHALLENGE_NOTES,
   COUNTED_BY_CHOICES,
@@ -59,7 +60,7 @@ import {
 const TODAY = '2026-10-07';
 const WORDS = { people: 'members', peopleCap: 'Members', person: 'member' };
 
-const challenge = (over = {}) => ({
+const challenge = (over = {}) => sentChallenge({
   id: 'c1',
   name: 'October Challenge',
   details: '',
@@ -87,13 +88,14 @@ describe('who may open it', () => {
 
 describe('the form', () => {
   it('starts on the commonest challenge and fills in from one that is kept', () => {
-    expect(newChallengeDraft()).toEqual({ name: '', details: '', prize: '', counts: 'gym_days', appCounts: 'gym_days', unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: [{ id: null, name: '' }, { id: null, name: '' }] });
+    expect(newChallengeDraft()).toEqual({ name: '', details: '', prize: '', counts: 'gym_days', appCounts: 'gym_days', kept: null, unit: '', startsOn: '', endsOn: '', win: 'most', target: '', who: 'everyone', teams: 'none', teamList: [{ id: null, name: '' }, { id: null, name: '' }] });
     expect(draftOf(challenge({ target: 12, who: 'joined', prize: 'A shaker' }))).toEqual({
       name: 'October Challenge',
       details: '',
       prize: 'A shaker',
       counts: 'gym_days',
       appCounts: 'gym_days',
+      kept: { subject: 'gym_visits', measure: 'days', countedBy: 'app' },
       unit: '',
       startsOn: '2026-10-05',
       endsOn: '2026-10-11',
@@ -167,7 +169,9 @@ describe('the form', () => {
       details: 'Come often',
       prize: 'A shaker',
       unit: '',
-      counts: 'workout_days',
+      subject: 'workouts',
+      measure: 'days',
+      countedBy: 'app',
       startsOn: '2026-10-08',
       endsOn: '2026-10-31',
       target: 12,
@@ -237,9 +241,9 @@ describe("the gym's own count", () => {
   });
 
   it('sends its word and whether the lowest wins; the app\'s counts send neither', () => {
-    expect(fieldsOf(own({ unit: ' seconds ', win: 'lowest' }))).toMatchObject({ counts: 'own', unit: 'seconds', lowestWins: true, target: null });
+    expect(fieldsOf(own({ unit: ' seconds ', win: 'lowest' }))).toMatchObject({ subject: 'own', measure: null, countedBy: 'staff', unit: 'seconds', lowestWins: true, target: null });
     expect(fieldsOf(own({ win: 'target', target: '500' }))).toMatchObject({ unit: 'push-ups', lowestWins: false, target: 500 });
-    expect(fieldsOf(draft({ unit: 'left over', win: 'lowest' }))).toMatchObject({ counts: 'gym_days', unit: '', lowestWins: false });
+    expect(fieldsOf(draft({ unit: 'left over', win: 'lowest' }))).toMatchObject({ subject: 'gym_visits', measure: 'days', countedBy: 'app', unit: '', lowestWins: false });
     expect(draftOf(challenge({ counts: 'own', unit: 'seconds', lowestWins: true }))).toMatchObject({ counts: 'own', unit: 'seconds', win: 'lowest' });
   });
 
@@ -252,17 +256,17 @@ describe("the gym's own count", () => {
 
   it('the card says what is counted, how it is won and who is in it, each in a few words', () => {
     expect(cardFacts(challenge({ target: 12 }), 143, WORDS)).toEqual([
-      { label: 'Counts', value: 'Gym days', note: 'Counted by the app' },
+      { label: 'About', value: 'Gym visits', note: 'Checked in at the front desk' },
       { label: 'How it is won', value: 'Reach 12 gym days', note: 'Everyone who gets there wins' },
       { label: 'Who is in it', value: 'Everyone in the app', note: '143 people' },
     ]);
     expect(cardFacts(challenge({ counts: 'own', unit: 'seconds', lowestWins: true, who: 'joined', joinedCount: 6 }), 143, WORDS)).toEqual([
-      { label: 'Counts', value: 'Seconds', note: 'Counted by your staff' },
+      { label: 'About', value: 'Seconds', note: 'Counted by your staff' },
       { label: 'How it is won', value: 'Lowest seconds wins', note: 'Equal numbers share a place' },
       { label: 'Who is in it', value: 'Members who join', note: '6 people have joined' },
     ]);
     expect(cardFacts(challenge({ counts: 'workout_days', who: 'joined', joinedCount: 0 }), 143, WORDS).map((f) => [f.value, f.note])).toEqual([
-      ['Workout days', 'Counted by the app'],
+      ['Workouts in the app', 'Counted by the app'],
       ['Most workout days wins', 'Equal numbers share a place'],
       ['Members who join', 'Nobody has joined yet'],
     ]);
@@ -475,7 +479,7 @@ describe('every number with its word, and every choice in plain words', () => {
 
   it('the three facts: what, then one thing worth knowing; a count of people says people', () => {
     expect(cardFacts(challenge(), 143, WORDS)).toEqual([
-      { label: 'Counts', value: 'Gym days', note: 'Counted by the app' },
+      { label: 'About', value: 'Gym visits', note: 'Checked in at the front desk' },
       { label: 'How it is won', value: 'Most gym days wins', note: 'Equal numbers share a place' },
       { label: 'Who is in it', value: 'Everyone in the app', note: '143 people' },
     ]);
@@ -483,7 +487,7 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(cardFacts(challenge({ who: 'joined', joinedCount: 1 }), 143, WORDS)[2].note).toBe('1 person has joined');
     expect(cardFacts(challenge({ teams: 'staff' }), 143, WORDS)[1]).toEqual({ label: 'How it is won', value: 'The team with the most gym days wins', note: "A team's number is its people's added together" });
     expect(cardFacts(challenge({ teams: 'members', target: 60 }), 143, WORDS)[1]).toEqual({ label: 'How it is won', value: 'Reach 60 gym days as a team', note: 'Every team that gets there wins' });
-    expect(cardFacts(challenge({ counts: 'own', unit: 'push-ups' }), 143, WORDS)[0]).toEqual({ label: 'Counts', value: 'Push-ups', note: 'Counted by your staff' });
+    expect(cardFacts(challenge({ counts: 'own', unit: 'push-ups' }), 143, WORDS)[0]).toEqual({ label: 'About', value: 'Push-ups', note: 'Counted by your staff' });
   });
 
   it('who is leading, on a row of the list, with the number\'s word', () => {
@@ -586,15 +590,15 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(said({})).toEqual({
       Name: 'October Challenge',
       When: 'Thu 8 Oct – Sat 31 Oct · 24 days',
-      Counts: 'Gym days · counted by the app',
+      About: 'Gym visits · checked in at the front desk',
       'How it is won': 'Most gym days wins',
       'Who is in it': 'Everyone in the app · 4 people',
       Teams: 'Individual, no teams',
       Prize: 'None',
     });
-    expect(said({ counts: 'own', unit: 'push-ups', win: 'target', target: '100', who: 'joined' })).toMatchObject({ Counts: 'Push-ups · counted by your staff', 'How it is won': 'Reach 100 push-ups', 'Who is in it': 'Members who join' });
+    expect(said({ counts: 'own', unit: 'push-ups', win: 'target', target: '100', who: 'joined' })).toMatchObject({ About: 'Push-ups · counted by your staff', 'How it is won': 'Reach 100 push-ups', 'Who is in it': 'Members who join' });
     // Not typed yet: said in general words, never a half sentence.
-    expect(said({ counts: 'own', unit: '' })).toMatchObject({ Counts: 'Not said yet · counted by your staff', 'How it is won': 'Highest number wins' });
+    expect(said({ counts: 'own', unit: '' })).toMatchObject({ About: 'Not said yet · counted by your staff', 'How it is won': 'Highest number wins' });
     expect(said({ counts: 'own', unit: '', win: 'lowest' })['How it is won']).toBe('Lowest number wins');
     expect(said({ counts: 'own', unit: '', win: 'most', teams: 'staff' })['How it is won']).toBe('The team with the highest number wins');
     expect(said({ counts: 'own', unit: '', win: 'target', target: '100' })['How it is won']).toBe('Reach 100');
@@ -603,8 +607,8 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(said({ teams: 'staff', teamList: [{ id: null, name: 'Red' }, { id: null, name: '' }] }).Teams).toBe('Red · you put people in them');
     expect(Object.fromEntries(draftSummary(draft(), { today: TODAY, inApp: 1 }, WORDS).map((line) => [line.label, line.value]))['Who is in it']).toBe('Everyone in the app · 1 person');
     // What is missing is marked as missing.
-    expect(draftSummary(draft({ counts: 'own', unit: '' }), list, WORDS).find((line) => line.label === 'Counts').empty).toBe(true);
-    expect(draftSummary(draft(), list, WORDS).find((line) => line.label === 'Counts').empty).toBe(false);
+    expect(draftSummary(draft({ counts: 'own', unit: '' }), list, WORDS).find((line) => line.label === 'About').empty).toBe(true);
+    expect(draftSummary(draft(), list, WORDS).find((line) => line.label === 'About').empty).toBe(false);
   });
 });
 
