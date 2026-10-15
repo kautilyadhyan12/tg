@@ -408,7 +408,7 @@ describe('what the box draws', () => {
     expect(within(row).getByText('Frozen')).toBeTruthy();
     expect(within(row).getByText('£49.99 every month')).toBeTruthy();
     expect(within(row).getByText('Started 4 October 2026 · Frozen since 10 October 2026')).toBeTruthy();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['Note a refund', 'Record payment early', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Record payment early', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
 
     // The cancelled one is behind one line: what was paid for it can be refunded, and nothing else.
     fireEvent.click(box().getByRole('button', { name: 'Show 5 earlier memberships' }));
@@ -416,7 +416,7 @@ describe('what the box draws', () => {
     const rows = screen.getAllByTestId('held-membership');
     expect(rows).toHaveLength(2);
     expect(within(rows[1]).getByText('Started 1 June 2026 · Cancelled 1 July 2026')).toBeTruthy();
-    expect(within(rows[1]).getAllByRole('button').map((x) => x.textContent)).toEqual(['Note a refund']);
+    expect(within(rows[1]).getAllByRole('button').map((x) => x.textContent)).toEqual(['View receipt', 'Note a refund']);
   });
 
   // 23a-ii: the ones that are over are folded away, so with nothing in use the box says
@@ -447,7 +447,7 @@ describe('what the box draws', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], true));
     const view = render(draw(ADA, 'Ada Lovelace'));
     expect(await (await boxSoon()).findByTestId('held-past-note')).toBeTruthy();
-    expect(box().getAllByRole('button').map((b) => b.textContent)).toEqual(['Note a refund']);
+    expect(box().getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund']);
     // Not in use, so not "Active".
     expect(box().getByText('Not in use')).toBeTruthy();
     expect(box().queryByText('Active')).toBeNull();
@@ -457,7 +457,8 @@ describe('what the box draws', () => {
     await waitFor(() => expect(screen.queryByTestId('held-past-note')).toBeNull());
     expect(box().getByText('Gold Monthly')).toBeTruthy();
     expect(box().getByText('Active')).toBeTruthy();
-    expect(box().queryAllByRole('button')).toEqual([]);
+    // A gym with no plan changes nothing; it still reads a payment's receipt.
+    expect(box().queryAllByRole('button').map((x) => x.textContent)).toEqual(['View receipt']);
   });
 
   it('says so when the memberships cannot be read, and Try again reads them again', async () => {

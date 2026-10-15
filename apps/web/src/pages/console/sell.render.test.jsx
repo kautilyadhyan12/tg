@@ -22,6 +22,7 @@ const svc = {
   archiveProduct: vi.fn(),
   restoreProduct: vi.fn(),
   purchases: vi.fn(),
+  receipt: vi.fn(),
 };
 const orgApi = { getMine: vi.fn(), getMemberList: vi.fn(), getMembershipTypes: vi.fn(), giveHeldMembership: vi.fn() };
 vi.mock('../../api/registerApi', () => ({ registerService: svc }));
@@ -82,6 +83,7 @@ const sale = (over = {}) => ({
   person: null,
   undone: false,
   canUndo: true,
+  receiptNumber: 41,
   ...over,
 });
 const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0, ...over });
@@ -173,7 +175,7 @@ describe('a product sale', () => {
     finish({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
 
     const done = await within(newSale()).findByTestId('sale-done');
-    expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. To take it back, press Undo sale on its row.New sale");
+    expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. To take it back, press Undo sale on its row.New saleView receipt");
     // The form is gone: there is nothing to press a second time by mistake.
     expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
     expect(screen.queryByLabelText('Product')).toBeNull();
@@ -324,7 +326,7 @@ describe('today', () => {
   });
 
   it('a membership payment is in the list with no Undo, and says where it is undone; a name opens their page', async () => {
-    const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' } };
+    const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 40 };
     svc.get.mockResolvedValue(page({ payments: [payment], totals: totals({ payments: 1, totalMinor: 4999, card_at_desk: 4999 }) }));
     open();
     const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
@@ -334,6 +336,56 @@ describe('today', () => {
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $49.99 from 1 membership payment. Card at the desk $49.99.');
     fireEvent.click(within(row).getByRole('button', { name: "Open Maya Patel's page" }));
     expect(screen.getByRole('dialog', { name: 'person e-maya' })).toBeTruthy();
+  });
+});
+
+describe('receipts (18g-i)', () => {
+  const paper = (over = {}) => ({
+    kind: 'sale',
+    number: 41,
+    gym: { name: 'Iron House', address: '12 High Street' },
+    on: '2026-10-12',
+    person: null,
+    by: 'Sam Desk',
+    currency: 'USD',
+    cancelled: false,
+    item: { name: 'Water', quantity: 2, unitPriceMinor: 199 },
+    amounts: { listedMinor: 398, discount: null, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 431 },
+    method: 'card_at_desk',
+    ...over,
+  });
+
+  it('the sale just recorded opens its own receipt under its box, by the number the server gave it', async () => {
+    svc.receipt.mockResolvedValue(paper());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Product', 'p-water');
+    fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
+    pick('How did they pay?', 'card_at_desk');
+    svc.sell.mockResolvedValue({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
+    fireEvent.click(takeButton());
+    const done = await within(newSale()).findByTestId('sale-done');
+    fireEvent.click(within(done).getByRole('button', { name: 'View receipt #41 for this sale' }));
+    const shown = await within(done).findByTestId('receipt');
+    expect(svc.receipt).toHaveBeenCalledWith('g1', 41);
+    expect(shown.textContent).toContain('Receipt #41');
+    expect(shown.textContent).toContain('For: Walk-in');
+    fireEvent.click(within(done).getByRole('button', { name: 'Close' }));
+    expect(within(done).queryByTestId('receipt')).toBeNull();
+  });
+
+  it("each of today's rows opens its own receipt under that row, and only that one", async () => {
+    const payment = { id: 'm1', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'cash', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 40 };
+    svc.get.mockResolvedValue(page({ sales: [sale()], payments: [payment], totals: totals({ count: 1, payments: 1, totalMinor: 5430, cash: 5430 }) }));
+    svc.receipt.mockResolvedValue(paper({ kind: 'payment', number: 40, person: 'Maya Patel', item: { name: '1 Month', covers: { from: '2026-10-12', to: '2026-11-11' } }, amounts: { listedMinor: 4999, discount: null, tax: null, totalMinor: 4999 }, paidMinor: 4999, method: 'cash', balance: null, refunds: [] }));
+    open();
+    const rows = await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
+    const paid = rows.find((r) => r.textContent.includes('1 Month'));
+    const sold = rows.find((r) => r.textContent.includes('Water'));
+    fireEvent.click(within(paid).getByRole('button', { name: 'View receipt #40 for 1 Month (membership)' }));
+    expect(await within(paid).findByTestId('receipt')).toBeTruthy();
+    expect(svc.receipt).toHaveBeenCalledWith('g1', 40);
+    expect(within(sold).queryByTestId('receipt-box')).toBeNull();
   });
 });
 

@@ -49,7 +49,7 @@ const bill = (over = {}) => ({
   payments: [],
   ...over,
 });
-const payment = (over = {}) => ({ id: '66666666-6666-4666-8666-000000000001', amountMinor: 4999, method: 'cash', paidOn: '2026-10-04', by: 'Sam Owner', refunds: [], refundableMinor: 4999, ...over });
+const payment = (over = {}) => ({ id: '66666666-6666-4666-8666-000000000001', amountMinor: 4999, method: 'cash', paidOn: '2026-10-04', by: 'Sam Owner', refunds: [], refundableMinor: 4999, receiptNumber: 4, ...over });
 const membership = (over = {}, billing = {}) => ({
   id: '44444444-4444-4444-8444-000000000001',
   typeName: 'Gold Monthly',
@@ -63,7 +63,7 @@ describe('each state the server sends has its own word, and no other', () => {
     const row = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
     expect(row).toMatchObject({ tag: 'Paid', tone: 'green', when: null, left: null });
     expect([row.days, row.amount]).toEqual(['4 Oct – 3 Nov 2026', '£49.99']);
-    expect(row.payments).toEqual([{ id: payment().id, amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, refunds: [] }]);
+    expect(row.payments).toEqual([{ id: payment().id, amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, receiptNumber: 4, refunds: [] }]);
   });
 
   it('Due says when, and Overdue says when it was due', () => {
@@ -200,7 +200,7 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
   });
 
   it('Refunded only when all of it went back; part of it is "Part refunded", with each refund on its own line', () => {
-    const refund = { id: 'r1', amountMinor: 2000, method: 'bank_transfer', refundedOn: '2026-10-12', reason: 'charged_too_much', by: 'Sam Owner' };
+    const refund = { id: 'r1', amountMinor: 2000, method: 'bank_transfer', refundedOn: '2026-10-12', reason: 'charged_too_much', by: 'Sam Owner', receiptNumber: 5 };
     const part = billRow(bill({ state: 'paid', paidMinor: 4999, refundedMinor: 2000, payments: [payment({ refunds: [refund], refundableMinor: 2999 })] }), 'GBP', TODAY);
     expect(part.tag).toBe('Part refunded');
     expect(part.payments[0]).toMatchObject({ refundable: true, refunds: [{ id: 'r1', amount: '£20.00 refunded', detail: 'Bank transfer · 12 Oct 2026 · Charged too much · by Sam Owner' }] });
@@ -315,7 +315,7 @@ describe('Note a refund', () => {
   });
 
   it('Undo refund names the refund it takes back', () => {
-    const refund = { id: 'r1', amountMinor: 2000, method: 'cash', refundedOn: '2026-10-12', reason: 'other', by: null };
+    const refund = { id: 'r1', amountMinor: 2000, method: 'cash', refundedOn: '2026-10-12', reason: 'other', by: null, receiptNumber: 5 };
     const with1 = membership({}, { bills: [bill({ state: 'paid', paidMinor: 4999, refundedMinor: 2000, payments: [{ ...paid, refunds: [refund] }] })] });
     expect(undoRefundWords(with1, 'Ada Lovelace', paid.id, 'r1')).toMatchObject({
       question: "Take back the £20.00 refund noted on 12 October 2026 for Ada Lovelace's Gold Monthly?",

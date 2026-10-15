@@ -1113,3 +1113,55 @@
   font-size: 16px;
   font-weight: 700;
 }
+
+/* ── A receipt (18g-i) ── */
+
+/* A receipt drawn on the page, as the paper it prints to: one column of lines, the amount
+   at the end of each. */
+.c-receipt {
+  background: var(--raise);
+  border: 1px solid var(--raise-line);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--t1);
+  max-width: 420px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.c-receipt-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+.c-receipt-total {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 4px;
+  font-weight: 700;
+}
+
+/* Print: while a receipt's Print is pressed, the page prints that receipt alone, black on
+   white whichever look the console is in. */
+@media print {
+  body.c-printing-receipt * {
+    visibility: hidden;
+  }
+  body.c-printing-receipt .c-receipt-printing,
+  body.c-printing-receipt .c-receipt-printing * {
+    visibility: visible;
+  }
+  body.c-printing-receipt .c-receipt-printing {
+    position: absolute;
+    left: 0;
+    top: 0;
+    max-width: 80mm;
+    border: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+  }
+  body.c-printing-receipt .c-receipt-printing * {
+    color: #000 !important;
+  }
+}
