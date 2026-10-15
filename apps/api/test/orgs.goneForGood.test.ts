@@ -555,6 +555,48 @@ d("a gym gone for good (real Postgres)", () => {
   );
 
   it(
+    "one email to an address a night holds across a retry of the night and two runs at once, not only within one run",
+    async () => {
+      const email = `${PREFIX}retry${String(seq)}-${String(Date.now() % 100000)}@example.com`;
+      const owner = { id: await user(email), email };
+      const first = await makeGym({ created: addMonths(T0, -12), owner });
+      const second = await makeGym({ created: addMonths(T0, -12), owner });
+      const faulty = await makeGym({ created: addMonths(T0, -12), ownerEmail: null });
+      for (const g of [first, second, faulty]) await plan(g.gymId, "expired", T0);
+      const ids = [first.gymId, second.gymId, faulty.gymId];
+      const night = plus(addMonths(T0, 6), -30);
+      // A gym's fault fails the run, and the worker runs it again a minute later.
+      const failing = {
+        info: (obj: object): void => {
+          if ((obj as { event?: string }).event === "orgs.gone_for_good.nobody_to_email") throw new Error("connection lost");
+        },
+        error: (): void => undefined,
+      };
+      const rec = recorder();
+      rec.night.at = night;
+      const run1 = await sweepGoneForGood({ sql, log: failing, mail: rec.mail }, { now: night, gymIds: ids });
+      expect(run1).toMatchObject({ monthSent: 1, held: 1, failed: 1 });
+      const retry = await sweepGoneForGood({ sql, log, mail: rec.mail }, { now: new Date(night.getTime() + 60_000), gymIds: ids });
+      expect(retry).toMatchObject({ monthSent: 0, held: 1 });
+      expect(rec.sent.filter((m) => m.to === email)).toHaveLength(1);
+      // The next night the other gym's email goes.
+      await run(rec, ids, plus(night, 1));
+      expect(rec.sent.filter((m) => m.to === email)).toHaveLength(2);
+
+      // Two runs at once, for two more gyms of one person: never two emails that night.
+      const email2 = `${PREFIX}twice${String(seq)}-${String(Date.now() % 100000)}@example.com`;
+      const owner2 = { id: await user(email2), email: email2 };
+      const a = await makeGym({ created: addMonths(T0, -12), owner: owner2 });
+      const b = await makeGym({ created: addMonths(T0, -12), owner: owner2 });
+      for (const g of [a, b]) await plan(g.gymId, "expired", T0);
+      const both = recorder();
+      await Promise.all([run(both, [a.gymId, b.gymId], night), run(both, [a.gymId, b.gymId], night)]);
+      expect(both.sent.length).toBeLessThanOrEqual(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "a run that starts more than an hour after another, while that one is still sending, does not send the same email again",
     async () => {
       const g = await makeGym({ created: addMonths(T0, -12) });

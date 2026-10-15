@@ -195,6 +195,26 @@ export async function staffWithEmail(sql: SqlOrTx, gymId: string): Promise<{ use
   return rows.map((r) => ({ userId: r.user_id, email: r.email }));
 }
 
+/** Was one of these people told about ANOTHER gym too recently for a second email tonight:
+ *  staff at a gym whose email went in the 20 hours to `now` (the night's clock, which
+ *  stamps `*_sent_at`), or is going now (a claim under an hour old by the database's clock
+ *  with nothing marked sent). Kept in the database, so a retry or a second run the same
+ *  night sees it; two runs at once each claim before they ask, so at most one sends. */
+export async function toldElsewhereTonight(sql: SqlOrTx, gymId: string, userIds: readonly string[], now: Date): Promise<boolean> {
+  const rows = await sql<{ told: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM gym_staff s JOIN gym_gone_for_good d ON d.gym_id = s.gym_id
+      WHERE s.user_id = ANY(${userIds}::uuid[]) AND s.gym_id <> ${gymId}
+        AND (
+          (d.month_sent_at > ${now}::timestamptz - INTERVAL '20 hours' AND d.month_sent_at <= ${now}::timestamptz)
+          OR (d.week_sent_at > ${now}::timestamptz - INTERVAL '20 hours' AND d.week_sent_at <= ${now}::timestamptz)
+          OR (d.month_sent_at IS NULL AND d.month_claimed_at > clock_timestamp() - INTERVAL '1 hour')
+          OR (d.week_sent_at IS NULL AND d.week_claimed_at > clock_timestamp() - INTERVAL '1 hour')
+        )
+    ) AS told`;
+  return rows[0]?.told ?? true;
+}
+
 /** When this gym's list was last deleted for being gone for good, or null. */
 export async function listDeletedAt(sql: SqlOrTx, gymId: string): Promise<Date | null> {
   const [row] = await sql<{ list_deleted_at: Date | null }[]>`

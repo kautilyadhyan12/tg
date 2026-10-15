@@ -21,8 +21,9 @@
 // not make another run's claim look old.
 //
 // Only a proved address is emailed (`repo.staffWithEmail`), and one address gets one of
-// these emails a night: a person with several gyms gone dark hears of one a night, and the
-// others wait, their days moving with them. The worker sends them from the invitations'
+// these emails a night (`repo.toldElsewhereTonight`, kept in the database so a retry of the
+// night sees it): a person with several gyms gone dark hears of one a night, and the others
+// wait, their days moving with them. The worker sends them from the invitations'
 // sender, never the sign-in codes' (`worker.ts`).
 //
 // The worker runs it nightly (`worker.ts`); `nextStep` is the rule, pure, table-tested.
@@ -115,14 +116,14 @@ type Sent = { kind: "sent"; count: number } | { kind: "none" } | { kind: "held" 
 
 /** Everyone at the gym who may both pay for its plan and download its list, the two things
  *  the email offers: the owner, and staff given both ticks. */
-async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<string[]> {
-  const out: string[] = [];
+async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<{ userId: string; email: string }[]> {
+  const out: { userId: string; email: string }[] = [];
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
     if (
       (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) &&
       (await holdsPrivilege(deps, gymId, staff.userId, "members.confirm"))
     ) {
-      out.push(staff.email);
+      out.push(staff);
     }
   }
   return out;
@@ -170,7 +171,7 @@ async function send(
   deps: GoneForGoodDeps,
   gymId: string,
   decided: Extract<Decided, { kind: "send" }>,
-  emailedTonight: Set<string>,
+  now: Date,
 ): Promise<Sent> {
   const gym = await repo.noticeGym(deps.sql, gymId);
   if (gym === null) return { kind: "none" };
@@ -179,12 +180,10 @@ async function send(
     deps.log.info({ event: "orgs.gone_for_good.nobody_to_email", gymId, notice: decided.notice }, "a gym gone for good has nobody to email, so it is kept");
     return { kind: "none" };
   }
-  const keys = to.map((address) => address.toLowerCase());
-  if (keys.some((key) => emailedTonight.has(key))) return { kind: "held" };
-  for (const key of keys) emailedTonight.add(key);
+  if (await repo.toldElsewhereTonight(deps.sql, gymId, to.map((staff) => staff.userId), now)) return { kind: "held" };
   const membersLink = `${deps.mail.webOrigin}/console/${encodeURIComponent(gym.slug)}/members`;
   let sent = 0;
-  for (const address of to) {
+  for (const { email: address } of to) {
     try {
       await deps.mail.transport.send(
         goneForGoodEmail({
@@ -211,7 +210,7 @@ async function send(
 }
 
 /** One gym's night: decided under its lock, then its email, if one is due. */
-async function gymNight(deps: GoneForGoodDeps, gymId: string, now: Date, emailedTonight: Set<string>, result: GoneForGoodResult): Promise<void> {
+async function gymNight(deps: GoneForGoodDeps, gymId: string, now: Date, result: GoneForGoodResult): Promise<void> {
   const decided = await decide(deps, gymId, now);
   if (decided.kind === "deleted") {
     result.deleted += 1;
@@ -220,7 +219,7 @@ async function gymNight(deps: GoneForGoodDeps, gymId: string, now: Date, emailed
   }
   if (decided.kind !== "send") return;
   const claim = { gymId, notice: decided.notice, countedFrom: decided.countedFrom, claimedAt: decided.claimedAt };
-  const sent = await send(deps, gymId, decided, emailedTonight);
+  const sent = await send(deps, gymId, decided, now);
   if (sent.kind !== "sent") {
     await repo.releaseClaim(deps.sql, claim);
     if (sent.kind === "held") result.held += 1;
@@ -241,10 +240,9 @@ export async function sweepGoneForGood(deps: GoneForGoodDeps, opts: GoneForGoodO
   const result: GoneForGoodResult = { due: 0, monthSent: 0, weekSent: 0, notSent: 0, held: 0, deleted: 0, failed: 0 };
   const due = await repo.dueGyms(deps.sql, now, opts.gymIds ?? null);
   result.due = due.length;
-  const emailedTonight = new Set<string>();
   for (const { gymId } of due) {
     try {
-      await gymNight(deps, gymId, now, emailedTonight, result);
+      await gymNight(deps, gymId, now, result);
     } catch (err) {
       // One gym's fault never stops the rest; it is tried again on the next run. A claim
       // left behind is taken again once it is an hour old.
