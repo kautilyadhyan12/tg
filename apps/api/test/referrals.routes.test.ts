@@ -270,7 +270,9 @@ d("Refer a friend (real Postgres)", () => {
         expect(res.statusCode).toBe(200);
         const invite = (JSON.parse(res.body) as { invite: PublicInvite }).invite;
         expect(invite.gymName).toBe("Northside Refer A");
-        expect(invite.friendGift).toEqual({ code: "WELCOME20", words: "20% off the first payment of a membership" });
+        // The gift's words, never its code: the business adds it when they join.
+        expect(invite.friendGift).toEqual({ words: "20% off the first payment of a membership" });
+        expect(res.body).not.toContain("WELCOME20");
         // Her first name (Kd, 2026-10-15), and nothing more: not her surname, email or id.
         expect(invite.inviterFirstName).toBe("Maya");
         expect(res.body).not.toContain("Patel");

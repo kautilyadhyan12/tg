@@ -61,8 +61,8 @@ describe('Refer a friend', () => {
     expect(screen.getByText("When a friend you invite joins Iron House and makes their first payment, you get 10% off your next payment. It comes off by itself, and we'll tell you in your inbox.")).toBeTruthy();
     expect(screen.getByText('Your friend gets ₹500.00 off the first payment of a membership when they join.')).toBeTruthy();
     expect(screen.getByText("[member's first name] invited you to join Iron House.")).toBeTruthy();
-    // The friend's code is made on Save: the preview says so, and invents none.
-    expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Use code [its code, made when you save] when you join.')).toBeTruthy();
+    // No code for the friend to remember: the business adds the offer.
+    expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Iron House adds it for you when you join.')).toBeTruthy();
     expect(bar().getByText("You have changes that aren't saved.")).toBeTruthy();
 
     saveReferralSettings.mockResolvedValue({
@@ -77,7 +77,7 @@ describe('Refer a friend', () => {
     });
     expect(box(FRIEND).getByText('Its promo code: WELCOME500.')).toBeTruthy();
     expect(box(MEMBER).queryByText(/promo code/)).toBeNull();
-    expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Use code WELCOME500 when you join.')).toBeTruthy();
+    expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Iron House adds it for you when you join.')).toBeTruthy();
     expect(box(FRIEND).getByRole('link', { name: 'See it in Discounts' }).getAttribute('href')).toBe('/console/iron-house/memberships#discounts');
   });
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Check, Copy, Loader2, MapPin, Sparkles } from 'lucide-react';
+import { Check, Loader2, MapPin, Sparkles } from 'lucide-react';
 import { REFERRAL_WORDS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../api/orgsApi';
 import { ACCENT, EnquiryForm, INK, LINE, MUTED } from './GymPublicPage';
@@ -11,24 +11,14 @@ import { inviteView } from './inviteView';
 // friend (their first name only), the welcome offer the business set, and its form makes
 // them one of the business's leads, marked as the member's friend. Public: no sign-in. A
 // welcome, not a form (Kd at the click-through: "the form looks really generic"): a warm
-// header, the gift as a ticket with its code, three steps, then the form.
+// header, the gift as a ticket (no code: the business adds it), three steps, then the form.
 
 const AMBER = '#FFB347';
 const WARM = '#FFF4EA';
 
-/** The welcome offer as a ticket: the gift in the server's words, its code and Copy. Said
- *  once: the line above the form says the rest. */
-function GiftTicket({ words, code }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  };
+/** The welcome offer as a ticket: the gift in the server's words and who adds it. No code:
+ *  the friend has nothing to remember or say (Kd, 2026-10-15). */
+function GiftTicket({ words, note }) {
   return (
     <section aria-label="Your welcome offer" className="relative rounded-3xl bg-white px-6 py-6 sm:px-8" style={{ border: `2px dashed ${ACCENT}`, boxShadow: '0 18px 40px -24px rgba(232,89,12,0.55)' }}>
       {/* The ticket's two notches. */}
@@ -40,29 +30,15 @@ function GiftTicket({ words, code }) {
       <p className="mt-2 text-2xl font-bold leading-snug" style={{ color: INK }}>
         {words.charAt(0).toUpperCase() + words.slice(1)}
       </p>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className="rounded-xl px-4 py-2 font-mono text-2xl font-bold tracking-[0.2em]" style={{ background: WARM, color: INK }} data-testid="invite-code">
-          {code}
-        </span>
-        <button
-          type="button"
-          onClick={() => void copy()}
-          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
-          style={{ border: `1px solid ${LINE}`, color: INK, minHeight: 44 }}
-        >
-          {copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
-          {copied ? 'Copied' : 'Copy code'}
-        </button>
-      </div>
-      <p className="mt-3 text-[14px]" style={{ color: MUTED }}>
-        Use this code when you join.
+      <p className="mt-3 flex items-center gap-2 text-[15px]" style={{ color: MUTED }}>
+        <Check aria-hidden="true" className="h-4 w-4 flex-shrink-0" style={{ color: ACCENT }} /> {note}
       </p>
     </section>
   );
 }
 
 function Steps({ gymName, hasGift }) {
-  const steps = ['Send your details below', `${gymName} gets in touch`, hasGift ? 'Use your code when you join' : 'Join and start training'];
+  const steps = ['Send your details below', `${gymName} gets in touch`, hasGift ? 'Join, and your offer comes off' : 'Join and start training'];
   return (
     <ol className="grid gap-3 sm:grid-cols-3">
       {steps.map((step, i) => (
@@ -152,7 +128,7 @@ export default function InvitePage() {
         ) : null}
       </header>
 
-      {gift !== null ? <GiftTicket words={gift.words} code={gift.code} /> : null}
+      {gift !== null ? <GiftTicket words={gift.words} note={`${invite.gymName} adds it for you when you join.`} /> : null}
 
       <Steps gymName={invite.gymName} hasGift={gift !== null} />
 

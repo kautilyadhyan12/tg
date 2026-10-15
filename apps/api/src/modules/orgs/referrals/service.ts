@@ -304,21 +304,23 @@ export async function liveInvite(sql: Sql, code: string): Promise<repo.InviteRow
   return invite;
 }
 
-/** What anybody with the link sees: the business, its gift to the friend, and its own page
- *  where it has one. Nothing about the member who sent it. */
+/** What anybody with the link sees: the business, the first name of the member who sent it,
+ *  the words of its gift to the friend (never its code), and its own page where it has one. */
 export async function publicInvite(deps: ReferralDeps & { robotCheckKey: string }, code: string): Promise<PublicInvite> {
   const invite = await liveInvite(deps.sql, code);
   if (invite === null) throw inviteNotFound();
   const settings = await repo.settingsFor(deps.sql, invite.gymId);
   const today = dayInTz(deps.now(), invite.timezone);
   const discounts = await referralDiscounts(deps.sql, invite.gymId, settings.friendDiscountId === null ? [] : [settings.friendDiscountId]);
+  // The gift's words alone: its code stays with the business, which adds it for them.
+  const gift = liveGift(discounts, settings.friendDiscountId, today);
   return {
     gymName: invite.name,
     // The first name alone (Kd, 2026-10-15): never the rest of it, their email or their id.
     inviterFirstName: greetingName(invite.referrerName),
     city: invite.city,
     orgType: orgTypeSchema.parse(invite.orgType),
-    friendGift: liveGift(discounts, settings.friendDiscountId, today),
+    friendGift: gift === null ? null : { words: gift.words },
     pageSlug: invite.pageShown ? invite.slug : null,
     robotCheckKey: deps.robotCheckKey,
   };

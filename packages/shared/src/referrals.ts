@@ -88,10 +88,11 @@ export function referralGiftProblem(d: ReferralGiftTerms, today: string): string
   return null;
 }
 
+/** The friend's gift as the invite page shows it: its words, and no code. The friend has
+ *  nothing to remember or say (Kd, 2026-10-15): the business adds it when they join
+ *  (20e-ii-b fills it in). */
 export const referralGiftSchema = z
   .object({
-    /** The promo code the person uses. */
-    code: z.string(),
     /** "10% off the first payment of a membership". */
     words: z.string(),
   })
@@ -152,7 +153,7 @@ export const publicInviteSchema = z
     inviterFirstName: z.string().nullable(),
     city: z.string().nullable(),
     orgType: orgTypeSchema,
-    /** Null where the business gives none, or its code cannot be used today. */
+    /** Null where the business gives none, or its code cannot be used today. Never its code. */
     friendGift: referralGiftSchema.nullable(),
     /** The business's own page, where it has one switched on; null otherwise. */
     pageSlug: z.string().nullable(),
@@ -183,7 +184,7 @@ export type InviteEnquiryRequest = z.infer<typeof inviteEnquiryRequestSchema>;
 export function inviteLines(gymName: string, friendGift: ReferralGift | null, inviterFirstName: string | null = null): string[] {
   const gym = gymName.trim();
   const lines = [inviterFirstName === null ? `A member of ${gym} has invited you.` : `${inviterFirstName} invited you to join ${gym}.`];
-  if (friendGift !== null) lines.push(`Your welcome offer: ${friendGift.words}. Use code ${friendGift.code} when you join.`);
+  if (friendGift !== null) lines.push(`Your welcome offer: ${friendGift.words}. ${gym} adds it for you when you join.`);
   lines.push(`Leave your details and ${gym} will be in touch.`);
   if (friendGift !== null) lines.push(`This offer is set by ${gym} and may change.`);
   return lines;

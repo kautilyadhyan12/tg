@@ -5154,7 +5154,10 @@ where it came from ("Referred by"). Migration `0117`.
   never a payment owed on the membership a member already has, so a code was the wrong gift
   for a member. 20e-ii-b gives it: their next bill on the membership they have, else credit
   on their page for the next thing they pay for.
-- **The friend's gift is a promo code the app makes**: off the first payment of a new
+- **The friend's gift is a promo code the app makes, for the business, never shown to the
+  friend** (the invite reply carries the gift's words alone; 20e-ii-b fills it in when staff
+  add the friend's membership, with Remove, and matches Add member to Leads by email or phone
+  so the chain holds): off the first payment of a new
   membership, every payment of one, or products sold at the desk. On Save it is kept as a
   discount of its own, "Refer a friend: friend's gift, WELCOME20", listed under Discounts like
   any other, with a **See it in Discounts** button beside its code. A code is unique within a
@@ -5177,7 +5180,8 @@ where it came from ("Referred by"). Migration `0117`.
   business has it, with or without a page of its own. A welcome, not a form (Kd: "the form
   looks really generic"): a warm header, "**Maya** invited you to join {business}." (the
   member's **first name only**, Kd "B yes": never their surname, email or id), the friend's gift
-  as a ticket with its code and **Copy code**, three steps, then the form, and a button to the
+  as a ticket with no code to remember ("{business} adds it for you when you join."; Kd: the
+  friend should not have to tell staff anything), three steps, then the form, and a button to the
   business's own page where it has one. Its form is the page's form with **Email *** required
   (Kd) and without "How did you hear about us?"
   (`POST …/enquiries`, the same robot check and the same limits, counted against the same

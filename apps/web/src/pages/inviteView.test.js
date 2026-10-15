@@ -3,9 +3,9 @@ import { inviteView } from './inviteView';
 
 describe('the invite page words, each in its place', () => {
   it('with a gift, and the first name of who invited them', () => {
-    expect(inviteView({ gymName: 'Iron House', inviterFirstName: 'Maya', friendGift: { code: 'WELCOME20', words: '20% off a membership' } })).toEqual({
+    expect(inviteView({ gymName: 'Iron House', inviterFirstName: 'Maya', friendGift: { words: '20% off a membership' } })).toEqual({
       invited: 'Maya invited you to join Iron House.',
-      offer: 'Your welcome offer: 20% off a membership. Use code WELCOME20 when you join.',
+      offer: 'Your welcome offer: 20% off a membership. Iron House adds it for you when you join.',
       touch: 'Leave your details and Iron House will be in touch.',
       setBy: 'This offer is set by Iron House and may change.',
     });

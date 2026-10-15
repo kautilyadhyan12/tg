@@ -26,7 +26,7 @@ const INVITE = {
   inviterFirstName: 'Maya',
   city: 'Leeds',
   orgType: 'gym',
-  friendGift: { code: 'WELCOME20', words: '20% off a membership' },
+  friendGift: { words: '20% off a membership' },
   pageSlug: null,
   robotCheckKey: 'k',
 };
@@ -51,15 +51,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the invite page', () => {
-  it('says who invited them by first name, the business, its welcome offer and code, and asks nothing the link already says', async () => {
+  it('says who invited them by first name, the business and its welcome offer, with no code to remember, and asks nothing the link already says', async () => {
     getPublicInvite.mockResolvedValue({ data: { invite: INVITE } });
     draw();
     await screen.findByRole('heading', { name: 'Maya invited you to join Iron House.' });
-    expect(within(screen.getByRole('region', { name: 'Your welcome offer' })).getByText('20% off a membership')).toBeTruthy();
-    expect(screen.getByTestId('invite-code').textContent).toBe('WELCOME20');
-    expect(screen.getByText('Use this code when you join.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Copy code' })).toBeTruthy();
-    expect(screen.getByText('Use your code when you join')).toBeTruthy();
+    const ticket = within(screen.getByRole('region', { name: 'Your welcome offer' }));
+    expect(ticket.getByText('20% off a membership')).toBeTruthy();
+    expect(ticket.getByText('Iron House adds it for you when you join.')).toBeTruthy();
+    expect(screen.queryByText(/code/i)).toBeNull();
+    expect(screen.getByText('Join, and your offer comes off')).toBeTruthy();
     expect(screen.getByText('This offer is set by Iron House and may change.')).toBeTruthy();
     expect(screen.queryByLabelText('How did you hear about us?')).toBeNull();
     expect(screen.getByLabelText('Phone (optional)')).toBeTruthy();

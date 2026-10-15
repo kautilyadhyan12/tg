@@ -244,7 +244,7 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
           />
           <GiftBox
             title="Gift for the friend"
-            hint="Shown on the invite page, with a promo code for them to use when they join."
+            hint="Shown on the invite page. It comes off when they join, with a promo code the app makes for your staff."
             gift={draft.friend}
             currency={settings.currency}
             withOn

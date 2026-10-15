@@ -117,9 +117,9 @@ describe("what the member reads", () => {
 
 describe("what the friend reads: the member's first name, and no more of them", () => {
   it("with a gift and a name", () => {
-    expect(inviteLines("Northside Gym", { code: "WELCOME20", words: "20% off a membership" }, "Maya")).toEqual([
+    expect(inviteLines("Northside Gym", { words: "20% off a membership" }, "Maya")).toEqual([
       "Maya invited you to join Northside Gym.",
-      "Your welcome offer: 20% off a membership. Use code WELCOME20 when you join.",
+      "Your welcome offer: 20% off a membership. Northside Gym adds it for you when you join.",
       "Leave your details and Northside Gym will be in touch.",
       "This offer is set by Northside Gym and may change.",
     ]);

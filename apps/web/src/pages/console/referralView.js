@@ -24,9 +24,6 @@ export const GIFT_ON_CHOICES = [
   { key: 'products', label: 'products sold at the desk' },
 ];
 
-/** Where the friend's code stands in a preview before it is made. */
-export const CODE_TO_COME = '[its code, made when you save]';
-
 const NO_GIFT = { give: 'none', value: '', on: 'first' };
 
 function giftDraft(view) {
@@ -94,23 +91,16 @@ const friendWords = (draft, currency) => {
   return body === null || body === undefined ? null : referralGiftInputWords(body, currency);
 };
 
-/** The saved friend's code, while the box still holds that same gift; null otherwise. */
-function savedCode(settings, draft) {
-  const view = settings.friend;
-  if (view === null || view.code === null || view.problem !== null) return null;
-  return JSON.stringify(friendBody(draft.friend, settings.currency)) === JSON.stringify(friendBody(giftDraft(view), settings.currency)) ? view.code : null;
-}
-
 /** What a member reads, with the gifts as typed. */
 export function memberPreview(draft, settings, gymName) {
   return referralOfferLines(gymName, memberWords(draft, settings.currency), friendWords(draft, settings.currency));
 }
 
-/** What a friend reads on the invite page, with the gift as typed. The member's first name
- *  stands as "[member's first name]". */
+/** What a friend reads on the invite page, with the gift as typed: no code, which stays
+ *  with the business. The member's first name stands as "[member's first name]". */
 export function friendPreview(draft, settings, gymName) {
   const words = friendWords(draft, settings.currency);
-  return inviteLines(gymName, words === null ? null : { code: savedCode(settings, draft) ?? CODE_TO_COME, words }, "[member's first name]");
+  return inviteLines(gymName, words === null ? null : { words }, "[member's first name]");
 }
 
 /** The line under the saved friend's gift: its code, or why nobody is promised it. */
