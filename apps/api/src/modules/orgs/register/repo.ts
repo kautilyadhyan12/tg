@@ -21,6 +21,7 @@ import {
   type MemberPaymentByHand,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { nextReceipt } from "../receipts/repo.js";
 import { lockedDiscount, returnUse, takeUse } from "./discountsRepo.js";
 import { rateOf, readRates, taxIncludedOf } from "./taxRepo.js";
 
@@ -77,6 +78,7 @@ export interface SaleRow {
   by: string | null;
   person: { entryId: string; name: string } | null;
   undone: boolean;
+  receiptNumber: number;
 }
 
 interface RawSale {
@@ -100,6 +102,7 @@ interface RawSale {
   entry_id: string | null;
   person_name: string | null;
   undone: boolean;
+  receipt_number: number;
 }
 
 /** A record with no name typed is still somebody: the row says so. */
@@ -126,13 +129,14 @@ const sale = (r: RawSale): SaleRow => ({
   by: r.by,
   person: r.entry_id === null ? null : { entryId: r.entry_id, name: r.person_name === null || r.person_name.trim() === "" ? NO_NAME : r.person_name },
   undone: r.undone,
+  receiptNumber: r.receipt_number,
 });
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
   s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
   s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
-  e.full_name AS person_name, s.undone_at IS NOT NULL AS undone`;
+  e.full_name AS person_name, s.undone_at IS NOT NULL AS undone, s.receipt_number`;
 
 export interface RegisterRow {
   country: string | null;
@@ -474,15 +478,18 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
     // The last check before anything is written: the count moves only if the limit allows.
     if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
 
+    // The sale takes the gym's next receipt number in the statement that writes it (18g-i).
     const [created] = await tx<{ id: string }[]>`
+      WITH n AS (${nextReceipt(tx, input.gymId)})
       INSERT INTO gym_sales
         (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
          tax_bp, tax_name, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
-         discount_id, discount_name, discount_minor)
-      VALUES (${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
-              ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${rate?.bp ?? 0}, ${rate?.name ?? null}, ${included}, ${item.currency},
-              ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
-              ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0})
+         discount_id, discount_name, discount_minor, receipt_number)
+      SELECT ${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
+             ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${rate?.bp ?? 0}, ${rate?.name ?? null}, ${included}, ${item.currency},
+             ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
+             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, n.number
+      FROM n
       RETURNING id`;
     if (created === undefined) throw new Error("sale insert returned no row");
     if (item.stock !== null) {

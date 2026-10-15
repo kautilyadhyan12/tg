@@ -150,6 +150,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
             paidAt: p.paidAt.toISOString(),
             by: p.by,
             person: { entryId: p.entryId, name: p.personName.trim() === "" ? repo.NO_NAME : p.personName },
+            receiptNumber: p.receiptNumber,
           })),
     paymentsNotShown: paid === null ? 0 : paid.count - paid.payments.length,
     totals: {

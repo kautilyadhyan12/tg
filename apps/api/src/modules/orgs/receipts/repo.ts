@@ -1,0 +1,199 @@
+// RECEIPTS (spec Part 3 §14.3; ROADMAP 18g-i): the gym's own numbers, and one receipt read
+// from the row it is for. Every read carries the gym in its WHERE.
+import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
+import {
+  memberPaymentByHandSchema,
+  memberPaymentMethodSchema,
+  receiptAmounts,
+  receiptBalance,
+  type PaymentReceipt,
+  type RefundReceipt,
+  type SaleReceipt,
+} from "@app/shared";
+
+/** The gym's next receipt number, as the CTE `n` (`number`) of the statement that writes
+ *  the payment, refund or sale it is for: the count and the row move together or not at
+ *  all, and the gym's row lock takes two at one instant one after the other. */
+export function nextReceipt(tx: TransactionSql, gymId: string): PendingQuery<Row[]> {
+  return tx`UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gymId} RETURNING receipts_issued AS number`;
+}
+
+/** A record with no name typed is still somebody: the receipt says so. */
+const NO_NAME = "No name on their record";
+const personName = (name: string | null): string => (name === null || name.trim() === "" ? NO_NAME : name);
+
+/** A receipt as its row holds it: the gym's name and address are the caller's. */
+export type ReceiptRow = Omit<SaleReceipt, "gym"> | Omit<PaymentReceipt, "gym"> | Omit<RefundReceipt, "gym">;
+
+const taxOf = (r: { tax_bp: number; tax_name: string | null; tax_included: boolean | null; tax_minor: number }) =>
+  r.tax_bp > 0 ? { name: r.tax_name, bp: r.tax_bp, included: r.tax_included === true, minor: r.tax_minor } : null;
+
+const coversOf = (r: { covers_from: string | null; covers_to: string | null }) =>
+  r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to };
+
+async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
+  const [r] = await sql<
+    {
+      item_name: string;
+      quantity: number;
+      unit_price_minor: number;
+      tax_minor: number;
+      total_minor: number;
+      tax_bp: number;
+      tax_name: string | null;
+      tax_included: boolean;
+      discount_name: string | null;
+      discount_minor: number;
+      currency: string;
+      method: string;
+      sold_on: string;
+      by: string | null;
+      entry_id: string | null;
+      full_name: string | null;
+      cancelled: boolean;
+    }[]
+  >`
+    SELECT s.item_name, s.quantity, s.unit_price_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
+           s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, u.display_name AS by,
+           s.entry_id, e.full_name, s.undone_at IS NOT NULL AS cancelled
+    FROM gym_sales s
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
+    LEFT JOIN users u ON u.id = s.recorded_by
+    WHERE s.gym_id = ${gymId} AND s.receipt_number = ${number}`;
+  if (r === undefined) return null;
+  return {
+    kind: "sale",
+    number,
+    on: r.sold_on,
+    person: r.entry_id === null ? null : personName(r.full_name),
+    by: r.by,
+    currency: r.currency,
+    cancelled: r.cancelled,
+    item: { name: r.item_name, quantity: r.quantity, unitPriceMinor: r.unit_price_minor },
+    amounts: receiptAmounts({
+      totalMinor: r.total_minor,
+      listedMinor: r.unit_price_minor * r.quantity,
+      tax: taxOf(r),
+      discount: r.discount_name === null ? null : { name: r.discount_name, minor: r.discount_minor },
+    }),
+    // Text under a CHECK: parsed, so a method this build does not know fails here.
+    method: memberPaymentByHandSchema.parse(r.method),
+  };
+}
+
+async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
+  const [r] = await sql<
+    {
+      id: string;
+      amount_minor: number;
+      currency: string;
+      method: string;
+      paid_on: string;
+      cancelled: boolean;
+      by: string | null;
+      full_name: string | null;
+      type_name: string;
+      bill_minor: number;
+      covers_from: string | null;
+      covers_to: string | null;
+      tax_minor: number;
+      tax_bp: number;
+      tax_name: string | null;
+      tax_included: boolean | null;
+      paid_before: number;
+    }[]
+  >`
+    SELECT p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
+           u.display_name AS by, e.full_name, t.name AS type_name,
+           b.amount_minor AS bill_minor, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
+           b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
+           COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
+                     WHERE q.gym_id = p.gym_id AND q.bill_id = p.bill_id AND q.undone_at IS NULL AND q.seq < p.seq), 0)::int AS paid_before
+    FROM gym_member_payments p
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    LEFT JOIN users u ON u.id = p.recorded_by
+    WHERE p.gym_id = ${gymId} AND p.receipt_number = ${number}`;
+  if (r === undefined) return null;
+  const refunds = await sql<{ receipt_number: number; refunded_on: string; amount_minor: number }[]>`
+    SELECT receipt_number, refunded_on::text AS refunded_on, amount_minor
+    FROM gym_member_refunds
+    WHERE gym_id = ${gymId} AND payment_id = ${r.id} AND undone_at IS NULL
+    ORDER BY created_at, id`;
+  return {
+    kind: "payment",
+    number,
+    on: r.paid_on,
+    person: personName(r.full_name),
+    by: r.by,
+    currency: r.currency,
+    cancelled: r.cancelled,
+    item: { name: r.type_name, covers: coversOf(r) },
+    amounts: receiptAmounts({ totalMinor: r.bill_minor, tax: taxOf(r), discount: null }),
+    paidMinor: r.amount_minor,
+    method: memberPaymentMethodSchema.parse(r.method),
+    balance: receiptBalance(r.bill_minor, r.paid_before, r.amount_minor),
+    refunds: refunds.map((f) => ({ number: f.receipt_number, on: f.refunded_on, amountMinor: f.amount_minor })),
+  };
+}
+
+async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
+  const [r] = await sql<
+    {
+      amount_minor: number;
+      currency: string;
+      method: string;
+      refunded_on: string;
+      cancelled: boolean;
+      by: string | null;
+      full_name: string | null;
+      type_name: string;
+      covers_from: string | null;
+      covers_to: string | null;
+      for_receipt: number;
+    }[]
+  >`
+    SELECT r.amount_minor, r.currency, r.method, r.refunded_on::text AS refunded_on,
+           (r.undone_at IS NOT NULL OR p.undone_at IS NOT NULL) AS cancelled,
+           u.display_name AS by, e.full_name, t.name AS type_name,
+           b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, p.receipt_number AS for_receipt
+    FROM gym_member_refunds r
+    JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    LEFT JOIN users u ON u.id = r.recorded_by
+    WHERE r.gym_id = ${gymId} AND r.receipt_number = ${number}`;
+  if (r === undefined) return null;
+  return {
+    kind: "refund",
+    number,
+    on: r.refunded_on,
+    person: personName(r.full_name),
+    by: r.by,
+    currency: r.currency,
+    cancelled: r.cancelled,
+    forReceipt: r.for_receipt,
+    item: { name: r.type_name, covers: coversOf(r) },
+    refundedMinor: r.amount_minor,
+    method: memberPaymentByHandSchema.parse(r.method),
+  };
+}
+
+/** The gym as its receipts head it: its name and the postal address it typed. */
+export async function gymOnReceipt(sql: Sql, gymId: string): Promise<{ name: string; address: string | null } | null> {
+  const [g] = await sql<{ name: string; postal_address: string | null }[]>`SELECT name, postal_address FROM gyms WHERE id = ${gymId}`;
+  return g === undefined ? null : { name: g.name, address: g.postal_address };
+}
+
+/** One of the gym's receipts by its number, or null where the gym has none by it. A number
+ *  is one row's in the gym: the three reads ask the three tables, and one answers. */
+export async function readReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
+  const found = await Promise.all([saleReceipt(sql, gymId, number), paymentReceipt(sql, gymId, number), refundReceipt(sql, gymId, number)]);
+  const rows = found.filter((r): r is ReceiptRow => r !== null);
+  if (rows.length > 1) throw new Error("one receipt number is on two rows");
+  return rows[0] ?? null;
+}

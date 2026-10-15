@@ -207,9 +207,13 @@ export const gymSales = pgTable(
     discountId: uuid("discount_id"),
     discountName: text("discount_name"),
     discountMinor: integer("discount_minor").notNull().default(0),
+    /** Its receipt's number, the gym's own (0113; 18g-i). */
+    receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    unique("gym_sales_receipt_uq").on(t.gymId, t.receiptNumber),
+    check("gym_sales_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_sales_request_uq").on(t.gymId, t.requestKey),
     unique("gym_sales_gym_id_uq").on(t.gymId, t.id),
     check("gym_sales_name_check", sql`char_length(${t.itemName}) BETWEEN 1 AND 80`),

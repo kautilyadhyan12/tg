@@ -318,9 +318,13 @@ export const gymMemberPayments = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Its receipt's number, the gym's own (0113; 18g-i). */
+    receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    unique("gym_member_payments_receipt_uq").on(t.gymId, t.receiptNumber),
+    check("gym_member_payments_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_payments_request_uq").on(t.gymId, t.requestKey),
     unique("gym_member_payments_gym_id_uq").on(t.gymId, t.id),
     check("gym_member_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
@@ -359,9 +363,13 @@ export const gymMemberRefunds = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Its receipt's number, the gym's own (0113; 18g-i). */
+    receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    unique("gym_member_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
+    check("gym_member_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_refunds_request_uq").on(t.gymId, t.requestKey),
     check("gym_member_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),

@@ -9,7 +9,7 @@
 // bill and payment are the notebook's, and no row of this file's is written for it.
 import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
-import { memberPaymentByHandSchema, memberPaymentMethodSchema } from "./memberBills.js";
+import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
 
@@ -243,6 +243,8 @@ export const gymSaleSchema = z
     undone: z.boolean(),
     /** Whether it can still be taken back: a sale of the gym's own today. */
     canUndo: z.boolean(),
+    /** Its receipt's number, the gym's own (18g-i). */
+    receiptNumber: receiptNumberSchema,
   })
   .strict();
 export type GymSale = z.infer<typeof gymSaleSchema>;
@@ -260,6 +262,8 @@ export const dayPaymentSchema = z
     paidAt: z.string().datetime(),
     by: z.string().nullable(),
     person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict(),
+    /** Its receipt's number, the gym's own (18g-i). */
+    receiptNumber: receiptNumberSchema,
   })
   .strict();
 export type DayPayment = z.infer<typeof dayPaymentSchema>;
