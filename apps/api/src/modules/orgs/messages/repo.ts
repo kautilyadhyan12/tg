@@ -49,6 +49,7 @@ export interface InboxRow {
   id: string;
   kind: string;
   body: string;
+  link: string | null;
   sentAt: Date;
   read: boolean;
 }
@@ -58,15 +59,15 @@ export interface InboxRow {
  *  row, to the microsecond: a JS instant drops them, and would let in a message from just
  *  before the stay. */
 export async function inboxRows(sql: SqlOrTx, gymId: string, userId: string, now: Date, max: number): Promise<InboxRow[]> {
-  const rows = await sql<{ id: string; kind: string; body: string; sent_at: Date; read: boolean }[]>`
-    SELECT id, kind, body, sent_at, read_at IS NOT NULL AS read
+  const rows = await sql<{ id: string; kind: string; body: string; link: string | null; sent_at: Date; read: boolean }[]>`
+    SELECT id, kind, body, link, sent_at, read_at IS NOT NULL AS read
     FROM gym_member_messages
     WHERE gym_id = ${gymId} AND user_id = ${userId}
       AND sent_at >= (SELECT m.joined_at FROM gym_members m WHERE m.gym_id = ${gymId} AND m.user_id = ${userId} AND m.removed_at IS NULL)
       AND sent_at <= ${now} AND expires_at > ${now}
     ORDER BY sent_at DESC, id
     LIMIT ${max}`;
-  return rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sent_at, read: row.read }));
+  return rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, link: row.link, sentAt: row.sent_at, read: row.read }));
 }
 
 /** How many of them the person has not opened. */
@@ -343,6 +344,8 @@ export interface NewMessage {
   kind: GymMessageKind;
   occasion: string;
   body: string;
+  /** The gym's review link, for Ask for a review; null for every other kind. */
+  link: string | null;
   gymDay: string;
 }
 
@@ -352,7 +355,7 @@ export interface NewMessage {
 export async function insertMessages(tx: SqlOrTx, messages: readonly NewMessage[], now: Date, keptDays: number): Promise<number> {
   if (messages.length === 0) return 0;
   const expires = new Date(now.getTime() + keptDays * 86_400_000);
-  const values = messages.map((m) => ({ gym_id: m.gymId, user_id: m.userId, kind: m.kind, occasion: m.occasion, body: m.body, gym_day: m.gymDay, sent_at: now, expires_at: expires }));
+  const values = messages.map((m) => ({ gym_id: m.gymId, user_id: m.userId, kind: m.kind, occasion: m.occasion, body: m.body, link: m.link, gym_day: m.gymDay, sent_at: now, expires_at: expires }));
   const rows = await tx<{ id: string }[]>`
     INSERT INTO gym_member_messages ${tx(values)}
     ON CONFLICT (gym_id, user_id, kind, occasion) DO NOTHING

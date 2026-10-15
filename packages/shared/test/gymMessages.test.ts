@@ -43,8 +43,11 @@ const nobody: Person = {
 };
 /** A gym that checked somebody in on every one of the last 400 days. */
 const EVERY_DAY = Array.from({ length: 400 }, (_, back) => new Date(Date.UTC(2026, 9, 9) - back * 86_400_000).toISOString().slice(0, 10));
+/** The gym of these tests asks for a review, at a number of visits nobody else here reaches. */
+const ON = { ...GYM_MESSAGE_STARTING_ON, review: true };
+const NUMBERS = { ...GYM_MESSAGE_STARTING_NUMBERS, reviewVisits: 60 };
 const facts = (person: Partial<Person> = {}, over: { gym?: Partial<GymMessageFacts["gym"]>; sent?: GymMessageFacts["sent"] } = {}): GymMessageFacts => ({
-  gym: { open: true, live: true, today: TODAY, hour: 12, on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, visitDays: EVERY_DAY, billsOverdueAfterDays: 0, takesPayments: true, ...over.gym },
+  gym: { open: true, live: true, today: TODAY, hour: 12, on: ON, numbers: NUMBERS, visitDays: EVERY_DAY, billsOverdueAfterDays: 0, takesPayments: true, ...over.gym },
   person: { ...nobody, ...person },
   sent: over.sent ?? [],
 });
@@ -64,6 +67,7 @@ const DUE: Record<DayKind, { person: Partial<Person>; occasion: string; endsOn?:
   birthday: { person: { birthday: "10-09" }, occasion: "birthday:2026" },
   milestone: { person: { visits: 50, recentVisitDays: 1, lastVisitOn: TODAY }, occasion: "visits:50" },
   miss_you: { person: { lastVisitOn: "2026-09-29", lastSeenOn: "2026-09-29" }, occasion: "absent:2026-09-29" },
+  review: { person: { visits: 60, recentVisitDays: 1, lastVisitOn: TODAY, lastSeenOn: TODAY }, occasion: "review" },
 };
 
 /** The occasion the rule answers for a kind's own person. */
@@ -77,7 +81,7 @@ const HELD: Record<GymMessageHeldReason, (kind: DayKind, occasion: string) => { 
   gym_lapsed: () => ({ gym: { live: false } }),
   removed: () => ({ person: { member: false } }),
   former: () => ({ person: { former: true } }),
-  gym_off: (kind) => ({ gym: { on: { ...GYM_MESSAGE_STARTING_ON, [kind]: false } } }),
+  gym_off: (kind) => ({ gym: { on: { ...ON, [kind]: false } } }),
   person_off: (kind) => ({ person: { off: [kind] } }),
   already_sent: (kind, occasion) => ({ sent: [{ kind, occasion, day: "2026-10-01" }] }),
   another_today: (kind) => ({ sent: [{ kind: kind === "birthday" ? "welcome" : "birthday", occasion: "something-else", day: TODAY }] }),
@@ -157,7 +161,7 @@ describe("the message rule", () => {
 });
 
 describe("the occasions", () => {
-  const kinds = (person: Partial<Person>, today = TODAY) => gymMessageOccasions(facts(person, { gym: { today } })).map((o) => o.kind);
+  const kinds = (person: Partial<Person>, today = TODAY, gym: Partial<GymMessageFacts["gym"]> = {}) => gymMessageOccasions(facts(person, { gym: { today, ...gym } })).map((o) => o.kind);
 
   it("payment overdue: once the bill reads Overdue and never sooner than three days after its due date, for 30 days, never for a paid bill or a gym that records no payments", () => {
     const bill = (dueOn: string, paid = false) => ({ id: "b1", dueOn, paid });
@@ -326,13 +330,39 @@ describe("the occasions", () => {
     expect(kinds({ visits: 50, recentVisitDays: 1, lastVisitOn: "2026-10-08" })).toEqual(["milestone"]);
     expect(kinds({ visits: 50, recentVisitDays: 0, lastVisitOn: "2026-10-07" })).toEqual([]);
     expect(kinds({ visits: 51, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual([]);
-    expect(kinds({ visits: 100, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual(["milestone"]);
+    // Past this gym's 60 visits too: the milestone goes first, the request for a review a later morning.
+    expect(kinds({ visits: 100, recentVisitDays: 1, lastVisitOn: TODAY })).toEqual(["milestone", "review"]);
     expect(kinds({ lastSeenOn: "2026-09-30" })).toEqual([]);
     expect(kinds({ lastSeenOn: "2026-09-29" })).toEqual(["miss_you"]);
     // Somebody who never came is not missed: there is no absence to count from.
     expect(kinds({ visits: 0, lastVisitOn: null, lastSeenOn: null })).toEqual([]);
     // One absence is one occasion, named by the day they were last seen.
     expect(gymMessageOccasions(facts({ lastSeenOn: "2026-09-10" }))).toEqual([{ kind: "miss_you", occasion: "absent:2026-09-10" }]);
+  });
+
+  it("ask for a review: once somebody has made the gym's number of visits and came in the last 7 days; never staff", () => {
+    for (const visits of [5, 10, 20, 30, 50]) {
+      const at = (person: Partial<Person>) => kinds({ birthday: null, ...person }, TODAY, { numbers: { ...NUMBERS, reviewVisits: visits, milestones: [1000] } });
+      expect(at({ visits: visits - 1, recentVisitDays: 1, lastVisitOn: TODAY }), `${String(visits)} less one`).toEqual([]);
+      expect(at({ visits, recentVisitDays: 1, lastVisitOn: TODAY }), String(visits)).toEqual(["review"]);
+      // Well past the number, as on the day a gym first switches this on.
+      expect(at({ visits: visits + 200, recentVisitDays: 1, lastVisitOn: "2026-10-03" }), `${String(visits)} six days on`).toEqual(["review"]);
+      // Somebody who stopped coming is not asked.
+      expect(at({ visits: visits + 200, recentVisitDays: 0, lastVisitOn: "2026-10-02", lastSeenOn: "2026-10-02" }), `${String(visits)} a week on`).toEqual([]);
+      expect(at({ visits, recentVisitDays: 1, lastVisitOn: TODAY, staff: true }), `${String(visits)} staff`).toEqual([]);
+      // A visit not yet made, or no day at all, asks nobody.
+      expect(at({ visits, recentVisitDays: 1, lastVisitOn: "2026-10-10" }), `${String(visits)} tomorrow`).toEqual([]);
+      expect(at({ visits, recentVisitDays: 1, lastVisitOn: null }), `${String(visits)} no day`).toEqual([]);
+    }
+    // Once ever: the occasion has no day or number in it, so a gym that changes its number asks nobody twice.
+    expect(gymMessageOccasions(facts(DUE.review.person))).toEqual([{ kind: "review", occasion: "review" }]);
+    const sent = [{ kind: "review" as const, occasion: "review", day: "2025-01-01" }];
+    expect(gymMessageDue(facts({ ...DUE.review.person, visits: 500 }, { gym: { numbers: { ...NUMBERS, reviewVisits: 5 } }, sent })).send).toBeNull();
+    // A gym asks nobody until it switches this on.
+    expect(GYM_MESSAGE_STARTING_ON.review).toBe(false);
+    expect(gymMessageDue(facts(DUE.review.person, { gym: { on: GYM_MESSAGE_STARTING_ON } })).send).toBeNull();
+    // It waits behind every other message of the day.
+    expect(gymMessageDue(facts({ ...DUE.review.person, ...DUE.birthday.person })).send?.kind).toBe("birthday");
   });
 
   it("a day that is not a day gives no occasion, never a wrong one", () => {
@@ -375,6 +405,45 @@ describe("the words and the shapes", () => {
     expect(say({ kind: "trial_ending", occasion: "trial:t1" })).toBeNull();
     expect(say({ kind: "membership_ending", occasion: "ends:m1", endsOn: "2026-02-30" })).toBeNull();
     expect([dayInWords("2026-01-01"), dayInWords("2028-02-29"), dayInWords("2026-12-31"), dayInWords("2026-13-01"), dayInWords(null)]).toEqual(["1 January", "29 February", "31 December", null, null]);
+  });
+
+  it("ask for a review: the gym's name, a first name where there is one, and the gym's own line under it", () => {
+    const send = { kind: "review" as const, occasion: "review" };
+    expect(automaticMessage(send, " Iron House ", "Maya Rao", null)).toBe("Hi Maya, thanks for coming to Iron House. If you have a minute, we'd love a review.");
+    expect(automaticMessage(send, "Iron House", "maya@example.com", "It helps us a lot.")).toBe("Thanks for coming to Iron House. If you have a minute, we'd love a review.\nIt helps us a lot.");
+  });
+
+  it("a message's link is a plain https web page or none: nothing a browser would run", () => {
+    const message = { id: "11111111-1111-4111-8111-111111111111", kind: "review", body: "Thanks for coming.", sentAt: "2026-10-09T06:30:00.000Z", read: false };
+    const reply = (link: unknown) => gymInboxResponseSchema.safeParse({ gymId: message.id, gymName: "Iron House", status: "shown", messages: [{ ...message, link }], unread: 1, asOf: "2026-10-09T06:31:00.000Z" });
+    // Links as Google, Facebook, Yelp and Tripadvisor give them out.
+    for (const link of [
+      "https://g.page/r/CbX1aBcDeFgHEBM/review",
+      "https://search.google.com/local/writereview?placeid=ChIJN1t_tDeuEmsRUsoyG83frY4",
+      "https://www.facebook.com/irongymleeds/reviews",
+      "https://www.yelp.com/writeareview/biz/abc123",
+      "https://www.tripadvisor.co.uk/UserReviewEdit-g186402-d1234567",
+    ]) {
+      expect(reply(link).success, link).toBe(true);
+    }
+    for (const link of [
+      "javascript:alert(1)",
+      "http://g.page/r/abc/review",
+      "data:text/html,<script>alert(1)</script>",
+      "https://user:pass@g.page/r/abc",
+      "https://192.168.1.10/review",
+      "https://localhost/review",
+      "https://g.page/r/abc def",
+      "g.page/r/abc/review",
+      "https://xn--ggle-0nda.com/review",
+      `https://g.page/${"a".repeat(500)}`,
+      "",
+    ]) {
+      expect(reply(link).success, link).toBe(false);
+    }
+    // Every other message, and an api older than this, carries none.
+    const plain = gymInboxResponseSchema.parse({ gymId: message.id, gymName: "Iron House", status: "shown", messages: [message], unread: 1, asOf: "2026-10-09T06:31:00.000Z" });
+    expect(plain.messages[0]?.link).toBeNull();
   });
 
   it("the inbox reply and the read mark hold their shapes", () => {

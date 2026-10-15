@@ -67,7 +67,7 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
     ...head,
     status: "shown",
     contact: reader.contact,
-    messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sentAt.toISOString(), read: row.read })),
+    messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, link: row.link, sentAt: row.sentAt.toISOString(), read: row.read })),
     unread,
     groupMessages: !off,
     off: kindsOff,

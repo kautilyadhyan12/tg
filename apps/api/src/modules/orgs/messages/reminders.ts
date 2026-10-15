@@ -54,7 +54,7 @@ export async function remindersForGym(sql: Sql | TransactionSql, gymId: string, 
       settings.ownLines.class_reminder ?? null,
     );
     if (body === null) continue;
-    due.push({ gymId, userId: b.userId, kind: "class_reminder", occasion: answer.occasion, body, gymDay: gym.today });
+    due.push({ gymId, userId: b.userId, kind: "class_reminder", occasion: answer.occasion, body, link: null, gymDay: gym.today });
   }
   return due;
 }
