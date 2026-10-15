@@ -97,6 +97,7 @@ import {
 import { importReviews } from "./review.js";
 import { entryIdsWithTag } from "./notesRepo.js";
 import * as repo from "./repo.js";
+import * as goneForGoodRepo from "../goneForGood/repo.js";
 import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { signedRecords } from "../waiver/signed.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
@@ -1442,12 +1443,13 @@ export async function readList(
   ]);
   const inApp = inAppEntryIds(members);
   const mine = heldChips(held, new Set(inApp));
-  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review, duplicates, signed] = await Promise.all([
+  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review, duplicates, signed, goneDeletedAt] = await Promise.all([
     repo.listStatusCounts(deps.sql, gymId, inApp, [...held.keys()]),
     currentAppWords(deps.sql, deps.invites ?? null, gymId, members, deps.now()),
     repo.reviewSign(deps.sql, gymId),
     repo.duplicatesSign(deps.sql, gymId),
     signedRecords(deps.sql, gymId, members),
+    goneForGoodRepo.listDeletedAt(deps.sql, gymId),
   ]);
   // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
@@ -1476,6 +1478,8 @@ export async function readList(
     review,
     duplicates,
     over: { count: tidy.length, owing: overOwing.length },
+    // Only while no list has been made since: a new import is the gym's answer to it.
+    goneForGoodDeletedAt: state === null ? (goneDeletedAt?.toISOString() ?? null) : null,
   };
 }
 

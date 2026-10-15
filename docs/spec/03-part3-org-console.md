@@ -5120,7 +5120,7 @@ as its checked type with `nosniff` and a sandboxing CSP, cached five minutes.
 Refer a friend, the offer, the invite link and the lead marked.** Read first: Mindbody's
 Branded App gives each client a referral code, and both rewards are issued by themselves
 once the new client makes a qualifying visit or purchase; PushPress marks each lead with
-where it came from ("Referred by"). Migration `0115`.
+where it came from ("Referred by"). Migration `0116`.
 - **The offer** (Settings → **Refer a friend**, `org.manage`; `gym_referral_settings`): a
   switch and two gifts, set in the box itself (Kd at the click-through: setting it up across
   two pages was too complicated): for the member who invites and for the friend, either alone

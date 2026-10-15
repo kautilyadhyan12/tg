@@ -401,7 +401,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 13. [x] **A gym that stops paying is never closed by the clock** — merged 2026-10-02 (PR #158).
 
-14. [ ] **A gym gone for good: its member list is deleted after 6 months** (Kd, RULINGS 2026-10-02; Folder B, before launch). No payment for 6 months and nobody from the gym signed in: the owner is emailed a month and a week before, with a download; then its member list, leads and staff invitations are deleted, never members' own history.
+14. [x] **A gym gone for good: its member list is deleted after 6 months** — merged 2026-10-15 (PR #278).
 
 15. [ ] **A gym accepts our terms when it is created** (RULINGS 2026-10-08; Folder A's last job, with the lawyer's words of item 3): on Create, a tick of its own for the terms and the data agreement, each opening its text; the version, the time and who agreed are kept, and a later version asks the owner again. Acceptance online is enough; no paper.
 
