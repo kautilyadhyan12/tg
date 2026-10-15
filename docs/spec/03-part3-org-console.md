@@ -3765,8 +3765,29 @@ the app never picks one.
   in two on its invoices, as India's CGST and SGST, charges it here as one GST rate); tax in
   Reports.
 
+**As built, 18g-i (2026-10-15; `rulings/2026-10-15-18g-i.md`).** Numbered receipts.
+- **One count for each gym** (`gyms.receipts_issued`, migration `0113`): a membership
+  payment, a refund noted and a product sale each take the next number in the statement that
+  writes their row, under the gym's row lock, and keep it (`receipt_number`, unique in the gym
+  on each table). What was taken before is numbered in the order it was taken. A payment or a
+  sale taken back keeps its number; its receipt says Cancelled.
+- **A receipt** (`GET /v1/orgs/:gymId/receipts/:number`, `billing.members` only; a stranger
+  gets 404): the gym's name and postal address, the number, the gym's day, who it is for (or
+  Walk-in), what was bought (a product with how many and the price each; a membership by its
+  type's name and the days its bill is for), the discount, the tax as it was charged, the
+  total, how it was paid, and who took it. A bill paid in parts says what was paid before and
+  what is left; a payment names the refunds against it; a refund names the receipt it gives
+  back for.
+- **View receipt** on each of Sell's rows for today, on the sale just recorded, on a person's
+  payments and refunds and on what they bought at the desk: the receipt opens under the row,
+  **Print** prints it alone, black on white. A gym with no postal address is asked for it
+  there, by whoever may add it.
+- **Not built**: a receipt by email (18g-ii); receipts in the member's app (Stage 5 item 16).
+
 ### 14.4 Pay by the gym's own link
 
+**DROPPED 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`: not standard practice; members pay
+through a connected company, 14.5, or at the desk, and staff record it). As first planned:
 A gym pastes its own payment link for a membership type (any company: RULINGS
 2026-09-15). The member's app shows **Pay {gym}**, which opens it outside the app;
 staff tick the bill paid. Only `https` links, shown with their host named, never
@@ -3798,8 +3819,8 @@ free, and Kd's to do when he chooses. Nothing in 14.2 to 14.4 waits for it.
 
 ### 14.6 Cards
 
-**18a** the notebook · **18b** the register, discounts and promo codes · **18c** Pay by
-link · **18d** the first Connect button, once its developer account exists · **18e**,
+**18a** the notebook · **18b** the register, discounts and promo codes · ~~**18c** Pay by
+link~~ (dropped 2026-10-15) · **18d** the first Connect button, once its developer account exists · **18e**,
 **18f** the others. 18a needs 17a. ONE feature for CLAUDE.md §6; the extra passes run
 over 18a–18c before a gym uses them, and again over each Connect button — reviewed by
 RUNNING the company's real sandbox, never a mock alone.

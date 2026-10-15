@@ -1141,27 +1141,32 @@
   font-weight: 700;
 }
 
-/* Print: while a receipt's Print is pressed, the page prints that receipt alone, black on
-   white whichever look the console is in. */
+/* Print: Print puts a copy of the receipt straight in the page's body while the print window
+   is open, and the page prints that copy alone, black on white whichever look the console is
+   in. A copy, because a receipt opened inside a panel that scrolls cannot be lifted out of it. */
+@media screen {
+  body > .c-receipt-printing {
+    display: none;
+  }
+}
 @media print {
-  body.c-printing-receipt * {
-    visibility: hidden;
+  html,
+  body.c-printing-receipt {
+    background: #fff !important;
   }
-  body.c-printing-receipt .c-receipt-printing,
-  body.c-printing-receipt .c-receipt-printing * {
-    visibility: visible;
+  body.c-printing-receipt > :not(.c-receipt-printing) {
+    display: none !important;
   }
-  body.c-printing-receipt .c-receipt-printing {
-    position: absolute;
-    left: 0;
-    top: 0;
+  body.c-printing-receipt > .c-receipt-printing {
+    display: flex;
     max-width: 80mm;
+    margin: 0;
     border: 0;
     padding: 0;
     background: #fff;
     color: #000;
   }
-  body.c-printing-receipt .c-receipt-printing * {
+  body.c-printing-receipt > .c-receipt-printing * {
     color: #000 !important;
   }
 }

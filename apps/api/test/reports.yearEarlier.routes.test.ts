@@ -258,21 +258,24 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       const refundedThenUndone = await pay(gym, owner, payer, held.id, "2025-10-05", 33300);
       // Written straight in: the app refunds only a bill paid in full, and this one is not.
       await sql`
-        INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by)
-        VALUES (${gym}, ${refundedThenUndone}, 300, 'GBP', 'cash', 'other', gen_random_uuid(), '2025-10-06', ${owner.userId})`;
+        WITH n AS (UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gym} RETURNING receipts_issued AS number)
+        INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by, receipt_number)
+        SELECT ${gym}, ${refundedThenUndone}, 300, 'GBP', 'cash', 'other', gen_random_uuid(), '2025-10-06', ${owner.userId}, n.number FROM n`;
       await sql`UPDATE gym_member_payments SET undone_at = '2025-10-07T11:00:00Z', undone_by = ${owner.userId} WHERE gym_id = ${gym} AND id = ${refundedThenUndone}`;
       // A payment in euros inside every span, and a refund in euros: the gym's money is pounds.
       const eurosHeld = await give(gym, owner, eve, yearly, "2024-10-30", false);
       const euros = (await sql<{ id: string }[]>`
-        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by)
-        SELECT ${gym}, b.id, 44400, 'EUR', 'cash', gen_random_uuid(), '2025-10-03', ${owner.userId}
-        FROM gym_member_bills b JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+        WITH n AS (UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gym} RETURNING receipts_issued AS number)
+        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by, receipt_number)
+        SELECT ${gym}, b.id, 44400, 'EUR', 'cash', gen_random_uuid(), '2025-10-03', ${owner.userId}, n.number
+        FROM n, gym_member_bills b JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
         WHERE b.gym_id = ${gym} AND h.id = ${eurosHeld.id} AND b.period_index = 0
         RETURNING id`)[0]?.id;
       if (euros === undefined) throw new Error("no payment in euros");
       await sql`
-        INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by)
-        VALUES (${gym}, ${euros}, 400, 'EUR', 'cash', 'other', gen_random_uuid(), '2025-10-04', ${owner.userId})`;
+        WITH n AS (UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gym} RETURNING receipts_issued AS number)
+        INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by, receipt_number)
+        SELECT ${gym}, ${euros}, 400, 'EUR', 'cash', 'other', gen_random_uuid(), '2025-10-04', ${owner.userId}, n.number FROM n`;
       // Today, a period's own payment: never a year earlier.
       await pay(gym, owner, payer, held.id, TODAY, 99900);
 

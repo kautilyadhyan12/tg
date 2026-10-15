@@ -14,19 +14,21 @@ import SentencePlace from './SentencePlace';
 // says now: a payment taken back since reads Cancelled. Print prints this receipt alone.
 // A gym with no postal address is asked for it here, by whoever may add it.
 
-/** Prints one receipt: the page's print rule shows only the element marked, and the marks
- *  come off once the print window closes. */
+/** Prints one receipt: a copy of it goes straight in the page's body, the page's print rule
+ *  shows only that copy, and the copy and the mark come off once the print window closes. */
 function printReceipt(element) {
   if (element === null) return;
   const body = globalThis.document?.body;
   if (body === undefined) return;
+  const copy = element.cloneNode(true);
+  copy.classList.add('c-receipt-printing');
   const done = () => {
     body.classList.remove('c-printing-receipt');
-    element.classList.remove('c-receipt-printing');
+    copy.remove();
     globalThis.removeEventListener?.('afterprint', done);
   };
+  body.appendChild(copy);
   body.classList.add('c-printing-receipt');
-  element.classList.add('c-receipt-printing');
   globalThis.addEventListener?.('afterprint', done);
   try {
     globalThis.print?.();

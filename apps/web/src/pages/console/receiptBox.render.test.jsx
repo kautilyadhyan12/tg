@@ -101,14 +101,16 @@ describe('a receipt', () => {
     svc.receipt.mockResolvedValue(receipt());
     const seen = [];
     const print = vi.spyOn(window, 'print').mockImplementation(() => {
-      seen.push([document.body.classList.contains('c-printing-receipt'), [...document.querySelectorAll('.c-receipt-printing')].map((e) => e.dataset.testid)]);
+      const marked = [...document.querySelectorAll('.c-receipt-printing')];
+      seen.push([document.body.classList.contains('c-printing-receipt'), marked.map((e) => e.parentElement === document.body), marked.map((e) => e.textContent.includes('Receipt #7'))]);
     });
     open();
     const row = await pressReceipt();
     await within(row).findByTestId('receipt');
     fireEvent.click(within(row).getByRole('button', { name: 'Print' }));
     expect(print).toHaveBeenCalledTimes(1);
-    expect(seen).toEqual([[true, ['receipt']]]);
+    // One copy of this receipt, straight in the page's body, while the print window is open.
+    expect(seen).toEqual([[true, [true], [true]]]);
     expect(document.body.classList.contains('c-printing-receipt')).toBe(false);
     expect(document.querySelectorAll('.c-receipt-printing')).toHaveLength(0);
     print.mockRestore();
