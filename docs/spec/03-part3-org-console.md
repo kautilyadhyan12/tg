@@ -3794,7 +3794,7 @@ record deleted for good keeps its money.
   `0116`) and stays with its bills, payments, refunds and receipt numbers. It is over
   (Cancelled that day if it was running; the database refuses it running with no record), its
   unpaid bills are cancelled, and a booking or session no longer counts against it. A membership
-  with nothing paid goes with the record. The app never deletes what it kept.
+  with nothing paid goes with the record. The app keeps it while the gym uses the app.
 - **Read as "A deleted member"**: on its receipts, on Sell's list of the day's takings (a sale
   too), with no page to open. Reports' takings keep it; what was owed and what was running stop
   counting, as for anybody who has left.
@@ -3803,8 +3803,8 @@ record deleted for good keeps its money.
 - **A join** moves a list membership that is over like any other; one still running beside the
   kept record's running one stays behind, and where it has a payment the join is refused: "Both
   records have Gold Monthly. Cancel it on one of them first, then merge."
-- **A gym's whole list deleted** (Stage 4 item 14) takes its payments, as before: the gym is warned
-  first, and downloading them is 18n.
+- **A gym's whole list deleted** (Stage 4 item 14) takes every payment, those kept from records
+  deleted earlier too (`deleteListForGym`): the gym is warned first, and downloading them is 18n.
 
 ### 14.4 Pay by the gym's own link
 

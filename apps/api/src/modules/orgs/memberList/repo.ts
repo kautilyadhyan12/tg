@@ -1147,6 +1147,9 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string, at: Da
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, null, at);
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
+  // What records deleted for good earlier left behind (18m) goes with the rest of the list:
+  // their bills, payments and refunds by the keys' cascade. The gym was warned it would.
+  await tx`DELETE FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id IS NULL`;
   // The gym's own column headings (3a-v-b). Nothing points at them once the entries
   // are gone, and a catalogue outliving the gym it belongs to would be the one row of
   // this feature the archive sweep left behind.

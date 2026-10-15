@@ -23,6 +23,8 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { deleteListForGym } from "../src/modules/orgs/memberList/repo.js";
+import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -342,18 +344,26 @@ d("payments kept when a record is deleted for good (real Postgres)", () => {
       const gymId = await makeGym(owner, "Pk Rule Gym");
       const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
       const ana = await addPerson(gymId, owner.cookies, "Ana Silva", "pk-p-ana@example.com");
+      const ben = await addPerson(gymId, owner.cookies, "Ben Okafor", "pk-p-ben@example.com");
       await give(gymId, ana, owner.cookies, gold, 5000, true);
+      await give(gymId, ben, owner.cookies, gold, 5000, true);
       expect((await deleteForGood(gymId, ana, owner.cookies)).statusCode).toBe(200);
-      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId}`;
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id IS NULL`;
       if (row === undefined) throw new Error("Ana's paid membership was not kept");
       await expect(sql`UPDATE gym_held_memberships SET status = 'active', cancelled_on = NULL WHERE id = ${row.id}`).rejects.toThrow(/record_deleted_check/);
       await expect(sql`UPDATE gym_held_memberships SET record_deleted_at = NULL WHERE id = ${row.id}`).rejects.toThrow(/record_deleted_check/);
-      // Nothing the hourly run reads as owing a bill.
-      const owing = await sql`
-        SELECT 1 FROM gym_held_memberships h
-        JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
-        WHERE h.gym_id = ${gymId}`;
-      expect(owing).toHaveLength(0);
+      // The hourly run a month on opens Ben's next bill and none on Ana's kept membership.
+      const log = { info: () => undefined, error: () => undefined };
+      const run = await openDueBills({ sql, log }, { now: new Date("2026-11-20T17:00:00Z"), gymIds: [gymId] });
+      expect(run.failed).toBe(0);
+      const bills = await sql<{ entry_id: string | null; n: number }[]>`
+        SELECT h.entry_id, count(b.id)::int AS n FROM gym_held_memberships h
+        JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id
+        WHERE h.gym_id = ${gymId} GROUP BY h.entry_id ORDER BY h.entry_id NULLS FIRST`;
+      expect(bills).toEqual([
+        { entry_id: null, n: 1 },
+        { entry_id: ben, n: 2 },
+      ]);
     },
     T,
   );
@@ -393,14 +403,31 @@ d("payments kept when a record is deleted for good (real Postgres)", () => {
       const undone = await post(`${heldUrl(gymId, sam)}/${samGold.id}/payments/${payment.id}/undo`, {}, owner.cookies);
       expect(undone.statusCode, undone.body).toBe(200);
       await give(gymId, kim, owner.cookies, gold, 5000, false);
+      // Zoe's Gold is refunded in full: its bill reads refunded, and stays so.
+      const zoe = await addPerson(gymId, owner.cookies, "Zoe Hart", "pk-p-zoe@example.com");
+      await give(gymId, zoe, owner.cookies, gold, 5000, true);
+      const zoeGold = await membershipNamed(gymId, zoe, owner.cookies, "Gold Monthly");
+      const zoePaid = zoeGold.billing?.bills[0]?.payments[0];
+      if (zoePaid === undefined) throw new Error("Zoe's payment is missing");
+      const back = await post(`${heldUrl(gymId, zoe)}/${zoeGold.id}/payments/${zoePaid.id}/refunds`, { requestKey: nextForm(), amountMinor: 5000, method: "cash", reason: "other" }, owner.cookies);
+      expect(back.statusCode, back.body).toBe(200);
+      const stays = await addPerson(gymId, owner.cookies, "Lu Chen", "pk-p-lu@example.com");
 
       expect((await deleteForGood(gymId, sam, owner.cookies)).statusCode).toBe(200);
       expect((await deleteForGood(gymId, kim, owner.cookies)).statusCode).toBe(200);
-      expect(await ledgerOf(gymId)).toEqual(["payment 1 5000 false"]);
+      expect((await deleteForGood(gymId, zoe, owner.cookies)).statusCode).toBe(200);
+      expect(await sql`SELECT status FROM gym_member_bills WHERE held_membership_id = ${zoeGold.id}`).toEqual([{ status: "refunded" }]);
+      // The gym-wide readers of bills still load, and list only who is on the list.
+      const list = await get(`${listUrl(gymId)}/entries`, owner.cookies);
+      expect(list.statusCode, list.body).toBe(200);
+      expect(list.body).toContain(stays);
+      expect(list.body).not.toMatch(/Sam Ortiz|Kim Lee|Zoe Hart/);
+      expect((await get(`/v1/orgs/${gymId}/reports/money?period=4w`, owner.cookies)).statusCode).toBe(200);
+      expect(await ledgerOf(gymId)).toEqual(["payment 1 5000 false", "payment 2 5000 true", "refund 3 5000 true"]);
       expect((await receipt(gymId, 1, owner.cookies)).receipt).toMatchObject({ cancelled: true, person: null, personDeleted: true });
       // Kim's unpaid membership and its bill went with her record.
       const left = await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${gymId}`;
-      expect(left).toEqual([{ entry_id: null }]);
+      expect(left).toEqual([{ entry_id: null }, { entry_id: null }]);
       expect(await sql`SELECT 1 FROM gym_member_bills WHERE gym_id = ${gymId} AND status = 'open'`).toHaveLength(0);
     },
     T,
@@ -434,6 +461,57 @@ d("payments kept when a record is deleted for good (real Postgres)", () => {
       expect(await ledgerOf(gymId)).toEqual(["payment 1 5000 true"]);
       expect((await receipt(gymId, 1, owner.cookies)).receipt).toMatchObject({ person: "Nina Rossi", personDeleted: false });
       expect(await sql`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id IS NULL`).toHaveLength(0);
+    },
+    T,
+  );
+
+  it(
+    "a gym's whole list deleted takes every payment, those kept from a record deleted for good earlier too",
+    async () => {
+      const owner = await makeUser("whole-owner");
+      const gymId = await makeGym(owner, "Pk Whole Gym");
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
+      const ivy = await addPerson(gymId, owner.cookies, "Ivy Moss", "pk-p-ivy@example.com");
+      const tom = await addPerson(gymId, owner.cookies, "Tom Reyes", "pk-p-tom@example.com");
+      await give(gymId, ivy, owner.cookies, gold, 5000, true);
+      await give(gymId, tom, owner.cookies, gold, 5000, true);
+      expect((await deleteForGood(gymId, ivy, owner.cookies)).statusCode).toBe(200);
+      expect(await ledgerOf(gymId)).toEqual(["payment 1 5000 true", "payment 2 5000 true"]);
+
+      await sql.begin(async (tx) => {
+        await deleteListForGym(tx, gymId, clock);
+      });
+      expect(await ledgerOf(gymId)).toEqual([]);
+      expect(await sql`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${gymId}`).toHaveLength(0);
+      expect((await get(receiptUrl(gymId, 1), owner.cookies)).statusCode).toBe(404);
+    },
+    T,
+  );
+
+  it(
+    "a join moves a paid list membership that is over, even beside the kept record's running one: no refusal, the payment with the person",
+    async () => {
+      const owner = await makeUser("over-owner");
+      const gymId = await makeGym(owner, "Pk Over Gym");
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
+      const keep = await addPerson(gymId, owner.cookies, "Ola Berg", "pk-p-ola@example.com");
+      const twin = await addPerson(gymId, owner.cookies, "O. Berg", "pk-p-ola2@example.com");
+      await give(gymId, twin, owner.cookies, gold, 5000, true);
+      // The list gave the record not kept Gold, paid, and it has ended since; the kept record
+      // holds Gold running, from the list too.
+      await sql`UPDATE gym_held_memberships SET from_list = true, status = 'ended' WHERE gym_id = ${gymId} AND entry_id = ${twin}`;
+      await give(gymId, keep, owner.cookies, gold, 5000, false);
+      await sql`UPDATE gym_held_memberships SET from_list = true WHERE gym_id = ${gymId} AND entry_id = ${keep}`;
+
+      const joined = await post(`${entryUrl(gymId, twin)}/merge`, { keepEntryId: keep }, owner.cookies);
+      expect(joined.statusCode, joined.body).toBe(200);
+      const rows = await sql<{ entry_id: string | null; status: string }[]>`SELECT entry_id, status FROM gym_held_memberships WHERE gym_id = ${gymId} ORDER BY status`;
+      expect(rows).toEqual([
+        { entry_id: keep, status: "active" },
+        { entry_id: keep, status: "ended" },
+      ]);
+      expect(await ledgerOf(gymId)).toEqual(["payment 1 5000 true"]);
+      expect((await receipt(gymId, 1, owner.cookies)).receipt).toMatchObject({ person: "Ola Berg", personDeleted: false });
     },
     T,
   );
