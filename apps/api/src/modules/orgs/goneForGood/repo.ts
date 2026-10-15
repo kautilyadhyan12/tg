@@ -26,26 +26,29 @@ export interface DueGym {
  *  signed-in console or app renews its session); `refresh_tokens` keeps its rows. */
 export async function dueGyms(sql: SqlOrTx, now: Date, gymIds: readonly string[] | null): Promise<DueGym[]> {
   const rows = await sql<{ gym_id: string; counted_from: Date; due_at: Date }[]>`
-    WITH dark AS (
+    WITH plans AS (
+      -- Every gym's plans in one pass: whether one is live, whether one ended undated, and
+      -- the latest end.
+      SELECT s.owner_id,
+        bool_or(s.status IN ('trialing','active','past_due')) AS live,
+        bool_or(s.ended_at IS NULL AND s.status NOT IN ('trialing','active','past_due')) AS undated,
+        max(s.ended_at) AS ended_at
+      FROM subscriptions s
+      WHERE s.owner_type = 'gym' AND (${gymIds}::uuid[] IS NULL OR s.owner_id = ANY(${gymIds}::uuid[]))
+      GROUP BY s.owner_id
+    ), dark AS (
       -- To the thousandth of a second, as a JavaScript Date holds it: the round is matched
       -- on this value when it comes back.
       SELECT g.id,
         date_trunc('milliseconds', GREATEST(
-          CASE WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.owner_type = 'gym' AND s.owner_id = g.id)
-               THEN (SELECT max(s.ended_at) FROM subscriptions s WHERE s.owner_type = 'gym' AND s.owner_id = g.id)
-               ELSE g.created_at END,
+          CASE WHEN p.owner_id IS NULL THEN g.created_at ELSE p.ended_at END,
           (SELECT max(r.created_at) FROM gym_staff st JOIN refresh_tokens r ON r.user_id = st.user_id
             WHERE st.gym_id = g.id)
         )) AS counted_from
-      FROM gyms g
+      FROM gyms g LEFT JOIN plans p ON p.owner_id = g.id
       WHERE (${gymIds}::uuid[] IS NULL OR g.id = ANY(${gymIds}::uuid[]))
-        AND NOT EXISTS (
-          SELECT 1 FROM subscriptions s
-          WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.status IN ('trialing','active','past_due'))
-        AND NOT EXISTS (
-          SELECT 1 FROM subscriptions s
-          WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.ended_at IS NULL
-            AND s.status NOT IN ('trialing','active','past_due'))
+        AND NOT coalesce(p.live, false)
+        AND NOT coalesce(p.undated, false)
     ), timed AS (
       SELECT id, counted_from,
         ((counted_from AT TIME ZONE 'UTC') + ${GONE_AFTER_MONTHS} * INTERVAL '1 month') AT TIME ZONE 'UTC' AS due_at

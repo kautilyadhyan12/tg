@@ -509,6 +509,21 @@ describe("the gym's own list", () => {
     expect(await screen.findByTestId('member-import')).toBeTruthy();
   });
 
+  it('says when and why the list was deleted for a gym gone for good, in the gym’s own zone, and nothing of it once a list is made', async () => {
+    const empty = { hasList: false, counts: { entries: 0, inApp: 0, canBeInvited: 0, noEmail: 0, former: 0 }, statuses: [], membershipTypes: [] };
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ ...empty, goneForGoodDeletedAt: '2030-07-09T20:00:00.000Z' }) } });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([]));
+    draw({ gym: { timezone: 'Asia/Kolkata' } });
+    expect(await screen.findByRole('heading', { name: 'Your list is empty' })).toBeTruthy();
+    expect(screen.getByTestId('members-gone-for-good').textContent).toBe('Your list was deleted on 10 Jul 2030 because your gym had no paid plan and nobody signed in for 6 months.');
+    expect(screen.getByRole('button', { name: 'Import members' })).toBeTruthy();
+    cleanup();
+    orgService.getMemberList.mockResolvedValue({ data: { list: view(empty) } });
+    draw({ gym: { timezone: 'Asia/Kolkata' } });
+    expect(await screen.findByRole('heading', { name: 'Your list is empty' })).toBeTruthy();
+    expect(screen.queryByTestId('members-gone-for-good')).toBeNull();
+  });
+
   it('says a failed read failed, never that the list is empty, and reads again', async () => {
     orgService.getMemberListEntries.mockRejectedValueOnce(Object.assign(new Error('x'), { response: { status: 500, data: {} } }));
     draw();
