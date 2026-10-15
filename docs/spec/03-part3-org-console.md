@@ -5168,8 +5168,10 @@ where it came from ("Referred by"). Migration `0117`.
   any other, with a **See it in Discounts** button beside its code. A code is unique within a
   business only; the app takes the next free one (WELCOME20B…) where the business already uses
   it. Saved again with the same gift, the same code. A changed gift nobody has used changes
-  its discount and code; once somebody has used it, that discount is left exactly as given
-  and the new gift gets its own. "No gift" archives a code nobody used. The offer and the code
+  its discount and code; once somebody has used it, it is archived (its sales keep what they
+  were sold at) and the new gift gets its own. "No gift" archives it. No friend holds the code,
+  so no replaced code is left in use. A code never shows a number the gift is not: 12.5% or
+  £5.50 is plain WELCOME. The offer and the code
   are written in one transaction under the gym's row lock. A code archived under Discounts is
   promised to nobody until the box is saved again.
 - **A gift in words** (`referralGiftWords`) is said from the discount as it is: "10% off the
@@ -5190,15 +5192,19 @@ where it came from ("Referred by"). Migration `0117`.
   business's own page where it has one. Its form is the page's form with **Email *** required
   (Kd) and without "How did you hear about us?"
   (`POST …/enquiries`, the same robot check and the same limits, counted against the same
-  business), and its lead's source is A friend. A code that is not one, of a member who has
+  business), and its lead's source is A friend. The page is opened at most 600 times an hour
+  per link from one address, and 6,000 an hour from one address in all (a carrier puts
+  thousands of phones behind one address); the form spends only the page form's own limits. A code that is not one, of a member who has
   left, of a business that switched the offer off, is closed or on no plan: the same 404,
   "This invite link isn't working. Ask the person who sent it for a new one."
 - **The lead marked** (`gym_leads.referred_by`, `referred_at`): only a NEW lead, and only
   while the member still is one and the offer is still on, asked again in the write's own
   transaction. A lead already there is never changed by the form, so nobody is claimed by a
-  second member. A member using their own link with their own email or phone is not their own
-  friend. Leads and the lead's page say **Invited by Maya Rao** (the gym's list's name for
-  them, else their app name); one who left reads "…, who is no longer a member"; one whose
+  second member. A member using their own link with their own email (a "+tag" address counts
+  as theirs) or phone is not their own friend: a backstop, since the member's gift still waits
+  for a second person to join and pay. Leads and the lead's page say **Invited by Maya Rao** (the gym's list's name where
+  that record is theirs alone, else their app name; the invite page and the member's own line
+  use their app name); one who left reads "…, who is no longer a member"; one whose
   account is deleted reads "Invited by a member who has since deleted their account".
 - **Privacy**: a link is the member's own (deleted at Day 14, exported); the lead's
   `referred_by` is the gym's record, `ON DELETE set null`.
