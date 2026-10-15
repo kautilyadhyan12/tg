@@ -198,7 +198,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
 
   /** What is in the table, read directly. */
   const rowsOf = (gymId: string) => sql<
-    { id: string; entry_id: string; status: string; paid_periods: number; renews: boolean; frozen_days: number; frozen_on: string | null }[]
+    { id: string; entry_id: string | null; status: string; paid_periods: number; renews: boolean; frozen_days: number; frozen_on: string | null }[]
   >`
     SELECT id, entry_id, status, paid_periods, renews, frozen_days, frozen_on::text AS frozen_on
     FROM gym_held_memberships WHERE gym_id = ${gymId} ORDER BY created_at, id`;
@@ -1098,10 +1098,12 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect((await post(`${entryUrl(gymId, quit)}/merge`, { keepEntryId: twin }, owner.cookies)).statusCode).toBe(200);
       expect(list(await get(heldUrl(gymId, twin), owner.cookies)).memberships[0]).toMatchObject({ id: quitId, billing: { bills: [{ state: "paid", payments: [{ amountMinor: 4999 }] }] } });
 
-      // Deleted for good: the record's bills and payments go with it, and nobody else's.
+      // Deleted for good: what the record paid stays, with no record (18m), and nobody
+      // else's moves.
       expect((await del(`/v1/orgs/${gymId}/member-list/former/${left}`, owner.cookies)).statusCode).toBe(200);
-      expect((await billsOf(gymId)).map((b) => b.held_membership_id).sort()).toEqual([quitId, backId].sort());
-      expect(await paymentsOf(gymId)).toHaveLength(2);
+      expect([...new Set((await billsOf(gymId)).map((b) => b.held_membership_id))].sort()).toEqual([quitId, backId, leftId].sort());
+      expect(await paymentsOf(gymId)).toHaveLength(3);
+      expect((await rowsOf(gymId)).find((r) => r.id === leftId)).toMatchObject({ entry_id: null });
     },
     TEST_TIMEOUT_MS,
   );
