@@ -30,6 +30,7 @@ import {
   appCountsExercise,
   challengeSubjectsResponseSchema,
   challengeWords,
+  exerciseIsHeld,
   exerciseNameOf,
   offeredSubjects,
   orgWords,
@@ -785,7 +786,7 @@ export async function getSubjects(deps: ChallengesDeps, staffId: string, gymId: 
   const exercises = library
     .flatMap((e) => {
       const name = exerciseNameOf(e.slug);
-      return name === null ? [] : [{ slug: e.slug, name, appCounts: appCountsExercise(e.liveDefinition) }];
+      return name === null ? [] : [{ slug: e.slug, name, held: exerciseIsHeld(e.slug), appCounts: appCountsExercise(e.liveDefinition) }];
     })
     .sort((a, b) => a.name.localeCompare(b.name, "en"));
   return challengeSubjectsResponseSchema.parse({ subjects: offeredSubjects(orgWords(org.orgType).person), exercises });
@@ -839,7 +840,9 @@ export async function changeChallenge(
     const problem = challengeSaveProblem({ today, before: { ...before, teamList }, next: body });
     if (problem !== null) throw refused(problem);
     await repo.updateChallenge(tx, gymId, challengeId, body, at);
-    if (!(await repo.setExercises(tx, gymId, challengeId, body.exercises))) throw exerciseNotOffered();
+    // The same exercises are left as they are: one hidden from the library since stays kept.
+    const same = before.exercises.length === body.exercises.length && before.exercises.every((slug, i) => slug === body.exercises[i]);
+    if (!same && !(await repo.setExercises(tx, gymId, challengeId, body.exercises))) throw exerciseNotOffered();
     // Once it has started its teams are as they were (`challengeSaveProblem`): only a
     // challenge that has not started has its teams made the ones sent.
     if (challengeState(before, today) === "coming" && !(await repo.setTeams(tx, gymId, challengeId, body.teamList, at))) {

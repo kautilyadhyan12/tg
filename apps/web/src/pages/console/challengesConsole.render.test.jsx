@@ -379,7 +379,7 @@ describe("the console's Challenges page", () => {
     expect(wins()).toEqual([
       'Highest number winsThe member with the highest number when it ends comes 1st.',
       'Reach a targetYou set the target, such as 100. Everyone who reaches it wins.',
-      "Fastest time winsFor a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
+      "Fastest time winsFor a time, such as a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
     ]);
     type('Challenge name', 'Row 500 m');
     pickDate('First day', '2026-10-07');
@@ -392,7 +392,7 @@ describe("the console's Challenges page", () => {
     expect(wins()).toEqual([
       'Most seconds winsThe member with the most seconds when it ends comes 1st.',
       'Reach a targetYou set the target, such as 100 seconds. Everyone who reaches it wins.',
-      "Fastest time winsFor a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
+      "Fastest time winsFor a time, such as a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
     ]);
     expect(picked('How it is won')).toContain('Fastest time wins');
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
@@ -425,7 +425,7 @@ describe("the console's Challenges page", () => {
     // The app is shown switched off, with its reason; the staff count it.
     const app = within(form().getByRole('radiogroup', { name: 'Who counts it' })).getByRole('radio', { name: /^The app/ });
     expect(app.disabled).toBe(true);
-    expect(app.textContent).toBe("The appThe camera can't count this exercise yet, so your staff count it.");
+    expect(app.textContent).toBe("The appThe camera can't count exercises for challenges yet, so your staff count them.");
     expect(picked('Who counts it')).toBe("Your staffYour staff enter each member's number.");
     fireEvent.click(app);
     expect(picked('Who counts it')).toContain('Your staff');

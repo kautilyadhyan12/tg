@@ -93,7 +93,11 @@ function appMeasure(draft, offered) {
  *  ("visits"), or what they typed for something of their own. */
 function staffWordFor(draft, offered) {
   const subject = subjectOf(offered, draft.subject);
-  if (subject?.pickExercise) return (exerciseOf(offered, draft.exercise)?.name ?? '').toLowerCase().slice(0, CHALLENGE_LIMITS.unit);
+  if (subject?.pickExercise) {
+    const exercise = exerciseOf(offered, draft.exercise);
+    if (exercise?.held === true) return TIME_WORD;
+    return (exercise?.name ?? '').toLowerCase().slice(0, CHALLENGE_LIMITS.unit);
+  }
   if (subject !== undefined && subject.staffWord !== '') return subject.staffWord;
   return draft.ownUnit ?? '';
 }
@@ -108,7 +112,8 @@ export function countedByChoices(draft, offered, words) {
   const measure = appMeasure(draft, offered);
   if (measure !== null) return { line: null, choices: [{ id: 'app', title: 'The app', sub: `It counts ${measure.many} by itself. Your staff don't enter any numbers.` }, staff] };
   const name = exerciseOf(offered, draft.exercise)?.name;
-  const why = name === undefined ? "The camera can't count this exercise yet, so your staff count it." : `The camera can't count ${name} yet, so your staff count it.`;
+  const anyCounted = offered.exercises.some((e) => e.appCounts);
+  const why = name !== undefined ? `The camera can't count ${name} yet, so your staff count it.` : anyCounted ? 'Pick an exercise first.' : "The camera can't count exercises for challenges yet, so your staff count them.";
   return { line: null, choices: [{ id: 'app', title: 'The app', sub: why, off: true }, staff] };
 }
 
@@ -118,7 +123,7 @@ export function withSubject(draft, subject, offered) {
   if (subject === draft.subject) return draft;
   const ownUnit = draft.subject === 'own' ? draft.unit : (draft.ownUnit ?? '');
   const next = { ...draft, subject, ownUnit, exercise: subjectOf(offered, subject)?.pickExercise ? (draft.exercise ?? '') : '' };
-  return withCountedBy(next, appMeasure(next, offered) === null ? 'staff' : 'app', offered, true);
+  return settled(withCountedBy(next, appMeasure(next, offered) === null ? 'staff' : 'app', offered, true), offered);
 }
 
 /** The draft counted by the app or by the staff. The app only where it can count it; the
@@ -128,7 +133,21 @@ export function withCountedBy(draft, by, offered, force = false) {
   const measure = by === 'app' ? appMeasure(draft, offered) : null;
   if (by === 'app' && measure === null) return draft;
   const app = by === 'app';
-  return { ...draft, countedBy: by, measure: app ? measure.measure : null, unit: app ? '' : timedWord(draft, staffWordFor(draft, offered)), win: app && draft.win === 'lowest' ? 'most' : draft.win };
+  return settled({ ...draft, countedBy: by, measure: app ? measure.measure : null, unit: app ? '' : timedWord(draft, staffWordFor(draft, offered)), win: app && draft.win === 'lowest' ? 'most' : draft.win }, offered);
+}
+
+/** The fastest time is offered for something of the gym's own and for an exercise done in
+ *  reps: never for a count of days, nor a hold or a pose, which are won by the longest. */
+export function fastestOffered(draft, offered) {
+  if (!isOwn(draft)) return false;
+  if (draft.subject === 'own') return true;
+  return picksExercise(draft) && exerciseOf(offered, draft.exercise)?.held !== true;
+}
+
+/** A draft whose fastest time is no longer offered goes back to the most, in the form's word. */
+function settled(draft, offered) {
+  if (draft.win !== 'lowest' || fastestOffered(draft, offered)) return draft;
+  return { ...draft, win: 'most', unit: draft.unit === TIME_WORD ? staffWordFor(draft, offered) : draft.unit };
 }
 
 /** The word a fastest time is typed in. */
@@ -151,36 +170,40 @@ export function withWin(draft, win, offered) {
 export function withExercise(draft, slug, offered) {
   const before = staffWordFor(draft, offered);
   const next = { ...draft, exercise: slug };
-  const unit = draft.countedBy === 'staff' && (draft.unit.trim() === '' || draft.unit === before) ? staffWordFor(next, offered) : draft.unit;
-  return { ...next, unit };
+  const unit = draft.countedBy === 'staff' && (draft.unit.trim() === '' || draft.unit === before) ? timedWord(next, staffWordFor(next, offered)) : draft.unit;
+  return settled({ ...next, unit }, offered);
 }
 
 /** How it is won, each choice in the words of what is counted. The lowest number can win
  *  only where the staff count (a time). `unit`: the staff's own word, '' until typed. */
-export function winChoices(draft, words = { person: 'person' }) {
+export function winChoices(draft, words = { person: 'person' }, offered = null) {
   const teams = draft.teams ?? 'none';
-  const u = wordsOf(draft);
+  const given = staffWordFor(draft, offered);
+  // Once the fastest wins the word is seconds; the other two still read in the form's word.
+  const u = draft.win === 'lowest' && draft.unit === TIME_WORD && given !== '' && given !== TIME_WORD ? given : wordsOf(draft);
   const own = isOwn(draft);
+  const fastest = fastestOffered(draft, offered);
   const theMost = u === '' ? 'highest number' : `most ${u}`;
   const most = u === '' ? 'Highest number wins' : `Most ${u} wins`;
   const lowest = 'Fastest time wins';
   const example = (n) => (u === '' ? count(n) : `${count(n)} ${u}`);
   // A time is typed in the staff's word once the fastest wins, else in seconds.
-  const timeWord = draft.win === 'lowest' && u !== '' ? u : TIME_WORD;
-  const aTime = '100 squats as fast as possible, or a 500 m row';
+  const typed = wordsOf(draft);
+  const timeWord = draft.win === 'lowest' && typed !== '' ? typed : TIME_WORD;
+  const aTime = draft.subject === 'own' ? 'a 500 m row' : `100 ${given === '' || given === TIME_WORD ? 'squats' : given} as fast as possible`;
   if (teams !== 'none') {
     const choices = [
       { id: 'most', title: most, sub: `The team with the ${theMost} when it ends comes 1st. A team's number is its people's numbers added together.` },
       { id: 'target', title: 'Reach a target', sub: `You set a target for a whole team, such as ${example(own ? 500 : 60)}. Every team that reaches it wins.` },
     ];
-    if (own) choices.push({ id: 'lowest', title: lowest, sub: `For a time, such as ${aTime}. Your staff enter each ${words.person}'s time in ${timeWord}, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.` });
+    if (fastest) choices.push({ id: 'lowest', title: lowest, sub: `For a time, such as ${aTime}. Your staff enter each ${words.person}'s time in ${timeWord}, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.` });
     return choices;
   }
   const choices = [
     { id: 'most', title: most, sub: `The ${words.person} with the ${theMost} when it ends comes 1st.` },
     { id: 'target', title: 'Reach a target', sub: `You set the target, such as ${example(own ? 100 : 12)}. Everyone who reaches it wins.` },
   ];
-  if (own) choices.push({ id: 'lowest', title: lowest, sub: `For a time, such as ${aTime}. Your staff enter each ${words.person}'s time in ${timeWord}, and the lowest comes 1st.` });
+  if (fastest) choices.push({ id: 'lowest', title: lowest, sub: `For a time, such as ${aTime}. Your staff enter each ${words.person}'s time in ${timeWord}, and the lowest comes 1st.` });
   return choices;
 }
 
@@ -381,7 +404,7 @@ export function startHint(draft, today) {
 /** A gym that checks nobody in gets no gym days: said under the choice, before it is saved. */
 export function notCheckingInNote(draft, list, words) {
   if (draft.subject !== 'gym_visits' || draft.countedBy !== 'app' || list.checkingIn) return null;
-  return `Nobody has been checked in at your front desk in the last 30 days. Gym days only come from check-ins, so every ${words.person} would stay at 0. Check people in at the front desk, or count workout days.`;
+  return `Nobody has been checked in at your front desk in the last 30 days. Gym days only come from check-ins, so every ${words.person} would stay at 0. Check people in at the front desk, or pick Workouts in the app.`;
 }
 
 /** The tag beside a challenge's name. */
@@ -751,10 +774,8 @@ function draftWon(draft) {
     const reach = target === null ? 'a target' : count(target);
     return teamed ? `Reach ${reach} as a team` : `Reach ${reach}`;
   }
-  if (u === '') {
-    const which = draft.win === 'lowest' ? 'lowest' : 'highest';
-    return teamed ? `The team with the ${which} number wins` : `${capital(which)} number wins`;
-  }
+  if (draft.win === 'lowest') return teamed ? 'The fastest team wins' : 'Fastest time wins';
+  if (u === '') return teamed ? 'The team with the highest number wins' : 'Highest number wins';
   return winLine({ words: draftWords(draft), target, lowestWins: isOwn(draft) && draft.win === 'lowest', teamed });
 }
 

@@ -695,7 +695,8 @@ export const challengeSubjectsResponseSchema = z
         })
         .strict(),
     ),
-    exercises: z.array(z.object({ slug: z.string(), name: z.string(), appCounts: z.boolean() }).strict()),
+    /** `held`: done for a time (a plank, a pose), so the staff count it in seconds. */
+    exercises: z.array(z.object({ slug: z.string(), name: z.string(), held: z.boolean(), appCounts: z.boolean() }).strict()),
   })
   .strict();
 export type ChallengeSubjectsResponse = z.infer<typeof challengeSubjectsResponseSchema>;

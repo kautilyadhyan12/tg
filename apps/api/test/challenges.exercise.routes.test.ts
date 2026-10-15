@@ -176,18 +176,18 @@ d("a challenge about an exercise, and the list the form reads (real Postgres)", 
       }
       // An exercise the library does not offer: unknown, hidden, none, two; or an exercise
       // sent with something that is not about one.
-      const refusals: [string, Record<string, unknown>][] = [
-        ["an unknown exercise", { exercises: ["no_such_exercise"] }],
-        ["a hidden exercise", { exercises: [HIDDEN] }],
-        ["no exercise", { exercises: [] }],
-        ["two exercises", { exercises: ["squat", "push_up"] }],
-        ["the same exercise twice", { exercises: ["squat", "squat"] }],
-        ["gym visits with an exercise", { subject: "gym_visits", measure: "days", countedBy: "app", unit: "" }],
-        ["something else with an exercise", { subject: "own", unit: "push-ups" }],
+      const refusals: [string, Record<string, unknown>, string][] = [
+        ["an unknown exercise", { exercises: ["no_such_exercise"] }, "challenge_exercise_not_offered"],
+        ["a hidden exercise", { exercises: [HIDDEN] }, "challenge_exercise_not_offered"],
+        ["no exercise", { exercises: [] }, "validation_error"],
+        ["two exercises", { exercises: ["squat", "push_up"] }, "validation_error"],
+        ["the same exercise twice", { exercises: ["squat", "squat"] }, "validation_error"],
+        ["gym visits with an exercise", { subject: "gym_visits", measure: "days", countedBy: "app", unit: "" }, "validation_error"],
+        ["something else with an exercise", { subject: "own", unit: "push-ups" }, "validation_error"],
       ];
-      for (const [what, over] of refusals) {
+      for (const [what, over, code] of refusals) {
         const res = await post(gym, over);
-        expect(res.statusCode, what).toBe(400);
+        expect([res.statusCode, codeOf(res)], what).toEqual([400, code]);
       }
       expect(await challengeRows(gym)).toBe(0);
 
@@ -217,6 +217,16 @@ d("a challenge about an exercise, and the list the form reads (real Postgres)", 
       const renamed = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, fields({ name: "Squat October" }));
       expect(renamed.statusCode, renamed.body).toBe(200);
       expect(await keptExercises(c.id)).toEqual(["squat"]);
+
+      // Its exercise hidden from the library since: its name still changes, the exercise kept.
+      await sql`UPDATE exercises SET status = 'hidden' WHERE slug = 'squat'`;
+      try {
+        const later = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, fields({ name: "Squat Oct" }));
+        expect(later.statusCode, later.body).toBe(200);
+        expect(await keptExercises(c.id)).toEqual(["squat"]);
+      } finally {
+        await sql`UPDATE exercises SET status = 'live' WHERE slug = 'squat'`;
+      }
 
       // Not started: another exercise takes its place, and only it is kept.
       const coming = await added(gym, { startsOn: "2026-10-20", endsOn: "2026-10-31" });
@@ -260,7 +270,9 @@ d("a challenge about an exercise, and the list the form reads (real Postgres)", 
       const slugs = body.exercises.map((e) => e.slug);
       expect(slugs).toContain("squat");
       expect(slugs).not.toContain(HIDDEN);
-      expect(body.exercises.find((e) => e.slug === "squat")).toEqual({ slug: "squat", name: "Squats", appCounts: false });
+      expect(body.exercises.find((e) => e.slug === "squat")).toEqual({ slug: "squat", name: "Squats", held: false, appCounts: false });
+      // A hold and a pose are done for a time: counted in seconds.
+      expect(["plank", "warrior_i", "brisk_walking", "push_up"].map((slug) => body.exercises.find((e) => e.slug === slug)?.held)).toEqual([true, true, true, false]);
       // Nothing the app cannot count is offered as counted by it.
       expect(body.exercises.some((e) => e.appCounts)).toBe(false);
       // In name order, each once.

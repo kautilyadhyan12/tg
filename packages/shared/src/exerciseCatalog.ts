@@ -161,6 +161,16 @@ const NAME_BY_SLUG: ReadonlyMap<string, string> = new Map(
   CATALOG_58.map((e) => [e.slug, e.legacyName]),
 );
 
+const HELD: ReadonlySet<string> = new Set(
+  CATALOG_58.filter((e) => e.family === "F10" || e.family === "F12" || e.tracking === "timer").map((e) => e.slug),
+);
+
+/** An exercise done for a time, not counted in reps: a hold (F10), a pose or stretch (F12),
+ *  or one the camera only times (Part 2 §5). A challenge about one is counted in seconds. */
+export function exerciseIsHeld(slug: string): boolean {
+  return HELD.has(slug);
+}
+
 /** Catalog slug → the library's name for it ("squat" → "Squats"), or null for a slug
  *  the catalog does not have. */
 export function exerciseNameOf(slug: string): string | null {

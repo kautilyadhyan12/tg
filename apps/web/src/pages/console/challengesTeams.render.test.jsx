@@ -521,11 +521,11 @@ describe('round one', () => {
     expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
     pick('Individual or teams', 'Teams: your members pick their own');
     expect(joined()).toBe('Only people who joinYour members see it and join by picking a team.');
-    await screen.findByRole('radiogroup', { name: 'Who counts it' });
-    pick('Who counts it', 'Your staff');
+    await screen.findByRole('radiogroup', { name: 'What is the challenge about' });
+    pick('What is the challenge about', 'Something else');
     type('What your staff count', 'seconds');
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
-      "Fastest time winsFor a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.",
+      "Fastest time winsFor a time, such as a 500 m row. Your staff enter each member's time in seconds, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.",
     );
   });
 

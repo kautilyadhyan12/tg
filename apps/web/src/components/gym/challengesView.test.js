@@ -266,7 +266,7 @@ describe("the gym's own count, in the gym's own word", () => {
   it('says how it is won and what is counted', () => {
     expect(howToWin(own())).toBe('Most push-ups wins');
     expect(howToWin(own({ target: 50 }))).toBe('Reach 50 push-ups');
-    expect(howToWin(own({ unit: 'seconds', lowestWins: true }))).toBe('Lowest seconds wins');
+    expect(howToWin(own({ unit: 'seconds', lowestWins: true }))).toBe('Fastest time wins');
     expect(whatCounts(own(), 'Iron House')).toBe("The staff at Iron House count the push-ups and add each person's number. If yours is missing or wrong, ask at the front desk.");
   });
 

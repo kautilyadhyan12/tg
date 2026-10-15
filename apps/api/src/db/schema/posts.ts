@@ -370,12 +370,11 @@ export const gymChallengeExercises = pgTable(
   {
     gymId: uuid("gym_id").notNull(),
     challengeId: uuid("challenge_id").notNull(),
-    exerciseId: uuid("exercise_id")
-      .notNull()
-      .references(() => exercises.id),
+    exerciseId: uuid("exercise_id").notNull(),
   },
   (t) => [
     primaryKey({ name: "gym_challenge_exercises_pk", columns: [t.challengeId, t.exerciseId] }),
+    foreignKey({ name: "gym_challenge_exercises_exercise_fk", columns: [t.exerciseId], foreignColumns: [exercises.id] }),
     foreignKey({ name: "gym_challenge_exercises_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
   ],
 );
