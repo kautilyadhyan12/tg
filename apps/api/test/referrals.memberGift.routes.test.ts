@@ -451,6 +451,21 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     );
 
     it(
+      "a bill with something already paid on it is never lowered: the gift waits for the next one",
+      async () => {
+        const joe = await memberWithBill("joe", "Joe Park", false);
+        const m = (await memberships(gymA.org.id, joe.entryId, owner.cookies)).memberships[0];
+        if (m === undefined) throw new Error("no membership");
+        const part = await post(`${heldUrl(gymA.org.id, joe.entryId)}/${m.id}/payments`, { requestKey: nextForm(), periodIndex: 0, amountMinor: 4500, method: "cash" }, owner.cookies);
+        expect(part.statusCode, part.body).toBe(200);
+        await friendJoins(joe.code, "Kai West", "kai.west@example.com", true);
+        expect(await billsOfEntry(gymA.org.id, joe.entryId)).toMatchObject([{ period_index: 0, amount_minor: 5000, status: "open" }]);
+        expect((await memberships(gymA.org.id, joe.entryId, owner.cookies)).memberGift).toMatchObject({ words: "£10.00 off", friendName: "Kai West" });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
       "filled in at Add membership and at Sell, worked out again on the server; a voided sale makes it wait again",
       async () => {
         const max = await memberWithBill("max", "Max Brandt", true);

@@ -260,9 +260,11 @@ export async function friendPaymentGone(tx: TransactionSql, input: { gymId: stri
     return;
   }
   if (gift.used) return;
-  await tx`
+  const taken = await tx<{ id: string }[]>`
     UPDATE gym_referral_member_gifts SET taken_back_at = ${input.now}, taken_back_on = ${input.today}::date, taken_back_why = ${input.why}
-    WHERE gym_id = ${input.gymId} AND id = ${gift.id} AND used_at IS NULL AND taken_back_at IS NULL`;
+    WHERE gym_id = ${input.gymId} AND id = ${gift.id} AND used_at IS NULL AND taken_back_at IS NULL
+    RETURNING id`;
+  if (taken.length === 0) return;
   await insertAudit(tx, {
     actorUserId: null,
     gymId: input.gymId,
