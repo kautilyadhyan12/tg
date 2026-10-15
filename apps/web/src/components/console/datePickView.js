@@ -66,8 +66,11 @@ export function withYear(monthStart, year) {
   return isDay(monthStart) ? `${String(year).padStart(4, '0')}${monthStart.slice(4)}` : monthStart;
 }
 
-/** The month the calendar opens on: the picked date's, else the first date
- *  that can be picked, else `today`'s. */
-export function openingMonth(value, min, today) {
-  return monthOf([value, min, today].find(isDay) ?? '');
+/** The month the calendar opens on: the picked date's; else `today`'s where today
+ *  can be picked (a range reaching back, such as a challenge's first day, still opens
+ *  on today); else the first date that can be picked. */
+export function openingMonth(value, min, today, max = '') {
+  if (isDay(value)) return monthOf(value);
+  if (isDay(today) && (!isDay(min) || today >= min) && (!isDay(max) || today <= max)) return monthOf(today);
+  return monthOf([min, today].find(isDay) ?? '');
 }
