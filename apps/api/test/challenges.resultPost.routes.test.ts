@@ -181,7 +181,9 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
     name: "October Six",
     details: "",
     prize: "",
-    counts: "gym_days",
+    subject: "gym_visits",
+    measure: "days",
+    countedBy: "app",
     startsOn: "2026-10-01",
     endsOn: "2026-10-06",
     target: null,
@@ -654,7 +656,7 @@ d("a challenge's result posted to Updates (real Postgres)", () => {
       const vera = await member(gym, "Vera Viewer");
       const asha = await quiet(gym, "Asha Rao");
       const bilal = await quiet(gym, "Bilal Khan");
-      const challenge = await add(gym, { name: "Push-up Week", counts: "own", unit: "push-ups" });
+      const challenge = await add(gym, { name: "Push-up Week", subject: "own", measure: null, countedBy: "staff", unit: "push-ups" });
       clock = THURSDAY;
       expect(await run([gym])).toEqual({ posted: 1 });
       const before = resultOf(await feed(gym, vera), challenge.id);

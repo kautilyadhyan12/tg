@@ -32,10 +32,15 @@ describe('the month grid', () => {
     expect(monthTitle('2026-10-01')).toBe('October 2026');
   });
 
-  it('opens on the picked date, else the first allowed, else today', () => {
+  it('opens on the picked date, else today where today can be picked, else the first allowed', () => {
     expect(openingMonth('2026-11-12', '2026-09-23', '2026-09-23')).toBe('2026-11-01');
     expect(openingMonth('', '2026-12-22', '2026-09-23')).toBe('2026-12-01');
     expect(openingMonth('', '', '2026-09-23')).toBe('2026-09-01');
+    // A challenge's first day may be up to 31 days back: it opens on today, not on the
+    // month 31 days ago (Kd, 19d-iii-a-i's click-through: "always opens in september").
+    expect(openingMonth('', '2026-09-14', '2026-10-15', '2027-10-15')).toBe('2026-10-01');
+    // Today past the last day that can be picked: the first allowed, as before.
+    expect(openingMonth('', '2026-08-01', '2026-10-15', '2026-09-30')).toBe('2026-08-01');
   });
 
   it.each([
@@ -65,6 +70,13 @@ describe('the picker', () => {
     );
     return onChange;
   };
+
+  it('with nothing picked and days allowed before today, opens on today\'s month', () => {
+    draw({ value: '', min: '2026-09-14', max: '2027-10-15', today: '2026-10-15' });
+    fireEvent.click(screen.getByRole('button', { name: 'Update from' }));
+    expect(screen.getByText('October 2026')).toBeTruthy();
+    expect(screen.queryByText('September 2026')).toBeNull();
+  });
 
   it('shows the date as words, and a picked day closes the calendar and is sent', () => {
     const onChange = draw();

@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { resultOf, resultPost } from './challengesView';
+import { sentChallenge } from './__fixtures__/sentChallenge';
 
 const svc = { list: vi.fn(), react: vi.fn(), add: vi.fn(), removeOwn: vi.fn(), report: vi.fn(), block: vi.fn(), blocked: vi.fn(), unblock: vi.fn(), person: vi.fn() };
 vi.mock('../../api/postsApi', () => ({
@@ -20,7 +21,7 @@ const TODAY = '2026-10-08';
 const me = (over = {}) => ({ value: 0, place: null, hidden: null, toNextPlace: null, nextPlace: null, reached: false, days: [], ...over });
 const row = (name, place, value, over = {}) => ({ userId: `u-${name}`, name, initials: name.slice(0, 1), place, value, reached: false, isMe: false, ...over });
 const board = (over = {}) => ({ status: 'shown', ranked: 12, top: [], leaders: 1, reached: null, ...over });
-const ended = (over = {}) => ({
+const ended = (over = {}) => sentChallenge({
   id: 'c1',
   name: 'October Six',
   details: '',

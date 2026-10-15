@@ -21,7 +21,9 @@ import {
 const TODAY = "2026-10-07";
 
 const rules = (over: Partial<ChallengeRules> = {}): ChallengeRules => ({
-  counts: "gym_days",
+  subject: "gym_visits",
+  measure: "days",
+  countedBy: "app",
   startsOn: "2026-10-10",
   endsOn: "2026-10-31",
   target: null,
@@ -71,7 +73,8 @@ describe("what may be saved", () => {
   });
 
   const COMING: [string, Partial<ChallengeRules>, GymChallengeSaveProblem | null][] = [
-    ["counts something else", { counts: "workout_days" }, null],
+    ["is about something else", { subject: "workouts" }, null],
+    ["is counted by the staff", { subject: "own", measure: null, countedBy: "staff" }, null],
     ["starts on another day", { startsOn: "2026-10-12" }, null],
     ["is for the people who join", { who: "joined" }, null],
     ["has a target", { target: 12 }, null],
@@ -89,7 +92,8 @@ describe("what may be saved", () => {
     ["a later last day", { endsOn: "2026-11-15" }, null],
     ["today as its last day", { endsOn: TODAY }, null],
     ["yesterday as its last day", { endsOn: "2026-10-06" }, "ends_before_today"],
-    ["what it counts", { counts: "workout_days" }, "started_locked"],
+    ["what it is about", { subject: "workouts" }, "started_locked"],
+    ["who counts it", { measure: null, countedBy: "staff" }, "started_locked"],
     ["its first day", { startsOn: "2026-10-02" }, "started_locked"],
     ["who is in it", { who: "everyone" }, "started_locked"],
     ["its target", { target: 10 }, "started_locked"],
@@ -151,7 +155,9 @@ describe("the request", () => {
     name: "October Challenge",
     details: "",
     prize: "",
-    counts: "gym_days",
+    subject: "gym_visits",
+    measure: "days",
+    countedBy: "app",
     startsOn: "2026-10-01",
     endsOn: "2026-10-31",
     target: null,
@@ -175,7 +181,7 @@ describe("the request", () => {
     ["a name of 81", { name: "a".repeat(81) }, false],
     ["a prize of 121 characters", { prize: "p".repeat(121) }, false],
     ["details of 501 characters", { details: "d".repeat(501) }, false],
-    ["something else counted", { counts: "streak" }, false],
+    ["the old field for what it counts", { counts: "gym_days" }, false],
     ["a field of its own", { winner: "me" }, false],
   ])("%s", (_what, over, accepted) => {
     expect(ok(over)).toBe(accepted);
@@ -219,7 +225,9 @@ describe("teams in the request", () => {
     name: "October Challenge",
     details: "",
     prize: "",
-    counts: "gym_days",
+    subject: "gym_visits",
+    measure: "days",
+    countedBy: "app",
     startsOn: "2026-10-01",
     endsOn: "2026-10-31",
     target: null,

@@ -1,41 +1,55 @@
 // A GYM'S CHALLENGES FOR ITS MEMBER, IN WORDS (spec Part 3 §15.6; ROADMAP 19d-i). Pure, so
 // every sentence is tested without a browser. A challenge's days are the gym's own calendar
 // days ("2026-10-05") and are printed as they are.
+//
+// What a challenge is about is said in the words the server sent with it (`words`, spec
+// §15.10.1): nothing here looks its subject up, so a subject added after this screen was
+// built still reads right.
 import { challengeTakesNumbers } from '@app/shared';
 import { dayLabel, ordinal } from './leaderboardView';
 
-const UNIT = { gym_days: 'gym day', workout_days: 'workout day' };
-const plural = (n, unit) => `${n.toLocaleString('en')} ${unit}${n === 1 ? '' : 's'}`;
 const people = (n) => (n === 1 ? '1 person' : `${n.toLocaleString('en')} people`);
 
 const dayNumber = (day) => Date.parse(`${day}T00:00:00Z`) / 86_400_000;
 const dayAt = (number) => new Date(number * 86_400_000).toISOString().slice(0, 10);
 
-/** What one counted day is called: "gym day", "workout day". */
-export const unitOf = (counts) => UNIT[counts];
+/** The staff count it, and type each person's number. */
+const staffCount = (challenge) => challenge.countedBy === 'staff';
 
-/** The gym's own count (staff type the numbers) reads in the gym's own word, as typed. */
-const isOwn = (challenge) => challenge.counts === 'own';
-/** The gym's own word after the number 1: "push-ups" → "push-up", "boxes" → "box". Only a
- *  word whose ending is an English plural's is touched; anything else is printed as typed
- *  ("kg lifted", "5 km time", "abs"). */
-export function oneOf(unit) {
-  if (/(?:ch|sh|x|ss)es$/i.test(unit)) return unit.slice(0, -2);
-  // Left as typed: "press", "bonus", "tennis", "series", and a word as short as "abs".
-  if (/(?:ss|us|is|series|species)$/i.test(unit) || !/[a-z]s$/i.test(unit) || unit.length <= 3) return unit;
-  return unit.slice(0, -1);
+/** A challenge's number as it is printed (`words.print`, spec §15.10.2): a whole number;
+ *  a time kept in seconds ("45 s", "2 min 05 s", "1 h 02 min 05 s"); a distance kept in
+ *  metres, in km to a tenth ("12.4 km"). A distance done is cut down, never rounded up past
+ *  a target; a distance still `needed` is rounded up, so doing that much is enough. */
+export function printed(n, words, needed = false) {
+  if (words?.print === 'time') {
+    const h = Math.floor(n / 3600);
+    const min = Math.floor((n % 3600) / 60);
+    const s = String(n % 60).padStart(2, '0');
+    if (h > 0) return `${h.toLocaleString('en')} h ${String(min).padStart(2, '0')} min ${s} s`;
+    return min > 0 ? `${min} min ${s} s` : `${n % 60} s`;
+  }
+  if (words?.print === 'km') {
+    const tenths = needed ? Math.ceil(n / 100) : Math.floor(n / 100);
+    return `${(tenths / 10).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+  }
+  return n.toLocaleString('en');
 }
+/** A printed time or distance carries its own unit; a whole number is followed by its word. */
+const whole = (challenge) => (challenge.words?.print ?? 'whole') === 'whole';
 
-/** The word after a number: "gym days", "gym day", or the gym's own word. */
-const wordFor = (challenge, n) => (isOwn(challenge) ? (n === 1 ? oneOf(challenge.unit) : challenge.unit) : `${UNIT[challenge.counts]}${n === 1 ? '' : 's'}`);
-const amount = (challenge, n) => `${n.toLocaleString('en')} ${wordFor(challenge, n)}`;
+/** The word after a number, as the server sent it: "gym days", "gym day", "push-ups". */
+const wordFor = (challenge, n) => (n === 1 ? challenge.words.one : challenge.words.many);
+const amount = (challenge, n) => (whole(challenge) ? `${printed(n, challenge.words)} ${wordFor(challenge, n)}` : printed(n, challenge.words));
 
 /** People are in it in teams (19d-ii-a): a team's number is its people's added together. */
 export const inTeams = (challenge) => (challenge.teams ?? 'none') !== 'none' && (challenge.teamBoard ?? null) !== null;
 const teamCount = (n) => (n === 1 ? '1 team' : `${n.toLocaleString('en')} teams`);
 
-/** "3 gym days", "1 workout day", "40 push-ups" (the gym's own word, as it typed it). */
-export const countText = (value, counts, unit = '') => amount({ counts, unit }, value);
+/** "3 gym days", "1 workout day", "40 push-ups": a number in a challenge's own words. */
+export const countText = (value, words) => amount({ words }, value);
+
+/** What it is about and how it is counted, in one line: "Gym visits · Checked in at the front desk". */
+export const aboutLine = (challenge) => `${challenge.words.about} · ${challenge.words.howLine}`;
 
 /** The mark beside a challenge's name: where it is on the gym's calendar. `tone` picks its
  *  colour and always comes with the words. */
@@ -59,9 +73,9 @@ export function challengeDates(challenge, today) {
 }
 
 /** How a challenge is won, in the one line a member and the gym's staff both read.
- *  `teamed`: people are in it in teams. */
-export function winLine({ counts, unit = '', target, lowestWins = false, teamed }) {
-  const c = { counts, unit };
+ *  `words`: the challenge's own (`one` and `many`). `teamed`: people are in it in teams. */
+export function winLine({ words, target, lowestWins = false, teamed }) {
+  const c = { words };
   if (teamed) {
     if (target !== null) return `Reach ${amount(c, target)} as a team`;
     return `The team with the ${lowestWins ? 'lowest' : 'most'} ${wordFor(c, 2)} wins`;
@@ -72,20 +86,11 @@ export function winLine({ counts, unit = '', target, lowestWins = false, teamed 
 
 /** How it is won, in one line. */
 export function howToWin(challenge) {
-  return winLine({ counts: challenge.counts, unit: challenge.unit, target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: inTeams(challenge) });
+  return winLine({ words: challenge.words, target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: inTeams(challenge) });
 }
 
 /** What is counted, for somebody who has never seen the app. */
-export function whatCounts(challenge, gymName) {
-  const same = 'It is the same count as the Leaderboard.';
-  if (isOwn(challenge)) {
-    return `The staff at ${gymName} count the ${challenge.unit} and add each person's number. If yours is missing or wrong, ask at the front desk.`;
-  }
-  if (challenge.counts === 'workout_days') {
-    return `A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. ${same}`;
-  }
-  return `A gym day is a day you're checked in at ${gymName}: a scan at the front desk, or a check-in by staff. Two visits on one day are one. ${same}`;
-}
+export const whatCounts = (challenge) => challenge.words.explain;
 
 /** Who is in it. */
 export function whoLine(challenge, gymName) {
@@ -99,14 +104,14 @@ export function progress(challenge) {
   const me = challenge.me;
   if (me === null) return null;
   // The gym's own count: nothing is theirs until staff have added it.
-  const waiting = isOwn(challenge) && me.value === 0 && challenge.state === 'running' ? "The staff haven't added your number yet." : null;
+  const waiting = staffCount(challenge) && me.value === 0 && challenge.state === 'running' ? "The staff haven't added your number yet." : null;
   // In teams the number to reach is the team's: a person's own number has no bar.
-  if (challenge.target === null || inTeams(challenge)) return { big: me.value, of: null, unit: wordFor(challenge, me.value), percent: null, note: waiting, done: false };
-  const unit = wordFor(challenge, 2);
+  if (challenge.target === null || inTeams(challenge)) return { big: me.value, of: null, unit: whole(challenge) ? wordFor(challenge, me.value) : '', percent: null, note: waiting, done: false };
+  const unit = whole(challenge) ? wordFor(challenge, 2) : '';
   const percent = Math.min(100, Math.round((me.value / challenge.target) * 100));
   if (me.reached) return { big: me.value, of: challenge.target, unit, percent: 100, note: `Done. You reached ${amount(challenge, challenge.target)}.`, done: true };
   const toGo = challenge.target - me.value;
-  const note = waiting ?? (challenge.state === 'ended' ? null : `${toGo.toLocaleString('en')} to go`);
+  const note = waiting ?? (challenge.state === 'ended' ? null : `${printed(toGo, challenge.words, true)} to go`);
   return { big: me.value, of: challenge.target, unit, percent, note, done: false };
 }
 
@@ -118,27 +123,36 @@ export function placeLine(challenge) {
   const where = `${ordinal(me.place)} of ${challenge.board.ranked.toLocaleString('en')}`;
   if (challenge.state === 'ended' || me.toNextPlace === null || me.nextPlace === null) return where;
   const less = challenge.lowestWins ? 'fewer' : 'more';
-  const gap = isOwn(challenge) ? `${me.toNextPlace.toLocaleString('en')} ${less} ${challenge.unit}` : plural(me.toNextPlace, `more ${UNIT[challenge.counts]}`);
+  // A time where the lowest wins is a gap of seconds faster.
+  const gap = !whole(challenge)
+    ? `${printed(me.toNextPlace, challenge.words, true)} ${challenge.lowestWins ? (challenge.words.print === 'time' ? 'faster' : 'less') : 'more'}`
+    : staffCount(challenge)
+      ? `${me.toNextPlace.toLocaleString('en')} ${less} ${challenge.words.many}`
+      : `${me.toNextPlace.toLocaleString('en')} more ${wordFor(challenge, me.toNextPlace)}`;
   return `${where} · ${gap} to reach ${ordinal(me.nextPlace)}`;
 }
+
+/** What one counted thing is called where somebody "has a …": "number" where the staff count. */
+const aNumber = (challenge) => (staffCount(challenge) ? 'number' : challenge.words.one);
 
 /** Why there are no places to show yet, or null when there are. */
 export function boardNote(challenge) {
   if (challenge.cancelled || challenge.board.status !== 'too_few') return null;
-  if (inTeams(challenge)) return `The teams' numbers show once 3 people have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]} in this challenge.`;
-  return `The places show once 3 people have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]} in this challenge.`;
+  if (inTeams(challenge)) return `The teams' numbers show once 3 people have a ${aNumber(challenge)} in this challenge.`;
+  return `The places show once 3 people have a ${aNumber(challenge)} in this challenge.`;
 }
 
-/** A gym-days challenge at a gym that checks nobody in counts nothing: say so, never a bare 0. */
+/** A challenge counted at the front desk, at a gym that checks nobody in, counts nothing:
+ *  say so, never a bare 0. */
 export function notCountingNote(challenge, list) {
-  if (challenge.counts !== 'gym_days' || challenge.state !== 'running' || challenge.cancelled || list.checkingIn) return null;
-  return `${list.gymName} hasn't checked anyone in at the front desk in the last 30 days, so no gym days are being counted.`;
+  if (challenge.words.how !== 'desk' || challenge.state !== 'running' || challenge.cancelled || list.checkingIn) return null;
+  return `${list.gymName} hasn't checked anyone in at the front desk in the last 30 days, so no ${challenge.words.many} are being counted.`;
 }
 
 /** The gym's own count, ended, with fewer than three numbers in while staff may still type
  *  them: the result is not in yet, which is not "nobody was in it". Null otherwise. */
 function numbersComing(challenge, at) {
-  if (at === null || !isOwn(challenge) || !challengeTakesNumbers(challenge, at.today)) return null;
+  if (at === null || !staffCount(challenge) || !challengeTakesNumbers(challenge, at.today)) return null;
   return `The staff at ${at.gymName} are still adding people's numbers. The result shows here once 3 people have one.`;
 }
 
@@ -167,8 +181,8 @@ export function resultOf(challenge, at = null) {
   }
   let mine = null;
   if (me !== null) {
-    if (target !== null) mine = me.reached ? `You reached it: ${said(me.value)}.` : `You got to ${me.value.toLocaleString('en')} of ${target.toLocaleString('en')}.`;
-    else if (me.value === 0) mine = isOwn(challenge) ? 'No number was added for you.' : `You had no ${UNIT[challenge.counts]}s in it.`;
+    if (target !== null) mine = me.reached ? `You reached it: ${said(me.value)}.` : `You got to ${printed(me.value, challenge.words)} of ${printed(target, challenge.words)}.`;
+    else if (me.value === 0) mine = staffCount(challenge) ? 'No number was added for you.' : `You had no ${challenge.words.many} in it.`;
     else if (me.place !== null && me.hidden === null && me.place > 1) mine = `You finished ${ordinal(me.place)}, with ${said(me.value)}.`;
     else if (me.place === null || me.hidden !== null) mine = `You had ${said(me.value)}.`;
   }
@@ -180,8 +194,8 @@ export function resultOf(challenge, at = null) {
  *  cell: counted, missed, today still open, or still ahead. */
 export function dayMarks(challenge, today) {
   const me = challenge.me;
-  // The gym's own count has no days: staff type one number.
-  if (me === null || challenge.state === 'coming' || challenge.cancelled || isOwn(challenge)) return null;
+  // Only a count of one a day has days to draw: staff type one number.
+  if (me === null || challenge.state === 'coming' || challenge.cancelled || !challenge.words.perDay) return null;
   const counted = new Set(me.days);
   const first = dayNumber(challenge.startsOn);
   const last = dayNumber(challenge.endsOn);
@@ -206,9 +220,9 @@ export function dayMarks(challenge, today) {
   return { weeks, whole };
 }
 
-/** What a flame means, for a screen reader and a hover. */
-export function markLabel(cell, counts) {
-  const what = { yes: UNIT[counts], no: `no ${UNIT[counts]}`, open: 'today, not counted yet', ahead: 'still to come' }[cell.state];
+/** What a flame means, for a screen reader and a hover. `words`: the challenge's own. */
+export function markLabel(cell, words) {
+  const what = { yes: words.one, no: `no ${words.one}`, open: 'today, not counted yet', ahead: 'still to come' }[cell.state];
   return `${dayLabel(cell.day)}: ${what}`;
 }
 
@@ -216,9 +230,9 @@ export function markLabel(cell, counts) {
 export function leaveBox(challenge) {
   return {
     title: `Leave ${challenge.name}?`,
-    line: isOwn(challenge)
+    line: staffCount(challenge)
       ? 'You come off its board. You can join again until it ends.'
-      : `You come off its board. Your ${UNIT[challenge.counts]}s stay yours, and you can join again until it ends.`,
+      : `You come off its board. Your ${challenge.words.many} stay yours, and you can join again until it ends.`,
     yes: 'Leave',
     no: 'Stay in',
   };
@@ -228,8 +242,8 @@ export function leaveBox(challenge) {
 export function joinNote(challenge) {
   if (!challenge.can.join) return null;
   if (challenge.state === 'coming') return `Join now and you're in from ${dayLabel(challenge.startsOn)}.`;
-  if (isOwn(challenge)) return 'Join, and the staff can add your number.';
-  return `Your ${UNIT[challenge.counts]}s since ${dayLabel(challenge.startsOn)} count as soon as you join.`;
+  if (staffCount(challenge)) return 'Join, and the staff can add your number.';
+  return `Your ${challenge.words.many} since ${dayLabel(challenge.startsOn)} count as soon as you join.`;
 }
 
 export const noChallenges = (gymName) => `${gymName} has no challenges on right now.`;
@@ -259,7 +273,7 @@ function teamResult(challenge, at = null) {
   const my = rows.find((row) => row.isMine);
   if (my !== undefined && teamBoard.status === 'shown') {
     const own = me !== null && me.value > 0 ? ` You had ${said(me.value)}.` : '';
-    if (target !== null) mine = my.reached ? `Your team, ${my.name}, reached it: ${said(my.value)}.${own}` : `Your team, ${my.name}, got to ${my.value.toLocaleString('en')} of ${target.toLocaleString('en')}.${own}`;
+    if (target !== null) mine = my.reached ? `Your team, ${my.name}, reached it: ${said(my.value)}.${own}` : `Your team, ${my.name}, got to ${printed(my.value, challenge.words)} of ${printed(target, challenge.words)}.${own}`;
     else if (my.place === null && (my.waiting ?? 0) > 0) mine = `Your team, ${my.name}, had no place: ${my.waiting === 1 ? '1 of its people' : `${my.waiting.toLocaleString('en')} of its people`} had no number.${own}`;
     else if (my.place === null) mine = `Your team, ${my.name}, had no number.`;
     else if (my.place === 1) mine = `Your team, ${my.name}, ${rows.filter((row) => row.place === 1).length > 1 ? 'was joint first' : 'won'}.${own}`;
@@ -329,11 +343,11 @@ export function myTeam(challenge) {
     name: team.name,
     people: mine.people.map((p) => ({ userId: p.userId, name: p.isMe ? 'You' : p.name, initials: p.isMe ? 'You' : p.initials, isMe: p.isMe, number: shown || p.isMe ? amount(challenge, p.value) : null })),
     // The leading teammates are named; the rest with a number are counted.
-    more: (mine.more ?? 0) > 0 ? `and ${(mine.more).toLocaleString('en')} more with a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]}` : null,
+    more: (mine.more ?? 0) > 0 ? `and ${(mine.more).toLocaleString('en')} more with a ${aNumber(challenge)}` : null,
     // Teammates are listed once they have a number of their own.
     // Only while numbers are shown: until three people have one nobody is listed, with or
     // without a number, and the card says why (`boardNote`).
-    note: shown && mine.people.length + (mine.more ?? 0) < team.people ? `Teammates show here once they have a ${isOwn(challenge) ? 'number' : UNIT[challenge.counts]}.` : null,
+    note: shown && mine.people.length + (mine.more ?? 0) < team.people ? `Teammates show here once they have a ${aNumber(challenge)}.` : null,
   };
 }
 

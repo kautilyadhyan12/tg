@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarDays, Check, Flag, Flame, Gift, Info, Loader2, Medal, Target, Trophy, Users } from 'lucide-react';
+import { Activity, CalendarDays, Check, Flag, Flame, Gift, Info, Loader2, Medal, Target, Trophy, Users } from 'lucide-react';
 import { challengesService } from '../../api/challengesApi';
 import { errorStatus, errorText } from '../../api/orgsApi';
 import PersonProfile from './PersonProfile';
 import Sheet, { Initials } from './Sheet';
 import {
+  aboutLine,
   boardNote,
   challengeChip,
   challengeDates,
@@ -21,12 +22,12 @@ import {
   notCountingNote,
   pickBox,
   placeLine,
+  printed,
   progress,
   resultOf,
   teamRows,
   teamRuleNote,
   teamsLine,
-  unitOf,
   whatCounts,
   whoLine,
 } from './challengesView';
@@ -80,7 +81,7 @@ function Flames({ challenge, today }) {
                 : cell.state === 'ahead'
                   ? { color: 'rgba(255,255,255,0.12)' }
                   : { color: 'rgba(255,255,255,0.28)' };
-          const label = markLabel(cell, challenge.counts);
+          const label = markLabel(cell, challenge.words);
           return (
             <span key={cell.day} role="img" aria-label={label} title={label} className="flex justify-center">
               <Flame aria-hidden="true" className="w-4 h-4" style={style} />
@@ -89,7 +90,7 @@ function Flames({ challenge, today }) {
         })}
       </div>
       <p aria-hidden="true" className="flex items-center gap-1 text-[10px] mt-1.5" style={{ color: MUTED }}>
-        <Flame className="w-3 h-3" style={{ color: ORANGE, fill: ORANGE }} /> {`a ${unitOf(challenge.counts)}`}
+        <Flame className="w-3 h-3" style={{ color: ORANGE, fill: ORANGE }} /> {`a ${challenge.words.one}`}
       </p>
       {!marks.whole && <p className="text-xs mt-1" style={{ color: MUTED, maxWidth: 170 }}>This week. Your number counts every day of the challenge.</p>}
     </div>
@@ -112,9 +113,9 @@ function Mine({ challenge, today, gymName }) {
       <div className="flex-1" style={{ minWidth: 200 }}>
       <div className="flex items-end justify-between gap-3">
         <p className="text-white leading-none">
-          <span className="text-4xl font-bold tabular-nums">{mine.big.toLocaleString('en')}</span>
+          <span className="text-4xl font-bold tabular-nums">{printed(mine.big, challenge.words)}</span>
           <span className="text-sm ml-1.5" style={{ color: SOFT }}>
-            {mine.of === null ? mine.unit : `of ${mine.of.toLocaleString('en')} ${mine.unit}`}
+            {mine.of === null ? mine.unit : `of ${printed(mine.of, challenge.words)}${mine.unit === '' ? '' : ` ${mine.unit}`}`}
           </span>
         </p>
         {mine.done && (
@@ -169,7 +170,7 @@ function Podium({ challenge }) {
               <Initials text={row.initials} />
             </span>
             <span className="text-sm text-white font-semibold mt-1.5 max-w-full truncate">{row.isMe ? 'You' : row.name}</span>
-            <span className="text-xl font-bold text-white tabular-nums mt-0.5">{row.value.toLocaleString('en')}</span>
+            <span className="text-xl font-bold text-white tabular-nums mt-0.5">{printed(row.value, challenge.words)}</span>
             {row.reached && (
               <span className="flex items-center gap-0.5 text-[11px] font-semibold mt-0.5" style={{ color: ORANGE }}>
                 <Check aria-hidden="true" className="w-3 h-3" strokeWidth={3} /> Reached
@@ -298,13 +299,13 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                     disabled={row.isMe}
                     className="w-full flex items-center gap-3 rounded-xl px-2 py-1.5 text-left min-h-11"
                     style={{ background: row.isMe ? 'rgba(255,138,31,0.08)' : 'transparent' }}
-                    aria-label={`${ordinal(row.place)}: ${row.isMe ? 'You' : row.name}, ${countText(row.value, challenge.counts, challenge.unit)}${row.reached ? ', reached the target' : ''}`}
+                    aria-label={`${ordinal(row.place)}: ${row.isMe ? 'You' : row.name}, ${countText(row.value, challenge.words)}${row.reached ? ', reached the target' : ''}`}
                   >
                     <span className="w-9 text-sm font-bold text-right" style={{ color: MEDAL[row.place] ?? MUTED }}>{ordinal(row.place)}</span>
                     <Initials text={row.initials} />
                     <span className="flex-1 min-w-0 text-sm text-white truncate">{row.isMe ? 'You' : row.name}</span>
                     {row.reached && <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={3} style={{ color: ORANGE }} />}
-                    <span className="w-10 text-right text-sm font-semibold text-white tabular-nums">{row.value}</span>
+                    <span className={`${challenge.words.print === 'whole' ? 'w-10' : 'min-w-10'} text-right text-sm font-semibold text-white tabular-nums whitespace-nowrap`}>{printed(row.value, challenge.words)}</span>
                   </button>
                 </li>
               ))}
@@ -316,7 +317,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                 <span className="w-9 text-right font-bold" style={{ color: MUTED }}>{me.place === null ? '—' : ordinal(me.place)}</span>
                 <Initials text="You" greyed={me.hidden !== null} />
                 <span className="flex-1">You</span>
-                <span className="w-10 text-right font-semibold tabular-nums">{me.value}</span>
+                <span className={`${challenge.words.print === 'whole' ? 'w-10' : 'min-w-10'} text-right font-semibold tabular-nums whitespace-nowrap`}>{printed(me.value, challenge.words)}</span>
               </p>
               {me.hidden !== null && <p className="text-xs mt-1 pl-12" style={{ color: MUTED }}>{hiddenText(me.hidden, gym.name)}</p>}
               {me.hidden === null && me.place !== null && <p className="text-xs mt-1 pl-12" style={{ color: MUTED }}>The board shows the first 100; your place is shown here.</p>}
@@ -370,6 +371,10 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
         <CalendarDays aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} />
         {challengeDates(challenge, list.today)}
       </p>
+      <p className="text-sm flex items-center gap-1.5" style={{ color: SOFT }}>
+        <Activity aria-hidden="true" className="w-4 h-4 flex-shrink-0" style={{ color: ORANGE }} />
+        <span className="break-words min-w-0">{aboutLine(challenge)}</span>
+      </p>
       {challenge.prize !== '' && (
         <p className="text-sm flex items-start gap-1.5" style={{ color: SOFT }}>
           <Gift aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: ORANGE }} />
@@ -391,7 +396,7 @@ function ChallengeCard({ gym, challenge, list, busy, said, asking, onJoin, onLea
           {teamsSaid}
         </p>
       )}
-      {info && <p className="text-xs rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.65)' }}>{whatCounts(challenge, gym.name)}</p>}
+      {info && <p className="text-xs rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.65)' }}>{whatCounts(challenge)}</p>}
       {challenge.details !== '' && <p className="text-sm whitespace-pre-wrap break-words" style={{ color: 'rgba(255,255,255,0.65)' }}>{challenge.details}</p>}
 
       {challenge.cancelled ? (
