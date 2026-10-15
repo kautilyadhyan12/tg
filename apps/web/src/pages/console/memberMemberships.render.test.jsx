@@ -745,7 +745,7 @@ describe('changing a membership', () => {
     // The payment voided is named: its amount and its day; why is picked.
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Void payment' }));
     const ask = within(screen.getByTestId('held-void-payment'));
-    expect(ask.getByText("Void the £49.99 recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
+    expect(ask.getByText("Void the £49.99 payment recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
     fireEvent.change(ask.getByLabelText('Why are you voiding it?'), { target: { value: 'mistake' } });
     fireEvent.click(ask.getByRole('button', { name: 'Void payment' }));
     const paymentId = gold.billing.bills[0].payments[0].id;

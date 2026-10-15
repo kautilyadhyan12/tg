@@ -242,7 +242,7 @@ describe('a membership that is over', () => {
     expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Record payment', 'Void payment']);
     fireEvent.click(within(row).getByRole('button', { name: 'Void payment' }));
     const voidBox = within(screen.getByTestId('held-void-payment'));
-    expect(voidBox.getByText("Void the £5.00 recorded on 19 October 2026 for Ada Lovelace's One week?")).toBeTruthy();
+    expect(voidBox.getByText("Void the £5.00 payment recorded on 19 October 2026 for Ada Lovelace's One week?")).toBeTruthy();
     // Nothing is sent until a reason is picked.
     fireEvent.click(voidBox.getByRole('button', { name: 'Void payment' }));
     expect(voidBox.getByRole('alert').textContent).toBe('Pick why you are voiding it.');

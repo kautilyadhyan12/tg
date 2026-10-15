@@ -318,7 +318,7 @@ export function undoWords(m, name) {
     };
   }
   const payment = m.billing.bills.flatMap((b) => b.payments).find((p) => p.id === undo.paymentId) ?? null;
-  const what = payment === null ? 'the last payment' : `the ${formatMinor(payment.amountMinor, m.currency)} recorded on ${dayWords(payment.paidOn)}`;
+  const what = payment === null ? 'the last payment' : `the ${formatMinor(payment.amountMinor, m.currency)} payment recorded on ${dayWords(payment.paidOn)}`;
   return {
     link: 'Void payment',
     question: `Void ${what} for ${name}'s ${m.typeName}?`,

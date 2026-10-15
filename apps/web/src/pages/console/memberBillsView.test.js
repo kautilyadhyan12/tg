@@ -148,7 +148,7 @@ describe('taking a payment back', () => {
     const m = membership({}, { bills: [bill({ state: 'paid', paidMinor: 4999, payments: [payment()] })], pay: null, undo: { kind: 'payment', paymentId: payment().id } });
     expect(undoWords(m, 'Ada Lovelace')).toMatchObject({
       link: 'Void payment',
-      question: "Void the £49.99 recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?",
+      question: "Void the £49.99 payment recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?",
       button: 'Void payment',
     });
     expect(undoWords(m, 'Ada Lovelace').detail).toContain('No money moves: to give money back, use Note a refund instead.');
