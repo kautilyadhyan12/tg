@@ -1,7 +1,7 @@
 // SETTINGS → REFER A FRIEND, drawn (ROADMAP 20e-ii-a). Only the network is mocked; every
-// sentence about a gift comes from the server's own words for it.
+// sentence about a gift is made by the server's own functions.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { REFERRAL_WORDS } from '@app/shared';
 
@@ -15,11 +15,8 @@ vi.mock('../../api/orgsApi', () => ({
 const ReferralPanel = (await import('../../components/console/ReferralPanel')).default;
 
 const ORG = { id: 'g1', slug: 'iron-house', name: 'Iron House', orgType: 'gym', staffRole: 'owner', privileges: ['org.manage', 'memberships.manage'] };
-const THANKS = { id: '11111111-1111-4111-8111-111111111111', name: 'Thank you', code: 'THANKS10', words: '10% off a membership', status: 'active', problem: null };
-const WELCOME = { id: '22222222-2222-4222-8222-222222222222', name: 'Welcome', code: 'WELCOME20', words: '20% off the first payment of a membership', status: 'active', problem: null };
-const ENDED = { id: '33333333-3333-4333-8333-333333333333', name: 'Summer', code: 'SUMMER', words: '5% off products, until 31 August 2026', status: 'expired', problem: 'It ended on 31 August 2026.' };
-const LATER = { id: '44444444-4444-4444-8444-444444444444', name: 'New year', code: 'NEWYEAR', words: '15% off a membership', status: 'scheduled', problem: 'It starts on 1 January 2027.' };
-const OFF = { on: false, memberDiscountId: null, friendDiscountId: null, discounts: [THANKS, WELCOME, ENDED, LATER], memberLines: [] };
+const OFF = { on: false, member: null, friend: null, currency: 'INR', memberLines: [] };
+const SAVED_GIFT = (code, percentBp, on, words) => ({ kind: 'percent', percentBp, amountMinor: null, currency: null, on, code, words, problem: null, archived: false });
 
 const draw = (org = ORG) =>
   render(
@@ -28,7 +25,15 @@ const draw = (org = ORG) =>
     </MemoryRouter>,
   );
 const save = () => screen.getByRole('button', { name: 'Save changes' });
-const pick = (label, id) => fireEvent.change(screen.getByLabelText(label), { target: { value: id } });
+const box = (title) => within(screen.getByRole('group', { name: title }));
+const MEMBER = 'Gift for the member who invites';
+const FRIEND = 'Gift for the friend';
+const choose = (title, what, value, on) => {
+  fireEvent.change(box(title).getByLabelText(`${title}: what they get`), { target: { value: what } });
+  if (what === 'none') return;
+  fireEvent.change(box(title).getByLabelText(`${title}: ${what === 'percent' ? 'percentage' : 'amount'}`), { target: { value } });
+  fireEvent.change(box(title).getByLabelText(`${title}: off`), { target: { value: on } });
+};
 
 beforeEach(() => {
   getReferralSettings.mockReset();
@@ -37,62 +42,90 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Refer a friend', () => {
-  it('turned on with both gifts, the member and the friend read exactly what the codes give, and the business is named as who set it', async () => {
+  it('both gifts are set in the box itself: the member and the friend read exactly what they give, and who set the offer', async () => {
     getReferralSettings.mockResolvedValue({ data: { settings: OFF } });
     draw();
-    await screen.findByLabelText('Gift for the member who invites');
+    await screen.findByRole('group', { name: MEMBER });
+    // Nothing to set up on another page first.
+    expect(screen.queryByText(/promo codes yet/)).toBeNull();
     fireEvent.click(screen.getByLabelText('Turn on Refer a friend'));
-    // On with no gift: Save waits, and says why.
     expect(screen.getByText(REFERRAL_WORDS.no_gift)).toBeTruthy();
     expect(save().disabled).toBe(true);
-    pick('Gift for the member who invites', THANKS.id);
-    pick('Gift for the friend', WELCOME.id);
-    expect(screen.getByText("When a friend you invite joins Iron House and makes their first payment, you get 10% off a membership. We'll send your code to your inbox.")).toBeTruthy();
-    expect(screen.getByText('Your friend gets 20% off the first payment of a membership when they join.')).toBeTruthy();
-    expect(screen.getByText('Your welcome offer: 20% off the first payment of a membership. Use code WELCOME20 when you join.')).toBeTruthy();
-    expect(screen.getAllByText('This offer is set by Iron House and may change.')).toHaveLength(2);
-    // The member's own code is in no preview: it is sent to them once it is earned.
-    expect(screen.queryByText(/THANKS10 when|code THANKS10/)).toBeNull();
 
-    saveReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, on: true, memberDiscountId: THANKS.id, friendDiscountId: WELCOME.id } } });
+    choose(MEMBER, 'percent', '10', 'every');
+    choose(FRIEND, 'amount', '500', 'first');
+    expect(screen.getByText("When a friend you invite joins Iron House and makes their first payment, you get 10% off every payment of a membership. We'll send your code to your inbox.")).toBeTruthy();
+    expect(screen.getByText('Your friend gets ₹500.00 off the first payment of a membership when they join.')).toBeTruthy();
+    // The friend's code is made on Save: the preview says so, and invents none.
+    expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Use code [its code, made when you save] when you join.')).toBeTruthy();
+    expect(screen.getAllByText('This offer is set by Iron House and may change.')).toHaveLength(2);
+
+    saveReferralSettings.mockResolvedValue({
+      data: {
+        settings: {
+          ...OFF,
+          on: true,
+          member: SAVED_GIFT('THANKS10', 1000, 'every', '10% off every payment of a membership'),
+          friend: { kind: 'amount', percentBp: null, amountMinor: 50000, currency: 'INR', on: 'first', code: 'WELCOME500', words: '₹500.00 off the first payment of a membership', problem: null, archived: false },
+        },
+      },
+    });
     fireEvent.click(save());
     await screen.findByText('Saved. Refer a friend is on.');
-    expect(saveReferralSettings).toHaveBeenCalledWith('g1', { on: true, memberDiscountId: THANKS.id, friendDiscountId: WELCOME.id });
+    expect(saveReferralSettings).toHaveBeenCalledWith('g1', {
+      on: true,
+      member: { kind: 'percent', percentBp: 1000, amountMinor: null, on: 'every' },
+      friend: { kind: 'amount', percentBp: null, amountMinor: 50000, on: 'first' },
+    });
+    // Saved, each gift says its code, the friend's preview shows the real one, and each has a button to Discounts.
+    expect(box(MEMBER).getByText('Its promo code: THANKS10.')).toBeTruthy();
+    expect(box(FRIEND).getByText('Its promo code: WELCOME500.')).toBeTruthy();
+    expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Use code WELCOME500 when you join.')).toBeTruthy();
+    expect(box(MEMBER).getByRole('link', { name: 'See it in Discounts' }).getAttribute('href')).toBe('/console/iron-house/memberships#discounts');
   });
 
-  it('an ended code cannot be saved and promises nothing; one starting later can, and says nobody is promised it yet', async () => {
+  it('what is typed that is not a gift waits, says why, and promises nothing', async () => {
     getReferralSettings.mockResolvedValue({ data: { settings: OFF } });
     draw();
-    await screen.findByLabelText('Gift for the member who invites');
+    await screen.findByRole('group', { name: MEMBER });
     fireEvent.click(screen.getByLabelText('Turn on Refer a friend'));
-    pick('Gift for the member who invites', ENDED.id);
-    expect(screen.getByText('Summer: It ended on 31 August 2026. Pick another.')).toBeTruthy();
-    expect(screen.getByText('It ended on 31 August 2026. Nobody is promised it.')).toBeTruthy();
+    choose(MEMBER, 'percent', '100', 'first');
+    expect(box(MEMBER).getByText('Type a percentage above 0 and under 100, like 10.')).toBeTruthy();
     expect(save().disabled).toBe(true);
-    expect(screen.queryByText(/you get 5% off/)).toBeNull();
-
-    pick('Gift for the member who invites', LATER.id);
-    expect(screen.getByText('It starts on 1 January 2027. Until then, nobody is promised it.')).toBeTruthy();
-    expect(screen.queryByText(/you get 15% off/)).toBeNull();
+    expect(screen.queryByText(/you get 100%/)).toBeNull();
+    choose(MEMBER, 'percent', '12.5', 'products');
+    expect(screen.getByText(/you get 12\.5% off products\./)).toBeTruthy();
     expect(save().disabled).toBe(false);
   });
 
-  it('a business with no promo code yet is sent to the Discounts box that makes one', async () => {
-    getReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, discounts: [] } } });
+  it('a business with no country can give a percentage, and is sent to set its country for an amount', async () => {
+    getReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, currency: null } } });
     draw();
-    await screen.findByText(/You have no promo codes yet\./);
-    expect(screen.getByRole('link', { name: 'Open Memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#discounts');
+    await screen.findByRole('group', { name: MEMBER });
+    choose(MEMBER, 'amount', '500', 'first');
+    expect(box(MEMBER).getByText(REFERRAL_WORDS.no_currency)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Set your country' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
+    expect(save().disabled).toBe(true);
+  });
+
+  it('a gift whose code was archived in Discounts says nobody is promised it, and that saving makes a new one', async () => {
+    getReferralSettings.mockResolvedValue({
+      data: { settings: { ...OFF, on: true, friend: { ...SAVED_GIFT('WELCOME20', 2000, 'first', '20% off the first payment of a membership'), problem: 'It was archived.', archived: true } } },
+    });
+    draw();
+    await screen.findByRole('group', { name: FRIEND });
+    expect(box(FRIEND).getByText('It was archived. Nobody is promised this gift. Save to make a new code.')).toBeTruthy();
   });
 
   it('a refusal from the server is said, and nothing is shown as saved', async () => {
     getReferralSettings.mockResolvedValue({ data: { settings: OFF } });
-    saveReferralSettings.mockRejectedValue({ response: { data: { message: REFERRAL_WORDS.not_live } } });
+    saveReferralSettings.mockRejectedValue({ response: { data: { message: REFERRAL_WORDS.too_many } } });
     draw();
-    await screen.findByLabelText('Gift for the member who invites');
+    await screen.findByRole('group', { name: MEMBER });
     fireEvent.click(screen.getByLabelText('Turn on Refer a friend'));
-    pick('Gift for the member who invites', THANKS.id);
+    choose(MEMBER, 'percent', '10', 'first');
     fireEvent.click(save());
-    await screen.findByText(REFERRAL_WORDS.not_live);
+    await screen.findByText(REFERRAL_WORDS.too_many);
     expect(screen.queryByText(/^Saved\./)).toBeNull();
   });
 });

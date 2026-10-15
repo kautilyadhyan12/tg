@@ -9,9 +9,9 @@
 // member or a friend is promised is what the code does. A gift whose code can no longer be
 // used today is promised to nobody.
 import { z } from "zod";
-import { bpToPercentText, discountStatus, type DiscountKind, type MembershipPayments } from "./discounts.js";
+import { bpToPercentText, DISCOUNT_KINDS, DISCOUNT_PERCENT_BP_MAX, discountStatus, type DiscountKind, type MembershipPayments } from "./discounts.js";
 import { MEMBER_LIST_MAX_EMAIL_CHARS, MEMBER_LIST_MAX_NAME_CHARS, MEMBER_LIST_MAX_TYPED_PHONE_CHARS } from "./memberList.js";
-import { formatMinor } from "./memberships.js";
+import { formatMinor, MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
 import { orgTypeSchema } from "./orgs.js";
 import { GYM_ENQUIRY_MAX_MESSAGE_CHARS } from "./gymPage.js";
 import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
@@ -62,7 +62,7 @@ function offWhat(d: ReferralGiftTerms): string {
   const memberships = d.allMembershipTypes ? "a membership" : "some memberships";
   if (d.forMemberships && d.forProducts) return `${d.allMembershipTypes ? "memberships" : "some memberships"} and ${products}`;
   if (d.forProducts) return products;
-  return d.membershipPayments === "first" ? `the first payment of ${memberships}` : memberships;
+  return d.membershipPayments === "first" ? `the first payment of ${memberships}` : `every payment of ${memberships}`;
 }
 
 /** A gift in one phrase: "10% off the first payment of a membership, until 31 December 2026". */
@@ -177,30 +177,59 @@ export function inviteLines(gymName: string, friendGift: ReferralGift | null): s
 }
 
 // ── WHAT THE BUSINESS SETS (Settings → Refer a friend) ──
+//
+// The owner sets each gift in the box itself: a percentage or an amount, and what it comes
+// off. The app makes the promo code for it, kept under Discounts like any other, so the
+// front desk takes it as it takes any code.
 
-/** One of the business's discounts as the picker shows it. */
-export const referralDiscountOptionSchema = z
+/** What a gift comes off: the first payment of a new membership, every payment of one, or
+ *  products sold at the desk. */
+export const REFERRAL_GIFT_ON = ["first", "every", "products"] as const;
+export type ReferralGiftOn = (typeof REFERRAL_GIFT_ON)[number];
+
+export const referralGiftInputSchema = z
   .object({
-    id: z.string().uuid(),
-    name: z.string(),
+    kind: z.enum(DISCOUNT_KINDS),
+    /** Hundredths of a percent: 1000 is 10%. */
+    percentBp: z.number().int().min(1).max(DISCOUNT_PERCENT_BP_MAX).nullable(),
+    /** In the business's own money, in minor units. */
+    amountMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX).nullable(),
+    on: z.enum(REFERRAL_GIFT_ON),
+  })
+  .strict()
+  .refine((g) => (g.kind === "percent" ? g.percentBp !== null && g.amountMinor === null : g.amountMinor !== null && g.percentBp === null), {
+    message: "invalid_gift",
+  });
+export type ReferralGiftInput = z.infer<typeof referralGiftInputSchema>;
+
+/** A gift as it is kept: its own discount and promo code. */
+export const referralGiftViewSchema = z
+  .object({
+    kind: z.enum(DISCOUNT_KINDS),
+    percentBp: z.number().int().nullable(),
+    amountMinor: z.number().int().nullable(),
+    currency: z.string().nullable(),
+    on: z.enum(REFERRAL_GIFT_ON),
+    /** The promo code the app made for it. */
     code: z.string().nullable(),
     words: z.string(),
-    /** What it is today: only an active one with a code is promised. */
-    status: z.enum(["active", "scheduled", "expired", "used_up", "archived"]),
-    /** Why it is not promised today; null when it can be. */
+    /** Why it is not promised today (its code was archived or used up under Discounts, or
+     *  has ended); null when it is. */
     problem: z.string().nullable(),
+    /** Archived under Discounts: saving the box again makes it a new code. */
+    archived: z.boolean(),
   })
   .strict();
-export type ReferralDiscountOption = z.infer<typeof referralDiscountOptionSchema>;
+export type ReferralGiftView = z.infer<typeof referralGiftViewSchema>;
 
 export const referralSettingsSchema = z
   .object({
     on: z.boolean(),
-    memberDiscountId: z.string().uuid().nullable(),
-    friendDiscountId: z.string().uuid().nullable(),
-    /** The business's discounts with a promo code that are not archived, plus a picked one
-     *  that since was. */
-    discounts: z.array(referralDiscountOptionSchema),
+    member: referralGiftViewSchema.nullable(),
+    friend: referralGiftViewSchema.nullable(),
+    /** The business's money for an amount off; null until its country is set, when only a
+     *  percentage can be given. */
+    currency: z.string().nullable(),
     /** The offer exactly as a member reads it, today. */
     memberLines: z.array(z.string()),
   })
@@ -211,17 +240,37 @@ export const referralSettingsResponseSchema = z.object({ settings: referralSetti
 export const setReferralSettingsRequestSchema = z
   .object({
     on: z.boolean(),
-    memberDiscountId: z.string().uuid().nullable(),
-    friendDiscountId: z.string().uuid().nullable(),
+    member: referralGiftInputSchema.nullable(),
+    friend: referralGiftInputSchema.nullable(),
   })
   .strict()
-  .refine((v) => !v.on || v.memberDiscountId !== null || v.friendDiscountId !== null, { message: "no_gift", path: ["on"] });
+  .refine((v) => !v.on || v.member !== null || v.friend !== null, { message: "no_gift", path: ["on"] });
 export type SetReferralSettingsRequest = z.infer<typeof setReferralSettingsRequestSchema>;
+
+/** A gift as typed, in the words a member or friend will read, before it is saved. */
+export function referralGiftInputWords(g: ReferralGiftInput, currency: string | null): string {
+  return referralGiftWords({
+    kind: g.kind,
+    percentBp: g.percentBp,
+    amountMinor: g.amountMinor,
+    currency,
+    forProducts: g.on === "products",
+    allProducts: true,
+    forMemberships: g.on !== "products",
+    allMembershipTypes: true,
+    membershipPayments: g.on === "products" ? null : g.on,
+    startsOn: null,
+    endsOn: null,
+    maxUses: null,
+    uses: 0,
+    archived: false,
+    code: null,
+  });
+}
 
 export const REFERRAL_WORDS = {
   not_found: "This invite link isn't working. Ask the person who sent it for a new one.",
-  no_gift: "Pick at least one promo code before switching Refer a friend on.",
-  discount_not_found: "That discount was not found. Nothing was saved: pick another.",
-  no_code: "That discount has no promo code. Nothing was saved: give it a code under Discounts, or pick another.",
-  not_live: "That promo code has ended, been used up or been archived. Nothing was saved: pick another.",
+  no_gift: "Choose at least one gift before switching Refer a friend on.",
+  no_currency: "Set your country in Settings before giving an amount off. A percentage works now.",
+  too_many: "You have 100 discounts in use, the most there can be. Archive one under Discounts, then save again.",
 } as const;

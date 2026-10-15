@@ -6,11 +6,10 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import PlaceLink from './PlaceLink';
 import {
-  NO_GIFT,
+  GIFT_ON_CHOICES,
   friendPreview,
-  giftChoices,
-  giftNote,
-  giftOption,
+  giftCodeLine,
+  giftProblem,
   memberPreview,
   referralBody,
   referralChanged,
@@ -20,56 +19,81 @@ import {
 } from '../../pages/console/referralView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
-// REFER A FRIEND (ROADMAP 20e-ii-a; spec Part 3 §16.3): the owner switches it on and picks
-// the promo codes the business gives, one for the member who invites and one for the
-// friend, or either alone. Below, exactly what a member and a friend will read with them.
-// The switch and both codes wait for Save together.
+// REFER A FRIEND (ROADMAP 20e-ii-a; spec Part 3 §16.3): the owner switches it on and sets
+// each gift right here, for the member who invites and for the friend, or either alone. The
+// app makes each gift's promo code when it is saved, kept under Discounts like any other.
+// Below, exactly what a member and a friend will read. Everything waits for Save together.
 
 const inputStyle = {
   background: '#0A0908',
   border: '1px solid rgba(255,255,255,0.10)',
   color: '#fff',
 };
+const labelStyle = { color: 'rgba(255,255,255,0.75)' };
+const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 
-function GiftPicker({ label, hint, value, settings, disabled, onChange }) {
-  const choices = giftChoices(settings, value);
-  const note = giftNote(settings, value);
+function GiftBox({ title, hint, gift, currency, codeLine, discountsTo, guard, disabled, onChange }) {
+  const set = (change) => onChange({ ...gift, ...change });
+  const problem = giftProblem(gift, currency);
   return (
-    <label className="block">
-      <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-        {label}
-      </span>
-      <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+    <fieldset className="flex flex-col gap-2" aria-label={title}>
+      <legend className="text-sm font-medium" style={labelStyle}>
+        {title}
+      </legend>
+      <span className="block text-xs" style={hintStyle}>
         {hint}
       </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-        aria-label={label}
-        className="mt-2 w-full rounded-xl px-4 py-3 text-base sm:text-sm"
-        style={inputStyle}
-      >
-        <option value={NO_GIFT}>No gift</option>
-        {choices.map((d) => (
-          <option key={d.id} value={d.id}>
-            {giftOption(d)}
-          </option>
-        ))}
-      </select>
-      {note !== null ? (
-        <span className="block text-xs mt-1.5" style={{ color: '#FFB347' }}>
-          {note}
+      <div className="grid gap-2 sm:grid-cols-[1fr_120px_1.6fr]">
+        <select value={gift.give} onChange={(e) => set({ give: e.target.value })} disabled={disabled} aria-label={`${title}: what they get`} className="rounded-xl px-4 py-3 text-base sm:text-sm" style={inputStyle}>
+          <option value="none">No gift</option>
+          <option value="percent">A percentage off</option>
+          <option value="amount">{currency === null ? 'An amount off' : `An amount off (${currency})`}</option>
+        </select>
+        {gift.give === 'none' ? null : (
+          <input
+            value={gift.value}
+            onChange={(e) => set({ value: e.target.value })}
+            disabled={disabled}
+            inputMode="decimal"
+            aria-label={gift.give === 'percent' ? `${title}: percentage` : `${title}: amount`}
+            placeholder={gift.give === 'percent' ? '10' : '500'}
+            className="rounded-xl px-4 py-3 text-base sm:text-sm"
+            style={inputStyle}
+          />
+        )}
+        {gift.give === 'none' ? null : (
+          <select value={gift.on} onChange={(e) => set({ on: e.target.value })} disabled={disabled} aria-label={`${title}: off`} className="rounded-xl px-4 py-3 text-base sm:text-sm" style={inputStyle}>
+            {GIFT_ON_CHOICES.map((c) => (
+              <option key={c.key} value={c.key}>
+                off {c.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {problem !== null && gift.value !== '' ? (
+        <span className="block text-xs" style={{ color: '#ef4444' }}>
+          {problem}
         </span>
       ) : null}
-    </label>
+      {codeLine !== null ? (
+        <span className="block text-xs" style={hintStyle}>
+          {codeLine}
+        </span>
+      ) : null}
+      {codeLine !== null && discountsTo !== null ? (
+        <PlaceLink to={discountsTo} guard={guard} className="c-lk text-xs self-start">
+          See it in Discounts
+        </PlaceLink>
+      ) : null}
+    </fieldset>
   );
 }
 
 function Preview({ title, lines }) {
   return (
     <div className="rounded-xl p-4 flex flex-col gap-1.5" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.45)' }}>
+      <p className="text-xs font-semibold uppercase tracking-wide" style={hintStyle}>
         {title}
       </p>
       {lines.map((line) => (
@@ -123,7 +147,11 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
   const problem = settings !== null && draft !== null ? referralProblem(draft, settings) : null;
   const changed = settings !== null && draft !== null && referralChanged(draft, settings);
   const canSave = changed && problem === null && !saving && !readOnly;
-  const membershipsTo = placeFor(org.slug, viewerPrivileges(org), 'membershipDiscounts');
+  const privileges = viewerPrivileges(org);
+  const countryTo = placeFor(org.slug, privileges, 'country');
+  // A saved gift's discount is listed with the others: on Sell for products, on
+  // Memberships for a membership.
+  const discountsTo = (side) => placeFor(org.slug, privileges, settings?.[side]?.on === 'products' ? 'sell' : 'membershipDiscounts');
 
   const edit = (next) => {
     setDraft(next);
@@ -137,7 +165,7 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await orgService.saveReferralSettings(gymId, referralBody(draft));
+      const res = await orgService.saveReferralSettings(gymId, referralBody(draft, settings));
       setSettings(res.data.settings);
       setDraft(referralDraft(res.data.settings));
       setSaved(true);
@@ -148,11 +176,10 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
     }
   };
 
-  const noCodes = settings !== null && settings.discounts.every((d) => d.code === null);
   return (
     <ConsoleSection title="Refer a friend" summary={referralSummary(settings)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
-        <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.45)' }}>
+        <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
         </p>
       ) : null}
@@ -161,10 +188,11 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
       ) : settings === null || draft === null ? (
         <ConsoleLoading label="Loading…" />
       ) : (
-        <form onSubmit={save} className="flex flex-col gap-4">
+        <form onSubmit={save} className="flex flex-col gap-5">
           <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>
             Your members share their own invite link from the app. A friend who opens it can send you their details, and
-            they arrive on Leads marked with who invited them. You choose the gifts, using your own promo codes.
+            they arrive on Leads marked with who invited them. Choose a thank-you gift for the member, a welcome gift for the
+            friend, or both.
           </p>
 
           <label className={`flex items-start gap-3 ${readOnly ? '' : 'cursor-pointer'}`}>
@@ -174,44 +202,34 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
             </span>
           </label>
 
-          {noCodes ? (
-            <div className="flex flex-col gap-2">
-              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                You have no promo codes yet. Add a discount with a promo code under Discounts on the Memberships page, then pick
-                it here.
-              </p>
-              {membershipsTo !== null ? (
-                <PlaceLink to={membershipsTo} guard={changed} className="c-lk text-sm self-start">
-                  Open Memberships
-                </PlaceLink>
-              ) : null}
-            </div>
-          ) : null}
-
-          <GiftPicker
-            label="Gift for the member who invites"
+          <GiftBox
+            title="Gift for the member who invites"
             hint="Sent to their inbox when their friend joins and makes their first payment."
-            value={draft.memberDiscountId}
-            settings={settings}
+            gift={draft.member}
+            currency={settings.currency}
+            codeLine={giftCodeLine(settings, 'member')}
+            discountsTo={discountsTo('member')}
+            guard={changed}
             disabled={readOnly || saving}
-            onChange={(id) => edit({ ...draft, memberDiscountId: id })}
+            onChange={(member) => edit({ ...draft, member })}
           />
-          <GiftPicker
-            label="Gift for the friend"
+          <GiftBox
+            title="Gift for the friend"
             hint="Shown on the invite page, for them to use when they join."
-            value={draft.friendDiscountId}
-            settings={settings}
+            gift={draft.friend}
+            currency={settings.currency}
+            codeLine={giftCodeLine(settings, 'friend')}
+            discountsTo={discountsTo('friend')}
+            guard={changed}
             disabled={readOnly || saving}
-            onChange={(id) => edit({ ...draft, friendDiscountId: id })}
+            onChange={(friend) => edit({ ...draft, friend })}
           />
-          {!noCodes && membershipsTo !== null ? (
-            <PlaceLink to={membershipsTo} guard={changed} className="c-lk text-sm self-start">
-              Add or change a promo code
+          {settings.currency === null && countryTo !== null && (draft.member.give === 'amount' || draft.friend.give === 'amount') ? (
+            // The country is higher up this same page, so nothing typed here is lost.
+            <PlaceLink to={countryTo} className="c-lk text-sm self-start">
+              Set your country
             </PlaceLink>
           ) : null}
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            Anyone who knows a promo code can use it at the desk, so pick codes you don&apos;t advertise elsewhere.
-          </p>
 
           <Preview title="What your members read" lines={memberPreview(draft, settings, org.name)} />
           <Preview title="What their friend reads" lines={friendPreview(draft, settings, org.name)} />

@@ -5122,12 +5122,21 @@ Branded App gives each client a referral code, and both rewards are issued by th
 once the new client makes a qualifying visit or purchase; PushPress marks each lead with
 where it came from ("Referred by"). Migration `0115`.
 - **The offer** (Settings → **Refer a friend**, `org.manage`; `gym_referral_settings`): a
-  switch and two of the business's own promo codes, a gift for the member who invites and
-  one for the friend, either alone or both. On with neither is refused (`no_gift`); a code
-  picked while on must have a promo code and be in use or start later; one that starts later
-  is promised from that day. Below the boxes, what a member and a friend will read, made by
-  the same functions the server uses (`referralOfferLines`, `inviteLines`). With no promo code
-  yet, **Open Memberships** opens the Discounts box there.
+  switch and two gifts, set in the box itself (Kd at the click-through: setting it up across
+  two pages was too complicated): for the member who invites and for the friend, either alone
+  or both. Each is "No gift", a percentage or an amount (in the business's money; with no
+  country set, only a percentage), off the first payment of a new membership, every payment
+  of one, or products sold at the desk. On with neither is refused (`no_gift`). Below the
+  boxes, what a member and a friend will read, made by the same functions the server uses.
+- **The codes are the app's**: on Save, each gift is kept as a discount of its own, named
+  "Refer a friend: member's gift, THANKS10" (the friend's starts WELCOME), listed under
+  Discounts like any other, with a **See it in Discounts** button beside its code. A code
+  is unique within a business only; the app takes the next free one (THANKS10B…) where the
+  business already uses it. Saved again with the same gift, the same code. A changed gift
+  nobody has used changes its discount and code; once somebody has used it, that discount is
+  left exactly as given and the new gift gets its own. "No gift" archives a code nobody used.
+  The offer and its codes are written in one transaction under the gym's row lock. A code
+  archived under Discounts is promised to nobody until the box is saved again.
 - **A gift in words** (`referralGiftWords`) is said from the discount as it is: "10% off the
   first payment of a membership, until 31 December 2026". A gift whose code cannot be used
   today (ended, used up, archived, not started, no code) is promised to nobody.

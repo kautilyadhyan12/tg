@@ -9,6 +9,7 @@ import {
   referralCodeSchema,
   referralGiftLive,
   referralGiftProblem,
+  referralGiftInputWords,
   referralGiftWords,
   referralOfferLines,
   setReferralSettingsRequestSchema,
@@ -36,7 +37,7 @@ const base: ReferralGiftTerms = {
 describe("a gift in words, for every shape a discount can have", () => {
   const cases: [string, Partial<ReferralGiftTerms>, string][] = [
     ["a percentage off a membership's first payment", {}, "10% off the first payment of a membership"],
-    ["a percentage off every payment", { membershipPayments: "every" }, "10% off a membership"],
+    ["a percentage off every payment", { membershipPayments: "every" }, "10% off every payment of a membership"],
     ["12.5%", { percentBp: 1250 }, "12.5% off the first payment of a membership"],
     ["a fixed amount in rupees", { kind: "amount", percentBp: null, amountMinor: 50000, currency: "INR" }, "₹500.00 off the first payment of a membership"],
     ["a fixed amount in pounds", { kind: "amount", percentBp: null, amountMinor: 500, currency: "GBP" }, "£5.00 off the first payment of a membership"],
@@ -154,12 +155,22 @@ describe("the parsers", () => {
   ])("an invite code %s is %s", (code, ok) => {
     expect(referralCodeSchema.safeParse(code).success).toBe(ok);
   });
-  it("switched on needs a gift; off needs none; nothing more is taken", () => {
-    const id = "6f9619ff-8b86-4d11-b42d-00c04fc964ff";
-    expect(setReferralSettingsRequestSchema.safeParse({ on: true, memberDiscountId: null, friendDiscountId: null }).success).toBe(false);
-    expect(setReferralSettingsRequestSchema.safeParse({ on: true, memberDiscountId: id, friendDiscountId: null }).success).toBe(true);
-    expect(setReferralSettingsRequestSchema.safeParse({ on: true, memberDiscountId: null, friendDiscountId: id }).success).toBe(true);
-    expect(setReferralSettingsRequestSchema.safeParse({ on: false, memberDiscountId: null, friendDiscountId: null }).success).toBe(true);
-    expect(setReferralSettingsRequestSchema.safeParse({ on: false, memberDiscountId: null, friendDiscountId: null, by: "x" }).success).toBe(false);
+  const gift = { kind: "percent", percentBp: 1000, amountMinor: null, on: "first" };
+  it.each([
+    ["on with a gift for the member", { on: true, member: gift, friend: null }, true],
+    ["on with a gift for the friend", { on: true, member: null, friend: gift }, true],
+    ["on with no gift", { on: true, member: null, friend: null }, false],
+    ["off with no gift", { on: false, member: null, friend: null }, true],
+    ["a percentage that carries an amount", { on: true, member: { ...gift, amountMinor: 500 }, friend: null }, false],
+    ["an amount with no amount", { on: true, member: { ...gift, kind: "amount", percentBp: null }, friend: null }, false],
+    ["100% off", { on: true, member: { ...gift, percentBp: 10000 }, friend: null }, false],
+    ["off something the box does not offer", { on: true, member: { ...gift, on: "everything" }, friend: null }, false],
+    ["a key it does not know", { on: false, member: null, friend: null, by: "x" }, false],
+  ])("%s", (_name, body, ok) => {
+    expect(setReferralSettingsRequestSchema.safeParse(body).success).toBe(ok);
+  });
+  it("a gift as typed reads as the saved one will", () => {
+    expect(referralGiftInputWords({ kind: "amount", percentBp: null, amountMinor: 50000, on: "first" }, "INR")).toBe("₹500.00 off the first payment of a membership");
+    expect(referralGiftInputWords({ kind: "percent", percentBp: 1500, amountMinor: null, on: "products" }, null)).toBe("15% off products");
   });
 });
