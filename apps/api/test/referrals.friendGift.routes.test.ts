@@ -509,6 +509,26 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
       },
       TIMEOUT_MS,
     );
+
+    it(
+      "a gift nobody has used, changed in place from products to memberships, does not reach back to a membership added before",
+      async () => {
+        // B's gift is unused, so changing it edits the same discount: it keeps the day it was made.
+        await switchOn(gymB, ownerB.cookies, pct(15, "products"));
+        const before = await friendDiscountOf(gymB.org.id);
+        const [silver] = await sql<{ id: string }[]>`SELECT id FROM gym_membership_types WHERE gym_id = ${gymB.org.id} AND name = 'Silver Monthly'`;
+        if (silver === undefined) throw new Error("no type");
+        const codeB = await linkOf(gymB, maya);
+        const leadId = await invited(codeB, "Kai Moreno", "kai.moreno@example.com");
+        const kai = await added(gymB.org.id, ownerB.cookies, { fullName: "Kai Moreno", email: "kai.moreno@example.com", leadId });
+        const given = await post(heldUrl(gymB.org.id, kai.entryId), { requestKey: nextForm(), typeId: silver.id, startsOn: today, paid: false, priceMinor: 5000 }, ownerB.cookies);
+        expect(given.statusCode, given.body).toBe(201);
+        await switchOn(gymB, ownerB.cookies, pct(15));
+        expect(await friendDiscountOf(gymB.org.id)).toBe(before);
+        expect((await leadPage(gymB.org.id, leadId, ownerB.cookies)).friendGift).toMatchObject({ state: "to_give", forMemberships: true, skipped: null });
+      },
+      TIMEOUT_MS,
+    );
   });
 
   describe("Add member finds the person in Leads, as people really write an email and a phone", () => {
