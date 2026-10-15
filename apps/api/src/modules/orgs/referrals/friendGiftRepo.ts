@@ -20,8 +20,9 @@ export interface FriendGiftRow {
   memberBefore: boolean;
   /** What the gift was given on, first; null while it has not been. */
   given: { on: string; at: Date } | null;
-  /** The first membership added since the invite without the gift. */
-  skipped: string | null;
+  /** The first membership added since the invite without the gift: its type, when, and the
+   *  staff who added it (null where their account is gone, or nobody is on record). */
+  skipped: { on: string; at: Date; by: string | null } | null;
 }
 
 interface DbRow {
@@ -30,7 +31,9 @@ interface DbRow {
   member_before: boolean;
   given_on: string | null;
   given_at: Date | null;
-  skipped: string | null;
+  skipped_on: string | null;
+  skipped_at: Date | null;
+  skipped_by: string | null;
 }
 
 /** The records among `entryIds` that a lead of this gym joined after coming by a member's
@@ -45,13 +48,20 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
              WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at < l.referred_at
            ) AS member_before,
            given.on_what AS given_on, given.at AS given_at,
-           (SELECT t.name
-            FROM gym_held_memberships h
-            JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-            WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at >= l.referred_at
-              AND NOT EXISTS (SELECT 1 FROM gym_discounts d WHERE d.gym_id = h.gym_id AND d.id = h.discount_id AND d.referral_gift)
-            ORDER BY h.created_at, h.id LIMIT 1) AS skipped
+           skipped.on_what AS skipped_on, skipped.at AS skipped_at, skipped.by AS skipped_by
     FROM gym_leads l
+    LEFT JOIN LATERAL (
+      -- Who added it is the gym's own record of the membership being given.
+      SELECT t.name AS on_what, h.created_at AS at,
+             (SELECT u.display_name FROM audit_log a JOIN users u ON u.id = a.actor_user_id AND u.status = 'active'
+              WHERE a.gym_id = h.gym_id AND a.action = 'org.held_membership_given' AND a.target_id = h.id::text
+              ORDER BY a.at LIMIT 1) AS by
+      FROM gym_held_memberships h
+      JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+      WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at >= l.referred_at
+        AND NOT EXISTS (SELECT 1 FROM gym_discounts d WHERE d.gym_id = h.gym_id AND d.id = h.discount_id AND d.referral_gift)
+      ORDER BY h.created_at, h.id LIMIT 1
+    ) skipped ON true
     LEFT JOIN LATERAL (
       SELECT x.on_what, x.at FROM (
         SELECT t.name AS on_what, h.created_at AS at
@@ -75,7 +85,7 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
     referredBy: r.referred_by,
     memberBefore: r.member_before,
     given: r.given_on === null || r.given_at === null ? null : { on: r.given_on, at: r.given_at },
-    skipped: r.skipped,
+    skipped: r.skipped_on === null || r.skipped_at === null ? null : { on: r.skipped_on, at: r.skipped_at, by: r.skipped_by },
   }));
 }
 
@@ -111,7 +121,7 @@ export async function friendGiftsNow(
       const state = friendGiftState({
         memberBefore: row.memberBefore,
         given: row.given === null ? null : { on: row.given.on, day: dayInTz(row.given.at, gym.timezone) },
-        skipped: row.skipped,
+        skipped: row.skipped === null ? null : { on: row.skipped.on, day: dayInTz(row.skipped.at, gym.timezone), by: row.skipped.by },
         gift: gift === null ? null : { forMemberships: gift.forMemberships, forProducts: gift.forProducts },
       });
       return [row.entryId, { row, state, discount: state.state === "to_give" ? gift : null }];

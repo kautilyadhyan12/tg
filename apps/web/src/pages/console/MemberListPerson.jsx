@@ -12,6 +12,7 @@ import {
   Smartphone,
   Trash2,
   UserMinus,
+  UserCheck,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -1177,14 +1178,17 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const leadPart = () => {
     if (id !== null || leadFound === null) return null;
     return (
-      <div className="c-card p-3 flex flex-col gap-2" data-testid="lead-found">
-        <p className="c-s14 c-t1 m-0">{leadMatchLine(leadFound)}</p>
-        {!leadFound.sameName ? (
-          <label className="flex items-center gap-2 c-s14 c-t1">
-            <input type="checkbox" checked={leadSame} onChange={(e) => setLeadSame(e.target.checked)} />
-            {`This is ${leadFound.fullName}: mark them Joined in Leads`}
-          </label>
-        ) : null}
+      <div className="rounded-[12px] p-3 flex items-start gap-3" style={{ background: 'var(--warn-bg)' }} data-testid="lead-found">
+        <UserCheck aria-hidden="true" className="w-5 h-5 shrink-0" style={{ color: 'var(--warn)' }} />
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          <p className="c-s14 c-w6 c-t1 m-0">{leadMatchLine(leadFound)}</p>
+          {!leadFound.sameName ? (
+            <label className="flex items-center gap-2 c-s14 c-t1">
+              <input type="checkbox" checked={leadSame} onChange={(e) => setLeadSame(e.target.checked)} />
+              {`This is ${leadFound.fullName}: mark them Joined in Leads`}
+            </label>
+          ) : null}
+        </div>
       </div>
     );
   };

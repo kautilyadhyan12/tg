@@ -15,8 +15,9 @@ export interface FriendGiftFacts {
   memberBefore: boolean;
   /** What the gift was given on and the gym's day it was; null while it has not been. */
   given: { on: string; day: string } | null;
-  /** The first membership added since the invite without the gift; null for none. */
-  skipped: string | null;
+  /** The first membership added since the invite without the gift, the gym's day it was, and
+   *  the staff who added it (null where unknown); null for none. */
+  skipped: { on: string; day: string; by: string | null } | null;
   /** The business's friend's gift as it is today, where it can be used today. */
   gift: { forMemberships: boolean; forProducts: boolean } | null;
 }
@@ -28,7 +29,7 @@ export const leadFriendGiftSchema = z.discriminatedUnion("state", [
       state: z.literal("to_give"),
       forMemberships: z.boolean(),
       forProducts: z.boolean(),
-      skipped: z.string().min(1).nullable(),
+      skipped: z.object({ on: z.string().min(1), day: z.string().regex(DAY), by: z.string().min(1).nullable() }).strict().nullable(),
     })
     .strict(),
   z.object({ state: z.literal("member_before") }).strict(),
@@ -61,7 +62,8 @@ export function friendGiftLine(g: LeadFriendGift, name: string): string {
     case "to_give": {
       if (g.skipped !== null && g.forMemberships) {
         const next = g.forProducts ? `${name}'s next membership or purchase at Sell` : `${name}'s next membership`;
-        return `Friend's gift not given on ${g.skipped}: it was added without it. It is filled in on ${next}.`;
+        const who = g.skipped.by === null ? "" : ` by ${g.skipped.by}`;
+        return `Friend's gift not given on ${g.skipped.on}: added without it${who} on ${fullDay(g.skipped.day)}. It is filled in on ${next}.`;
       }
       const where =
         g.forMemberships && g.forProducts

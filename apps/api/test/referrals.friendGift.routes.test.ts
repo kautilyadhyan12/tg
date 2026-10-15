@@ -458,6 +458,14 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         const ticked = await added(gymA.org.id, owner.cookies, { fullName: "Joanna Pike", email: "joanna.pike@example.com", phone: "07700 900789", leadId: joLead });
         expect(ticked.lead).toEqual({ id: joLead, fullName: "Jo" });
         expect(await leadRow(joLead)).toEqual({ status: "joined", entry_id: ticked.entryId });
+        // Staff add her membership without the gift: her lead says so, by whom and when.
+        expect((await post(heldUrl(gymA.org.id, ticked.entryId), giveBody(goldA, today, null), owner.cookies)).statusCode).toBe(201);
+        expect((await leadPage(gymA.org.id, joLead, owner.cookies)).friendGift).toEqual({
+          state: "to_give",
+          forMemberships: true,
+          forProducts: false,
+          skipped: { on: "Gold Monthly", day: today, by: "Owner A" },
+        });
       },
       TIMEOUT_MS,
     );

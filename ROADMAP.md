@@ -175,6 +175,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 5d-i. [x] **Notes and tags on a person's page** — merged 2026-10-08 (PR #196).
      - 5d-ii. [x] **Tags on the Members list** — merged 2026-10-09 (PR #199).
      - 5d-iii. [x] **The two extra passes' fixes** over notes and tags — merged 2026-10-09 (PR #201).
+   - 5e. [ ] **The app numbers members itself** (Kd, 2026-10-15, `rulings/2026-10-15-20e-ii-b-i.md`): Add member fills in the next member number, staff may change it; an import keeps its numbers and new people continue from the highest; a file with none gives numbers once to everyone without one. Web folder 2, after item 20's two extra passes.
 6. [ ] Gym profile page for members; ~~gym announcements feed~~ (**item 19b since 2026-09-22**); gym greeting and branding on the member home.
 7. [ ] Member-to-coach / gym messaging. **2026-09-22: no private chat now** (RULINGS that day: reactions, no comments, no private chat — it needs far more safety work); a gym talks to its members on the shared page (item 19) and by the messages of Part 7.
 8. ~~Classes, schedules and booking (the largest gym item).~~ **Planned 2026-09-21 as item 17 (17b–17f).**
@@ -316,7 +317,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 20e-ii-a. [x] **The offer, the invite link and the lead marked** — merged 2026-10-15 (PR #279).
       - 20e-ii-b. **Both gifts given by themselves**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-ii-b-i.md`):
         - 20e-ii-b-i. [ ] **The friend's gift, and Add member finds the person in Leads**: filled in on Add member, Add membership and Sell for the friend a member invited, once, with Remove; the lead says what became of it. Risky.
-        - 20e-ii-b-ii. [ ] **The member's gift**: once, off the next bill on the membership they have when their friend joins and pays (else credit for their next payment), told in their inbox; a voided payment takes back a gift not yet used; the lead says so. Risky. Both before anybody uses Refer a friend.
+        - 20e-ii-b-ii. [ ] **The member's gift**: once, off the next bill on the membership they have when their friend joins and pays (else credit for their next payment), or, as the owner picks, free days added to their membership (Kd, 2026-10-15); told in their inbox; a voided payment takes back a gift not yet used; the lead says so. Risky. Both before anybody uses Refer a friend.
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
      - 20f-ii. [x] **Sent messages** — merged 2026-10-10 (PR #217).

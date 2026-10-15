@@ -13,7 +13,11 @@ describe("friendGiftState: every class of case", () => {
   const cases: [string, FriendGiftFacts, ReturnType<typeof friendGiftState>][] = [
     ["new friend, gift for memberships", facts(), { state: "to_give", forMemberships: true, forProducts: false, skipped: null }],
     ["new friend, gift for products", facts({ gift: PRODUCTS }), { state: "to_give", forMemberships: false, forProducts: true, skipped: null }],
-    ["new friend, a membership added without it", facts({ skipped: "Gold Monthly" }), { state: "to_give", forMemberships: true, forProducts: false, skipped: "Gold Monthly" }],
+    [
+      "new friend, a membership added without it",
+      facts({ skipped: { on: "Gold Monthly", day: "2026-10-15", by: "Priya Desk" } }),
+      { state: "to_give", forMemberships: true, forProducts: false, skipped: { on: "Gold Monthly", day: "2026-10-15", by: "Priya Desk" } },
+    ],
     ["given once", facts({ given: { on: "Gold Monthly", day: "2026-10-15" } }), { state: "given", on: "Gold Monthly", day: "2026-10-15" }],
     // Given is said even where the offer has since lost its gift, or they were a member before.
     ["given, the gift gone since", facts({ given: { on: "Protein bar", day: "2026-10-16" }, gift: null }), { state: "given", on: "Protein bar", day: "2026-10-16" }],
@@ -33,9 +37,15 @@ describe("friendGiftLine: what staff read on the lead", () => {
     [{ state: "member_before" } as const, "No friend's gift: Tara had a membership here before they were invited."],
     [{ state: "no_gift" } as const, "No friend's gift: Refer a friend has no friend's gift that can be used today."],
     [{ state: "to_give", ...MEMBERSHIPS, skipped: null } as const, "Friend's gift: filled in when Tara's membership is added."],
-    [{ state: "to_give", ...MEMBERSHIPS, skipped: "Day pass" } as const, "Friend's gift not given on Day pass: it was added without it. It is filled in on Tara's next membership."],
-    [{ state: "to_give", ...BOTH, skipped: "Day pass" } as const, "Friend's gift not given on Day pass: it was added without it. It is filled in on Tara's next membership or purchase at Sell."],
-    [{ state: "to_give", ...PRODUCTS, skipped: "Day pass" } as const, "Friend's gift: filled in when Tara buys something at Sell."],
+    [
+      { state: "to_give", ...MEMBERSHIPS, skipped: { on: "Day pass", day: "2026-10-15", by: "Priya Desk" } } as const,
+      "Friend's gift not given on Day pass: added without it by Priya Desk on 15 October 2026. It is filled in on Tara's next membership.",
+    ],
+    [
+      { state: "to_give", ...BOTH, skipped: { on: "Day pass", day: "2026-10-15", by: null } } as const,
+      "Friend's gift not given on Day pass: added without it on 15 October 2026. It is filled in on Tara's next membership or purchase at Sell.",
+    ],
+    [{ state: "to_give", ...PRODUCTS, skipped: { on: "Day pass", day: "2026-10-15", by: null } } as const, "Friend's gift: filled in when Tara buys something at Sell."],
     [{ state: "to_give", ...BOTH, skipped: null } as const, "Friend's gift: filled in when Tara's membership is added or they buy at Sell."],
   ])("%j", (gift, line) => {
     expect(friendGiftLine(gift, "Tara")).toBe(line);
