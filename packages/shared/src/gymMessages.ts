@@ -34,8 +34,11 @@ export type GymMessageKind = z.infer<typeof gymMessageKindSchema>;
 /** A message staff typed for the people they chose (ROADMAP 20f-i). It is no automatic
  *  kind: the rule below never makes one, and it is not in the day's one automatic message. */
 export const GYM_GROUP_MESSAGE_KIND = "group";
+/** Refer a friend's member's gift, given (20e-ii-b-ii-a): a notice about money, written with
+ *  the friend's payment, never one of the day's automatic messages and never switched off. */
+export const GYM_REFERRAL_GIFT_MESSAGE_KIND = "referral_gift";
 /** Every kind a member's inbox can hold. */
-export const gymInboxKindSchema = z.enum([...GYM_MESSAGE_KINDS, GYM_GROUP_MESSAGE_KIND]);
+export const gymInboxKindSchema = z.enum([...GYM_MESSAGE_KINDS, GYM_GROUP_MESSAGE_KIND, GYM_REFERRAL_GIFT_MESSAGE_KIND]);
 export type GymInboxKind = z.infer<typeof gymInboxKindSchema>;
 
 /** The kinds a person cannot switch off (§16.2: "except a payment notice"). */

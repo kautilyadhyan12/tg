@@ -66,6 +66,7 @@ import { appOrThrow, type MemberListDeps } from "./service.js";
 import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
 import { listBillFacts } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
+import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 
 type Sql = MemberListDeps["sql"];
 
@@ -834,6 +835,7 @@ export async function mergeEntries(
     // (the reference test lists every table that does).
     await repo.moveMembershipLinks(tx, gymId, goneId, keepId);
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
+    await moveGiftLinks(tx, gymId, goneId, keepId);
     await moveDeskSignatures(tx, gymId, goneId, keepId);
     // What the clock has ended on the kept record is marked first: only a membership
     // still in use there keeps the other record's from-list one from moving.

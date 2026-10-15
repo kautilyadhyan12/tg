@@ -8,7 +8,7 @@ import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
 import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
-import { FriendGiftNote } from './FriendGift';
+import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
@@ -568,7 +568,7 @@ export default function MemberMemberships({
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
-            const notes = [row.tax, row.when, row.cancelled].filter((line) => line !== null);
+            const notes = [row.gift, row.tax, row.when, row.cancelled].filter((line) => line !== null);
             return (
               <li
                 key={row.id}
@@ -894,7 +894,11 @@ export default function MemberMemberships({
     const free = choice.type !== null && choice.type.priceMinor === 0;
     // A discount is used by whoever takes payments; the server sends nobody else any.
     const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
-    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded);
+    // The person's own Refer a friend gift (20e-ii-b-ii-a), filled in unless Removed.
+    const memberGift = shown.canBill && !free && shown.memberGift !== null && shown.memberGift !== undefined ? shown.memberGift : null;
+    const giftFits = memberGift !== null && choice.type !== null && membershipSummary(choice.type, discount, shown.taxIncluded, memberGift)?.giftOffMinor > 0;
+    const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
+    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed);
     const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && summary !== null;
     return (
       <form
@@ -905,7 +909,7 @@ export default function MemberMemberships({
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready || busy) return;
-          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary)));
+          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed)));
         }}
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
@@ -934,6 +938,17 @@ export default function MemberMemberships({
                 what={choice.type.name}
                 onRemove={() => setForm((f) => ({ ...f, discountId: '', code: NO_CODE }))}
                 onPutBack={() => setForm((f) => ({ ...f, discountId: gift.discount.id, code: NO_CODE }))}
+                disabled={busy}
+              />
+            ) : null}
+            {memberGift !== null && choice.type !== null ? (
+              <MemberGiftNote
+                gift={memberGift}
+                applied={giftUsed !== null}
+                fits={giftFits}
+                what={choice.type.name}
+                onRemove={() => setForm((f) => ({ ...f, memberGiftOff: true }))}
+                onPutBack={() => setForm((f) => ({ ...f, memberGiftOff: false }))}
                 disabled={busy}
               />
             ) : null}
@@ -982,6 +997,7 @@ export default function MemberMemberships({
           </button>
         ) : null}
       </div>
+      {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
       {shown.past && shown.memberships.length > 0 ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-past-note">
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}

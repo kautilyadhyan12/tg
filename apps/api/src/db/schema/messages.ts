@@ -41,7 +41,7 @@ export const gymMemberMessages = pgTable(
     index("gym_member_messages_inbox_idx").on(t.userId, t.gymId, t.sentAt.desc()),
     check(
       "gym_member_messages_kind_check",
-      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder','group')`,
+      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder','group','referral_gift')`,
     ),
     check("gym_member_messages_occasion_check", sql`length(${t.occasion}) BETWEEN 1 AND 80`),
     check("gym_member_messages_body_check", sql`length(${t.body}) BETWEEN 1 AND 500`),

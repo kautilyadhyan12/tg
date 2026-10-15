@@ -6,6 +6,7 @@
 // holds the code, so they never have to ask for it (Kd, 2026-10-15).
 import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
+import { memberGiftSchema } from "./memberGift.js";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -88,7 +89,8 @@ export const friendGiftSchema = z
   })
   .strict();
 export type FriendGift = z.infer<typeof friendGiftSchema>;
-export const friendGiftResponseSchema = z.object({ friendGift: friendGiftSchema.nullable() }).strict();
+/** With the person's own Refer a friend gift where one waits for them (20e-ii-b-ii-a). */
+export const friendGiftResponseSchema = z.object({ friendGift: friendGiftSchema.nullable(), memberGift: memberGiftSchema.nullable().default(null) }).strict();
 export type FriendGiftResponse = z.infer<typeof friendGiftResponseSchema>;
 
 /** The line under a filled-in gift, beside its Remove. */

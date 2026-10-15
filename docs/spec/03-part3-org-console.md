@@ -5253,6 +5253,55 @@ given, and Add member finds the person in Leads.** Migration `0119`. The member'
 - **A voided payment** leaves the membership's discount as it was: the gift was given on the
   membership, and voiding a payment records it wrongly taken, not the membership undone.
 
+**Built in 20e-ii-b-ii-a (2026-10-15; `rulings/2026-10-15-20e-ii-b-ii-a.md`): the member's
+gift, money off.** Migration `0121`. Free days, the owner's second choice, is 20e-ii-b-ii-b.
+- **Given** (`referrals/memberGiftRepo.ts`, `gym_referral_member_gifts`) inside the write that
+  records a payment that stands for a friend `friendGiftRows` names: a membership payment
+  (Record payment, or Add membership paid) or a sale at the desk to that record. A free trial
+  is no payment. Only to the member whose link it was, while they are still a member with a
+  live account, the offer is on and has a member's gift, and never to the friend themselves.
+  Once a friend (a unique index; two servers at one instant give one), and only for the friend's
+  first payment that stands: a later one gives nothing, whatever changed since (round one). Two
+  records of one friend joined carry the gift to the kept record. The gift is kept as the
+  offer was then.
+- **Told** in the member's inbox, once a friend (kind `referral_gift`, never one of the day's
+  automatic messages, never switched off): "A friend you invited has joined Iron Gym and made
+  their first payment. You get £10.00 off your next payment: it comes off by itself." The
+  friend is not named. A member in the app with no record on Members is told "…your next
+  payment at Iron Gym." instead, and the lead says the gift waits until staff add them to the
+  list, with **Find Ned Fox in the app** (Members, In the app).
+- **Where it comes off**, only on the record the member's own account holds today, at this
+  business: the earliest open bill with nothing paid on it of a membership in use, at once;
+  else the next bill the hourly run opens; else it is filled in, with Remove, on Add
+  membership (off the first bill, after any discount) and at Sell (in a discount's place).
+  The bill is opened again at its own price less the gift, with its own tax rate, and says
+  "Refer a friend gift for inviting Tara Shah: £10.00 off", so staff see why at a glance (Kd
+  at the click-through); a sale keeps it as its discount line, "Refer a friend gift"
+  (`gym_sales.member_gift`), which Sell's list says the same way, and the member's own
+  receipt says without the friend's name. It comes off only where something is left to pay, as every
+  discount here: a gift as large as the price waits for a payment it is smaller than, and the
+  screen says "It can't be used on Protein tub, so it is kept for their next payment." A bill
+  paid ahead before it opens is opened at its full price; the gift waits for the next. Until
+  used it waits on the person's page: "Refer a friend gift, £10.00 off, for inviting Tara
+  Shah. It comes off their next bill by itself, or is filled in when you add a membership or
+  sell to them."
+- **Taken back**: the friend's payment voided (today, Undo payment or Undo sale) or refunded
+  in full while the gift is not used: it stands instead on another of the friend's payments
+  that does, where there is one, else it is taken back, and nobody is sent a message. One
+  already taken off stays. A refund taken back gives it again, with no second message. A bill
+  the gift came off, cancelled by staff or with its membership, or a sale it came off voided:
+  the gift waits again where one of the friend's payments still stands, and is taken back where
+  none does (round one).
+- **The lead says** (`memberGiftLine`): "Maya Rao's gift for inviting Tara (£10.00 off) came
+  off their Gold Monthly bill due 1 November 2026." · "…came off their Protein tub at Sell on
+  20 October 2026." · "…comes off their next bill, or is filled in when they next add a
+  membership or buy at Sell." · "…was taken back: Tara's payment of 15 October 2026 was
+  voided before the gift was used." (or "was refunded in full").
+- **Cost** (`apps/api/.cost/measure-member-gift.ts`, rolled back): the friend rule on every
+  payment, 4.5 to 6.6 ms at 10,000 leads; one person's waiting gift 4.7 to 5.0 ms; the hourly
+  run taking 200 waiting gifts off 200 bills at once 166 to 284 ms (written in one statement
+  each), 7 to 9 ms with nothing waiting.
+
 ### 16.4 At risk
 
 The console lists members whose visits have dropped — came in at least 2 of the last

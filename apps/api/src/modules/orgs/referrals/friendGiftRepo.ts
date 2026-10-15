@@ -15,6 +15,8 @@ type SqlOrTx = Sql | TransactionSql;
 
 export interface FriendGiftRow {
   entryId: string;
+  /** The lead that joined them (the earliest, where two were joined to one record). */
+  leadId: string;
   /** The member who invited them; null where that account is gone. */
   referredBy: string | null;
   /** On Members, or holding a membership, before they were invited. */
@@ -30,6 +32,7 @@ export interface FriendGiftRow {
 
 interface DbRow {
   entry_id: string;
+  lead_id: string;
   referred_by: string | null;
   member_before: boolean;
   given_on: string | null;
@@ -45,7 +48,7 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
   if (entryIds.length === 0) return [];
   const rows = await sql<DbRow[]>`
     SELECT DISTINCT ON (l.entry_id)
-           l.entry_id, l.referred_by,
+           l.entry_id, l.id AS lead_id, l.referred_by,
            (EXISTS (
               SELECT 1 FROM gym_member_list_entries e
               WHERE e.gym_id = l.gym_id AND e.id = l.entry_id AND e.created_at < l.referred_at
@@ -102,6 +105,7 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
     ORDER BY l.entry_id, l.referred_at, l.id`;
   return rows.map((r) => ({
     entryId: r.entry_id,
+    leadId: r.lead_id,
     referredBy: r.referred_by,
     memberBefore: r.member_before,
     given: r.given_on === null || r.given_at === null ? null : { on: r.given_on, at: r.given_at },

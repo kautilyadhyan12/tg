@@ -17,7 +17,8 @@ import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import { applyPromoCode, discountOption, discountsFor, offeredDiscounts, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
-import { FriendGiftNote } from './FriendGift';
+import { FriendGiftNote, MemberGiftNote } from './FriendGift';
+import { MEMBER_GIFT_SALE_NAME, memberGiftOff } from '@app/shared';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -25,6 +26,7 @@ import {
   SELL_REFUSED,
   canOpenSell,
   canSellMemberships,
+  discountMinorFor,
   personOption,
   productOption,
   quantityMax,
@@ -202,18 +204,23 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   /** Refer a friend's gift for the person picked, where they are a friend a member invited
    *  (20e-ii-b-i): filled in on the sale, with Remove. */
   const [giftRead, setGiftRead] = useState(null);
+  /** The buyer's own Refer a friend gift (20e-ii-b-ii-a), filled in where no discount is
+   *  picked, unless staff press Remove. */
+  const [giftRemoved, setGiftRemoved] = useState(false);
   const buyerId = who === 'member' && person !== null ? person.entryId : null;
   const gift = giftRead !== null && giftRead.buyerId === buyerId ? giftRead.gift : null;
+  const memberGift = giftRead !== null && giftRead.buyerId === buyerId ? giftRead.memberGift : null;
   useEffect(() => {
     if (buyerId === null) return undefined;
     let live = true;
     registerService.friendGift(gymId, buyerId).then(
       (res) => {
-        const found = res.friendGift;
-        if (!live || found === null || !found.discount.forProducts) return;
-        setGiftRead({ buyerId, gift: found });
+        if (!live) return;
+        const found = res.friendGift !== null && res.friendGift.discount.forProducts ? res.friendGift : null;
+        setGiftRead({ buyerId, gift: found, memberGift: res.memberGift ?? null });
+        setGiftRemoved(false);
         // Only where staff have picked no discount of their own for this sale.
-        setDiscountId((picked) => (picked === '' ? found.discount.id : picked));
+        if (found !== null) setDiscountId((picked) => (picked === '' ? found.discount.id : picked));
       },
       () => undefined,
     );
@@ -235,7 +242,12 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   const usable = discountsFor(page, product);
   const discount = usable.find((d) => d.id === discountId) ?? null;
   const hasCodes = offeredDiscounts(page).some((d) => d.code !== null);
-  const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, discount) : null;
+  // The buyer's own gift takes a discount's place: used where no discount is picked and it
+  // fits this price; else kept for their next payment.
+  const giftFits = memberGift !== null && product !== null && Number.isInteger(quantity) && memberGiftOff(memberGift, product.priceMinor * quantity, product.currency) > 0;
+  const giftUsed = giftFits && discount === null && !giftRemoved ? memberGift : null;
+  const offShown = discount ?? (giftUsed === null ? null : { ...giftUsed, name: MEMBER_GIFT_SALE_NAME });
+  const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, offShown) : null;
   const problem = saleProblem({ product, quantity, who, person, currency: page.currency, discount });
   // "Applied" is said only while the applied discount is the one on the sale.
   const codeNote = promoCodeNote(page, product, discount, code);
@@ -260,6 +272,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         method,
         totalMinor: summary.totalMinor,
         discountId: discount === null ? null : discount.id,
+        ...(giftUsed === null ? {} : { memberGift: { id: giftUsed.id, offMinor: discountMinorFor(product, quantity, offShown) } }),
       });
       const sold = answer.register.sales.find((s) => s.id === answer.saleId);
       setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold), receiptNumber: sold?.receiptNumber ?? null, receiptOpen: false });
@@ -269,6 +282,8 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       setWho('walkin');
       setPerson(null);
       setDiscountId('');
+      setGiftRemoved(false);
+      setGiftRead(null);
       setCode({ text: '', note: null, appliedId: null });
       onPage(answer.register);
     } catch (err) {
@@ -392,6 +407,25 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           }}
           onPutBack={() => {
             setDiscountId(gift.discount.id);
+            touched();
+          }}
+          disabled={locked || state.busy}
+        />
+      ) : null}
+      {product !== null && memberGift !== null ? (
+        <MemberGiftNote
+          gift={memberGift}
+          applied={giftUsed !== null}
+          fits={giftFits}
+          what={product.name}
+          onRemove={() => {
+            setGiftRemoved(true);
+            touched();
+          }}
+          onPutBack={() => {
+            setGiftRemoved(false);
+            setDiscountId('');
+            setCode((was) => ({ ...was, note: null, appliedId: null }));
             touched();
           }}
           disabled={locked || state.busy}

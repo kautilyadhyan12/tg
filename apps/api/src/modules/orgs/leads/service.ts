@@ -53,6 +53,7 @@ import { leadJoinDecision, sharesContact, type ListRecord } from "./joinRule.js"
 import * as repo from "./repo.js";
 import { invitersFor, type Inviter } from "../referrals/repo.js";
 import { friendGiftsNow } from "../referrals/friendGiftRepo.js";
+import { leadMemberGift } from "../referrals/memberGiftRepo.js";
 import { friendGiftForNewFriend } from "../referrals/friendGift.js";
 import { leadForDetails } from "./joinOnAdd.js";
 
@@ -287,6 +288,7 @@ export function toLead(
     invitedBy: invitedBy(row, inviters),
     // Read only for one lead's own page (`getLead`).
     friendGift: null,
+    memberGift: null,
   };
 }
 
@@ -440,8 +442,12 @@ export async function getLead(deps: LeadsDeps, userId: string, gymId: string, le
   const lead = await leadWithSending(deps, gymId, row, today);
   // A friend a member invited who has joined: what became of Refer a friend's gift (20e-ii-b-i).
   if (row.status !== "joined" || row.referredAt === null || row.entryId === null) return lead;
-  const gift = (await friendGiftsNow(deps.sql, { id: gymId, timezone: org.timezone }, [row.entryId], today)).get(row.entryId);
-  return { ...lead, friendGift: gift?.state ?? null };
+  const [gift, memberGift] = await Promise.all([
+    friendGiftsNow(deps.sql, { id: gymId, timezone: org.timezone }, [row.entryId], today),
+    // The member's own gift for this friend (20e-ii-b-ii-a).
+    leadMemberGift(deps.sql, gymId, row.entryId),
+  ]);
+  return { ...lead, friendGift: gift.get(row.entryId)?.state ?? null, memberGift };
 }
 
 /** Add member (20e-ii-b-i): the lead not yet joined with the email or phone being typed, so

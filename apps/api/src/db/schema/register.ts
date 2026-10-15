@@ -213,6 +213,8 @@ export const gymSales = pgTable(
     receiptNumber: integer("receipt_number").notNull(),
     /** Sold to somebody on the gym's list, kept after their record is deleted for good (0114). */
     forMember: boolean("for_member").notNull().default(false),
+    /** Its discount line is a member's Refer a friend gift (0121), not one of the gym's discounts. */
+    memberGift: boolean("member_gift").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
@@ -244,7 +246,8 @@ export const gymSales = pgTable(
     }),
     check(
       "gym_sales_discount_check",
-      sql`(${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND ${t.unitPriceMinor} * ${t.quantity} - 1 END`,
+      sql`CASE WHEN ${t.memberGift} THEN ${t.discountId} IS NULL AND ${t.discountName} IS NOT NULL AND ${t.discountMinor} BETWEEN 1 AND ${t.unitPriceMinor} * ${t.quantity} - 1
+        ELSE (${t.discountId} IS NULL) = (${t.discountName} IS NULL) AND CASE WHEN ${t.discountId} IS NULL THEN ${t.discountMinor} = 0 ELSE ${t.discountMinor} BETWEEN 1 AND ${t.unitPriceMinor} * ${t.quantity} - 1 END END`,
     ),
     foreignKey({
       name: "gym_sales_discount_fk",

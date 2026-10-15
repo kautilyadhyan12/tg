@@ -13,6 +13,8 @@ import {
   PRODUCT_ARCHIVED_PAGE,
   discountFits,
   discountOff,
+  memberGiftOff,
+  MEMBER_GIFT_SALE_NAME,
   memberCurrencyForCountry,
   memberPaymentByHandSchema,
   saleAmounts,
@@ -24,6 +26,7 @@ import { insertAudit, lockOrgRow } from "../repo.js";
 import { nextReceipt } from "../receipts/repo.js";
 import { lockedDiscount, returnUse, takeUse } from "./discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
+import { friendPaymentGone, giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { rateOf, readRates, taxIncludedOf } from "./taxRepo.js";
 
 export interface ProductRow {
@@ -72,6 +75,8 @@ export interface SaleRow {
   taxIncluded: boolean;
   discountName: string | null;
   discountMinor: number;
+  /** The friend a member's Refer a friend gift on it was for inviting; null otherwise. */
+  giftFor: string | null;
   currency: string;
   method: MemberPaymentByHand;
   soldOn: string;
@@ -97,6 +102,7 @@ interface RawSale {
   tax_included: boolean;
   discount_name: string | null;
   discount_minor: number;
+  gift_for: string | null;
   currency: string;
   method: string;
   sold_on: string;
@@ -125,6 +131,7 @@ const sale = (r: RawSale): SaleRow => ({
   taxIncluded: r.tax_included,
   discountName: r.discount_name,
   discountMinor: r.discount_minor,
+  giftFor: r.gift_for,
   currency: r.currency,
   // Text under a CHECK: parsed, so a method this build does not know fails here.
   method: memberPaymentByHandSchema.parse(r.method),
@@ -140,7 +147,13 @@ const sale = (r: RawSale): SaleRow => ({
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
   s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
-  s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
+  s.discount_name, s.discount_minor,
+  CASE WHEN s.member_gift THEN (
+    SELECT NULLIF(btrim(f.full_name), '') FROM gym_referral_member_gifts g
+    JOIN gym_member_list_entries f ON f.gym_id = g.gym_id AND f.id = g.friend_entry_id
+    WHERE g.gym_id = s.gym_id AND g.used_sale_id = s.id
+  ) END AS gift_for,
+  s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
   e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.receipt_number`;
 
 export interface RegisterRow {
@@ -396,7 +409,13 @@ export type SellOutcome =
   /** The discount rounds to nothing on this price. */
   | { kind: "discount_nothing_off"; name: string }
   /** Refer a friend's gift, for somebody who is not an invited friend, or has had it. */
-  | { kind: "friend_gift_not_theirs" };
+  | { kind: "friend_gift_not_theirs" }
+  /** A member's Refer a friend gift that is not the buyer's, or no longer waits. */
+  | { kind: "member_gift_not_theirs" }
+  /** What it takes off is no longer what the screen showed, or it no longer fits. */
+  | { kind: "member_gift_changed" }
+  /** The gift and a discount on one sale. */
+  | { kind: "member_gift_with_discount" };
 
 export interface SellInput {
   gymId: string;
@@ -409,6 +428,9 @@ export interface SellInput {
   totalMinor: number;
   /** The gym's discount the sale is made with; null for none. */
   discountId: string | null;
+  /** The buyer's own Refer a friend gift in place of a discount, and what the screen showed it
+   *  takes off; null for none. */
+  memberGift: { id: string; offMinor: number } | null;
   /** The gym's own day. */
   today: string;
   actorUserId: string;
@@ -473,6 +495,20 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       // No use is spent on a discount that takes nothing off.
       if (used.offMinor === 0) return { kind: "discount_nothing_off", name: found.name };
     }
+    // The buyer's own Refer a friend gift (20e-ii-b-ii-a), in a discount's place: theirs, still
+    // waiting, read under its lock, and taking off what the screen showed.
+    let gift: { id: string; offMinor: number } | null = null;
+    if (input.memberGift !== null) {
+      if (input.discountId !== null) return { kind: "member_gift_with_discount" };
+      if (input.entryId === null) return { kind: "member_gift_not_theirs" };
+      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id);
+      if (found === null) return { kind: "member_gift_not_theirs" };
+      const off = memberGiftOff(found, item.price_minor * input.quantity, item.currency);
+      if (off === 0 || off !== input.memberGift.offMinor) return { kind: "member_gift_changed" };
+      gift = { id: found.id, offMinor: off };
+    }
+    const offName = used?.name ?? (gift === null ? null : MEMBER_GIFT_SALE_NAME);
+    const offMinor = used?.offMinor ?? gift?.offMinor ?? 0;
 
     // The product's rate as it is now, read under the gym's lock that its changes take.
     const rate = item.tax_rate_id === null ? null : await rateOf(tx, input.gymId, item.tax_rate_id);
@@ -482,7 +518,7 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       taxed: rate !== null,
       taxBp: rate?.bp ?? 0,
       taxIncluded: included,
-      discountMinor: used?.offMinor ?? 0,
+      discountMinor: offMinor,
     });
     if (!amounts.ok && amounts.reason === "nothing_to_pay") return { kind: "nothing_to_pay" };
     if (!amounts.ok || amounts.totalMinor !== input.totalMinor) return { kind: "price_changed" };
@@ -496,14 +532,17 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       INSERT INTO gym_sales
         (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
          tax_bp, tax_name, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
-         discount_id, discount_name, discount_minor, receipt_number, for_member)
+         discount_id, discount_name, discount_minor, receipt_number, for_member, member_gift)
       SELECT ${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
              ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${rate?.bp ?? 0}, ${rate?.name ?? null}, ${included}, ${item.currency},
              ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
-             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, n.number, ${input.entryId !== null}
+             ${used?.id ?? null}, ${offName}, ${offMinor}, n.number, ${input.entryId !== null}, ${gift !== null}
       FROM n
       RETURNING id`;
     if (created === undefined) throw new Error("sale insert returned no row");
+    if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: null, saleId: created.id, offMinor: gift.offMinor, currency: item.currency, now: input.now });
+    // A friend a member invited has paid at the desk: the member's Refer a friend gift.
+    if (input.entryId !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { saleId: created.id }, today: input.today, now: input.now });
     if (item.stock !== null) {
       await tx`
         UPDATE gym_products SET stock = stock - ${input.quantity}, updated_at = ${input.now}
@@ -525,6 +564,7 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
         method: input.method,
         ...(input.entryId === null ? {} : { entryId: input.entryId }),
         ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor) }),
+        ...(gift === null ? {} : { memberGiftId: gift.id, discountMinor: String(gift.offMinor) }),
       },
     });
     return { kind: "ok", saleId: created.id };
@@ -554,6 +594,10 @@ export async function undoSale(sql: Sql, input: { gymId: string; saleId: string;
         WHERE gym_id = ${input.gymId} AND id = ${row.product_id} AND stock IS NOT NULL`;
     }
     if (row.discount_id !== null) await returnUse(tx, input.gymId, row.discount_id);
+    // A member's Refer a friend gift taken off it waits again; a friend's sale that gave one
+    // no longer stands for it (20e-ii-b-ii-a).
+    await giftUseUndone(tx, input.gymId, { saleId: input.saleId }, input.today, input.now);
+    await friendPaymentGone(tx, { gymId: input.gymId, by: { saleId: input.saleId }, why: "voided", today: input.today, now: input.now });
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,

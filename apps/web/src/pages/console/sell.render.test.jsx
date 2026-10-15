@@ -247,6 +247,31 @@ describe('a product sale', () => {
     expect(svc.sell.mock.calls[0][1]).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', discountId: 'd-friend' });
   });
 
+  it("a member's own Refer a friend gift is filled in for them at Sell, in a discount's place, and Remove keeps it (20e-ii-b-ii-a)", async () => {
+    const memberGift = { id: 'g-maya', kind: 'percent', percentBp: 1000, amountMinor: null, currency: null, words: '10% off', friendName: 'Tara Shah' };
+    svc.friendGift.mockImplementation((_gym, entryId) => Promise.resolve({ friendGift: null, memberGift: entryId === 'e-maya' ? memberGift : null }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Product', 'p-towel');
+    expect(within(newSale()).queryByTestId('member-gift')).toBeNull();
+    fireEvent.click(screen.getByLabelText('A member'));
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    const note = within(await within(newSale()).findByTestId('member-gift'));
+    expect(note.getByText('Refer a friend gift filled in')).toBeTruthy();
+    expect(note.getByText('10% off. Refer a friend: for inviting Tara Shah, who joined.')).toBeTruthy();
+    expect(within(newSale()).getByText('Discount (Refer a friend gift)')).toBeTruthy();
+    fireEvent.click(note.getByRole('button', { name: 'Remove' }));
+    expect(note.getByText('Refer a friend gift removed')).toBeTruthy();
+    expect(within(newSale()).queryByText('Discount (Refer a friend gift)')).toBeNull();
+    fireEvent.click(note.getByRole('button', { name: 'Put it back' }));
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    const sent = svc.sell.mock.calls[0][1];
+    expect(sent).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', discountId: null, memberGift: { id: 'g-maya' } });
+    expect(sent.memberGift.offMinor).toBeGreaterThan(0);
+  });
+
   it("Refer a friend's gift never replaces a discount staff picked before it was found", async () => {
     const gift = {
       id: 'd-friend', name: "Refer a friend: friend's gift, WELCOME10", code: 'WELCOME10', kind: 'percent', percentBp: 1000, amountMinor: null, currency: null,
