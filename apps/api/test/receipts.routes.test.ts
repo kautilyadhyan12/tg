@@ -24,6 +24,7 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { nextReceipt } from "../src/modules/orgs/receipts/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 
 const url = process.env["DATABASE_URL"];
@@ -98,7 +99,7 @@ d("receipts (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST", path: string, cookies: Cookies, payload?: unknown) =>
+  const send = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
     api().inject({
       method,
       url: path,
@@ -108,6 +109,7 @@ d("receipts (real Postgres)", () => {
     });
   const get = (path: string, cookies: Cookies = {}) => send("GET", path, cookies);
   const post = (path: string, payload: unknown, cookies: Cookies = {}) => send("POST", path, cookies, payload);
+  const del = (path: string, cookies: Cookies = {}) => send("DELETE", path, cookies);
 
   interface Person {
     userId: string;
@@ -246,17 +248,32 @@ d("receipts (real Postgres)", () => {
       const water = await addProduct(gymId, owner.cookies, "Water", 250);
       await sold(gymId, owner.cookies, water.id, 250);
       await sold(gymId, owner.cookies, water.id, 250, { entryId: maya });
-      // Next door sells one thing of its own.
+      // $10.00 of Maya's payment is given back.
+      const refundOf = async (gym: string, entryId: string, cookies: Cookies, amountMinor: number) => {
+        const membership = (await held(gym, entryId, cookies)).memberships[0];
+        const payment = membership?.billing?.bills[0]?.payments[0];
+        if (membership === undefined || payment === undefined) throw new Error("no payment to refund");
+        const res = await post(`${heldUrl(gym, entryId)}/${membership.id}/payments/${payment.id}/refunds`, { requestKey: nextForm(), amountMinor, method: "cash", reason: "other" }, cookies);
+        expect(res.statusCode, res.body).toBe(200);
+      };
+      await refundOf(gymId, maya, owner.cookies, 1000);
+      // Next door sells, takes a membership payment and gives part of it back: its numbers are
+      // the same as this gym's, each its own.
       const theirWater = await addProduct(theirGym, nextDoor.cookies, "Their Water", 300);
       await sold(theirGym, nextDoor.cookies, theirWater.id, 300);
+      const theirGold = await addType(theirGym, nextDoor.cookies, monthly({ name: "Their Gold" }));
+      const zoe = await addPerson(theirGym, nextDoor.cookies, "Zoe Next");
+      await give(theirGym, zoe, nextDoor.cookies, theirGold, 5000, 5000);
+      await sold(theirGym, nextDoor.cookies, theirWater.id, 300);
+      await refundOf(theirGym, zoe, nextDoor.cookies, 700);
 
-      expect(await numbersOf(gymId)).toEqual(["1 payment", "2 sale", "3 sale"]);
-      expect(await numbersOf(theirGym)).toEqual(["1 sale"]);
-      expect(await issuedOf(gymId)).toBe(3);
-      expect(await issuedOf(theirGym)).toBe(1);
+      expect(await numbersOf(gymId)).toEqual(["1 payment", "2 sale", "3 sale", "4 refund"]);
+      expect(await numbersOf(theirGym)).toEqual(["1 sale", "2 payment", "3 sale", "4 refund"]);
+      expect(await issuedOf(gymId)).toBe(4);
+      expect(await issuedOf(theirGym)).toBe(4);
 
       // Next door asks for this gym's receipts by number: not found, and nothing of them.
-      for (const number of [1, 2, 3]) {
+      for (const number of [1, 2, 3, 4]) {
         const res = await get(receiptUrl(gymId, number), nextDoor.cookies);
         expect(res.statusCode).toBe(404);
         for (const word of ["Maya", "Patel", "Gold", "Water", "Rcp Worst Gym", "High Street", "5413"]) expect(res.body).not.toContain(word);
@@ -265,6 +282,10 @@ d("receipts (real Postgres)", () => {
       const theirs = await receipt(theirGym, 1, nextDoor.cookies);
       expect(theirs).toMatchObject({ kind: "sale", number: 1, gym: { name: "Rcp Next Door", address: null }, person: null, item: { name: "Their Water" } });
       expect(JSON.stringify(theirs)).not.toContain("Maya");
+      // Each gym's refund number 4 is its own refund, of its own member.
+      expect(await receipt(theirGym, 2, nextDoor.cookies)).toMatchObject({ kind: "payment", person: "Zoe Next", item: { name: "Their Gold" } });
+      expect(await receipt(theirGym, 4, nextDoor.cookies)).toMatchObject({ kind: "refund", person: "Zoe Next", refundedMinor: 700, forReceipt: 2 });
+      expect(await receipt(gymId, 4, owner.cookies)).toMatchObject({ kind: "refund", person: "Maya Patel", refundedMinor: 1000, forReceipt: 1 });
 
       // This gym's own number 1 is Maya's payment, with the bill's tax, to the cent.
       expect(await receipt(gymId, 1, owner.cookies)).toEqual({
@@ -273,6 +294,7 @@ d("receipts (real Postgres)", () => {
         gym: { name: "Rcp Worst Gym", address: "12 High Street, Austin TX 78701" },
         on: "2026-10-15",
         person: "Maya Patel",
+        personDeleted: false,
         by: "Rcp worst-owner",
         currency: "USD",
         cancelled: false,
@@ -281,14 +303,14 @@ d("receipts (real Postgres)", () => {
         paidMinor: 5413,
         method: "cash",
         balance: null,
-        refunds: [],
+        refunds: [{ number: 4, on: "2026-10-15", amountMinor: 1000 }],
       });
-      expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({ kind: "sale", person: null, item: { name: "Water", quantity: 1, unitPriceMinor: 250 } });
+      expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({ kind: "sale", person: null, personDeleted: false, item: { name: "Water", quantity: 1, unitPriceMinor: 250 } });
       expect(await receipt(gymId, 3, owner.cookies)).toMatchObject({ kind: "sale", person: "Maya Patel" });
 
       // A number the gym has not given; staff who may only change prices or read the list;
       // nobody signed in.
-      expect((await get(receiptUrl(gymId, 4), owner.cookies)).statusCode).toBe(404);
+      expect((await get(receiptUrl(gymId, 5), owner.cookies)).statusCode).toBe(404);
       for (const who of [pricer, reader]) {
         const res = await get(receiptUrl(gymId, 1), who.cookies);
         expect(res.statusCode).toBe(403);
@@ -322,6 +344,87 @@ d("receipts (real Postgres)", () => {
       const numbers = (await numbersOf(gymId)).map((line) => Number(line.split(" ")[0]));
       expect(numbers).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
       expect(await issuedOf(gymId)).toBe(15);
+
+      // The statement itself, by writers that take no lock of their own first: each holds its
+      // number a moment before it commits, and no two are given one.
+      const taken = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          sql.begin(async (tx) => {
+            const [row] = await tx<{ number: number }[]>`WITH n AS (${nextReceipt(tx, gymId)}) SELECT number FROM n`;
+            await tx`SELECT pg_sleep(0.05)`;
+            return row?.number;
+          }),
+        ),
+      );
+      expect([...taken].sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([16, 17, 18, 19, 20]);
+      expect(await issuedOf(gymId)).toBe(20);
+    },
+    T,
+  );
+
+  it(
+    "a membership sold with a discount prints its full price and the discount on the bill it came off, the tax on what was left",
+    async () => {
+      const owner = await makeUser("discount-owner");
+      const gymId = await makeGym(owner, "Rcp Discount Gym");
+      const tax = await addRate(gymId, owner.cookies, "Sales tax", 825);
+      const gold = await addType(gymId, owner.cookies, monthly({ taxRateId: tax }));
+      const discount = async (name: string, percentBp: number, payments: "first" | "every") => {
+        const res = await post(
+          `${register(gymId)}/discounts`,
+          { name, code: null, kind: "percent", percentBp, amountMinor: null, startsOn: null, endsOn: null, maxUses: null, forProducts: false, allProducts: true, productIds: [], forMemberships: true, allMembershipTypes: true, membershipTypeIds: [], membershipPayments: payments },
+          owner.cookies,
+        );
+        expect(res.statusCode, res.body).toBe(201);
+        const found = page(res).discounts.find((x) => x.name === name);
+        if (found === undefined) throw new Error("no discount");
+        return found.id;
+      };
+      const first = await discount("First month 20", 2000, "first");
+      const every = await discount("Staff 10", 1000, "every");
+      const giveWith = async (name: string, discountId: string, discountMinor: number, totalMinor: number) => {
+        const entryId = await addPerson(gymId, owner.cookies, name);
+        const res = await post(
+          heldUrl(gymId, entryId),
+          { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: true, method: "cash", priceMinor: 5000, discountId, discountMinor, totalMinor },
+          owner.cookies,
+        );
+        expect(res.statusCode, res.body).toBe(201);
+      };
+      // $50.00 less 20% is $40.00, and 8.25% of that is $3.30.
+      await giveWith("Ana First", first, 1000, 4330);
+      // $50.00 less 10% is $45.00, and 8.25% of that is $3.71 (3.7125).
+      await giveWith("Ben Every", every, 500, 4871);
+      expect((await receipt(gymId, 1, owner.cookies)).kind === "payment").toBe(true);
+      expect(await receipt(gymId, 1, owner.cookies)).toMatchObject({
+        amounts: { listedMinor: 5000, discount: { name: "First month 20", minor: 1000 }, tax: { name: "Sales tax", bp: 825, included: false, minor: 330 }, totalMinor: 4330 },
+        paidMinor: 4330,
+      });
+      expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({
+        amounts: { listedMinor: 5000, discount: { name: "Staff 10", minor: 500 }, tax: { name: "Sales tax", bp: 825, included: false, minor: 371 }, totalMinor: 4871 },
+        paidMinor: 4871,
+      });
+    },
+    T,
+  );
+
+  it(
+    "a sale to a member whose record is deleted for good names nobody, and never reads as a walk-in's",
+    async () => {
+      const owner = await makeUser("deleted-owner");
+      const gymId = await makeGym(owner, "Rcp Deleted Gym");
+      const water = await addProduct(gymId, owner.cookies, "Water", 250);
+      const cara = await addPerson(gymId, owner.cookies, "Cara Gone");
+      await sold(gymId, owner.cookies, water.id, 250, { entryId: cara });
+      await sold(gymId, owner.cookies, water.id, 250);
+      expect(await receipt(gymId, 1, owner.cookies)).toMatchObject({ person: "Cara Gone", personDeleted: false });
+      expect((await del(`/v1/orgs/${gymId}/member-list/entries/${cara}`, owner.cookies)).statusCode).toBe(200);
+      expect((await del(`/v1/orgs/${gymId}/member-list/former/${cara}`, owner.cookies)).statusCode).toBe(200);
+      const after = await receipt(gymId, 1, owner.cookies);
+      expect(after).toMatchObject({ kind: "sale", person: null, personDeleted: true });
+      expect(JSON.stringify(after)).not.toContain("Cara");
+      // The walk-in's stays a walk-in's.
+      expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({ person: null, personDeleted: false });
     },
     T,
   );
@@ -374,6 +477,7 @@ d("receipts (real Postgres)", () => {
         gym: { name: "Rcp Parts Gym", address: null },
         on: "2026-10-15",
         person: "Lena Ortiz",
+        personDeleted: false,
         by: "Rcp parts-owner",
         currency: "USD",
         cancelled: false,

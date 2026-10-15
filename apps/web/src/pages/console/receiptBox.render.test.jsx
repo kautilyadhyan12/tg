@@ -48,6 +48,7 @@ const receipt = (over = {}) => ({
   gym: { name: 'Iron House', address: '12 High Street\nAustin TX 78701' },
   on: '2026-10-15',
   person: 'Maya Patel',
+  personDeleted: false,
   by: 'Sam Desk',
   currency: 'USD',
   cancelled: false,
@@ -145,13 +146,17 @@ describe('a receipt', () => {
     expect(within(ask).queryByRole('textbox')).toBeNull();
   });
 
-  it('a receipt that cannot be read says so where it was asked for, with Try again', async () => {
+  it('a receipt that cannot be read says so where it was asked for; Try again says it is reading, then shows it', async () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
-    svc.receipt.mockRejectedValueOnce(Object.assign(new Error('down'), { response: { status: 500, data: {} } })).mockResolvedValueOnce(receipt());
+    let answer;
+    svc.receipt.mockRejectedValueOnce(Object.assign(new Error('down'), { response: { status: 500, data: {} } })).mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     open();
     const row = await pressReceipt();
     expect((await within(row).findByRole('alert')).textContent).toBe("We couldn't open this receipt. Try again.");
     fireEvent.click(within(row).getByRole('button', { name: 'Try again' }));
+    expect(within(row).getByText('Opening the receipt…')).toBeTruthy();
+    expect(within(row).queryByRole('alert')).toBeNull();
+    answer(receipt());
     expect(await within(row).findByTestId('receipt')).toBeTruthy();
   });
 });

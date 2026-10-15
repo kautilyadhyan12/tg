@@ -2,6 +2,7 @@
 // from the row it is for. Every read carries the gym in its WHERE.
 import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import {
+  billAmounts,
   memberPaymentByHandSchema,
   memberPaymentMethodSchema,
   receiptAmounts,
@@ -13,7 +14,9 @@ import {
 
 /** The gym's next receipt number, as the CTE `n` (`number`) of the statement that writes
  *  the payment, refund or sale it is for: the count and the row move together or not at
- *  all, and the gym's row lock takes two at one instant one after the other. */
+ *  all, and the gym's row lock takes two at one instant one after the other. THE ONE DOOR:
+ *  the database keeps a number once in each of the three tables, not across them, so every
+ *  writer of a payment, a refund or a sale takes its number here. */
 export function nextReceipt(tx: TransactionSql, gymId: string): PendingQuery<Row[]> {
   return tx`UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gymId} RETURNING receipts_issued AS number`;
 }
@@ -50,10 +53,11 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
       by: string | null;
       entry_id: string | null;
       full_name: string | null;
+      for_member: boolean;
       cancelled: boolean;
     }[]
   >`
-    SELECT s.item_name, s.quantity, s.unit_price_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
+    SELECT s.for_member, s.item_name, s.quantity, s.unit_price_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
            s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, u.display_name AS by,
            s.entry_id, e.full_name, s.undone_at IS NOT NULL AS cancelled
     FROM gym_sales s
@@ -66,6 +70,8 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     number,
     on: r.sold_on,
     person: r.entry_id === null ? null : personName(r.full_name),
+    // Sold to somebody whose record was deleted for good since: theirs, and nobody named.
+    personDeleted: r.entry_id === null && r.for_member,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
@@ -79,6 +85,33 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     // Text under a CHECK: parsed, so a method this build does not know fails here.
     method: memberPaymentByHandSchema.parse(r.method),
   };
+}
+
+/** A membership bill's amounts as its receipt prints them. A membership sold with a discount
+ *  (18b-ii-b) prints its full price and the discount on each bill the discount came off: with
+ *  "every" its kept price is already after it, so the full price is that and the discount;
+ *  with "first" its kept price is the full one, and the bill that came to the price less the
+ *  discount, at the bill's own tax, is the one it came off. A bill opened at the full price
+ *  prints no discount. */
+function billReceiptAmounts(r: {
+  bill_minor: number;
+  tax_minor: number;
+  tax_bp: number;
+  tax_name: string | null;
+  tax_included: boolean | null;
+  held_price: number;
+  discount_name: string | null;
+  discount_minor: number;
+  discount_payments: string | null;
+}) {
+  const tax = taxOf(r);
+  const plain = receiptAmounts({ totalMinor: r.bill_minor, tax, discount: null });
+  if (r.discount_name === null || r.discount_minor <= 0 || r.discount_payments === null) return plain;
+  const listed = r.discount_payments === "every" ? r.held_price + r.discount_minor : r.held_price;
+  const applied = tax === null ? null : { name: tax.name ?? "", bp: tax.bp, included: tax.included };
+  const came = billAmounts(listed - r.discount_minor, applied);
+  if (!came.ok || came.totalMinor !== r.bill_minor) return plain;
+  return receiptAmounts({ totalMinor: r.bill_minor, listedMinor: listed, tax, discount: { name: r.discount_name, minor: r.discount_minor } });
 }
 
 async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
@@ -101,9 +134,13 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       tax_name: string | null;
       tax_included: boolean | null;
       paid_before: number;
+      held_price: number;
+      discount_name: string | null;
+      discount_minor: number;
+      discount_payments: string | null;
     }[]
   >`
-    SELECT p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
+    SELECT h.price_minor AS held_price, h.discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
            u.display_name AS by, e.full_name, t.name AS type_name,
            b.amount_minor AS bill_minor, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
@@ -127,11 +164,12 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     number,
     on: r.paid_on,
     person: personName(r.full_name),
+    personDeleted: false,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
     item: { name: r.type_name, covers: coversOf(r) },
-    amounts: receiptAmounts({ totalMinor: r.bill_minor, tax: taxOf(r), discount: null }),
+    amounts: billReceiptAmounts(r),
     paidMinor: r.amount_minor,
     method: memberPaymentMethodSchema.parse(r.method),
     balance: receiptBalance(r.bill_minor, r.paid_before, r.amount_minor),
@@ -173,6 +211,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
     number,
     on: r.refunded_on,
     person: personName(r.full_name),
+    personDeleted: false,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,

@@ -8,10 +8,14 @@
 // writes nothing here.
 import { z } from "zod";
 import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
+import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { SALE_QUANTITY_MAX } from "./register.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
 const currencySchema = z.string().regex(/^[A-Z]{3}$/);
+/** A price before its discount: up to 99 of the dearest thing a gym can sell. */
+const listedSchema = z.number().int().min(0).max(SALE_QUANTITY_MAX * MEMBERSHIP_PRICE_MINOR_MAX);
 
 /** The tax a receipt names: the rate's name and percentage as they were, whether the price
  *  held it, and how much it is. `name` is null for a sale made before rates had names. */
@@ -23,8 +27,8 @@ const receiptTaxSchema = z
  *  and before the tax where the tax is added on top; `totalMinor` is what it came to. */
 const receiptAmountsSchema = z
   .object({
-    listedMinor: minorSchema,
-    discount: z.object({ name: z.string(), minor: minorSchema }).strict().nullable(),
+    listedMinor: listedSchema,
+    discount: z.object({ name: z.string(), minor: listedSchema }).strict().nullable(),
     tax: receiptTaxSchema.nullable(),
     totalMinor: minorSchema,
   })
@@ -41,8 +45,10 @@ const receiptCommon = {
     .strict(),
   /** The gym's own day it was taken, or given back. */
   on: daySchema,
-  /** Who it is for, by the name on their record; null for a walk-in. */
+  /** Who it is for, by the name on their record; null for a walk-in, or for somebody whose
+   *  record was deleted for good since (`personDeleted`). */
   person: z.string().nullable(),
+  personDeleted: z.boolean(),
   /** The member of staff who took it; null where they have since left the app. */
   by: z.string().nullable(),
   currency: currencySchema,

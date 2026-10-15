@@ -6,7 +6,7 @@ import { cancelledLine, noAddressLine, receiptButtonLabel, receiptDay, receiptLi
 // server sends. Amounts are worked by hand: Texas's 8.25% on $50.00 is $4.13; India's GST
 // of 18% inside ₹2,000.00 is ₹305.08 of it.
 
-const common = { number: 12, gym: { name: 'Iron Works', address: '12 High Street' }, on: '2026-10-15', person: 'Maya Patel', by: 'Sam', currency: 'USD', cancelled: false };
+const common = { number: 12, gym: { name: 'Iron Works', address: '12 High Street' }, on: '2026-10-15', person: 'Maya Patel', personDeleted: false, by: 'Sam', currency: 'USD', cancelled: false };
 const payment = (over = {}) => ({
   ...common,
   kind: 'payment',
@@ -40,6 +40,17 @@ const refund = (over = {}) => ({
 const drawn = (receipt) => receiptLines(receipt).map((l) => (l.amount === null ? l.label : `${l.label} | ${l.amount}`));
 
 describe('receiptLines', () => {
+  it('a membership sold with a discount: its full price, the discount, the tax on what was left', () => {
+    const off = payment({ amounts: { listedMinor: 5000, discount: { name: 'First month 20', minor: 1000 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 330 }, totalMinor: 4330 }, paidMinor: 4330 });
+    expect(drawn(off)).toEqual([
+      'Gold Monthly, 15 Oct – 14 Nov 2026 | $50.00',
+      'Discount: First month 20 | −$10.00',
+      'Sales tax 8.25% | $3.30',
+      'Total | $43.30',
+      'Paid by cash | $43.30',
+    ]);
+  });
+
   it('a membership paid in full, tax added on top: the price, the tax, the total and how it was paid', () => {
     expect(drawn(payment())).toEqual([
       'Gold Monthly, 15 Oct – 14 Nov 2026 | $50.00',
@@ -102,6 +113,8 @@ describe('the rest of a receipt', () => {
     expect(receiptDay(payment())).toBe('15 Oct 2026');
     expect(receiptPerson(payment())).toBe('Maya Patel');
     expect(receiptPerson(sale())).toBe('Walk-in');
+    // Sold to somebody whose record was deleted for good: theirs, never a walk-in's.
+    expect(receiptPerson(sale({ personDeleted: true }))).toBe('A deleted member');
   });
 
   it('a receipt taken back says Cancelled, in words for what it was', () => {

@@ -25,12 +25,16 @@ describe('printHtml', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('a print window that never says it closed still loses its frame in time', () => {
+  it('a print window still open keeps its page; a frame a browser never said closed goes with the next print', () => {
     vi.useFakeTimers();
     printHtml('<p>Receipt no. 8</p>');
-    const frame = document.querySelector('iframe');
-    vi.spyOn(frame.contentWindow, 'print').mockImplementation(() => undefined);
-    vi.advanceTimersByTime(60_000);
-    expect(document.querySelector('iframe')).toBeNull();
+    const first = document.querySelector('iframe');
+    vi.spyOn(first.contentWindow, 'print').mockImplementation(() => undefined);
+    vi.advanceTimersByTime(120_000);
+    expect(document.querySelectorAll('iframe')).toHaveLength(1);
+    printHtml('<p>Receipt no. 9</p>');
+    const frames = [...document.querySelectorAll('iframe')];
+    expect(frames).toHaveLength(1);
+    expect(frames[0].contentDocument.body.textContent).toBe('Receipt no. 9');
   });
 });

@@ -17,7 +17,7 @@ import SentencePlace from './SentencePlace';
 // A gym with no postal address is asked for it here, by whoever may add it.
 
 export default function ReceiptBox({ gymId, gym, number, onClose }) {
-  const [state, setState] = useState({ number: null, receipt: null, error: null });
+  const [state, setState] = useState({ number: null, asked: 0, receipt: null, error: null });
   const [asked, setAsked] = useState(0);
   const words = orgWords(gym?.orgType);
   const mayAddAddress = canManageOrg(viewerPrivileges(gym));
@@ -25,8 +25,8 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
   useEffect(() => {
     let live = true;
     registerService.receipt(gymId, number).then(
-      (receipt) => live && setState({ number, receipt, error: null }),
-      (err) => live && setState({ number, receipt: null, error: errorText(err, "We couldn't open this receipt. Try again.") }),
+      (receipt) => live && setState({ number, asked, receipt, error: null }),
+      (err) => live && setState({ number, asked, receipt: null, error: errorText(err, "We couldn't open this receipt. Try again.") }),
     );
     return () => {
       live = false;
@@ -34,7 +34,9 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
   }, [gymId, number, asked]);
 
   const again = useCallback(() => setAsked((n) => n + 1), []);
-  const loading = state.number !== number;
+  // Reading: another receipt's answer, or Try again pressed after a failed read. A receipt
+  // already on screen stays there while it is read again (its address just added).
+  const loading = state.number !== number || (state.receipt === null && state.asked !== asked);
   const receipt = loading ? null : state.receipt;
 
   return (

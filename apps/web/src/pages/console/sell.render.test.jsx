@@ -346,6 +346,7 @@ describe('receipts (18g-i)', () => {
     gym: { name: 'Iron House', address: '12 High Street' },
     on: '2026-10-12',
     person: null,
+    personDeleted: false,
     by: 'Sam Desk',
     currency: 'USD',
     cancelled: false,

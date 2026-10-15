@@ -55,4 +55,11 @@ ALTER TABLE "gym_member_refunds" ADD CONSTRAINT "gym_member_refunds_receipt_chec
 ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_receipt_check" CHECK ("receipt_number" >= 1);--> statement-breakpoint
 ALTER TABLE "gym_member_payments" ADD CONSTRAINT "gym_member_payments_receipt_uq" UNIQUE ("gym_id", "receipt_number");--> statement-breakpoint
 ALTER TABLE "gym_member_refunds" ADD CONSTRAINT "gym_member_refunds_receipt_uq" UNIQUE ("gym_id", "receipt_number");--> statement-breakpoint
-ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_receipt_uq" UNIQUE ("gym_id", "receipt_number");
+ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_receipt_uq" UNIQUE ("gym_id", "receipt_number");--> statement-breakpoint
+
+-- A sale made to somebody on the gym's list keeps that it was, for its receipt: a record
+-- deleted for good lets go of the sale (`entry_id` to null, 0102), and the receipt then says
+-- a deleted member's, never a walk-in's. A sale whose record went before this is a walk-in's.
+ALTER TABLE "gym_sales" ADD COLUMN "for_member" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+UPDATE "gym_sales" SET "for_member" = true WHERE "entry_id" IS NOT NULL;--> statement-breakpoint
+ALTER TABLE "gym_sales" ADD CONSTRAINT "gym_sales_for_member_check" CHECK ("entry_id" IS NULL OR "for_member");

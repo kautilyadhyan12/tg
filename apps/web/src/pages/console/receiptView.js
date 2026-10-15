@@ -77,9 +77,10 @@ export function receiptNotes(receipt) {
   return notes;
 }
 
-/** Who it is for: their name, or a walk-in. */
+/** Who it is for: their name, a walk-in, or somebody whose record was deleted for good. */
 export function receiptPerson(receipt) {
-  return receipt.person === null ? 'Walk-in' : receipt.person;
+  if (receipt.person !== null) return receipt.person;
+  return receipt.personDeleted ? 'A deleted member' : 'Walk-in';
 }
 
 /** "15 Oct 2026". */

@@ -153,7 +153,7 @@ export interface RegisterRow {
 /** The Sell page in one go, or null where the gym does not exist: what is on sale (bounded
  *  by the cap the writes hold), a page of what was archived, and the day's sales. A sale
  *  names who bought it, so the day's sales are read only `withSales`. */
-export async function readRegister(sql: Sql, gymId: string, today: string, salesShown: number, withSales: boolean): Promise<RegisterRow | null> {
+export async function readRegister(sql: Sql | TransactionSql, gymId: string, today: string, salesShown: number, withSales: boolean): Promise<RegisterRow | null> {
   const readProducts = (archived: boolean, limit: number) => sql<RawProduct[]>`
     SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at
     FROM gym_products
@@ -484,11 +484,11 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       INSERT INTO gym_sales
         (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
          tax_bp, tax_name, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
-         discount_id, discount_name, discount_minor, receipt_number)
+         discount_id, discount_name, discount_minor, receipt_number, for_member)
       SELECT ${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
              ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${rate?.bp ?? 0}, ${rate?.name ?? null}, ${included}, ${item.currency},
              ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
-             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, n.number
+             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, n.number, ${input.entryId !== null}
       FROM n
       RETURNING id`;
     if (created === undefined) throw new Error("sale insert returned no row");

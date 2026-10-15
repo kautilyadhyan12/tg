@@ -52,7 +52,7 @@ describe("receiptParamsSchema", () => {
 });
 
 describe("receiptSchema", () => {
-  const common = { number: 1, gym: { name: "Iron Works", address: null }, on: "2026-10-15", person: null, by: null, currency: "USD", cancelled: false };
+  const common = { number: 1, gym: { name: "Iron Works", address: null }, on: "2026-10-15", person: null, personDeleted: false, by: null, currency: "USD", cancelled: false };
   it("a sale is paid by hand: a payment link is refused on one", () => {
     const sale = {
       ...common,
@@ -63,6 +63,17 @@ describe("receiptSchema", () => {
     };
     expect(receiptSchema.safeParse(sale).success).toBe(true);
     expect(receiptSchema.safeParse({ ...sale, method: "link" }).success).toBe(false);
+  });
+  it("a sale listed above the cap reads back: two at the top price, half off, so its total fits", () => {
+    const listed = 2 * 99_999_999;
+    const big = {
+      ...common,
+      kind: "sale",
+      item: { name: "Lifetime", quantity: 2, unitPriceMinor: 99_999_999 },
+      amounts: { listedMinor: listed, discount: { name: "Half", minor: 99_999_999 }, tax: null, totalMinor: 99_999_999 },
+      method: "cash",
+    };
+    expect(receiptSchema.safeParse(big).success).toBe(true);
   });
   it("a field the receipt does not have is refused", () => {
     const refund = { ...common, kind: "refund", forReceipt: 1, item: { name: "Gold", covers: null }, refundedMinor: 100, method: "cash" };
