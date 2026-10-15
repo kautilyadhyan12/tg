@@ -1356,6 +1356,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         <MemberMemberships
           key={p.entryId}
           gymId={gymId}
+          gym={gym}
           entryId={p.entryId}
           name={p.fullName || 'this person'}
           readOnly={readOnly}

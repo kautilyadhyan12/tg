@@ -119,13 +119,21 @@ async function makeGym(people: number): Promise<Made> {
     FROM gym_held_memberships h, generate_series(0, ${MONTHS - 1}) AS n
     WHERE h.gym_id = ${gymId}`;
   await sql`
-    INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by)
-    SELECT ${gymId}, b.id, ${PRICE}::int, 'GBP', 'cash', gen_random_uuid(), b.due_on, ${owner}
-    FROM gym_member_bills b WHERE b.gym_id = ${gymId} AND b.status = 'paid'`;
+    WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
+    ins AS (
+      INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by, receipt_number)
+      SELECT ${gymId}, b.id, ${PRICE}::int, 'GBP', 'cash', gen_random_uuid(), b.due_on, ${owner}, base.b + row_number() OVER ()
+      FROM gym_member_bills b, base WHERE b.gym_id = ${gymId} AND b.status = 'paid'
+      RETURNING 1)
+    UPDATE gyms SET receipts_issued = receipts_issued + (SELECT count(*) FROM ins) WHERE id = ${gymId}`;
   await sql`
-    INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by)
-    SELECT ${gymId}, p.id, 1000, 'GBP', 'cash', 'other', gen_random_uuid(), p.paid_on + 3, ${owner}
-    FROM gym_member_payments p WHERE p.gym_id = ${gymId} AND p.seq % 20 = 0`;
+    WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
+    ins AS (
+      INSERT INTO gym_member_refunds (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by, receipt_number)
+      SELECT ${gymId}, p.id, 1000, 'GBP', 'cash', 'other', gen_random_uuid(), p.paid_on + 3, ${owner}, base.b + row_number() OVER ()
+      FROM gym_member_payments p, base WHERE p.gym_id = ${gymId} AND p.seq % 20 = 0
+      RETURNING 1)
+    UPDATE gyms SET receipts_issued = receipts_issued + (SELECT count(*) FROM ins) WHERE id = ${gymId}`;
 
   const staff = [owner];
   for (let i = 1; i < 5; i++) {
@@ -139,13 +147,17 @@ async function makeGym(people: number): Promise<Made> {
     SELECT ${gymId}, 'Product ' || n, 100 + n * 50, 'GBP' FROM generate_series(1, 30) AS n`;
   const perDay = Math.max(1, Math.ceil(people / 20));
   await sql`
-    INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                           tax_bp, tax_included, currency, method, sold_on, recorded_by, undone_at)
-    SELECT ${gymId}, gen_random_uuid(), p.id, p.name, 1 + k % 3, p.price_minor, p.price_minor * (1 + k % 3), 0, p.price_minor * (1 + k % 3),
-           0, false, 'GBP', 'cash', (current_date - d)::date, ((${staff})::uuid[])[1 + k % 5],
-           CASE WHEN k % 50 = 0 THEN now() END
-    FROM generate_series(0, ${MONTHS * 30}) AS d, generate_series(1, ${perDay}) AS k,
-         LATERAL (SELECT id, name, price_minor FROM gym_products WHERE gym_id = ${gymId} ORDER BY name OFFSET (d + k) % 30 LIMIT 1) p`;
+    WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
+    ins AS (
+      INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
+                             tax_bp, tax_included, currency, method, sold_on, recorded_by, undone_at, receipt_number)
+      SELECT ${gymId}, gen_random_uuid(), p.id, p.name, 1 + k % 3, p.price_minor, p.price_minor * (1 + k % 3), 0, p.price_minor * (1 + k % 3),
+             0, false, 'GBP', 'cash', (current_date - d)::date, ((${staff})::uuid[])[1 + k % 5],
+             CASE WHEN k % 50 = 0 THEN now() END, base.b + row_number() OVER ()
+      FROM generate_series(0, ${MONTHS * 30}) AS d, generate_series(1, ${perDay}) AS k, base,
+           LATERAL (SELECT id, name, price_minor FROM gym_products WHERE gym_id = ${gymId} ORDER BY name OFFSET (d + k) % 30 LIMIT 1) p
+      RETURNING 1)
+    UPDATE gyms SET receipts_issued = receipts_issued + (SELECT count(*) FROM ins) WHERE id = ${gymId}`;
   return { gymId, people };
 }
 

@@ -1,4 +1,4 @@
-import { memberPurchasesResponseSchema, salePeopleResponseSchema, sellPageResponseSchema, sellProductResponseSchema } from '@app/shared';
+import { memberPurchasesResponseSchema, receiptSchema, salePeopleResponseSchema, sellPageResponseSchema, sellProductResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // THE CONSOLE'S SELL PAGE (spec Part 3 §14.3; ROADMAP 18b-i): for staff holding
@@ -43,6 +43,8 @@ export const registerService = {
   changeDiscount: async (gymId, discountId, body) => page(await authApi.put(`${gymPath(gymId)}/register/discounts/${encodeURIComponent(discountId)}`, body)),
   archiveDiscount: async (gymId, discountId) => page(await authApi.delete(`${gymPath(gymId)}/register/discounts/${encodeURIComponent(discountId)}`)),
   restoreDiscount: async (gymId, discountId) => page(await authApi.post(`${gymPath(gymId)}/register/discounts/${encodeURIComponent(discountId)}/restore`, {})),
+  /** One receipt by the gym's own number (18g-i), for staff who may record payments. */
+  receipt: async (gymId, number) => read(receiptSchema, 'that receipt', await authApi.get(`${gymPath(gymId)}/receipts/${encodeURIComponent(String(number))}`)),
   /** What one person has bought at the desk, newest first. */
   purchases: async (gymId, entryId) =>
     read(memberPurchasesResponseSchema, "this person's purchases", await authApi.get(`${gymPath(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/purchases`)),

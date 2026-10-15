@@ -70,6 +70,9 @@ export type MemberBillState = z.infer<typeof memberBillStateSchema>;
 
 // ── The wire ────────────────────────────────────────────────────────────────
 
+/** A receipt's number: the gym's own count of its payments, refunds and sales (18g-i). */
+export const receiptNumberSchema = z.number().int().min(1).max(2_147_483_647);
+
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
 
@@ -85,6 +88,8 @@ export const memberRefundSchema = z
     refundedOn: daySchema,
     reason: refundReasonSchema,
     by: z.string().nullable(),
+    /** Its receipt's number, the gym's own (18g-i). */
+    receiptNumber: receiptNumberSchema,
   })
   .strict();
 export type MemberRefund = z.infer<typeof memberRefundSchema>;
@@ -102,6 +107,8 @@ export const memberPaymentSchema = z
     refunds: z.array(memberRefundSchema),
     /** What a refund can still be noted for; 0 where none can (`refundMemberPayment`). */
     refundableMinor: minorSchema,
+    /** Its receipt's number, the gym's own (18g-i). */
+    receiptNumber: receiptNumberSchema,
   })
   .strict();
 export type MemberPayment = z.infer<typeof memberPaymentSchema>;

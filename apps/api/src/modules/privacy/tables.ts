@@ -98,7 +98,7 @@ export const DIRECT_DELETE_TABLES = [
   // Which team of a challenge a person is in (migration 0086; ROADMAP 19d-ii-a): about
   // the person, deleted at Day 14 and exported.
   "gym_challenge_team_people",
-  // A member's own invite link at a business (migration 0114; ROADMAP 20e-ii-a): a random
+  // A member's own invite link at a business (migration 0115; ROADMAP 20e-ii-a): a random
   // code that stands for the person, deleted at Day 14 and exported.
   "gym_referral_links",
   // §5.2's Day-0 sentence already says "push tokens deleted", so clearing
@@ -422,7 +422,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_leads.added_by — which member of staff added a lead (`0046`), on
   // gym_member_list_uploads' footing: the gym's record, and the lead itself is a
   // person the gym told us about, not an account. Deleted when the gym closes.
-  // gym_leads.referred_by — the member whose invite link brought the lead (`0114`), on the
+  // gym_leads.referred_by — the member whose invite link brought the lead (`0115`), on the
   // same footing: the gym's record of where a lead came from; `ON DELETE set null`, and a
   // deleted account's name is never shown (referrals/repo.invitersFor).
   "gym_leads",
@@ -516,7 +516,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // the purge deletes it six years after that record is deleted for good (3e-iii).
   "gym_waiver_desk_signatures",
   // gym_referral_settings.updated_by — which member of staff last set the business's
-  // Refer a friend offer (`0114`), on gym_leads' footing: the gym's record; `ON DELETE set
+  // Refer a friend offer (`0115`), on gym_leads' footing: the gym's record; `ON DELETE set
   // null`.
   "gym_referral_settings",
   "api_cost_events",

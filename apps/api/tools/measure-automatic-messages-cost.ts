@@ -122,9 +122,13 @@ try {
       FROM gym_held_memberships h CROSS JOIN generate_series(0, 11) AS k
       WHERE h.gym_id = ${gymId}`;
     await sql`
-      INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by)
-      SELECT ${gymId}, b.id, 4999, 'GBP', 'cash', gen_random_uuid(), b.due_on, ${owner}
-      FROM gym_member_bills b WHERE b.gym_id = ${gymId} AND b.status = 'paid'`;
+      WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
+      ins AS (
+        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by, receipt_number)
+        SELECT ${gymId}, b.id, 4999, 'GBP', 'cash', gen_random_uuid(), b.due_on, ${owner}, base.b + row_number() OVER ()
+        FROM gym_member_bills b, base WHERE b.gym_id = ${gymId} AND b.status = 'paid'
+        RETURNING 1)
+      UPDATE gyms SET receipts_issued = receipts_issued + (SELECT count(*) FROM ins) WHERE id = ${gymId}`;
     return gymId;
   };
 

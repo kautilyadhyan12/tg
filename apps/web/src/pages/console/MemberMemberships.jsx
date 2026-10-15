@@ -3,6 +3,8 @@ import { Check, Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
+import ReceiptBox from '../../components/console/ReceiptBox';
+import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
 import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
@@ -106,6 +108,7 @@ const addForm = (types, today) => ({ requestKey: newRequestKey(), typeId: types.
 
 export default function MemberMemberships({
   gymId,
+  gym = null,
   entryId,
   name,
   readOnly,
@@ -127,6 +130,9 @@ export default function MemberMemberships({
   const [notice, setNotice] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
+  /** The receipt open under its payment or refund, by its number. */
+  const [receiptFor, setReceiptFor] = useState(null);
+  const toggleReceipt = (number) => setReceiptFor((was) => (was === number ? null : number));
   /** The classes a cancel would end, when the server asked: { id, later, ending, all, moved }.
    *  `moved`: asked again after the box's own button, since the classes had changed. */
   const [ending, setEnding] = useState(null);
@@ -599,18 +605,37 @@ export default function MemberMemberships({
                         {p.amount}
                       </span>
                       <span className="c-s13 c-t2 md:flex-1">{p.detail}</span>
+                      <button
+                        type="button"
+                        className={`${SMALL} self-start md:self-auto`}
+                        aria-expanded={receiptFor === p.receiptNumber}
+                        aria-label={receiptButtonLabel(p.receiptNumber, `the payment of ${p.amount}`)}
+                        onClick={() => toggleReceipt(p.receiptNumber)}
+                      >
+                        {RECEIPT_BUTTON}
+                      </button>
                       {acts && p.refundable ? (
                         <button type="button" className={`${REFUND} self-start md:self-auto`} disabled={busy} onClick={() => startRefund(m, p.id)}>
                           Note a refund
                         </button>
                       ) : null}
                     </div>
+                    {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {p.refunds.map((r) => (
                       <div key={r.id} className={`${LINE} pl-3`} style={{ borderLeft: '2px solid var(--bad)' }} data-testid="held-refund">
                         <span className="c-s13 c-w6 whitespace-nowrap" style={{ color: 'var(--bad)' }}>
                           {r.amount}
                         </span>
                         <span className="c-s13 c-t2 md:flex-1">{r.detail}</span>
+                        <button
+                          type="button"
+                          className={`${SMALL} self-start md:self-auto`}
+                          aria-expanded={receiptFor === r.receiptNumber}
+                          aria-label={receiptButtonLabel(r.receiptNumber, `the refund of ${r.amount}`)}
+                          onClick={() => toggleReceipt(r.receiptNumber)}
+                        >
+                          {RECEIPT_BUTTON}
+                        </button>
                         {acts ? (
                           <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => askUndoRefund(m, p.id, r.id)}>
                             Undo refund
@@ -618,6 +643,7 @@ export default function MemberMemberships({
                         ) : null}
                       </div>
                     ))}
+                    {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
                   </div>
                 ))}
                 {pays ? (

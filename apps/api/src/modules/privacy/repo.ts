@@ -145,7 +145,7 @@ export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): P
   await tx`DELETE FROM gym_member_messages WHERE user_id = ${userId}`;
   // The kinds of message they switched off (tables.ts, 0092).
   await tx`DELETE FROM gym_member_messages_off WHERE user_id = ${userId}`;
-  // Their own invite links (tables.ts, 0114). A link stops working at Day 0 already: an
+  // Their own invite links (tables.ts, 0115). A link stops working at Day 0 already: an
   // invite is read only for an active account.
   await tx`DELETE FROM gym_referral_links WHERE user_id = ${userId}`;
   // The posts they made as a MEMBER, with their photos' rows, reactions and reports by
