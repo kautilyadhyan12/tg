@@ -3784,7 +3784,27 @@ the app never picks one.
   number, day and who for, a Description and Amount table, the notes, "Thank you."), from a
   frame nobody sees. A gym with no postal address is asked for it there, by whoever may add
   it; a receipt prints without one.
-- **Not built**: a receipt by email (18g-ii); receipts in the member's app (Stage 5 item 16).
+- **Not built**: receipts in the member's app (Stage 5 item 16). A receipt by email (18g-ii)
+  was dropped 2026-10-15 (`rulings/2026-10-15-18m.md`): the app shows them, the desk prints them.
+
+**As built, 18m (2026-10-15; `rulings/2026-10-15-18g-i.md`, `rulings/2026-10-15-18m.md`).** A
+record deleted for good keeps its money.
+- **Before the record goes** (`deleteEntry`, `keepPaidMemberships`), each of its memberships with a
+  payment on it, one taken back too, lets go of it (`entry_id` null, `record_deleted_at`, migration
+  `0116`) and stays with its bills, payments, refunds and receipt numbers. It is over
+  (Cancelled that day if it was running; the database refuses it running with no record), its
+  unpaid bills are cancelled, and a booking or session no longer counts against it. A membership
+  with nothing paid goes with the record. The app keeps it while the gym uses the app.
+- **Read as "A deleted member"**: on its receipts, on Sell's list of the day's takings (a sale
+  too), with no page to open. Reports' takings keep it; what was owed and what was running stop
+  counting, as for anybody who has left.
+- **Delete for good** says so first: "Their details and history are gone and can't be brought
+  back. Payments they made stay in your takings and reports, as “A deleted member”."
+- **A join** moves a list membership that is over like any other; one still running beside the
+  kept record's running one stays behind, and where it has a payment the join is refused: "Both
+  records have Gold Monthly. Cancel it on one of them first, then merge."
+- **A gym's whole list deleted** (Stage 4 item 14) takes every payment, those kept from records
+  deleted earlier too (`deleteListForGym`): the gym is warned first, and downloading them is 18n.
 
 ### 14.4 Pay by the gym's own link
 

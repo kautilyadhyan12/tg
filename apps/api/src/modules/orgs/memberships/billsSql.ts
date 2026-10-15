@@ -394,8 +394,9 @@ export interface DayPaymentRow {
   method: MemberPaymentMethod;
   paidAt: Date;
   by: string | null;
-  entryId: string;
-  personName: string;
+  /** Null where the record was deleted for good since (18m). */
+  entryId: string | null;
+  personName: string | null;
   receiptNumber: number;
 }
 
@@ -409,13 +410,13 @@ export async function paymentsOn(
   limit: number,
 ): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; count: number; totalMinor: number }[]; refunds: { currency: string; totalMinor: number }[] }> {
   const [rows, sums, refunds] = await Promise.all([
-    sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string; full_name: string; receipt_number: number }[]>`
+    sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string | null; full_name: string | null; receipt_number: number }[]>`
       SELECT p.id, t.name AS type_name, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name, p.receipt_number
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-      JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+      LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
       LEFT JOIN users u ON u.id = p.recorded_by
       WHERE p.gym_id = ${gymId} AND p.paid_on = ${day}::date AND p.undone_at IS NULL
       ORDER BY p.seq DESC

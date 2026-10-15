@@ -210,6 +210,19 @@ describe('today', () => {
     ]);
     expect(takingsRows(page({ sales: [sale()], payments: null }), 'Europe/London', '24h').map((r) => r.facts)).toEqual(['Maya Patel · Cash · 15:05 · by Sam Desk']);
   });
+  it('a sale or payment of somebody deleted for good since reads "A deleted member", never Walk-in, and has no page to open', () => {
+    const gone = { id: 'm2', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'cash', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: null };
+    const rows = takingsRows(
+      page({ sales: [sale({ person: null, personDeleted: true, by: null }), sale({ id: 's0', soldAt: '2026-10-12T09:00:00.000Z', person: null, personDeleted: false, by: null })], payments: [gone] }),
+      'America/Chicago',
+      '12h',
+    );
+    expect(rows.map((r) => [r.kind, r.facts, r.person])).toEqual([
+      ['payment', 'A deleted member · Cash · 10:30 AM', null],
+      ['sale', 'A deleted member · Cash · 9:05 AM', null],
+      ['sale', 'Walk-in · Cash · 4:00 AM', null],
+    ]);
+  });
   it('the Undo box says what goes and who gives the money back', () => {
     expect(undoSaleQuestion(sale())).toBe("Undo this sale? 2 × Water, $4.31. It will no longer count in today's total. If you took the money, give it back yourself.");
   });

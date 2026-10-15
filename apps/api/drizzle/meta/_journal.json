@@ -806,6 +806,13 @@
       "when": 1790640000115,
       "tag": "0115_gym_gone_for_good",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1790640000116,
+      "tag": "0116_payments_kept",
+      "breakpoints": true
     }
   ]
 }
