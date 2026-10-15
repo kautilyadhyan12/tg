@@ -14,7 +14,6 @@ export * from "./workouts.js";
 export * from "./progress.js";
 export * from "./gamification.js";
 export * from "./entitlements.js";
-export * from "./coach.js";
 export * from "./nutrition.js";
 export * from "./mealVision.js";
 export * from "./geo.js";

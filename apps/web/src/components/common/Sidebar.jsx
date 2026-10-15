@@ -4,7 +4,7 @@ import { useTransition } from '../../context/TransitionContext';
 import { useXp } from '../../hooks/useXp';
 import { formatLevel } from '../../api/gamificationApi';
 import {
-  LayoutDashboard, Dumbbell, Activity, Brain,
+  LayoutDashboard, Dumbbell, Activity,
   Apple, Trophy, Settings, LogOut, Play,
   ChevronLeft, ChevronRight, Flame, Footprints,
 } from 'lucide-react';
@@ -27,7 +27,6 @@ const navItems = [
   { to: '/workout/builder', icon: Play,            label: 'My Workout' },
   { to: '/running',         icon: Footprints,      label: 'Running'    },
   { to: '/progress',        icon: Activity,        label: 'Progress'   },
-  { to: '/coach',           icon: Brain,           label: 'AI Coach'   },
   { to: '/nutrition',       icon: Apple,           label: 'Nutrition'  },
   { to: '/achievements',    icon: Trophy,          label: 'Achievements' },
   // `My Gym` USED TO LIVE HERE and was REMOVED by Kd's ruling of 2026-08-19,

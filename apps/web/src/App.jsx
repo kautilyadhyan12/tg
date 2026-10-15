@@ -19,7 +19,6 @@ import PreWorkout      from './pages/PreWorkout';
 import ActiveWorkout   from './pages/ActiveWorkout';
 import PostWorkout     from './pages/PostWorkout';
 import Progress        from './pages/Progress';
-import Coach           from './pages/Coach';
 import Nutrition       from './pages/Nutrition';
 import Achievements    from './pages/Achievements';
 import Settings        from './pages/Settings';
@@ -140,11 +139,8 @@ export default function App() {
                 <AppLayout><Progress /></AppLayout>
               </ProtectedRoute>
             } />
-            <Route path="/coach" element={
-              <ProtectedRoute>
-                <AppLayout><Coach /></AppLayout>
-              </ProtectedRoute>
-            } />
+            {/* The AI coach was deleted (Kd, 2026-10-15); an old link lands on the Dashboard. */}
+            <Route path="/coach" element={<Navigate to="/dashboard" replace />} />
             <Route path="/nutrition" element={
               <ProtectedRoute>
                 <AppLayout><Nutrition /></AppLayout>

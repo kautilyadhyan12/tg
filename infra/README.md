@@ -43,9 +43,8 @@ Only these are hard-required (no default, not optional):
 | `JWT_SECRET` | 32+ chars enforced. |
 | `REDIS_URL` | Required **in production only**, via config's `.refine()`. Upstash in prod. |
 
-Everything else has a default or is optional; an unset `GROQ_API_KEY` cleanly
-disables the coach rather than breaking boot, an unset `GEMINI_API_KEY` does the
-same for the meal scanner (`MEAL_VISION_MODEL` names the model; Gemini 3.5
+Everything else has a default or is optional; an unset `GEMINI_API_KEY` cleanly
+disables the meal scanner rather than breaking boot (`MEAL_VISION_MODEL` names the model; Gemini 3.5
 Flash-Lite by default, Groq's `qwen/qwen3.6-27b` as the spare, which then needs
 `GROQ_API_KEY` instead), and the same pattern covers `ORS_API_KEY` and the three
 `GOOGLE_*` values.
@@ -75,22 +74,6 @@ DATABASE_URL=postgres://aihg:aihg@localhost:5433/aihg corepack pnpm --filter api
 
 That matches v1 §19's CI pipeline, where migrate is its own step before deploy,
 and `RUNBOOK/cutover.md`, which already runs both this way.
-
-## Why the model weights are baked into the image
-
-The coach embeds the **user's question in-process on every request**
-(`modules/coach/routes.ts` wires `createMiniLmEmbedder()` as the default;
-`service.ts` calls `retrieve(sql, embedder, message)`), so all-MiniLM-L6-v2
-(~90 MB) has to be inside the container.
-
-It **cannot** be supplied by a mounted volume: transformers.js v4.2.0 reads no
-`process.env` at all — `DEFAULT_CACHE_DIR = path.join(dirname__, '/.cache/')`
-resolves inside the package's own `node_modules` directory, so `HF_HOME` and
-`TRANSFORMERS_CACHE` do nothing. The Dockerfile therefore runs one warm embed at
-build time and asserts the returned dimension is Part 4 §3.7's pinned 384.
-
-Consequences worth knowing: the image is large, a redeploy costs no re-download,
-and a container with no route to HuggingFace still answers coach questions.
 
 ## Deploying
 
