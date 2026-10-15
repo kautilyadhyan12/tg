@@ -15,12 +15,13 @@ const MessageSettingsPanel = (await import('../../components/console/MessageSett
 const view = await import('./messageSettingsView');
 
 const ORG = { id: 'g1', slug: 'iron-house', name: 'Iron House', orgType: 'gym', staffRole: 'owner', privileges: ['org.manage', 'attendance.read', 'memberships.manage'] };
-const KINDS = ['welcome', 'trial_check_in', 'trial_ending', 'membership_ending', 'payment_overdue', 'class_reminder', 'birthday', 'milestone', 'miss_you'];
-const NAMES = ['Welcome', 'Trial check-in', 'Trial ending', 'Membership ending', 'Payment overdue', 'Class reminder', 'Birthday', 'Visit milestone', 'We miss you'];
-const NUMBERS = { missYouDays: 10, milestones: [50, 100], trialCheckInDay: 2, trialEndingDays: 2, membershipEndingDays: 7, classReminderHours: 2 };
-/** A gym that uses everything: check-in, a price list with a trial on it, payments, classes. */
+const KINDS = ['welcome', 'trial_check_in', 'trial_ending', 'membership_ending', 'payment_overdue', 'class_reminder', 'birthday', 'milestone', 'miss_you', 'review'];
+const NAMES = ['Welcome', 'Trial check-in', 'Trial ending', 'Membership ending', 'Payment overdue', 'Class reminder', 'Birthday', 'Visit milestone', 'We miss you', 'Ask for a review'];
+const NUMBERS = { missYouDays: 10, milestones: [50, 100], trialCheckInDay: 2, trialEndingDays: 2, membershipEndingDays: 7, classReminderHours: 2, reviewVisits: 10, reviewLink: null };
+/** A gym that uses everything: check-in, a price list with a trial on it, payments, classes.
+ *  Ask for a review is off until a gym gives its link. */
 const START = {
-  messages: KINDS.map((kind) => ({ kind, on: true, ownLine: null })),
+  messages: KINDS.map((kind) => ({ kind, on: kind !== 'review', ownLine: null })),
   ...NUMBERS,
   checkIn: true,
   trialOnList: true,
@@ -29,7 +30,7 @@ const START = {
   billsOverdueDays: 0,
   bookings: true,
 };
-const loaded = () => screen.findByText(/^(All 9 on|\d of 9 on|All switched off)$/);
+const loaded = () => screen.findByText(/^(All 10 on|\d+ of 10 on|All switched off)$/);
 const withKind = (kind, change, over = {}) => ({ ...START, ...over, messages: START.messages.map((m) => (m.kind === kind ? { ...m, ...change } : m)) });
 const draw = (org = ORG, props = {}) =>
   render(
@@ -53,8 +54,8 @@ describe('Automatic messages', () => {
   it('shows each message with its switch, when it is sent and the words a member will read, in the gym\'s name', async () => {
     getMessageSettings.mockResolvedValue({ data: START });
     draw();
-    await screen.findByText('All 9 on');
-    expect(screen.getAllByRole('switch').map((s) => [s.getAttribute('aria-label'), s.getAttribute('aria-checked')])).toEqual(NAMES.map((name) => [`Send the ${name} message`, 'true']));
+    await screen.findByText('9 of 10 on');
+    expect(screen.getAllByRole('switch').map((s) => [s.getAttribute('aria-label'), s.getAttribute('aria-checked')])).toEqual(NAMES.map((name) => [`Send the ${name} message`, name === 'Ask for a review' ? 'false' : 'true']));
     expect(preview('trial_check_in')).toBe("Hi [member's first name], how's your trial at Iron House going? If you need anything, just let us know.");
     expect(preview('trial_ending')).toBe("Hi [member's first name], your trial at Iron House ends on [its last day]. If you'd like to keep coming, we'd be happy to help you choose a membership.");
     expect(preview('membership_ending')).toBe("Hi [member's first name], your membership at Iron House ends on [its last day]. We'd love to keep you with us. Just let us know if you'd like to renew.");
@@ -117,15 +118,17 @@ describe('Automatic messages', () => {
     await screen.findByText('Saved. It holds from the next message sent.');
     expect(updateMessageSettings).toHaveBeenCalledTimes(1);
     expect(updateMessageSettings).toHaveBeenCalledWith('g1', {
-      messages: KINDS.map((kind) => ({ kind, on: kind !== 'birthday', ownLine: kind === 'miss_you' ? 'Your first class back is on us.' : null })),
+      messages: KINDS.map((kind) => ({ kind, on: kind !== 'birthday' && kind !== 'review', ownLine: kind === 'miss_you' ? 'Your first class back is on us.' : null })),
       missYouDays: 14,
       milestones: [10, 50, 100],
       trialCheckInDay: 3,
       trialEndingDays: 1,
       membershipEndingDays: 14,
       classReminderHours: 2,
+      reviewVisits: 10,
+      reviewLink: null,
     });
-    expect(screen.getByText('8 of 9 on')).toBeTruthy();
+    expect(screen.getByText('8 of 10 on')).toBeTruthy();
     expect(within(box('Trial check-in')).getByLabelText('Day of the trial').value).toBe('3');
     expect(theSwitch('Birthday').getAttribute('aria-checked')).toBe('false');
     expect(save().disabled).toBe(true);
@@ -157,12 +160,12 @@ describe('Automatic messages', () => {
     expect(updateMessageSettings).not.toHaveBeenCalled();
   });
 
-  it('a gym nobody is checked in at is told on the two messages that count visits, with a button to Attendance, or who can', async () => {
+  it('a gym nobody is checked in at is told on the three messages that count visits, with a button to Attendance, or who can', async () => {
     getMessageSettings.mockResolvedValue({ data: { ...START, checkIn: false } });
     draw();
     await loaded();
     const note = 'This one counts check-ins. Nobody has been checked in at your gym in the last 30 days, so nobody will get it yet.';
-    for (const name of ['Visit milestone', 'We miss you']) {
+    for (const name of ['Visit milestone', 'We miss you', 'Ask for a review']) {
       expect(within(box(name)).getByText(note)).toBeTruthy();
       // The box holds what was typed, so the button asks before it leaves.
       expect(within(box(name)).getByRole('button', { name: 'Open Attendance' })).toBeTruthy();
@@ -255,8 +258,9 @@ describe('Automatic messages', () => {
   it('a gym on no plan sees everything and can change nothing; a studio reads its own words', async () => {
     getMessageSettings.mockResolvedValue({ data: withKind('welcome', { on: false }) });
     draw({ ...ORG, orgType: 'studio' }, { readOnly: true });
-    await screen.findByText('8 of 9 on');
+    await screen.findByText('8 of 10 on');
     expect(screen.getAllByRole('switch').every((s) => s.disabled)).toBe(true);
+    expect(within(box('Ask for a review')).getByLabelText('Your review link').disabled).toBe(true);
     expect(line('Welcome').disabled).toBe(true);
     expect(save().disabled).toBe(true);
     expect(within(box('Welcome')).getByText(/^Sent when somebody joins your studio in the app: within a quarter of an hour by day/)).toBeTruthy();
@@ -348,20 +352,83 @@ describe('the class reminder', () => {
   });
 });
 
+describe('ask for a review', () => {
+  const LINK = 'https://g.page/r/CbX1aBcDeFgHEBM/review';
+  const reviewBox = () => within(box('Ask for a review'));
+  const link = () => reviewBox().getByLabelText('Your review link');
+
+  it('says when it is sent and what a member reads, and tells the gym where its link is', async () => {
+    getMessageSettings.mockResolvedValue({ data: START });
+    draw();
+    await loaded();
+    expect(preview('review')).toBe("Hi [member's first name], thanks for coming to Iron House. If you have a minute, we'd love a review.");
+    expect(
+      reviewBox().getByText(
+        'Sent once, in the morning, when a member has made the number of visits you pick here. A visit is a day the front desk or staff checked them in. Only to people who came in during the last 7 days, never to your staff, and never twice. Under the words, a Leave a review button opens your review link.',
+      ),
+    ).toBeTruthy();
+    expect(reviewBox().getByText('The page where people write a review of you. On Google, open your Business Profile, press Ask for reviews and copy the link.')).toBeTruthy();
+    const pick = reviewBox().getByLabelText('Visits before asking');
+    expect([pick.value, [...pick.options].map((o) => o.textContent)]).toEqual(['10', ['5 visits', '10 visits', '20 visits', '30 visits', '50 visits']]);
+    expect(link().value).toBe('');
+    expect(reviewBox().queryByRole('alert')).toBeNull();
+  });
+
+  it('switched on with no link, or with a link that is not a whole https link, cannot be saved, and says why where Save is', async () => {
+    getMessageSettings.mockResolvedValue({ data: START });
+    draw();
+    await loaded();
+    const bar = () => within(screen.getByTestId('message-settings-save'));
+    fireEvent.click(theSwitch('Ask for a review'));
+    expect(reviewBox().getByRole('alert').textContent).toBe('Add your review link to switch this on, or switch it off.');
+    expect(bar().getByRole('alert').textContent).toBe('Ask for a review: Add your review link to switch this on, or switch it off.');
+    expect(save().disabled).toBe(true);
+    for (const typed of ['g.page/r/abc/review', 'http://g.page/r/abc/review', 'javascript:alert(1)', 'https://g.page/r/a b']) {
+      fireEvent.change(link(), { target: { value: typed } });
+      expect(reviewBox().getByRole('alert').textContent, typed).toBe(view.REVIEW_LINK_WRONG);
+      expect(save().disabled, typed).toBe(true);
+    }
+    // Off again, a wrong link still cannot be kept.
+    fireEvent.click(theSwitch('Ask for a review'));
+    expect(reviewBox().getByRole('alert').textContent).toBe(view.REVIEW_LINK_WRONG);
+    expect(updateMessageSettings).not.toHaveBeenCalled();
+  });
+
+  it('a link and a number are saved with the rest, and the switch then reads on', async () => {
+    getMessageSettings.mockResolvedValue({ data: START });
+    const after = { ...withKind('review', { on: true }), reviewVisits: 20, reviewLink: LINK };
+    updateMessageSettings.mockResolvedValue({ data: after });
+    draw();
+    await loaded();
+    fireEvent.click(theSwitch('Ask for a review'));
+    fireEvent.change(link(), { target: { value: `  ${LINK} ` } });
+    fireEvent.change(reviewBox().getByLabelText('Visits before asking'), { target: { value: '20' } });
+    expect(reviewBox().queryByRole('alert')).toBeNull();
+    fireEvent.click(save());
+    await screen.findByText('Saved. It holds from the next message sent.');
+    expect(updateMessageSettings).toHaveBeenCalledWith('g1', { messages: after.messages, ...NUMBERS, reviewVisits: 20, reviewLink: LINK });
+    expect(screen.getByText('All 10 on')).toBeTruthy();
+    expect(link().value).toBe(LINK);
+    expect(theSwitch('Ask for a review').getAttribute('aria-checked')).toBe('true');
+  });
+});
+
 describe('the box\'s own rules', () => {
   it('reads what the server holds, and says whether anything changed', () => {
     const kept = view.messageDraft(withKind('birthday', { on: false, ownLine: 'Cake at the desk' }, { missYouDays: 21, milestones: [100, 10] }));
     expect(kept).toEqual({
-      on: Object.fromEntries(KINDS.map((kind) => [kind, kind !== 'birthday'])),
+      on: Object.fromEntries(KINDS.map((kind) => [kind, kind !== 'birthday' && kind !== 'review'])),
       lines: Object.fromEntries(KINDS.map((kind) => [kind, kind === 'birthday' ? 'Cake at the desk' : ''])),
       trialCheckInDay: 2,
       trialEndingDays: 2,
       membershipEndingDays: 7,
       missYouDays: 21,
       classReminderHours: 2,
+      reviewVisits: 10,
       milestones: [10, 100],
+      reviewLink: '',
     });
-    for (const field of ['trialCheckInDay', 'trialEndingDays', 'membershipEndingDays', 'classReminderHours']) expect(view.messageDraftChanged({ ...kept, [field]: 3 }, kept), field).toBe(true);
+    for (const field of ['trialCheckInDay', 'trialEndingDays', 'membershipEndingDays', 'classReminderHours', 'reviewVisits']) expect(view.messageDraftChanged({ ...kept, [field]: 3 }, kept), field).toBe(true);
     // A reply with no numbers in it starts at the app's own.
     expect(view.messageDraft({ messages: [] })).toMatchObject({ trialCheckInDay: 2, trialEndingDays: 2, membershipEndingDays: 7, missYouDays: 10 });
     // The row's day is the sender's own, for every grace period the Bills box offers: on that
@@ -374,14 +441,18 @@ describe('the box\'s own rules', () => {
       expect(after >= 3 && after > grace, String(grace)).toBe(true);
     }
     expect([view.overdueAfter(0), view.overdueAfter(7), view.overdueAfter(undefined)]).toEqual(['3 days after its due date', '8 days after its due date', '3 days after its due date']);
-    expect(view.messageSettingsSummary(kept)).toBe('8 of 9 on');
-    expect(view.messageSettingsSummary(view.messageDraft(START))).toBe('All 9 on');
+    expect(view.messageSettingsSummary(kept)).toBe('8 of 10 on');
+    expect(view.messageSettingsSummary(view.messageDraft(START))).toBe('9 of 10 on');
     expect(view.messageDraftChanged(kept, kept)).toBe(false);
     // Spaces alone are no change.
     expect(view.messageDraftChanged({ ...kept, lines: { ...kept.lines, birthday: ' Cake at the desk ' } }, kept)).toBe(false);
     expect(view.messageDraftChanged({ ...kept, missYouDays: 7 }, kept)).toBe(true);
     expect(view.messageDraftChanged({ ...kept, milestones: [10] }, kept)).toBe(true);
     expect(view.messageDraftChanged({ ...kept, on: { ...kept.on, welcome: false } }, kept)).toBe(true);
+    expect(view.messageDraftChanged({ ...kept, reviewLink: ' https://g.page/r/abc/review' }, kept)).toBe(true);
+    expect(view.messageDraftChanged({ ...kept, reviewLink: '   ' }, kept)).toBe(false);
+    // A reply from a server older than Ask for a review: it starts off, never on.
+    expect(view.messageDraft({ messages: START.messages.filter((m) => m.kind !== 'review') }).on.review).toBe(false);
     expect(view.toggleMilestone([50, 100], 10)).toEqual([10, 50, 100]);
     expect(view.toggleMilestone([50, 100], 50)).toEqual([100]);
     expect(view.messageSettingsSummary(view.messageDraft({ ...START, messages: START.messages.map((m) => ({ ...m, on: false })) }))).toBe('All switched off');

@@ -7,12 +7,14 @@
 import { z } from "zod";
 import { gymContactSchema } from "./gymContact.js";
 import { underAgeOn } from "./memberInvites.js";
+import { classOnlineLinkSchema } from "./classOnline.js";
 import { instantSchema } from "./time.js";
 
 /** Every kind of automatic message, in the order one is picked when several are due on
  *  one day: the one that cannot wait a day first. A birthday is only today; a Welcome is
  *  the gym's first word and has three days; a trial's check-in has two. An ending and a
- *  payment notice are still due tomorrow, and a come-back is last. A class reminder is
+ *  payment notice are still due tomorrow, a come-back after them, and a request for a review,
+ *  which can always wait, last. A class reminder is
  *  never one of the day's: `classReminderDue` decides it, a booking at a time. */
 export const GYM_MESSAGE_KINDS = [
   "birthday",
@@ -23,6 +25,7 @@ export const GYM_MESSAGE_KINDS = [
   "payment_overdue",
   "milestone",
   "miss_you",
+  "review",
   "class_reminder",
 ] as const;
 export const gymMessageKindSchema = z.enum(GYM_MESSAGE_KINDS);
@@ -88,6 +91,12 @@ export function paymentNoticeAfterDays(graceDays: number): number | null {
  *  marks paid, and its members owe it nothing. */
 export const GYM_MESSAGE_PAYMENTS_DAYS = 45;
 
+/** The gym's review link (20e-i): the same rule as an online class's link, an `https://`
+ *  address of a named site with no sign-in in it and nothing that cannot be seen. */
+export const reviewLinkSchema = classOnlineLinkSchema;
+/** Ask for a review is sent once ever to one person by one gym: this is its one occasion. */
+export const GYM_MESSAGE_REVIEW_OCCASION = "review";
+
 /** We miss you waits until the gym has checked somebody in on this many days since the
  *  person's last visit: half the gym's days, rounded up. A gym that stopped using check-in,
  *  or was shut for those days, has not seen anybody, so nobody there is told they were missed. */
@@ -109,6 +118,8 @@ export interface GymMessageNumbers {
   milestones: readonly number[];
   /** Class reminder: this many hours before a booked class or session starts. */
   classReminderHours: number;
+  /** Ask for a review: once somebody has made this many visits. */
+  reviewVisits: number;
 }
 export const GYM_MESSAGE_STARTING_NUMBERS: GymMessageNumbers = {
   trialCheckInDay: 2,
@@ -117,8 +128,10 @@ export const GYM_MESSAGE_STARTING_NUMBERS: GymMessageNumbers = {
   membershipEndingDays: 7,
   milestones: [50, 100],
   classReminderHours: 2,
+  reviewVisits: 10,
 };
-/** Every kind is on until a gym switches it off (20b). */
+/** Every kind is on until a gym switches it off (20b), apart from Ask for a review, which
+ *  has nothing to send until the gym gives its review link (20e-i). */
 export const GYM_MESSAGE_STARTING_ON: Record<GymMessageKind, boolean> = {
   payment_overdue: true,
   membership_ending: true,
@@ -129,6 +142,7 @@ export const GYM_MESSAGE_STARTING_ON: Record<GymMessageKind, boolean> = {
   milestone: true,
   miss_you: true,
   class_reminder: true,
+  review: false,
 };
 
 /** Why a message that has an occasion is not sent now. */
@@ -364,6 +378,12 @@ export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[
     if (reached.length > 0) found.push({ kind: "milestone", occasion: `visits:${String(Math.max(...reached))}` });
   }
 
+  // Asked once ever, by somebody who has been coming for a while and came this week: never
+  // somebody who stopped coming long ago, on the first day a gym switches this on.
+  if (!person.staff && sinceVisit !== null && sinceVisit >= 0 && sinceVisit < GYM_MESSAGE_MILESTONE_DAYS && person.visits >= numbers.reviewVisits) {
+    found.push({ kind: "review", occasion: GYM_MESSAGE_REVIEW_OCCASION });
+  }
+
   // Away is counted from the last check-in of any kind, and only for a while: somebody who
   // stopped coming long before the gym used this is not told on its first day.
   const sinceSeen = daysBetween(person.lastSeenOn, today);
@@ -453,6 +473,7 @@ function fixedWords(send: GymMessageOccasion, gym: string, displayName: string |
     if (about.online) return hi(`you're booked for ${title} ${about.when} with ${gym}. It's an online class.`);
     return hi(`you're booked for ${title} ${about.when} at ${gym}. See you there.`);
   }
+  if (send.kind === "review") return hi(`thanks for coming to ${gym}. If you have a minute, we'd love a review.`);
   if (send.kind === "payment_overdue") return hi(`your payment to ${gym} is overdue. Please get in touch so we can sort it out.`);
   if (send.kind === "trial_ending" || send.kind === "membership_ending") {
     const day = dayInWords(send.endsOn ?? null);
@@ -498,6 +519,9 @@ export const gymInboxMessageSchema = z.object({
     .min(1)
     .refine((body) => gymMessageLength(body) <= GYM_MESSAGE_BODY_MAX, { message: "too_long" }),
   sentAt: instantSchema,
+  /** Where the message's button goes: the gym's review link, for Ask for a review. Null
+   *  for every other message, and from an api older than 20e-i. */
+  link: reviewLinkSchema.nullable().default(null),
   /** False until the member has opened the inbox with it in. */
   read: z.boolean(),
 });

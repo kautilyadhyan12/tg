@@ -207,13 +207,15 @@ d("the class reminder (real Postgres)", () => {
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
   const START: GymMessageSettingsRequest = {
-    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null })),
+    messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind !== "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
     trialCheckInDay: 2,
     trialEndingDays: 2,
     membershipEndingDays: 7,
     classReminderHours: 2,
+    reviewVisits: 10,
+    reviewLink: null,
   };
   const reminder = (change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
     ...START,
@@ -593,15 +595,15 @@ d("the class reminder (real Postgres)", () => {
       const group = async (who: Person, name: string, isOn: boolean) => await inject("PUT", `/v1/orgs/${gym.id}/inbox/switches`, who.cookies, { group: name, on: isOn });
       expect(JSON.parse((await group(maya, "membership", false)).body)).toEqual({ off: ["class_reminder", "membership_ending", "trial_ending"], groupMessages: true });
       expect(JSON.parse((await group(maya, "membership", false)).body)).toEqual({ off: ["class_reminder", "membership_ending", "trial_ending"], groupMessages: true });
-      expect(JSON.parse((await group(maya, "news", false)).body)).toEqual({ off: ["birthday", "class_reminder", "membership_ending", "milestone", "miss_you", "trial_check_in", "trial_ending"], groupMessages: false });
+      expect(JSON.parse((await group(maya, "news", false)).body)).toEqual({ off: ["birthday", "class_reminder", "membership_ending", "milestone", "miss_you", "review", "trial_check_in", "trial_ending"], groupMessages: false });
       const shown = JSON.parse((await inject("GET", `/v1/orgs/${gym.id}/inbox`, maya.cookies)).body) as GymInboxResponse;
-      expect([shown.off.length, shown.groupMessages]).toEqual([7, false]);
+      expect([shown.off.length, shown.groupMessages]).toEqual([8, false]);
       // Her membership switch off: no reminder of a second class, tomorrow at 18:30, that she booked this morning.
       await sql`
         INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, status, request_key, created_at, booked_at)
         VALUES (${gym.id}, ${await classAt(gym, "Evening Spin", TOMORROW, 18, 30)}, ${maya.userId}, ${maya.entryId}, 'booked', gen_random_uuid(), ${at(TODAY, 9)}, ${at(TODAY, 9)})`;
       expect((await run([gym], at(TODAY, 18, 34))).sent).toBe(0);
-      expect(JSON.parse((await group(maya, "membership", true)).body)).toEqual({ off: ["birthday", "milestone", "miss_you", "trial_check_in"], groupMessages: false });
+      expect(JSON.parse((await group(maya, "membership", true)).body)).toEqual({ off: ["birthday", "milestone", "miss_you", "review", "trial_check_in"], groupMessages: false });
       expect(JSON.parse((await group(maya, "news", true)).body)).toEqual({ off: [], groupMessages: true });
       // Switched on again, the reminder she was owed goes.
       expect((await run([gym], at(TODAY, 18, 49))).sent).toBe(1);

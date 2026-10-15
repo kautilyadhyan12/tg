@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, Loader2, Mail, Phone, Pin } from 'lucide-react';
+import { ChevronDown, ExternalLink, Loader2, Mail, Phone, Pin } from 'lucide-react';
 import { inboxService } from '../../api/inboxApi';
 import {
   INBOX_NOTE,
@@ -263,6 +263,18 @@ export default function Inbox({ gym, inbox }) {
                 <p className="text-sm" style={{ color: '#fff', overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}>
                   {row.body}
                 </p>
+                {row.link === null ? null : (
+                  <a
+                    href={row.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 rounded-xl px-3.5 py-2 text-sm font-semibold min-h-11 inline-flex items-center gap-2"
+                    style={{ background: 'rgba(255,138,31,0.15)', color: ORANGE, border: '1px solid rgba(255,138,31,0.30)' }}
+                  >
+                    {row.linkLabel}
+                    <ExternalLink className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                  </a>
+                )}
                 <p className="text-xs mt-0.5" style={{ color: MUTED }}>
                   {row.isNew ? (
                     <span className="font-semibold" style={{ color: ORANGE }}>

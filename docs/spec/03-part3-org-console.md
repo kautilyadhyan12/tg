@@ -4689,7 +4689,8 @@ before) · **We miss you** (no visit for 10 days; once for each absence) · **Me
 ending** (7 days before) · **Payment overdue** (once a bill reads Overdue on the person's
 page by the gym's own grace period of §14.2, and never sooner than 3 days after its due
 date: 20b-ii, RULINGS 2026-10-11) · **Birthday** · **Milestone** (the 50th visit, the 100th) · **Class reminder** (2 hours before a
-booked class or personal training session: 20b-iii, RULINGS 2026-10-08 and 2026-10-11). Fixed words with the gym's
+booked class or personal training session: 20b-iii, RULINGS 2026-10-08 and 2026-10-11) · **Ask for a
+review** (once, after a number of visits, with the gym's own review link: 20e-i, RULINGS 2026-10-08). Fixed words with the gym's
 name and the person's first name; the gym may add ONE line of its own — 140
 characters, no links, no `@`, held by 15.3's filter. One worker decides what is due,
 by ONE pure rule over (the gym's switches and numbers, the person's record, visits,
@@ -4930,6 +4931,34 @@ member's own switch. Migration `0096`: the kind in the three lists of kinds, `ho
   keeps a row a kind. A payment notice has no switch, as before.
 - **Save in the gym's box stays in view** once something in it changed, and "Saved.", a
   save that failed, and the row and reason that stop a save are said there (`c-save-stuck`).
+
+**Built in 20e-i (2026-10-15; RULINGS 2026-10-08): Ask for a review is sent.** A tenth kind,
+`review`, last in the box and last of the day's order (it can always wait). Migration `0113`:
+the kind in the three lists of kinds; `visits` and `link` on the review's own row of
+`gym_message_settings`; `link` on `gym_member_messages`, each refused by the database on any
+other kind and unless it starts `https://`. Read first: Mindbody asks through its review
+partners once a visit is marked signed in; PushPress asks every 90 days after a check-in, with
+the gym's Google "Ask for reviews" link.
+- **The gym's row**: the switch, "After 5 · 10 · 20 · 30 · 50 visits" (10 to start), and
+  **Your review link**, with where Google gives it. It starts OFF, and the switch cannot be
+  saved on without a link (`review_link_missing`); without a link the rule reads it off
+  whatever its switch says (`gymMessageSettingsFrom`). The link is the online class's rule
+  (`reviewLinkSchema` = `classOnlineLinkSchema`): an `https://` address of a named site, no
+  sign-in in it, nothing that cannot be seen. A save that leaves out the link or the number
+  keeps them.
+- **Who is asked**: somebody whose visits (as the milestone counts them: the desk or staff
+  checked them in, a day at a time) have reached the gym's number, with one of them in the last
+  7 days (`GYM_MESSAGE_MILESTONE_DAYS`), never the gym's own staff. Its occasion is `review`, so
+  it is sent ONCE EVER per person per gym: a gym that lowers its number, or changes its link,
+  asks nobody twice. On the day a gym switches it on, everybody past the number who came this
+  week is asked, one a morning as any message.
+- **The words**: "Hi Maya, thanks for coming to {gym}. If you have a minute, we'd love a
+  review." Under them, in the inbox, a **Leave a review** button opens the link in a new tab.
+  The link is kept on the message as it was sent; a link changed later is for later people.
+  The inbox reply carries `link` (null on every other kind), and the browser draws a button
+  only for a review whose link passes the same rule; the server sends a stored link the rule
+  does not take as none. The phone's inbox, when it is built, reads the same field.
+- **A member's switch**: it is in **News and greetings**, whose line says so.
 
 ### 16.3 Leads
 

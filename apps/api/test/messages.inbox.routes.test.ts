@@ -284,7 +284,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       clock = minutes(NOON, 5);
       const first = await inbox(gym, maya);
       expect(first.unread).toBe(1);
-      expect(first.messages).toEqual([{ id: first.messages[0]?.id, kind: "welcome", body: welcomeMessage(gym.name, "Maya Rao"), sentAt: NOON.toISOString(), read: false }]);
+      expect(first.messages).toEqual([{ id: first.messages[0]?.id, kind: "welcome", body: welcomeMessage(gym.name, "Maya Rao"), link: null, sentAt: NOON.toISOString(), read: false }]);
       // Reading marks nothing.
       expect((await inbox(gym, maya)).unread).toBe(1);
 
