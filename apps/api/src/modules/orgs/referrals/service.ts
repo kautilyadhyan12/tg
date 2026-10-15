@@ -2,10 +2,11 @@
 //
 // The worst thing this could do to a real person: mark a lead, or promise a gift, as one
 // member's when it is not theirs — another business's member, somebody who has left, or a
-// code that was made up — or show a member's name to whoever opens their link. So an
-// invite is found by its random code alone and answers only its own business; it works
-// only while its member is one and the offer is on, and the enquiry's own transaction asks
-// both again before a lead is marked. The invite page names the business, never the member.
+// code that was made up — or show more of a member than their first name to whoever opens
+// their link. So an invite is found by its random code alone and answers only its own
+// business; it works only while its member is one and the offer is on, and the enquiry's
+// own transaction asks both again before a lead is marked. The invite page names the business and the member's
+// first name alone (Kd, 2026-10-15).
 //
 // The owner sets the offer (`org.manage`); a member reads their own link and the offer
 // while they are a member; anybody with a link reads the invite page.

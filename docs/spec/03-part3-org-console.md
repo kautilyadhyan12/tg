@@ -5123,33 +5123,43 @@ once the new client makes a qualifying visit or purchase; PushPress marks each l
 where it came from ("Referred by"). Migration `0116`.
 - **The offer** (Settings → **Refer a friend**, `org.manage`; `gym_referral_settings`): a
   switch and two gifts, set in the box itself (Kd at the click-through: setting it up across
-  two pages was too complicated): for the member who invites and for the friend, either alone
-  or both. Each is "No gift", a percentage or an amount (in the business's money; with no
-  country set, only a percentage), off the first payment of a new membership, every payment
-  of one, or products sold at the desk. On with neither is refused (`no_gift`). Below the
-  boxes, what a member and a friend will read, made by the same functions the server uses.
-- **The codes are the app's**: on Save, each gift is kept as a discount of its own, named
-  "Refer a friend: member's gift, THANKS10" (the friend's starts WELCOME), listed under
-  Discounts like any other, with a **See it in Discounts** button beside its code. A code
-  is unique within a business only; the app takes the next free one (THANKS10B…) where the
-  business already uses it. Saved again with the same gift, the same code. A changed gift
-  nobody has used changes its discount and code; once somebody has used it, that discount is
-  left exactly as given and the new gift gets its own. "No gift" archives a code nobody used.
-  The offer and its codes are written in one transaction under the gym's row lock. A code
-  archived under Discounts is promised to nobody until the box is saved again.
+  two pages was too complicated), either alone or both. Each is "No gift", a percentage or an
+  amount (in the business's money; with no country set, only a percentage). On with neither
+  is refused (`no_gift`), said under the switch and beside Save. Save stays in view at the
+  foot of the screen (above the phone's tabs) while anything is not saved, and closing the tab
+  then asks first. Below the boxes, what a member and a friend will read.
+- **The member's gift comes off their next payment, by itself** (Kd, "A yes"): kept on the
+  offer (`member_gift_kind`, `member_percent_bp`, `member_amount_minor`, `member_currency`),
+  no code. A code only takes money off something new (a membership given, a product sold),
+  never a payment owed on the membership a member already has, so a code was the wrong gift
+  for a member. 20e-ii-b gives it: their next bill on the membership they have, else credit
+  on their page for the next thing they pay for.
+- **The friend's gift is a promo code the app makes**: off the first payment of a new
+  membership, every payment of one, or products sold at the desk. On Save it is kept as a
+  discount of its own, "Refer a friend: friend's gift, WELCOME20", listed under Discounts like
+  any other, with a **See it in Discounts** button beside its code. A code is unique within a
+  business only; the app takes the next free one (WELCOME20B…) where the business already uses
+  it. Saved again with the same gift, the same code. A changed gift nobody has used changes
+  its discount and code; once somebody has used it, that discount is left exactly as given
+  and the new gift gets its own. "No gift" archives a code nobody used. The offer and the code
+  are written in one transaction under the gym's row lock. A code archived under Discounts is
+  promised to nobody until the box is saved again.
 - **A gift in words** (`referralGiftWords`) is said from the discount as it is: "10% off the
   first payment of a membership, until 31 December 2026". A gift whose code cannot be used
   today (ended, used up, archived, not started, no code) is promised to nobody.
 - **The member's link** (`GET /v1/orgs/{gym}/referral`, a live member only; 404 for anybody
   else): a random code of 16 of `a-z2-7` (80 bits), one per member per business
   (`gym_referral_links`), made the first time and the same after. The reply carries the
-  link's path and the offer's lines, the last one "This offer is set by {business} and may
-  change." The member's own code is never in it: it is sent once it is earned (20e-ii-b). The
-  phone's Invite a friend (Stage 5 item 20) reads this route.
+  link's path and the offer's lines, among them "Your link shows your first name, Maya, to
+  whoever opens it." and, last, "This offer is set by {business} and may change." The phone's
+  Invite a friend (Stage 5 item 20) reads this route.
 - **The invite page** (`/invite/{code}`, public; `GET /v1/public/invites/{code}`): every
-  business has it, with or without a page of its own. It names the business, its town, the
-  friend's gift with its code, and a button to the business's own page where it has one;
-  **never the member**. Its form is the page's form without "How did you hear about us?"
+  business has it, with or without a page of its own. A welcome, not a form (Kd: "the form
+  looks really generic"): a warm header, "**Maya** invited you to join {business}." (the
+  member's **first name only**, Kd "B yes": never their surname, email or id), the friend's gift
+  as a ticket with its code and **Copy code**, three steps, then the form, and a button to the
+  business's own page where it has one. Its form is the page's form with **Email *** required
+  (Kd) and without "How did you hear about us?"
   (`POST …/enquiries`, the same robot check and the same limits, counted against the same
   business), and its lead's source is A friend. A code that is not one, of a member who has
   left, of a business that switched the offer off, is closed or on no plan: the same 404,
