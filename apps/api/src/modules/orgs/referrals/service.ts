@@ -17,7 +17,9 @@ import {
   REFERRAL_WORDS,
   referralGiftLive,
   referralGiftProblem,
+  greetingName,
   referralGiftWords,
+  referralMemberGiftWords,
   referralOfferLines,
   referralPath,
   type MemberReferralResponse,
@@ -102,18 +104,20 @@ function giftView(discounts: readonly DiscountRow[], id: string | null, today: s
   };
 }
 
+/** The member's gift in words; null for none. */
+const memberWords = (gift: repo.MemberGift | null): string | null => (gift === null ? null : referralMemberGiftWords(gift));
+
 async function settingsView(sql: Sql, org: { id: string; name: string; country: string | null }, today: string): Promise<ReferralSettings> {
   const now = await repo.settingsFor(sql, org.id);
-  const picked = [now.memberDiscountId, now.friendDiscountId].filter((id): id is string => id !== null);
-  const discounts = await referralDiscounts(sql, org.id, picked);
-  const member = liveGift(discounts, now.memberDiscountId, today);
+  const discounts = await referralDiscounts(sql, org.id, now.friendDiscountId === null ? [] : [now.friendDiscountId]);
   const friend = liveGift(discounts, now.friendDiscountId, today);
+  const member = memberWords(now.member);
   return {
     on: now.on,
-    member: giftView(discounts, now.memberDiscountId, today),
+    member: now.member === null || member === null ? null : { ...now.member, words: member },
     friend: giftView(discounts, now.friendDiscountId, today),
     currency: memberCurrencyForCountry(org.country),
-    memberLines: referralOfferLines(org.name, member?.words ?? null, friend?.words ?? null),
+    memberLines: referralOfferLines(org.name, member, friend?.words ?? null),
   };
 }
 
@@ -123,11 +127,11 @@ export async function getReferralSettings(deps: ReferralDeps, userId: string, gy
   return await settingsView(deps.sql, org, dayInTz(deps.now(), org.timezone));
 }
 
-type Side = "member" | "friend";
-const CODE_START: Record<Side, string> = { member: "THANKS", friend: "WELCOME" };
+/** The friend's code starts with this: WELCOME20. */
+const CODE_START = "WELCOME";
 /** A code that is taken gets the next of these on its end: THANKS10, THANKS10B… */
 const CODE_ENDS = ["", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
-const giftName = (side: Side, code: string): string => `Refer a friend: ${side === "member" ? "member's" : "friend's"} gift, ${code}`;
+const giftName = (code: string): string => `Refer a friend: friend's gift, ${code}`;
 
 /** The discount a gift is kept as: for every membership type or every product, with no
  *  dates and no limit, as the box says. */
@@ -170,14 +174,14 @@ function sameGift(d: DiscountRow, want: DiscountInput, currency: string | null):
   );
 }
 
-/** "THANKS10" for 10%, "WELCOME500" for ₹500: the first of it, then B, C… that no other
+/** "WELCOME20" for 20%, "WELCOME500" for ₹500: the first of it, then B, C… that no other
  *  discount of this gym in use has as its code or its name. */
-async function freeCode(tx: TransactionSql, gymId: string, side: Side, gift: ReferralGiftInput, currency: string | null, exceptId: string | null): Promise<string> {
+async function freeCode(tx: TransactionSql, gymId: string, gift: ReferralGiftInput, currency: string | null, exceptId: string | null): Promise<string> {
   const amount = gift.kind === "percent" ? Math.trunc((gift.percentBp ?? 0) / 100) : Number.parseInt(minorToPriceText(gift.amountMinor ?? 0, currency ?? "USD"), 10);
-  const base = `${CODE_START[side]}${String(Number.isFinite(amount) && amount > 0 ? amount : "")}`.slice(0, 16);
+  const base = `${CODE_START}${String(Number.isFinite(amount) && amount > 0 ? amount : "")}`.slice(0, 16);
   for (const end of CODE_ENDS) {
     const code = `${base}${end}`;
-    if (!(await codeOrNameTaken(tx, gymId, code, giftName(side, code), exceptId))) return code;
+    if (!(await codeOrNameTaken(tx, gymId, code, giftName(code), exceptId))) return code;
   }
   throw new OrgsError(409, "too_many", REFERRAL_WORDS.too_many);
 }
@@ -189,14 +193,13 @@ function refused(outcome: { kind: string }): OrgsError {
   return new OrgsError(409, outcome.kind, "We couldn't save that. Please try again.");
 }
 
-/** One gift, kept as its own discount. The same gift keeps its discount and code. A changed
+/** The friend's gift, kept as its own discount. The same gift keeps its discount and code. A changed
  *  gift changes its discount, and its code, where nobody has used it yet; once somebody has,
  *  that discount is left exactly as it was given and the new gift gets a discount of its
  *  own. "No gift" archives a discount nobody has used. */
 async function placeGift(
   tx: TransactionSql,
   ctx: { gymId: string; userId: string; at: Date; currency: string | null },
-  side: Side,
   gift: ReferralGiftInput | null,
   current: DiscountRow | undefined,
 ): Promise<string | null> {
@@ -209,20 +212,22 @@ async function placeGift(
   const want = giftDiscount(gift);
   if (live !== undefined && sameGift(live, want, ctx.currency)) return live.id;
   if (live !== undefined && live.uses === 0) {
-    const code = await freeCode(tx, ctx.gymId, side, gift, ctx.currency, live.id);
-    const done = await updateDiscountInTx(tx, { ...want, name: giftName(side, code), code, gymId: ctx.gymId, discountId: live.id, readAt: null, actorUserId: ctx.userId, now: ctx.at });
+    const code = await freeCode(tx, ctx.gymId, gift, ctx.currency, live.id);
+    const done = await updateDiscountInTx(tx, { ...want, name: giftName(code), code, gymId: ctx.gymId, discountId: live.id, readAt: null, actorUserId: ctx.userId, now: ctx.at });
     if (done.kind !== "ok") throw refused(done);
     return live.id;
   }
-  const code = await freeCode(tx, ctx.gymId, side, gift, ctx.currency, null);
-  const made = await createDiscountInTx(tx, { ...want, name: giftName(side, code), code, gymId: ctx.gymId, actorUserId: ctx.userId });
+  const code = await freeCode(tx, ctx.gymId, gift, ctx.currency, null);
+  const made = await createDiscountInTx(tx, { ...want, name: giftName(code), code, gymId: ctx.gymId, actorUserId: ctx.userId });
   if (made.kind !== "created") throw refused(made);
   return made.id;
 }
 
-/** Saved twice it is saved once: the same gifts keep their codes. Switched on needs a gift.
- *  The offer and its codes are written in one transaction under the gym's row lock, so two
- *  saves at once make one code each, never two. */
+/** Saved twice it is saved once: the same friend's gift keeps its code. Switched on needs a
+ *  gift. The member's gift is kept on the offer itself (an amount in the business's money as
+ *  it is now); 20e-ii-b takes it off their next payment. The offer and the friend's code are
+ *  written in one transaction under the gym's row lock, so two saves at once make one code,
+ *  never two. */
 export async function setReferralSettings(
   deps: ReferralDeps,
   userId: string,
@@ -237,12 +242,15 @@ export async function setReferralSettings(
   await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
     const before = await repo.settingsFor(tx, gymId);
-    const ids = [before.memberDiscountId, before.friendDiscountId].filter((id): id is string => id !== null);
-    const discounts = await referralDiscounts(tx, gymId, ids);
+    const discounts = await referralDiscounts(tx, gymId, before.friendDiscountId === null ? [] : [before.friendDiscountId]);
     const ctx = { gymId, userId, at, currency: memberCurrencyForCountry(org.country) };
-    const memberDiscountId = await placeGift(tx, ctx, "member", body.member, discounts.find((d) => d.id === before.memberDiscountId));
-    const friendDiscountId = await placeGift(tx, ctx, "friend", body.friend, discounts.find((d) => d.id === before.friendDiscountId));
-    await repo.writeSettings(tx, gymId, { on: body.on, memberDiscountId, friendDiscountId }, userId, at);
+    if (body.member?.kind === "amount" && ctx.currency === null) throw new OrgsError(409, "no_currency", REFERRAL_WORDS.no_currency);
+    const member: repo.MemberGift | null =
+      body.member === null
+        ? null
+        : { kind: body.member.kind, percentBp: body.member.percentBp, amountMinor: body.member.amountMinor, currency: body.member.kind === "amount" ? ctx.currency : null };
+    const friendDiscountId = await placeGift(tx, ctx, body.friend, discounts.find((d) => d.id === before.friendDiscountId));
+    await repo.writeSettings(tx, gymId, { on: body.on, member, friendDiscountId }, userId, at);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
@@ -265,18 +273,18 @@ export async function getMemberReferral(deps: ReferralDeps, userId: string, gymI
   if (!settings.on || !gate.open || !gate.live) return { status: "off", gymName: gate.name };
   const tz = await timezoneOf(deps.sql, gymId);
   const today = dayInTz(deps.now(), tz);
-  const picked = [settings.memberDiscountId, settings.friendDiscountId].filter((id): id is string => id !== null);
-  const discounts = await referralDiscounts(deps.sql, gymId, picked);
-  const member = liveGift(discounts, settings.memberDiscountId, today);
+  const discounts = await referralDiscounts(deps.sql, gymId, settings.friendDiscountId === null ? [] : [settings.friendDiscountId]);
+  const member = memberWords(settings.member);
   const friend = liveGift(discounts, settings.friendDiscountId, today);
   const code = await repo.linkCode(deps.sql, gymId, userId, freshCode);
+  const firstName = greetingName(await repo.memberNameAt(deps.sql, gymId, userId));
   return {
     status: "on",
     gymName: gate.name,
     path: referralPath(code),
-    memberGift: member?.words ?? null,
+    memberGift: member,
     friendGift: friend?.words ?? null,
-    lines: referralOfferLines(gate.name, member?.words ?? null, friend?.words ?? null),
+    lines: referralOfferLines(gate.name, member, friend?.words ?? null, firstName),
   };
 }
 
@@ -305,6 +313,8 @@ export async function publicInvite(deps: ReferralDeps & { robotCheckKey: string 
   const discounts = await referralDiscounts(deps.sql, invite.gymId, settings.friendDiscountId === null ? [] : [settings.friendDiscountId]);
   return {
     gymName: invite.name,
+    // The first name alone (Kd, 2026-10-15): never the rest of it, their email or their id.
+    inviterFirstName: greetingName(invite.referrerName),
     city: invite.city,
     orgType: orgTypeSchema.parse(invite.orgType),
     friendGift: liveGift(discounts, settings.friendDiscountId, today),

@@ -100,16 +100,24 @@ export type ReferralGift = z.infer<typeof referralGiftSchema>;
 
 // ── WHAT A MEMBER READS (the phone app's Invite a friend, Stage 5 item 20) ──
 
-/** The offer in the member's words. The member's own code is not in it: it is sent to
- *  their inbox once it is earned. */
-export function referralOfferLines(gymName: string, memberGift: string | null, friendGift: string | null): string[] {
+/** The member's gift, off their next payment (20e-ii-b gives it): "10% off your next
+ *  payment", "₹500.00 off your next payment". */
+export function referralMemberGiftWords(g: { kind: DiscountKind; percentBp: number | null; amountMinor: number | null; currency: string | null }): string {
+  const off = g.kind === "percent" ? `${bpToPercentText(g.percentBp ?? 0)}% off` : `${formatMinor(g.amountMinor ?? 0, g.currency ?? "USD")} off`;
+  return `${off} your next payment`;
+}
+
+/** The offer in the member's words. No code: the member's gift comes off their next payment
+ *  by itself. `firstName`: the name their link shows; null in the owner's preview. */
+export function referralOfferLines(gymName: string, memberGift: string | null, friendGift: string | null, firstName: string | null = null): string[] {
   const gym = gymName.trim();
   const lines: string[] = [];
   if (memberGift !== null) {
-    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift}. We'll send your code to your inbox.`);
+    lines.push(`When a friend you invite joins ${gym} and makes their first payment, you get ${memberGift}. It comes off by itself, and we'll tell you in your inbox.`);
   }
   if (friendGift !== null) lines.push(`Your friend gets ${friendGift} when they join.`);
   if (memberGift === null && friendGift === null) lines.push(`Send your link to a friend who'd like to join ${gym}.`);
+  lines.push(firstName === null ? "Your link shows your first name to whoever opens it." : `Your link shows your first name, ${firstName}, to whoever opens it.`);
   lines.push(`This offer is set by ${gym} and may change.`);
   return lines;
 }
@@ -135,10 +143,13 @@ export type MemberReferralResponse = z.infer<typeof memberReferralResponseSchema
 
 // ── WHAT THE FRIEND READS: the invite page, which every business has ──
 
-/** What anybody with the link sees. Nothing on it names the member who sent it. */
+/** What anybody with the link sees: the business, its gift, and the first name of the
+ *  member who sent it (Kd, 2026-10-15), nothing more of them. */
 export const publicInviteSchema = z
   .object({
     gymName: z.string(),
+    /** "Maya": the member's first name only; null where none can be said. */
+    inviterFirstName: z.string().nullable(),
     city: z.string().nullable(),
     orgType: orgTypeSchema,
     /** Null where the business gives none, or its code cannot be used today. */
@@ -156,7 +167,9 @@ export const publicInviteResponseSchema = z.object({ invite: publicInviteSchema 
 export const inviteEnquiryRequestSchema = z
   .object({
     fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
-    email: z.string().max(MEMBER_LIST_MAX_EMAIL_CHARS).optional(),
+    /** Required here (Kd, 2026-10-15): the friend's welcome offer and the business's
+     *  follow-ups reach them by email. */
+    email: z.string().trim().min(1).max(MEMBER_LIST_MAX_EMAIL_CHARS),
     phone: z.string().max(MEMBER_LIST_MAX_TYPED_PHONE_CHARS).optional(),
     message: z.string().max(GYM_ENQUIRY_MAX_MESSAGE_CHARS).optional(),
     mayEmail: z.boolean().optional(),
@@ -167,9 +180,9 @@ export const inviteEnquiryRequestSchema = z
 export type InviteEnquiryRequest = z.infer<typeof inviteEnquiryRequestSchema>;
 
 /** The friend's words on the invite page. */
-export function inviteLines(gymName: string, friendGift: ReferralGift | null): string[] {
+export function inviteLines(gymName: string, friendGift: ReferralGift | null, inviterFirstName: string | null = null): string[] {
   const gym = gymName.trim();
-  const lines = [`A member of ${gym} has invited you.`];
+  const lines = [inviterFirstName === null ? `A member of ${gym} has invited you.` : `${inviterFirstName} invited you to join ${gym}.`];
   if (friendGift !== null) lines.push(`Your welcome offer: ${friendGift.words}. Use code ${friendGift.code} when you join.`);
   lines.push(`Leave your details and ${gym} will be in touch.`);
   if (friendGift !== null) lines.push(`This offer is set by ${gym} and may change.`);
@@ -182,27 +195,45 @@ export function inviteLines(gymName: string, friendGift: ReferralGift | null): s
 // off. The app makes the promo code for it, kept under Discounts like any other, so the
 // front desk takes it as it takes any code.
 
-/** What a gift comes off: the first payment of a new membership, every payment of one, or
- *  products sold at the desk. */
+/** What the friend's gift comes off: the first payment of a new membership, every payment
+ *  of one, or products sold at the desk. */
 export const REFERRAL_GIFT_ON = ["first", "every", "products"] as const;
 export type ReferralGiftOn = (typeof REFERRAL_GIFT_ON)[number];
 
+const giftAmountFields = {
+  kind: z.enum(DISCOUNT_KINDS),
+  /** Hundredths of a percent: 1000 is 10%. */
+  percentBp: z.number().int().min(1).max(DISCOUNT_PERCENT_BP_MAX).nullable(),
+  /** In the business's own money, in minor units. */
+  amountMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX).nullable(),
+};
+const oneAmount = (g: { kind: DiscountKind; percentBp: number | null; amountMinor: number | null }): boolean =>
+  g.kind === "percent" ? g.percentBp !== null && g.amountMinor === null : g.amountMinor !== null && g.percentBp === null;
+
+/** The member's gift: a percentage or an amount off their next payment. */
+export const referralMemberGiftInputSchema = z.object(giftAmountFields).strict().refine(oneAmount, { message: "invalid_gift" });
+export type ReferralMemberGiftInput = z.infer<typeof referralMemberGiftInputSchema>;
+
+/** The friend's gift: a percentage or an amount, and what it comes off. */
 export const referralGiftInputSchema = z
-  .object({
-    kind: z.enum(DISCOUNT_KINDS),
-    /** Hundredths of a percent: 1000 is 10%. */
-    percentBp: z.number().int().min(1).max(DISCOUNT_PERCENT_BP_MAX).nullable(),
-    /** In the business's own money, in minor units. */
-    amountMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX).nullable(),
-    on: z.enum(REFERRAL_GIFT_ON),
-  })
+  .object({ ...giftAmountFields, on: z.enum(REFERRAL_GIFT_ON) })
   .strict()
-  .refine((g) => (g.kind === "percent" ? g.percentBp !== null && g.amountMinor === null : g.amountMinor !== null && g.percentBp === null), {
-    message: "invalid_gift",
-  });
+  .refine(oneAmount, { message: "invalid_gift" });
 export type ReferralGiftInput = z.infer<typeof referralGiftInputSchema>;
 
-/** A gift as it is kept: its own discount and promo code. */
+/** The member's gift as it is kept. */
+export const referralMemberGiftViewSchema = z
+  .object({
+    kind: z.enum(DISCOUNT_KINDS),
+    percentBp: z.number().int().nullable(),
+    amountMinor: z.number().int().nullable(),
+    currency: z.string().nullable(),
+    words: z.string(),
+  })
+  .strict();
+export type ReferralMemberGiftView = z.infer<typeof referralMemberGiftViewSchema>;
+
+/** The friend's gift as it is kept: its own discount and promo code. */
 export const referralGiftViewSchema = z
   .object({
     kind: z.enum(DISCOUNT_KINDS),
@@ -225,7 +256,7 @@ export type ReferralGiftView = z.infer<typeof referralGiftViewSchema>;
 export const referralSettingsSchema = z
   .object({
     on: z.boolean(),
-    member: referralGiftViewSchema.nullable(),
+    member: referralMemberGiftViewSchema.nullable(),
     friend: referralGiftViewSchema.nullable(),
     /** The business's money for an amount off; null until its country is set, when only a
      *  percentage can be given. */
@@ -240,7 +271,7 @@ export const referralSettingsResponseSchema = z.object({ settings: referralSetti
 export const setReferralSettingsRequestSchema = z
   .object({
     on: z.boolean(),
-    member: referralGiftInputSchema.nullable(),
+    member: referralMemberGiftInputSchema.nullable(),
     friend: referralGiftInputSchema.nullable(),
   })
   .strict()

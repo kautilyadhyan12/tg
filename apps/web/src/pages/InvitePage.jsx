@@ -1,16 +1,83 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Gift, Loader2, MapPin } from 'lucide-react';
+import { Check, Copy, Loader2, MapPin, Sparkles } from 'lucide-react';
 import { REFERRAL_WORDS } from '@app/shared';
 import { orgService, errorStatus, errorText } from '../api/orgsApi';
 import { ACCENT, EnquiryForm, INK, LINE, MUTED } from './GymPublicPage';
 import { inviteView } from './inviteView';
 
 // A MEMBER'S INVITE LINK, `/invite/{code}` (ROADMAP 20e-ii-a; spec Part 3 §16.3): every
-// business has this page, whether or not it has a page of its own. It says which business
-// invited the friend and the welcome offer it set, and its form makes them one of the
-// business's leads, marked as the member's friend. It never names the member. Public: no
-// sign-in.
+// business has this page, whether or not it has a page of its own. It says who invited the
+// friend (their first name only), the welcome offer the business set, and its form makes
+// them one of the business's leads, marked as the member's friend. Public: no sign-in. A
+// welcome, not a form (Kd at the click-through: "the form looks really generic"): a warm
+// header, the gift as a ticket with its code, three steps, then the form.
+
+const AMBER = '#FFB347';
+const WARM = '#FFF4EA';
+
+/** The welcome offer as a ticket: the gift in the server's words, its code and Copy. Said
+ *  once: the line above the form says the rest. */
+function GiftTicket({ words, code }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <section aria-label="Your welcome offer" className="relative rounded-3xl bg-white px-6 py-6 sm:px-8" style={{ border: `2px dashed ${ACCENT}`, boxShadow: '0 18px 40px -24px rgba(232,89,12,0.55)' }}>
+      {/* The ticket's two notches. */}
+      <span aria-hidden="true" className="absolute top-1/2 -left-3 h-6 w-6 -translate-y-1/2 rounded-full" style={{ background: WARM, borderRight: `2px dashed ${ACCENT}` }} />
+      <span aria-hidden="true" className="absolute top-1/2 -right-3 h-6 w-6 -translate-y-1/2 rounded-full" style={{ background: WARM, borderLeft: `2px dashed ${ACCENT}` }} />
+      <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: ACCENT }}>
+        Your welcome offer
+      </p>
+      <p className="mt-2 text-2xl font-bold leading-snug" style={{ color: INK }}>
+        {words.charAt(0).toUpperCase() + words.slice(1)}
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <span className="rounded-xl px-4 py-2 font-mono text-2xl font-bold tracking-[0.2em]" style={{ background: WARM, color: INK }} data-testid="invite-code">
+          {code}
+        </span>
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold"
+          style={{ border: `1px solid ${LINE}`, color: INK, minHeight: 44 }}
+        >
+          {copied ? <Check aria-hidden="true" className="h-4 w-4" /> : <Copy aria-hidden="true" className="h-4 w-4" />}
+          {copied ? 'Copied' : 'Copy code'}
+        </button>
+      </div>
+      <p className="mt-3 text-[14px]" style={{ color: MUTED }}>
+        Use this code when you join.
+      </p>
+    </section>
+  );
+}
+
+function Steps({ gymName, hasGift }) {
+  const steps = ['Send your details below', `${gymName} gets in touch`, hasGift ? 'Use your code when you join' : 'Join and start training'];
+  return (
+    <ol className="grid gap-3 sm:grid-cols-3">
+      {steps.map((step, i) => (
+        <li key={step} className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3" style={{ border: `1px solid ${LINE}` }}>
+          <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, ${AMBER})` }}>
+            {i + 1}
+          </span>
+          <span className="text-[14px] font-medium" style={{ color: INK }}>
+            {step}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function InvitePage() {
   const { code } = useParams();
@@ -41,7 +108,7 @@ export default function InvitePage() {
   }, [state.invite]);
 
   const shell = (children) => (
-    <div className="min-h-screen px-4 py-8 sm:py-12" style={{ background: '#F6F5F2', color: INK }}>
+    <div className="min-h-screen px-4 py-8 sm:py-12" style={{ background: `linear-gradient(180deg, ${WARM} 0%, #F6F5F2 420px)`, color: INK }}>
       <div className="mx-auto w-full max-w-2xl flex flex-col gap-6">{children}</div>
     </div>
   );
@@ -63,55 +130,44 @@ export default function InvitePage() {
 
   const invite = state.invite;
   const gift = invite.friendGift;
-  const { invited, offer, touch, setBy } = inviteView(invite);
-  const card = 'rounded-2xl p-5 sm:p-6 flex flex-col gap-3';
-  const cardStyle = { background: '#fff', border: `1px solid ${LINE}` };
+  const { invited, touch, setBy } = inviteView(invite);
   // The form's own page fields: the business's name and the robot check's key.
   const page = { name: invite.gymName, robotCheckKey: invite.robotCheckKey };
   return shell(
     <>
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: INK }}>
-          {invite.gymName}
-        </h1>
+      <header
+        className="relative overflow-hidden rounded-3xl px-6 py-8 sm:px-10 sm:py-10 text-white"
+        style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #F47B20 55%, ${AMBER} 100%)`, boxShadow: '0 24px 48px -28px rgba(232,89,12,0.75)' }}
+      >
+        <span aria-hidden="true" className="absolute -right-10 -top-10 h-40 w-40 rounded-full" style={{ background: 'rgba(255,255,255,0.14)' }} />
+        <span aria-hidden="true" className="absolute -bottom-16 right-16 h-32 w-32 rounded-full" style={{ background: 'rgba(255,255,255,0.10)' }} />
+        <p className="relative flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-[0.16em]" style={{ background: 'rgba(255,255,255,0.22)' }}>
+          <Sparkles aria-hidden="true" className="h-3.5 w-3.5" /> You&apos;re invited
+        </p>
+        <h1 className="relative mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{invited}</h1>
         {invite.city ? (
-          <p className="flex items-center gap-1.5 text-[15px]" style={{ color: MUTED }}>
-            <MapPin aria-hidden="true" className="w-4 h-4" /> {invite.city}
+          <p className="relative mt-3 flex items-center gap-1.5 text-[15px]" style={{ color: 'rgba(255,255,255,0.88)' }}>
+            <MapPin aria-hidden="true" className="h-4 w-4" /> {invite.city}
           </p>
         ) : null}
-        <p className="text-[17px]" style={{ color: INK }}>
-          {invited}
-        </p>
       </header>
 
-      {gift !== null ? (
-        <section className={card} style={{ ...cardStyle, borderColor: ACCENT }} aria-label="Your welcome offer">
-          <div className="flex items-start gap-3">
-            <Gift aria-hidden="true" className="w-6 h-6 flex-shrink-0 mt-0.5" style={{ color: ACCENT }} />
-            <div className="flex flex-col gap-2">
-              <p className="text-[15px]" style={{ color: INK }}>
-                {offer}
-              </p>
-              <p className="text-2xl font-bold tracking-widest" style={{ color: INK }}>
-                {gift.code}
-              </p>
-            </div>
-          </div>
-        </section>
-      ) : null}
+      {gift !== null ? <GiftTicket words={gift.words} code={gift.code} /> : null}
 
-      <section className={card} style={cardStyle}>
-        <h2 className="text-lg font-bold" style={{ color: INK }}>
-          Get in touch
+      <Steps gymName={invite.gymName} hasGift={gift !== null} />
+
+      <section className="flex flex-col gap-3 rounded-3xl bg-white p-6 sm:p-8" style={{ border: `1px solid ${LINE}` }}>
+        <h2 className="text-xl font-bold" style={{ color: INK }}>
+          Send your details
         </h2>
         <p className="text-[15px]" style={{ color: MUTED }}>
           {touch}
         </p>
-        <EnquiryForm page={page} askSource={false} send={(body) => orgService.sendInviteEnquiry(code, withoutSource(body))} />
+        <EnquiryForm page={page} askSource={false} requireEmail sendLabel="Send my details" send={(body) => orgService.sendInviteEnquiry(code, withoutSource(body))} />
       </section>
 
       {invite.pageSlug !== null ? (
-        <Link to={`/gyms/${encodeURIComponent(invite.pageSlug)}`} className="text-[15px] font-semibold underline" style={{ color: ACCENT }}>
+        <Link to={`/gyms/${encodeURIComponent(invite.pageSlug)}`} className="self-start text-[15px] font-semibold underline" style={{ color: ACCENT }}>
           See {invite.gymName}&apos;s page
         </Link>
       ) : null}

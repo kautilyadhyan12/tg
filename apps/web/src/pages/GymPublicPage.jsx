@@ -42,7 +42,7 @@ function Field({ label, hint, children, htmlFor }) {
 /** The form: on the business's own page, and on a member's invite page (20e-ii-a), where
  *  `send` posts to that link and "How did you hear about us?" is not asked. `page` gives
  *  the business's name and the robot check's key. */
-export function EnquiryForm({ page, send: post, askSource = true }) {
+export function EnquiryForm({ page, send: post, askSource = true, requireEmail = false, sendLabel = 'Send' }) {
   const [form, setForm] = useState(EMPTY_ENQUIRY);
   const [problem, setProblem] = useState(null);
   const [sending, setSending] = useState(false);
@@ -57,7 +57,7 @@ export function EnquiryForm({ page, send: post, askSource = true }) {
   const send = async (e) => {
     e.preventDefault();
     if (sending) return;
-    const wrong = enquiryProblem(form);
+    const wrong = enquiryProblem(form, { requireEmail });
     if (wrong !== null) {
       setProblem(wrong);
       return;
@@ -101,10 +101,11 @@ export function EnquiryForm({ page, send: post, askSource = true }) {
         <input id="enq-name" autoComplete="name" maxLength={120} value={form.fullName} onChange={set('fullName')} className={inputClass} style={inputStyle} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Email" htmlFor="enq-email">
+        <Field label={requireEmail ? 'Email *' : 'Email'} htmlFor="enq-email">
           <input
             id="enq-email"
             type="email"
+            aria-required={requireEmail || undefined}
             autoComplete="email"
             maxLength={254}
             value={form.email}
@@ -113,13 +114,15 @@ export function EnquiryForm({ page, send: post, askSource = true }) {
             style={inputStyle}
           />
         </Field>
-        <Field label="Phone" htmlFor="enq-phone">
+        <Field label={requireEmail ? 'Phone (optional)' : 'Phone'} htmlFor="enq-phone">
           <input id="enq-phone" type="tel" autoComplete="tel" maxLength={40} value={form.phone} onChange={set('phone')} className={inputClass} style={inputStyle} />
         </Field>
       </div>
-      <p className="text-[13px] -mt-2" style={{ color: MUTED }}>
-        An email address or a phone number, so they can reach you.
-      </p>
+      {requireEmail ? null : (
+        <p className="text-[13px] -mt-2" style={{ color: MUTED }}>
+          An email address or a phone number, so they can reach you.
+        </p>
+      )}
       {askSource ? (
         <Field label="How did you hear about us?" htmlFor="enq-source">
           <select id="enq-source" value={form.source} onChange={set('source')} className={inputClass} style={inputStyle}>
@@ -174,7 +177,7 @@ export function EnquiryForm({ page, send: post, askSource = true }) {
         style={{ background: ACCENT, color: '#fff', minHeight: 48 }}
       >
         {sending ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-        {sending ? 'Sending…' : 'Send'}
+        {sending ? 'Sending…' : sendLabel}
       </button>
       <p className="text-[13px]" style={{ color: MUTED }}>
         Your details go only to {page.name}, so they can reply.

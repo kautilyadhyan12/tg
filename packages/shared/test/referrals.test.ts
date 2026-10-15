@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   invitedByWords,
+  inviteEnquiryRequestSchema,
   inviteLines,
   leadSchema,
   referralCodeSchema,
@@ -11,6 +12,7 @@ import {
   referralGiftProblem,
   referralGiftInputWords,
   referralGiftWords,
+  referralMemberGiftWords,
   referralOfferLines,
   setReferralSettingsRequestSchema,
   type ReferralGiftTerms,
@@ -73,44 +75,57 @@ describe("a gift is promised only while its code can be used today", () => {
 });
 
 describe("what the member reads", () => {
-  it("both gifts, the code sent later, and who set the offer", () => {
-    expect(referralOfferLines("Northside Gym", "10% off a membership", "₹500.00 off the first payment of a membership")).toEqual([
-      "When a friend you invite joins Northside Gym and makes their first payment, you get 10% off a membership. We'll send your code to your inbox.",
+  const next = (g: { kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null; currency: string | null }): string => referralMemberGiftWords(g);
+  it.each([
+    [{ kind: "percent" as const, percentBp: 1000, amountMinor: null, currency: null }, "10% off your next payment"],
+    [{ kind: "percent" as const, percentBp: 1250, amountMinor: null, currency: null }, "12.5% off your next payment"],
+    [{ kind: "amount" as const, percentBp: null, amountMinor: 50000, currency: "INR" }, "₹500.00 off your next payment"],
+    [{ kind: "amount" as const, percentBp: null, amountMinor: 500, currency: "GBP" }, "£5.00 off your next payment"],
+  ])("the member's gift %j reads %s", (gift, words) => {
+    expect(next(gift)).toBe(words);
+  });
+  it("both gifts, that it comes off by itself, the name their link shows, and who set the offer", () => {
+    expect(referralOfferLines("Northside Gym", "10% off your next payment", "₹500.00 off the first payment of a membership", "Maya")).toEqual([
+      "When a friend you invite joins Northside Gym and makes their first payment, you get 10% off your next payment. It comes off by itself, and we'll tell you in your inbox.",
       "Your friend gets ₹500.00 off the first payment of a membership when they join.",
+      "Your link shows your first name, Maya, to whoever opens it.",
       "This offer is set by Northside Gym and may change.",
     ]);
   });
-  it("the member's gift alone", () => {
-    expect(referralOfferLines("Ann's Yoga ", "10% off products", null)).toEqual([
-      "When a friend you invite joins Ann's Yoga and makes their first payment, you get 10% off products. We'll send your code to your inbox.",
+  it("the member's gift alone, in the owner's preview where no member is named", () => {
+    expect(referralOfferLines("Ann's Yoga ", "£5.00 off your next payment", null)).toEqual([
+      "When a friend you invite joins Ann's Yoga and makes their first payment, you get £5.00 off your next payment. It comes off by itself, and we'll tell you in your inbox.",
+      "Your link shows your first name to whoever opens it.",
       "This offer is set by Ann's Yoga and may change.",
     ]);
   });
   it("the friend's gift alone", () => {
-    expect(referralOfferLines("Northside Gym", null, "20% off a membership")).toEqual([
+    expect(referralOfferLines("Northside Gym", null, "20% off a membership", "Maya")).toEqual([
       "Your friend gets 20% off a membership when they join.",
+      "Your link shows your first name, Maya, to whoever opens it.",
       "This offer is set by Northside Gym and may change.",
     ]);
   });
   it("no gift that can be used today promises nothing", () => {
-    expect(referralOfferLines("Northside Gym", null, null)).toEqual([
+    expect(referralOfferLines("Northside Gym", null, null, "Maya")).toEqual([
       "Send your link to a friend who'd like to join Northside Gym.",
+      "Your link shows your first name, Maya, to whoever opens it.",
       "This offer is set by Northside Gym and may change.",
     ]);
   });
 });
 
-describe("what the friend reads, and no member's name in it", () => {
-  it("with a gift", () => {
-    expect(inviteLines("Northside Gym", { code: "WELCOME20", words: "20% off a membership" })).toEqual([
-      "A member of Northside Gym has invited you.",
+describe("what the friend reads: the member's first name, and no more of them", () => {
+  it("with a gift and a name", () => {
+    expect(inviteLines("Northside Gym", { code: "WELCOME20", words: "20% off a membership" }, "Maya")).toEqual([
+      "Maya invited you to join Northside Gym.",
       "Your welcome offer: 20% off a membership. Use code WELCOME20 when you join.",
       "Leave your details and Northside Gym will be in touch.",
       "This offer is set by Northside Gym and may change.",
     ]);
   });
-  it("without one", () => {
-    expect(inviteLines("Northside Gym", null)).toEqual(["A member of Northside Gym has invited you.", "Leave your details and Northside Gym will be in touch."]);
+  it("without a name that can be said, and without a gift", () => {
+    expect(inviteLines("Northside Gym", null, null)).toEqual(["A member of Northside Gym has invited you.", "Leave your details and Northside Gym will be in touch."]);
   });
 });
 
@@ -155,19 +170,29 @@ describe("the parsers", () => {
   ])("an invite code %s is %s", (code, ok) => {
     expect(referralCodeSchema.safeParse(code).success).toBe(ok);
   });
-  const gift = { kind: "percent", percentBp: 1000, amountMinor: null, on: "first" };
+  const member = { kind: "percent", percentBp: 1000, amountMinor: null };
+  const gift = { ...member, on: "first" };
   it.each([
-    ["on with a gift for the member", { on: true, member: gift, friend: null }, true],
+    ["on with a gift for the member", { on: true, member, friend: null }, true],
     ["on with a gift for the friend", { on: true, member: null, friend: gift }, true],
     ["on with no gift", { on: true, member: null, friend: null }, false],
     ["off with no gift", { on: false, member: null, friend: null }, true],
-    ["a percentage that carries an amount", { on: true, member: { ...gift, amountMinor: 500 }, friend: null }, false],
-    ["an amount with no amount", { on: true, member: { ...gift, kind: "amount", percentBp: null }, friend: null }, false],
-    ["100% off", { on: true, member: { ...gift, percentBp: 10000 }, friend: null }, false],
-    ["off something the box does not offer", { on: true, member: { ...gift, on: "everything" }, friend: null }, false],
+    ["a percentage that carries an amount", { on: true, member: { ...member, amountMinor: 500 }, friend: null }, false],
+    ["an amount with no amount", { on: true, member: { ...member, kind: "amount", percentBp: null }, friend: null }, false],
+    ["100% off", { on: true, member: { ...member, percentBp: 10000 }, friend: null }, false],
+    ["the member's gift says what it comes off: it is always their next payment", { on: true, member: gift, friend: null }, false],
+    ["the friend's gift off something the box does not offer", { on: true, member: null, friend: { ...gift, on: "everything" } }, false],
     ["a key it does not know", { on: false, member: null, friend: null, by: "x" }, false],
   ])("%s", (_name, body, ok) => {
     expect(setReferralSettingsRequestSchema.safeParse(body).success).toBe(ok);
+  });
+  it.each([
+    ["an email", { fullName: "Tara", email: "tara@example.com", robotToken: "t" }, true],
+    ["no email", { fullName: "Tara", phone: "+447700900123", robotToken: "t" }, false],
+    ["a blank email", { fullName: "Tara", email: "   ", robotToken: "t" }, false],
+    ["where they heard of the business, which the link already says", { fullName: "Tara", email: "tara@example.com", source: "friend", robotToken: "t" }, false],
+  ])("the invite form with %s", (_name, body, ok) => {
+    expect(inviteEnquiryRequestSchema.safeParse(body).success).toBe(ok);
   });
   it("a gift as typed reads as the saved one will", () => {
     expect(referralGiftInputWords({ kind: "amount", percentBp: null, amountMinor: 50000, on: "first" }, "INR")).toBe("₹500.00 off the first payment of a membership");
