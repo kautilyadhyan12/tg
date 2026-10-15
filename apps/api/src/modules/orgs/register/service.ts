@@ -340,6 +340,8 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
       throw new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
     case "member_gift_changed":
       throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
+    case "member_gift_with_discount":
+      throw new OrgsError(409, "member_gift_with_discount", MEMBER_GIFT_WORDS.with_discount);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale outcome: ${JSON.stringify(never)}`);

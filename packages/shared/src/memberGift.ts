@@ -36,9 +36,13 @@ export function memberGiftWords(gift: MemberGiftTerms): string {
 }
 
 /** The message in the member's inbox when their gift is given. The friend is not named:
- *  the member may have sent their link to many people, and joining is the friend's own. */
-export function memberGiftMessage(gift: MemberGiftTerms, gymName: string): string {
-  return `A friend you invited has joined ${gymName.trim()} and made their first payment. You get ${memberGiftWords(gift)} your next payment: it comes off by itself.`;
+ *  the member may have sent their link to many people, and joining is the friend's own. It
+ *  promises "by itself" only where a record of theirs on the gym's list can take it (`listed`);
+ *  otherwise the gym takes it off when they next pay (round one, H3). */
+export function memberGiftMessage(gift: MemberGiftTerms, gymName: string, listed = true): string {
+  const gym = gymName.trim();
+  const off = `You get ${memberGiftWords(gift)} your next payment`;
+  return `A friend you invited has joined ${gym} and made their first payment. ${listed ? `${off}: it comes off by itself.` : `${off} at ${gym}.`}`;
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -67,6 +71,8 @@ export const leadMemberGiftSchema = z.discriminatedUnion("state", [
     })
     .strict(),
   z.object({ state: z.literal("waiting"), words: z.string().min(1) }).strict(),
+  /** The member is in the app but has no record on the gym's list: nothing can take it off yet. */
+  z.object({ state: z.literal("waiting_no_record"), words: z.string().min(1) }).strict(),
   z
     .object({
       state: z.literal("taken_back"),
@@ -89,6 +95,8 @@ export function memberGiftLine(g: LeadMemberGift, member: string, friend: string
         : `${gift} came off their ${g.on.what} at Sell on ${fullDay(g.on.day)}.`;
     case "waiting":
       return `${gift} comes off their next bill, or is filled in when they next add a membership or buy at Sell.`;
+    case "waiting_no_record":
+      return `${gift} is waiting: ${member} is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.`;
     case "taken_back":
       return g.why === "voided"
         ? `${gift} was taken back: ${friend}'s payment of ${fullDay(g.day)} was voided before the gift was used.`

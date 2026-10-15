@@ -302,7 +302,7 @@ export async function cancelMemberBill(
     const done = await cancelBill(tx, { gymId: input.gymId, billId: bill.id, reason: input.reason, on: input.today, by: input.actorUserId, now: input.now });
     if (!done) throw new Error("a bill to cancel was not open under the gym's lock");
     // A Refer a friend gift taken off it waits for the next bill.
-    await giftUseUndone(tx, input.gymId, { billIds: [bill.id] });
+    await giftUseUndone(tx, input.gymId, { billIds: [bill.id] }, input.today, input.now);
     if (count.paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, count.paidPeriods, input.now);
 
     await insertAudit(tx, {

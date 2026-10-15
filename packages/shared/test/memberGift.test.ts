@@ -65,6 +65,12 @@ describe("the words", () => {
     );
   });
 
+  it("tells a member with no record on the list it comes off at the gym, not by itself (round one, H3)", () => {
+    expect(memberGiftMessage(gbp(1000), "Iron Gym", false)).toBe(
+      "A friend you invited has joined Iron Gym and made their first payment. You get £10.00 off your next payment at Iron Gym.",
+    );
+  });
+
   it("the lead's line, in every state", () => {
     const words = "£10.00 off";
     expect(memberGiftLine({ state: "used", words, on: { kind: "bill", what: "Gold Monthly", dueOn: "2026-11-01" } }, "Maya Rao", "Tara")).toBe(
@@ -75,6 +81,9 @@ describe("the words", () => {
     );
     expect(memberGiftLine({ state: "waiting", words }, "Maya Rao", "Tara")).toBe(
       "Maya Rao's gift for inviting Tara (£10.00 off) comes off their next bill, or is filled in when they next add a membership or buy at Sell.",
+    );
+    expect(memberGiftLine({ state: "waiting_no_record", words }, "Maya Rao", "Tara")).toBe(
+      "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.",
     );
     expect(memberGiftLine({ state: "taken_back", words, why: "voided", day: "2026-10-15" }, "Maya Rao", "Tara")).toBe(
       "Maya Rao's gift for inviting Tara (£10.00 off) was taken back: Tara's payment of 15 October 2026 was voided before the gift was used.",

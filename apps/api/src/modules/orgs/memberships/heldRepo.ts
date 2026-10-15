@@ -771,7 +771,7 @@ export async function moveHeld(
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
     await voidBills(tx, input.gymId, voided, input.now);
     // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
-    await giftUseUndone(tx, input.gymId, { billIds: voided });
+    await giftUseUndone(tx, input.gymId, { billIds: voided }, input.today, input.now);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

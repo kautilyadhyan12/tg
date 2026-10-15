@@ -224,12 +224,12 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
 
   /** A member who holds their own record at gym A, with Gold Monthly: its first bill open
    *  (5000) unless `paid`. Answers them, their record and their invite code. */
-  const memberWithBill = async (local: string, name: string, paid: boolean) => {
+  const memberWithBill = async (local: string, name: string, paid: boolean, startsOn: string = today) => {
     const person = await makeUser(local, name);
     await join(gymA, owner.cookies, person);
     const entryId = await added(gymA.org.id, owner.cookies, { fullName: name, email: `${local}-record@example.com` });
     await sql`UPDATE gym_members SET entry_id = ${entryId} WHERE gym_id = ${gymA.org.id} AND user_id = ${person.id}`;
-    expect((await give(gymA.org.id, entryId, owner.cookies, goldA, paid)).statusCode).toBe(201);
+    expect((await give(gymA.org.id, entryId, owner.cookies, goldA, paid, { startsOn })).statusCode).toBe(201);
     return { person, entryId, code: await linkOf(gymA, person) };
   };
   /** A friend comes by the link, is added from Leads, and their Gold Monthly is given. */
@@ -419,6 +419,150 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         } finally {
           await setOffer(gymA, owner.cookies, TEN_POUNDS);
         }
+      },
+      TIMEOUT_MS,
+    );
+  });
+
+  describe("round one: the first payment only, a used gift whose source is gone, a member not on the list", () => {
+    it(
+      "H1: a later payment of the friend gives nothing, whatever changed since their first",
+      async () => {
+        // The offer has no member's gift when the friend first pays.
+        await setOffer(gymA, owner.cookies, null);
+        const pia = await memberWithBill("pia", "Pia Holt", false);
+        const friend = await friendJoins(pia.code, "Ray Cole", "ray.cole@example.com", true);
+        await setOffer(gymA, owner.cookies, TEN_POUNDS);
+        // The owner then gives a member's gift; the friend buys at the desk.
+        const tub = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: friend.entryId, method: "cash", totalMinor: 2500 }, owner.cookies);
+        expect(tub.statusCode, tub.body).toBe(201);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toEqual([]);
+        expect(await billsOfEntry(gymA.org.id, pia.entryId)).toMatchObject([{ amount_minor: 5000 }]);
+        expect(await messagesOf(pia.person.id)).toEqual([]);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "H2: a used gift whose friend's payment no longer stands is taken back when its bill is cancelled, its membership cancelled, or its sale voided",
+      async () => {
+        const voidFriendPayment = async (entryId: string) => {
+          const m = (await memberships(gymA.org.id, entryId, owner.cookies)).memberships[0];
+          const undo = m?.billing?.undo;
+          if (m === undefined || undo?.kind !== "payment") throw new Error("no payment to void");
+          expect((await post(`${heldUrl(gymA.org.id, entryId)}/${m.id}/payments/${undo.paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        };
+        // Cancel this bill.
+        const pat = await memberWithBill("pat", "Pat Lowe", false);
+        const f1 = await friendJoins(pat.code, "Sol Reid", "sol.reid@example.com", true);
+        await voidFriendPayment(f1.entryId);
+        const page = await memberships(gymA.org.id, pat.entryId, owner.cookies);
+        const m = page.memberships[0];
+        const billId = m?.billing?.cancel?.billId;
+        if (m === undefined || billId === undefined) throw new Error("no bill to cancel");
+        expect((await post(`${heldUrl(gymA.org.id, pat.entryId)}/${m.id}/bills/${billId}/cancel`, { reason: "not_charging" }, owner.cookies)).statusCode).toBe(200);
+        expect((await memberships(gymA.org.id, pat.entryId, owner.cookies)).memberGift).toBeNull();
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === f1.entryId)).toMatchObject([{ taken_back_why: "voided", used_bill_id: null }]);
+        const theirs = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: pat.entryId, method: "cash", totalMinor: 1500, memberGift: { id: "00000000-0000-4000-8000-000000000999", offMinor: 1000 } }, owner.cookies);
+        expect([theirs.statusCode, errorOf(theirs)]).toEqual([409, "member_gift_not_theirs"]);
+
+        // Cancel membership: the same. It starts in ten days, so its first bill is due after
+        // the day it is cancelled on and goes with it.
+        const inTen = new Date(Date.parse(`${today}T12:00:00Z`) + 10 * 86_400_000).toISOString().slice(0, 10);
+        const vic = await memberWithBill("vic", "Vic Shaw", false, inTen);
+        expect(await billsOfEntry(gymA.org.id, vic.entryId)).toMatchObject([{ amount_minor: 5000, status: "open" }]);
+        const f2 = await friendJoins(vic.code, "Ada Kerr", "ada.kerr@example.com", true);
+        await voidFriendPayment(f2.entryId);
+        const vm = (await memberships(gymA.org.id, vic.entryId, owner.cookies)).memberships[0];
+        if (vm === undefined) throw new Error("no membership");
+        const cancelled = await post(`${heldUrl(gymA.org.id, vic.entryId)}/${vm.id}/cancel`, { when: "today" }, owner.cookies);
+        expect(cancelled.statusCode, cancelled.body).toBe(200);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === f2.entryId)).toMatchObject([{ taken_back_why: "voided", used_bill_id: null }]);
+
+        // A cancelled membership whose friend's payment still stands: the gift waits again.
+        const wes = await memberWithBill("wes", "Wes Pryor", false, inTen);
+        await friendJoins(wes.code, "Ola Hart", "ola.hart@example.com", true);
+        const wm = (await memberships(gymA.org.id, wes.entryId, owner.cookies)).memberships[0];
+        if (wm === undefined) throw new Error("no membership");
+        expect((await post(`${heldUrl(gymA.org.id, wes.entryId)}/${wm.id}/cancel`, { when: "today" }, owner.cookies)).statusCode).toBe(200);
+        expect((await memberships(gymA.org.id, wes.entryId, owner.cookies)).memberGift).toMatchObject({ words: "£10.00 off", friendName: "Ola Hart" });
+
+        // A sale the gift came off, voided after the friend's only sale was voided: taken back.
+        const kim = await memberWithBill("kim", "Kim Ford", true);
+        const leadId = await invited(kim.code, "Ian Webb", "ian.webb@example.com");
+        const ian = await added(gymA.org.id, owner.cookies, { fullName: "Ian Webb", email: "ian.webb@example.com", leadId });
+        const iansSale = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: ian, method: "cash", totalMinor: 2500 }, owner.cookies);
+        expect(iansSale.statusCode).toBe(201);
+        const waiting = (await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGift;
+        if (waiting === null) throw new Error("no waiting gift");
+        const kimsSale = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: kim.entryId, method: "cash", totalMinor: 1500, memberGift: { id: waiting.id, offMinor: 1000 } }, owner.cookies);
+        expect(kimsSale.statusCode, kimsSale.body).toBe(201);
+        const idOf = (res: { body: string }) => (JSON.parse(res.body) as { saleId: string }).saleId;
+        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(iansSale)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(kimsSale)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGift).toBeNull();
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === ian)).toMatchObject([{ taken_back_why: "voided", used_sale_id: null }]);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "H3: a member in the app with no record on the list is told it comes off at the gym, and the lead says why it waits",
+      async () => {
+        const ned = await makeUser("ned", "Ned Fox");
+        await join(gymA, owner.cookies, ned);
+        const [row] = await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_members WHERE gym_id = ${gymA.org.id} AND user_id = ${ned.id}`;
+        expect(row?.entry_id ?? null).toBeNull();
+        const friend = await friendJoins(await linkOf(gymA, ned), "Lou Park", "lou.park@example.com", true);
+        expect(await messagesOf(ned.id)).toEqual([
+          {
+            gym_id: gymA.org.id,
+            kind: "referral_gift",
+            body: "A friend you invited has joined Northside Member Gift A and made their first payment. You get £10.00 off your next payment at Northside Member Gift A.",
+          },
+        ]);
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_no_record", words: "£10.00 off" }, memberName: "Ned Fox" });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "a member is not their own friend; once a friend holds in the database itself; L1's words",
+      async () => {
+        // A lead marked as invited by the member and joined to the member's own record.
+        const zed = await memberWithBill("zed", "Zed Moon", false);
+        await sql`
+          INSERT INTO gym_leads (gym_id, full_name, email, source, status, entry_id, referred_by, referred_at)
+          VALUES (${gymA.org.id}, 'Zed Moon', 'zed-self@example.com', 'friend', 'joined', ${zed.entryId}, ${zed.person.id}, now() - interval '1 day')`;
+        const own = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: zed.entryId, method: "cash", totalMinor: 2500 }, owner.cookies);
+        expect(own.statusCode).toBe(201);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === zed.person.id)).toEqual([]);
+
+        // A second gift standing for one friend is refused by the table itself.
+        const [one] = await sql<{ friend_entry_id: string; member_user_id: string }[]>`
+          SELECT friend_entry_id, member_user_id FROM gym_referral_member_gifts WHERE gym_id = ${gymA.org.id} AND taken_back_at IS NULL AND friend_entry_id IS NOT NULL LIMIT 1`;
+        if (one === undefined) throw new Error("no gift");
+        await expect(sql`
+          INSERT INTO gym_referral_member_gifts (gym_id, friend_entry_id, member_user_id, kind, amount_minor, currency, given_at, given_on)
+          VALUES (${gymA.org.id}, ${one.friend_entry_id}, ${one.member_user_id}, 'amount', 1000, 'GBP', now(), current_date)`).rejects.toThrow(/gym_referral_member_gifts_friend_uq/);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "two gifts waiting for one member: the hourly run takes one off the bill it opens, and the other still waits",
+      async () => {
+        const dee = await memberWithBill("dee", "Dee Grey", true);
+        await friendJoins(dee.code, "Max Hill", "max.hill@example.com", true);
+        await friendJoins(dee.code, "Joy Lake", "joy.lake@example.com", true);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === dee.person.id)).toHaveLength(2);
+        const later = new Date(Date.now() + 40 * 86_400_000);
+        const run = await openDueBills({ sql, log: { info: () => undefined, error: () => undefined } }, { now: later, gymIds: [gymA.org.id] });
+        expect(run.failed).toBe(0);
+        expect((await billsOfEntry(gymA.org.id, dee.entryId))[1]).toMatchObject({ period_index: 1, amount_minor: 4000 });
+        const mine = (await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === dee.person.id);
+        expect(mine.filter((g) => g.used_bill_id !== null)).toHaveLength(1);
+        expect((await memberships(gymA.org.id, dee.entryId, owner.cookies)).memberGift).toMatchObject({ words: "£10.00 off" });
       },
       TIMEOUT_MS,
     );

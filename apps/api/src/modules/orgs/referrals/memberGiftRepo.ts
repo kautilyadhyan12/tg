@@ -54,12 +54,19 @@ export async function giveMemberGift(tx: TransactionSql, input: { gymId: string;
     SELECT id FROM gym_referral_member_gifts
     WHERE gym_id = ${input.gymId} AND friend_entry_id = ${input.friendEntryId} AND taken_back_at IS NULL`;
   if (standing !== undefined) return;
+  // Only the friend's first payment that stands gives it: a later one, made after the offer
+  // gained a member's gift or after the member came back, gives nothing (round one, H1). A
+  // payment voided or refunded in full does not stand, so the next one is the first again.
+  const paymentId0 = "paymentId" in input.by ? input.by.paymentId : null;
+  const saleId0 = "saleId" in input.by ? input.by.saleId : null;
+  if ((await standingOther(tx, input.gymId, input.friendEntryId, paymentId0, saleId0)) !== undefined) return;
   const offer = await settingsFor(tx, input.gymId);
   if (!offer.on || offer.member === null) return;
   // The member who sent the link, still a member here, with a live account; never the friend
   // themselves (a member is not their own friend).
-  const [inviter] = await tx<{ entry_id: string | null; gym_name: string }[]>`
-    SELECT m.entry_id, g.name AS gym_name
+  const [inviter] = await tx<{ entry_id: string | null; gym_name: string; listed: boolean }[]>`
+    SELECT m.entry_id, g.name AS gym_name,
+           EXISTS (SELECT 1 FROM gym_member_list_entries e WHERE e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL) AS listed
     FROM gym_members m
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
     JOIN gyms g ON g.id = m.gym_id
@@ -86,7 +93,7 @@ export async function giveMemberGift(tx: TransactionSql, input: { gymId: string;
         userId: friend.referredBy,
         kind: GYM_REFERRAL_GIFT_MESSAGE_KIND,
         occasion: `friend:${input.friendEntryId}`,
-        body: memberGiftMessage(gift, inviter.gym_name),
+        body: memberGiftMessage(gift, inviter.gym_name, inviter.listed),
         link: null,
         gymDay: input.today,
       },
@@ -303,24 +310,43 @@ async function standingOther(
 }
 
 /** A bill or a sale a gift was taken off no longer charges anybody (staff cancelled the bill,
- *  it was cancelled with its membership, or the sale was voided): the gift waits again for the
- *  next one. */
-export async function giftUseUndone(tx: TransactionSql, gymId: string, on: { billIds: readonly string[] } | { saleId: string }): Promise<void> {
+ *  it was cancelled with its membership, or the sale was voided). Where one of the friend's
+ *  payments or sales still stands, the gift waits again for the member's next payment, standing
+ *  on it; where none does, it is taken back (round one, H2): a used gift stays only while it is
+ *  used. Inside that write's own transaction, under the gym's lock. */
+export async function giftUseUndone(tx: TransactionSql, gymId: string, on: { billIds: readonly string[] } | { saleId: string }, today: string, now: Date): Promise<void> {
   const billIds = "billIds" in on ? [...on.billIds] : [];
   const saleId = "saleId" in on ? on.saleId : null;
   if (billIds.length === 0 && saleId === null) return;
-  const rows = await tx<{ id: string }[]>`
-    UPDATE gym_referral_member_gifts
-    SET used_at = NULL, used_bill_id = NULL, used_sale_id = NULL, used_off_minor = NULL, used_currency = NULL
-    WHERE gym_id = ${gymId} AND (used_bill_id = ANY(${billIds}::uuid[]) OR used_sale_id = ${saleId}::uuid)
-    RETURNING id`;
-  for (const row of rows) {
+  const gifts = await tx<{ id: string; friend_entry_id: string | null; refunded: boolean }[]>`
+    SELECT g.id, g.friend_entry_id,
+           COALESCE(p.undone_at IS NULL AND p.amount_minor <= (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_member_refunds r
+                                                              WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL), false) AS refunded
+    FROM gym_referral_member_gifts g
+    LEFT JOIN gym_member_payments p ON p.gym_id = g.gym_id AND p.id = g.by_payment_id
+    WHERE g.gym_id = ${gymId} AND (g.used_bill_id = ANY(${billIds}::uuid[]) OR g.used_sale_id = ${saleId}::uuid)
+    FOR UPDATE OF g`;
+  for (const gift of gifts) {
+    const stands = gift.friend_entry_id === null ? undefined : await standingOther(tx, gymId, gift.friend_entry_id, null, null);
+    if (stands !== undefined) {
+      await tx`
+        UPDATE gym_referral_member_gifts
+        SET used_at = NULL, used_bill_id = NULL, used_sale_id = NULL, used_off_minor = NULL, used_currency = NULL,
+            by_payment_id = ${stands.paymentId}, by_sale_id = ${stands.saleId}
+        WHERE gym_id = ${gymId} AND id = ${gift.id}`;
+    } else {
+      await tx`
+        UPDATE gym_referral_member_gifts
+        SET used_at = NULL, used_bill_id = NULL, used_sale_id = NULL, used_off_minor = NULL, used_currency = NULL,
+            taken_back_at = ${now}, taken_back_on = ${today}::date, taken_back_why = ${gift.refunded ? "refunded" : "voided"}
+        WHERE gym_id = ${gymId} AND id = ${gift.id}`;
+    }
     await insertAudit(tx, {
       actorUserId: null,
       gymId,
-      action: "org.referral_member_gift_waiting_again",
+      action: stands === undefined ? "org.referral_member_gift_taken_back" : "org.referral_member_gift_waiting_again",
       targetType: "gym_referral_member_gift",
-      targetId: row.id,
+      targetId: gift.id,
       meta: saleId === null ? { bills: String(billIds.length) } : { saleId },
     });
   }
@@ -364,6 +390,7 @@ interface RawLeadGift extends RawTerms {
   taken_back_why: string | null;
   taken_back_payment_day: string | null;
   member_name: string | null;
+  listed: boolean;
 }
 
 const whySchema = z.enum(["voided", "refunded"]);
@@ -379,7 +406,8 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
            s.item_name AS used_sale_item, s.sold_on::text AS used_sale_day,
            g.taken_back_why,
            COALESCE(gp.paid_on, gs.sold_on, g.taken_back_on)::text AS taken_back_payment_day,
-           CASE WHEN u.status = 'active' THEN COALESCE(NULLIF(btrim(e.full_name), ''), u.display_name) END AS member_name
+           CASE WHEN u.status = 'active' THEN COALESCE(NULLIF(btrim(e.full_name), ''), u.display_name) END AS member_name,
+           (e.id IS NOT NULL AND e.former_at IS NULL) AS listed
     FROM gym_referral_member_gifts g
     LEFT JOIN gym_member_bills b ON b.gym_id = g.gym_id AND b.id = g.used_bill_id
     LEFT JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
@@ -406,6 +434,10 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
   } else if (r.used) {
     // What it was taken off has since been deleted for good with its record: nothing to say.
     return null;
+  } else if (!r.listed && r.member_name !== null) {
+    // In the app, but no record of theirs on Members: no bill or sale of theirs can take it
+    // until staff put them on the list (round one, H3).
+    gift = { state: "waiting_no_record", words };
   } else {
     gift = { state: "waiting", words };
   }

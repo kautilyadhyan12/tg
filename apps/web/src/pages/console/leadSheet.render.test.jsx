@@ -270,6 +270,19 @@ describe('adding and keeping a lead', () => {
     );
   });
 
+  it("a member's gift waiting for a member not on the list says so, with the place to find them (round one, H3)", async () => {
+    const invited = { ...tom, source: 'friend', status: 'joined', entryId: OWN, onList: true, invitedBy: { name: 'Ned Fox', member: true } };
+    const memberGift = { gift: { state: 'waiting_no_record', words: '£10.00 off' }, memberName: 'Ned Fox' };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift } } });
+    render(sheet(TOM));
+    expect((await screen.findByTestId('member-gift-line')).textContent).toBe(
+      "Ned Fox's gift for inviting Tom (£10.00 off) is waiting: Ned Fox is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.",
+    );
+    const find = screen.getByTestId('member-gift-find');
+    expect(find.textContent).toBe('Find Ned Fox in the app');
+    expect(find.getAttribute('href')).toMatch(/\/members\?view=app$/);
+  });
+
   it('a lead nobody invited has no line about a gift', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true } } });
     render(sheet(TOM));

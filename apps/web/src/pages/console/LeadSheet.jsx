@@ -491,6 +491,11 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
                   {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
                 </span>
               ) : null}
+              {lead !== null && memberGift !== null && memberGift.gift.state === 'waiting_no_record' ? (
+                <Link to={`/console/${orgSlug}/members?view=app`} className="c-lk c-w6 c-s14" data-testid="member-gift-find">
+                  {`Find ${memberGift.memberName ?? 'them'} in the app`}
+                </Link>
+              ) : null}
             </div>
             <button type="button" aria-label="Close" onClick={() => tryLeave('close')} className="c-icon-btn">
               <X aria-hidden="true" className="w-5 h-5" />

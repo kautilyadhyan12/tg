@@ -413,7 +413,9 @@ export type SellOutcome =
   /** A member's Refer a friend gift that is not the buyer's, or no longer waits. */
   | { kind: "member_gift_not_theirs" }
   /** What it takes off is no longer what the screen showed, or it no longer fits. */
-  | { kind: "member_gift_changed" };
+  | { kind: "member_gift_changed" }
+  /** The gift and a discount on one sale. */
+  | { kind: "member_gift_with_discount" };
 
 export interface SellInput {
   gymId: string;
@@ -497,7 +499,8 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
     // waiting, read under its lock, and taking off what the screen showed.
     let gift: { id: string; offMinor: number } | null = null;
     if (input.memberGift !== null) {
-      if (input.entryId === null || input.discountId !== null) return { kind: "member_gift_not_theirs" };
+      if (input.discountId !== null) return { kind: "member_gift_with_discount" };
+      if (input.entryId === null) return { kind: "member_gift_not_theirs" };
       const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id);
       if (found === null) return { kind: "member_gift_not_theirs" };
       const off = memberGiftOff(found, item.price_minor * input.quantity, item.currency);
@@ -593,7 +596,7 @@ export async function undoSale(sql: Sql, input: { gymId: string; saleId: string;
     if (row.discount_id !== null) await returnUse(tx, input.gymId, row.discount_id);
     // A member's Refer a friend gift taken off it waits again; a friend's sale that gave one
     // no longer stands for it (20e-ii-b-ii-a).
-    await giftUseUndone(tx, input.gymId, { saleId: input.saleId });
+    await giftUseUndone(tx, input.gymId, { saleId: input.saleId }, input.today, input.now);
     await friendPaymentGone(tx, { gymId: input.gymId, by: { saleId: input.saleId }, why: "voided", today: input.today, now: input.now });
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
