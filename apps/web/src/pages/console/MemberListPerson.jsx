@@ -468,6 +468,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   /** The person in the app a "Not this person" box is about. */
   const [notThem, setNotThem] = useState(null);
   const [form, setForm] = useState(() => formFrom(null, fields));
+  /** Add member: the gym's next member number, filled in (5e-i); null until it is read. Left
+   *  as it is, the number is the server's to give when the person is added, so two staff
+   *  shown the same one are never given it twice. */
+  const [offered, setOffered] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   /** A refusal: its sentence, and what can be done about it. */
@@ -515,6 +519,28 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [picking, setPicking] = useState(pair?.otherId ?? null);
 
   const ranges = dayRanges();
+
+  // Add member: the next member number, filled in where the box is still empty.
+  useEffect(() => {
+    if (id !== null) return undefined;
+    let live = true;
+    Promise.resolve()
+      .then(() => orgService.getNextMemberNumber(gymId))
+      .then(
+        (res) => {
+          const next = res.data.memberNumber;
+          if (!live || next === null) return;
+          setOffered(next);
+          setForm((f) => (f.memberNumber === '' ? { ...f, memberNumber: next } : f));
+        },
+        () => {
+          // The box stays empty, and the person is still given the next number when added.
+        },
+      );
+    return () => {
+      live = false;
+    };
+  }, [gymId, id]);
 
   // Add member: the lead with the email or phone being typed, asked once typing stops.
   const typedName = id === null ? (form.fullName ?? '').trim() : '';
@@ -766,7 +792,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       message: noAddress ? inviteBlockedWords(code, words, canSetAddress) : errorText(err, fallback),
       canSetAddress,
       place: code === 'not_them_staff' ? 'staff' : null,
-      openId: (code === 'already_on_list' || code === 'former_record') && typeof other === 'string' ? other : null,
+      openId: (code === 'already_on_list' || code === 'former_record' || code === 'member_number_taken') && typeof other === 'string' ? other : null,
       ack: code === 'leaves_list' ? extra.ack ?? null : null,
     });
   };
@@ -839,6 +865,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         }
       }
       written(null, res);
+      // The number shown was given to somebody else a moment before (5e-i): said where the
+      // person added is, so a desk that wrote it down knows.
+      const givenNumber = res.data.entry.memberNumber;
+      // Only while the panel still has that person open: staff may have moved on meanwhile.
+      const stillThere = wanted.current === res.data.entry.entryId;
+      if (stillThere && res.data.outcome === 'added' && input.memberNumber === undefined && offered !== null && givenNumber !== null && givenNumber !== offered) {
+        setNotice((said) => `${said} Their member number is ${givenNumber}, as ${offered} was given to someone else a moment ago.`);
+      }
       if (notGiven !== null) setRefusal({ message: notGiven, openId: null, ack: null });
     } catch (err) {
       if (wanted.current !== null) return;
@@ -860,6 +894,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       // With a price list the membership is picked, and the list's own words for it are
       // not asked: a box the form does not show sends nothing.
       const answers = inputFrom(form, sells ? HELD_ANSWERS : []);
+      // The number filled in, left as it is, is the server's to give (5e-i).
+      if (offered !== null && answers.memberNumber === offered) delete answers.memberNumber;
       // The lead staff were shown as this person is marked Joined with them (20e-ii-b-i).
       const typed = leadJoins ? { ...answers, leadId: leadFound.id } : answers;
       await addPerson(invite ? { ...typed, invite: true } : typed);
@@ -1101,12 +1137,42 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
 
   // ── What the panel draws ──
 
-  const textBox = (f) => (
-    <label key={f.key} className="c-field">
-      <span className="c-label">{f.label}</span>
-      <input type={f.type} autoComplete={f.autoComplete} value={form[f.key]} onChange={(e) => setField(f.key, e.target.value)} className="c-input" />
-    </label>
-  );
+  const textBox = (f) => {
+    // Add member fills in the next member number (5e-i), and says so under the box; emptied,
+    // the box says the person is still given one, as the app numbers everybody.
+    const numberBox = id === null && f.key === 'memberNumber';
+    const hint = !numberBox
+      ? null
+      : offered !== null && form.memberNumber === offered
+        ? 'Your next member number. You can type a different one.'
+        : offered !== null && form.memberNumber.trim() === ''
+          ? 'Left empty, they are given your next member number.'
+          : null;
+    const filled = hint !== null;
+    const hintId = `${titleId}-${f.key}-hint`;
+    // The hint is outside the label, so the box's name stays "Member number"; the box is
+    // wrapped the same way with or without it, so typing in it never moves the focus.
+    return (
+      <div key={f.key} className="c-field">
+        <label className="c-field">
+          <span className="c-label">{f.label}</span>
+          <input
+            type={f.type}
+            autoComplete={f.autoComplete}
+            value={form[f.key]}
+            onChange={(e) => setField(f.key, e.target.value)}
+            aria-describedby={filled ? hintId : undefined}
+            className="c-input"
+          />
+        </label>
+        {filled ? (
+          <span id={hintId} className="c-hint">
+            {hint}
+          </span>
+        ) : null}
+      </div>
+    );
+  };
 
   const wordBox = (f) => {
     const listId = `${titleId}-${f.key}`;
@@ -1263,7 +1329,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             {/* It leaves this form, so it asks first once something has been typed. */}
             <PlaceLink
               to={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
-              guard={JSON.stringify(form) !== JSON.stringify(formFrom(null, fields))}
+              guard={JSON.stringify(form) !== JSON.stringify({ ...formFrom(null, fields), memberNumber: offered ?? '' })}
               className="c-btn c-btn-s c-btn-sm"
             >
               Set up memberships

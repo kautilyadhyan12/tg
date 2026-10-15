@@ -2598,6 +2598,21 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   not_them_staff: "This person is staff or has a complimentary place, so their access isn't changed here.",
 } as const;
 
+/** Add member or Change with a member number another record holds (5e-i): nobody is
+ *  given a number somebody has, a past member's included. */
+export function memberNumberTakenWords(memberNumber: string, fullName: string, former: boolean): string {
+  const who = fullName.trim() === "" ? "another person" : fullName;
+  return former
+    ? `Member number ${memberNumber} belongs to ${who}, who is no longer on your list. Use another number, or open their record.`
+    : `Member number ${memberNumber} belongs to ${who}. Use another number, or open their record.`;
+}
+
+/** The member number Add member fills in (5e-i): the gym's next one. A suggestion: the
+ *  number a person is given is worked out again when they are added. Null where the next
+ *  number would be too long to store. */
+export const memberListNextNumberSchema = z.object({ memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable() }).strict();
+export type MemberListNextNumber = z.infer<typeof memberListNextNumberSchema>;
+
 /** "Not this person": which account in the app it is about (§18.4). */
 export const memberListNotThemRequestSchema = z.object({ userId: z.string().uuid() }).strict();
 export type MemberListNotThemRequest = z.infer<typeof memberListNotThemRequestSchema>;
