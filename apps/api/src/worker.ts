@@ -203,20 +203,28 @@ try {
   log.fatal({ err }, "failed to register the gone-for-good schedule");
   process.exit(1);
 }
-// Its emails go through the sign-in codes' sender; RESEND_API_KEY and EMAIL_FROM are required
-// in production. Elsewhere the email is written to the log (its subject and link, never the
-// address) so a local run can be watched.
+// Its emails go from the invitations' sender, on its own sub-domain, never the sign-in codes'
+// (`config.ts`): a warning nobody wanted must never get sign-in codes blocked. In production
+// with no such sender every send fails, so no gym is told and none is emptied. Elsewhere the
+// email is written to the log (its subject and link, never the address) so a local run can
+// be watched.
 const goneForGoodMail = {
   transport:
-    config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
-      ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
-      : {
-          send(message: { subject: string; text: string }): Promise<void> {
-            const links = message.text.match(/https?:\/\/\S+/g) ?? [];
-            log.info({ event: "email.gone_for_good.dev", subject: message.subject, links }, "DEV ONLY — gone-for-good email (no email service configured)");
-            return Promise.resolve();
+    config.RESEND_API_KEY !== undefined && config.INVITE_EMAIL_FROM !== undefined
+      ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.INVITE_EMAIL_FROM })
+      : config.NODE_ENV === "production"
+        ? {
+            send(): Promise<void> {
+              return Promise.reject(new Error("INVITE_EMAIL_FROM is not set, so gone-for-good emails cannot be sent"));
+            },
+          }
+        : {
+            send(message: { subject: string; text: string }): Promise<void> {
+              const links = message.text.match(/https?:\/\/\S+/g) ?? [];
+              log.info({ event: "email.gone_for_good.dev", subject: message.subject, links }, "DEV ONLY — gone-for-good email (no email service configured)");
+              return Promise.resolve();
+            },
           },
-        },
   webOrigin: config.WEB_ORIGIN,
 };
 

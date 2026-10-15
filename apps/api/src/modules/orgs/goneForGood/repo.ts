@@ -109,6 +109,14 @@ export async function roundFor(tx: TransactionSql, gymId: string, countedFrom: D
 
 export type Notice = "month" | "week";
 
+/** The database's own clock, read under the gym's lock: what a claim is stamped with and
+ *  timed against, so a run that started long ago never makes another run's claim look old. */
+export async function claimClock(tx: TransactionSql): Promise<Date> {
+  const [row] = await tx<{ at: Date }[]>`SELECT date_trunc('milliseconds', clock_timestamp()) AS at`;
+  if (row === undefined) throw new Error("clock_timestamp returned no row");
+  return row.at;
+}
+
 /** The email is about to go: its claim, and the day it will name. */
 export async function claimNotice(tx: TransactionSql, gymId: string, notice: Notice, at: Date, deletesAt: Date): Promise<void> {
   if (notice === "month") {
@@ -119,20 +127,22 @@ export async function claimNotice(tx: TransactionSql, gymId: string, notice: Not
 }
 
 /** The email went to `recipients` people. Only the claim it was sent under is marked: a
- *  round started again meanwhile is left as it is. */
+ *  round started again meanwhile is left as it is. False when nothing was marked. */
 export async function markSent(
   sql: SqlOrTx,
   input: { gymId: string; notice: Notice; countedFrom: Date; claimedAt: Date; recipients: number; at: Date },
-): Promise<void> {
-  if (input.notice === "month") {
-    await sql`
-      UPDATE gym_gone_for_good SET month_sent_at = ${input.at}, month_recipients = ${input.recipients}
-      WHERE gym_id = ${input.gymId} AND counted_from = ${input.countedFrom} AND month_claimed_at = ${input.claimedAt}`;
-  } else {
-    await sql`
-      UPDATE gym_gone_for_good SET week_sent_at = ${input.at}, week_recipients = ${input.recipients}
-      WHERE gym_id = ${input.gymId} AND counted_from = ${input.countedFrom} AND week_claimed_at = ${input.claimedAt}`;
-  }
+): Promise<boolean> {
+  const rows =
+    input.notice === "month"
+      ? await sql`
+          UPDATE gym_gone_for_good SET month_sent_at = ${input.at}, month_recipients = ${input.recipients}
+          WHERE gym_id = ${input.gymId} AND counted_from = ${input.countedFrom} AND month_claimed_at = ${input.claimedAt}
+          RETURNING gym_id`
+      : await sql`
+          UPDATE gym_gone_for_good SET week_sent_at = ${input.at}, week_recipients = ${input.recipients}
+          WHERE gym_id = ${input.gymId} AND counted_from = ${input.countedFrom} AND week_claimed_at = ${input.claimedAt}
+          RETURNING gym_id`;
+  return rows.length > 0;
 }
 
 /** Nothing went: the claim is let go, and the next run tries again. */
@@ -170,11 +180,17 @@ export async function noticeGym(sql: SqlOrTx, gymId: string): Promise<NoticeGym 
   return row === undefined ? null : { name: row.name, slug: row.slug, orgType: row.org_type, timezone: row.timezone };
 }
 
-/** The gym's staff who have an address, for the ticks the sweep checks. */
+/** The gym's staff whose address is proved (a sign-in code, Google or the verification
+ *  link: the marker `auth/repo.ts` `recordVerifiedEmail` keeps), for the ticks the sweep
+ *  checks. An address typed at `POST /v1/auth/register` and never proved may be anybody's,
+ *  so it is never emailed, and its gym is then never emptied. */
 export async function staffWithEmail(sql: SqlOrTx, gymId: string): Promise<{ userId: string; email: string }[]> {
   const rows = await sql<{ user_id: string; email: string }[]>`
-    SELECT s.user_id, u.email FROM gym_staff s JOIN users u ON u.id = s.user_id
+    SELECT s.user_id, u.email::text AS email FROM gym_staff s JOIN users u ON u.id = s.user_id
     WHERE s.gym_id = ${gymId} AND u.status = 'active' AND u.email IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM one_time_tokens t
+        WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL)
     ORDER BY u.email`;
   return rows.map((r) => ({ userId: r.user_id, email: r.email }));
 }

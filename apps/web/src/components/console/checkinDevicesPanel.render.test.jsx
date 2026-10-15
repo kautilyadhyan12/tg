@@ -195,4 +195,13 @@ describe('a gym with no live plan', () => {
     expect(screen.getByRole('button', { name: 'New link' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Switch off' }).disabled).toBe(false);
   });
+
+  it('a device that is on says it is paused, never that it is checking people in', async () => {
+    open([device({ lastSeenAt: '2026-10-01T09:30:00.000Z', keyTagsPausedUntil: '2099-01-01T00:00:00.000Z' })], { readOnly: true });
+    expect(await screen.findByText('Paused')).toBeTruthy();
+    expect(screen.getByText('Not checking anybody in while this gym has no plan. It starts again by itself once the gym has one.')).toBeTruthy();
+    expect(screen.getByText('1 device · paused')).toBeTruthy();
+    expect(screen.queryByText(/Checking people in/)).toBeNull();
+    expect(screen.queryByText(/Not taking key tags/)).toBeNull();
+  });
 });

@@ -1153,6 +1153,9 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string, at: Da
   await tx`DELETE FROM gym_member_list_fields WHERE gym_id = ${gymId}`;
   // The gym's tags (5d): what was on a record went with it, above.
   await tx`DELETE FROM gym_member_tags WHERE gym_id = ${gymId}`;
+  // The kept Possible duplicates hold names and have no key to the records, so nothing
+  // above takes them; with no list they would never be worked out again.
+  await tx`DELETE FROM gym_member_list_pairs WHERE gym_id = ${gymId}`;
   await tx`DELETE FROM gym_member_lists WHERE gym_id = ${gymId}`;
 }
 

@@ -33,16 +33,26 @@ export function momentLabel(iso, { timezone, clockFormat }, now = new Date()) {
   return `${date}, ${time}`;
 }
 
-/** The closed box's line: how many devices, and how many can check people in. */
-export function devicesSummary(devices) {
+/** The closed box's line: how many devices, and how many can check people in. `paused`:
+ *  the gym has no plan, so none can (Kd, 2026-10-15). */
+export function devicesSummary(devices, paused = false) {
   if (!Array.isArray(devices) || devices.length === 0) return 'No devices yet';
   const on = devices.filter((d) => d.state === 'on').length;
   const count = devices.length === 1 ? '1 device' : `${String(devices.length)} devices`;
+  if (paused && on > 0) return `${count} · paused`;
   return `${count} · ${String(on)} on`;
 }
 
-/** One device's tag and the line beside it. */
-export function deviceState(device, clock, now = new Date()) {
+/** One device's tag and the line beside it. `pausedFor`: the gym's word ("gym") when it has
+ *  no plan, so a device that is on checks nobody in until it has one; null otherwise. */
+export function deviceState(device, clock, now = new Date(), pausedFor = null) {
+  if (device.state === 'on' && typeof pausedFor === 'string') {
+    return {
+      tag: 'Paused',
+      tone: 'plain',
+      line: `Not checking anybody in while this ${pausedFor} has no plan. It starts again by itself once the ${pausedFor} has one.`,
+    };
+  }
   if (device.state === 'waiting') {
     const until = device.linkExpiresAt === null ? '' : momentLabel(device.linkExpiresAt, clock, now);
     return {

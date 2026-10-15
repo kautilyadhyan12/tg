@@ -704,13 +704,48 @@ d("check-in at the front desk (real Postgres)", () => {
     expect((await post("/v1/checkin/scan", { code: PROBE }, cookieMap(claimed))).statusCode).toBe(401);
   });
 
+  it("THE WORST THING: a paying, a payment-failed and a trial gym's desks check people in; only a gym with no plan is paused, writes nothing, and checks in again once it has a plan", async () => {
+    const deskOwner = await makeUser("plans", "Plans Owner");
+    const gymFor = async (status: string | null): Promise<{ gymId: string; desk: { cookies: Cookies }; tag: string }> => {
+      const gymId = await makeGym(deskOwner, `Plan ${status ?? "none"} Gym`);
+      const gymDesk = await makeDesk(gymId, deskOwner);
+      const tag = `PL-${uniq()}`;
+      await addRecord(gymId, { fullName: "Walk In", phone: "+919800000011", memberNumber: tag });
+      // Set up on its trial, as every desk is; then the plan it is on now.
+      if (status === null) await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+      else await sql`UPDATE subscriptions SET status = ${status} WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+      return { gymId, desk: gymDesk, tag };
+    };
+    for (const status of ["active", "past_due", "trialing"]) {
+      const g = await gymFor(status);
+      expect((await scan(g.desk, g.tag)).result, status).toBe("checked_in");
+      expect(await visits(g.gymId), status).toHaveLength(1);
+    }
+    for (const status of [null, "expired", "canceled"]) {
+      const g = await gymFor(status);
+      const res = await post("/v1/checkin/scan", { code: g.tag }, g.desk.cookies);
+      expect(res.statusCode, String(status)).toBe(409);
+      expect(JSON.parse(res.body)).toMatchObject({ error: "checkin_paused", message: "Check-in is unavailable. Please see a member of staff." });
+      expect(res.body).not.toContain("Walk In");
+      expect(await visits(g.gymId), String(status)).toEqual([]);
+      if (status === "expired") {
+        // The gym takes a plan: the same desk, untouched, checks people in again.
+        await sql`
+          INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider)
+          VALUES ('gym', ${g.gymId}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'active', 'pilot')`;
+        expect((await scan(g.desk, g.tag)).result).toBe("checked_in");
+        expect(await visits(g.gymId)).toHaveLength(1);
+      }
+    }
+  });
+
   it("a closed gym's desk stops; an owner whose plan lapsed can still switch a device off", async () => {
     const lapsedOwner = await makeUser("lapsed", "Lapsed Owner");
     const lapsed = await makeGym(lapsedOwner, "Lapsed Gym");
     const lapsedDesk = await makeDesk(lapsed, lapsedOwner);
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${lapsed}`;
     expect((await post(`/v1/orgs/${lapsed}/checkin-devices`, { name: "New" }, lapsedOwner.cookies)).statusCode).toBe(409);
-    expect((await post("/v1/checkin/scan", { code: PROBE }, lapsedDesk.cookies)).statusCode).toBe(200);
+    expect((await post("/v1/checkin/scan", { code: PROBE }, lapsedDesk.cookies)).statusCode).toBe(409);
     expect((await post(`/v1/orgs/${lapsed}/checkin-devices/${lapsedDesk.deviceId}/off`, {}, lapsedOwner.cookies)).statusCode).toBe(200);
 
     const closingOwner = await makeUser("closing", "Closing Owner");
