@@ -38,7 +38,7 @@ export interface DiscountRow {
   allMembershipTypes: boolean;
   membershipTypeIds: string[];
   membershipPayments: MembershipPayments | null;
-  /** Refer a friend's own friend's gift (0118): given only to a friend a member invited. */
+  /** Refer a friend's own friend's gift (0119): given only to a friend a member invited. */
   referralGift: boolean;
   archivedAt: Date | null;
   updatedAt: Date;

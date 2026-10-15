@@ -4502,7 +4502,9 @@ can work out for it, each with its id, its words, the word after a number, how t
 number is printed, how it is counted (`desk` · `app` · `camera` · `gps`), which ways to
 win it allows (most · target · fewest), and whether one a day is the most, so that a
 target cannot pass the challenge's days. A subject with no measure can only be counted
-by staff.
+by staff. The staff may count any subject on the list, in their own word ("always possible",
+above): "Gym visits · Counted by the staff at {gym}" (19d-iii-a-i; the form offers it from
+19d-iii-a-ii only where it offers the subject).
 
 | Subject (`id`) | What the app can count (measure) | Counted how | Job |
 |---|---|---|---|
@@ -4603,9 +4605,12 @@ running.
 - **Only people who join** is the one choice for anything else (running; later steps or
   cycling). The Join box says what the gym's members will see and what they never will
   ("your running distance from 1 to 30 Nov; never where you ran").
-- **Never counted by the app**, whatever a gym asks: weight, body measurements, meals,
-  anything about nutrition, water. Members are promised a gym never sees them
-  (`OrgVisibilitySheet`), and the health rules of CLAUDE.md §4 stand.
+- **Never counted by the app**, whatever a gym asks: weight, body measurements, water.
+  Food only as 19d-iii-e (Kd, 2026-10-15, `rulings/2026-10-15-19d-iii-a-i.md`, amending
+  this line's "meals, anything about nutrition"): for members who join and say yes to
+  sharing it; never for under-18s; never "who ate the least wins". Otherwise members are
+  promised a gym never sees them (`OrgVisibilitySheet`), and the health rules of CLAUDE.md
+  §4 stand.
 - A member in Safe mode is offered no exercise or running challenge the app counts until
   their clearance is confirmed, and their card says so (RULINGS 2026-09-07).
 
@@ -5210,7 +5215,7 @@ where it came from ("Referred by"). Migration `0117`.
   `referred_by` is the gym's record, `ON DELETE set null`.
 
 **Built in 20e-ii-b-i (2026-10-15; `rulings/2026-10-15-20e-ii-b-i.md`): the friend's gift
-given, and Add member finds the person in Leads.** Migration `0118`. The member's gift is
+given, and Add member finds the person in Leads.** Migration `0119`. The member's gift is
 20e-ii-b-ii.
 - **Add member looks in Leads** while staff type (`GET /v1/orgs/{gym}/leads/match`,
   `members.confirm`): a lead not yet joined with the email or phone typed (cleaned by the

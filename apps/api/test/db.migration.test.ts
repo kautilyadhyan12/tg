@@ -2124,7 +2124,9 @@ d("0001_init on a real database", () => {
           gym_id: a,
           challenge_key: randomUUID(),
           name: "October",
-          counts: "gym_days",
+          subject: "gym_visits",
+          measure: "days",
+          counted_by: "app",
           starts_on: "2026-10-01",
           ends_on: "2026-10-31",
           target: null,
@@ -2149,7 +2151,7 @@ d("0001_init on a real database", () => {
           ["a target of nothing", { target: 0 }, "gym_challenges_target_check"],
           ["a last day before the first", { ends_on: "2026-09-30" }, "gym_challenges_days_check"],
           ["367 days", { ends_on: "2027-10-02" }, "gym_challenges_days_check"],
-          ["something else counted", { counts: "streak" }, "gym_challenges_counts_check"],
+          ["a subject of a shape nobody uses", { subject: "Gym days" }, "gym_challenges_subject_check"],
           ["somebody else in it", { who: "staff" }, "gym_challenges_who_check"],
           ["no name", { name: "" }, "gym_challenges_name_check"],
         ];
@@ -2186,7 +2188,9 @@ d("0001_init on a real database", () => {
           gym_id: gym.id,
           challenge_key: randomUUID(),
           name: "October",
-          counts: "gym_days",
+          subject: "gym_visits",
+          measure: "days",
+          counted_by: "app",
           starts_on: "2026-10-01",
           ends_on: "2026-10-07",
           target: null,
@@ -2243,6 +2247,145 @@ d("0001_init on a real database", () => {
       });
   });
 
+/** `0118`, on a copy of the table as it was before it (`0082` and `0086`'s shape and
+   *  checks): every challenge a gym made is moved onto the list as it was counted, nothing
+   *  else in its row changes, the checks hold in their new terms, and a value nobody knows
+   *  stops the migration rather than becoming something. */
+  it("0118 moves every kind of challenge onto the list as it was counted, and changes nothing else", async () => {
+    const migration = await readFile(new URL("../drizzle/0118_challenge_subjects.sql", import.meta.url), "utf8");
+    const statements = migration.split("--> statement-breakpoint").map((s) => s.trim());
+    if (statements.length !== 16 || !statements.some((s) => s.startsWith('UPDATE "gym_challenges" SET'))) {
+      throw new Error(`0118 no longer holds its sixteen statements (found ${String(statements.length)})`);
+    }
+    const onCopy = (statement: string): string => statement.replaceAll('"gym_challenges"', '"zz_0118_challenges"');
+    /** The copy, as the table stood before `0118`. */
+    const before = async (tx: postgres.TransactionSql): Promise<void> => {
+      await tx`CREATE TEMP TABLE zz_0118_challenges (LIKE gym_challenges INCLUDING DEFAULTS) ON COMMIT DROP`;
+      await tx`ALTER TABLE zz_0118_challenges DROP COLUMN subject, DROP COLUMN measure, DROP COLUMN counted_by, ADD COLUMN counts text NOT NULL`;
+      await tx.unsafe(`ALTER TABLE zz_0118_challenges
+        ADD CONSTRAINT "gym_challenges_counts_check" CHECK ("counts" IN ('gym_days','workout_days','own')),
+        ADD CONSTRAINT "gym_challenges_target_check" CHECK ("target" IS NULL OR (("counts" = 'own' OR "teams" <> 'none') AND "target" BETWEEN 1 AND 1000000) OR ("counts" <> 'own' AND "teams" = 'none' AND "target" BETWEEN 1 AND "ends_on" - "starts_on" + 1)),
+        ADD CONSTRAINT "gym_challenges_unit_check" CHECK (char_length("unit") <= 30 AND ("counts" = 'own') = ("unit" <> '')),
+        ADD CONSTRAINT "gym_challenges_lowest_check" CHECK (NOT "lowest_wins" OR ("counts" = 'own' AND "target" IS NULL))`);
+    };
+    const gym = "00000000-0000-4000-8000-000000000118";
+    const row = (name: string, counts: string, over: Record<string, unknown> = {}) => ({
+      id: randomUUID(),
+      gym_id: gym,
+      challenge_key: randomUUID(),
+      name,
+      details: `About ${name}`,
+      prize: "A towel",
+      counts,
+      starts_on: "2026-10-01",
+      ends_on: "2026-10-07",
+      target: null,
+      who: "everyone",
+      unit: "",
+      lowest_wins: false,
+      teams: "none",
+      ...over,
+    });
+    const kinds = [
+      row("gym days, most", "gym_days"),
+      row("gym days, every day", "gym_days", { target: 7, who: "joined" }),
+      row("gym days in teams, past its days", "gym_days", { target: 40, teams: "staff" }),
+      row("workout days, most", "workout_days", { who: "joined" }),
+      row("workout days, a target", "workout_days", { target: 3, teams: "members" }),
+      row("push-ups, most", "own", { unit: "push-ups" }),
+      row("boxes, a target", "own", { unit: "boxes", target: 500 }),
+      row("5 km, lowest", "own", { unit: "seconds", lowest_wins: true, who: "joined" }),
+      row("rowing teams, lowest", "own", { unit: "metres", lowest_wins: true, teams: "staff" }),
+    ];
+    const moved: Record<string, [string, string | null, string]> = { gym_days: ["gym_visits", "days", "app"], workout_days: ["workouts", "days", "app"], own: ["own", null, "staff"] };
+    /** The constraint a statement trips, or "ok". */
+    const put = async (tx: postgres.TransactionSql, values: Record<string, unknown>): Promise<string> => {
+      try {
+        await tx.savepoint((sp) => sp`INSERT INTO zz_0118_challenges ${sp(values)}`);
+        return "ok";
+      } catch (err) {
+        return err instanceof postgres.PostgresError ? (err.constraint_name ?? err.message) : String(err);
+      }
+    };
+
+    await sql
+      .begin(async (tx) => {
+        await before(tx);
+        for (const k of kinds) await tx`INSERT INTO zz_0118_challenges ${tx(k)}`;
+        const was = await tx<Record<string, unknown>[]>`SELECT * FROM zz_0118_challenges ORDER BY name`;
+        for (const statement of statements) await tx.unsafe(onCopy(statement));
+        const now = await tx<Record<string, unknown>[]>`SELECT * FROM zz_0118_challenges ORDER BY name`;
+
+        expect(now.length).toBe(kinds.length);
+        for (const [i, after] of now.entries()) {
+          const old = was[i] ?? {};
+          const counts = String(old["counts"]);
+          expect([after["name"], after["subject"], after["measure"], after["counted_by"]]).toEqual([old["name"], ...(moved[counts] ?? [])]);
+          // Everything else in the row is as it was, and `counts` is gone.
+          const rest = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([k]) => !["counts", "subject", "measure", "counted_by"].includes(k)));
+          expect(rest(after)).toEqual(rest(old));
+          expect("counts" in after).toBe(false);
+        }
+
+        // The checks, in their new terms.
+        const fresh = (over: Record<string, unknown>) => {
+          const r: Record<string, unknown> = { ...row("x", "unused"), subject: "gym_visits", measure: "days", counted_by: "app", ...over };
+          delete r["counts"];
+          return r;
+        };
+        const cases: [string, Record<string, unknown>, string][] = [
+          ["gym visits counted by the app", {}, "ok"],
+          ["something the gym names, counted by its staff", { subject: "own", measure: null, counted_by: "staff", unit: "laps" }, "ok"],
+          ["a subject of a shape nobody uses", { subject: "Gym days" }, "gym_challenges_subject_check"],
+          ["a measure of a shape nobody uses", { measure: "Days!" }, "gym_challenges_subject_check"],
+          ["no subject", { subject: null }, "zz_0118_challenges"],
+          ["the app counting with no measure", { measure: null }, "gym_challenges_counted_by_check"],
+          ["the staff counting a measure", { counted_by: "staff", unit: "visits" }, "gym_challenges_counted_by_check"],
+          ["the camera as who counts it", { counted_by: "camera" }, "gym_challenges_counted_by_check"],
+          ["a day-counted target past its seven days", { target: 8 }, "gym_challenges_target_check"],
+          ["the same target in teams", { target: 8, teams: "staff" }, "ok"],
+          ["a staff-counted target past its days", { subject: "own", measure: null, counted_by: "staff", unit: "laps", target: 500 }, "ok"],
+          ["a target of nothing", { target: 0 }, "gym_challenges_target_check"],
+          ["the app counting with a word", { unit: "visits" }, "gym_challenges_unit_check"],
+          ["the staff counting with no word", { subject: "own", measure: null, counted_by: "staff" }, "gym_challenges_unit_check"],
+          ["the lowest winning where the app counts", { lowest_wins: true }, "gym_challenges_lowest_check"],
+          ["the lowest winning with a target", { subject: "own", measure: null, counted_by: "staff", unit: "laps", lowest_wins: true, target: 9 }, "gym_challenges_lowest_check"],
+        ];
+        for (const [what, over, constraint] of cases) {
+          const got = await put(tx, fresh(over));
+          expect(constraint === "zz_0118_challenges" ? got.includes("null value") : got === constraint, `${what}: ${got}`).toBe(true);
+        }
+        throw new Error("ROLLBACK-0118-FIXTURE");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0118-FIXTURE") return;
+        throw err;
+      });
+
+    // A kind nobody knows is never made into one: the migration stops.
+    await sql
+      .begin(async (tx) => {
+        await before(tx);
+        await tx`ALTER TABLE zz_0118_challenges DROP CONSTRAINT "gym_challenges_counts_check"`;
+        await tx`INSERT INTO zz_0118_challenges ${tx(row("a streak", "streak"))}`;
+        let stopped = "";
+        for (const statement of statements) {
+          try {
+            await tx.savepoint((sp) => sp.unsafe(onCopy(statement)));
+          } catch (err) {
+            stopped = err instanceof postgres.PostgresError ? err.message : String(err);
+            break;
+          }
+        }
+        expect(stopped).toMatch(/subject.*null values|null values.*subject/u);
+        throw new Error("ROLLBACK-0118-UNKNOWN");
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.message === "ROLLBACK-0118-UNKNOWN") return;
+        throw err;
+      });
+  });
+
   it("0087's result post: one a challenge for ever, only the gym's own post, only a challenge of that gym, and it goes with its challenge", async () => {
     await sql
       .begin(async (tx) => {
@@ -2257,8 +2400,8 @@ d("0001_init on a real database", () => {
         const theirs = await gym("zz-0087-b");
         const challenge = async (gymId: string): Promise<string> => {
           const [row] = await tx<{ id: string }[]>`
-            INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
-            VALUES (${gymId}, ${randomUUID()}, 'October', 'gym_days', '2026-10-01', '2026-10-07', 'everyone') RETURNING id`;
+            INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, measure, counted_by, starts_on, ends_on, who)
+            VALUES (${gymId}, ${randomUUID()}, 'October', 'gym_visits', 'days', 'app', '2026-10-01', '2026-10-07', 'everyone') RETURNING id`;
           if (row === undefined) throw new Error("no challenge");
           return row.id;
         };

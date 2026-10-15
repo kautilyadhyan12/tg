@@ -89,7 +89,7 @@ export const gymDiscounts = pgTable(
     forMemberships: boolean("for_memberships").notNull().default(false),
     allMembershipTypes: boolean("all_membership_types").notNull().default(true),
     membershipPayments: text("membership_payments"),
-    /** Refer a friend's own friend's gift (0118): given only to a friend a member invited. */
+    /** Refer a friend's own friend's gift (0119): given only to a friend a member invited. */
     referralGift: boolean("referral_gift").notNull().default(false),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),

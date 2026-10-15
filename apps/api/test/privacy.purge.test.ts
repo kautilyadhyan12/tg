@@ -176,8 +176,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     // A challenge of the gym's that they joined (19d-i): the person's own choice.
     await sql`
       WITH c AS (
-        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
-        VALUES (${postGymId}, gen_random_uuid(), 'fixture challenge', 'gym_days', current_date, current_date + 7, 'joined') RETURNING id
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, measure, counted_by, starts_on, ends_on, who)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture challenge', 'gym_visits', 'days', 'app', current_date, current_date + 7, 'joined') RETURNING id
       )
       INSERT INTO gym_challenge_people (gym_id, challenge_id, user_id) SELECT ${postGymId}, c.id, ${userId} FROM c`;
     // A message their gym sent them in the app (20a).
@@ -192,15 +192,15 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       VALUES (${postGymId}, ${userId}, translate(substr(replace(${userId}::text, '-', ''), 1, 16), '0189', 'abcd'))`;
     await sql`
       WITH c AS (
-        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)
-        VALUES (${postGymId}, gen_random_uuid(), 'fixture own challenge', 'own', 'push-ups', current_date, current_date + 7, 'everyone') RETURNING id
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, counted_by, unit, starts_on, ends_on, who)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture own challenge', 'own', 'staff', 'push-ups', current_date, current_date + 7, 'everyone') RETURNING id
       )
       INSERT INTO gym_challenge_scores (gym_id, challenge_id, user_id, value) SELECT ${postGymId}, c.id, ${userId}, 40 FROM c`;
     // A team of a challenge that they are in (19d-ii-a).
     await sql`
       WITH c AS (
-        INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who, teams)
-        VALUES (${postGymId}, gen_random_uuid(), 'fixture team challenge', 'gym_days', current_date, current_date + 7, 'everyone', 'staff') RETURNING id
+        INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, measure, counted_by, starts_on, ends_on, who, teams)
+        VALUES (${postGymId}, gen_random_uuid(), 'fixture team challenge', 'gym_visits', 'days', 'app', current_date, current_date + 7, 'everyone', 'staff') RETURNING id
       ), t AS (
         INSERT INTO gym_challenge_teams (gym_id, challenge_id, name, position) SELECT ${postGymId}, c.id, 'Red', 0 FROM c RETURNING id, challenge_id
       )
