@@ -401,6 +401,25 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     );
 
     it(
+      "a member in their second month who owes for it is still shown owing it, from the day it began, never paid",
+      async () => {
+        // Started about forty days ago and given unpaid: the month they are in now is owed.
+        const vera = await memberWithBill("vera", "Vera Lund", false, addDays(today, -40));
+        const before = await firstOf(gymA.org.id, vera.entryId);
+        expect(before.view.payment?.state).toBe("due");
+        const bills = await billsOfEntry(gymA.org.id, vera.entryId);
+        await friendJoins(vera.code, "Wyn Cole", "wyn.cole@example.com", true);
+        const after = await firstOf(gymA.org.id, vera.entryId);
+        expect(after.view.payment).toEqual(before.view.payment);
+        expect(after.view.status).toBe(before.view.status);
+        if (before.view.renewsOn === null) throw new Error("no renewal");
+        expect(after.view.renewsOn).toBe(addDays(before.view.renewsOn, 14));
+        expect(await billsOfEntry(gymA.org.id, vera.entryId)).toEqual(bills);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
       "two servers record two of the friend's payments at one instant: one gift, the days added once, one message",
       async () => {
         const nia = await memberWithBill("nia", "Nia Clarke", true);
