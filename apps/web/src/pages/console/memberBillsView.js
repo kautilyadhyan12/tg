@@ -121,8 +121,10 @@ export function billRow(bill, currency, today) {
       amount: formatMinor(p.amountMinor, currency),
       detail: joined([methodWords(p.method), shortDay(p.paidOn), byWords(p.by)]),
       refundable: p.refundableMinor > 0,
+      receiptNumber: p.receiptNumber,
       refunds: p.refunds.map((r) => ({
         id: r.id,
+        receiptNumber: r.receiptNumber,
         amount: `${formatMinor(r.amountMinor, currency)} refunded`,
         detail: joined([methodWords(r.method), shortDay(r.refundedOn), REFUND_REASON_WORDS[r.reason] ?? null, byWords(r.by)]),
       })),

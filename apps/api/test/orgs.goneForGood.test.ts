@@ -129,8 +129,8 @@ d("a gym gone for good (real Postgres)", () => {
       VALUES (${gymId}, ${held.id}, 0, 5000, 'USD', '2029-12-01') RETURNING id`;
     if (bill === undefined) throw new Error("no bill");
     await sql`
-      INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on)
-      VALUES (${gymId}, ${bill.id}, 5000, 'USD', 'cash', ${randomUUID()}, '2029-12-01')`;
+      INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, receipt_number)
+      VALUES (${gymId}, ${bill.id}, 5000, 'USD', 'cash', ${randomUUID()}, '2029-12-01', 1)`;
     await sql`INSERT INTO gym_leads (gym_id, full_name, source, email) VALUES (${gymId}, 'Sam Lead', 'walk_in', 'sam@example.com')`;
     await sql`
       INSERT INTO gym_staff_invites (gym_id, email, role, privileges, created_at, expires_at)

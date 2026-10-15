@@ -797,7 +797,14 @@
       "idx": 113,
       "version": "7",
       "when": 1790553600114,
-      "tag": "0114_gym_gone_for_good",
+      "tag": "0114_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1790640000115,
+      "tag": "0115_gym_gone_for_good",
       "breakpoints": true
     }
   ]

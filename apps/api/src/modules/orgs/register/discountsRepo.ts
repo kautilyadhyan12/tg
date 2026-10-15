@@ -104,7 +104,7 @@ const columns = (sql: Sql | TransactionSql) => sql`
 
 /** A gym's discounts: the ones in use (bounded by the cap the writes hold), a page of the
  *  archived ones, and how many of those there are. */
-export async function readDiscounts(sql: Sql, gymId: string): Promise<{ live: DiscountRow[]; archived: DiscountRow[]; archivedTotal: number }> {
+export async function readDiscounts(sql: Sql | TransactionSql, gymId: string): Promise<{ live: DiscountRow[]; archived: DiscountRow[]; archivedTotal: number }> {
   const [live, archived, count] = await Promise.all([
     sql<RawDiscount[]>`
       SELECT ${columns(sql)} FROM gym_discounts d
@@ -130,7 +130,7 @@ export async function membershipDiscounts(sql: Sql, gymId: string): Promise<Disc
 }
 
 /** The gym's membership types on its price list, by name; a gym has at most 60. */
-export async function membershipTypeNames(sql: Sql, gymId: string): Promise<{ id: string; name: string; taxRateId: string | null; free: boolean }[]> {
+export async function membershipTypeNames(sql: Sql | TransactionSql, gymId: string): Promise<{ id: string; name: string; taxRateId: string | null; free: boolean }[]> {
   return await sql<{ id: string; name: string; taxRateId: string | null; free: boolean }[]>`
     SELECT id, name, tax_rate_id AS "taxRateId", price_minor = 0 AS free FROM gym_membership_types
     WHERE gym_id = ${gymId} AND archived_at IS NULL

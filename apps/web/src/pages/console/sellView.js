@@ -212,6 +212,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     person: sale.person,
     undone: sale.undone,
     canUndo: sale.canUndo,
+    receiptNumber: sale.receiptNumber,
     sale,
   }));
   const payments = (page.payments ?? []).map((payment) => ({
@@ -224,6 +225,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     person: payment.person,
     undone: false,
     canUndo: false,
+    receiptNumber: payment.receiptNumber,
     sale: null,
   }));
   return [...sales, ...payments].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
@@ -250,6 +252,7 @@ export function purchaseLine(sale) {
     amount: formatMinor(sale.totalMinor, sale.currency),
     facts: [when, methodWords(sale.method), saleDiscountWords(sale), saleTaxWords(sale)].filter((x) => x !== null).join(' · '),
     undone: sale.undone,
+    receiptNumber: sale.receiptNumber,
   };
 }
 

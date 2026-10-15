@@ -927,8 +927,10 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
     const m = first(await given(gymId, person, owner.cookies, { typeId: gold, startsOn: today, paid: true }));
     const payment = m.billing.bills[0]?.payments[0]?.id ?? "";
     const bill = m.billing.bills[0]?.id ?? "";
+    let receipt = 900_000;
     const refund = (over: Record<string, unknown>) => {
-      const row = { gym_id: gymId, payment_id: payment, amount_minor: 100, currency: "GBP", method: "cash", reason: "other", request_key: nextKey(), refunded_on: today, ...over };
+      // A number of its own each time, far past the gym's, so only the check named is hit.
+      const row = { gym_id: gymId, payment_id: payment, amount_minor: 100, currency: "GBP", method: "cash", reason: "other", request_key: nextKey(), refunded_on: today, receipt_number: ++receipt, ...over };
       return sql`INSERT INTO gym_member_refunds ${sql(row)}`;
     };
     await expect(refund({ amount_minor: 0 })).rejects.toThrow(/gym_member_refunds_amount_check/);
