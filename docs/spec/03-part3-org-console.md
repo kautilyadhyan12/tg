@@ -5093,6 +5093,45 @@ the rest in a row; a tap opens one full size. A photo is served at
 `/v1/public/gyms/{slug}/photos/{id}` only while the page shows (the same 404 otherwise),
 as its checked type with `nosniff` and a sandboxing CSP, cached five minutes.
 
+**Built in 20e-ii-a (2026-10-15; RULINGS 2026-10-08 and `rulings/2026-10-15-20e-ii-a.md`):
+Refer a friend, the offer, the invite link and the lead marked.** Read first: Mindbody's
+Branded App gives each client a referral code, and both rewards are issued by themselves
+once the new client makes a qualifying visit or purchase; PushPress marks each lead with
+where it came from ("Referred by"). Migration `0114`.
+- **The offer** (Settings → **Refer a friend**, `org.manage`; `gym_referral_settings`): a
+  switch and two of the business's own promo codes, a gift for the member who invites and
+  one for the friend, either alone or both. On with neither is refused (`no_gift`); a code
+  picked while on must have a promo code and be in use or start later; one that starts later
+  is promised from that day. Below the boxes, what a member and a friend will read, made by
+  the same functions the server uses (`referralOfferLines`, `inviteLines`). With no promo code
+  yet, **Open Memberships** opens the Discounts box there.
+- **A gift in words** (`referralGiftWords`) is said from the discount as it is: "10% off the
+  first payment of a membership, until 31 December 2026". A gift whose code cannot be used
+  today (ended, used up, archived, not started, no code) is promised to nobody.
+- **The member's link** (`GET /v1/orgs/{gym}/referral`, a live member only; 404 for anybody
+  else): a random code of 16 of `a-z2-7` (80 bits), one per member per business
+  (`gym_referral_links`), made the first time and the same after. The reply carries the
+  link's path and the offer's lines, the last one "This offer is set by {business} and may
+  change." The member's own code is never in it: it is sent once it is earned (20e-ii-b). The
+  phone's Invite a friend (Stage 5 item 20) reads this route.
+- **The invite page** (`/invite/{code}`, public; `GET /v1/public/invites/{code}`): every
+  business has it, with or without a page of its own. It names the business, its town, the
+  friend's gift with its code, and a button to the business's own page where it has one;
+  **never the member**. Its form is the page's form without "How did you hear about us?"
+  (`POST …/enquiries`, the same robot check and the same limits, counted against the same
+  business), and its lead's source is A friend. A code that is not one, of a member who has
+  left, of a business that switched the offer off, is closed or on no plan: the same 404,
+  "This invite link isn't working. Ask the person who sent it for a new one."
+- **The lead marked** (`gym_leads.referred_by`, `referred_at`): only a NEW lead, and only
+  while the member still is one and the offer is still on, asked again in the write's own
+  transaction. A lead already there is never changed by the form, so nobody is claimed by a
+  second member. A member using their own link with their own email or phone is not their own
+  friend. Leads and the lead's page say **Invited by Maya Rao** (the gym's list's name for
+  them, else their app name); one who left reads "…, who is no longer a member"; one whose
+  account is deleted reads "Invited by a member who has since deleted their account".
+- **Privacy**: a link is the member's own (deleted at Day 14, exported); the lead's
+  `referred_by` is the gym's record, `ON DELETE set null`.
+
 ### 16.4 At risk
 
 The console lists members whose visits have dropped — came in at least 2 of the last
