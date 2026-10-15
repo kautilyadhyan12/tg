@@ -11,6 +11,7 @@ import type { Sql } from "postgres";
 import {
   DISCOUNT_WORDS,
   FRIEND_GIFT_WORDS,
+  MEMBER_GIFT_WORDS,
   BILLS_SHOWN,
   BILL_OVERDUE_DAYS_MAX,
   HELD_EARLIER_PAGE,
@@ -49,6 +50,7 @@ import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
 import { membershipDiscounts } from "../register/discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
+import { giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow } from "./billsSql.js";
 
 export interface HeldDeps {
@@ -69,7 +71,7 @@ function billingOf(
   bills: readonly BillRow[],
   payments: readonly PaymentRow[],
   refunds: readonly RefundRow[],
-  ctx: { today: string; past: boolean; overdueAfterDays: number },
+  ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string }> },
 ): MemberBilling {
   const view = heldMembershipView(row.membership, ctx.today);
   const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
@@ -97,6 +99,7 @@ function billingOf(
       state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
       refundedMinor: b.refundedMinor,
       cancelled: b.cancelled,
+      gift: ctx.gifts.get(b.id) ?? null,
       payments: payments
         .filter((p) => p.billId === b.id)
         .map((p) => ({
@@ -159,7 +162,13 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     canBill ? friendGiftOffer(deps.sql, gymId, entryId, today) : null,
   ]);
   if (list === null) throw notFound();
-  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays };
+  // A member's own Refer a friend gift (20e-ii-b-ii-a): what it took off a bill, and the one
+  // waiting, filled in on Add.
+  const [gifts, memberGift] = await Promise.all([
+    canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string }>(),
+    canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId) : null,
+  ]);
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
   const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
@@ -222,6 +231,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     taxIncluded: list.taxIncluded,
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
     friendGift: list.past ? null : friendGift,
+    memberGift,
   });
 }
 
@@ -281,6 +291,10 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "membership_discount_changed", DISCOUNT_WORDS.membership_discount_changed);
     case "friend_gift_not_theirs":
       throw new OrgsError(409, "friend_gift_not_theirs", FRIEND_GIFT_WORDS.not_theirs);
+    case "member_gift_not_theirs":
+      throw new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
+    case "member_gift_changed":
+      throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
     case "early_payment":
       throw new OrgsError(
         409,
@@ -322,7 +336,7 @@ export async function giveHeldMembership(
   // Saying it is paid records a payment, which is the notebook's own tick; so is using a
   // discount, which is taken where payments are (18b-ii-a), paid or not.
   if (req.paid && !canBill) throw new OrgsError(403, "forbidden", NO_BILLING);
-  if (req.discountId !== undefined && !canBill) throw new OrgsError(403, "forbidden", NO_DISCOUNTS);
+  if ((req.discountId !== undefined || req.memberGiftId !== undefined) && !canBill) throw new OrgsError(403, "forbidden", NO_DISCOUNTS);
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
   throwOnFailure(
@@ -337,6 +351,7 @@ export async function giveHeldMembership(
       shownPriceMinor: req.priceMinor ?? null,
       shownTotalMinor: req.totalMinor ?? null,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
+      memberGift: req.memberGiftId === undefined || req.memberGiftMinor === undefined ? null : { id: req.memberGiftId, shownOffMinor: req.memberGiftMinor },
       today,
       actorUserId: userId,
       now,
@@ -547,7 +562,7 @@ export async function undoMemberRefund(
   refundId: string,
 ): Promise<HeldMembershipsResponse> {
   const { today, now } = await requireBilling(deps, userId, gymId);
-  throwOnBillFailure(await billsRepo.undoRefund(deps.sql, { gymId, entryId, membershipId, paymentId, refundId, actorUserId: userId, now }));
+  throwOnBillFailure(await billsRepo.undoRefund(deps.sql, { gymId, entryId, membershipId, paymentId, refundId, today, actorUserId: userId, now }));
   return await readOr404(deps, gymId, entryId, today, true);
 }
 

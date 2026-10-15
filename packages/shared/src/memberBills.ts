@@ -134,6 +134,8 @@ export const memberBillSchema = z
     /** Who cancelled it and why, where staff did; null for one cancelled with its
      *  membership, and for every bill that is not cancelled. */
     cancelled: z.object({ reason: billCancelReasonSchema, on: daySchema, by: z.string().nullable() }).strict().nullable(),
+    /** What a member's Refer a friend gift took off it, before tax (20e-ii-b-ii-a); null for none. */
+    gift: z.object({ offMinor: minorSchema, currency: z.string().regex(/^[A-Z]{3}$/) }).strict().nullable().default(null),
     payments: z.array(memberPaymentSchema),
   })
   .strict();

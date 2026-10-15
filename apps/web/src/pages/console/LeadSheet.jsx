@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, Loader2, Mail, UserCheck, X } from 'lucide-react';
-import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS, friendGiftLine } from '@app/shared';
+import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS, friendGiftLine, memberGiftLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import PlaceLink from '../../components/console/PlaceLink';
@@ -256,12 +256,14 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
   const [giftRead, setGiftRead] = useState(null);
   const giftAsk = lead !== null && lead.id === leadId && lead.status === 'joined' && lead.invitedBy !== null ? `${lead.id}:${lead.entryId ?? ''}` : null;
   const gift = giftRead !== null && giftRead.ask === giftAsk ? giftRead.gift : null;
+  /** What became of the inviting member's own gift for this friend (20e-ii-b-ii-a). */
+  const memberGift = giftRead !== null && giftRead.ask === giftAsk ? giftRead.memberGift : null;
   useEffect(() => {
     if (giftAsk === null) return undefined;
     let live = true;
     orgService.getLead(gymId, leadId).then(
       (res) => {
-        if (live) setGiftRead({ ask: giftAsk, gift: res.data.lead.friendGift });
+        if (live) setGiftRead({ ask: giftAsk, gift: res.data.lead.friendGift, memberGift: res.data.lead.memberGift ?? null });
       },
       () => undefined,
     );
@@ -482,6 +484,11 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               {lead !== null && gift !== null ? (
                 <span className="c-s14 c-t2" data-testid="friend-gift-line">
                   {friendGiftLine(gift, lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
+                </span>
+              ) : null}
+              {lead !== null && memberGift !== null ? (
+                <span className="c-s14 c-t2" data-testid="member-gift-line">
+                  {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
                 </span>
               ) : null}
             </div>

@@ -36,6 +36,7 @@ import {
   sameTypeTwice,
   membershipAccessSchema,
   membershipDiscount,
+  memberGiftOff,
   membershipKindSchema,
   membershipLimitPeriodSchema,
   membershipTermUnitSchema,
@@ -56,6 +57,7 @@ import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
 import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
+import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
 import {
   billOf,
@@ -356,6 +358,10 @@ export type HeldWriteOutcome =
   | { kind: "discount_nothing_off"; name: string }
   /** The discount takes off the whole price. */
   | { kind: "discount_nothing_to_pay" }
+  /** The Refer a friend gift named is not this record's, or is no longer waiting. */
+  | { kind: "member_gift_not_theirs" }
+  /** What the gift takes off is no longer what the screen showed, or it no longer fits. */
+  | { kind: "member_gift_changed" }
   /** What the discount takes off is no longer what the screen showed. */
   | { kind: "discount_changed" }
   /** Refer a friend's gift, for somebody who is not an invited friend, or has had it. */
@@ -462,6 +468,9 @@ export async function giveHeld(
     shownPriceMinor: number | null;
     /** The gym's discount it is given with, and what the screen showed coming off. */
     discount: { id: string; shownOffMinor: number } | null;
+    /** The person's own Refer a friend gift filled in (20e-ii-b-ii-a), off its first bill, and
+     *  what the screen showed it takes off. */
+    memberGift: { id: string; shownOffMinor: number } | null;
     /** What the screen showed its first bill comes to, tax in; null where it showed none. */
     shownTotalMinor: number | null;
     /** The gym's own day. */
@@ -516,9 +525,20 @@ export async function giveHeld(
       used = { id: found.id, name: found.name, ...costs };
     }
     const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
-    // The first bill: its price after any discount, with its tax. Nothing is given at a
-    // total the screen did not show.
-    const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(used === null ? type.priceMinor : used.firstBillMinor, tax);
+    const firstListed = used === null ? type.priceMinor : used.firstBillMinor;
+    // The member's own Refer a friend gift comes off the first bill, after any discount: this
+    // record's, still waiting, read under its lock, and taking off what the screen showed.
+    let gift: { id: string; offMinor: number } | null = null;
+    if (input.memberGift !== null) {
+      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id);
+      if (found === null || type.priceMinor === 0) return { kind: "member_gift_not_theirs" };
+      const off = memberGiftOff(found, firstListed, type.currency);
+      if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
+      gift = { id: found.id, offMinor: off };
+    }
+    // The first bill: its price after any discount and gift, with its tax. Nothing is given at
+    // a total the screen did not show.
+    const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0), tax);
     if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
 
     // Worked out unpaid: the bill of the period owed is opened first, and a payment
@@ -584,6 +604,7 @@ export async function giveHeld(
         input.now,
       );
       if (opened === undefined) throw new Error("a new membership's bill was not opened");
+      if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: opened.id, saleId: null, offMinor: gift.offMinor, currency: type.currency, now: input.now });
       if (pays && input.method !== null) {
         const paymentId = await insertPayment(
           tx,
@@ -602,6 +623,8 @@ export async function giveHeld(
         );
         if (paymentId === null) throw new Error("a new membership's payment was not recorded");
         await setBillStatus(tx, input.gymId, opened.id, "paid", input.now);
+        // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
+        await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
         await insertAudit(tx, {
           actorUserId: input.actorUserId,
           gymId: input.gymId,
@@ -624,6 +647,8 @@ export async function giveHeld(
     } else if (used !== null && used.payments === "first") {
       // Its discount rides on the bill opened now; every later one is opened at the full price.
       throw new Error("a membership given with a first-payment discount had no bill to carry it");
+    } else if (gift !== null) {
+      throw new Error("a membership given with a Refer a friend gift had no bill to carry it");
     }
     return { kind: "ok" };
   });
@@ -745,6 +770,8 @@ export async function moveHeld(
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
     await voidBills(tx, input.gymId, voided, input.now);
+    // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
+    await giftUseUndone(tx, input.gymId, { billIds: voided });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

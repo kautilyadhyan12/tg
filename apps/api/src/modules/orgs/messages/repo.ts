@@ -1,7 +1,7 @@
 // A GYM'S MESSAGES TO A MEMBER: reads and writes `gym_member_messages` (spec Part 3 §16.1;
 // ROADMAP 20a). Every statement names the gym and the person. The copies of a message to a
 // group are written, read back by message and removed in `groupRepo.ts`.
-import { GYM_GROUP_MESSAGE_KIND, GYM_MESSAGE_MILESTONE_DAYS, SHARED_BIRTH_DATE_RECORDS, type GymClockFormat, type GymMessageKind } from "@app/shared";
+import { GYM_GROUP_MESSAGE_KIND, GYM_MESSAGE_MILESTONE_DAYS, GYM_REFERRAL_GIFT_MESSAGE_KIND, SHARED_BIRTH_DATE_RECORDS, type GymClockFormat, type GymInboxKind, type GymMessageKind } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { COUNTED_METHODS, soloHolders, visitsWithOwner } from "../leaderboard/visits.js";
 
@@ -274,7 +274,7 @@ export async function peopleForMessages(tx: SqlOrTx, gymId: string, now: Date, t
            coalesce((
              SELECT json_agg(json_build_object('kind', x.kind, 'occasion', x.occasion, 'day', x.gym_day::text))
              FROM gym_member_messages x
-             WHERE x.gym_id = g.id AND x.user_id = m.user_id AND x.kind NOT IN (${GYM_GROUP_MESSAGE_KIND}, 'class_reminder')
+             WHERE x.gym_id = g.id AND x.user_id = m.user_id AND x.kind NOT IN (${GYM_GROUP_MESSAGE_KIND}, ${GYM_REFERRAL_GIFT_MESSAGE_KIND}, 'class_reminder')
            ), '[]'::json) AS sent
     FROM gyms g
     JOIN gym_members m ON m.gym_id = g.id
@@ -341,7 +341,7 @@ export async function forgetDay(sql: SqlOrTx, gymId: string): Promise<void> {
 export interface NewMessage {
   gymId: string;
   userId: string;
-  kind: GymMessageKind;
+  kind: GymInboxKind;
   occasion: string;
   body: string;
   /** The gym's review link, for Ask for a review; null for every other kind. */

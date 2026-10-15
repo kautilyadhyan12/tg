@@ -357,8 +357,12 @@ export const sellProductRequestSchema = z
     method: memberPaymentByHandSchema,
     totalMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX),
     discountId: z.string().uuid().nullable().default(null),
+    /** The buyer's own Refer a friend gift filled in (20e-ii-b-ii-a), in place of a discount,
+     *  and what the screen showed it takes off: worked out again on the server. */
+    memberGift: z.object({ id: z.string().uuid(), offMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX) }).strict().nullable().default(null),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.memberGift === null || (v.discountId === null && v.entryId !== null), { message: "member_gift_alone" });
 export type SellProductRequest = z.infer<typeof sellProductRequestSchema>;
 /** The same, as a screen sends it: `discountId` may be left out. */
 export type SellProductRequestBody = z.input<typeof sellProductRequestSchema>;

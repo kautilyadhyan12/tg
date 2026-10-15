@@ -255,6 +255,21 @@ describe('adding and keeping a lead', () => {
     expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("No friend's gift: Tom was already on your Members list before they were invited.");
   });
 
+  it("a joined friend's lead says what became of the inviting member's own gift (20e-ii-b-ii-a)", async () => {
+    const invited = { ...tom, source: 'friend', status: 'joined', entryId: OWN, onList: true, invitedBy: { name: 'Maya Patel', member: true } };
+    const memberGift = { gift: { state: 'used', words: '£10.00 off', on: { kind: 'bill', what: 'Gold Monthly', dueOn: '2026-11-01' } }, memberName: 'Maya Patel' };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift } } });
+    const { unmount } = render(sheet(TOM));
+    expect((await screen.findByTestId('member-gift-line')).textContent).toBe("Maya Patel's gift for inviting Tom (£10.00 off) came off their Gold Monthly bill due 1 November 2026.");
+    unmount();
+    const back = { gift: { state: 'taken_back', words: '£10.00 off', why: 'voided', day: '2026-10-15' }, memberName: null };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift: back } } });
+    render(sheet(TOM));
+    expect((await screen.findByTestId('member-gift-line')).textContent).toBe(
+      "The inviting member's gift for inviting Tom (£10.00 off) was taken back: Tom's payment of 15 October 2026 was voided before the gift was used.",
+    );
+  });
+
   it('a lead nobody invited has no line about a gift', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true } } });
     render(sheet(TOM));

@@ -834,6 +834,13 @@
       "when": 1790726400119,
       "tag": "0119_friend_gift",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1790726400120,
+      "tag": "0120_member_gift",
+      "breakpoints": true
     }
   ]
 }
