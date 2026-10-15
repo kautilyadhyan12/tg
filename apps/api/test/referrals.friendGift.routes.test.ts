@@ -412,7 +412,7 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
 
         const codeB = await linkOf(gymB, maya);
         const leadId = await invited(codeB, "Leo Grant", "leo.grant@example.com");
-        const leo = await added(gymB.org.id, ownerB.cookies, { fullName: "Leo Grant", email: "leo.grant@example.com" });
+        const leo = await added(gymB.org.id, ownerB.cookies, { fullName: "Leo Grant", email: "leo.grant@example.com", leadId });
         expect(leo.lead).toEqual({ id: leadId, fullName: "Leo Grant" });
         const offered = await get(`/v1/orgs/${gymB.org.id}/member-list/entries/${leo.entryId}/friend-gift`, ownerB.cookies);
         expect(friendGiftResponseSchema.parse(JSON.parse(offered.body)).friendGift?.discount.id).toBe(gift);
@@ -449,6 +449,11 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         const notTicked = await added(gymA.org.id, owner.cookies, { fullName: "Beatrice Lindqvist", email: "beatrice.l@example.com", phone: "07700 900456" });
         expect(notTicked.lead).toBeUndefined();
         expect(await leadRow(leadId)).toEqual({ status: "new", entry_id: null });
+        // Nor one with the same name that the screen did not show: only the lead sent is joined.
+        const unseen = await invited(codeA, "Ana Costa", "ana.costa@example.com");
+        const ana = await added(gymA.org.id, owner.cookies, { fullName: "Ana Costa", email: "ana.costa@example.com" });
+        expect(ana.lead).toBeUndefined();
+        expect(await leadRow(unseen)).toEqual({ status: "new", entry_id: null });
         const joLead = await invited(codeA, "Jo", "jo.pike@example.com", "+44 7700 900789");
         const ticked = await added(gymA.org.id, owner.cookies, { fullName: "Joanna Pike", email: "joanna.pike@example.com", phone: "07700 900789", leadId: joLead });
         expect(ticked.lead).toEqual({ id: joLead, fullName: "Jo" });

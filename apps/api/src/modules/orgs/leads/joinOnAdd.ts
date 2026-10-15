@@ -2,8 +2,9 @@
 //
 // Somebody added on Members who is a lead not yet joined, by email or phone, is marked
 // Joined as the new record, so a friend a member invited is followed from the link to their
-// membership. The join rule's own test decides who is the same person (`joinRule.ts`): the
-// same email or phone AND the same name. A shared contact with another name is a different
+// membership. Only the lead the screen showed staff is joined, never one they were not
+// shown. The screen shows the one with the same name as said (`joinRule.ts`'s test: the same
+// email or phone AND the same name); a shared contact with another name is a different
 // person until staff tick that it is not (a mother and her son on one address).
 import type { TransactionSql } from "postgres";
 import { fold } from "../memberList/fields.js";
@@ -20,9 +21,9 @@ export function leadForDetails(typed: { fullName: string }, leads: readonly repo
   return first === undefined ? null : { lead: first, sameName: false };
 }
 
-/** Inside Add member's transaction, under the gym's lock: the lead marked Joined as the new
- *  record. `leadId` is the lead staff were shown and ticked; without it only a lead with the
- *  same name is joined. Null where none is. */
+/** Inside Add member's transaction, under the gym's lock: the lead staff were shown
+ *  (`leadId`) marked Joined as the new record, while it still shares the email or phone typed
+ *  and is not joined. Null where none is. */
 export async function joinLeadOnAdd(
   tx: TransactionSql,
   input: {
@@ -34,11 +35,9 @@ export async function joinLeadOnAdd(
     at: Date;
   },
 ): Promise<{ id: string; fullName: string } | null> {
+  if (input.leadId === null) return null;
   const leads = await repo.openLeadsSharingContact(tx, input.gymId, input.values);
-  const found = leadForDetails(input.values, leads);
-  // Staff were shown one lead: only that one, while it still shares the email or phone. A
-  // lead with the same name is the same person whether or not the screen said so.
-  const lead = input.leadId !== null ? leads.find((l) => l.id === input.leadId) : found?.sameName === true ? found.lead : undefined;
+  const lead = leads.find((l) => l.id === input.leadId);
   if (lead === undefined) return null;
   if (!(await repo.markLeadJoined(tx, input.gymId, lead.id, input.entryId, input.at))) return null;
   await insertAudit(tx, {

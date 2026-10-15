@@ -5218,9 +5218,11 @@ given, and Add member finds the person in Leads.** Migration `0118`. The member'
   address with its dots or a "+tag" is another address). With the same name: "Tara Shah is in
   Leads, invited by Maya Rao. Adding them marks them Joined." With another name: "Tara in
   Leads has this email or phone…" and a tick, "This is Tara: mark them Joined in Leads"
-  (`joinRule.ts`'s test: a shared contact with another name is not proof). Saved, the lead is
-  Joined as the new record in Add member's own transaction (`leadId`, checked again there),
-  and the box says "Tara Shah was in Leads and is now marked Joined."
+  (`joinRule.ts`'s test: a shared contact with another name is not proof). Saved, the lead
+  shown (`leadId`) is Joined as the new record in Add member's own transaction, while it
+  still shares the email or phone; a lead the screen did not show is never changed (a person
+  added before the lookup answered is added as before). The box says "Tara Shah was in Leads
+  and is now marked Joined."
 - **The friend's gift** (the offer's discount, marked `gym_discounts.referral_gift`) is
   offered only to a record a lead of THIS business joined after coming by a member's link,
   who held no membership here before the invite, and who has not had it on a membership or a

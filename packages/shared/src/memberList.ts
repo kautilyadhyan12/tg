@@ -2321,8 +2321,7 @@ export const memberListEntryInputSchema = z
      *  every record alike now is one of them; the exact "already on your list" still stops it. */
     acknowledgedDuplicates: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
     /** The lead staff were shown as this person (20e-ii-b-i), marked Joined with the new
-     *  record where it still shares the email or phone typed. Left out, a lead with that
-     *  email or phone AND this name is marked by itself. */
+     *  record where it still shares the email or phone typed. Left out, no lead is changed. */
     leadId: z.string().uuid().optional(),
   })
   .strict();
