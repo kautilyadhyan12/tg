@@ -14,6 +14,8 @@ import { Refusal } from './MemberListTags';
 import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
 import TaxRates from './TaxRates';
+import ReceiptBox from '../../components/console/ReceiptBox';
+import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
 import {
   NO_SELLING_LINE,
@@ -147,7 +149,7 @@ function WhoPicker({ gymId, who, setWho, person, setPerson, mustPick, disabled, 
 /** WHAT THE BOX SHOWS ONCE A SALE IS RECORDED (Kd's click-through, RULINGS 2026-10-12): the
  *  form is gone, so a second press cannot sell again, and the next sale starts with its
  *  own button. */
-function SaleRecorded({ words, note, onNew, children }) {
+function SaleRecorded({ words, note, onNew, children, below = null }) {
   return (
     <div className="flex flex-col gap-3" role="status" data-testid="sale-done">
       <p className="c-s16 c-w7 c-t1 m-0 flex items-center gap-2">
@@ -162,6 +164,7 @@ function SaleRecorded({ words, note, onNew, children }) {
         </button>
         {children}
       </div>
+      {below}
     </div>
   );
 }
@@ -185,7 +188,7 @@ function PayPicker({ method, setMethod, disabled }) {
 }
 
 /** A product, how many, who and how: one press records the sale. */
-function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, onAddProduct, onPage }) {
+function ProductSale({ gymId, org, page, locked, firstPerson, addMemberTo, canAdd, onAddProduct, onPage }) {
   const [productId, setProductId] = useState('');
   const [quantityText, setQuantityText] = useState('1');
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
@@ -234,7 +237,7 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
         discountId: discount === null ? null : discount.id,
       });
       const sold = answer.register.sales.find((s) => s.id === answer.saleId);
-      setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold) });
+      setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold), receiptNumber: sold?.receiptNumber ?? null, receiptOpen: false });
       setKey(newKey());
       setProductId('');
       setQuantityText('1');
@@ -254,7 +257,27 @@ function ProductSale({ gymId, page, locked, firstPerson, addMemberTo, canAdd, on
   };
 
   if (state.done !== null) {
-    return <SaleRecorded words={state.done} note="It is in today's list below. To take it back, press Undo sale on its row." onNew={() => setState({ busy: false, error: null, done: null })} />;
+    const number = state.receiptNumber ?? null;
+    return (
+      <SaleRecorded
+        words={state.done}
+        note="It is in today's list below. To take it back, press Undo sale on its row."
+        onNew={() => setState({ busy: false, error: null, done: null })}
+        below={number !== null && state.receiptOpen ? <ReceiptBox gymId={gymId} gym={org} number={number} onClose={() => setState((was) => ({ ...was, receiptOpen: false }))} /> : null}
+      >
+        {number !== null ? (
+          <button
+            type="button"
+            className="c-btn c-btn-s c-btn-lg"
+            aria-expanded={state.receiptOpen === true}
+            aria-label={receiptButtonLabel(number, 'this sale')}
+            onClick={() => setState((was) => ({ ...was, receiptOpen: !was.receiptOpen }))}
+          >
+            {RECEIPT_BUTTON}
+          </button>
+        ) : null}
+      </SaleRecorded>
+    );
   }
 
   if (page.products.length === 0) {
@@ -456,6 +479,8 @@ function MembershipFinder({ gymId, locked, addMemberTo, onOpen }) {
 function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage }) {
   const rows = takingsRows(page, org.timezone, org.clockFormat);
   const [asking, setAsking] = useState(null);
+  /** The row whose receipt is open under it, by its key. */
+  const [receiptFor, setReceiptFor] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const hasPayments = rows.some((r) => r.kind === 'payment');
   const [all, setAll] = useState(false);
@@ -509,6 +534,15 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                       Open their page
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="c-btn c-btn-s c-btn-sm"
+                    aria-expanded={receiptFor === row.key}
+                    aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
+                    onClick={() => setReceiptFor((was) => (was === row.key ? null : row.key))}
+                  >
+                    {RECEIPT_BUTTON}
+                  </button>
                   {row.canUndo && asking !== row.key ? (
                     <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy} onClick={() => setAsking(row.key)} aria-label={`Undo sale of ${row.title}`}>
                       Undo sale
@@ -519,6 +553,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
               {asking === row.key && row.sale !== null ? (
                 <ConfirmInline newLook question={undoSaleQuestion(row.sale)} confirmLabel="Undo sale" cancelLabel="Keep it" busy={state.busy} onConfirm={() => void undo(row.sale)} onCancel={() => setAsking(null)} />
               ) : null}
+              {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
             </li>
           ))}
         </ul>
@@ -658,6 +693,7 @@ export default function Sell() {
                 <ProductSale
                   key={`product-${gymId}`}
                   gymId={gymId}
+                  org={org}
                   page={page}
                   locked={readOnly}
                   firstPerson={firstPerson}

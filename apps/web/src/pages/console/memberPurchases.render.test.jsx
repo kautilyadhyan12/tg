@@ -28,6 +28,7 @@ const sale = (over = {}) => ({
   person: { entryId: 'e1', name: 'Maya Patel' },
   undone: false,
   canUndo: true,
+  receiptNumber: 7,
   ...over,
 });
 
@@ -56,7 +57,7 @@ describe('bought at the desk', () => {
     open();
     const box = await screen.findByRole('region', { name: 'Bought at the desk' });
     expect(svc.purchases).toHaveBeenCalledWith('g1', 'e1');
-    expect(within(box).getAllByTestId('purchase-row').map((r) => r.textContent)).toEqual(['2 × Water12 Oct 2026 · Cash · $0.33 tax$4.31', '1 × Water12 Oct 2026 · Cash · $0.16 tax · Undone$2.15']);
+    expect(within(box).getAllByTestId('purchase-row').map((r) => r.textContent)).toEqual(['2 × Water12 Oct 2026 · Cash · $0.33 tax$4.31View receipt', '1 × Water12 Oct 2026 · Cash · $0.16 tax · Undone$2.15View receipt']);
     expect(within(box).getByText('Showing the newest 2.')).toBeTruthy();
     fireEvent.click(within(box).getByRole('link', { name: 'Sell a product to Maya Patel' }));
     expect(screen.getByText('The Sell page for {"sellTo":{"entryId":"e1","name":"Maya Patel","past":false}}')).toBeTruthy();

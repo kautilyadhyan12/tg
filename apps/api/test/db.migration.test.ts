@@ -1733,10 +1733,12 @@ d("0001_init on a real database", () => {
         const key = "00000000-0000-4000-8000-000000009300";
         const payment = (sp: typeof tx, over: Record<string, unknown> = {}) => {
           const p = { gym: one.gym, bill: first.id, amount: 4999, method: "cash", provider: null, providerId: null, key, ...over };
+          // The gym's next receipt number, taken as the app takes it (0114).
           return sp`
-            INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on)
-            VALUES (${p.gym}, ${p.bill}, ${p.amount}, 'GBP', ${p.method}, ${p.provider as string | null},
-                    ${p.providerId as string | null}, ${p.key}, '2026-01-15')`;
+            WITH n AS (UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${p.gym} RETURNING receipts_issued AS number)
+            INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on, receipt_number)
+            SELECT ${p.gym}, ${p.bill}, ${p.amount}, 'GBP', ${p.method}, ${p.provider as string | null},
+                   ${p.providerId as string | null}, ${p.key}, '2026-01-15', n.number FROM n`;
         };
         await payment(tx);
         const other = "00000000-0000-4000-8000-000000009301";

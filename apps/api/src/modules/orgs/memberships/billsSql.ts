@@ -5,6 +5,7 @@
 // Every statement carries `gym_id` in its WHERE. A write runs in its caller's
 // transaction, under the gym's lock and the record's.
 import type { Sql, TransactionSql } from "postgres";
+import { nextReceipt } from "../receipts/repo.js";
 import {
   billAmounts,
   billCancelReasonSchema,
@@ -129,16 +130,17 @@ export interface PaymentRow {
   by: string | null;
   /** The refunds that stand against it, added up. */
   refundedMinor: number;
+  receiptNumber: number;
 }
 
 /** The payments that stand on the memberships named, in the order they were recorded. */
 export async function paymentsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<PaymentRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<
-    { id: string; bill_id: string; held_membership_id: string; period_index: number; seq: string; amount_minor: number; method: string; paid_on: string; by: string | null; refunded_minor: number }[]
+    { id: string; bill_id: string; held_membership_id: string; period_index: number; seq: string; amount_minor: number; method: string; paid_on: string; by: string | null; refunded_minor: number; receipt_number: number }[]
   >`
     SELECT p.id, p.bill_id, b.held_membership_id, b.period_index, p.seq::text AS seq, p.amount_minor, p.method,
-           p.paid_on::text AS paid_on, u.display_name AS by,
+           p.paid_on::text AS paid_on, u.display_name AS by, p.receipt_number,
            COALESCE((SELECT sum(r.amount_minor) FROM gym_member_refunds r
                      WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL), 0)::int AS refunded_minor
     FROM gym_member_payments p
@@ -157,6 +159,7 @@ export async function paymentsFor(sql: Sql | TransactionSql, gymId: string, memb
     paidOn: r.paid_on,
     by: r.by,
     refundedMinor: r.refunded_minor,
+    receiptNumber: r.receipt_number,
   }));
 }
 
@@ -169,6 +172,7 @@ export interface RefundRow {
   refundedOn: string;
   reason: RefundReason;
   by: string | null;
+  receiptNumber: number;
 }
 
 /** The refunds that stand against the standing payments of the memberships named, in the
@@ -176,10 +180,10 @@ export interface RefundRow {
 export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<RefundRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<
-    { id: string; payment_id: string; held_membership_id: string; amount_minor: number; method: string; refunded_on: string; reason: string; by: string | null }[]
+    { id: string; payment_id: string; held_membership_id: string; amount_minor: number; method: string; refunded_on: string; reason: string; by: string | null; receipt_number: number }[]
   >`
     SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
-           u.display_name AS by
+           u.display_name AS by, r.receipt_number
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
@@ -196,6 +200,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     refundedOn: r.refunded_on,
     reason: refundReasonSchema.parse(r.reason),
     by: r.by,
+    receiptNumber: r.receipt_number,
   }));
 }
 
@@ -337,13 +342,16 @@ export interface NewRefund {
   recordedBy: string;
 }
 
-/** Notes a refund. Null where this request is already noted: nothing is added. */
+/** Notes a refund, with the gym's next receipt number (18g-i). Null where this request is
+ *  already noted: nothing is added. */
 export async function insertRefund(tx: TransactionSql, r: NewRefund, now: Date): Promise<string | null> {
   const [row] = await tx<{ id: string }[]>`
+    WITH n AS (${nextReceipt(tx, r.gymId)})
     INSERT INTO gym_member_refunds
-      (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by, created_at)
-    VALUES (${r.gymId}, ${r.paymentId}, ${r.amountMinor}, ${r.currency}, ${r.method}, ${r.reason}, ${r.requestKey},
-            ${r.refundedOn}::date, ${r.recordedBy}, ${now})
+      (gym_id, payment_id, amount_minor, currency, method, reason, request_key, refunded_on, recorded_by, created_at, receipt_number)
+    SELECT ${r.gymId}, ${r.paymentId}, ${r.amountMinor}, ${r.currency}, ${r.method}, ${r.reason}, ${r.requestKey},
+           ${r.refundedOn}::date, ${r.recordedBy}, ${now}, n.number
+    FROM n
     ON CONFLICT DO NOTHING
     RETURNING id`;
   return row?.id ?? null;
@@ -363,14 +371,16 @@ export interface NewPayment {
   provider: { name: string; paymentId: string } | null;
 }
 
-/** Records a payment. Null where this request, or this payment of a company's, is
- *  already recorded: nothing is added. */
+/** Records a payment, with the gym's next receipt number (18g-i). Null where this request,
+ *  or this payment of a company's, is already recorded: nothing is added. */
 export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date): Promise<string | null> {
   const [row] = await tx<{ id: string }[]>`
+    WITH n AS (${nextReceipt(tx, p.gymId)})
     INSERT INTO gym_member_payments
-      (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on, recorded_by, created_at)
-    VALUES (${p.gymId}, ${p.billId}, ${p.amountMinor}, ${p.currency}, ${p.method}, ${p.provider?.name ?? null},
-            ${p.provider?.paymentId ?? null}, ${p.requestKey}, ${p.paidOn}::date, ${p.recordedBy}, ${now})
+      (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on, recorded_by, created_at, receipt_number)
+    SELECT ${p.gymId}, ${p.billId}, ${p.amountMinor}, ${p.currency}, ${p.method}, ${p.provider?.name ?? null},
+           ${p.provider?.paymentId ?? null}, ${p.requestKey}, ${p.paidOn}::date, ${p.recordedBy}, ${now}, n.number
+    FROM n
     ON CONFLICT DO NOTHING
     RETURNING id`;
   return row?.id ?? null;
@@ -386,6 +396,7 @@ export interface DayPaymentRow {
   by: string | null;
   entryId: string;
   personName: string;
+  receiptNumber: number;
 }
 
 /** THE MEMBERSHIP PAYMENTS RECORDED ON ONE OF THE GYM'S DAYS that stand (18b-i: the Sell
@@ -398,8 +409,8 @@ export async function paymentsOn(
   limit: number,
 ): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; count: number; totalMinor: number }[]; refunds: { currency: string; totalMinor: number }[] }> {
   const [rows, sums, refunds] = await Promise.all([
-    sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string; full_name: string }[]>`
-      SELECT p.id, t.name AS type_name, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name
+    sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string; full_name: string; receipt_number: number }[]>`
+      SELECT p.id, t.name AS type_name, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name, p.receipt_number
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
@@ -433,6 +444,7 @@ export async function paymentsOn(
       by: r.by,
       entryId: r.entry_id,
       personName: r.full_name,
+      receiptNumber: r.receipt_number,
     })),
     count,
     // One money is never added to another: each sum says which it is in.

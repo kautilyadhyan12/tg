@@ -1113,3 +1113,30 @@
   font-size: 16px;
   font-weight: 700;
 }
+
+/* ── A receipt (18g-i) ── */
+
+/* A receipt drawn on the page, as the paper it prints to: one column of lines, the amount
+   at the end of each. */
+.c-receipt {
+  background: var(--raise);
+  border: 1px solid var(--raise-line);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--t1);
+  max-width: 420px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.c-receipt-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+.c-receipt-total {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 4px;
+  font-weight: 700;
+}

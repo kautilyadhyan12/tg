@@ -334,10 +334,11 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
       }
       // A sale in euros, from before the gym's country changed: not counted, and said.
       await sql`
+        WITH n AS (UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gym} RETURNING receipts_issued AS number)
         INSERT INTO gym_sales (gym_id, request_key, product_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                               tax_bp, tax_included, currency, method, sold_on, recorded_by)
-        SELECT gym_id, ${nextKey()}, product_id, item_name, 1, 7777, 7777, 0, 7777, 0, false, 'EUR', 'cash', '2026-10-04', recorded_by
-        FROM gym_sales WHERE gym_id = ${gym} AND id = ${theirs}`;
+                               tax_bp, tax_included, currency, method, sold_on, recorded_by, receipt_number)
+        SELECT gym_id, ${nextKey()}, product_id, item_name, 1, 7777, 7777, 0, 7777, 0, false, 'EUR', 'cash', '2026-10-04', recorded_by, n.number
+        FROM gym_sales, n WHERE gym_id = ${gym} AND id = ${theirs}`;
 
       const r = figures(await read(gym, owner, "4w"));
       expect(r.firstPaidOn).toBe("2025-07-15");

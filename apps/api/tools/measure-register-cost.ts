@@ -104,14 +104,18 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
 
   // A year of sales, the newest day today: two in three for a member, the rest walk-ins.
   await sql`
-    INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-                           tax_bp, tax_included, currency, method, sold_on, recorded_by, created_at)
-    SELECT ${gymId}, gen_random_uuid(), (${productIds}::uuid[])[1 + (n % ${PRODUCTS})],
-           CASE WHEN n % 3 = 0 THEN NULL ELSE (${entryIds}::uuid[])[1 + (n % ${people})] END,
-           'Product ' || (n % ${PRODUCTS}), 1, 240, 200, 40, 240, 2000, true, 'GBP',
-           (ARRAY['cash','card_at_desk','bank_transfer'])[1 + (n % 3)],
-           ${today}::date - d, ${owner}, ${now}::timestamptz - make_interval(days => d, mins => n)
-    FROM generate_series(0, ${DAYS - 1}) AS d, generate_series(0, ${salesADay - 1}) AS n`;
+    WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${gymId}),
+    ins AS (
+      INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
+                             tax_bp, tax_included, currency, method, sold_on, recorded_by, created_at, receipt_number, for_member)
+      SELECT ${gymId}, gen_random_uuid(), (${productIds}::uuid[])[1 + (n % ${PRODUCTS})],
+             CASE WHEN n % 3 = 0 THEN NULL ELSE (${entryIds}::uuid[])[1 + (n % ${people})] END,
+             'Product ' || (n % ${PRODUCTS}), 1, 240, 200, 40, 240, 2000, true, 'GBP',
+             (ARRAY['cash','card_at_desk','bank_transfer'])[1 + (n % 3)],
+             ${today}::date - d, ${owner}, ${now}::timestamptz - make_interval(days => d, mins => n), base.b + row_number() OVER (), n % 3 <> 0
+      FROM generate_series(0, ${DAYS - 1}) AS d, generate_series(0, ${salesADay - 1}) AS n, base
+      RETURNING 1)
+    UPDATE gyms SET receipts_issued = receipts_issued + (SELECT count(*) FROM ins) WHERE id = ${gymId}`;
   return { gymId, owner, sales: DAYS * salesADay, productId: products[1]?.id ?? "", buyer: entryIds[1] ?? "", discountId: discounts[0]?.id ?? "" };
 }
 

@@ -103,6 +103,9 @@ export const gyms = pgTable(
     /** The gym's postal address, printed in the footer of every invitation it sends
      *  (CAN-SPAM, CASL; Part 3 §9.12). A gym without one cannot send invitations. */
     postalAddress: text("postal_address"),
+    /** The last receipt number the gym has given (0114; 18g-i): a payment, a refund or a
+     *  product sale takes the next one as its row is written. */
+    receiptsIssued: integer("receipts_issued").notNull().default(0),
     /** An Indian gym's owner's mobile for its payments (`+91…`), given to Razorpay's window so
      *  it asks nothing (ROADMAP 1d-i). Seen and changed only by staff who manage billing. */
     billingMobile: text("billing_mobile"),
@@ -166,6 +169,7 @@ export const gyms = pgTable(
       "gyms_contact_email_check",
       sql`${t.contactEmail} IS NULL OR (length(${t.contactEmail}) BETWEEN 3 AND 254 AND ${t.contactEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+$' AND ${t.contactEmail} !~ '[?&#%,;<>]')`,
     ),
+    check("gyms_receipts_issued_check", sql`${t.receiptsIssued} >= 0`),
     check("gyms_postal_address_check", sql`${t.postalAddress} IS NULL OR length(${t.postalAddress}) BETWEEN 1 AND 200`),
     check(
       "gyms_invites_stopped_reason_check",

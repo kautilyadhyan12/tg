@@ -105,8 +105,9 @@ function billingOf(
           by: p.by,
           refunds: refunds
             .filter((r) => r.paymentId === p.id)
-            .map((r) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by })),
+            .map((r) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by, receiptNumber: r.receiptNumber })),
           refundableMinor: refundableMinor(b.status, p),
+          receiptNumber: p.receiptNumber,
         })),
     })),
     billsNotShown: bills.length - sent.length,

@@ -105,12 +105,16 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
   const today = dayInTz(deps.now(), viewer.timezone);
   // A sale names who bought it and a payment who paid: both are read only for whoever
   // may record one. Staff who only change prices are sent the products and the tax.
-  const [row, paid, offered, types] = await Promise.all([
-    repo.readRegister(deps.sql, gymId, today, SALES_SHOWN, viewer.canSell),
-    viewer.canSell ? paymentsOn(deps.sql, gymId, today, SALES_SHOWN) : null,
-    discounts.readDiscounts(deps.sql, gymId),
-    discounts.membershipTypeNames(deps.sql, gymId),
-  ]);
+  // One connection and one moment: a sale or payment another desk records meanwhile is in
+  // every list and count here, or in none, so the rows never outnumber their count.
+  const [row, paid, offered, types] = await deps.sql.begin("isolation level repeatable read read only", async (tx) =>
+    Promise.all([
+      repo.readRegister(tx, gymId, today, SALES_SHOWN, viewer.canSell),
+      viewer.canSell ? paymentsOn(tx, gymId, today, SALES_SHOWN) : null,
+      discounts.readDiscounts(tx, gymId),
+      discounts.membershipTypeNames(tx, gymId),
+    ]),
+  );
   if (row === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   // The day's total is in the gym's own money. What was taken in another (the gym changed
   // its country) is added to nothing, and counted so the screen can say so.
@@ -150,6 +154,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
             paidAt: p.paidAt.toISOString(),
             by: p.by,
             person: { entryId: p.entryId, name: p.personName.trim() === "" ? repo.NO_NAME : p.personName },
+            receiptNumber: p.receiptNumber,
           })),
     paymentsNotShown: paid === null ? 0 : paid.count - paid.payments.length,
     totals: {

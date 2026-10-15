@@ -64,7 +64,7 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
         cancelled: null,
         payments:
           f.status === 'paid'
-            ? [{ id: paymentId(n, f.periodIndex), amountMinor: f.amountMinor, method: 'cash', paidOn: f.dueOn, by, refunds: [], refundableMinor: f.amountMinor }]
+            ? [{ id: paymentId(n, f.periodIndex), amountMinor: f.amountMinor, method: 'cash', paidOn: f.dueOn, by, refunds: [], refundableMinor: f.amountMinor, receiptNumber: n * 100 + f.periodIndex + 1 }]
             : [],
       })),
     billsNotShown: 0,
@@ -87,7 +87,7 @@ export function withRefund(billing, amountMinor, by = 'Sam Owner') {
     if (i !== at) return b;
     const [p, ...rest] = b.payments;
     const all = amountMinor >= b.paidMinor;
-    const refund = { id: refundId(i + 1), amountMinor, method: 'cash', refundedOn: p.paidOn, reason: 'charged_too_much', by };
+    const refund = { id: refundId(i + 1), amountMinor, method: 'cash', refundedOn: p.paidOn, reason: 'charged_too_much', by, receiptNumber: 9000 + i };
     return {
       ...b,
       state: all ? 'refunded' : 'paid',
