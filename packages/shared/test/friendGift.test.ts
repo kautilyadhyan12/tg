@@ -33,7 +33,8 @@ describe("friendGiftLine: what staff read on the lead", () => {
     [{ state: "member_before" } as const, "No friend's gift: Tara had a membership here before they were invited."],
     [{ state: "no_gift" } as const, "No friend's gift: Refer a friend has no friend's gift that can be used today."],
     [{ state: "to_give", ...MEMBERSHIPS, skipped: null } as const, "Friend's gift: filled in when Tara's membership is added."],
-    [{ state: "to_give", ...MEMBERSHIPS, skipped: "Day pass" } as const, "Day pass was added without it. Friend's gift: filled in when Tara's membership is added."],
+    [{ state: "to_give", ...MEMBERSHIPS, skipped: "Day pass" } as const, "Friend's gift not given on Day pass: it was added without it. It is filled in on Tara's next membership."],
+    [{ state: "to_give", ...BOTH, skipped: "Day pass" } as const, "Friend's gift not given on Day pass: it was added without it. It is filled in on Tara's next membership or purchase at Sell."],
     [{ state: "to_give", ...PRODUCTS, skipped: "Day pass" } as const, "Friend's gift: filled in when Tara buys something at Sell."],
     [{ state: "to_give", ...BOTH, skipped: null } as const, "Friend's gift: filled in when Tara's membership is added or they buy at Sell."],
   ])("%j", (gift, line) => {

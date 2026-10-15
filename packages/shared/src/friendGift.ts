@@ -59,14 +59,17 @@ export function friendGiftLine(g: LeadFriendGift, name: string): string {
     case "no_gift":
       return "No friend's gift: Refer a friend has no friend's gift that can be used today.";
     case "to_give": {
+      if (g.skipped !== null && g.forMemberships) {
+        const next = g.forProducts ? `${name}'s next membership or purchase at Sell` : `${name}'s next membership`;
+        return `Friend's gift not given on ${g.skipped}: it was added without it. It is filled in on ${next}.`;
+      }
       const where =
         g.forMemberships && g.forProducts
           ? `when ${name}'s membership is added or they buy at Sell`
           : g.forMemberships
             ? `when ${name}'s membership is added`
             : `when ${name} buys something at Sell`;
-      const before = g.skipped !== null && g.forMemberships ? `${g.skipped} was added without it. ` : "";
-      return `${before}Friend's gift: filled in ${where}.`;
+      return `Friend's gift: filled in ${where}.`;
     }
   }
 }

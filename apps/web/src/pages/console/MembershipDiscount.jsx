@@ -100,7 +100,7 @@ export function MembershipTotal({ summary }) {
         {summary.lines.map((line) => (
           <div key={line.label} className="flex justify-between gap-4" style={{ maxWidth: 360 }}>
             <dt className={line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}>{line.label}</dt>
-            <dd className={`m-0 c-num ${line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}`}>{line.value}</dd>
+            <dd className={`m-0 c-num whitespace-nowrap ${line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}`}>{line.value}</dd>
           </div>
         ))}
       </dl>
