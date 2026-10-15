@@ -503,6 +503,7 @@ export async function reissueAfterLostReply(
       RETURNING id`;
     const newId = rows[0]?.id;
     if (newId === undefined) throw new Error("refresh token re-issue insert returned no row");
+    await markUsed(tx, input.userId);
     await tx`
       UPDATE refresh_tokens SET replaced_by = ${newId}
       WHERE id = ${input.oldId} AND user_id = ${input.userId}`;
