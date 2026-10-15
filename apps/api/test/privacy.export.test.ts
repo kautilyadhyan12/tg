@@ -140,6 +140,10 @@ d("DPDP data export (real Postgres)", () => {
       VALUES (${postGymId}, ${userId}, 'welcome', 'joined:fixture', 'Welcome.', current_date, now() + interval '30 days')`;
     // A kind of message they switched off at that gym (20f-i).
     await sql`INSERT INTO gym_member_messages_off (gym_id, user_id, kind) VALUES (${postGymId}, ${userId}, 'group')`;
+    // Their own invite link at that gym (20e-ii-a): 16 of a-z2-7, made from their id.
+    await sql`
+      INSERT INTO gym_referral_links (gym_id, user_id, code)
+      VALUES (${postGymId}, ${userId}, translate(substr(replace(${userId}::text, '-', ''), 1, 16), '0189', 'abcd'))`;
     await sql`
       WITH c AS (
         INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, unit, starts_on, ends_on, who)

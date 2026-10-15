@@ -39,6 +39,7 @@ import { cleanContact, followUpValues } from "../leads/service.js";
 import { cleanPhoto, type PhotoProblem } from "./photoBytes.js";
 import { photoKey, type PhotoStore } from "./photoStore.js";
 import * as repo from "./repo.js";
+import * as referralsRepo from "../referrals/repo.js";
 import type { RobotCheck } from "./robotCheck.js";
 
 export interface GymPageDeps {
@@ -274,7 +275,7 @@ export async function publicPhoto(deps: GymPageDeps, slug: string, photoId: stri
 }
 
 /** A page switched on, of an open gym on a trial or a paid plan; null otherwise. */
-async function livePage(sql: Sql, slug: string): Promise<repo.ShownPageRow | null> {
+export async function livePage(sql: Sql, slug: string): Promise<repo.ShownPageRow | null> {
   const page = await repo.shownPageBySlug(sql, slug);
   if (page === null || !(await gymHasLivePlan(sql, page.gymId))) return null;
   return page;
@@ -306,7 +307,7 @@ export async function publicPage(deps: Pick<GymPageDeps, "sql" | "robotCheck" | 
 /** The member list's own rules for a name, email and phone, answered in the words a
  *  person filling the form reads. */
 function visitorContact(
-  body: GymEnquiryRequest,
+  body: Pick<GymEnquiryRequest, "fullName" | "email" | "phone">,
   country: string | null,
 ): { fullName: string; email: string | null; phone: string | null } {
   try {
@@ -324,11 +325,40 @@ function visitorContact(
   }
 }
 
-/** A message from the form. A lead with its email (else its phone) keeps it, and is
+/** Where a message from a form goes: the gym, and, from a member's invite link, that member
+ *  (20e-ii-a). The invite's form says "A friend" itself. */
+export interface EnquiryTarget {
+  gymId: string;
+  country: string | null;
+  timezone: string;
+  referrerId: string | null;
+}
+
+/** What either form sends: the page's form, or the invite page's, which has no source. */
+type EnquiryBody = Omit<GymEnquiryRequest, "source"> & { source?: GymEnquiryRequest["source"] };
+
+export interface EnquiryLimits {
+  robotRoom: Limit;
+  robotFailed: () => Promise<void>;
+  address: Limit;
+  page: () => Promise<boolean>;
+}
+
+/** A message from the gym's own page: to the gym whose page is at `slug`, while it is on. */
+export async function sendEnquiry(deps: GymPageDeps, slug: string, body: GymEnquiryRequest, limits: EnquiryLimits): Promise<"received" | null> {
+  return await takeEnquiry(deps, body, limits, async () => {
+    const page = await livePage(deps.sql, slug);
+    return page === null ? null : { gymId: page.gymId, country: page.country, timezone: page.timezone, referrerId: null };
+  });
+}
+
+/** A message from a form. A lead with its email (else its phone) keeps it, and is
  *  left exactly as staff keep it: a stranger can type anybody's email, so the form never
- *  changes a lead's name, contact, status or "Happy to hear from us" — the person's tick
- *  is kept on the message, for staff to act on. Nobody else is a lead yet: they become
- *  one, New, as the form's own, ticked by their own tick. Answered `received` in every
+ *  changes a lead's name, contact, status, "Happy to hear from us" or who invited them —
+ *  the person's tick is kept on the message, for staff to act on. Nobody else is a lead
+ *  yet: they become one, New, as the form's own, ticked by their own tick, and marked with
+ *  the member whose link they came by while that member still is one and the gym's offer
+ *  is still on, unless it is the member's own email or phone. Answered `received` in every
  *  case, and a full gym refuses everybody alike, so the reply never says who a gym has.
  *
  *  Order: this address's failed robot checks at this page (too many, and it is refused
@@ -336,11 +366,11 @@ function visitorContact(
  *  apart), then the address's allowance and the page's own, the write. Only a send that
  *  passed the robot check spends either allowance, so robots cannot use them up for the
  *  people who come after them (the security pass over 20c, 2026-09-30). */
-export async function sendEnquiry(
+export async function takeEnquiry(
   deps: GymPageDeps,
-  slug: string,
-  body: GymEnquiryRequest,
-  limits: { robotRoom: Limit; robotFailed: () => Promise<void>; address: Limit; page: () => Promise<boolean> },
+  body: EnquiryBody,
+  limits: EnquiryLimits,
+  find: () => Promise<EnquiryTarget | null>,
 ): Promise<"received" | null> {
   if (!(await limits.robotRoom())) return null;
   // The field no person sees: filled, it was a robot, and nothing is kept.
@@ -356,60 +386,89 @@ export async function sendEnquiry(
   }
   if (!(await limits.address())) return null;
 
-  const page = await livePage(deps.sql, slug);
-  if (page === null) throw notFound();
-  const contact = visitorContact(body, page.country);
+  const target = await find();
+  if (target === null) throw notFound();
+  const contact = visitorContact(body, target.country);
   const message = (body.message ?? "").trim();
   if (holdsCard(message)) throw new OrgsError(400, "card_number", ENQUIRY_WORDS.card_number);
   const mayEmail = body.mayEmail === true;
   if (mayEmail && contact.email === null) throw new OrgsError(400, "needs_email", ENQUIRY_WORDS.needs_email);
   if (!(await limits.page())) throw new OrgsError(429, "page_busy", ENQUIRY_WORDS.page_busy);
-  const source = body.source ?? null;
+  const source = target.referrerId === null ? (body.source ?? null) : "friend";
   const at = deps.now();
 
   await deps.sql.begin(async (tx) => {
-    await lockGym(tx, page.gymId);
+    await lockGym(tx, target.gymId);
     // Before anybody is looked up: a full gym answers everybody the same. The form has a
     // ceiling of its own, far under the gym's, so a flood of it can never leave staff
     // unable to add a walk-in (the security pass over 20c, 2026-09-30).
     if (
-      (await leadsRepo.countLeads(tx, page.gymId)) >= LEADS_MAX_PER_GYM ||
-      (await leadsRepo.countPageNewLeads(tx, page.gymId)) >= PAGE_NEW_LEADS_MAX
+      (await leadsRepo.countLeads(tx, target.gymId)) >= LEADS_MAX_PER_GYM ||
+      (await leadsRepo.countPageNewLeads(tx, target.gymId)) >= PAGE_NEW_LEADS_MAX
     ) {
       throw new OrgsError(409, "enquiries_full", ENQUIRY_WORDS.full);
     }
-    const lead = await leadsRepo.lockLeadForContact(tx, page.gymId, contact);
+    const lead = await leadsRepo.lockLeadForContact(tx, target.gymId, contact);
     let leadId: string;
+    let referred = false;
     if (lead !== null) {
       leadId = lead.id;
     } else {
+      const referredBy = target.referrerId === null ? null : await inviter(tx, target.gymId, target.referrerId, contact);
+      referred = referredBy !== null;
       const okAt = mayEmail ? at : null;
       const inserted = await leadsRepo.insertLead(
         tx,
-        page.gymId,
+        target.gymId,
         {
           ...contact,
           source: source ?? "other",
           notes: "",
           emailOkAt: okAt,
-          ...followUpValues({ status: "new", emailOkAt: okAt, sent: 0, lastAt: null }, page.timezone),
+          ...followUpValues({ status: "new", emailOkAt: okAt, sent: 0, lastAt: null }, target.timezone),
         },
         null,
         deps.addressKey,
         at,
         true,
+        referredBy,
       );
       leadId = inserted.id;
     }
-    await leadsRepo.addEnquiry(tx, page.gymId, leadId, { ...contact, source, message, mayEmail }, at, GYM_ENQUIRIES_KEPT_PER_LEAD);
+    await leadsRepo.addEnquiry(tx, target.gymId, leadId, { ...contact, source, message, mayEmail }, at, GYM_ENQUIRIES_KEPT_PER_LEAD);
     await insertAudit(tx, {
       actorUserId: null,
-      gymId: page.gymId,
+      gymId: target.gymId,
       action: "org.lead_enquiry",
       targetType: "lead",
       targetId: leadId,
-      meta: { lead: lead === null ? "new" : "existing", mayEmail: String(mayEmail) },
+      meta: { lead: lead === null ? "new" : "existing", mayEmail: String(mayEmail), ...(target.referrerId === null ? {} : { invited: String(referred) }) },
     });
   });
   return "received";
+}
+
+/** The member a new lead is marked as invited by: the link's member while they still are
+ *  one and the offer is still on, and never for their own email or phone. */
+async function inviter(
+  tx: Parameters<typeof referralsRepo.referrerNow>[0],
+  gymId: string,
+  referrerId: string,
+  contact: { email: string | null; phone: string | null },
+): Promise<string | null> {
+  const now = await referralsRepo.referrerNow(tx, gymId, referrerId);
+  if (now === null) return null;
+  // An address with a "+tag" is the same mailbox: maya+gym@ is maya@ (round one, L1). A
+  // backstop, not the gate: the member's gift still waits for a second person to join and pay.
+  const sameEmail = contact.email !== null && now.email !== null && mailbox(contact.email) === mailbox(now.email);
+  const samePhone = contact.phone !== null && now.statedPhone !== null && contact.phone === now.statedPhone;
+  return sameEmail || samePhone ? null : referrerId;
+}
+
+/** An address as one mailbox: lower case, without a "+tag" before the "@". */
+function mailbox(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1) return email.toLowerCase();
+  const local = email.slice(0, at).split("+")[0] ?? "";
+  return `${local}${email.slice(at)}`.toLowerCase();
 }

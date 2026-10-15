@@ -28,7 +28,7 @@ import {
   leadsQueryString,
   leadsSelectionFilter,
   showsEmailDue,
-  sourceWord,
+  leadSourceLine,
   statusChips,
   statusWord,
 } from './leadsView';
@@ -513,13 +513,13 @@ export default function Leads() {
                         <span className="c-s13 c-t2 c-ell">{candidateLine(lead)}</span>
                       </span>
                       <span className="hidden md:block c-s14 c-t1 c-ell" style={{ gridArea: 'src' }}>
-                        {sourceWord(lead.source)}
+                        {leadSourceLine(lead)}
                       </span>
                       <span className="hidden md:block c-s14 c-t2 c-ell" style={{ gridArea: 'added' }}>
                         {addedDay(lead.createdAt)}
                       </span>
                       <span className="md:hidden c-s13 c-t3 c-ell" style={{ gridArea: 'meta' }}>
-                        {sourceWord(lead.source)} · {addedWords(lead.createdAt)}
+                        {leadSourceLine(lead)} · {addedWords(lead.createdAt)}
                       </span>
                       <span
                         className="self-start md:self-center justify-self-end md:justify-self-start flex flex-wrap justify-end md:justify-start gap-1.5"

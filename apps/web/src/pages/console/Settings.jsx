@@ -6,6 +6,7 @@ import OpeningHoursPanel from '../../components/console/OpeningHoursPanel';
 import MemberContactPanel from '../../components/console/MemberContactPanel';
 import MessageSettingsPanel from '../../components/console/MessageSettingsPanel';
 import LeadEmailsPanel from '../../components/console/LeadEmailsPanel';
+import ReferralPanel from '../../components/console/ReferralPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
 import WaiverPanel from '../../components/console/WaiverPanel';
@@ -197,6 +198,14 @@ export default function Settings() {
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.messages)}
           />
+        </div>
+      ) : null}
+
+      {/* REFER A FRIEND (20e-ii-a): the offer and its promo codes, on `org.manage` as the server
+          gates it. Keyed per gym for the panels' reason above: it holds choices not saved yet. */}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.referrals} style={{ scrollMarginTop: 16 }}>
+          <ReferralPanel key={`referrals-${org.id}`} org={org} readOnly={readOnly} startOpen={linked(section === SETTINGS_SECTION.referrals)} />
         </div>
       ) : null}
 
