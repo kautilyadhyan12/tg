@@ -228,7 +228,7 @@ export async function listBillFacts(
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE b.gym_id = ${gymId}
       AND ((b.status = 'open' AND b.due_on <= ${today}::date) OR (b.status = 'void' AND b.void_reason IS NOT NULL) OR b.status = 'refunded')
-      AND h.entry_id IS NOT NULL AND (${ids}::uuid[] IS NULL OR h.entry_id = ANY(${ids}::uuid[]))
+      AND (${ids}::uuid[] IS NULL OR h.entry_id = ANY(${ids}::uuid[]))
     GROUP BY h.entry_id, h.id`;
   for (const row of rows) {
     const had = facts.owedSince.get(row.entry_id);
