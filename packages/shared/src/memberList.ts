@@ -1706,6 +1706,9 @@ export const memberListViewSchema = z.object({
    *  whose renewal is waiting, anybody who still owes on a bill, and anybody staff chose
    *  to keep on the list. */
   over: memberListOverSignSchema.default({ count: 0, owing: 0 }),
+  /** When the list was last deleted because the gym had no paid plan and no sign-in for
+   *  six months (ROADMAP Stage 4 item 14), for the empty list's line; null if never. */
+  goneForGoodDeletedAt: z.string().datetime({ offset: true }).nullable().default(null),
 });
 export type MemberListView = z.infer<typeof memberListViewSchema>;
 

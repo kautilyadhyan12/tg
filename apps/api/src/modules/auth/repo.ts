@@ -247,6 +247,16 @@ async function holdsPassword(tx: TransactionSql, userId: string, checked: readon
   return current !== null && checked.includes(current);
 }
 
+/** The account was used: a sign-in, or a session renewed. At most once an hour, so a
+ *  busy session does not write the users row every few minutes. A gym's staff being
+ *  used keeps the gym's list (`orgs/goneForGood`), and `refresh_tokens` rows are not
+ *  kept for ever (spec Part 4 §5.1), so this is where that is kept. */
+async function markUsed(tx: TransactionSql, userId: string): Promise<void> {
+  await tx`
+    UPDATE users SET last_active_at = now()
+    WHERE id = ${userId} AND (last_active_at IS NULL OR last_active_at < now() - INTERVAL '1 hour')`;
+}
+
 async function insertRefreshRow(
   tx: TransactionSql,
   input: { userId: string; familyId: string; tokenHash: string; expiresAt: Date; ip: string | null; userAgent: string | null },
@@ -255,6 +265,7 @@ async function insertRefreshRow(
     INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
     VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
             ${input.ip}, ${input.userAgent})`;
+  await markUsed(tx, input.userId);
 }
 
 /** Upgrade a checked password's hash, if the account still holds the one checked. */
@@ -328,11 +339,15 @@ export async function insertRefreshToken(
     userAgent: string | null;
   },
 ): Promise<string> {
-  const rows = await sql<{ id: string }[]>`
-    INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
-    VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
-            ${input.ip}, ${input.userAgent})
-    RETURNING id`;
+  const rows = await sql.begin(async (tx) => {
+    const inserted = await tx<{ id: string }[]>`
+      INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent)
+      VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
+              ${input.ip}, ${input.userAgent})
+      RETURNING id`;
+    await markUsed(tx, input.userId);
+    return inserted;
+  });
   const id = rows[0]?.id;
   if (id === undefined) throw new Error("refresh token insert returned no row");
   return id;
@@ -362,6 +377,7 @@ export async function startPhoneSession(
       INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at, ip, user_agent, client)
       VALUES (${input.userId}, ${input.familyId}, ${input.tokenHash}, ${input.expiresAt},
               ${input.ip}, ${input.userAgent}, 'phone')`;
+    await markUsed(tx, input.userId);
   });
 }
 
@@ -431,6 +447,8 @@ export async function rotateRefreshToken(
       RETURNING id`;
     const newId = rows[0]?.id;
     if (newId === undefined) throw new Error("refresh token rotation insert returned no row");
+    // Before the old row is taken: the users row first, the order revoking takes them in.
+    await markUsed(tx, input.userId);
     const revoked = await tx<{ id: string }[]>`
       UPDATE refresh_tokens SET revoked_at = now(), replaced_by = ${newId}
       WHERE id = ${input.oldId} AND user_id = ${input.userId} AND revoked_at IS NULL
@@ -485,6 +503,7 @@ export async function reissueAfterLostReply(
       RETURNING id`;
     const newId = rows[0]?.id;
     if (newId === undefined) throw new Error("refresh token re-issue insert returned no row");
+    await markUsed(tx, input.userId);
     await tx`
       UPDATE refresh_tokens SET replaced_by = ${newId}
       WHERE id = ${input.oldId} AND user_id = ${input.userId}`;

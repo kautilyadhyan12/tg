@@ -1140,3 +1140,12 @@ export function sentToWords(count) {
 export function messageCount(typed) {
   return `${n(groupMessageLength(typed))} of ${n(GYM_MESSAGE_BODY_MAX)}`;
 }
+
+/** The empty list's reason, when the list was deleted because the gym had no paid plan and
+ *  nobody signed in for six months (ROADMAP Stage 4 item 14); null otherwise. */
+export function goneForGoodLine(list, timeZone, it = 'gym') {
+  const at = list?.goneForGoodDeletedAt;
+  if (!at) return null;
+  const day = gymToday(timeZone, new Date(at));
+  return `Your list, with its memberships and payments, was deleted on ${shortDay(day)} because your ${it} had no paid plan and nobody signed in for 6 months.`;
+}

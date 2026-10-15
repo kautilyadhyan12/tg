@@ -47,6 +47,7 @@ import { analyseEntriesIfMoved } from "./modules/orgs/memberList/repo.js";
 import { rollUpGymDays } from "./modules/orgs/rollup.js";
 import { ORGS_SWEEP_JOB, runJoinSweep, scheduleJoinSweep } from "./modules/orgs/joinSweepSchedule.js";
 import { expireLapsedGymTrials } from "./modules/orgs/trialSweep.js";
+import { sweepGoneForGood } from "./modules/orgs/goneForGood/sweep.js";
 import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
@@ -85,6 +86,7 @@ export const ORGS_MEMBER_LIST_EXPIRY_JOB = "orgs.member_list_expiry";
 export const ORGS_CLASS_FILL_JOB = "orgs.class_fill";
 export const ORGS_CLASS_NO_SHOWS_JOB = "orgs.class_no_shows";
 export const ORGS_MEMBER_LIST_ANALYSE_JOB = "orgs.member_list_analyse";
+export const ORGS_GONE_FOR_GOOD_JOB = "orgs.gone_for_good";
 
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const sql = postgres(config.DATABASE_URL, { prepare: false, max: 2 });
@@ -180,6 +182,43 @@ try {
   log.fatal({ err }, "failed to remove the gym archive schedule");
   process.exit(1);
 }
+
+// A gym gone for good (ROADMAP Stage 4 item 14): 04:40 UTC, its own minute. Its days are
+// counted in days, so once a night is enough; a retry decides each gym again under its lock.
+try {
+  await queue.upsertJobScheduler(
+    ORGS_GONE_FOR_GOOD_JOB,
+    { pattern: "40 4 * * *" },
+    {
+      name: ORGS_GONE_FOR_GOOD_JOB,
+      opts: {
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+      },
+    },
+  );
+} catch (err) {
+  log.fatal({ err }, "failed to register the gone-for-good schedule");
+  process.exit(1);
+}
+// Its emails go through the sign-in codes' sender; RESEND_API_KEY and EMAIL_FROM are required
+// in production. Elsewhere the email is written to the log (its subject and link, never the
+// address) so a local run can be watched.
+const goneForGoodMail = {
+  transport:
+    config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
+      ? createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
+      : {
+          send(message: { subject: string; text: string }): Promise<void> {
+            const links = message.text.match(/https?:\/\/\S+/g) ?? [];
+            log.info({ event: "email.gone_for_good.dev", subject: message.subject, links }, "DEV ONLY — gone-for-good email (no email service configured)");
+            return Promise.resolve();
+          },
+        },
+  webOrigin: config.WEB_ORIGIN,
+};
 
 // A FILE NOBODY SAID YES TO (Part 3 §9.6). Hourly at minute 45, clear of every
 // other schedule on this queue, for the reason the blocks above give: one worker
@@ -595,7 +634,8 @@ const worker = new Worker(
       job.name !== ORGS_CHALLENGE_RESULTS_JOB &&
       job.name !== ORGS_MEMBER_MESSAGES_JOB &&
       job.name !== ORGS_MEMBER_BILLS_JOB &&
-      job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB
+      job.name !== ORGS_MEMBER_LIST_ANALYSE_JOB &&
+      job.name !== ORGS_GONE_FOR_GOOD_JOB
     ) {
       throw new Error(`unknown job on ${ROLLUPS_QUEUE}: ${job.name}`);
     }
@@ -639,6 +679,15 @@ const worker = new Worker(
     // A run queued before the schedule was taken out closes no gym.
     if (job.name === ORGS_ARCHIVE_JOB) {
       log.info({ event: "job.finished", job: job.name, skipped: "archive_off" }, "job finished");
+      return;
+    }
+
+    // Each gym is its own transaction; a gym that raised is counted, and the run fails so it
+    // is seen and retried (every step is safe twice).
+    if (job.name === ORGS_GONE_FOR_GOOD_JOB) {
+      const gone = await sweepGoneForGood({ sql, log, mail: goneForGoodMail });
+      log.info({ ...gone, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      if (gone.failed > 0) throw new Error(`gone-for-good: ${String(gone.failed)} gym(s) could not be decided`);
       return;
     }
 
