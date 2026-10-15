@@ -160,8 +160,8 @@ d("Refer a friend (real Postgres)", () => {
   type Gift = { kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null; on: "first" | "every" | "products" };
   const pct = (n: number, on: Gift["on"] = "first"): Gift => ({ kind: "percent", percentBp: n * 100, amountMinor: null, on });
   /** The member's gift: a percentage off their next payment. */
-  type MemberGift = { kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null };
-  const mine = (n: number): MemberGift => ({ kind: "percent", percentBp: n * 100, amountMinor: null });
+  type MemberGift = { kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null; on: "membership" | "products"; days: number | null };
+  const mine = (n: number): MemberGift => ({ kind: "percent", percentBp: n * 100, amountMinor: null, on: "membership", days: null });
   const switchOn = async (org: CreatedOrg, owner: Record<string, string>, member: MemberGift | null, friend: Gift | null) => {
     const res = await put(settingsUrl(org.org.id), { on: true, member, friend }, owner);
     expect(res.statusCode).toBe(200);
@@ -525,7 +525,7 @@ d("Refer a friend (real Postgres)", () => {
           SELECT member_gift_kind AS kind, member_percent_bp AS bp FROM gym_referral_settings WHERE gym_id = ${gymA.org.id}`;
         expect(kept).toEqual({ kind: "percent", bp: 1000 });
         const again = await switchOn(gymA, ownerA.cookies, mine(10), pct(20));
-        expect(again.member).toMatchObject({ words: "10% off your next payment" });
+        expect(again.member).toMatchObject({ words: "10% off your next membership payment" });
         expect(again.friend?.code).toBe("WELCOME20");
         const after = await sql<{ id: string }[]>`SELECT id FROM gym_discounts WHERE gym_id = ${gymA.org.id} AND archived_at IS NULL ORDER BY code`;
         expect(after.map((d) => d.id)).toEqual(before.map((d) => d.id));
@@ -584,7 +584,7 @@ d("Refer a friend (real Postgres)", () => {
 
         await sql`UPDATE gyms SET country = NULL WHERE id = ${gymA.org.id}`;
         for (const body of [
-          { on: true, member: { kind: "amount", percentBp: null, amountMinor: 500 }, friend: pct(20) },
+          { on: true, member: { kind: "amount", percentBp: null, amountMinor: 500, on: "membership", days: null }, friend: pct(20) },
           { on: true, member: mine(10), friend: { kind: "amount", percentBp: null, amountMinor: 500, on: "products" } },
         ]) {
           const noMoney = await put(settingsUrl(gymA.org.id), body, ownerA.cookies);
@@ -592,8 +592,8 @@ d("Refer a friend (real Postgres)", () => {
           expect((JSON.parse(noMoney.body) as { message: string }).message).toBe(REFERRAL_WORDS.no_currency);
         }
         await sql`UPDATE gyms SET country = 'GB' WHERE id = ${gymA.org.id}`;
-        const pounds = await switchOn(gymA, ownerA.cookies, { kind: "amount", percentBp: null, amountMinor: 500 }, { kind: "amount", percentBp: null, amountMinor: 500, on: "products" });
-        expect(pounds.member).toMatchObject({ words: "£5.00 off your next payment", currency: "GBP" });
+        const pounds = await switchOn(gymA, ownerA.cookies, { kind: "amount", percentBp: null, amountMinor: 500, on: "membership", days: null }, { kind: "amount", percentBp: null, amountMinor: 500, on: "products" });
+        expect(pounds.member).toMatchObject({ words: "£5.00 off your next membership payment", currency: "GBP" });
         expect(pounds.friend).toMatchObject({ code: "WELCOME5", words: "£5.00 off products" });
         // 12.5% and £5.50 are not whole: the code says no number rather than a wrong one (L2).
         const half = await switchOn(gymA, ownerA.cookies, mine(10), pct(12.5));
@@ -659,10 +659,10 @@ d("Refer a friend (real Postgres)", () => {
         expect(body).toMatchObject({
           status: "on",
           gymName: "Northside Refer A",
-          memberGift: "10% off your next payment",
+          memberGift: "10% off your next membership payment",
           friendGift: "20% off the first payment of a membership",
           lines: [
-            "When a friend you invite joins Northside Refer A and makes their first payment, you get 10% off your next payment. It comes off by itself, and we'll tell you in your inbox.",
+            "When a friend you invite joins Northside Refer A and makes their first payment, you get 10% off your next membership payment. It comes off by itself, and we'll tell you in your inbox.",
             "Your friend gets 20% off the first payment of a membership when they join.",
             "Your link shows your first name, Maya, to whoever opens it.",
             "This offer is set by Northside Refer A and may change.",
