@@ -54,6 +54,7 @@ const typeOf = (n, over = {}) => ({
   termUnit: 'month',
   packClasses: null,
   packDays: null,
+  tax: null,
   ...over,
 });
 const GOLD = typeOf(1);
@@ -88,6 +89,7 @@ function held(n, type, startsOn, paid, moves = []) {
     notCharged: false,
     refundedInFull: false,
     discount: null,
+    tax: null,
     view: heldMembershipView(m, TODAY),
     billing: billingFor(n, given, m, type.priceMinor, TODAY),
   };
@@ -103,6 +105,7 @@ const answer = (memberships, past = false, more = {}) => ({
     listed: null,
     canBill: true,
     discounts: [],
+    taxIncluded: false,
     ...more,
   }),
 });
@@ -536,6 +539,7 @@ describe('adding a membership', () => {
       startsOn: TODAY,
       paid: false,
       priceMinor: 4999,
+      totalMinor: 3999,
       discountId: founders.id,
       discountMinor: 1000,
     });
@@ -543,6 +547,57 @@ describe('adding a membership', () => {
     expect(await box.findByText('Membership added.')).toBeTruthy();
     expect(box.getByText('Sold with Founders: £10.00 off every payment.')).toBeTruthy();
     expect(box.getByText('£39.99 every month')).toBeTruthy();
+  });
+
+  it('with tax: the form shows the price, its tax and the total, sends what it showed, and the membership and its bill say the tax (18b-iii)', async () => {
+    const VAT = { name: 'VAT', bp: 2000 };
+    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: VAT });
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [TAXED, GOLD] }));
+    // 20% on top of £50.00 is £10.00: £60.00 a bill.
+    const owed = held(5, { ...TAXED, priceMinor: 6000 }, TODAY, false);
+    const sold = {
+      ...owed,
+      priceMinor: 5000,
+      tax: VAT,
+      billing: { ...owed.billing, bills: owed.billing.bills.map((b) => ({ ...b, tax: { ...VAT, included: false, minor: 1000 } })) },
+    };
+    orgService.giveHeldMembership.mockResolvedValue(answer([sold], false, { types: [TAXED, GOLD] }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    // A type with no tax shows no box of sums: the price is all there is.
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(form.queryByTestId('sale-summary')).toBeNull();
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: TAXED.id } });
+    const lines = form.getByTestId('sale-summary');
+    expect([...lines.querySelectorAll('dt')].map((x) => x.textContent)).toEqual(['Price', 'VAT 20%', 'Total']);
+    expect([...lines.querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£50.00', '£10.00', '£60.00']);
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.giveHeldMembership.mock.calls[0][2]).toEqual({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      typeId: TAXED.id,
+      startsOn: TODAY,
+      paid: false,
+      priceMinor: 5000,
+      totalMinor: 6000,
+    });
+    const box = await boxSoon();
+    expect(await box.findByText('Membership added.')).toBeTruthy();
+    expect(box.getByText('Each bill charges VAT 20%.')).toBeTruthy();
+    expect(box.getByText('£50.00 plus £10.00 VAT 20%')).toBeTruthy();
+  });
+
+  it('where the gym’s prices hold the tax, the total is the price and the form says how much of it is tax', async () => {
+    const TAXED = typeOf(5, { name: 'Gold VAT', priceMinor: 5000, tax: { name: 'VAT', bp: 2000 } });
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [TAXED], taxIncluded: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: TAXED.id } });
+    const lines = form.getByTestId('sale-summary');
+    expect([...lines.querySelectorAll('dt')].map((x) => x.textContent)).toEqual(['Total', 'Includes VAT 20%']);
+    expect([...lines.querySelectorAll('dd')].map((x) => x.textContent)).toEqual(['£50.00', '£8.33']);
   });
 
   it('a discounted pack ticked as paid says the amount paid, the Total, never the full price', async () => {
@@ -607,7 +662,8 @@ describe('adding a membership', () => {
     await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
     const [gym, entry, body] = orgService.giveHeldMembership.mock.calls[0];
     expect([gym, entry]).toEqual([GYM, ADA]);
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash' });
+    // The price and what the first bill comes to are sent as the screen showed them (18b-iii).
+    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), typeId: GOLD.id, startsOn: TODAY, paid: true, method: 'cash', priceMinor: 4999, totalMinor: 4999 });
 
     // It failed: the form stays, and pressing again sends the same key, so one membership.
     expect(await (await boxSoon()).findByRole('alert')).toBeTruthy();
@@ -802,6 +858,8 @@ describe('Add member gives a membership in the same form', () => {
       startsOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       paid: true,
       method: 'bank_transfer',
+      priceMinor: 9000,
+      totalMinor: 9000,
     });
     // The person was added first, as typed; the type's name became their Membership word
     // on the list only after the membership was given.

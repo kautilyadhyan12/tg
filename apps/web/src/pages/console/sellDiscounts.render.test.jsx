@@ -12,7 +12,10 @@ const svc = {
   findPeople: vi.fn(),
   sell: vi.fn(),
   undoSale: vi.fn(),
-  saveTax: vi.fn(),
+  saveTaxMode: vi.fn(),
+  addTaxRate: vi.fn(),
+  changeTaxRate: vi.fn(),
+  removeTaxRate: vi.fn(),
   addProduct: vi.fn(),
   changeProduct: vi.fn(),
   archiveProduct: vi.fn(),
@@ -47,7 +50,7 @@ const ORG = {
 };
 const SELLER = { ...ORG, staffRole: 'trainer', privileges: ['members.read', 'billing.members'] };
 
-const WATER = { id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxed: true, stock: null, archivedAt: null, updatedAt: '2026-10-13T10:00:00.000Z' };
+const WATER = { id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-13T10:00:00.000Z' };
 const TOWEL = { ...WATER, id: 'p-towel', name: 'Towel', priceMinor: 500 };
 const discount = (over = {}) => ({
   id: 'd-summer',
@@ -78,7 +81,7 @@ const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor:
 const page = (over = {}) => ({
   currency: 'USD',
   today: '2026-10-13',
-  tax: { bp: 825, included: false },
+  tax: { included: false, rates: [{ id: 'r1', name: 'Sales tax', bp: 825, products: 1, membershipTypes: 0, memberships: 0 }] },
   products: [TOWEL, WATER],
   archived: [],
   archivedTotal: 0,
@@ -95,7 +98,7 @@ const page = (over = {}) => ({
   totals: totals(),
   ...over,
 });
-const SOLD = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true };
+const SOLD = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true };
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { message } } });
 
 const open = (org = ORG) => {
@@ -140,9 +143,9 @@ describe('a sale with a discount', () => {
     // Only what can be used on water today is offered: not the towels' one.
     expect(options('Discount')).toEqual(['No discount', 'Staff · $1.00 off', 'Summer sale · 20% off · code SUMMER20']);
     expect(within(newSale()).getByLabelText('Discount').value).toBe('');
-    expect(summary()).toBe('Price$3.98Tax (8.25%)$0.33Total$4.31');
+    expect(summary()).toBe('Price$3.98Sales tax 8.25%$0.33Total$4.31');
     pick('Discount', 'd-summer');
-    expect(summary()).toBe('Price$3.98Discount (Summer sale)-$0.80Tax (8.25%)$0.26Total$3.44');
+    expect(summary()).toBe('Price$3.98Discount (Summer sale)-$0.80Sales tax 8.25%$0.26Total$3.44');
     expect(takeButton().textContent).toBe('Take payment · $3.44');
 
     svc.sell.mockResolvedValue({ saleId: 's1', register: page({ sales: [SOLD], totals: totals({ count: 1, totalMinor: 344, taxMinor: 26, cash: 344, discountMinor: 80 }) }) });
@@ -178,12 +181,12 @@ describe('a sale with a discount', () => {
     type('summer2');
     apply();
     expect(within(newSale()).getByRole('status').textContent).toBe('There is no promo code SUMMER2. Check the spelling with the customer.');
-    expect(summary()).toBe('Price$1.99Tax (8.25%)$0.16Total$2.15');
+    expect(summary()).toBe('Price$1.99Sales tax 8.25%$0.16Total$2.15');
     type(' summer20');
     fireEvent.keyDown(within(newSale()).getByLabelText('Promo code'), { key: 'Enter' });
     expect(within(newSale()).getByRole('status').textContent).toBe('SUMMER20 applied: 20% off.');
     expect(within(newSale()).getByLabelText('Discount').value).toBe('d-summer');
-    expect(summary()).toBe('Price$1.99Discount (Summer sale)-$0.40Tax (8.25%)$0.13Total$1.72');
+    expect(summary()).toBe('Price$1.99Discount (Summer sale)-$0.40Sales tax 8.25%$0.13Total$1.72');
 
     // The product is changed to one the picked discount is not for: it falls back to none.
     pick('Discount', 'd-staff');
@@ -192,7 +195,7 @@ describe('a sale with a discount', () => {
     pick('Discount', 'd-towels');
     pick('Product', 'p-water');
     expect(within(newSale()).getByLabelText('Discount').value).toBe('');
-    expect(summary()).toBe('Price$1.99Tax (8.25%)$0.16Total$2.15');
+    expect(summary()).toBe('Price$1.99Sales tax 8.25%$0.16Total$2.15');
   });
 
   it('a discount that takes the whole price is not sold, and one the server refuses is said and the page read again', async () => {
@@ -213,7 +216,7 @@ describe('a sale with a discount', () => {
     fireEvent.click(takeButton());
     expect(await within(newSale()).findByText('Summer sale has reached its usage limit. Nothing was sold: pick another discount, or sell without one.')).toBeTruthy();
     await waitFor(() => expect(within(newSale()).getByText('No discount applies to this product today.')).toBeTruthy());
-    expect(summary()).toBe('Price$1.99Tax (8.25%)$0.16Total$2.15');
+    expect(summary()).toBe('Price$1.99Sales tax 8.25%$0.16Total$2.15');
   });
 
   it('a gym with no discounts is asked nothing about them', async () => {
@@ -400,7 +403,7 @@ describe('what the screen says stays true', () => {
     expect(within(newSale()).getByLabelText('Discount').value).toBe('');
     expect(within(newSale()).queryByText('TOWEL applied: 10% off.')).toBeNull();
     expect(within(newSale()).getByRole('status').textContent).toBe('Towels only does not apply to Water. No discount is on this sale.');
-    expect(summary()).toBe('Price$1.99Tax (8.25%)$0.16Total$2.15');
+    expect(summary()).toBe('Price$1.99Sales tax 8.25%$0.16Total$2.15');
     // Back on the towel it is the one on the sale again, and is said to be.
     pick('Product', 'p-towel');
     expect(within(newSale()).getByLabelText('Discount').value).toBe('d-towels');

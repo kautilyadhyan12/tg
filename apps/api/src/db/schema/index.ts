@@ -24,6 +24,7 @@ export * from "./posts.js";
 export * from "./personalTraining.js";
 export * from "./messages.js";
 export * from "./register.js";
+export * from "./tax.js";
 export * from "./goals.js";
 export * from "./dietPlans.js";
 export * from "./waiver.js";

@@ -126,7 +126,7 @@ describe("the wire", () => {
     }
   });
   it("a product has a name of one line, a price above nothing and a stock count or none", () => {
-    const good = { name: "  Water 500 ml ", priceMinor: 199, taxed: true, stock: null };
+    const good = { name: "  Water 500 ml ", priceMinor: 199, taxRateId: null, stock: null };
     expect(saveGymProductRequestSchema.parse(good).name).toBe("Water 500 ml");
     for (const bad of [
       { ...good, name: "   " },
@@ -137,6 +137,8 @@ describe("the wire", () => {
       { ...good, stock: -1 },
       { ...good, stock: 2.5 },
       { ...good, currency: "USD" },
+      { ...good, taxRateId: "GST" },
+      { ...good, taxed: true },
     ]) {
       expect(saveGymProductRequestSchema.safeParse(bad).success).toBe(false);
     }

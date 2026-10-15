@@ -71,7 +71,9 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
   const owner = randomUUID();
   await sql`INSERT INTO users (id, email, display_name) VALUES (${owner}, ${`${PREFIX}${owner}@example.com`}, 'Cost Owner')`;
   const gymId = randomUUID();
-  await sql`INSERT INTO gyms (id, slug, name, timezone, country, owner_user_id, sales_tax_bp, sales_tax_included) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', ${TZ}, 'GB', ${owner}, 2000, true)`;
+  await sql`INSERT INTO gyms (id, slug, name, timezone, country, owner_user_id, sales_tax_included) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', ${TZ}, 'GB', ${owner}, true)`;
+  const [vat] = await sql<{ id: string }[]>`INSERT INTO gym_tax_rates (gym_id, name, rate_bp) VALUES (${gymId}, 'VAT', 2000) RETURNING id`;
+  if (vat === undefined) throw new Error("no tax rate");
   await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gymId}, ${owner}, 'owner')`;
 
   const total = people * (1 + FORMER_EACH);
@@ -90,7 +92,7 @@ async function makeGym(people: number, salesADay: number): Promise<Made> {
   });
   for (let i = 0; i < entries.length; i += 1000) await sql`INSERT INTO gym_member_list_entries ${sql(entries.slice(i, i + 1000))}`;
 
-  const products = Array.from({ length: PRODUCTS }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Product ${String(i)}`, price_minor: 100 + i * 25, currency: "GBP", taxed: i % 5 !== 0, stock: i % 2 === 0 ? 100_000 : null }));
+  const products = Array.from({ length: PRODUCTS }, (_, i) => ({ id: randomUUID(), gym_id: gymId, name: `Product ${String(i)}`, price_minor: 100 + i * 25, currency: "GBP", tax_rate_id: i % 5 !== 0 ? vat.id : null, stock: i % 2 === 0 ? 100_000 : null }));
   await sql`INSERT INTO gym_products ${sql(products)}`;
   const productIds = products.map((p) => p.id);
   // As many discounts as a gym can have, half of them limited to five products.
@@ -138,7 +140,7 @@ try {
     if (found.people.length === 0) throw new Error("the search found nobody");
   };
   // Not taxed, not counted: the price is the total, and the day's count is put back after.
-  const product = (gym: Made) => sql<{ id: string; price_minor: number }[]>`SELECT id, price_minor FROM gym_products WHERE gym_id = ${gym.gymId} AND NOT taxed AND stock IS NULL LIMIT 1`;
+  const product = (gym: Made) => sql<{ id: string; price_minor: number }[]>`SELECT id, price_minor FROM gym_products WHERE gym_id = ${gym.gymId} AND tax_rate_id IS NULL AND stock IS NULL LIMIT 1`;
   const [untaxed] = await product(big);
   if (untaxed === undefined) throw new Error("no product to sell");
   // Sold with a discount of 10%, which is one more row read and one more written.

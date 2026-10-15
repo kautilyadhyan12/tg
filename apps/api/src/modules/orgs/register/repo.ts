@@ -1,5 +1,5 @@
-// The register: the only file that reads or writes a gym's products, its sales and its
-// tax (spec Part 3 §14.3; ROADMAP 18b-i). `memberList/repo.ts` moves a sale's person when
+// The register: the only file that reads or writes a gym's products and its sales (spec
+// Part 3 §14.3; ROADMAP 18b-i). Its tax rates are `taxRepo.ts`'s (18b-iii). `memberList/repo.ts` moves a sale's person when
 // two records are joined. A gym's discounts are `discountsRepo.ts`'s; a sale made with one
 // counts its use here, in the sale's own transaction.
 //
@@ -16,19 +16,20 @@ import {
   memberCurrencyForCountry,
   memberPaymentByHandSchema,
   saleAmounts,
-  taxIncludedForCountry,
   type DiscountRefusal,
+  type SalesTax,
   type MemberPaymentByHand,
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { lockedDiscount, returnUse, takeUse } from "./discountsRepo.js";
+import { rateOf, readRates, taxIncludedOf } from "./taxRepo.js";
 
 export interface ProductRow {
   id: string;
   name: string;
   priceMinor: number;
   currency: string;
-  taxed: boolean;
+  taxRateId: string | null;
   stock: number | null;
   archivedAt: Date | null;
   updatedAt: Date;
@@ -39,7 +40,7 @@ interface RawProduct {
   name: string;
   price_minor: number;
   currency: string;
-  taxed: boolean;
+  tax_rate_id: string | null;
   stock: number | null;
   archived_at: Date | null;
   updated_at: Date;
@@ -50,7 +51,7 @@ const product = (r: RawProduct): ProductRow => ({
   name: r.name,
   priceMinor: r.price_minor,
   currency: r.currency,
-  taxed: r.taxed,
+  taxRateId: r.tax_rate_id,
   stock: r.stock,
   archivedAt: r.archived_at,
   updatedAt: r.updated_at,
@@ -65,6 +66,7 @@ export interface SaleRow {
   taxMinor: number;
   totalMinor: number;
   taxBp: number;
+  taxName: string | null;
   taxIncluded: boolean;
   discountName: string | null;
   discountMinor: number;
@@ -86,6 +88,7 @@ interface RawSale {
   tax_minor: number;
   total_minor: number;
   tax_bp: number;
+  tax_name: string | null;
   tax_included: boolean;
   discount_name: string | null;
   discount_minor: number;
@@ -111,6 +114,7 @@ const sale = (r: RawSale): SaleRow => ({
   taxMinor: r.tax_minor,
   totalMinor: r.total_minor,
   taxBp: r.tax_bp,
+  taxName: r.tax_name,
   taxIncluded: r.tax_included,
   discountName: r.discount_name,
   discountMinor: r.discount_minor,
@@ -126,18 +130,13 @@ const sale = (r: RawSale): SaleRow => ({
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
-  s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_included,
+  s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
   s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
   e.full_name AS person_name, s.undone_at IS NOT NULL AS undone`;
 
-export interface GymTax {
-  bp: number;
-  included: boolean;
-}
-
 export interface RegisterRow {
   country: string | null;
-  tax: GymTax;
+  tax: SalesTax;
   products: ProductRow[];
   archived: ProductRow[];
   archivedTotal: number;
@@ -147,24 +146,20 @@ export interface RegisterRow {
   totals: { currency: string; count: number; totalMinor: number; taxMinor: number; discountMinor: number; cash: number; card_at_desk: number; bank_transfer: number }[];
 }
 
-const taxOf = (gym: { country: string | null; sales_tax_bp: number; sales_tax_included: boolean | null }): GymTax => ({
-  bp: gym.sales_tax_bp,
-  included: gym.sales_tax_included ?? taxIncludedForCountry(gym.country),
-});
-
 /** The Sell page in one go, or null where the gym does not exist: what is on sale (bounded
  *  by the cap the writes hold), a page of what was archived, and the day's sales. A sale
  *  names who bought it, so the day's sales are read only `withSales`. */
 export async function readRegister(sql: Sql, gymId: string, today: string, salesShown: number, withSales: boolean): Promise<RegisterRow | null> {
   const readProducts = (archived: boolean, limit: number) => sql<RawProduct[]>`
-    SELECT id, name, price_minor, currency, taxed, stock, archived_at, updated_at
+    SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at
     FROM gym_products
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
     LIMIT ${limit}`;
-  const [gymRows, live, archived, archivedTotal, sales, totals] = await Promise.all([
-    sql<{ country: string | null; sales_tax_bp: number; sales_tax_included: boolean | null }[]>`
-      SELECT country, sales_tax_bp, sales_tax_included FROM gyms WHERE id = ${gymId}`,
+  const [gymRows, included, rates, live, archived, archivedTotal, sales, totals] = await Promise.all([
+    sql<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${gymId}`,
+    taxIncludedOf(sql, gymId),
+    readRates(sql, gymId, today),
     readProducts(false, PRODUCTS_MAX),
     readProducts(true, PRODUCT_ARCHIVED_PAGE),
     sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_products WHERE gym_id = ${gymId} AND archived_at IS NOT NULL`,
@@ -193,10 +188,10 @@ export async function readRegister(sql: Sql, gymId: string, today: string, sales
       GROUP BY currency`,
   ]);
   const gym = gymRows[0];
-  if (gym === undefined) return null;
+  if (gym === undefined || included === null) return null;
   return {
     country: gym.country,
-    tax: taxOf(gym),
+    tax: { included, rates },
     products: live.map(product),
     archived: archived.map(product),
     archivedTotal: archivedTotal[0]?.n ?? 0,
@@ -220,7 +215,7 @@ export async function readRegister(sql: Sql, gymId: string, today: string, sales
 export interface ProductInput {
   name: string;
   priceMinor: number;
-  taxed: boolean;
+  taxRateId: string | null;
   stock: number | null;
 }
 
@@ -232,7 +227,9 @@ export type ProductWriteOutcome =
   /** The product was changed, or one was sold, after the form that sent this read it. */
   | { kind: "changed" }
   /** The gym's country has no money to price in. */
-  | { kind: "no_currency" };
+  | { kind: "no_currency" }
+  /** The tax rate named is not one of this gym's. */
+  | { kind: "rate_not_found" };
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -258,9 +255,10 @@ export async function createProduct(sql: Sql, input: ProductInput & { gymId: str
     if (currency === null) return { kind: "no_currency" };
     if ((await liveCount(tx, input.gymId)) >= PRODUCTS_MAX) return { kind: "too_many", cap: PRODUCTS_MAX };
     if (await nameTaken(tx, input.gymId, input.name, null)) return { kind: "name_taken" };
+    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
     const [created] = await tx<{ id: string }[]>`
-      INSERT INTO gym_products (gym_id, name, price_minor, currency, taxed, stock)
-      VALUES (${input.gymId}, ${input.name}, ${input.priceMinor}, ${currency}, ${input.taxed}, ${input.stock})
+      INSERT INTO gym_products (gym_id, name, price_minor, currency, tax_rate_id, stock)
+      VALUES (${input.gymId}, ${input.name}, ${input.priceMinor}, ${currency}, ${input.taxRateId}, ${input.stock})
       RETURNING id`;
     if (created === undefined) throw new Error("product insert returned no row");
     await insertAudit(tx, {
@@ -290,6 +288,7 @@ export async function updateProduct(
     // To the millisecond, which is what the list sends and a form can send back.
     if (before.updated_at.getTime() !== input.readAt.getTime()) return { kind: "changed" };
     if (await nameTaken(tx, input.gymId, input.name, input.productId)) return { kind: "name_taken" };
+    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
     // The price typed is in the gym's money as it is now: a product made before the gym
     // changed its country takes the new one with its new price.
     const [gym] = await tx<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${input.gymId}`;
@@ -297,7 +296,7 @@ export async function updateProduct(
     if (currency === null) return { kind: "no_currency" };
     await tx`
       UPDATE gym_products
-      SET name = ${input.name}, price_minor = ${input.priceMinor}, currency = ${currency}, taxed = ${input.taxed}, stock = ${input.stock}, updated_at = ${input.now}
+      SET name = ${input.name}, price_minor = ${input.priceMinor}, currency = ${currency}, tax_rate_id = ${input.taxRateId}, stock = ${input.stock}, updated_at = ${input.now}
       WHERE id = ${input.productId} AND gym_id = ${input.gymId}`;
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -366,28 +365,6 @@ export async function restoreProduct(sql: Sql, input: { gymId: string; productId
   });
 }
 
-// ── Tax ─────────────────────────────────────────────────────────────────────
-
-export async function saveTax(sql: Sql, input: { gymId: string; tax: GymTax; actorUserId: string }): Promise<void> {
-  await sql.begin(async (tx) => {
-    await lockOrgRow(tx, input.gymId);
-    const [before] = await tx<{ country: string | null; sales_tax_bp: number; sales_tax_included: boolean | null }[]>`
-      SELECT country, sales_tax_bp, sales_tax_included FROM gyms WHERE id = ${input.gymId}`;
-    if (before === undefined) return;
-    const was = taxOf(before);
-    if (was.bp === input.tax.bp && was.included === input.tax.included) return;
-    await tx`UPDATE gyms SET sales_tax_bp = ${input.tax.bp}, sales_tax_included = ${input.tax.included} WHERE id = ${input.gymId}`;
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.sales_tax_changed",
-      targetType: "gym",
-      targetId: input.gymId,
-      meta: { bpBefore: String(was.bp), bpAfter: String(input.tax.bp), includedBefore: String(was.included), includedAfter: String(input.tax.included) },
-    });
-  });
-}
-
 // ── A sale ──────────────────────────────────────────────────────────────────
 
 export type SellOutcome =
@@ -450,11 +427,11 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       return same ? { kind: "ok", saleId: again.id } : { kind: "request_reused" };
     }
 
-    const [gym] = await tx<{ country: string | null; sales_tax_bp: number; sales_tax_included: boolean | null }[]>`
-      SELECT country, sales_tax_bp, sales_tax_included FROM gyms WHERE id = ${input.gymId}`;
-    if (gym === undefined) return { kind: "product_not_found" };
+    const [gym] = await tx<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${input.gymId}`;
+    const included = await taxIncludedOf(tx, input.gymId);
+    if (gym === undefined || included === null) return { kind: "product_not_found" };
     const [item] = await tx<RawProduct[]>`
-      SELECT id, name, price_minor, currency, taxed, stock, archived_at, updated_at FROM gym_products
+      SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at FROM gym_products
       WHERE gym_id = ${input.gymId} AND id = ${input.productId} AND archived_at IS NULL`;
     if (item === undefined) return { kind: "product_not_found" };
 
@@ -481,13 +458,14 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       if (used.offMinor === 0) return { kind: "discount_nothing_off", name: found.name };
     }
 
-    const tax = taxOf(gym);
+    // The product's rate as it is now, read under the gym's lock that its changes take.
+    const rate = item.tax_rate_id === null ? null : await rateOf(tx, input.gymId, item.tax_rate_id);
     const amounts = saleAmounts({
       unitPriceMinor: item.price_minor,
       quantity: input.quantity,
-      taxed: item.taxed,
-      taxBp: tax.bp,
-      taxIncluded: tax.included,
+      taxed: rate !== null,
+      taxBp: rate?.bp ?? 0,
+      taxIncluded: included,
       discountMinor: used?.offMinor ?? 0,
     });
     if (!amounts.ok && amounts.reason === "nothing_to_pay") return { kind: "nothing_to_pay" };
@@ -496,14 +474,13 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
     // The last check before anything is written: the count moves only if the limit allows.
     if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
 
-    const taxBp = item.taxed ? tax.bp : 0;
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_sales
         (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-         tax_bp, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
+         tax_bp, tax_name, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
          discount_id, discount_name, discount_minor)
       VALUES (${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
-              ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${taxBp}, ${tax.included}, ${item.currency},
+              ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${rate?.bp ?? 0}, ${rate?.name ?? null}, ${included}, ${item.currency},
               ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
               ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0})
       RETURNING id`;

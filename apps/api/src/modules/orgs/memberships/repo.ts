@@ -8,6 +8,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { MEMBERSHIP_ARCHIVED_PAGE, MEMBERSHIP_TYPES_MAX, memberCurrencyForCountry } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
+import { rateOf, readRates, taxIncludedOf } from "../register/taxRepo.js";
 
 export interface MembershipTypeRow {
   id: string;
@@ -28,6 +29,7 @@ export interface MembershipTypeRow {
   includesPt: boolean;
   ptLimit: number | null;
   ptPeriod: string | null;
+  taxRateId: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -38,6 +40,9 @@ export interface PriceListRow {
   archived: MembershipTypeRow[];
   archivedTotal: number;
   classChoices: { id: string; name: string }[];
+  /** The gym's tax rates, for a type's "Tax" (18b-iii), and whether its prices hold the tax. */
+  taxRates: { id: string; name: string; bp: number }[];
+  taxIncluded: boolean;
 }
 
 interface RawType {
@@ -58,6 +63,7 @@ interface RawType {
   includes_pt: boolean;
   pt_limit: number | null;
   pt_period: string | null;
+  tax_rate_id: string | null;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -69,13 +75,13 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, includes_pt, pt_limit, pt_period, archived_at, updated_at
+           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
     LIMIT ${limit}`;
 
-  const [gymRows, live, archived, totals, covered, classChoices] = await Promise.all([
+  const [gymRows, live, archived, totals, covered, classChoices, rates, taxIncluded] = await Promise.all([
     sql<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${gymId}`,
     readTypes(false, MEMBERSHIP_TYPES_MAX),
     readTypes(true, MEMBERSHIP_ARCHIVED_PAGE),
@@ -92,9 +98,11 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
       SELECT id, name FROM gym_class_types
       WHERE gym_id = ${gymId} AND archived_at IS NULL
       ORDER BY lower(name), id`,
+    readRates(sql, gymId, null),
+    taxIncludedOf(sql, gymId),
   ]);
   const gym = gymRows[0];
-  if (gym === undefined) return null;
+  if (gym === undefined || taxIncluded === null) return null;
 
   const coveredByType = new Map<string, { id: string; name: string }[]>();
   for (const row of covered) {
@@ -120,6 +128,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     includesPt: r.includes_pt,
     ptLimit: r.pt_limit,
     ptPeriod: r.pt_period,
+    taxRateId: r.tax_rate_id,
     archivedAt: r.archived_at,
     updatedAt: r.updated_at,
   });
@@ -129,6 +138,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     archived: archived.map(shape),
     archivedTotal: totals[0]?.n ?? 0,
     classChoices: classChoices.map((c) => ({ id: c.id, name: c.name })),
+    taxRates: rates.map((r) => ({ id: r.id, name: r.name, bp: r.bp })),
+    taxIncluded,
   };
 }
 
@@ -150,6 +161,8 @@ export interface MembershipTypeInput {
   /** How many personal training sessions a week or a month; both null: no limit. */
   ptLimit: number | null;
   ptPeriod: string | null;
+  /** The gym's tax rate its bills charge; null for none. */
+  taxRateId: string | null;
 }
 
 export type MembershipWriteOutcome =
@@ -164,7 +177,9 @@ export type MembershipWriteOutcome =
   /** The type was changed after the form that sent this update read it. */
   | { kind: "changed" }
   /** The gym's country has no money to price in. */
-  | { kind: "no_currency" };
+  | { kind: "no_currency" }
+  /** The tax rate named is not one of this gym's. */
+  | { kind: "rate_not_found" };
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -233,16 +248,17 @@ export async function createMembershipType(
     if (!(await classesAreThisGyms(tx, input.gymId, input.classTypeIds))) {
       return { kind: "class_not_in_gym" };
     }
+    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
 
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_membership_types
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
          pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt,
-         pt_limit, pt_period)
+         pt_limit, pt_period, tax_rate_id)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
               ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
-              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod})
+              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId})
       RETURNING id`;
     if (created === undefined) throw new Error("membership type insert returned no row");
     await writeCoveredClasses(tx, input.gymId, created.id, input.classTypeIds);
@@ -291,6 +307,7 @@ export async function updateMembershipType(
     if (!(await classesAreThisGyms(tx, input.gymId, input.classTypeIds))) {
       return { kind: "class_not_in_gym" };
     }
+    if (input.taxRateId !== null && (await rateOf(tx, input.gymId, input.taxRateId)) === null) return { kind: "rate_not_found" };
 
     await tx`
       UPDATE gym_membership_types
@@ -301,7 +318,7 @@ export async function updateMembershipType(
           bookings_period = ${input.bookingsPeriod},
           covers_all_classes = ${input.classTypeIds === null}, includes_pt = ${input.includesPt},
           pt_limit = ${input.ptLimit}, pt_period = ${input.ptPeriod},
-          updated_at = ${input.now}
+          tax_rate_id = ${input.taxRateId}, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);
 

@@ -22,9 +22,9 @@ import {
 } from './sellDiscountsView';
 import { purchaseLine, saleProblem, saleSummary, soldWords, takingsNotes, takingsRows } from './sellView';
 
-const WATER = { id: '11111111-1111-4111-8111-111111111111', name: 'Water', priceMinor: 199, currency: 'USD', taxed: true, stock: null };
-const TOWEL = { id: '22222222-2222-4222-8222-222222222222', name: 'Towel', priceMinor: 500, currency: 'USD', taxed: true, stock: null };
-const MAT = { id: '33333333-3333-4333-8333-333333333333', name: 'Mat', priceMinor: 900, currency: 'USD', taxed: true, stock: null };
+const WATER = { id: '11111111-1111-4111-8111-111111111111', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null };
+const TOWEL = { id: '22222222-2222-4222-8222-222222222222', name: 'Towel', priceMinor: 500, currency: 'USD', taxRateId: 'r1', stock: null };
+const MAT = { id: '33333333-3333-4333-8333-333333333333', name: 'Mat', priceMinor: 900, currency: 'USD', taxRateId: 'r1', stock: null };
 const discount = (over = {}) => ({
   id: 'd-summer',
   name: 'Summer sale',
@@ -49,7 +49,7 @@ const discount = (over = {}) => ({
   ...over,
 });
 const FIVE = discount({ id: 'd-five', name: 'Five off', code: null, kind: 'amount', percentBp: null, amountMinor: 500, currency: 'USD' });
-const TAX = { bp: 825, included: false };
+const TAX = { included: false, rates: [{ id: 'r1', name: 'Sales tax', bp: 825, products: 1, membershipTypes: 0, memberships: 0 }] };
 const page = (discounts) => ({ today: '2026-10-13', currency: 'USD', products: [WATER, TOWEL, MAT], discounts });
 
 describe('how a discount reads', () => {
@@ -198,20 +198,20 @@ describe('what a sale with a discount shows', () => {
     expect(summary.lines).toEqual([
       { label: 'Price', value: '$3.98' },
       { label: 'Discount (Summer sale)', value: '-$0.80' },
-      { label: 'Tax (8.25%)', value: '$0.26' },
+      { label: 'Sales tax 8.25%', value: '$0.26' },
       { label: 'Total', value: '$3.44', strong: true },
     ]);
     expect(summary.totalMinor).toBe(344);
   });
 
   it('tax in the price, and no tax', () => {
-    expect(saleSummary({ ...TOWEL, priceMinor: 1000, currency: 'GBP' }, 1, { bp: 2000, included: true }, { ...FIVE, amountMinor: 200, currency: 'GBP' }).lines).toEqual([
+    expect(saleSummary({ ...TOWEL, priceMinor: 1000, currency: 'GBP' }, 1, { included: true, rates: [{ id: 'r1', name: 'VAT', bp: 2000, products: 1, membershipTypes: 0, memberships: 0 }] }, { ...FIVE, amountMinor: 200, currency: 'GBP' }).lines).toEqual([
       { label: 'Price', value: '£10.00' },
       { label: 'Discount (Five off)', value: '-£2.00' },
       { label: 'Total', value: '£8.00', strong: true },
-      { label: 'Includes tax (20%)', value: '£1.33' },
+      { label: 'Includes VAT 20%', value: '£1.33' },
     ]);
-    expect(saleSummary({ ...WATER, taxed: false }, 1, TAX, discount()).lines).toEqual([
+    expect(saleSummary({ ...WATER, taxRateId: null }, 1, TAX, discount()).lines).toEqual([
       { label: 'Price', value: '$1.99' },
       { label: 'Discount (Summer sale)', value: '-$0.40' },
       { label: 'Total', value: '$1.59', strong: true },
@@ -219,9 +219,9 @@ describe('what a sale with a discount shows', () => {
   });
 
   it('without a discount it is as it was', () => {
-    expect(saleSummary(WATER, 2, TAX).lines.map((l) => l.label)).toEqual(['Price', 'Tax (8.25%)', 'Total']);
+    expect(saleSummary(WATER, 2, TAX).lines.map((l) => l.label)).toEqual(['Price', 'Sales tax 8.25%', 'Total']);
     expect(saleSummary(WATER, 2, TAX, null).totalMinor).toBe(431);
-    expect(saleSummary({ ...WATER, taxed: false }, 1, TAX).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
+    expect(saleSummary({ ...WATER, taxRateId: null }, 1, TAX).lines).toEqual([{ label: 'Total', value: '$1.99', strong: true }]);
   });
 
   it('a discount that takes the whole price cannot be sold, and the form says why', () => {
@@ -237,7 +237,7 @@ describe('what a sale with a discount shows', () => {
     expect(saleProblem(base)).toBeNull();
   });
 
-  const sold = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true };
+  const sold = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true };
   const plain = { ...sold, id: 's2', discountName: null, discountMinor: 0, netMinor: 398, taxMinor: 33, totalMinor: 431 };
 
   it('says the discount where the sale is said: in the box, in the day and on the person', () => {
@@ -246,8 +246,8 @@ describe('what a sale with a discount shows', () => {
     const rows = takingsRows({ sales: [sold, plain], payments: [] }, 'America/Chicago', '12h');
     expect(rows.find((r) => r.key === 'sale-s1').facts).toContain('Cash · Summer sale: $0.80 off · ');
     expect(rows.find((r) => r.key === 'sale-s2').facts).not.toContain('off');
-    expect(purchaseLine(sold).facts).toBe('13 Oct 2026 · Cash · Summer sale: $0.80 off · $0.26 tax');
-    expect(purchaseLine(plain).facts).toBe('13 Oct 2026 · Cash · $0.33 tax');
+    expect(purchaseLine(sold).facts).toBe('13 Oct 2026 · Cash · Summer sale: $0.80 off · $0.26 Sales tax');
+    expect(purchaseLine(plain).facts).toBe('13 Oct 2026 · Cash · $0.33 Sales tax');
   });
 
   it('the day says what discounts took off, only where they took something', () => {

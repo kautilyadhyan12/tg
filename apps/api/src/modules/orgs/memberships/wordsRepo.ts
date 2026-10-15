@@ -16,7 +16,8 @@ import {
 } from "@app/shared";
 import { insertAudit } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
-import { LAST_DAY, inUseByRule, liveTypes, typeChoice } from "./heldRepo.js";
+import { LAST_DAY, inUseByRule, liveTypes, typeChoice, typeTaxRateId } from "./heldRepo.js";
+import { taxIncludedOf } from "../register/taxRepo.js";
 import { linkDigest, placePeople, type PlacedPerson, type WordPerson } from "./words.js";
 
 export interface WordRow {
@@ -342,6 +343,7 @@ export async function linkWord(
     const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
     if (rawType === undefined) return { kind: "type_not_found" };
     const { type, updatedAt } = typeNow(rawType);
+    const taxRateId = typeTaxRateId(rawType);
 
     // The records are held, then read: a join of two records or a delete waits.
     const ids = await tx<{ id: string }[]>`
@@ -379,12 +381,15 @@ export async function linkWord(
         INSERT INTO gym_held_memberships
           (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
            term_count, term_unit, pack_classes, pack_days, starts_on, frozen_days, status,
-           paid_periods, paid_floor, renews, classes_left, from_list)
+           paid_periods, paid_floor, renews, classes_left, from_list, tax_rate_id, tax_included)
         SELECT ${input.gymId}, r.entry_id, ${input.typeId}, gen_random_uuid(), ${type.kind},
                ${type.priceMinor}, ${type.currency}, ${type.termCount}::int, ${type.termUnit}::text,
                ${type.packClasses}::int, ${type.packDays}::int, r.starts_on, r.frozen_days, 'active',
                r.paid_periods, r.paid_floor, ${type.kind === "recurring"},
-               ${type.kind === "pack" ? type.packClasses : null}::int, r.from_list
+               ${type.kind === "pack" ? type.packClasses : null}::int, r.from_list,
+               -- Each keeps the tax rate the type charges now, and how the gym charges it, as a
+               -- membership given by hand does.
+               ${taxRateId}::uuid, ${taxRateId === null ? null : await taxIncludedOf(tx, input.gymId)}::boolean
         FROM jsonb_to_recordset(${tx.json(rows)})
           AS r(entry_id uuid, starts_on date, frozen_days int, paid_periods int, paid_floor int,
                from_list boolean)

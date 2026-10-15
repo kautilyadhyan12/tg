@@ -111,7 +111,14 @@ export const memberBillSchema = z
     id: z.string().uuid(),
     periodIndex: z.number().int().min(0),
     covers: z.object({ from: daySchema, to: daySchema }).strict().nullable(),
+    /** What the person pays for it, its tax in. */
     amountMinor: minorSchema,
+    /** The tax in `amountMinor` (18b-iii), as the bill was opened: the rate's name and
+     *  percentage then, whether the price held it, and how much it is. Null for none. */
+    tax: z
+      .object({ name: z.string(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
+      .strict()
+      .nullable(),
     paidMinor: minorSchema,
     dueOn: daySchema,
     state: memberBillStateSchema,

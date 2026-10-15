@@ -37,6 +37,9 @@ export const MEMBERSHIP_ARCHIVED_PAGE = 200;
 export const MEMBERSHIP_NAME_MAX = 80;
 /** 999,999.99 in a two-decimal currency; inside a Postgres integer. */
 export const MEMBERSHIP_PRICE_MINOR_MAX = 99_999_999;
+/** The highest price of a taxed membership type (18b-iii): at the highest tax rate, 30%,
+ *  added on top, its bill still fits under a bill's cap. 76,923,076 bills 99,999,999. */
+export const TAXED_PRICE_MINOR_MAX = 76_923_076;
 export const MEMBERSHIP_TERM_COUNT_MAX = 365;
 export const MEMBERSHIP_PACK_CLASSES_MAX = 500;
 export const MEMBERSHIP_PACK_DAYS_MAX = 730;
@@ -109,6 +112,8 @@ export const gymMembershipTypeSchema = z
     includesPt: z.boolean(),
     ptLimit: ptLimitSchema.nullable(),
     ptPeriod: membershipLimitPeriodSchema.nullable(),
+    /** The gym's tax rate its bills charge (18b-iii); null for no tax. */
+    taxRateId: z.string().uuid().nullable(),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -127,6 +132,9 @@ export const gymMembershipTypesResponseSchema = z
     archived: z.array(gymMembershipTypeSchema),
     archivedTotal: z.number().int().min(0),
     classChoices: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1).max(80) }).strict()),
+    /** The gym's tax rates, for "Tax" (18b-iii), and whether its prices hold the tax. */
+    taxRates: z.array(z.object({ id: z.string().uuid(), name: z.string(), bp: z.number().int().min(1).max(3000) }).strict()),
+    taxIncluded: z.boolean(),
   })
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;
@@ -150,6 +158,8 @@ const membershipTypeFields = {
   /** Left out of a NEW type is "no limit"; a change must say both (below). */
   ptLimit: ptLimitSchema.nullable().default(null),
   ptPeriod: membershipLimitPeriodSchema.nullable().default(null),
+  /** Left out of a NEW type is "no tax"; a change must say it (below). */
+  taxRateId: z.string().uuid().nullable().default(null),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -183,6 +193,9 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.classTypeIds !== null && new Set(value.classTypeIds).size !== value.classTypeIds.length) {
     wrong("classTypeIds");
   }
+  if (value.taxRateId !== null && value.priceMinor > TAXED_PRICE_MINOR_MAX) wrong("priceMinor");
+  // A free type opens no bill: it charges no tax.
+  if (value.taxRateId !== null && value.priceMinor === 0) wrong("taxRateId");
 }
 
 /** What a gym types. Every field every time: an update replaces, it never merges,
@@ -200,6 +213,7 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     includesPt: z.boolean(),
     ptLimit: ptLimitSchema.nullable(),
     ptPeriod: membershipLimitPeriodSchema.nullable(),
+    taxRateId: z.string().uuid().nullable(),
   })
   .strict()
   .superRefine(refineMembershipType);

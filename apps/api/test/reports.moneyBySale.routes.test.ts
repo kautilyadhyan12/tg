@@ -123,7 +123,7 @@ d("Reports, money by product and by staff: whose sales, who reads them (real Pos
   };
 
   const addProduct = async (gymId: string, owner: User, name: string, priceMinor: number): Promise<string> => {
-    const res = await post(`/v1/orgs/${gymId}/register/products`, { name, priceMinor, taxed: false, stock: null }, owner.cookies);
+    const res = await post(`/v1/orgs/${gymId}/register/products`, { name, priceMinor, taxRateId: null, stock: null }, owner.cookies);
     expect(res.statusCode, res.body).toBe(201);
     const found = (JSON.parse(res.body) as SellPageResponse).products.find((p) => p.name === name);
     if (found === undefined) throw new Error(`no product named ${name}`);

@@ -12,6 +12,7 @@
 // caller's: it is the gym's country's own, read here when a type is made.
 import type { Sql } from "postgres";
 import {
+  REGISTER_WORDS,
   gymMembershipTypesResponseSchema,
   memberCurrencyForCountry,
   type GymMembershipTypesResponse,
@@ -43,6 +44,8 @@ function toResponse(row: repo.PriceListRow): GymMembershipTypesResponse {
     archived: row.archived.map(shape),
     archivedTotal: row.archivedTotal,
     classChoices: row.classChoices,
+    taxRates: row.taxRates,
+    taxIncluded: row.taxIncluded,
   });
 }
 
@@ -90,6 +93,8 @@ function throwOnFailure(outcome: repo.MembershipWriteOutcome): void {
         "no_member_currency",
         "Set your country before adding a membership type.",
       );
+    case "rate_not_found":
+      throw new OrgsError(409, "tax_rate_not_found", REGISTER_WORDS.rate_not_found);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled membership write outcome: ${JSON.stringify(never)}`);
@@ -116,6 +121,7 @@ function typeInput(req: SaveGymMembershipTypeRequest): repo.MembershipTypeInput 
     includesPt: req.includesPt,
     ptLimit: req.ptLimit,
     ptPeriod: req.ptPeriod,
+    taxRateId: req.taxRateId,
   };
 }
 

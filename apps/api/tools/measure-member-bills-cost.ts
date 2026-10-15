@@ -68,6 +68,10 @@ async function seedGym(people: number): Promise<Gym> {
   await sql`
     INSERT INTO gym_membership_types (id, gym_id, name, kind, price_minor, currency, term_count, term_unit, access)
     VALUES (${typeId}, ${id}, 'Gold Monthly', 'recurring', 4999, 'GBP', 1, 'month', 'all_classes')`;
+  // Every membership taxed (18b-iii): every bill opened works its tax out.
+  const rateId = randomUUID();
+  await sql`INSERT INTO gym_tax_rates (id, gym_id, name, rate_bp) VALUES (${rateId}, ${id}, 'VAT', 2000)`;
+  await sql`UPDATE gym_membership_types SET tax_rate_id = ${rateId} WHERE id = ${typeId}`;
   const records = Array.from({ length: people }, (_, i) => {
     const entry = randomUUID();
     return {
@@ -83,8 +87,8 @@ async function seedGym(people: number): Promise<Gym> {
   // Given 40 days ago and never paid: the first month and the one that began since are owed.
   await sql`
     INSERT INTO gym_held_memberships
-      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews)
-    SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', current_date - 40, 'active', 0, true
+      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews, tax_rate_id)
+    SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', current_date - 40, 'active', 0, true, ${rateId}
     FROM gym_member_list_entries e WHERE e.gym_id = ${id}`;
   const first = records[0]?.id ?? "";
   const [m] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${id} AND entry_id = ${first}`;
