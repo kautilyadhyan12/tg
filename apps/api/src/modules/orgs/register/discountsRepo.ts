@@ -129,6 +129,18 @@ export async function membershipDiscounts(sql: Sql, gymId: string): Promise<Disc
   return rows.map(discount);
 }
 
+/** The discounts Refer a friend can give (20e-ii-a): the gym's ones in use with a promo
+ *  code, and any named in `picked` whatever they are now (one archived since it was
+ *  picked). Bounded by the cap the writes hold, plus the two picked. */
+export async function referralDiscounts(sql: Sql | TransactionSql, gymId: string, picked: readonly string[]): Promise<DiscountRow[]> {
+  const rows = await sql<RawDiscount[]>`
+    SELECT ${columns(sql)} FROM gym_discounts d
+    WHERE d.gym_id = ${gymId}
+      AND ((d.archived_at IS NULL AND d.code IS NOT NULL) OR d.id = ANY(${[...picked]}::uuid[]))
+    ORDER BY lower(d.name), d.id LIMIT ${DISCOUNTS_MAX + 2}`;
+  return rows.map(discount);
+}
+
 /** The gym's membership types on its price list, by name; a gym has at most 60. */
 export async function membershipTypeNames(sql: Sql, gymId: string): Promise<{ id: string; name: string; taxRateId: string | null; free: boolean }[]> {
   return await sql<{ id: string; name: string; taxRateId: string | null; free: boolean }[]>`
