@@ -65,9 +65,10 @@ export function workerChoices(workers) {
   };
 }
 
-/** Only the owner runs the gym: the list says how to add staff. */
+/** Only the owner has ever run the gym: the list says how to add staff. A gym whose staff
+ *  have all left is not told it has none yet. */
 export function noStaffYet(workers) {
-  return workers.filter((w) => w.current).length <= 1;
+  return workers.length <= 1;
 }
 
 /** What an empty list says, and whether it offers to clear the filters. */

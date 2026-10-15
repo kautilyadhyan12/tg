@@ -37,11 +37,12 @@ describe('staff activity view', () => {
     expect(groupByDay(lines, TODAY, '12h')[0].lines[0].time).toBe('12:00 AM');
   });
 
-  it('puts former staff after the staff today, and knows when only the owner runs the gym', () => {
+  it('puts former staff after the staff today, and knows when only the owner has ever run the gym', () => {
     const owner = { userId: 'a', name: 'Owner', current: true };
     const former = { userId: 'b', name: 'Gone', current: false };
     expect(workerChoices([owner, former])).toEqual({ current: [owner], former: [former] });
-    expect(noStaffYet([owner, former])).toBe(true);
+    expect(noStaffYet([owner])).toBe(true);
+    expect(noStaffYet([owner, former])).toBe(false);
     expect(noStaffYet([owner, { ...former, current: true }])).toBe(false);
   });
 
