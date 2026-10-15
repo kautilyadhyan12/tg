@@ -12,6 +12,7 @@ import {
   gymInboxResponseSchema,
   gymMessageSwitchResponseSchema,
   markGymInboxReadResponseSchema,
+  reviewLinkSchema,
   type GymContact,
   type GymGroupMessagesSwitchRequest,
   type GymGroupMessagesSwitchResponse,
@@ -51,6 +52,15 @@ async function forMember(deps: MessagesDeps, gymId: string, userId: string): Pro
   return { name: gate.name, now, paused: !(gate.open && gate.live), contact: { phone: gate.contactPhone, email: gate.contactEmail } };
 }
 
+/** A message's link as the inbox reply carries it: one the rule does not take is no link,
+ *  so a row the database's looser check let in costs that message its button, never the
+ *  member's whole inbox. */
+function shownLink(link: string | null): string | null {
+  if (link === null) return null;
+  const parsed = reviewLinkSchema.safeParse(link);
+  return parsed.success ? parsed.data : null;
+}
+
 /** The member's inbox from this gym, newest first. Reading it marks nothing. */
 export async function getInbox(deps: MessagesDeps, userId: string, gymId: string, limit: Limit): Promise<GymInboxResponse | null> {
   const reader = await forMember(deps, gymId, userId);
@@ -67,7 +77,7 @@ export async function getInbox(deps: MessagesDeps, userId: string, gymId: string
     ...head,
     status: "shown",
     contact: reader.contact,
-    messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, sentAt: row.sentAt.toISOString(), read: row.read })),
+    messages: rows.map((row) => ({ id: row.id, kind: row.kind, body: row.body, link: shownLink(row.link), sentAt: row.sentAt.toISOString(), read: row.read })),
     unread,
     groupMessages: !off,
     off: kindsOff,

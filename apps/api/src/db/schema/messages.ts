@@ -4,7 +4,9 @@
 // About the person: deleted with their account (`DIRECT_DELETE_TABLES`) and exported.
 // `gym_group_messages` and `gym_member_messages_off` mirror `0092_group_messages.sql`;
 // `gym_message_settings` mirrors `0095_gym_message_settings.sql`. `0096_class_reminder.sql`
-// adds the `class_reminder` kind to each list and `hours` to a gym's settings.
+// adds the `class_reminder` kind to each list and `hours` to a gym's settings;
+// `0113_review_message.sql` the `review` kind, `visits` and `link` to a gym's settings, and
+// `link` to a message.
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
@@ -25,6 +27,8 @@ export const gymMemberMessages = pgTable(
     occasion: text("occasion").notNull(),
     /** The words as sent. */
     body: text("body").notNull(),
+    /** Where its button goes: the gym's review link, as it was when sent. */
+    link: text("link"),
     /** The gym's own date it was sent on. */
     gymDay: date("gym_day").notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
@@ -37,11 +41,15 @@ export const gymMemberMessages = pgTable(
     index("gym_member_messages_inbox_idx").on(t.userId, t.gymId, t.sentAt.desc()),
     check(
       "gym_member_messages_kind_check",
-      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','class_reminder','group')`,
+      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder','group')`,
     ),
     check("gym_member_messages_occasion_check", sql`length(${t.occasion}) BETWEEN 1 AND 80`),
     check("gym_member_messages_body_check", sql`length(${t.body}) BETWEEN 1 AND 500`),
     check("gym_member_messages_expires_check", sql`${t.expiresAt} > ${t.sentAt}`),
+    check(
+      "gym_member_messages_link_check",
+      sql`${t.link} IS NULL OR (${t.kind} = 'review' AND length(${t.link}) BETWEEN 9 AND 500 AND ${t.link} LIKE 'https://%')`,
+    ),
   ],
 );
 
@@ -92,7 +100,7 @@ export const gymMemberMessagesOff = pgTable(
     primaryKey({ name: "gym_member_messages_off_pk", columns: [t.gymId, t.userId, t.kind] }),
     check(
       "gym_member_messages_off_kind_check",
-      sql`${t.kind} IN ('membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','class_reminder','group')`,
+      sql`${t.kind} IN ('membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder','group')`,
     ),
   ],
 );
@@ -122,17 +130,25 @@ export const gymMessageSettings = pgTable(
     milestones: integer("milestones").array(),
     /** The class reminder's number: hours before the start. */
     hours: integer("hours"),
+    /** Ask for a review: the visits before it asks, and the gym's review link. */
+    visits: integer("visits"),
+    link: text("link"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ name: "gym_message_settings_pk", columns: [t.gymId, t.kind] }),
     check(
       "gym_message_settings_kind_check",
-      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','class_reminder')`,
+      sql`${t.kind} IN ('payment_overdue','membership_ending','trial_ending','trial_check_in','welcome','birthday','milestone','miss_you','review','class_reminder')`,
     ),
     check("gym_message_settings_own_line_check", sql`${t.ownLine} IS NULL OR length(${t.ownLine}) BETWEEN 1 AND 140`),
     check("gym_message_settings_days_check", sql`${t.days} IS NULL OR ${t.days} BETWEEN 1 AND 90`),
     check("gym_message_settings_hours_check", sql`${t.hours} IS NULL OR ${t.hours} BETWEEN 1 AND 48`),
+    check("gym_message_settings_visits_check", sql`${t.visits} IS NULL OR (${t.kind} = 'review' AND ${t.visits} BETWEEN 1 AND 1000)`),
+    check(
+      "gym_message_settings_link_check",
+      sql`${t.link} IS NULL OR (${t.kind} = 'review' AND length(${t.link}) BETWEEN 9 AND 500 AND ${t.link} LIKE 'https://%')`,
+    ),
     check(
       "gym_message_settings_milestones_check",
       sql`${t.milestones} IS NULL OR (cardinality(${t.milestones}) BETWEEN 1 AND 10 AND 1 <= ALL (${t.milestones}))`,

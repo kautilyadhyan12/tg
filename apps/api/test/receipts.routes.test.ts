@@ -459,11 +459,11 @@ d("receipts (real Postgres)", () => {
   );
 
   it(
-    "migration 0113 numbers what was written before it in the order it was written, gym by gym, one count across payments, refunds and sales",
+    "migration 0114 numbers what was written before it in the order it was written, gym by gym, one count across payments, refunds and sales",
     async () => {
       // The two data statements of the migration, as written, run against temporary tables
       // of the shape they read (a temporary table hides the real one of its name), then dropped.
-      const text = readFileSync(new URL("../drizzle/0113_receipts.sql", import.meta.url), "utf8");
+      const text = readFileSync(new URL("../drizzle/0114_receipts.sql", import.meta.url), "utf8");
       const statements = text.split("--> statement-breakpoint").map((s) => s.replace(/^\s*--.*$/gm, "").trim());
       const numbering = statements.find((s) => s.startsWith('WITH "written"'));
       const issued = statements.find((s) => s.startsWith('UPDATE "gyms" g'));

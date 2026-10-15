@@ -10,6 +10,7 @@ import {
   NO_CHECK_IN_ASK,
   OVERDUE_DAYS_ASK,
   OVERDUE_DAYS_NOTE,
+  REVIEW_LINK_HELP,
   dayPicker,
   lineCount,
   messageDraft,
@@ -69,6 +70,7 @@ const noteStyle = { background: 'rgba(255,138,31,0.08)', border: '1px solid rgba
 
 function Message({ kind, org, draft, edit, locked, use, attendanceTo }) {
   const lineId = useId();
+  const linkId = useId();
   const on = draft.on[kind];
   const problem = messageProblem(kind, draft);
   const picker = dayPicker(kind);
@@ -130,6 +132,30 @@ function Message({ kind, org, draft, edit, locked, use, attendanceTo }) {
           </select>
           {picker.after}
         </label>
+      ) : null}
+
+      {kind === 'review' ? (
+        <div>
+          <label htmlFor={linkId} className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
+            Your review link
+          </label>
+          <input
+            id={linkId}
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            placeholder="https://"
+            value={draft.reviewLink}
+            disabled={locked}
+            maxLength={500}
+            onChange={(e) => edit((was) => ({ ...was, reviewLink: e.target.value }))}
+            className="mt-2 w-full rounded-xl px-4 py-3 text-base sm:text-sm"
+            style={inputStyle}
+          />
+          <p className="text-xs mt-1 m-0" style={{ color: MUTED }}>
+            {REVIEW_LINK_HELP}
+          </p>
+        </div>
       ) : null}
 
       {kind === 'payment_overdue' && missing?.place !== 'memberships' ? (

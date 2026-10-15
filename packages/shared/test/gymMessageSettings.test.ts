@@ -51,7 +51,11 @@ const facts = (person: Partial<Person>, gym: Partial<GymMessageFacts["gym"]> = {
   person: { ...nobody, ...person },
   sent: [],
 });
-const occasions = (person: Partial<Person>, gym: Partial<GymMessageFacts["gym"]> = {}) => gymMessageOccasions(facts(person, gym)).map((o) => `${o.kind} ${o.occasion}`);
+/** Ask for a review counts visits too; it has its own table in `gymMessages.test.ts`. */
+const occasions = (person: Partial<Person>, gym: Partial<GymMessageFacts["gym"]> = {}) =>
+  gymMessageOccasions(facts(person, gym))
+    .filter((o) => o.kind !== "review")
+    .map((o) => `${o.kind} ${o.occasion}`);
 
 describe("we miss you", () => {
   it("waits for the gym's days, and for the gym to have checked somebody in on half of them since", () => {
@@ -147,7 +151,10 @@ describe("a visit milestone", () => {
   it("one message a day: a birthday goes before a milestone, which goes the next day if it still can", () => {
     const due = gymMessageDue(facts({ visits: 50, recentVisitDays: 1, lastVisitOn: TODAY, birthday: "10-09" }));
     expect(due.send).toEqual({ kind: "birthday", occasion: "birthday:2026" });
-    expect(due.held).toEqual([{ kind: "milestone", occasion: "visits:50", reason: "another_today" }]);
+    expect(due.held).toEqual([
+      { kind: "milestone", occasion: "visits:50", reason: "another_today" },
+      { kind: "review", occasion: "review", reason: "gym_off" },
+    ]);
   });
 });
 
@@ -253,33 +260,47 @@ describe("the gym's own line", () => {
 
 describe("what is kept, and the shapes", () => {
   it("a gym with no rows has the starting values; its rows change only their own kind", () => {
-    expect(gymMessageSettingsFrom([])).toEqual({ on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, ownLines: {} });
+    expect(gymMessageSettingsFrom([])).toEqual({ on: GYM_MESSAGE_STARTING_ON, numbers: GYM_MESSAGE_STARTING_NUMBERS, ownLines: {}, reviewLink: null });
     const set = gymMessageSettingsFrom([
-      { kind: "birthday", on: false, ownLine: "Cake at the desk", days: null, milestones: null, hours: null },
-      { kind: "miss_you", on: true, ownLine: null, days: 21, milestones: null, hours: null },
-      { kind: "milestone", on: true, ownLine: " ", days: null, milestones: [100, 10], hours: null },
-      { kind: "trial_check_in", on: true, ownLine: null, days: 3, milestones: null, hours: null },
-      { kind: "trial_ending", on: false, ownLine: null, days: 1, milestones: null, hours: null },
-      { kind: "membership_ending", on: true, ownLine: null, days: 14, milestones: null, hours: null },
-      { kind: "payment_overdue", on: false, ownLine: null, days: 9, milestones: null, hours: null },
-      { kind: "class_reminder", on: true, ownLine: null, days: null, milestones: null, hours: 24 },
+      { kind: "birthday", on: false, ownLine: "Cake at the desk", days: null, milestones: null, hours: null, visits: null, link: null },
+      { kind: "miss_you", on: true, ownLine: null, days: 21, milestones: null, hours: null, visits: null, link: null },
+      { kind: "milestone", on: true, ownLine: " ", days: null, milestones: [100, 10], hours: null, visits: null, link: null },
+      { kind: "trial_check_in", on: true, ownLine: null, days: 3, milestones: null, hours: null, visits: null, link: null },
+      { kind: "trial_ending", on: false, ownLine: null, days: 1, milestones: null, hours: null, visits: null, link: null },
+      { kind: "membership_ending", on: true, ownLine: null, days: 14, milestones: null, hours: null, visits: null, link: null },
+      { kind: "payment_overdue", on: false, ownLine: null, days: 9, milestones: null, hours: null, visits: null, link: null },
+      { kind: "class_reminder", on: true, ownLine: null, days: null, milestones: null, hours: 24, visits: null, link: null },
     ]);
     expect(set.on).toEqual({ ...GYM_MESSAGE_STARTING_ON, birthday: false, trial_ending: false, payment_overdue: false });
     // A payment notice has no number of its own: it goes by the gym's grace period for bills.
-    expect(set.numbers).toEqual({ trialCheckInDay: 3, trialEndingDays: 1, missYouDays: 21, membershipEndingDays: 14, milestones: [10, 100], classReminderHours: 24 });
+    expect(set.numbers).toEqual({ trialCheckInDay: 3, trialEndingDays: 1, missYouDays: 21, membershipEndingDays: 14, milestones: [10, 100], classReminderHours: 24, reviewVisits: 10 });
     expect(set.ownLines).toEqual({ birthday: "Cake at the desk" });
+  });
+
+  it("ask for a review is off without a link the rule takes, whatever its switch says; with one, its switch and number hold", () => {
+    const row = (on: boolean, link: string | null, visits: number | null = 20) => ({ kind: "review" as const, on, ownLine: null, days: null, milestones: null, hours: null, visits, link });
+    const link = "https://g.page/r/CbX1aBcDeFgHEBM/review";
+    expect(gymMessageSettingsFrom([row(true, link)])).toMatchObject({ on: { review: true }, numbers: { reviewVisits: 20 }, reviewLink: link });
+    expect(gymMessageSettingsFrom([row(false, link)])).toMatchObject({ on: { review: false }, reviewLink: link });
+    for (const bad of [null, "", "http://g.page/r/abc", "javascript:alert(1)", "https://g.page/r/a b"]) {
+      expect(gymMessageSettingsFrom([row(true, bad)]), String(bad)).toMatchObject({ on: { review: false }, reviewLink: null });
+    }
+    // A number that is not one is left at its start.
+    for (const visits of [0, -5, 2.5, null]) expect(gymMessageSettingsFrom([row(true, link, visits)]).numbers.reviewVisits, String(visits)).toBe(10);
+    // A review number on another kind's row is not the review's.
+    expect(gymMessageSettingsFrom([{ ...row(true, link), kind: "birthday" }]).numbers.reviewVisits).toBe(10);
   });
 
   it("a number that is not one is left at its start", () => {
     const set = gymMessageSettingsFrom([
-      { kind: "miss_you", on: true, ownLine: null, days: 0, milestones: null, hours: null },
-      { kind: "milestone", on: true, ownLine: null, days: 5, milestones: [50, -1], hours: null },
-      { kind: "welcome", on: true, ownLine: null, days: 3, milestones: [1], hours: null },
-      { kind: "trial_check_in", on: true, ownLine: null, days: 0, milestones: null, hours: null },
-      { kind: "trial_ending", on: true, ownLine: null, days: 1.5, milestones: null, hours: null },
-      { kind: "membership_ending", on: true, ownLine: null, days: null, milestones: [7], hours: null },
-      { kind: "class_reminder", on: true, ownLine: null, days: 24, milestones: null, hours: 0 },
-      { kind: "birthday", on: true, ownLine: null, days: null, milestones: null, hours: 12 },
+      { kind: "miss_you", on: true, ownLine: null, days: 0, milestones: null, hours: null, visits: null, link: null },
+      { kind: "milestone", on: true, ownLine: null, days: 5, milestones: [50, -1], hours: null, visits: null, link: null },
+      { kind: "welcome", on: true, ownLine: null, days: 3, milestones: [1], hours: null, visits: null, link: null },
+      { kind: "trial_check_in", on: true, ownLine: null, days: 0, milestones: null, hours: null, visits: null, link: null },
+      { kind: "trial_ending", on: true, ownLine: null, days: 1.5, milestones: null, hours: null, visits: null, link: null },
+      { kind: "membership_ending", on: true, ownLine: null, days: null, milestones: [7], hours: null, visits: null, link: null },
+      { kind: "class_reminder", on: true, ownLine: null, days: 24, milestones: null, hours: 0, visits: null, link: null },
+      { kind: "birthday", on: true, ownLine: null, days: null, milestones: null, hours: 12, visits: null, link: null },
     ]);
     expect(set.numbers).toEqual(GYM_MESSAGE_STARTING_NUMBERS);
   });
@@ -287,7 +308,7 @@ describe("what is kept, and the shapes", () => {
   it("a save names every kind once and only numbers on offer; a member's switch only a kind with one", () => {
     const messages = GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null }));
     const ok = { messages, missYouDays: 14, milestones: [25, 250], trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 30, classReminderHours: 12 };
-    expect(messages.map((m) => m.kind)).toEqual(["welcome", "trial_check_in", "trial_ending", "membership_ending", "payment_overdue", "class_reminder", "birthday", "milestone", "miss_you"]);
+    expect(messages.map((m) => m.kind)).toEqual(["welcome", "trial_check_in", "trial_ending", "membership_ending", "payment_overdue", "class_reminder", "birthday", "milestone", "miss_you", "review"]);
     expect(gymMessageSettingsRequestSchema.safeParse(ok).success).toBe(true);
     const bad = [
       { ...ok, missYouDays: 12 },
@@ -303,13 +324,16 @@ describe("what is kept, and the shapes", () => {
       { ...ok, messages: [...messages.slice(1), messages[1]] },
       { ...ok, messages: messages.map((m) => ({ ...m, days: 3 })) },
       { ...ok, extra: true },
+      { ...ok, reviewVisits: 15 },
+      { ...ok, reviewLink: "http://g.page/r/abc/review" },
+      { ...ok, reviewLink: "javascript:alert(1)" },
     ];
     for (const body of bad) expect(gymMessageSettingsRequestSchema.safeParse(body).success, JSON.stringify(body).slice(0, 80)).toBe(false);
     // A page loaded before the four new kinds: the four it knows and its two numbers. Its save still holds.
     const older = { messages: messages.filter((m) => ["welcome", "birthday", "milestone", "miss_you"].includes(m.kind)), missYouDays: 14, milestones: [25, 250] };
     expect(gymMessageSettingsRequestSchema.parse(older)).toEqual(older);
     for (const kind of GYM_MESSAGE_MEMBER_SWITCH_KINDS) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success).toBe(true);
-    expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "class_reminder", "birthday", "milestone", "miss_you"]);
+    expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "class_reminder", "birthday", "milestone", "miss_you", "review"]);
     for (const kind of ["welcome", "payment_overdue", "group", "x"]) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success, kind).toBe(false);
     // The two switches a member is shown: every kind with a switch is in one group, and in one only.
     const grouped = [...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.membership, ...GYM_MESSAGE_MEMBER_SWITCH_GROUPS.news];

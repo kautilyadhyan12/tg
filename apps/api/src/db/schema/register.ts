@@ -207,7 +207,7 @@ export const gymSales = pgTable(
     discountId: uuid("discount_id"),
     discountName: text("discount_name"),
     discountMinor: integer("discount_minor").notNull().default(0),
-    /** Its receipt's number, the gym's own (0113; 18g-i). */
+    /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },

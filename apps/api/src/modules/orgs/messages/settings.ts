@@ -26,6 +26,9 @@ import { forgetDay } from "./repo.js";
 import type { Limit, MessagesDeps } from "./service.js";
 import * as settingsRepo from "./settingsRepo.js";
 
+/** Said when Ask for a review is switched on with no link to send. */
+export const REVIEW_LINK_MISSING = "Add your review link before you switch on Ask for a review.";
+
 const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
 
 /** The number of days a kind keeps in its row, from the numbers named; null for a kind
@@ -61,6 +64,8 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
     billsOverdueDays: money.billsOverdueAfterDays,
     classReminderHours: settings.numbers.classReminderHours,
     bookings,
+    reviewVisits: settings.numbers.reviewVisits,
+    reviewLink: settings.reviewLink,
   });
 }
 
@@ -83,7 +88,7 @@ export async function setMessageSettings(
 ): Promise<GymMessageSettingsResponse | null> {
   await requireWritablePrivilege(deps, gymId, staffId, "org.manage");
   if (!(await limit())) return null;
-  const checked = body.messages.map((message) => {
+  const checked: { kind: GymMessageKind; on: boolean; ownLine: string | null }[] = body.messages.map((message) => {
     const line = tidyOwnLine(message.ownLine ?? "");
     const problem = ownLineProblem(line);
     if (problem !== null) throw new OrgsError(400, `message_line_${problem}`, GYM_MESSAGE_OWN_LINE_WORDS[problem]);
@@ -103,11 +108,25 @@ export async function setMessageSettings(
       membershipEndingDays: body.membershipEndingDays ?? kept.membershipEndingDays,
     };
     const classReminderHours = body.classReminderHours ?? kept.classReminderHours;
+    // Ask for a review: its link and number, sent or kept. A page that sends either without
+    // the message itself keeps its switch and its line as they are.
+    const wasReview = before.get("review");
+    const reviewVisits = body.reviewVisits ?? kept.reviewVisits;
+    const reviewLink = body.reviewLink === undefined ? (wasReview?.link ?? null) : body.reviewLink;
+    if (!checked.some((message) => message.kind === "review") && (body.reviewVisits !== undefined || body.reviewLink !== undefined)) {
+      checked.push({ kind: "review", on: wasReview?.on ?? false, ownLine: wasReview?.ownLine ?? null });
+    }
+    // The switch alone never sends: a member's button needs the link.
+    if (checked.some((message) => message.kind === "review" && message.on) && reviewLink === null) {
+      throw new OrgsError(400, "review_link_missing", REVIEW_LINK_MISSING);
+    }
     const rows: GymMessageSettingRow[] = checked.map((message) => ({
       ...message,
       days: daysOf(message.kind, numbers),
       milestones: message.kind === "milestone" ? [...body.milestones].sort((a, b) => a - b) : null,
       hours: message.kind === "class_reminder" ? classReminderHours : null,
+      visits: message.kind === "review" ? reviewVisits : null,
+      link: message.kind === "review" ? reviewLink : null,
     }));
     const start = gymMessageSettingsFrom([]);
     const changed = rows.filter((row) => {
@@ -119,12 +138,16 @@ export async function setMessageSettings(
         days: daysOf(row.kind, start.numbers),
         milestones: row.kind === "milestone" ? start.numbers.milestones : null,
         hours: row.kind === "class_reminder" ? start.numbers.classReminderHours : null,
+        visits: row.kind === "review" ? start.numbers.reviewVisits : null,
+        link: null,
       };
       return (
         wasRow.on !== row.on ||
         wasRow.ownLine !== row.ownLine ||
         wasRow.days !== row.days ||
         wasRow.hours !== row.hours ||
+        wasRow.visits !== row.visits ||
+        wasRow.link !== row.link ||
         (wasRow.milestones ?? []).join(",") !== (row.milestones ?? []).join(",")
       );
     });
