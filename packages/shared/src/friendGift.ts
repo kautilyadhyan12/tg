@@ -62,8 +62,9 @@ export function friendGiftLine(g: LeadFriendGift, name: string): string {
     case "to_give": {
       if (g.skipped !== null && g.forMemberships) {
         const next = g.forProducts ? `${name}'s next membership or purchase at Sell` : `${name}'s next membership`;
-        const who = g.skipped.by === null ? "" : ` by ${g.skipped.by}`;
-        return `Friend's gift not given on ${g.skipped.on}: added without it${who} on ${fullDay(g.skipped.day)}. It is filled in on ${next}.`;
+        const added =
+          g.skipped.by === null ? `${g.skipped.on} was added without it` : `${g.skipped.by} added ${g.skipped.on} without it`;
+        return `Friend's gift not used: ${added} on ${fullDay(g.skipped.day)}. It will be offered again on ${next}.`;
       }
       const where =
         g.forMemberships && g.forProducts

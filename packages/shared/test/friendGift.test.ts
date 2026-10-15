@@ -39,11 +39,11 @@ describe("friendGiftLine: what staff read on the lead", () => {
     [{ state: "to_give", ...MEMBERSHIPS, skipped: null } as const, "Friend's gift: filled in when Tara's membership is added."],
     [
       { state: "to_give", ...MEMBERSHIPS, skipped: { on: "Day pass", day: "2026-10-15", by: "Priya Desk" } } as const,
-      "Friend's gift not given on Day pass: added without it by Priya Desk on 15 October 2026. It is filled in on Tara's next membership.",
+      "Friend's gift not used: Priya Desk added Day pass without it on 15 October 2026. It will be offered again on Tara's next membership.",
     ],
     [
       { state: "to_give", ...BOTH, skipped: { on: "Day pass", day: "2026-10-15", by: null } } as const,
-      "Friend's gift not given on Day pass: added without it on 15 October 2026. It is filled in on Tara's next membership or purchase at Sell.",
+      "Friend's gift not used: Day pass was added without it on 15 October 2026. It will be offered again on Tara's next membership or purchase at Sell.",
     ],
     [{ state: "to_give", ...PRODUCTS, skipped: { on: "Day pass", day: "2026-10-15", by: null } } as const, "Friend's gift: filled in when Tara buys something at Sell."],
     [{ state: "to_give", ...BOTH, skipped: null } as const, "Friend's gift: filled in when Tara's membership is added or they buy at Sell."],

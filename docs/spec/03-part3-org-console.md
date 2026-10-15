@@ -5235,8 +5235,8 @@ given, and Add member finds the person in Leads.** Migration `0118`. The member'
   record's lock, and refuses anybody else (`friend_gift_not_theirs`, "Refer a friend's gift
   is only for a friend a member invited, and only once."); a walk-in never has it.
 - **The lead says what became of it**, on its own page, once joined: "Friend's gift given on
-  Gold Monthly, 15 October 2026." · "Friend's gift not given on Gold Monthly: added without it
-  by Priya Desk on 15 October 2026. It is filled in on Tara's next membership." (who, from the
+  Gold Monthly, 15 October 2026." · "Friend's gift not used: Priya Desk added Gold Monthly
+  without it on 15 October 2026. It will be offered again on Tara's next membership." (who, from the
   gym's own record of the membership being given; nobody is sent a message, Kd) · "Friend's gift: filled in when
   Tara's membership is added." · "No friend's gift: Tara had a membership here before they
   were invited." · "No friend's gift: Refer a friend has no friend's gift that can be used
