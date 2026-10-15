@@ -5257,12 +5257,16 @@ gift, money off.** Migration `0120`. Free days, the owner's second choice, is 20
   (Record payment, or Add membership paid) or a sale at the desk to that record. A free trial
   is no payment. Only to the member whose link it was, while they are still a member with a
   live account, the offer is on and has a member's gift, and never to the friend themselves.
-  Once a friend (a unique index; two servers at one instant give one). The gift is kept as the
+  Once a friend (a unique index; two servers at one instant give one), and only for the friend's
+  first payment that stands: a later one gives nothing, whatever changed since (round one). Two
+  records of one friend joined carry the gift to the kept record. The gift is kept as the
   offer was then.
 - **Told** in the member's inbox, once a friend (kind `referral_gift`, never one of the day's
   automatic messages, never switched off): "A friend you invited has joined Iron Gym and made
   their first payment. You get £10.00 off your next payment: it comes off by itself." The
-  friend is not named.
+  friend is not named. A member in the app with no record on Members is told "…your next
+  payment at Iron Gym." instead, and the lead says the gift waits until staff add them to the
+  list, with **Find Ned Fox in the app** (Members, In the app).
 - **Where it comes off**, only on the record the member's own account holds today, at this
   business: the earliest open bill with nothing paid on it of a membership in use, at once;
   else the next bill the hourly run opens; else it is filled in, with Remove, on Add
@@ -5283,7 +5287,8 @@ gift, money off.** Migration `0120`. Free days, the owner's second choice, is 20
   that does, where there is one, else it is taken back, and nobody is sent a message. One
   already taken off stays. A refund taken back gives it again, with no second message. A bill
   the gift came off, cancelled by staff or with its membership, or a sale it came off voided:
-  the gift waits again.
+  the gift waits again where one of the friend's payments still stands, and is taken back where
+  none does (round one).
 - **The lead says** (`memberGiftLine`): "Maya Rao's gift for inviting Tara (£10.00 off) came
   off their Gold Monthly bill due 1 November 2026." · "…came off their Protein tub at Sell on
   20 October 2026." · "…comes off their next bill, or is filled in when they next add a
