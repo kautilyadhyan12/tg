@@ -649,11 +649,10 @@ export default function Dashboard() {
         </div>
 
         {/* ── Quick actions + Daily Motivation ──────────────────────────────── */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { label: 'Browse Exercises', icon: Dumbbell,   path: '/exercises', image: '/images/exercises/weight.jpg',  color: '#FF8A1F' },
             { label: 'View Progress',    icon: TrendingUp, path: '/progress',  image: '/images/wellness/running.jpg',  color: '#60a5fa' },
-            { label: 'Ask AI Coach',     icon: Sparkles,   path: '/coach',     image: '/images/wellness/yoga.jpg',     color: '#a78bfa' },
           ].map(({ label, icon: Icon, path, image, color }, idx) => (
             <motion.div
               key={path}

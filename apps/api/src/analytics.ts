@@ -12,7 +12,6 @@ export type AnalyticsEvent =
   | "exercise_completed"
   | "paywall_viewed"
   | "subscribe_activated"
-  | "coach_msg_sent"
   | "meal_logged"
   | "gym_code_redeemed"
   | "gym_trial_started"
