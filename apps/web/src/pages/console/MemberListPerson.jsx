@@ -31,7 +31,8 @@ import MemberMemberships from './MemberMemberships';
 import MemberPurchases from './MemberPurchases';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
-import { METHOD_NEEDED, giveBody, membershipChoice, newRequestKey } from './heldMembershipsView';
+import { METHOD_NEEDED, giveBody, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
+import { membershipSummary } from './sellDiscountsView';
 import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
@@ -517,7 +518,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       .then(() => orgService.getMembershipTypes(gymId))
       .then(
         (res) => {
-          if (live) setPriceList(res.data.types);
+          if (live) setPriceList(res.data.types.map((t) => ({ ...typeWithTax(t, res.data), taxIncluded: res.data.taxIncluded })));
         },
         () => {
           if (live) setPriceList((had) => had ?? null);
@@ -737,7 +738,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     setMaybe(null);
     // A membership chosen in the form is given once the person is added. If that fails
     // the person stays added, and the page says the membership was not.
-    const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone));
+    const givenType = giveTypes === null ? null : (giveTypes.find((t) => t.id === giving.typeId) ?? null);
+    const givenSummary = givenType === null ? null : membershipSummary(givenType, null, givenType.taxIncluded);
+    const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone), givenSummary === null || !givenSummary.shows ? null : givenSummary.totalMinor);
     if (choice !== null && choice.type !== null && choice.problem !== null) {
       setRefusal({ message: choice.problem, openId: null, ack: null });
       setBusy(false);
@@ -760,7 +763,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           notGiven = `${who} ${why}, so the ${choice.type.name} membership was not added. Add it under Memberships below.`;
         } else {
           try {
-            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving));
+            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, null, givenSummary));
             // Once it is given, and only then, the type's name becomes their Membership word,
             // so the list's Membership column and filter show it as they show a file's word.
             if (input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS) {
@@ -1135,6 +1138,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       );
     }
     if (giveTypes !== null) {
+      // The paid tick says what the first bill comes to, its tax in (18b-iii).
+      const picked = giveTypes.find((t) => t.id === giving.typeId) ?? null;
+      const total = picked === null ? null : membershipSummary(picked, null, picked.taxIncluded);
       return (
         <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
           <span className="c-s15 c-w6 c-t1">Membership</span>
@@ -1143,6 +1149,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             types={giveTypes}
             today={gymToday(gym?.timezone)}
             value={giving}
+            paidMinor={total === null || !total.shows ? null : total.totalMinor}
             canBill={canRecordPayments(viewerPrivileges(gym))}
             onChange={(next) => {
               setRefusal(null);

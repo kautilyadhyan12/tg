@@ -6,6 +6,7 @@
 // transaction, under the gym's lock and the record's.
 import type { Sql, TransactionSql } from "postgres";
 import {
+  billAmounts,
   billCancelReasonSchema,
   memberBillStatusSchema,
   memberPaymentByHandSchema,
@@ -16,13 +17,34 @@ import {
   type MemberPaymentByHand,
   type MemberPaymentMethod,
   type RefundReason,
+  type TaxApplied,
 } from "@app/shared";
+
+/** The tax inside a bill's amount, as it was opened (18b-iii). */
+export interface BillTax {
+  name: string;
+  bp: number;
+  included: boolean;
+  minor: number;
+}
+
+/** WHAT ONE BILL IS OPENED AT: its price after any discount (`listedMinor`), with the tax
+ *  of the rate its membership was sold with, by the one rule (`billAmounts`). A taxed
+ *  price is capped where it is set (`TAXED_PRICE_MINOR_MAX`), so a bill that does not fit
+ *  is a fault, never a bill. */
+export function billOf(listedMinor: number, tax: TaxApplied | null): { amountMinor: number; tax: BillTax | null } {
+  const amounts = billAmounts(listedMinor, tax);
+  if (!amounts.ok) throw new Error(`a bill could not be worked out: ${amounts.reason}`);
+  return { amountMinor: amounts.totalMinor, tax: tax === null ? null : { name: tax.name, bp: tax.bp, included: tax.included, minor: amounts.taxMinor } };
+}
 
 export interface BillRow {
   id: string;
   membershipId: string;
   periodIndex: number;
   amountMinor: number;
+  /** The tax in `amountMinor`, as it was opened; null for none. */
+  tax: BillTax | null;
   currency: string;
   dueOn: string;
   /** The days it was opened for; null for a membership of one period. */
@@ -42,6 +64,10 @@ interface RawBill {
   held_membership_id: string;
   period_index: number;
   amount_minor: number;
+  tax_minor: number;
+  tax_bp: number;
+  tax_name: string | null;
+  tax_included: boolean | null;
   currency: string;
   due_on: string;
   covers_from: string | null;
@@ -59,6 +85,7 @@ const bill = (r: RawBill): BillRow => ({
   membershipId: r.held_membership_id,
   periodIndex: r.period_index,
   amountMinor: r.amount_minor,
+  tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, bp: r.tax_bp, included: r.tax_included, minor: r.tax_minor },
   currency: r.currency,
   dueOn: r.due_on,
   covers: r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to },
@@ -74,7 +101,7 @@ const bill = (r: RawBill): BillRow => ({
 export async function billsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<BillRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<RawBill[]>`
-    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.currency,
+    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.currency,
            b.due_on::text AS due_on, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, b.status,
            COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p
                      WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0)::int AS paid_minor,
@@ -209,7 +236,9 @@ export async function listBillFacts(
 export interface NewBill {
   membershipId: string;
   periodIndex: number;
+  /** What the person pays, its tax in (`billOf`). */
   amountMinor: number;
+  tax: BillTax | null;
   currency: string;
   dueOn: string;
   covers: { from: string; to: string } | null;
@@ -224,11 +253,24 @@ export async function insertBills(
   now: Date,
 ): Promise<{ id: string; membershipId: string; periodIndex: number }[]> {
   if (bills.length === 0) return [];
-  const payload = bills.map((b) => ({ m: b.membershipId, i: b.periodIndex, a: b.amountMinor, c: b.currency, d: b.dueOn, f: b.covers?.from ?? null, t: b.covers?.to ?? null }));
+  const payload = bills.map((b) => ({
+    m: b.membershipId,
+    i: b.periodIndex,
+    a: b.amountMinor,
+    tm: b.tax?.minor ?? 0,
+    tb: b.tax?.bp ?? 0,
+    tn: b.tax?.name ?? null,
+    ti: b.tax?.included ?? null,
+    c: b.currency,
+    d: b.dueOn,
+    f: b.covers?.from ?? null,
+    t: b.covers?.to ?? null,
+  }));
   const rows = await tx<{ id: string; held_membership_id: string; period_index: number }[]>`
-    INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to, created_at, updated_at)
-    SELECT ${gymId}, r.m, r.i, r.a, r.c, r.d, r.f, r.t, ${now}, ${now}
-    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, c text, d date, f date, t date)
+    INSERT INTO gym_member_bills
+      (gym_id, held_membership_id, period_index, amount_minor, tax_minor, tax_bp, tax_name, tax_included, currency, due_on, covers_from, covers_to, created_at, updated_at)
+    SELECT ${gymId}, r.m, r.i, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.d, r.f, r.t, ${now}, ${now}
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, tm int, tb int, tn text, ti boolean, c text, d date, f date, t date)
     ON CONFLICT (held_membership_id, period_index) DO NOTHING
     RETURNING id, held_membership_id, period_index`;
   return rows.map((r) => ({ id: r.id, membershipId: r.held_membership_id, periodIndex: r.period_index }));

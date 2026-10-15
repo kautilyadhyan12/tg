@@ -597,6 +597,10 @@ export function shownRenewal(view: Pick<HeldMembershipView, "renewsOn" | "paymen
 
 const daySchema = z.string().regex(DAY);
 
+/** A tax rate as a membership charges it: its name and percentage. */
+export const heldTaxSchema = z.object({ name: z.string(), bp: z.number().int().min(1).max(3000) }).strict();
+export type HeldTax = z.infer<typeof heldTaxSchema>;
+
 /** One held membership, as the console reads it. `typeName` is the type's name now;
  *  the price and the term are the type's as they were when it was given. */
 export const heldMembershipSchema = z
@@ -630,6 +634,9 @@ export const heldMembershipSchema = z
       .object({ name: z.string(), offMinor: z.number().int().min(1), payments: z.enum(MEMBERSHIP_PAYMENTS) })
       .strict()
       .nullable(),
+    /** The tax rate it was sold with, as the rate is now (18b-iii): every bill opened from
+     *  here on charges it. Null for no tax. */
+    tax: heldTaxSchema.nullable(),
     view: heldMembershipViewSchema,
     /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
     billing: memberBillingSchema.nullable(),
@@ -650,6 +657,8 @@ export const heldMembershipTypeChoiceSchema = z
     termUnit: membershipTermUnitSchema.nullable(),
     packClasses: z.number().int().nullable(),
     packDays: z.number().int().nullable(),
+    /** The tax rate its bills charge (18b-iii); null for no tax. */
+    tax: heldTaxSchema.nullable(),
   })
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
@@ -691,6 +700,8 @@ export const heldMembershipsResponseSchema = z
     canBill: z.boolean(),
     /** The gym's discounts in use that are for memberships (18b-ii-b), for the Add form. */
     discounts: z.array(gymDiscountSchema),
+    /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
+    taxIncluded: z.boolean(),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;
@@ -713,11 +724,16 @@ export const giveHeldMembershipRequestSchema = z
      *  anything else. Sent with `priceMinor`. */
     discountId: z.string().uuid().optional(),
     discountMinor: z.number().int().min(1).max(99_999_999).optional(),
+    /** What the screen showed the first bill comes to, tax and discount in (18b-iii): a
+     *  membership whose first bill now comes to anything else is not given. Sent with
+     *  `priceMinor`. */
+    totalMinor: z.number().int().min(0).max(99_999_999).optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
     message: "discount_needs_price",
-  });
+  })
+  .refine((v) => v.totalMinor === undefined || v.priceMinor !== undefined, { message: "total_needs_price" });
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;
 
 /** `confirmBookings`: the number of bookings the screen was told the cancel would end

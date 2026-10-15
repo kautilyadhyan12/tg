@@ -191,7 +191,7 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
   };
   const changeLimit = async (gym: Gym, name: string, limit: Limit, by = gym.owner) => {
     const type = await typeNamed(gym, name);
-    return await inject("PUT", `${typesUrl(gym)}/${type.id}`, by.cookies, { ...monthlyBody(name, limit), updatedAt: type.updatedAt });
+    return await inject("PUT", `${typesUrl(gym)}/${type.id}`, by.cookies, { ...monthlyBody(name, limit), taxRateId: null, updatedAt: type.updatedAt });
   };
   const hold = async (gym: Gym, entryId: string, typeId: string, over: { pack?: number } = {}): Promise<string> => {
     const pack = over.pack !== undefined;
@@ -574,7 +574,7 @@ d("a limit on personal training sessions (real Postgres, two api instances)", { 
     await sell(gym, "Gold", { ptLimit: 4, ptPeriod: "month" });
     const sam = await trainerWith(gym, "Sam Trainer");
     const type = await typeNamed(gym, "Gold");
-    const body = { ...monthlyBody("Gold", NO_LIMIT), updatedAt: type.updatedAt };
+    const body = { ...monthlyBody("Gold", NO_LIMIT), taxRateId: null, updatedAt: type.updatedAt };
     const put = (cookies: Cookies, payload: unknown) => inject("PUT", `${typesUrl(gym)}/${type.id}`, cookies, payload);
 
     // A stranger, another gym's owner (through this gym's address and their own), a trainer.

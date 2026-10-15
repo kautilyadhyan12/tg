@@ -56,6 +56,7 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
         // The days it was opened for: a freeze since has not moved them.
         covers: f.covers,
         amountMinor: f.amountMinor,
+        tax: null,
         paidMinor: f.paidMinor,
         dueOn: f.dueOn,
         state: memberBillState(f, today, 0),

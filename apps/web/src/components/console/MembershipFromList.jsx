@@ -96,7 +96,8 @@ function Names({ preview, group }) {
 /** Who gets the membership and who does not, before anybody is given it. `counted` is
  *  whether the list's name already counts as this type. `inRow`: drawn inside its
  *  membership type's own row, where it was opened from. */
-export function GiveBox({ preview, counted, busy, error, inRow = false, onGive, onCancel }) {
+/** `taxLine`: the tax the type's bills charge, said under its name (18b-iii); null for none. */
+export function GiveBox({ preview, counted, busy, error, inRow = false, taxLine = null, onGive, onCancel }) {
   const [ticks, setTicks] = useState(() => startTicks(preview));
   const [paid, setPaid] = useState(null);
   const [pressed, setPressed] = useState(false);
@@ -130,6 +131,7 @@ export function GiveBox({ preview, counted, busy, error, inRow = false, onGive, 
       <div className="flex flex-col gap-2">
         <Heading className="c-h2">{words.heading}</Heading>
         {lead !== null ? <p className="c-s14 c-t2 m-0">{lead}</p> : null}
+        {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
       </div>
 
       {groups.length > 0 ? (

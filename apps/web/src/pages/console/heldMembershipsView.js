@@ -323,10 +323,18 @@ export const METHOD_NEEDED = 'Pick how they paid.';
 export function giveBody(requestKey, type, value, discount = null, summary = null) {
   const paid = type.priceMinor === 0 ? false : value.paid;
   const body = { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
-  // With a discount the screen says the price and what comes off: the server gives nothing
-  // where either is no longer so (18b-ii-b).
-  if (discount === null || summary === null || summary.offMinor === null) return body;
-  return { ...body, priceMinor: type.priceMinor, discountId: discount.id, discountMinor: summary.offMinor };
+  // The screen says the price and what the first bill comes to, tax in (18b-iii): the
+  // server gives nothing where either is no longer so.
+  const shown = { ...body, priceMinor: type.priceMinor, ...(summary === null ? {} : { totalMinor: summary.totalMinor }) };
+  // With a discount, what comes off too (18b-ii-b).
+  if (discount === null || summary === null || summary.offMinor === null) return shown;
+  return { ...shown, discountId: discount.id, discountMinor: summary.offMinor };
+}
+
+/** A price-list type with the tax its bills charge, as the Add form reads it (18b-iii). */
+export function typeWithTax(type, list) {
+  const rate = (list?.taxRates ?? []).find((r) => r.id === type.taxRateId);
+  return { ...type, tax: rate === undefined ? null : { name: rate.name, bp: rate.bp } };
 }
 
 /** A key the server takes one membership for, however often the request arrives. */
