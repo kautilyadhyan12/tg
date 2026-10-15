@@ -431,13 +431,13 @@ export async function findPeople(deps: RegisterDeps, gymId: string, viewer: View
   return salePeopleResponseSchema.parse({ people });
 }
 
-/** What one person has bought at the desk, for their page. */
 /** Refer a friend's gift for the person Sell has picked (20e-ii-b-i): null where they are
  *  not a friend a member invited, or have had it. */
 export async function getFriendGift(deps: RegisterDeps, gymId: string, viewer: Viewer, entryId: string): Promise<FriendGiftResponse> {
   return friendGiftResponseSchema.parse({ friendGift: await friendGiftOffer(deps.sql, gymId, entryId, dayInTz(deps.now(), viewer.timezone)) });
 }
 
+/** What one person has bought at the desk, for their page. */
 export async function getPurchases(deps: RegisterDeps, gymId: string, viewer: Viewer, entryId: string): Promise<MemberPurchasesResponse> {
   const found = await repo.purchasesOf(deps.sql, gymId, entryId, PURCHASES_SHOWN);
   if (found === null) throw new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);

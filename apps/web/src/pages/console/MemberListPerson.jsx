@@ -532,10 +532,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         .then(() => orgService.matchLead(gymId, query))
         .then(
           (res) => {
-            if (live) setLeadRead({ contact, lead: res.data.lead });
+            if (live) setLeadRead({ contact, name: typedName, lead: res.data.lead });
           },
           () => {
-            if (live) setLeadRead({ contact, lead: null });
+            if (live) setLeadRead({ contact, name: typedName, lead: null });
           },
         );
     }, 400);
@@ -550,8 +550,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const setLeadSame = (yes) => setSameAs(yes ? foundId : null);
   const giftOff = foundId !== null && giftOffFor === foundId;
   const setGiftOff = (off) => setGiftOffFor(off ? foundId : null);
-  /** The lead this person is: by the same name, or ticked by staff. */
-  const leadJoins = leadFound !== null && (leadFound.sameName || leadSame);
+  /** The lead this person is: by the same name (as typed when it was asked: a name changed
+   *  since waits for the next answer), or ticked by staff. */
+  const leadJoins = leadFound !== null && ((leadFound.sameName && leadRead?.name === typedName) || leadSame);
   /** Refer a friend's gift on the membership picked here; null where there is none, it cannot
    *  be used on that type, or staff do not take payments. */
   const giftOf = (type) => {

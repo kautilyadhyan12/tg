@@ -212,7 +212,8 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         const found = res.friendGift;
         if (!live || found === null || !found.discount.forProducts) return;
         setGiftRead({ buyerId, gift: found });
-        setDiscountId(found.discount.id);
+        // Only where staff have picked no discount of their own for this sale.
+        setDiscountId((picked) => (picked === '' ? found.discount.id : picked));
       },
       () => undefined,
     );

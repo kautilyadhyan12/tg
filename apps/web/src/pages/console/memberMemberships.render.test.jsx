@@ -937,6 +937,36 @@ describe('Add member gives a membership in the same form', () => {
       expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Beatrice Hart', email: 'bea@members.example' });
       expect(orgService.giveHeldMembership.mock.calls[0][2].discountId).toBeUndefined();
     });
+
+    it('with another name, ticked: the lead is sent to be joined, and the membership has the gift', async () => {
+      orgService.matchLead.mockResolvedValue(found({ fullName: 'Bea', sameName: false }));
+      orgService.giveHeldMembership.mockResolvedValue(answer([]));
+      openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
+      const choice = within(await screen.findByTestId('add-membership'));
+      typeName('Name', 'Beatrice Hart');
+      typeName('Email', 'bea@members.example');
+      const box = within(await screen.findByTestId('lead-found'));
+      fireEvent.change(choice.getByRole('combobox'), { target: { value: GOLD.id } });
+      fireEvent.click(box.getByRole('checkbox', { name: 'This is Bea: mark them Joined in Leads' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+      await waitFor(() => expect(orgService.giveHeldMembership).toHaveBeenCalledTimes(1));
+      expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Beatrice Hart', email: 'bea@members.example', leadId: LEAD });
+      expect(orgService.giveHeldMembership.mock.calls[0][2]).toMatchObject({ discountId: gift.id, discountMinor: 1000, totalMinor: 3999 });
+    });
+
+    it('with the same name, renamed before the next answer: nothing is joined on the old answer', async () => {
+      orgService.matchLead.mockImplementation((_gym, query) => Promise.resolve(query.fullName === 'Bea Hart' ? found() : found({ sameName: false })));
+      openAdd({ ...IRON, privileges: ['members.confirm', 'billing.members'] });
+      await screen.findByTestId('add-membership');
+      typeName('Name', 'Bea Hart');
+      typeName('Email', 'bea@members.example');
+      await screen.findByText('Bea Hart is in Leads, invited by Maya Patel. Adding them marks them Joined.');
+      // Another name typed, and Add pressed at once, before the lookup asks again.
+      typeName('Name', 'Beatrix Stone');
+      fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+      await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledTimes(1));
+      expect(orgService.addMemberListEntry.mock.calls[0][1]).toEqual({ fullName: 'Beatrix Stone', email: 'bea@members.example' });
+    });
   });
 
   it('gives the membership picked to the person just added, and to nobody else', async () => {

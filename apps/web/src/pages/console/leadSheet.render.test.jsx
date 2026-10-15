@@ -252,7 +252,7 @@ describe('adding and keeping a lead', () => {
     unmount();
     orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: { state: 'member_before' } } } });
     render(sheet(TOM));
-    expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("No friend's gift: Tom had a membership here before they were invited.");
+    expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("No friend's gift: Tom was already on your Members list before they were invited.");
   });
 
   it('a lead nobody invited has no line about a gift', async () => {

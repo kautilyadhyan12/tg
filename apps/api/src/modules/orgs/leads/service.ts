@@ -448,8 +448,11 @@ export async function getLead(deps: LeadsDeps, userId: string, gymId: string, le
  *  staff see who they are adding and Refer a friend's gift is filled in. Details not yet
  *  whole (an email half typed) find nobody. */
 export async function matchLead(deps: LeadsDeps, userId: string, gymId: string, query: LeadMatchQuery, limit: Limit): Promise<LeadMatchResponse | null> {
-  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
+  // The gift is a discount with its code: read only by whoever takes payments, as on a
+  // person's memberships.
+  const canBill = privileges.includes("billing.members");
   const typed: { fullName: string; email?: string; phone?: string } = { fullName: query.fullName ?? "" };
   if (query.email !== undefined && query.email.trim() !== "") typed.email = query.email;
   if (query.phone !== undefined && query.phone.trim() !== "") typed.phone = query.phone;
@@ -467,7 +470,7 @@ export async function matchLead(deps: LeadsDeps, userId: string, gymId: string, 
       fullName: lead.fullName,
       sameName,
       invitedBy: lead.referredAt === null ? null : by === undefined ? { name: null, member: false } : { name: by.name, member: by.member },
-      friendGift: lead.referredAt === null ? null : await friendGiftForNewFriend(deps.sql, gymId, lead.referredBy, dayInTz(deps.now(), org.timezone)),
+      friendGift: lead.referredAt === null || !canBill ? null : await friendGiftForNewFriend(deps.sql, gymId, lead.referredBy, dayInTz(deps.now(), org.timezone)),
     },
   });
 }

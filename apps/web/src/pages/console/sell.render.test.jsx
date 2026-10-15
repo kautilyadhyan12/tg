@@ -247,6 +247,29 @@ describe('a product sale', () => {
     expect(svc.sell.mock.calls[0][1]).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', discountId: 'd-friend' });
   });
 
+  it("Refer a friend's gift never replaces a discount staff picked before it was found", async () => {
+    const gift = {
+      id: 'd-friend', name: "Refer a friend: friend's gift, WELCOME10", code: 'WELCOME10', kind: 'percent', percentBp: 1000, amountMinor: null, currency: null,
+      startsOn: null, endsOn: null, maxUses: null, uses: 0, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true,
+      membershipTypeIds: [], membershipPayments: null, referralGift: true, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z',
+    };
+    const summer = { ...gift, id: 'd-summer', name: 'Summer', code: null, referralGift: false, percentBp: 500 };
+    svc.get.mockResolvedValue(page({ discounts: [gift, summer] }));
+    let answer;
+    svc.friendGift.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Product', 'p-towel');
+    fireEvent.click(screen.getByLabelText('A member'));
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    pick('Discount', 'd-summer');
+    answer({ friendGift: { discount: gift, words: '10% off products', invitedBy: 'Ravi Kumar' } });
+    const note = within(await within(newSale()).findByTestId('friend-gift'));
+    expect(note.getByRole('button', { name: 'Put it back' })).toBeTruthy();
+    expect(screen.getByLabelText('Discount').value).toBe('d-summer');
+  });
+
   it('nobody found says what to do, with a button to add a member that asks before leaving', async () => {
     svc.findPeople.mockResolvedValue([]);
     open();

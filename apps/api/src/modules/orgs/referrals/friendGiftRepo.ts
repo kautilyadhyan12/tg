@@ -3,8 +3,8 @@
 // The worst thing this could do to a real person: give the gift to somebody nobody invited,
 // or give it twice. So a record is an invited friend only through a lead of the SAME gym that
 // came by a member's link and was joined to that record; the gift is given once, on a
-// membership or a desk sale that still stands; and somebody who held a membership here
-// before they were invited is not offered it. Every statement names its gym.
+// membership or a desk sale that still stands; and somebody already on Members before they
+// were invited (with a membership or without) is not offered it. Every statement names its gym.
 import type { Sql, TransactionSql } from "postgres";
 import { friendGiftState, referralGiftLive, referralGiftWords, type LeadFriendGift } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
@@ -17,11 +17,14 @@ export interface FriendGiftRow {
   entryId: string;
   /** The member who invited them; null where that account is gone. */
   referredBy: string | null;
+  /** On Members, or holding a membership, before they were invited. */
   memberBefore: boolean;
   /** What the gift was given on, first; null while it has not been. */
   given: { on: string; at: Date } | null;
-  /** The first membership added since the invite without the gift: its type, when, and the
-   *  staff who added it (null where their account is gone, or nobody is on record). */
+  /** The first membership the business's gift as it is now could have gone on, added since
+   *  the invite and since the gift was last changed, without it: its type, when, and the staff
+   *  who added it (null where their account is gone, or nobody is on record). A free one, one
+   *  the gift is not for, or one it would take everything or nothing off is never counted. */
   skipped: { on: string; at: Date; by: string | null } | null;
 }
 
@@ -43,10 +46,13 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
   const rows = await sql<DbRow[]>`
     SELECT DISTINCT ON (l.entry_id)
            l.entry_id, l.referred_by,
-           EXISTS (
-             SELECT 1 FROM gym_held_memberships h
-             WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at < l.referred_at
-           ) AS member_before,
+           (EXISTS (
+              SELECT 1 FROM gym_member_list_entries e
+              WHERE e.gym_id = l.gym_id AND e.id = l.entry_id AND e.created_at < l.referred_at
+            ) OR EXISTS (
+              SELECT 1 FROM gym_held_memberships h
+              WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at < l.referred_at
+            )) AS member_before,
            given.on_what AS given_on, given.at AS given_at,
            skipped.on_what AS skipped_on, skipped.at AS skipped_at, skipped.by AS skipped_by
     FROM gym_leads l
@@ -58,8 +64,22 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
               ORDER BY a.at LIMIT 1) AS by
       FROM gym_held_memberships h
       JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-      WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at >= l.referred_at
+      JOIN gyms gy ON gy.id = h.gym_id
+      JOIN gym_referral_settings s ON s.gym_id = h.gym_id
+      JOIN gym_discounts g ON g.gym_id = s.gym_id AND g.id = s.friend_discount_id AND g.for_memberships
+      WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id
+        AND h.created_at >= l.referred_at AND h.created_at >= g.updated_at
         AND NOT EXISTS (SELECT 1 FROM gym_discounts d WHERE d.gym_id = h.gym_id AND d.id = h.discount_id AND d.referral_gift)
+        -- Only one the gift could have gone on that day: paid, of a type it is for, and not
+        -- taking everything off (an amount as large as the price).
+        AND h.price_minor + CASE WHEN h.discount_payments = 'every' THEN h.discount_minor ELSE 0 END > 0
+        AND (g.all_membership_types OR EXISTS (
+              SELECT 1 FROM gym_discount_membership_types m
+              WHERE m.gym_id = g.gym_id AND m.discount_id = g.id AND m.membership_type_id = h.membership_type_id))
+        AND (g.kind = 'percent' OR (g.currency = h.currency
+              AND g.amount_minor < h.price_minor + CASE WHEN h.discount_payments = 'every' THEN h.discount_minor ELSE 0 END))
+        AND (g.starts_on IS NULL OR g.starts_on <= (h.created_at AT TIME ZONE gy.timezone)::date)
+        AND (g.ends_on IS NULL OR g.ends_on >= (h.created_at AT TIME ZONE gy.timezone)::date)
       ORDER BY h.created_at, h.id LIMIT 1
     ) skipped ON true
     LEFT JOIN LATERAL (

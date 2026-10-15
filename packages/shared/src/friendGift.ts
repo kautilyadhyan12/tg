@@ -1,8 +1,8 @@
 // REFER A FRIEND: THE FRIEND'S GIFT — spec Part 3 §16.3; ROADMAP Stage 2 item 20e-ii-b-i.
 //
 // Somebody a member invited is offered the business's friend's gift, filled in for staff on
-// what they add or sell them, until they have had it once. Somebody who held a membership
-// here before they were invited is not a new member, and is not offered it. The friend never
+// what they add or sell them, until they have had it once. Somebody already on Members
+// before they were invited is not a new member, and is not offered it. The friend never
 // holds the code, so they never have to ask for it (Kd, 2026-10-15).
 import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
@@ -11,7 +11,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** What is known about one invited friend's gift, read under the record's lock. */
 export interface FriendGiftFacts {
-  /** They held a membership here before they were invited. */
+  /** They were on Members, or held a membership here, before they were invited. */
   memberBefore: boolean;
   /** What the gift was given on and the gym's day it was; null while it has not been. */
   given: { on: string; day: string } | null;
@@ -58,7 +58,7 @@ export function friendGiftLine(g: LeadFriendGift, name: string): string {
     case "given":
       return `Friend's gift given on ${g.on}, ${fullDay(g.day)}.`;
     case "member_before":
-      return `No friend's gift: ${name} had a membership here before they were invited.`;
+      return `No friend's gift: ${name} was already on your Members list before they were invited.`;
     case "no_gift":
       return "No friend's gift: Refer a friend has no friend's gift that can be used today.";
     case "to_give": {

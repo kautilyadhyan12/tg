@@ -231,6 +231,9 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
   let gymA: CreatedOrg;
   let gymB: CreatedOrg;
   let goldA: string;
+  let packA: string;
+  let freeA: string;
+  let desk: Person;
   let today: string;
   let codeA: string;
 
@@ -271,6 +274,17 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
     const [type] = await sql<{ id: string }[]>`SELECT id FROM gym_membership_types WHERE gym_id = ${gymA.org.id} AND name = 'Gold Monthly'`;
     if (type === undefined) throw new Error("no type");
     goldA = type.id;
+    const addType = async (body: Record<string, unknown>): Promise<string> => {
+      const res = await post(`/v1/orgs/${gymA.org.id}/membership-types`, { ...gold, ...body }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(201);
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_membership_types WHERE gym_id = ${gymA.org.id} AND name = ${String(body["name"])}`;
+      if (row === undefined) throw new Error("no type");
+      return row.id;
+    };
+    packA = await addType({ name: "Ten classes", kind: "pack", priceMinor: 9000, termCount: null, termUnit: null, packClasses: 10, packDays: 60 });
+    freeA = await addType({ name: "Free Trial Week", kind: "one_time", priceMinor: 0, termCount: 7, termUnit: "day" });
+    desk = await makeUser("desk", "Dee Desk");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymA.org.id}, ${desk.id}, 'trainer', ${["members.read", "members.confirm"]})`;
     codeA = await linkOf(gymA, maya);
     const someone = await added(gymA.org.id, owner.cookies, { fullName: "Day Probe", email: "fgift-probe@example.com" });
     today = (await memberships(gymA.org.id, someone.entryId, owner.cookies)).today;
@@ -363,12 +377,14 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         const gift = await friendDiscountOf(gymA.org.id);
         const kofi = await added(gymA.org.id, owner.cookies, { fullName: "Kofi Mensah", email: "kofi.mensah@example.com", leadId });
         if (second === undefined) throw new Error("no second app");
+        // Two different memberships, so nothing but the gift's own rule can refuse the second.
         const both = await Promise.all([
           post(heldUrl(gymA.org.id, kofi.entryId), giveBody(goldA, today, gift), owner.cookies),
-          post(heldUrl(gymA.org.id, kofi.entryId), giveBody(goldA, today, gift), owner.cookies, second),
+          post(heldUrl(gymA.org.id, kofi.entryId), { ...giveBody(packA, today, gift), priceMinor: 9000, discountMinor: 1800 }, owner.cookies, second),
         ]);
-        expect(both.map((r) => r.statusCode).sort()).toEqual([201, 409]);
-        expect(await heldOf(gymA.org.id, kofi.entryId)).toEqual([{ discount_id: gift }]);
+        expect(both.map((r) => r.statusCode).sort(), both.map((r) => r.body).join(" | ")).toEqual([201, 409]);
+        expect(both.map((r) => errorOf(r)).filter((e) => e !== undefined)).toEqual(["friend_gift_not_theirs"]);
+        expect((await heldOf(gymA.org.id, kofi.entryId)).map((h) => h.discount_id)).toEqual([gift]);
       },
       TIMEOUT_MS,
     );
@@ -425,6 +441,76 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
     );
   });
 
+  describe("somebody already on Members before they were invited (round one, H1)", () => {
+    it(
+      "a record on Members with no membership, joined from Leads, is not offered the gift and is refused it",
+      async () => {
+        const gift = await friendDiscountOf(gymA.org.id);
+        const rahul = await added(gymA.org.id, owner.cookies, { fullName: "Rahul Mehta", email: "rahul.mehta@example.com" });
+        const leadId = await invited(codeA, "Rahul Mehta", "rahul.mehta@example.com");
+        expect((await post(`/v1/orgs/${gymA.org.id}/leads/${leadId}/join`, {}, owner.cookies)).statusCode).toBe(200);
+        expect(await leadRow(leadId)).toEqual({ status: "joined", entry_id: rahul.entryId });
+        expect((await memberships(gymA.org.id, rahul.entryId, owner.cookies)).friendGift).toBeNull();
+        const res = await post(heldUrl(gymA.org.id, rahul.entryId), giveBody(goldA, today, gift), owner.cookies);
+        expect(errorOf(res), res.body).toBe("friend_gift_not_theirs");
+        expect((await leadPage(gymA.org.id, leadId, owner.cookies)).friendGift).toEqual({ state: "member_before" });
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "a past member put back by Add member is joined to their old record and is not offered the gift",
+      async () => {
+        const gift = await friendDiscountOf(gymA.org.id);
+        const ines = await added(gymA.org.id, owner.cookies, { fullName: "Ines Lopez", email: "ines.lopez@example.com" });
+        await sql`UPDATE gym_member_list_entries SET former_at = now() - interval '30 days' WHERE id = ${ines.entryId}`;
+        const leadId = await invited(codeA, "Ines Lopez", "ines.lopez@example.com");
+        const back = await addMember(gymA.org.id, owner.cookies, { fullName: "Ines Lopez", email: "ines.lopez@example.com", leadId });
+        expect(back.statusCode, back.body).toBeLessThan(300);
+        expect((JSON.parse(back.body) as { outcome: string }).outcome).toBe("revived");
+        expect(await leadRow(leadId)).toEqual({ status: "joined", entry_id: ines.entryId });
+        expect((await memberships(gymA.org.id, ines.entryId, owner.cookies)).friendGift).toBeNull();
+        expect(errorOf(await post(heldUrl(gymA.org.id, ines.entryId), giveBody(goldA, today, gift), owner.cookies))).toBe("friend_gift_not_theirs");
+      },
+      TIMEOUT_MS,
+    );
+  });
+
+  describe("the lead says a gift was not used only where it could have been (round one, H2)", () => {
+    it(
+      "a free trial added first is not a gift left off: the line still says it will be filled in",
+      async () => {
+        const leadId = await invited(codeA, "Mia Wong", "mia.wong@example.com");
+        const mia = await added(gymA.org.id, owner.cookies, { fullName: "Mia Wong", email: "mia.wong@example.com", leadId });
+        const trial = await post(heldUrl(gymA.org.id, mia.entryId), { requestKey: nextForm(), typeId: freeA, startsOn: today, paid: false, priceMinor: 0 }, owner.cookies);
+        expect(trial.statusCode, trial.body).toBe(201);
+        expect((await leadPage(gymA.org.id, leadId, owner.cookies)).friendGift).toMatchObject({ state: "to_give", skipped: null });
+        // It is still offered for the paid membership after the trial.
+        expect((await memberships(gymA.org.id, mia.entryId, owner.cookies)).friendGift).not.toBeNull();
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "a membership added while the gift was for products only is not a gift left off once the gift covers memberships",
+      async () => {
+        const silver = await post(`/v1/orgs/${gymB.org.id}/membership-types`, { ...gold, name: "Silver Monthly" }, ownerB.cookies);
+        expect(silver.statusCode, silver.body).toBe(201);
+        const [type] = await sql<{ id: string }[]>`SELECT id FROM gym_membership_types WHERE gym_id = ${gymB.org.id} AND name = 'Silver Monthly'`;
+        if (type === undefined) throw new Error("no type");
+        const codeB = await linkOf(gymB, maya);
+        const leadId = await invited(codeB, "Zoe Park", "zoe.park@example.com");
+        const zoe = await added(gymB.org.id, ownerB.cookies, { fullName: "Zoe Park", email: "zoe.park@example.com", leadId });
+        const given = await post(heldUrl(gymB.org.id, zoe.entryId), { requestKey: nextForm(), typeId: type.id, startsOn: today, paid: false, priceMinor: 5000 }, ownerB.cookies);
+        expect(given.statusCode, given.body).toBe(201);
+        // The owner changes the friend's gift to memberships afterwards.
+        await switchOn(gymB, ownerB.cookies, pct(15));
+        expect((await leadPage(gymB.org.id, leadId, ownerB.cookies)).friendGift).toMatchObject({ state: "to_give", forMemberships: true, skipped: null });
+      },
+      TIMEOUT_MS,
+    );
+  });
+
   describe("Add member finds the person in Leads, as people really write an email and a phone", () => {
     it(
       "a UK mobile written three ways finds the lead; another address that reaches the same inbox does not",
@@ -436,6 +522,10 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         for (const email of ["samokafor@example.com", "sam.okafor+gym@example.com", "sam.okafor@example.co"]) {
           expect(await match(gymA.org.id, owner.cookies, { fullName: "Sam", email }), email).toBeNull();
         }
+        // Staff who may not take payments are shown the lead, never the gift and its code.
+        const asDesk = await match(gymA.org.id, desk.cookies, { fullName: "Sam", email: "sam.okafor@example.com" });
+        expect(asDesk).toMatchObject({ id: leadId, friendGift: null });
+        expect((await match(gymA.org.id, owner.cookies, { fullName: "Sam", email: "sam.okafor@example.com" }))?.friendGift).not.toBeNull();
         // Half typed: nobody yet, and no error.
         expect(await match(gymA.org.id, owner.cookies, { fullName: "Sam", email: "sam.okafor@" })).toBeNull();
       },

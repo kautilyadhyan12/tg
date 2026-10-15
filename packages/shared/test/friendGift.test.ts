@@ -34,7 +34,7 @@ describe("friendGiftState: every class of case", () => {
 describe("friendGiftLine: what staff read on the lead", () => {
   it.each([
     [{ state: "given", on: "Gold Monthly", day: "2026-10-05" } as const, "Friend's gift given on Gold Monthly, 5 October 2026."],
-    [{ state: "member_before" } as const, "No friend's gift: Tara had a membership here before they were invited."],
+    [{ state: "member_before" } as const, "No friend's gift: Tara was already on your Members list before they were invited."],
     [{ state: "no_gift" } as const, "No friend's gift: Refer a friend has no friend's gift that can be used today."],
     [{ state: "to_give", ...MEMBERSHIPS, skipped: null } as const, "Friend's gift (20% off the first payment of a membership): filled in when Tara's membership is added."],
     [
