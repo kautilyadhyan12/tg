@@ -868,7 +868,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       // The number shown was given to somebody else a moment before (5e-i): said where the
       // person added is, so a desk that wrote it down knows.
       const givenNumber = res.data.entry.memberNumber;
-      if (res.data.outcome === 'added' && input.memberNumber === undefined && offered !== null && givenNumber !== null && givenNumber !== offered) {
+      // Only while the panel still has that person open: staff may have moved on meanwhile.
+      const stillThere = wanted.current === res.data.entry.entryId;
+      if (stillThere && res.data.outcome === 'added' && input.memberNumber === undefined && offered !== null && givenNumber !== null && givenNumber !== offered) {
         setNotice((said) => `${said} Their member number is ${givenNumber}, as ${offered} was given to someone else a moment ago.`);
       }
       if (notGiven !== null) setRefusal({ message: notGiven, openId: null, ack: null });
@@ -1143,7 +1145,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       ? null
       : offered !== null && form.memberNumber === offered
         ? 'Your next member number. You can type a different one.'
-        : form.memberNumber.trim() === ''
+        : offered !== null && form.memberNumber.trim() === ''
           ? 'Left empty, they are given your next member number.'
           : null;
     const filled = hint !== null;

@@ -1251,6 +1251,8 @@ describe('Add member', () => {
     fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
     await waitFor(() => expect(orgService.getNextMemberNumber).toHaveBeenCalled());
     expect(dialog().getByLabelText('Member number').value).toBe('');
+    // Nothing was offered, so the box does not promise a number (round one re-check, Low-B).
+    expect(dialog().queryByText('Left empty, they are given your next member number.')).toBeNull();
     fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
     await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { email: 'bea@members.example' }));
   });
