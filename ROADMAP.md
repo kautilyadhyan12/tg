@@ -313,7 +313,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20e. **Review and referral messages**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-i.md`):
      - 20e-i. [x] **Ask for a review** — merged 2026-10-15 (PR #275).
      - 20e-ii. **Refer a friend**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-ii-a.md`):
-      - 20e-ii-a. [ ] **The offer, the invite link and the lead marked** (`rulings/2026-10-15-20e-ii-a.md`).
+      - 20e-ii-a. [x] **The offer, the invite link and the lead marked** — merged 2026-10-15 (PR #279).
       - 20e-ii-b. [ ] **Both gifts given by themselves** (Kd, 2026-10-15): the member's, once, off the next bill on the membership they have when their friend joins and pays (else credit for their next payment), told in their inbox; the friend's filled in when staff add their membership, with Remove; Add member matches Leads by email or phone; the lead says what was given and why not. Risky. Before anybody uses Refer a friend.
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
