@@ -152,6 +152,8 @@ beforeEach(() => {
   onClose = vi.fn();
   onChanged = vi.fn();
   orgService.getMemberList.mockResolvedValue({ data: { list: LIST } });
+  // Add member looks the person up in Leads (20e-ii-b-i): nobody, unless a test says so.
+  orgService.matchLead.mockResolvedValue({ data: { lead: null } });
   orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, bea]));
   orgService.getMemberListEntry.mockImplementation((_gym, id) =>
     Promise.resolve(entryAnswer({ [ADA]: ada, [BEA]: bea, [ADA_OLD]: adaOld }[id])),

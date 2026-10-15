@@ -462,6 +462,7 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         expect((await post(heldUrl(gymA.org.id, ticked.entryId), giveBody(goldA, today, null), owner.cookies)).statusCode).toBe(201);
         expect((await leadPage(gymA.org.id, joLead, owner.cookies)).friendGift).toEqual({
           state: "to_give",
+          words: "20% off the first payment of a membership",
           forMemberships: true,
           forProducts: false,
           skipped: { on: "Gold Monthly", day: today, by: "Owner A" },

@@ -18,8 +18,9 @@ export interface FriendGiftFacts {
   /** The first membership added since the invite without the gift, the gym's day it was, and
    *  the staff who added it (null where unknown); null for none. */
   skipped: { on: string; day: string; by: string | null } | null;
-  /** The business's friend's gift as it is today, where it can be used today. */
-  gift: { forMemberships: boolean; forProducts: boolean } | null;
+  /** The business's friend's gift as it is today, where it can be used today, with its words
+   *  ("20% off the first payment of a membership"). */
+  gift: { forMemberships: boolean; forProducts: boolean; words: string } | null;
 }
 
 export const leadFriendGiftSchema = z.discriminatedUnion("state", [
@@ -27,6 +28,7 @@ export const leadFriendGiftSchema = z.discriminatedUnion("state", [
   z
     .object({
       state: z.literal("to_give"),
+      words: z.string().min(1),
       forMemberships: z.boolean(),
       forProducts: z.boolean(),
       skipped: z.object({ on: z.string().min(1), day: z.string().regex(DAY), by: z.string().min(1).nullable() }).strict().nullable(),
@@ -43,7 +45,7 @@ export function friendGiftState(f: FriendGiftFacts): LeadFriendGift {
   if (f.given !== null) return { state: "given", on: f.given.on, day: f.given.day };
   if (f.memberBefore) return { state: "member_before" };
   if (f.gift === null) return { state: "no_gift" };
-  return { state: "to_give", forMemberships: f.gift.forMemberships, forProducts: f.gift.forProducts, skipped: f.skipped };
+  return { state: "to_give", words: f.gift.words, forMemberships: f.gift.forMemberships, forProducts: f.gift.forProducts, skipped: f.skipped };
 }
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -61,10 +63,9 @@ export function friendGiftLine(g: LeadFriendGift, name: string): string {
       return "No friend's gift: Refer a friend has no friend's gift that can be used today.";
     case "to_give": {
       if (g.skipped !== null && g.forMemberships) {
-        const next = g.forProducts ? `${name}'s next membership or purchase at Sell` : `${name}'s next membership`;
-        const added =
-          g.skipped.by === null ? `${g.skipped.on} was added without it` : `${g.skipped.by} added ${g.skipped.on} without it`;
-        return `Friend's gift not used: ${added} on ${fullDay(g.skipped.day)}. It will be offered again on ${next}.`;
+        const when = g.skipped.by === null ? `${name}'s ${g.skipped.on} was added` : `${g.skipped.by} added ${name}'s ${g.skipped.on}`;
+        const next = g.forProducts ? `${name}'s next membership is added or they buy at Sell` : `${name}'s next membership is added`;
+        return `${name} has not had the friend's gift yet (${g.words}). It was not used when ${when} on ${fullDay(g.skipped.day)}. It will be filled in again when ${next}.`;
       }
       const where =
         g.forMemberships && g.forProducts
@@ -72,7 +73,7 @@ export function friendGiftLine(g: LeadFriendGift, name: string): string {
           : g.forMemberships
             ? `when ${name}'s membership is added`
             : `when ${name} buys something at Sell`;
-      return `Friend's gift: filled in ${where}.`;
+      return `Friend's gift (${g.words}): filled in ${where}.`;
     }
   }
 }

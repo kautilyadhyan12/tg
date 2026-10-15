@@ -118,6 +118,7 @@ beforeEach(() => {
   onClose = vi.fn();
   onChanged = vi.fn();
   for (const fn of Object.values(orgService)) fn.mockReset();
+  orgService.matchLead.mockResolvedValue({ data: { lead: null } });
 });
 afterEach(() => cleanup());
 

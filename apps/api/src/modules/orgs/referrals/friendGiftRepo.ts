@@ -6,7 +6,7 @@
 // membership or a desk sale that still stands; and somebody who held a membership here
 // before they were invited is not offered it. Every statement names its gym.
 import type { Sql, TransactionSql } from "postgres";
-import { friendGiftState, referralGiftLive, type LeadFriendGift } from "@app/shared";
+import { friendGiftState, referralGiftLive, referralGiftWords, type LeadFriendGift } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { referralDiscounts, type DiscountRow } from "../register/discountsRepo.js";
 import { settingsFor } from "./repo.js";
@@ -122,7 +122,7 @@ export async function friendGiftsNow(
         memberBefore: row.memberBefore,
         given: row.given === null ? null : { on: row.given.on, day: dayInTz(row.given.at, gym.timezone) },
         skipped: row.skipped === null ? null : { on: row.skipped.on, day: dayInTz(row.skipped.at, gym.timezone), by: row.skipped.by },
-        gift: gift === null ? null : { forMemberships: gift.forMemberships, forProducts: gift.forProducts },
+        gift: gift === null ? null : { forMemberships: gift.forMemberships, forProducts: gift.forProducts, words: referralGiftWords({ ...gift, archived: false }) },
       });
       return [row.entryId, { row, state, discount: state.state === "to_give" ? gift : null }];
     }),
