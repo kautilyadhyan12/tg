@@ -78,10 +78,10 @@ export function winLine({ words, target, lowestWins = false, teamed }) {
   const c = { words };
   if (teamed) {
     if (target !== null) return `Reach ${amount(c, target)} as a team`;
-    return `The team with the ${lowestWins ? 'lowest' : 'most'} ${wordFor(c, 2)} wins`;
+    return lowestWins ? 'The fastest team wins' : `The team with the most ${wordFor(c, 2)} wins`;
   }
   if (target !== null) return `Reach ${amount(c, target)}`;
-  return `${lowestWins ? 'Lowest' : 'Most'} ${wordFor(c, 2)} wins`;
+  return lowestWins ? 'Fastest time wins' : `Most ${wordFor(c, 2)} wins`;
 }
 
 /** How it is won, in one line. */

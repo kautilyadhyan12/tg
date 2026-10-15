@@ -1152,7 +1152,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // deleted record lets it go.
       "gym_pt_appointments.entry_id",
       "gym_pt_appointments.gym_id",
-      // The friend a member's Refer a friend gift was given for (0120): moved by the join, so
+      // The friend a member's Refer a friend gift was given for (0121): moved by the join, so
       // the friend's next payment gives no second gift; a record deleted for good lets the
       // friend go and the gift still waits for its member (`referrals.memberGift.routes.test.ts`).
       "gym_referral_member_gifts.friend_entry_id",

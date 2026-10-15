@@ -1,5 +1,6 @@
 import {
   challengeScoresResponseSchema,
+  challengeSubjectsResponseSchema,
   challengeTeamPeopleResponseSchema,
   gymChallengeBoardResponseSchema,
   gymChallengeResponseSchema,
@@ -47,6 +48,8 @@ export const challengesService = {
 // anyone else whatever a screen shows.
 export const staffChallengesService = {
   list: (gymId) => readThrough(staffGymChallengesResponseSchema, 'the challenges', authApi.get(`${gymPath(gymId)}/staff`)),
+  /** What the form may pick at this gym: the list, and the library's exercises. */
+  subjects: (gymId) => readThrough(challengeSubjectsResponseSchema, 'what a challenge can be about', authApi.get(`${gymPath(gymId)}/subjects`)),
   board: (gymId, challengeId, page) =>
     readThrough(staffGymChallengeBoardResponseSchema, 'the board', authApi.get(`${challengePath(gymId, challengeId)}/board/staff`, { params: { page } })),
   /** A new challenge; one key is one challenge. */

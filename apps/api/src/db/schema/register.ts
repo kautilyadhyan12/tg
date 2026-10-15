@@ -213,7 +213,7 @@ export const gymSales = pgTable(
     receiptNumber: integer("receipt_number").notNull(),
     /** Sold to somebody on the gym's list, kept after their record is deleted for good (0114). */
     forMember: boolean("for_member").notNull().default(false),
-    /** Its discount line is a member's Refer a friend gift (0120), not one of the gym's discounts. */
+    /** Its discount line is a member's Refer a friend gift (0121), not one of the gym's discounts. */
     memberGift: boolean("member_gift").notNull().default(false),
     createdAt: createdAt(),
   },

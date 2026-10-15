@@ -30,7 +30,7 @@ import postgres from "postgres";
 import { GYM_CHALLENGES_CURRENT_MAX, GYM_CHALLENGES_ENDED_SHOWN, GYM_CHALLENGE_RESULT_POST_ENDING, GYM_CHALLENGE_TEAMS_MAX, GYM_POSTS_PAGE, GYM_POST_MAX_PINNED } from "@app/shared";
 import { postChallengeResults } from "../src/modules/orgs/challenges/resultPosts.js";
 import { getPosts, getStaffPosts } from "../src/modules/orgs/posts/service.js";
-import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, pickTeam, setCancelled, setJoined, setScores, setTeamPeople } from "../src/modules/orgs/challenges/service.js";
+import { addChallenge, getBoard, getChallenges, getStaffBoard, getStaffChallenges, getSubjects, pickTeam, setCancelled, setJoined, setScores, setTeamPeople } from "../src/modules/orgs/challenges/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -221,6 +221,7 @@ try {
     ["member, one whole board (everyone's challenge)", () => getBoard(deps, viewer, gymId, everyone, allowed)],
     ["member, one whole board (a challenge people join)", () => getBoard(deps, viewer, gymId, joined, allowed)],
     ["staff, the challenges", () => getStaffChallenges(deps, owner, gymId, allowed)],
+    ["staff, what the form may pick (the list and the library)", () => getSubjects(deps, owner, gymId, allowed)],
     ["staff, one board, a page of a hundred", () => getStaffBoard(deps, owner, gymId, everyone, 1, allowed)],
   ];
   for (const [name, fn] of reads) {
@@ -319,7 +320,7 @@ try {
     let id = "";
     adds.push(
       await time(async () => {
-        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", subject: "gym_visits", measure: "days", countedBy: "app", startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false, teams: "none", teamList: [] }, allowed);
+        const made = await addChallenge(deps, owner, gymId, { challengeKey: randomUUID(), name: "Added", details: "", prize: "", subject: "gym_visits", measure: "days", countedBy: "app", exercises: [], startsOn: today, endsOn: today, target: null, who: "everyone", unit: "", lowestWins: false, teams: "none", teamList: [] }, allowed);
         id = made?.id ?? "";
       }),
     );

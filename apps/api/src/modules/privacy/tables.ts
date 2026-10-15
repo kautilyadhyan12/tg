@@ -520,7 +520,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // null`.
   "gym_referral_settings",
   // gym_referral_member_gifts.member_user_id — the member a Refer a friend gift was given to
-  // (`0120`), on gym_leads' footing: the gym's record of money taken off its own bills and
+  // (`0121`), on gym_leads' footing: the gym's record of money taken off its own bills and
   // sales; `ON DELETE set null`. A deleted account's gift is never used: it is for the record
   // a live account holds.
   "gym_referral_member_gifts",
