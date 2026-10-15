@@ -130,9 +130,9 @@ export async function membershipDiscounts(sql: Sql, gymId: string): Promise<Disc
 }
 
 /** The gym's membership types on its price list, by name; a gym has at most 60. */
-export async function membershipTypeNames(sql: Sql, gymId: string): Promise<{ id: string; name: string }[]> {
-  return await sql<{ id: string; name: string }[]>`
-    SELECT id, name FROM gym_membership_types
+export async function membershipTypeNames(sql: Sql, gymId: string): Promise<{ id: string; name: string; taxRateId: string | null; free: boolean }[]> {
+  return await sql<{ id: string; name: string; taxRateId: string | null; free: boolean }[]>`
+    SELECT id, name, tax_rate_id AS "taxRateId", price_minor = 0 AS free FROM gym_membership_types
     WHERE gym_id = ${gymId} AND archived_at IS NULL
     ORDER BY lower(name), id`;
 }

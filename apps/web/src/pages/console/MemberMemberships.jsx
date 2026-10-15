@@ -5,7 +5,7 @@ import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import MembershipChoice from './MembershipChoice';
 import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
-import { NO_CODE, heldDiscountLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
+import { NO_CODE, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
@@ -559,7 +559,7 @@ export default function MemberMemberships({
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
-            const notes = [row.when, row.cancelled].filter((line) => line !== null);
+            const notes = [row.tax, row.when, row.cancelled].filter((line) => line !== null);
             return (
               <li
                 key={row.id}
@@ -797,6 +797,7 @@ export default function MemberMemberships({
         </div>
         <span className="c-s14 c-t2">{termLine(m)}</span>
         {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
+        {heldTaxLine(m) !== null ? <span className="c-s14 c-t2">{heldTaxLine(m)}</span> : null}
         <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
         {pay !== null ? (
           <span className="c-s14 c-w5" style={{ color: pay.due ? 'var(--warn)' : 'var(--t1)' }} data-testid="held-payment">
@@ -857,8 +858,8 @@ export default function MemberMemberships({
     const free = choice.type !== null && choice.type.priceMinor === 0;
     // A discount is used by whoever takes payments; the server sends nobody else any.
     const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
-    const summary = discount === null ? null : membershipSummary(choice.type, discount);
-    const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && (discount === null || summary !== null);
+    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded);
+    const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && summary !== null;
     return (
       <form
         noValidate
@@ -886,7 +887,7 @@ export default function MemberMemberships({
               today={today}
               value={form}
               canBill={shown.canBill}
-              paidMinor={summary === null ? null : summary.totalMinor}
+              paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null } } : {}) }))}
             />
             {choice.type !== null && !free && shown.canBill ? (
@@ -900,7 +901,7 @@ export default function MemberMemberships({
                 disabled={busy}
               />
             ) : null}
-            <MembershipTotal summary={summary} />
+            <MembershipTotal summary={summary !== null && summary.shows ? summary : null} />
           </>
         )}
         <div className="flex flex-wrap gap-2">

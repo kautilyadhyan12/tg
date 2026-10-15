@@ -2,7 +2,9 @@ import {
   DISCOUNTS_MAX,
   DISCOUNT_NAME_MAX,
   DISCOUNT_USES_MAX,
+  billAmounts,
   bpToPercentText,
+  bpToTaxRateText,
   discountFits,
   discountStatus,
   formatMinor,
@@ -248,27 +250,56 @@ export function pickedDiscount(page, type, discountId) {
   return discountsForType(page, type).find((d) => d.id === discountId) ?? null;
 }
 
-/** What a membership given with this discount comes to, as the lines above its button
- *  read: Price, Discount, Total, and what every later payment is. `discount` null is none.
- *  `offMinor` is what the server is sent as coming off. */
-export function membershipSummary(type, discount) {
+/** The tax a type's bills charge, as the server works it out: null for none. */
+function typeTax(type, taxIncluded) {
+  const t = type.tax;
+  return t === null || t === undefined ? null : { name: t.name, bp: t.bp, included: taxIncluded === true };
+}
+
+/** "GST 18%". */
+const taxLabel = (tax) => `${tax.name} ${bpToTaxRateText(tax.bp)}%`;
+
+/** What a membership comes to, as the lines above its button read: Price, Discount, its
+ *  tax, Total, and what every later payment is (18b-ii-b, 18b-iii). `discount` null is none.
+ *  `offMinor` is what the server is sent as coming off, `totalMinor` what its first bill
+ *  comes to: the server gives nothing where either is no longer so. `shows` is whether
+ *  there is anything to show beyond the price itself. Null where the discount cannot be
+ *  used on this type. */
+export function membershipSummary(type, discount, taxIncluded = false) {
   if (type === null || type === undefined) return null;
   const money = (minor) => formatMinor(minor, type.currency);
-  if (discount === null || discount === undefined) {
-    return { totalMinor: type.priceMinor, offMinor: null, total: type.priceMinor === 0 ? 'Free' : money(type.priceMinor), lines: [{ label: 'Total', value: type.priceMinor === 0 ? 'Free' : money(type.priceMinor), strong: true }], later: null };
+  if (type.priceMinor === 0) {
+    return { totalMinor: 0, offMinor: null, total: 'Free', lines: [{ label: 'Total', value: 'Free', strong: true }], later: null, shows: false };
   }
-  const costs = membershipDiscount(discount, type);
-  if (!costs.ok) return null;
-  const lines = [
-    { label: 'Price', value: money(type.priceMinor) },
-    { label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` },
-    { label: 'Total', value: money(costs.firstBillMinor), strong: true },
-  ];
+  let costs = { offMinor: null, payments: 'every', heldPriceMinor: type.priceMinor, firstBillMinor: type.priceMinor };
+  if (discount !== null && discount !== undefined) {
+    const made = membershipDiscount(discount, type);
+    if (!made.ok) return null;
+    costs = made;
+  }
+  const tax = typeTax(type, taxIncluded);
+  const first = billAmounts(costs.firstBillMinor, tax);
+  const next = billAmounts(costs.payments === 'first' ? type.priceMinor : costs.heldPriceMinor, tax);
+  if (!first.ok || !next.ok) return null;
+  const onTop = tax !== null && !tax.included;
+  const lines = [];
+  if (costs.offMinor !== null || onTop) lines.push({ label: 'Price', value: money(type.priceMinor) });
+  if (costs.offMinor !== null) lines.push({ label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` });
+  if (onTop) lines.push({ label: taxLabel(tax), value: money(first.taxMinor) });
+  lines.push({ label: 'Total', value: money(first.totalMinor), strong: true });
+  if (tax !== null && tax.included) lines.push({ label: `Includes ${taxLabel(tax)}`, value: money(first.taxMinor) });
   let later = null;
-  if (type.kind === 'recurring') {
-    later = costs.payments === 'first' ? `This is the first payment. Every payment after it is ${money(type.priceMinor)}.` : `Every payment is ${money(costs.heldPriceMinor)} while the membership lasts.`;
+  if (type.kind === 'recurring' && costs.offMinor !== null) {
+    later = costs.payments === 'first' ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.` : `Every payment is ${money(next.totalMinor)} while the membership lasts.`;
   }
-  return { totalMinor: costs.firstBillMinor, offMinor: costs.offMinor, total: money(costs.firstBillMinor), lines, later };
+  return { totalMinor: first.totalMinor, offMinor: costs.offMinor, total: money(first.totalMinor), lines, later, shows: costs.offMinor !== null || tax !== null };
+}
+
+/** A held membership's tax, said on a person's page (18b-iii); null where it has none. */
+export function heldTaxLine(membership) {
+  const t = membership.tax;
+  if (t === null || t === undefined) return null;
+  return `Each bill charges ${t.name} ${bpToTaxRateText(t.bp)}%.`;
 }
 
 /** A held membership's discount, said on a person's page; null where it had none. */
@@ -277,7 +308,7 @@ export function heldDiscountLine(membership) {
   if (d === null || d === undefined) return null;
   const off = formatMinor(d.offMinor, membership.currency);
   if (membership.kind !== 'recurring') return `Sold with ${d.name}: ${off} off.`;
-  if (d.payments === 'first') return `Sold with ${d.name}: ${off} off the first payment. Every payment after it is ${formatMinor(membership.priceMinor, membership.currency)}.`;
+  if (d.payments === 'first') return `Sold with ${d.name}: ${off} off the first payment. Every payment after it is ${formatMinor(membership.priceMinor, membership.currency)}${membership.tax === null || membership.tax === undefined ? '' : ' before tax'}.`;
   return `Sold with ${d.name}: ${off} off every payment.`;
 }
 

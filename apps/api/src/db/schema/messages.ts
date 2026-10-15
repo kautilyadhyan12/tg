@@ -5,7 +5,7 @@
 // `gym_group_messages` and `gym_member_messages_off` mirror `0092_group_messages.sql`;
 // `gym_message_settings` mirrors `0095_gym_message_settings.sql`. `0096_class_reminder.sql`
 // adds the `class_reminder` kind to each list and `hours` to a gym's settings;
-// `0112_review_message.sql` the `review` kind, `visits` and `link` to a gym's settings, and
+// `0113_review_message.sql` the `review` kind, `visits` and `link` to a gym's settings, and
 // `link` to a message.
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";

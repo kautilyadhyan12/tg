@@ -5,6 +5,9 @@ import {
   PRODUCT_NAME_MAX,
   PRODUCT_STOCK_MAX,
   SALE_QUANTITY_MAX,
+  TAX_NAME_MAX,
+  TAX_RATES_MAX,
+  billAmounts,
   bpToTaxRateText,
   discountOff,
   formatMinor,
@@ -56,6 +59,17 @@ export function taxPercent(bp) {
   return `${bpToTaxRateText(bp)}%`;
 }
 
+/** The gym's rate of this id, or null: no tax, or a rate since removed. */
+export function rateById(tax, rateId) {
+  if (rateId === null || rateId === undefined) return null;
+  return tax.rates.find((r) => r.id === rateId) ?? null;
+}
+
+/** "GST 18%": a rate as every list and bill names it. */
+export function rateLabel(rate) {
+  return `${rate.name} ${taxPercent(rate.bp)}`;
+}
+
 /** One product as the picker reads it: "Water · $1.99", with how many are left where the
  *  gym counts them. */
 export function productOption(product) {
@@ -81,7 +95,8 @@ export function discountMinorFor(product, quantity, discount) {
 export function saleSummary(product, quantity, tax, discount = null) {
   if (product === null || product === undefined) return null;
   const off = discountMinorFor(product, quantity, discount);
-  const amounts = saleAmounts({ unitPriceMinor: product.priceMinor, quantity, taxed: product.taxed, taxBp: tax.bp, taxIncluded: tax.included, discountMinor: off });
+  const rate = rateById(tax, product.taxRateId);
+  const amounts = saleAmounts({ unitPriceMinor: product.priceMinor, quantity, taxed: rate !== null, taxBp: rate?.bp ?? 0, taxIncluded: tax.included, discountMinor: off });
   if (!amounts.ok) return null;
   const money = (minor) => formatMinor(minor, product.currency);
   const lines = [];
@@ -92,9 +107,9 @@ export function saleSummary(product, quantity, tax, discount = null) {
   } else if (taxOnTop) {
     lines.push({ label: 'Price', value: money(amounts.netMinor) });
   }
-  if (taxOnTop) lines.push({ label: `Tax (${taxPercent(tax.bp)})`, value: money(amounts.taxMinor) });
+  if (taxOnTop && rate !== null) lines.push({ label: rateLabel(rate), value: money(amounts.taxMinor) });
   lines.push({ label: 'Total', value: money(amounts.totalMinor), strong: true });
-  if (amounts.taxMinor > 0 && tax.included) lines.push({ label: `Includes tax (${taxPercent(tax.bp)})`, value: money(amounts.taxMinor) });
+  if (amounts.taxMinor > 0 && tax.included && rate !== null) lines.push({ label: `Includes ${rateLabel(rate)}`, value: money(amounts.taxMinor) });
   return { totalMinor: amounts.totalMinor, total: money(amounts.totalMinor), lines };
 }
 
@@ -219,6 +234,12 @@ export function undoSaleQuestion(sale) {
   return `Undo this sale? ${String(sale.quantity)} × ${sale.itemName}, ${formatMinor(sale.totalMinor, sale.currency)}. It will no longer count in today's total. If you took the money, give it back yourself.`;
 }
 
+/** "$0.18 GST": the tax in a sale, by the name it was charged under; null for none. */
+export function saleTaxWords(sale) {
+  if (sale.taxMinor <= 0) return null;
+  return `${formatMinor(sale.taxMinor, sale.currency)} ${sale.taxName ?? 'tax'}`;
+}
+
 /** One purchase on a person's page. */
 export function purchaseLine(sale) {
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(sale.soldOn);
@@ -227,7 +248,7 @@ export function purchaseLine(sale) {
   return {
     title: `${String(sale.quantity)} × ${sale.itemName}`,
     amount: formatMinor(sale.totalMinor, sale.currency),
-    facts: [when, methodWords(sale.method), saleDiscountWords(sale), sale.taxMinor > 0 ? `${formatMinor(sale.taxMinor, sale.currency)} tax` : null].filter((x) => x !== null).join(' · '),
+    facts: [when, methodWords(sale.method), saleDiscountWords(sale), saleTaxWords(sale)].filter((x) => x !== null).join(' · '),
     undone: sale.undone,
   };
 }
@@ -237,8 +258,10 @@ export function purchaseLine(sale) {
 export const TOO_MANY_PRODUCTS = `You can have ${String(PRODUCTS_MAX)} products for sale. Archive one you no longer sell first.`;
 export const HIDDEN_TEXT = 'Something hidden was pasted in with this. Delete it and type it again.';
 
-export function emptyProductDraft() {
-  return { id: null, name: '', price: '', taxed: true, counts: false, stock: '', updatedAt: null };
+/** A new product charges the gym's tax where it has one rate, and asks where it has several. */
+export function emptyProductDraft(tax) {
+  const only = tax !== undefined && tax.rates.length === 1 ? (tax.rates[0]?.id ?? '') : '';
+  return { id: null, name: '', price: '', taxRateId: only, counts: false, stock: '', updatedAt: null };
 }
 
 export function draftFromProduct(product) {
@@ -246,7 +269,7 @@ export function draftFromProduct(product) {
     id: product.id,
     name: product.name,
     price: minorToPriceText(product.priceMinor, product.currency),
-    taxed: product.taxed,
+    taxRateId: product.taxRateId ?? '',
     counts: product.stock !== null,
     stock: product.stock === null ? '' : String(product.stock),
     updatedAt: product.updatedAt,
@@ -281,7 +304,7 @@ export function productBody(draft, currency) {
   const body = {
     name: draft.name.trim(),
     priceMinor: priceToMinor(draft.price, currency),
-    taxed: draft.taxed,
+    taxRateId: draft.taxRateId === '' ? null : draft.taxRateId,
     stock: draft.counts ? Number(draft.stock.trim()) : null,
   };
   return draft.id === null ? body : { ...body, updatedAt: draft.updatedAt };
@@ -291,43 +314,123 @@ export function productBody(draft, currency) {
 export function productRow(product, tax, currency) {
   const facts = [formatMinor(product.priceMinor, product.currency)];
   if (typeof currency === 'string' && product.currency !== currency) facts.push(`priced in ${product.currency}: save its price in ${currency} to sell it`);
-  if (tax.bp > 0) facts.push(product.taxed ? (tax.included ? 'tax included' : 'plus tax') : 'no tax');
+  const rate = rateById(tax, product.taxRateId);
+  if (tax.rates.length > 0) facts.push(rate === null ? 'no tax' : tax.included ? `${rateLabel(rate)} included` : `plus ${rateLabel(rate)}`);
   facts.push(product.stock === null ? 'stock not counted' : product.stock === 0 ? 'out of stock' : `${String(product.stock)} in stock`);
   return facts.join(' · ');
 }
 
-/** The two ways a gym charges tax, each with an example in the gym's own money. */
-export function taxModes(currency) {
+// ── Tax ─────────────────────────────────────────────────────────────────────
+
+export const TOO_MANY_RATES = `You can have ${String(TAX_RATES_MAX)} tax rates. Remove one you no longer charge first.`;
+export const RATE_HINT = 'Your accountant or tax office can tell you the name and rate of the tax you charge, such as GST 18% or Sales tax 8.25%.';
+export const RATE_CHANGE_NOTE = 'A new rate is charged on sales and bills from now on. Sales and bills already made keep the tax they were made with.';
+
+/** Said in a rate's Change form: who else a new percentage reaches (round one, L2). */
+export function rateChangeNote(rate) {
+  if (rate === null || rate === undefined || rate.memberships === 0) return RATE_CHANGE_NOTE;
+  const who = rate.memberships === 1 ? "the 1 member's membership" : `the ${String(rate.memberships)} members' memberships`;
+  const verb = rate.memberships === 1 ? 'charges' : 'charge';
+  return `${RATE_CHANGE_NOTE} The next bill of ${who} that ${verb} ${rate.name} changes too.`;
+}
+
+/** The two ways a gym charges tax, each with an example in the gym's own money, at the
+ *  gym's own first rate where it has one (Kd's click-through: "how is tax 10% decided"). */
+export function taxModes(currency, rate = null) {
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
+  const bp = rate === null || rate === undefined ? 1000 : rate.bp;
+  const name = rate === null || rate === undefined ? 'a 10% tax' : rateLabel(rate);
+  const price = 10000;
+  const onTop = billAmounts(price, { name: 'Tax', bp, included: false });
+  const inside = billAmounts(price, { name: 'Tax', bp, included: true });
+  const example = rate === null || rate === undefined ? 'For example, with a 10% tax' : `With ${name}`;
   return [
     {
       value: 'added',
       label: 'Added on top of the price',
-      hint: `At 10% tax, a product priced ${money(1000)} costs the customer ${money(1100)}. Usual in the United States and Canada.`,
+      hint: `${example}, a price of ${money(price)} costs the customer ${money(onTop.ok ? onTop.totalMinor : price)}. Usual in the United States and Canada.`,
     },
     {
       value: 'included',
       label: 'Already included in the price',
-      hint: `At 10% tax, a product priced ${money(1000)} costs the customer ${money(1000)}, and ${money(91)} of it is tax. Usual where VAT or GST is charged.`,
+      hint: `${example}, a price of ${money(price)} costs the customer ${money(price)}, and ${money(inside.ok ? inside.taxMinor : 0)} of it is tax. Usual where VAT or GST is charged.`,
     },
   ];
 }
 
-export function taxDraft(tax) {
-  return { rate: bpToTaxRateText(tax.bp), mode: tax.included ? 'included' : 'added' };
+/** What a rate's "Choose" box lists: the gym's membership types or its products, each
+ *  ticked where it charges this rate, with the rate it charges now where that is another. */
+export function chargeChoices(page, rate, use) {
+  const items = use === 'memberships' ? page.membershipTypes : page.products;
+  // A free membership opens no bill, so it is not offered.
+  return items
+    .filter((item) => item.free !== true)
+    .map((item) => {
+      const other = item.taxRateId !== null && item.taxRateId !== rate.id ? rateById(page.tax, item.taxRateId) : null;
+      return { id: item.id, name: item.name, on: item.taxRateId === rate.id, note: other === null ? null : `Now charges ${rateLabel(other)}` };
+    });
 }
 
-/** The tax form as the server takes it, or the sentence that says what is wrong. */
-export function taxBody(draft) {
-  const bp = taxRateToBp(draft.rate.trim() === '' ? '0' : draft.rate);
-  if (bp === null) return { ok: false, problem: 'Enter the tax rate as a number from 0 to 30, like 8.25. Use 0 for no tax.' };
-  return { ok: true, body: { bp, included: draft.mode === 'included' } };
+/** Said once a rate's list is saved, in the box it was saved in. */
+export function chargedWords(rate, names, use) {
+  const label = rateLabel(rate);
+  const what = use === 'memberships' ? 'membership' : 'product';
+  if (names.length === 0) return `${label} is now charged on no ${what}s.`;
+  const shown = names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${String(names.length - 3)} more`;
+  return `${label} is now charged on ${shown}.`;
 }
 
 /** What the gym's tax is, in one sentence. */
 export function taxLine(tax) {
-  if (tax.bp === 0) return 'No tax is charged on what you sell here.';
+  if (tax.rates.length === 0) return 'You charge no tax. Add a tax rate if you need to charge one.';
   return tax.included
-    ? `Your prices include ${taxPercent(tax.bp)} tax. Each sale shows how much of it is tax.`
-    : `${taxPercent(tax.bp)} tax is added on top of the price of each taxed product.`;
+    ? 'Your prices include the tax. Each sale and each bill shows how much of it is tax.'
+    : 'Tax is added on top of the price of each product and membership that charges it.';
+}
+
+const counted = (n, one, many) => `${String(n)} ${n === 1 ? one : many}`;
+
+/** What a rate is charged on, in one line. */
+export function rateUses(rate) {
+  const parts = [
+    rate.products > 0 ? counted(rate.products, 'product', 'products') : null,
+    rate.membershipTypes > 0 ? counted(rate.membershipTypes, 'membership type', 'membership types') : null,
+    rate.memberships > 0 ? counted(rate.memberships, "member's membership", "members' memberships") : null,
+  ].filter((p) => p !== null);
+  if (parts.length === 0) return 'Not charged on anything yet.';
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `Charged on ${list}.`;
+}
+
+/** Why a rate cannot be removed now, or null where it can. */
+export function rateRemoveBlock(rate) {
+  if (rate.products === 0 && rate.membershipTypes === 0 && rate.memberships === 0) return null;
+  const change = rate.products > 0 || rate.membershipTypes > 0 ? ' Change those to another rate or No tax first.' : '';
+  const held = rate.memberships > 0 ? ` A membership keeps the tax it was sold with, so ${rate.name} can be removed once nobody holds one.` : '';
+  return `${rate.name} can't be removed: ${rateUses(rate).replace(/^Charged on /, 'it is charged on ')}${change}${held}`;
+}
+
+export function emptyRateDraft() {
+  return { id: null, name: '', rate: '' };
+}
+
+export function draftFromRate(rate) {
+  return { id: rate.id, name: rate.name, rate: bpToTaxRateText(rate.bp) };
+}
+
+/** What is wrong with a rate form, by box; empty where it can be saved. */
+export function rateProblems(draft) {
+  const problems = {};
+  const name = draft.name.trim();
+  if (name === '') problems.name = 'Give the tax a name, such as GST, VAT or Sales tax.';
+  else if (name.length > TAX_NAME_MAX) problems.name = `Keep the name to ${String(TAX_NAME_MAX)} characters.`;
+  else if (!isVisibleText(name)) problems.name = HIDDEN_TEXT;
+  const bp = taxRateToBp(draft.rate);
+  if (bp === null || bp < 1) problems.rate = 'Enter the rate as a number above 0 and up to 30, like 8.25.';
+  return problems;
+}
+
+/** The rate form as the server takes it. Call only with no problems. */
+export function rateBody(draft) {
+  return { name: draft.name.trim(), bp: taxRateToBp(draft.rate) };
 }

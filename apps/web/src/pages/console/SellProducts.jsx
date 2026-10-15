@@ -5,6 +5,7 @@ import { errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import PlaceLink from '../../components/console/PlaceLink';
 import { Refusal } from './MemberListTags';
+import { NewRateInline } from './TaxRates';
 import {
   NO_MANAGING_LINE,
   TOO_MANY_PRODUCTS,
@@ -14,16 +15,13 @@ import {
   productBody,
   productProblems,
   productRow,
-  taxBody,
-  taxDraft,
-  taxLine,
-  taxModes,
+  rateLabel,
 } from './sellView';
 import { PRODUCTS_MAX } from '@app/shared';
 
-// PRODUCTS AND TAX, on the Sell page (spec Part 3 §14.3; ROADMAP 18b-i): what the gym
-// sells at the desk and the tax it charges, for staff who may change prices. Everybody
-// else who can open the page reads the list.
+// PRODUCTS, on the Sell page (spec Part 3 §14.3; ROADMAP 18b-i): what the gym sells at the
+// desk and the tax each charges, for staff who may change prices. Everybody else who can
+// open the page reads the list. The gym's tax rates are the Tax box's (`TaxRates.jsx`).
 
 const LINE = { borderTop: '1px solid var(--line)' };
 const BAD = { color: 'var(--bad)' };
@@ -43,7 +41,8 @@ export function SavedNote({ children }) {
   );
 }
 
-function ProductForm({ gymId, currency, taxOn, draft, setDraft, busy, error, onSave, onCancel }) {
+function ProductForm({ gymId, currency, rates, onPage, draft, setDraft, busy, error, onSave, onCancel }) {
+  const [addingRate, setAddingRate] = useState(false);
   const problems = draft.pressed ? productProblems(draft, currency) : {};
   const id = useId();
   const set = (patch) => setDraft((was) => ({ ...was, ...patch }));
@@ -72,11 +71,38 @@ function ProductForm({ gymId, currency, taxOn, draft, setDraft, busy, error, onS
         <input id={`${id}-price`} className="c-input" style={{ maxWidth: 200 }} inputMode="decimal" value={draft.price} disabled={busy} onChange={(e) => set({ price: e.target.value })} placeholder={priceExample(currency)} />
         {problems.price ? <p className="c-s14 m-0" style={BAD}>{problems.price}</p> : null}
       </div>
-      <label className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
-        <input type="checkbox" checked={draft.taxed} disabled={busy} onChange={(e) => set({ taxed: e.target.checked })} />
-        Charge tax on this product
-      </label>
-      {!taxOn ? <p className="c-s13 c-t3 m-0">Your tax rate is 0, so no tax is charged until you set a rate under Tax below.</p> : null}
+      <div className="c-field">
+        <label className="c-label" htmlFor={`${id}-tax`}>
+          Tax
+        </label>
+        <select id={`${id}-tax`} className="c-input" style={{ maxWidth: 280 }} value={draft.taxRateId} disabled={busy} onChange={(e) => set({ taxRateId: e.target.value })}>
+          <option value="">No tax</option>
+          {rates.map((rate) => (
+            <option key={rate.id} value={rate.id}>
+              {rateLabel(rate)}
+            </option>
+          ))}
+        </select>
+        {addingRate ? null : (
+          <p className="c-s13 c-t3 m-0 flex flex-wrap items-center gap-2">
+            {rates.length === 0 ? 'You have no tax rates yet.' : null}
+            <button type="button" className="c-btn-link c-s13 c-w6" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAddingRate(true)}>
+              Add a tax rate
+            </button>
+          </p>
+        )}
+      </div>
+      {addingRate ? (
+        <NewRateInline
+          gymId={gymId}
+          onPage={onPage}
+          onAdded={(rate) => {
+            setAddingRate(false);
+            set({ taxRateId: rate.id });
+          }}
+          onCancel={() => setAddingRate(false)}
+        />
+      ) : null}
       <label className="flex items-center gap-3 c-s15 c-t1" style={{ minHeight: 44 }}>
         <input type="checkbox" checked={draft.counts} disabled={busy} onChange={(e) => set({ counts: e.target.checked })} />
         Count how many are in stock
@@ -105,70 +131,6 @@ function ProductForm({ gymId, currency, taxOn, draft, setDraft, busy, error, onS
   );
 }
 
-function TaxForm({ gymId, page, locked, onPage }) {
-  const [draft, setDraft] = useState(() => taxDraft(page.tax));
-  const [state, setState] = useState({ saving: false, error: null, saved: false });
-  const rateId = useId();
-  const group = useId();
-  const was = taxDraft(page.tax);
-  const changed = draft.rate.trim() !== was.rate || draft.mode !== was.mode;
-  const set = (patch) => {
-    setDraft((d) => ({ ...d, ...patch }));
-    setState((s) => ({ ...s, error: null, saved: false }));
-  };
-  const save = async () => {
-    const made = taxBody(draft);
-    if (!made.ok) {
-      setState({ saving: false, error: made.problem, saved: false });
-      return;
-    }
-    setState({ saving: true, error: null, saved: false });
-    try {
-      const now = await registerService.saveTax(gymId, made.body);
-      setDraft(taxDraft(now.tax));
-      setState({ saving: false, error: null, saved: true });
-      onPage(now);
-    } catch (err) {
-      setState({ saving: false, error: errorText(err, "We couldn't save the tax. Try again."), saved: false });
-    }
-  };
-  return (
-    <div className="flex flex-col gap-4 pt-4" style={LINE}>
-      <h3 className="c-h3">Tax</h3>
-      <p className="c-s14 c-t2 m-0">{taxLine(page.tax)}</p>
-      <div className="c-field">
-        <label className="c-label" htmlFor={rateId}>
-          Tax rate, in percent
-        </label>
-        <input id={rateId} className="c-input" style={{ maxWidth: 160 }} inputMode="decimal" value={draft.rate} disabled={locked || state.saving} onChange={(e) => set({ rate: e.target.value })} />
-        <p className="c-s13 c-t3 m-0">Use 0 for no tax. Your accountant or tax office can tell you the rate for what you sell.</p>
-      </div>
-      <fieldset className="flex flex-col gap-1" style={{ border: 0, padding: 0, margin: 0 }}>
-        <legend className="c-label">How the tax is charged</legend>
-        {taxModes(page.currency).map((mode) => (
-          <label key={mode.value} className="flex items-start gap-3 c-s15 c-t1 py-2">
-            <input type="radio" className="mt-1" name={group} value={mode.value} checked={draft.mode === mode.value} disabled={locked || state.saving} onChange={() => set({ mode: mode.value })} />
-            <span className="flex flex-col">
-              {mode.label}
-              <span className="c-s13 c-t3">{mode.hint}</span>
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={locked || !changed || state.saving} onClick={() => void save()}>
-          {state.saving ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {state.saving ? 'Saving…' : 'Save tax'}
-        </button>
-        <p className="c-s13 c-t3 m-0" role="status">
-          {state.saved && !changed ? 'Saved. New sales use this tax; sales already made keep theirs.' : changed ? 'Not saved yet.' : ''}
-        </p>
-      </div>
-      {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
-    </div>
-  );
-}
-
 /** `addAsk`: a number the page raises each time a button elsewhere asks for the Add form. */
 export default function SellProducts({ gymId, page, locked, lockedNote, countryTo, addAsk = 0, onPage }) {
   const canManage = page.canManage;
@@ -182,7 +144,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
   const [asked, setAsked] = useState(0);
   if (addAsk !== asked) {
     setAsked(addAsk);
-    if (draft === null && canManage && !locked && page.currency !== null && !full) setDraft(emptyProductDraft());
+    if (draft === null && canManage && !locked && page.currency !== null && !full) setDraft(emptyProductDraft(page.tax));
   }
 
   const run = async (work, done) => {
@@ -218,7 +180,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="c-h2">Products</h2>
         {canManage && draft === null && page.currency !== null ? (
-          <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || full || state.busy} onClick={() => { setDraft(emptyProductDraft()); setState({ busy: false, error: null, done: null }); }}>
+          <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || full || state.busy} onClick={() => { setDraft(emptyProductDraft(page.tax)); setState({ busy: false, error: null, done: null }); }}>
             <Plus aria-hidden="true" className="w-4 h-4" />
             Add a product
           </button>
@@ -235,7 +197,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
       ) : null}
 
       {draft !== null && draft.id === null ? (
-        <ProductForm gymId={gymId} currency={page.currency} taxOn={page.tax.bp > 0} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
+        <ProductForm gymId={gymId} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
       ) : null}
       {state.done !== null ? <SavedNote>{state.done}</SavedNote> : null}
       {state.error !== null && draft === null ? <Refusal>{state.error}</Refusal> : null}
@@ -247,7 +209,7 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
           {page.products.map((product) => (
             <li key={product.id} className="flex flex-col gap-3 py-3" style={LINE} data-testid="product-row">
               {draft !== null && draft.id === product.id ? (
-                <ProductForm gymId={gymId} currency={page.currency} taxOn={page.tax.bp > 0} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
+                <ProductForm gymId={gymId} currency={page.currency} rates={page.tax.rates} onPage={onPage} draft={draft} setDraft={setDraft} busy={state.busy} error={state.error} onSave={() => void save()} onCancel={() => { setDraft(null); setState({ busy: false, error: null, done: null }); }} />
               ) : (
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div className="flex flex-col min-w-0">
@@ -307,7 +269,6 @@ export default function SellProducts({ gymId, page, locked, lockedNote, countryT
         </div>
       ) : null}
 
-      {canManage ? <TaxForm gymId={gymId} page={page} locked={locked} onPage={onPage} /> : <p className="c-s14 c-t2 m-0 pt-3" style={LINE}>{taxLine(page.tax)}</p>}
     </section>
   );
 }

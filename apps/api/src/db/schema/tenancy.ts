@@ -143,9 +143,8 @@ export const gyms = pgTable(
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),
     atRiskWeeksCame: integer("at_risk_weeks_came").notNull().default(2),
-    /** The gym's tax on what it sells (0102; spec Part 3 §14.3): hundredths of a percent, and
-     *  whether its prices already hold it (null: its country says). */
-    salesTaxBp: integer("sales_tax_bp").notNull().default(0),
+    /** Whether the gym's prices already hold its tax (0102; spec Part 3 §14.3; null: its
+     *  country says). Its rates are `gym_tax_rates` (0112). */
     salesTaxIncluded: boolean("sales_tax_included"),
     /** Whom the front desk checks in, and what it does with a payment overdue (0101; spec
      *  Part 3 §12.4), under `gyms_checkin_rules_check`; `checkinRulesSchema` in `@app/shared`. */
@@ -157,7 +156,6 @@ export const gyms = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    check("gyms_sales_tax_check", sql`${t.salesTaxBp} BETWEEN 0 AND 3000`),
     check(
       "gyms_leaderboard_boards_off_check",
       sql`${t.leaderboardBoardsOff} <@ ARRAY['gym_days','workout_days','streak']::text[]`,

@@ -28,7 +28,7 @@ import {
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { lockGym } from "../memberList/repo.js";
-import { billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
+import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
 export type BillWriteOutcome =
@@ -103,14 +103,16 @@ export async function recordPayment(
     if (row === null) return { kind: "membership_not_found" };
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
-    const target = memberPayTarget(row.membership, row.priceMinor, input.today, bills, entry.past);
+    const target = memberPayTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
     if (target === null || target.periodIndex !== input.periodIndex) return { kind: "not_allowed" };
     if (input.amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
 
     // Everything that can refuse is asked before anything is written: a refusal leaves no
     // bill behind.
     const found = bills.find((b) => b.periodIndex === target.periodIndex);
-    const paid = payMemberBill(found ?? { status: "open", amountMinor: row.priceMinor, paidMinor: 0 }, input.amountMinor);
+    // A period with no bill yet is opened as the bill run would open it today, its tax in.
+    const opening = billOf(row.priceMinor, row.taxApplied);
+    const paid = payMemberBill(found ?? { status: "open", amountMinor: opening.amountMinor, paidMinor: 0 }, input.amountMinor);
     if (!paid.ok) return { kind: "not_allowed" };
     // The count of paid periods moves with the payment that settles the bill, or not at all.
     let paidPeriods: number | null = null;
@@ -125,11 +127,11 @@ export async function recordPayment(
       const [opened] = await insertBills(
         tx,
         input.gymId,
-        [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
+        [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
         input.now,
       );
       if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
-      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: row.priceMinor, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
+      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
     }
 
     const paymentId = await insertPayment(
@@ -287,7 +289,7 @@ export async function cancelMemberBill(
     if (bill === undefined) return { kind: "bill_not_found" };
     if (bill.status === "void" && bill.cancelled !== null) return { kind: "ok" };
     if (bill.status === "open" && bill.paidMinor > 0) return { kind: "bill_has_payment" };
-    const target = memberCancelTarget(row.membership, row.priceMinor, input.today, bills, entry.past);
+    const target = memberCancelTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
     if (target === null || target.periodIndex !== bill.periodIndex) return { kind: "not_allowed" };
     const count = countAfterPayment(row.membership, target, input.today);
     if (!count.ok) return { kind: "not_allowed" };
@@ -494,7 +496,17 @@ export async function saveOverdueDays(sql: Sql, input: { gymId: string; days: nu
 
 // ── The run that opens the bills that have fallen due ───────────────────────
 
-type Owing = ListHeldColumns & { gym_id: string; entry_id: string; timezone: string; price_minor: number; currency: string };
+type Owing = ListHeldColumns & {
+  gym_id: string;
+  entry_id: string;
+  timezone: string;
+  price_minor: number;
+  currency: string;
+  /** The rate the membership was sold with, as it is now; null for none (18b-iii). */
+  tax_name: string | null;
+  tax_bp: number | null;
+  tax_included: boolean | null;
+};
 
 /** The memberships that may be owed a bill: stored active, with a price, of a current
  *  record of a gym that is open, and either repeating and renewing or never paid. Which
@@ -504,10 +516,12 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
          (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
-         h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency
+         h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
+         r.name AS tax_name, r.rate_bp AS tax_bp, h.tax_included
   FROM gym_held_memberships h
   JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
   JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+  LEFT JOIN gym_tax_rates r ON r.gym_id = h.gym_id AND r.id = h.tax_rate_id
   JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
   WHERE h.status = 'active' AND h.price_minor > 0
     AND ((h.kind = 'recurring' AND h.renews) OR (h.kind <> 'recurring' AND h.paid_periods = 0))
@@ -565,8 +579,13 @@ function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<nu
       work.counts.push({ entryId: row.entry_id, row: { id: row.id, typeName: row.type_name, membership }, count });
       membership = { ...membership, paidPeriods: count, paidFloor: count };
     }
-    for (const due of billsToOpen(membership, work.today, have)) {
-      work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: row.price_minor, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
+    const opens = billsToOpen(membership, work.today, have);
+    if (opens.length === 0) continue;
+    // Each bill charges the rate its membership was sold with, at its percentage today.
+    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: row.tax_included ?? false };
+    const bill = billOf(row.price_minor, tax);
+    for (const due of opens) {
+      work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: bill.amountMinor, tax: bill.tax, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
     }
   }
   for (const [gymId, work] of byGym) if (work.counts.length === 0 && work.bills.length === 0) byGym.delete(gymId);

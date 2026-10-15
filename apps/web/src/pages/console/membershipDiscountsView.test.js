@@ -14,6 +14,7 @@ import {
   draftFromDiscount,
   emptyDiscountDraft,
   heldDiscountLine,
+  heldTaxLine,
   membershipPromoCodeNote,
   membershipSummary,
   oldMoneySaleLine,
@@ -23,7 +24,7 @@ import {
 const GOLD = { id: 't-gold', name: 'Gold Monthly', kind: 'recurring', priceMinor: 5000, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
 const PASS = { id: 't-pass', name: 'Day pass', kind: 'pack', priceMinor: 1500, currency: 'USD', termCount: null, termUnit: null, packClasses: 1, packDays: 1 };
 const STAFF = { id: 't-staff', name: 'Staff', kind: 'recurring', priceMinor: 0, currency: 'USD', termCount: 1, termUnit: 'month', packClasses: null, packDays: null };
-const WATER = { id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxed: true, stock: null };
+const WATER = { id: 'p-water', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: null, stock: null };
 const discount = (over = {}) => ({
   id: 'd-first',
   name: 'First month',
@@ -129,11 +130,60 @@ describe('what a membership with a discount comes to', () => {
     expect(summary.offMinor).toBe(offMinor);
   });
 
+  // Worked by hand: 18% of $50.00 is $9.00, of $40.00 is $7.20; 20% VAT inside £50.00 is
+  // 50 / 6 = 8.333, so £8.33.
+  const GST = { name: 'GST', bp: 1800 };
+  it.each([
+    // [what, type, discount, the gym's prices hold the tax, the lines, later payments, the first bill]
+    ['GST on top of $50.00', { ...GOLD, tax: GST }, null, false, [['Price', '$50.00'], ['GST 18%', '$9.00'], ['Total', '$59.00']], null, 5900],
+    [
+      'GST on top, 20% off the first month',
+      { ...GOLD, tax: GST },
+      FIRST,
+      false,
+      [['Price', '$50.00'], ['Discount (First month)', '-$10.00'], ['GST 18%', '$7.20'], ['Total', '$47.20']],
+      'This is the first payment. Every payment after it is $59.00.',
+      4720,
+    ],
+    [
+      'GST on top, $10.00 off every month',
+      { ...GOLD, tax: GST },
+      FOUNDERS,
+      false,
+      [['Price', '$50.00'], ['Discount (Founders)', '-$10.00'], ['GST 18%', '$7.20'], ['Total', '$47.20']],
+      'Every payment is $47.20 while the membership lasts.',
+      4720,
+    ],
+    ['VAT inside £50.00', { ...GOLD, currency: 'GBP', tax: { name: 'VAT', bp: 2000 } }, null, true, [['Total', '£50.00'], ['Includes VAT 20%', '£8.33']], null, 5000],
+    ['a type with no tax, at a gym whose prices hold it', GOLD, null, true, [['Total', '$50.00']], null, 5000],
+    ['a free type is free, tax or none', { ...STAFF, tax: GST }, null, false, [['Total', 'Free']], null, 0],
+  ])('%s', (_what, type, d, included, lines, later, totalMinor) => {
+    const summary = membershipSummary(type, d, included);
+    expect(summary.lines.map((l) => [l.label, l.value])).toEqual(lines);
+    expect(summary.later).toBe(later);
+    expect(summary.totalMinor).toBe(totalMinor);
+  });
+
+  it('the box under the form is drawn only where there is more to say than the price', () => {
+    expect(membershipSummary(GOLD, null).shows).toBe(false);
+    expect(membershipSummary(GOLD, FIRST).shows).toBe(true);
+    expect(membershipSummary({ ...GOLD, tax: GST }, null).shows).toBe(true);
+    expect(membershipSummary({ ...STAFF, tax: GST }, null).shows).toBe(false);
+  });
+
   it('nothing to show for no type, or a discount that would take the whole price', () => {
     expect(membershipSummary(null, FIRST)).toBeNull();
     expect(membershipSummary(PASS, discount({ kind: 'amount', percentBp: null, amountMinor: 1500, currency: 'USD' }))).toBeNull();
   });
 
+});
+
+describe('what a person page says of a membership’s tax', () => {
+  it('names the rate its bills charge, and nothing where there is none', () => {
+    expect(heldTaxLine({ tax: { name: 'GST', bp: 1800 } })).toBe('Each bill charges GST 18%.');
+    expect(heldTaxLine({ tax: { name: 'Sales tax', bp: 825 } })).toBe('Each bill charges Sales tax 8.25%.');
+    expect(heldTaxLine({ tax: null })).toBeNull();
+  });
 });
 
 describe('what a person page says of a membership sold with a discount', () => {
