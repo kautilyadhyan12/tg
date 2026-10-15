@@ -16,9 +16,9 @@ const svc = { list: vi.fn(), subjects: vi.fn(), board: vi.fn(), add: vi.fn(), ch
 const OFFERED = {
   subjects: offeredSubjects('member'),
   exercises: [
-    { slug: 'chair_squat', name: 'Chair Squats', appCounts: false },
-    { slug: 'plank', name: 'Plank', appCounts: false },
-    { slug: 'squat', name: 'Squats', appCounts: false },
+    { slug: 'chair_squat', name: 'Chair Squats', word: 'chair squats', held: false, appCounts: false },
+    { slug: 'plank', name: 'Plank', word: 'seconds', held: true, appCounts: false },
+    { slug: 'squat', name: 'Squats', word: 'squats', held: false, appCounts: false },
   ],
 };
 /** The form's first question, there once what the gym can pick has come. */

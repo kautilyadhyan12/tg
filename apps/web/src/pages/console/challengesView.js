@@ -96,7 +96,7 @@ function staffWordFor(draft, offered) {
   if (subject?.pickExercise) {
     const exercise = exerciseOf(offered, draft.exercise);
     if (exercise?.held === true) return TIME_WORD;
-    return (exercise?.name ?? '').toLowerCase().slice(0, CHALLENGE_LIMITS.unit);
+    return (exercise?.word ?? '').slice(0, CHALLENGE_LIMITS.unit);
   }
   if (subject !== undefined && subject.staffWord !== '') return subject.staffWord;
   return draft.ownUnit ?? '';

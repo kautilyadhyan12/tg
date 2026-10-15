@@ -2,7 +2,7 @@
 // gym may ask for, how each may be won, and the words each is sent with. The expected
 // answers are written out from the spec's table and words, case by case.
 import { describe, expect, it } from "vitest";
-import { CHALLENGE_SUBJECTS, addGymChallengeRequestSchema, appCountsExercise, challengeWords, kindOnTheList, offeredSubjects, oneOf, type ChallengeKind } from "../src/index.js";
+import { CATALOG_58, CHALLENGE_SUBJECTS, GYM_CHALLENGE_UNIT_MAX, addGymChallengeRequestSchema, appCountsExercise, exerciseCountWord, exerciseIsHeld, challengeWords, kindOnTheList, offeredSubjects, oneOf, type ChallengeKind } from "../src/index.js";
 
 const body = (over: Record<string, unknown> = {}) => ({
   challengeKey: "00000000-0000-4000-8000-000000000118",
@@ -221,5 +221,16 @@ describe("a challenge about an exercise", () => {
     expect(offered[0]?.hint).toBe("Days a client is checked in, at your front desk or by your staff.");
     expect(offered[0]?.appCounts[0]?.howLine).toBe("Checked in at the front desk");
     expect([appCountsExercise(true), appCountsExercise(false)]).toEqual([false, false]);
+  });
+});
+
+describe("the word each exercise of the library is counted in", () => {
+  it("every one of the 58 has a word that fits the staff's box, and a hold or a pose is counted in seconds", () => {
+    for (const e of CATALOG_58) {
+      const word = exerciseCountWord(e.slug);
+      expect([e.slug, word !== null && word.trim() !== "" && word.length <= GYM_CHALLENGE_UNIT_MAX]).toEqual([e.slug, true]);
+      expect([e.slug, word === "seconds"]).toEqual([e.slug, exerciseIsHeld(e.slug)]);
+    }
+    expect(exerciseCountWord("no_such_exercise")).toBeNull();
   });
 });

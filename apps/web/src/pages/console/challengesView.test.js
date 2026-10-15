@@ -93,9 +93,10 @@ const draft = (over = {}) => {
 const OFFERED = {
   subjects: offeredSubjects('member'),
   exercises: [
-    { slug: 'chair_squat', name: 'Chair Squats', held: false, appCounts: false },
-    { slug: 'plank', name: 'Plank', held: true, appCounts: false },
-    { slug: 'squat', name: 'Squats', held: false, appCounts: false },
+    { slug: 'chair_squat', name: 'Chair Squats', word: 'chair squats', held: false, appCounts: false },
+    { slug: 'glute_bridge', name: 'Glute Bridge', word: 'glute bridges', held: false, appCounts: false },
+    { slug: 'plank', name: 'Plank', word: 'seconds', held: true, appCounts: false },
+    { slug: 'squat', name: 'Squats', word: 'squats', held: false, appCounts: false },
   ],
 };
 const squatWords = { about: 'Squats', one: 'squat', many: 'squats', print: 'whole', how: 'staff', howLine: 'Counted by the staff at Iron House', explain: 'The staff count.', perDay: false };
@@ -559,6 +560,7 @@ describe('every number with its word, and every choice in plain words', () => {
     ]);
     expect(exerciseChoices(OFFERED)).toEqual([
       { id: 'chair_squat', title: 'Chair Squats' },
+      { id: 'glute_bridge', title: 'Glute Bridge' },
       { id: 'plank', title: 'Plank' },
       { id: 'squat', title: 'Squats' },
     ]);
@@ -576,7 +578,7 @@ describe('every number with its word, and every choice in plain words', () => {
     // and before one is picked, nothing but to pick it.
     const counted = {
       subjects: OFFERED.subjects.map((s) => (s.id === 'exercise' ? { ...s, appCounts: [{ measure: 'reps', one: 'rep', many: 'reps', howLine: 'Counted by the camera' }] } : s)),
-      exercises: [{ slug: 'squat', name: 'Squats', held: false, appCounts: true }, { slug: 'push_up', name: 'Push-ups', held: false, appCounts: false }],
+      exercises: [{ slug: 'squat', name: 'Squats', word: 'squats', held: false, appCounts: true }, { slug: 'push_up', name: 'Push-ups', word: 'push-ups', held: false, appCounts: false }],
     };
     const ex = withSubject(draft(), 'exercise', counted);
     expect(countedByChoices(ex, counted, WORDS).choices[0].sub).toBe('Pick an exercise first.');
@@ -600,6 +602,8 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(fieldsOf(squats)).toMatchObject({ subject: 'exercise', measure: null, countedBy: 'staff', exercises: ['squat'], unit: 'squats' });
     // Another exercise: the word follows it; a word the staff typed stays theirs.
     expect(withExercise(squats, 'chair_squat', OFFERED).unit).toBe('chair squats');
+    // In the word the server sends, not the library's name.
+    expect(withExercise(squats, 'glute_bridge', OFFERED).unit).toBe('glute bridges');
     expect(withExercise({ ...squats, unit: 'reps' }, 'chair_squat', OFFERED).unit).toBe('reps');
     // About something else, no exercise is sent.
     expect(fieldsOf(withSubject(squats, 'workouts', OFFERED))).toMatchObject({ subject: 'workouts', measure: 'days', countedBy: 'app', exercises: [], unit: '' });

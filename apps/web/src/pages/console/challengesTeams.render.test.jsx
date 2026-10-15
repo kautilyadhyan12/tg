@@ -101,7 +101,7 @@ beforeEach(() => {
   orgApi.getMine.mockReset();
   resetConsoleOrgs();
   svc.list.mockResolvedValue(listOf());
-  svc.subjects.mockResolvedValue({ subjects: offeredSubjects('member'), exercises: [{ slug: 'squat', name: 'Squats', appCounts: false }] });
+  svc.subjects.mockResolvedValue({ subjects: offeredSubjects('member'), exercises: [{ slug: 'squat', name: 'Squats', word: 'squats', held: false, appCounts: false }] });
 });
 afterEach(() => cleanup());
 

@@ -218,15 +218,13 @@ d("a challenge about an exercise, and the list the form reads (real Postgres)", 
       expect(renamed.statusCode, renamed.body).toBe(200);
       expect(await keptExercises(c.id)).toEqual(["squat"]);
 
-      // Its exercise hidden from the library since: its name still changes, the exercise kept.
-      await sql`UPDATE exercises SET status = 'hidden' WHERE slug = 'squat'`;
-      try {
-        const later = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, fields({ name: "Squat Oct" }));
-        expect(later.statusCode, later.body).toBe(200);
-        expect(await keptExercises(c.id)).toEqual(["squat"]);
-      } finally {
-        await sql`UPDATE exercises SET status = 'live' WHERE slug = 'squat'`;
-      }
+      // Its exercise hidden from the library since (this file's own hidden row, so no other file
+      // reads a library without squat): its name still changes, the exercise kept.
+      await sql`UPDATE gym_challenge_exercises SET exercise_id = (SELECT id FROM exercises WHERE slug = ${HIDDEN}) WHERE challenge_id = ${c.id}`;
+      const later = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, fields({ name: "Squat Oct", exercises: [HIDDEN] }));
+      expect(later.statusCode, later.body).toBe(200);
+      expect(await keptExercises(c.id)).toEqual([HIDDEN]);
+      await sql`UPDATE gym_challenge_exercises SET exercise_id = (SELECT id FROM exercises WHERE slug = 'squat') WHERE challenge_id = ${c.id}`;
 
       // Not started: another exercise takes its place, and only it is kept.
       const coming = await added(gym, { startsOn: "2026-10-20", endsOn: "2026-10-31" });
@@ -270,7 +268,16 @@ d("a challenge about an exercise, and the list the form reads (real Postgres)", 
       const slugs = body.exercises.map((e) => e.slug);
       expect(slugs).toContain("squat");
       expect(slugs).not.toContain(HIDDEN);
-      expect(body.exercises.find((e) => e.slug === "squat")).toEqual({ slug: "squat", name: "Squats", held: false, appCounts: false });
+      expect(body.exercises.find((e) => e.slug === "squat")).toEqual({ slug: "squat", name: "Squats", word: "squats", held: false, appCounts: false });
+      // The word a count is said in: the name, unless the name is not that word.
+      expect(["plank", "glute_bridge", "bulgarian_split_squat", "skipping_rope", "superman", "push_up"].map((slug) => body.exercises.find((e) => e.slug === slug)?.word)).toEqual([
+        "seconds",
+        "glute bridges",
+        "Bulgarian split squats",
+        "skips",
+        "reps",
+        "push-ups",
+      ]);
       // A hold and a pose are done for a time: counted in seconds.
       expect(["plank", "warrior_i", "brisk_walking", "push_up"].map((slug) => body.exercises.find((e) => e.slug === slug)?.held)).toEqual([true, true, true, false]);
       // Nothing the app cannot count is offered as counted by it.

@@ -30,6 +30,7 @@ import {
   appCountsExercise,
   challengeSubjectsResponseSchema,
   challengeWords,
+  exerciseCountWord,
   exerciseIsHeld,
   exerciseNameOf,
   offeredSubjects,
@@ -786,7 +787,8 @@ export async function getSubjects(deps: ChallengesDeps, staffId: string, gymId: 
   const exercises = library
     .flatMap((e) => {
       const name = exerciseNameOf(e.slug);
-      return name === null ? [] : [{ slug: e.slug, name, held: exerciseIsHeld(e.slug), appCounts: appCountsExercise(e.liveDefinition) }];
+      const word = exerciseCountWord(e.slug);
+      return name === null || word === null ? [] : [{ slug: e.slug, name, word, held: exerciseIsHeld(e.slug), appCounts: appCountsExercise(e.liveDefinition) }];
     })
     .sort((a, b) => a.name.localeCompare(b.name, "en"));
   return challengeSubjectsResponseSchema.parse({ subjects: offeredSubjects(orgWords(org.orgType).person), exercises });
