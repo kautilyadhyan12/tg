@@ -155,17 +155,6 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     expect((await post(`/v1/orgs/${org.org.id}/applications/${id}/confirm`, {}, owner)).statusCode).toBe(200);
   };
 
-  /** The offer: the member's gift as given, and the friend's 20% off their first payment. */
-  const setOffer = async (
-    org: CreatedOrg,
-    owner: Cookies,
-    member: { kind: "amount" | "percent"; amountMinor: number | null; percentBp: number | null } | null,
-    on: "membership" | "products" = "membership",
-  ) => {
-    const friend = { kind: "percent", percentBp: 2000, amountMinor: null, on: "first" };
-    const res = await put(`/v1/orgs/${org.org.id}/referral-settings`, { on: true, member: member === null ? null : { ...member, on, days: null }, friend }, owner);
-    expect(res.statusCode, res.body).toBe(200);
-  };
   const TEN_POUNDS = { kind: "amount" as const, amountMinor: 1000, percentBp: null };
 
   const linkOf = async (org: CreatedOrg, person: Person): Promise<string> => {
@@ -268,8 +257,9 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     ownerB = await makeUser("owner-b", "Owner B");
     gymA = await makeOrg(owner.cookies, "Northside Free Days A");
     gymB = await makeOrg(ownerB.cookies, "Southside Free Days B");
-    await setOffer(gymA, owner.cookies, TEN_POUNDS);
-    await setOffer(gymB, ownerB.cookies, TEN_POUNDS);
+    // The offer: 14 free days, and £10 off for a member with no membership (`setDays`, below).
+    await setDays(gymA, owner.cookies, 14);
+    await setDays(gymB, ownerB.cookies, 14);
     const typeOf = async (gym: CreatedOrg, cookies: Cookies, body: Record<string, unknown> & { name?: string }): Promise<string> => {
       const res = await post(`/v1/orgs/${gym.org.id}/membership-types`, { ...gold, ...body }, cookies);
       expect(res.statusCode, res.body).toBe(201);
@@ -327,8 +317,6 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     it(
       "the days go only on the inviting member's own membership at this business, once: its renewal moves 14 days and nothing paid or owed moves",
       async () => {
-        await setDays(gymA, owner.cookies, 14);
-        await setDays(gymB, ownerB.cookies, 14);
         const maya = await memberWithBill("maya", "Maya Patel", true);
         const ben = await memberWithBill("ben", "Ben Okafor", true);
         await join(gymB, ownerB.cookies, maya.person);
@@ -502,6 +490,16 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
         expect((await withDays(gymA.org.id)).filter((r) => r.entry_id === lia.entryId)).toMatchObject([{ gift_days: 14 }]);
         expect((await daysGifts(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ days: 14, taken_back_why: null }]);
         expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift?.gift).toMatchObject({ state: "days_added" });
+
+        // The friend pays again: the payment is taken like any other, and nothing more is given.
+        const again = await firstOf(gymA.org.id, friend.entryId);
+        const pay = again.billing?.pay;
+        if (pay === null || pay === undefined) throw new Error("nothing to pay");
+        const paid = await post(`${heldUrl(gymA.org.id, friend.entryId)}/${again.id}/payments`, { requestKey: nextForm(), periodIndex: pay.periodIndex, amountMinor: pay.leftMinor, method: "cash" }, owner.cookies);
+        expect(paid.statusCode, paid.body).toBe(200);
+        expect((await daysGifts(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toHaveLength(1);
+        expect((await withDays(gymA.org.id)).filter((r) => r.entry_id === lia.entryId)).toMatchObject([{ gift_days: 14 }]);
+        expect(await messagesOf(lia.person.id)).toHaveLength(1);
       },
       TIMEOUT_MS,
     );
