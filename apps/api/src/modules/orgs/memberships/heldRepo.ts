@@ -55,6 +55,7 @@ import {
 import { insertAudit, insertAudits } from "../repo.js";
 import { lockEntries, lockGym } from "../memberList/repo.js";
 import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
+import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
 import {
   billOf,
@@ -357,6 +358,8 @@ export type HeldWriteOutcome =
   | { kind: "discount_nothing_to_pay" }
   /** What the discount takes off is no longer what the screen showed. */
   | { kind: "discount_changed" }
+  /** Refer a friend's gift, for somebody who is not an invited friend, or has had it. */
+  | { kind: "friend_gift_not_theirs" }
   /** A cancel, and a payment stands on a bill for days after the membership's last day. */
   | { kind: "early_payment" };
 
@@ -505,6 +508,8 @@ export async function giveHeld(
       if (found === null) return { kind: "discount_not_found" };
       const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, membershipTypeId: type.id, currency: type.currency });
       if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
+      // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i).
+      if (found.referralGift && !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today))) return { kind: "friend_gift_not_theirs" };
       const costs = membershipDiscount(found, type);
       if (!costs.ok) return costs.reason === "nothing_off" ? { kind: "discount_nothing_off", name: found.name } : { kind: "discount_nothing_to_pay" };
       if (costs.offMinor !== input.discount.shownOffMinor) return { kind: "discount_changed" };

@@ -31,6 +31,7 @@ import {
 } from "./memberships.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
+import { friendGiftSchema } from "./friendGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
@@ -700,6 +701,9 @@ export const heldMembershipsResponseSchema = z
     canBill: z.boolean(),
     /** The gym's discounts in use that are for memberships (18b-ii-b), for the Add form. */
     discounts: z.array(gymDiscountSchema),
+    /** Refer a friend's gift where this person is a friend a member invited and has not had
+     *  it (20e-ii-b-i): filled in on the Add form, with Remove. Null otherwise. */
+    friendGift: friendGiftSchema.nullable().default(null),
     /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
     taxIncluded: z.boolean(),
   })

@@ -1,0 +1,94 @@
+// REFER A FRIEND: THE FRIEND'S GIFT — spec Part 3 §16.3; ROADMAP Stage 2 item 20e-ii-b-i.
+//
+// Somebody a member invited is offered the business's friend's gift, filled in for staff on
+// what they add or sell them, until they have had it once. Somebody who held a membership
+// here before they were invited is not a new member, and is not offered it. The friend never
+// holds the code, so they never have to ask for it (Kd, 2026-10-15).
+import { z } from "zod";
+import { gymDiscountSchema } from "./discounts.js";
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** What is known about one invited friend's gift, read under the record's lock. */
+export interface FriendGiftFacts {
+  /** They held a membership here before they were invited. */
+  memberBefore: boolean;
+  /** What the gift was given on and the gym's day it was; null while it has not been. */
+  given: { on: string; day: string } | null;
+  /** The first membership added since the invite without the gift; null for none. */
+  skipped: string | null;
+  /** The business's friend's gift as it is today, where it can be used today. */
+  gift: { forMemberships: boolean; forProducts: boolean } | null;
+}
+
+export const leadFriendGiftSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("given"), on: z.string().min(1), day: z.string().regex(DAY) }).strict(),
+  z
+    .object({
+      state: z.literal("to_give"),
+      forMemberships: z.boolean(),
+      forProducts: z.boolean(),
+      skipped: z.string().min(1).nullable(),
+    })
+    .strict(),
+  z.object({ state: z.literal("member_before") }).strict(),
+  z.object({ state: z.literal("no_gift") }).strict(),
+]);
+export type LeadFriendGift = z.infer<typeof leadFriendGiftSchema>;
+
+/** Given once is given: that is said first. A member before is never offered it; with no
+ *  usable gift, nothing is to give. */
+export function friendGiftState(f: FriendGiftFacts): LeadFriendGift {
+  if (f.given !== null) return { state: "given", on: f.given.on, day: f.given.day };
+  if (f.memberBefore) return { state: "member_before" };
+  if (f.gift === null) return { state: "no_gift" };
+  return { state: "to_give", forMemberships: f.gift.forMemberships, forProducts: f.gift.forProducts, skipped: f.skipped };
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const fullDay = (day: string): string => `${String(Number(day.slice(8, 10)))} ${MONTHS[Number(day.slice(5, 7)) - 1] ?? ""} ${day.slice(0, 4)}`;
+
+/** The lead's line about the friend's gift, for staff: what was given, or why not, or where
+ *  it will be filled in. `name` is the lead's first name. */
+export function friendGiftLine(g: LeadFriendGift, name: string): string {
+  switch (g.state) {
+    case "given":
+      return `Friend's gift given on ${g.on}, ${fullDay(g.day)}.`;
+    case "member_before":
+      return `No friend's gift: ${name} had a membership here before they were invited.`;
+    case "no_gift":
+      return "No friend's gift: Refer a friend has no friend's gift that can be used today.";
+    case "to_give": {
+      const where =
+        g.forMemberships && g.forProducts
+          ? `when ${name}'s membership is added or they buy at Sell`
+          : g.forMemberships
+            ? `when ${name}'s membership is added`
+            : `when ${name} buys something at Sell`;
+      const before = g.skipped !== null && g.forMemberships ? `${g.skipped} was added without it. ` : "";
+      return `${before}Friend's gift: filled in ${where}.`;
+    }
+  }
+}
+
+/** The friend's gift a person on the list may be given now: the discount itself, its words,
+ *  and who invited them (null where that member's account is gone). */
+export const friendGiftSchema = z
+  .object({
+    discount: gymDiscountSchema,
+    words: z.string().min(1),
+    invitedBy: z.string().min(1).nullable(),
+  })
+  .strict();
+export type FriendGift = z.infer<typeof friendGiftSchema>;
+export const friendGiftResponseSchema = z.object({ friendGift: friendGiftSchema.nullable() }).strict();
+export type FriendGiftResponse = z.infer<typeof friendGiftResponseSchema>;
+
+/** The line under a filled-in gift, beside its Remove. */
+export function friendGiftNote(gift: FriendGift): string {
+  return gift.invitedBy === null ? "Refer a friend: a member invited them." : `Refer a friend: ${gift.invitedBy} invited them.`;
+}
+
+export const FRIEND_GIFT_WORDS = {
+  not_theirs: "Refer a friend's gift is only for a friend a member invited, and only once.",
+} as const;

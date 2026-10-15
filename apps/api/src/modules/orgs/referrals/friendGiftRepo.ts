@@ -1,0 +1,130 @@
+// Refer a friend's friend's gift in the database (ROADMAP 20e-ii-b-i; spec Part 3 §16.3).
+//
+// The worst thing this could do to a real person: give the gift to somebody nobody invited,
+// or give it twice. So a record is an invited friend only through a lead of the SAME gym that
+// came by a member's link and was joined to that record; the gift is given once, on a
+// membership or a desk sale that still stands; and somebody who held a membership here
+// before they were invited is not offered it. Every statement names its gym.
+import type { Sql, TransactionSql } from "postgres";
+import { friendGiftState, referralGiftLive, type LeadFriendGift } from "@app/shared";
+import { dayInTz } from "../../gamification/streak.js";
+import { referralDiscounts, type DiscountRow } from "../register/discountsRepo.js";
+import { settingsFor } from "./repo.js";
+
+type SqlOrTx = Sql | TransactionSql;
+
+export interface FriendGiftRow {
+  entryId: string;
+  /** The member who invited them; null where that account is gone. */
+  referredBy: string | null;
+  memberBefore: boolean;
+  /** What the gift was given on, first; null while it has not been. */
+  given: { on: string; at: Date } | null;
+  /** The first membership added since the invite without the gift. */
+  skipped: string | null;
+}
+
+interface DbRow {
+  entry_id: string;
+  referred_by: string | null;
+  member_before: boolean;
+  given_on: string | null;
+  given_at: Date | null;
+  skipped: string | null;
+}
+
+/** The records among `entryIds` that a lead of this gym joined after coming by a member's
+ *  invite link (the earliest such lead, where two were joined to one record). */
+export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<FriendGiftRow[]> {
+  if (entryIds.length === 0) return [];
+  const rows = await sql<DbRow[]>`
+    SELECT DISTINCT ON (l.entry_id)
+           l.entry_id, l.referred_by,
+           EXISTS (
+             SELECT 1 FROM gym_held_memberships h
+             WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at < l.referred_at
+           ) AS member_before,
+           given.on_what AS given_on, given.at AS given_at,
+           (SELECT t.name
+            FROM gym_held_memberships h
+            JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+            WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id AND h.created_at >= l.referred_at
+              AND NOT EXISTS (SELECT 1 FROM gym_discounts d WHERE d.gym_id = h.gym_id AND d.id = h.discount_id AND d.referral_gift)
+            ORDER BY h.created_at, h.id LIMIT 1) AS skipped
+    FROM gym_leads l
+    LEFT JOIN LATERAL (
+      SELECT x.on_what, x.at FROM (
+        SELECT t.name AS on_what, h.created_at AS at
+        FROM gym_held_memberships h
+        JOIN gym_discounts d ON d.gym_id = h.gym_id AND d.id = h.discount_id AND d.referral_gift
+        JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+        WHERE h.gym_id = l.gym_id AND h.entry_id = l.entry_id
+        UNION ALL
+        SELECT s.item_name, s.created_at
+        FROM gym_sales s
+        JOIN gym_discounts d ON d.gym_id = s.gym_id AND d.id = s.discount_id AND d.referral_gift
+        WHERE s.gym_id = l.gym_id AND s.entry_id = l.entry_id AND s.undone_at IS NULL
+      ) x
+      ORDER BY x.at LIMIT 1
+    ) given ON true
+    WHERE l.gym_id = ${gymId} AND l.entry_id = ANY(${[...new Set(entryIds)]}::uuid[])
+      AND l.status = 'joined' AND l.referred_at IS NOT NULL
+    ORDER BY l.entry_id, l.referred_at, l.id`;
+  return rows.map((r) => ({
+    entryId: r.entry_id,
+    referredBy: r.referred_by,
+    memberBefore: r.member_before,
+    given: r.given_on === null || r.given_at === null ? null : { on: r.given_on, at: r.given_at },
+    skipped: r.skipped,
+  }));
+}
+
+export interface FriendGiftNow {
+  row: FriendGiftRow;
+  state: LeadFriendGift;
+  /** The gift to fill in, where `state` is `to_give`; null otherwise. */
+  discount: DiscountRow | null;
+}
+
+/** The business's friend's gift, where it can be used today. */
+export async function giftToday(sql: SqlOrTx, gymId: string, today: string): Promise<DiscountRow | null> {
+  const { friendDiscountId } = await settingsFor(sql, gymId);
+  if (friendDiscountId === null) return null;
+  const [d] = await referralDiscounts(sql, gymId, [friendDiscountId]);
+  if (d === undefined || !d.referralGift) return null;
+  return referralGiftLive({ ...d, archived: d.archivedAt !== null }, today) ? d : null;
+}
+
+/** Each invited friend among `entryIds`, with their gift as it stands on the gym's `today`.
+ *  A record nobody invited is not in the map. */
+export async function friendGiftsNow(
+  sql: SqlOrTx,
+  gym: { id: string; timezone: string },
+  entryIds: readonly string[],
+  today: string,
+): Promise<Map<string, FriendGiftNow>> {
+  const rows = await friendGiftRows(sql, gym.id, entryIds);
+  if (rows.length === 0) return new Map();
+  const gift = await giftToday(sql, gym.id, today);
+  return new Map(
+    rows.map((row) => {
+      const state = friendGiftState({
+        memberBefore: row.memberBefore,
+        given: row.given === null ? null : { on: row.given.on, day: dayInTz(row.given.at, gym.timezone) },
+        skipped: row.skipped,
+        gift: gift === null ? null : { forMemberships: gift.forMemberships, forProducts: gift.forProducts },
+      });
+      return [row.entryId, { row, state, discount: state.state === "to_give" ? gift : null }];
+    }),
+  );
+}
+
+/** Whether `discountId` may be given to this record now: it is the business's friend's gift
+ *  as it is today, and the record is an invited friend who has not had it. Asked inside the
+ *  write's own transaction, under the record's lock, so two staff giving it at one instant
+ *  give it once. */
+export async function friendGiftOpen(tx: TransactionSql, gymId: string, entryId: string, discountId: string, today: string): Promise<boolean> {
+  const now = await friendGiftsNow(tx, { id: gymId, timezone: "UTC" }, [entryId], today);
+  const mine = now.get(entryId);
+  return mine !== undefined && mine.discount !== null && mine.discount.id === discountId;
+}

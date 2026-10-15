@@ -38,6 +38,8 @@ export interface DiscountRow {
   allMembershipTypes: boolean;
   membershipTypeIds: string[];
   membershipPayments: MembershipPayments | null;
+  /** Refer a friend's own friend's gift (0118): given only to a friend a member invited. */
+  referralGift: boolean;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -61,6 +63,7 @@ interface RawDiscount {
   all_membership_types: boolean;
   membership_type_ids: string[];
   membership_payments: string | null;
+  referral_gift: boolean;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -88,6 +91,7 @@ const discount = (r: RawDiscount): DiscountRow => ({
   allMembershipTypes: r.all_membership_types,
   membershipTypeIds: r.membership_type_ids,
   membershipPayments: paymentsSchema.parse(r.membership_payments),
+  referralGift: r.referral_gift,
   archivedAt: r.archived_at,
   updatedAt: r.updated_at,
 });
@@ -96,7 +100,7 @@ const discount = (r: RawDiscount): DiscountRow => ({
 const columns = (sql: Sql | TransactionSql) => sql`
   d.id, d.name, d.code, d.kind, d.percent_bp, d.amount_minor, d.currency, d.starts_on::text AS starts_on,
   d.ends_on::text AS ends_on, d.max_uses, d.uses, d.for_products, d.all_products, d.for_memberships,
-  d.all_membership_types, d.membership_payments, d.archived_at, d.updated_at,
+  d.all_membership_types, d.membership_payments, d.referral_gift, d.archived_at, d.updated_at,
   COALESCE((SELECT array_agg(p.product_id::text ORDER BY p.product_id)
             FROM gym_discount_products p WHERE p.gym_id = d.gym_id AND p.discount_id = d.id), '{}') AS product_ids,
   COALESCE((SELECT array_agg(m.membership_type_id::text ORDER BY m.membership_type_id)
@@ -120,11 +124,12 @@ export async function readDiscounts(sql: Sql | TransactionSql, gymId: string): P
 }
 
 /** A gym's discounts in use that are for memberships: what a person's page offers when a
- *  membership is added. Bounded by the cap the writes hold. */
+ *  membership is added. Bounded by the cap the writes hold. Refer a friend's friend's gift
+ *  is not among them: it is offered only to the friend it is for (`referrals/friendGift`). */
 export async function membershipDiscounts(sql: Sql, gymId: string): Promise<DiscountRow[]> {
   const rows = await sql<RawDiscount[]>`
     SELECT ${columns(sql)} FROM gym_discounts d
-    WHERE d.gym_id = ${gymId} AND d.archived_at IS NULL AND d.for_memberships
+    WHERE d.gym_id = ${gymId} AND d.archived_at IS NULL AND d.for_memberships AND NOT d.referral_gift
     ORDER BY lower(d.name), d.id LIMIT ${DISCOUNTS_MAX}`;
   return rows.map(discount);
 }
@@ -293,7 +298,7 @@ export async function createDiscount(sql: Sql, input: DiscountInput & { gymId: s
  *  (Refer a friend makes its own codes, 20e-ii-a). Answers the new discount's id. */
 export async function createDiscountInTx(
   tx: TransactionSql,
-  input: DiscountInput & { gymId: string; actorUserId: string },
+  input: DiscountInput & { gymId: string; actorUserId: string; referralGift?: true },
 ): Promise<Exclude<DiscountWriteOutcome, { kind: "ok" }> | { kind: "created"; id: string }> {
   const money = await currencyFor(tx, input.gymId, input.kind);
   if (!money.ok) return { kind: "no_currency" };
@@ -304,10 +309,10 @@ export async function createDiscountInTx(
   if (!(await typesAreLive(tx, input.gymId, input.membershipTypeIds))) return { kind: "membership_type_not_found" };
   const [created] = await tx<{ id: string }[]>`
     INSERT INTO gym_discounts (gym_id, name, code, kind, percent_bp, amount_minor, currency, starts_on, ends_on, max_uses,
-                               for_products, all_products, for_memberships, all_membership_types, membership_payments)
+                               for_products, all_products, for_memberships, all_membership_types, membership_payments, referral_gift)
     VALUES (${input.gymId}, ${input.name}, ${input.code}, ${input.kind}, ${input.percentBp}, ${input.amountMinor}, ${money.currency},
             ${input.startsOn}::date, ${input.endsOn}::date, ${input.maxUses}, ${input.forProducts}, ${input.allProducts},
-            ${input.forMemberships}, ${input.allMembershipTypes}, ${input.membershipPayments})
+            ${input.forMemberships}, ${input.allMembershipTypes}, ${input.membershipPayments}, ${input.referralGift === true})
     RETURNING id`;
   if (created === undefined) throw new Error("discount insert returned no row");
   await setProducts(tx, input.gymId, created.id, input.productIds);

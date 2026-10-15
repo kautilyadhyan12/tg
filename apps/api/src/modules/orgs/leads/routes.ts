@@ -16,6 +16,7 @@ import {
   leadFollowUpSentRequestSchema,
   leadsDeletePreviewRequestSchema,
   leadsDeleteRequestSchema,
+  leadMatchQuerySchema,
   leadsQuerySchema,
   leadsSelectAllRequestSchema,
   updateLeadEmailSettingsRequestSchema,
@@ -147,6 +148,17 @@ export function registerLeadRoutes(app: FastifyInstance, deps: LeadRouteDeps): v
     const page = await service.listLeads(leadDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
     if (page === null) return;
     return reply.status(200).send(page);
+  });
+
+  /** Add member (20e-ii-b-i): the lead with the email or phone being typed, if any. */
+  app.get("/v1/orgs/:gymId/leads/match", signedIn, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(leadMatchQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await service.matchLead(leadDeps, requireUserId(req), params.gymId, query, readGate(req, reply));
+    if (answer === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
   /** Leads from a file (20c-iii): who would be added, and nothing written. */

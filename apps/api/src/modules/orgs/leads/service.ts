@@ -16,9 +16,12 @@ import {
   LEAD_WORDS,
   LEADS_MAX_PER_GYM,
   LEADS_PAGE,
+  leadMatchResponseSchema,
   leadSourceSchema,
   leadStatusSchema,
   type CreateLeadRequest,
+  type LeadMatchQuery,
+  type LeadMatchResponse,
   type JoinLeadRequest,
   type JoinLeadResponse,
   type Lead,
@@ -49,6 +52,9 @@ import { followUpDueOn } from "./followUp.js";
 import { leadJoinDecision, sharesContact, type ListRecord } from "./joinRule.js";
 import * as repo from "./repo.js";
 import { invitersFor, type Inviter } from "../referrals/repo.js";
+import { friendGiftsNow } from "../referrals/friendGiftRepo.js";
+import { friendGiftForNewFriend } from "../referrals/friendGift.js";
+import { leadForDetails } from "./joinOnAdd.js";
 
 export interface LeadsDeps {
   sql: Sql;
@@ -279,6 +285,8 @@ export function toLead(
     enquiredAt: row.enquiredAt === null ? null : row.enquiredAt.toISOString(),
     emailProblem: sending.emailProblem,
     invitedBy: invitedBy(row, inviters),
+    // Read only for one lead's own page (`getLead`).
+    friendGift: null,
   };
 }
 
@@ -428,7 +436,40 @@ export async function getLead(deps: LeadsDeps, userId: string, gymId: string, le
   if (!(await limit())) return null;
   const row = await repo.leadFor(deps.sql, gymId, leadId);
   if (row === null) throw notFound();
-  return await leadWithSending(deps, gymId, row, dayInTz(deps.now(), org.timezone));
+  const today = dayInTz(deps.now(), org.timezone);
+  const lead = await leadWithSending(deps, gymId, row, today);
+  // A friend a member invited who has joined: what became of Refer a friend's gift (20e-ii-b-i).
+  if (row.status !== "joined" || row.referredAt === null || row.entryId === null) return lead;
+  const gift = (await friendGiftsNow(deps.sql, { id: gymId, timezone: org.timezone }, [row.entryId], today)).get(row.entryId);
+  return { ...lead, friendGift: gift?.state ?? null };
+}
+
+/** Add member (20e-ii-b-i): the lead not yet joined with the email or phone being typed, so
+ *  staff see who they are adding and Refer a friend's gift is filled in. Details not yet
+ *  whole (an email half typed) find nobody. */
+export async function matchLead(deps: LeadsDeps, userId: string, gymId: string, query: LeadMatchQuery, limit: Limit): Promise<LeadMatchResponse | null> {
+  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const typed: { fullName: string; email?: string; phone?: string } = { fullName: query.fullName ?? "" };
+  if (query.email !== undefined && query.email.trim() !== "") typed.email = query.email;
+  if (query.phone !== undefined && query.phone.trim() !== "") typed.phone = query.phone;
+  const applied = applyTyped(EMPTY_VALUES, typed, { country: readCountry(org.country), fields: new Map() });
+  if (!applied.ok) return { lead: null };
+  const { fullName, email, phone } = applied.values;
+  const found = leadForDetails({ fullName }, await repo.openLeadsSharingContact(deps.sql, gymId, { email, phone }));
+  if (found === null) return { lead: null };
+  const { lead, sameName } = found;
+  const inviters = await invitersFor(deps.sql, gymId, lead.referredBy === null ? [] : [lead.referredBy]);
+  const by = lead.referredBy === null ? undefined : inviters.get(lead.referredBy);
+  return leadMatchResponseSchema.parse({
+    lead: {
+      id: lead.id,
+      fullName: lead.fullName,
+      sameName,
+      invitedBy: lead.referredAt === null ? null : by === undefined ? { name: null, member: false } : { name: by.name, member: by.member },
+      friendGift: lead.referredAt === null ? null : await friendGiftForNewFriend(deps.sql, gymId, lead.referredBy, dayInTz(deps.now(), org.timezone)),
+    },
+  });
 }
 
 /** The messages a lead sent through the gym page's form, newest first (20c-iv-a). */

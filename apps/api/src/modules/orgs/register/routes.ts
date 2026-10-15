@@ -22,6 +22,7 @@
 //   DELETE /v1/orgs/:gymId/register/discounts/:discountId   archive it
 //   POST   /v1/orgs/:gymId/register/discounts/:discountId/restore
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/purchases   what one person bought (`billing.members`)
+//   GET    /v1/orgs/:gymId/member-list/entries/:entryId/friend-gift Refer a friend's gift for them, if any (`billing.members`)
 //
 // A sale carries the form's own key: the same key twice is one sale.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -273,5 +274,14 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
     if (!viewer.canSell) return reply.status(403).send({ error: "forbidden", message: "Your role doesn't allow that.", requestId: req.id });
     if (!(await within(readLimit, req, reply))) return reply;
     return reply.status(200).header("cache-control", "no-store").send(await service.getPurchases(registerDeps, params.data.gymId, viewer, params.data.entryId));
+  });
+
+  app.get("/v1/orgs/:gymId/member-list/entries/:entryId/friend-gift", pre, async (req, reply) => {
+    const params = memberListEntryParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const viewer = await service.requireReader(registerDeps, userOf(req), params.data.gymId);
+    if (!viewer.canSell) return reply.status(403).send({ error: "forbidden", message: "Your role doesn't allow that.", requestId: req.id });
+    if (!(await within(readLimit, req, reply))) return reply;
+    return reply.status(200).header("cache-control", "no-store").send(await service.getFriendGift(registerDeps, params.data.gymId, viewer, params.data.entryId));
   });
 }
