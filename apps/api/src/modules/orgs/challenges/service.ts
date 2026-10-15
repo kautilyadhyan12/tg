@@ -27,7 +27,14 @@ import {
   challengeState,
   challengeTakesNumbers,
   challengeTakesTeams,
+  appCountsExercise,
+  challengeSubjectsResponseSchema,
   challengeWords,
+  exerciseCountWord,
+  exerciseIsHeld,
+  exerciseNameOf,
+  offeredSubjects,
+  orgWords,
   placeTeams,
   gymChallengeBoardResponseSchema,
   gymChallengesResponseSchema,
@@ -36,6 +43,7 @@ import {
   staffGymChallengeSchema,
   staffGymChallengesResponseSchema,
   type AddGymChallengeRequest,
+  type ChallengeSubjectsResponse,
   type ChangeGymChallengeRequest,
   type GymChallenge,
   type GymChallengeBoardResponse,
@@ -80,6 +88,8 @@ const TICK = "leaderboard.manage";
 const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
 const challengeNotFound = (): OrgsError => new OrgsError(404, "challenge_not_found", GYM_CHALLENGE_WORDS.not_found);
 
+const exerciseNotOffered = (): OrgsError => new OrgsError(400, "challenge_exercise_not_offered", GYM_CHALLENGE_WORDS.exercise_not_offered);
+
 const SAVE_STATUS: Record<GymChallengeSaveProblem, { status: number; code: string }> = {
   ended: { status: 409, code: "challenge_ended" },
   started_locked: { status: 409, code: "challenge_started" },
@@ -103,6 +113,7 @@ function shaped(row: repo.ChallengeRow, today: string, gymName: string): GymChal
     subject: row.subject,
     measure: row.measure,
     countedBy: row.countedBy,
+    exercises: row.exercises,
     words: challengeWords(row, gymName),
     startsOn: row.startsOn,
     endsOn: row.endsOn,
@@ -766,6 +777,23 @@ export async function getStaffBoard(
   });
 }
 
+/** What the gym's form may pick (spec Part 3 §15.10.1), for its staff holding the tick: the
+ *  list, and the library's exercises in name order. The app counts an exercise only where the
+ *  list has a measure for it and the camera a live definition (`appCountsExercise`). */
+export async function getSubjects(deps: ChallengesDeps, staffId: string, gymId: string, limit: Limit): Promise<ChallengeSubjectsResponse | null> {
+  const { org } = await requirePrivilege(deps, gymId, staffId, TICK);
+  if (!(await limit())) return null;
+  const library = await repo.libraryExercises(deps.sql);
+  const exercises = library
+    .flatMap((e) => {
+      const name = exerciseNameOf(e.slug);
+      const word = exerciseCountWord(e.slug);
+      return name === null || word === null ? [] : [{ slug: e.slug, name, word, held: exerciseIsHeld(e.slug), appCounts: appCountsExercise(e.liveDefinition) }];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "en"));
+  return challengeSubjectsResponseSchema.parse({ subjects: offeredSubjects(orgWords(org.orgType).person), exercises });
+}
+
 /** A new challenge. Sent twice under one key (a reply lost on the way back), it is one. */
 export async function addChallenge(deps: ChallengesDeps, staffId: string, gymId: string, body: AddGymChallengeRequest, limit: Limit): Promise<StaffGymChallenge | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, staffId, TICK);
@@ -782,9 +810,10 @@ export async function addChallenge(deps: ChallengesDeps, staffId: string, gymId:
     if (problem !== null) throw refused(problem);
     if ((await repo.countCurrent(tx, gymId, today)) >= GYM_CHALLENGES_CURRENT_MAX) throw new OrgsError(409, "challenges_full", GYM_CHALLENGE_WORDS.full);
     if (!(await repo.insertChallenge(tx, gymId, { id, ...body }, staffId, at))) return;
+    if (!(await repo.setExercises(tx, gymId, id, body.exercises))) throw exerciseNotOffered();
     // Every team of a new challenge is new, whatever id was sent with it.
     await repo.setTeams(tx, gymId, id, body.teamList.map((team) => ({ id: null, name: team.name })), at);
-    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_added", targetType: "challenge", targetId: id, meta: { subject: body.subject, measure: body.measure, countedBy: body.countedBy, who: body.who, teams: body.teams } });
+    await insertAudit(tx, { actorUserId: staffId, gymId, action: "org.challenge_added", targetType: "challenge", targetId: id, meta: { subject: body.subject, measure: body.measure, countedBy: body.countedBy, exercises: body.exercises, who: body.who, teams: body.teams } });
   });
   const kept = await repo.challengeIdByKey(deps.sql, gymId, body.challengeKey);
   if (kept === null) throw challengeNotFound();
@@ -813,6 +842,9 @@ export async function changeChallenge(
     const problem = challengeSaveProblem({ today, before: { ...before, teamList }, next: body });
     if (problem !== null) throw refused(problem);
     await repo.updateChallenge(tx, gymId, challengeId, body, at);
+    // The same exercises are left as they are: one hidden from the library since stays kept.
+    const same = before.exercises.length === body.exercises.length && before.exercises.every((slug, i) => slug === body.exercises[i]);
+    if (!same && !(await repo.setExercises(tx, gymId, challengeId, body.exercises))) throw exerciseNotOffered();
     // Once it has started its teams are as they were (`challengeSaveProblem`): only a
     // challenge that has not started has its teams made the ones sent.
     if (challengeState(before, today) === "coming" && !(await repo.setTeams(tx, gymId, challengeId, body.teamList, at))) {

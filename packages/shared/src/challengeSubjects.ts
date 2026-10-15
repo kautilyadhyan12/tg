@@ -7,6 +7,7 @@
 // Every challenge is sent with its own words (`challengeWords`), and a screen prints them:
 // it never looks a subject up in a list of its own, so a subject added next year shows
 // correctly in this year's app.
+import { exerciseNameOf } from "./exerciseCatalog.js";
 
 /** Who counts a challenge: the app, from what it measured itself; or the gym's staff, who
  *  type each person's number. */
@@ -51,6 +52,13 @@ export interface ChallengeSubject {
   id: string;
   /** What the challenge is about, as the form and the challenge's page say it. */
   title: string;
+  /** The form's one line under it, with the gym's word for one of its people. */
+  hint: (person: string) => string;
+  /** The gym picks one exercise from the library (`gym_challenge_exercises`). */
+  pickExercise: boolean;
+  /** Where the staff count it, the word their form starts with ("visits"); empty: the gym
+   *  types its own, or, for an exercise, the exercise's name is it. */
+  staffWord: string;
   /** "Everyone in the app" may be in it: members are already told their gym sees the thing
    *  (§15.10.5). Otherwise only people who join. */
   everyone: boolean;
@@ -64,6 +72,9 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
   {
     id: "gym_visits",
     title: "Gym visits",
+    hint: (person) => `Days a ${person} is checked in, at your front desk or by your staff.`,
+    pickExercise: false,
+    staffWord: "visits",
     everyone: true,
     measures: [
       {
@@ -81,6 +92,9 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
   {
     id: "workouts",
     title: "Workouts in the app",
+    hint: (person) => `Days a ${person} finishes a workout in the app.`,
+    pickExercise: false,
+    staffWord: "workouts",
     everyone: true,
     measures: [
       {
@@ -95,7 +109,25 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
       },
     ],
   },
-  { id: "own", title: "Something else", everyone: true, measures: [] },
+  // Nothing the app counts yet: the camera's count comes with 19d-iii-b.
+  {
+    id: "exercise",
+    title: "An exercise",
+    hint: () => "One exercise from the app's library, such as squats.",
+    pickExercise: true,
+    staffWord: "",
+    everyone: true,
+    measures: [],
+  },
+  {
+    id: "own",
+    title: "Something else",
+    hint: () => "Anything the app doesn't track: a rowing time, a tug of war. You name it.",
+    pickExercise: false,
+    staffWord: "",
+    everyone: true,
+    measures: [],
+  },
 ];
 
 export const challengeSubject = (id: string): ChallengeSubject | undefined => CHALLENGE_SUBJECTS.find((subject) => subject.id === id);
@@ -166,13 +198,22 @@ export interface ChallengeWords {
   perDay: boolean;
 }
 
-/** A challenge's words. `unit`: the gym's own word, where its staff count. */
-export function challengeWords(kind: ChallengeKind & { unit: string }, gymName: string): ChallengeWords {
+/** What a challenge is about; for one about an exercise, the exercise's name: "Squats". */
+const aboutOf = (subject: ChallengeSubject | undefined, exercises: readonly string[]): string | null => {
+  if (subject?.pickExercise !== true) return subject?.title ?? null;
+  const names = exercises.map((slug) => exerciseNameOf(slug));
+  return names.length === 0 || names.some((name) => name === null) ? subject.title : names.join(", ");
+};
+
+/** A challenge's words. `unit`: the gym's own word, where its staff count. `exercises`: the
+ *  library's exercises it is about, by slug. */
+export function challengeWords(kind: ChallengeKind & { unit: string; exercises?: readonly string[] }, gymName: string): ChallengeWords {
   const unit = kind.unit.trim();
+  const exercises = kind.exercises ?? [];
   const measure = kind.countedBy === "app" ? challengeMeasure(kind.subject, kind.measure) : undefined;
   if (measure !== undefined) {
     return {
-      about: challengeSubject(kind.subject)?.title ?? capital(measure.many),
+      about: aboutOf(challengeSubject(kind.subject), exercises) ?? capital(measure.many),
       one: measure.one,
       many: measure.many,
       print: measure.print,
@@ -187,7 +228,7 @@ export function challengeWords(kind: ChallengeKind & { unit: string }, gymName: 
   // and is never said as the staff's or as something else.
   if (kind.countedBy === "app") {
     return {
-      about: subject?.title ?? "Challenge",
+      about: aboutOf(subject, exercises) ?? "Challenge",
       one: "point",
       many: "points",
       print: "whole",
@@ -200,7 +241,7 @@ export function challengeWords(kind: ChallengeKind & { unit: string }, gymName: 
   // The staff count it, in the gym's own word.
   const word = unit === "" ? "points" : unit;
   return {
-    about: subject === undefined || subject.id === "own" ? capital(word) : subject.title,
+    about: subject === undefined || subject.id === "own" ? capital(word) : (aboutOf(subject, exercises) ?? capital(word)),
     one: oneOf(word),
     many: word,
     print: "whole",
@@ -209,4 +250,24 @@ export function challengeWords(kind: ChallengeKind & { unit: string }, gymName: 
     explain: `The staff at ${gymName} count the ${word} and add each person's number. If yours is missing or wrong, ask at the front desk.`,
     perDay: false,
   };
+}
+
+/** The list as a gym's form is offered it, in the gym's word for one of its people: each
+ *  subject with what the app can count for it. */
+export function offeredSubjects(person: string) {
+  return CHALLENGE_SUBJECTS.map((subject) => ({
+    id: subject.id,
+    title: subject.title,
+    hint: subject.hint(person),
+    pickExercise: subject.pickExercise,
+    everyone: subject.everyone,
+    staffWord: subject.staffWord,
+    appCounts: subject.measures.map((m) => ({ measure: m.id, one: m.one, many: m.many, howLine: HOW_LINE[m.how] })),
+  }));
+}
+
+/** Whether the app can count an exercise of the library for a challenge: the list has a
+ *  measure for an exercise, and the camera has a live definition of this one. */
+export function appCountsExercise(liveDefinition: boolean): boolean {
+  return liveDefinition && CHALLENGE_SUBJECTS.some((subject) => subject.pickExercise && subject.measures.length > 0);
 }

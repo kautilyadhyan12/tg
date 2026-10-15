@@ -18,6 +18,7 @@ const challenge = {
   subject: "gym_visits",
   measure: "days",
   countedBy: "app",
+  exercises: [],
   words: { about: "Gym visits", one: "gym day", many: "gym days", print: "whole", how: "desk", howLine: "Checked in at the front desk", explain: "A gym day is a day you're checked in.", perDay: true },
   startsOn: "2026-10-01",
   endsOn: "2026-10-06",

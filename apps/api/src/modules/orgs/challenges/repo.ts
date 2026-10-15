@@ -23,6 +23,8 @@ export interface ChallengeRow {
   subject: string;
   measure: string | null;
   countedBy: ChallengeCountedBy;
+  /** The library's exercises it is about, by slug, in slug order; none for anything else. */
+  exercises: string[];
   /** Days on the gym's own calendar, as `YYYY-MM-DD`, both counted. */
   startsOn: string;
   endsOn: string;
@@ -44,6 +46,7 @@ interface RawChallenge {
   subject: string;
   measure: string | null;
   counted_by: ChallengeCountedBy;
+  exercises: string[];
   starts_on: string;
   ends_on: string;
   target: number | null;
@@ -62,6 +65,7 @@ const toRow = (r: RawChallenge): ChallengeRow => ({
   subject: r.subject,
   measure: r.measure,
   countedBy: r.counted_by,
+  exercises: r.exercises,
   startsOn: r.starts_on,
   endsOn: r.ends_on,
   target: r.target,
@@ -73,7 +77,10 @@ const toRow = (r: RawChallenge): ChallengeRow => ({
 });
 
 const columns = (sql: SqlOrTx) => sql`
-  c.id, c.name, c.details, c.prize, c.subject, c.measure, c.counted_by, c.starts_on::text AS starts_on, c.ends_on::text AS ends_on,
+  c.id, c.name, c.details, c.prize, c.subject, c.measure, c.counted_by,
+  ARRAY(SELECT e.slug FROM gym_challenge_exercises ce JOIN exercises e ON e.id = ce.exercise_id
+        WHERE ce.gym_id = c.gym_id AND ce.challenge_id = c.id ORDER BY e.slug) AS exercises,
+  c.starts_on::text AS starts_on, c.ends_on::text AS ends_on,
   c.target, c.who, c.unit, c.lowest_wins, c.teams, (c.cancelled_at IS NOT NULL) AS cancelled`;
 
 /** What a member is sent: every challenge that has not ended (a cancelled one for a week
@@ -192,6 +199,28 @@ export async function insertChallenge(
     ON CONFLICT (gym_id, challenge_key) DO NOTHING
     RETURNING id`;
   return rows.length === 1;
+}
+
+/** The challenge's exercises made the ones sent, by slug: false, and nothing written, when one
+ *  of them is not an exercise the library offers. */
+export async function setExercises(tx: TransactionSql, gymId: string, challengeId: string, slugs: readonly string[]): Promise<boolean> {
+  const found = await tx<{ id: string }[]>`SELECT id FROM exercises WHERE slug = ANY(${slugs}::text[]) AND status = 'live'`;
+  if (found.length !== new Set(slugs).size || found.length !== slugs.length) return false;
+  const ids = found.map((r) => r.id);
+  await tx`DELETE FROM gym_challenge_exercises WHERE gym_id = ${gymId} AND challenge_id = ${challengeId} AND NOT (exercise_id = ANY(${ids}::uuid[]))`;
+  for (const id of ids) {
+    await tx`INSERT INTO gym_challenge_exercises (gym_id, challenge_id, exercise_id) VALUES (${gymId}, ${challengeId}, ${id}) ON CONFLICT DO NOTHING`;
+  }
+  return true;
+}
+
+/** The library a gym's form picks from: every exercise it offers, and whether the camera has a
+ *  live definition of it. */
+export async function libraryExercises(sql: SqlOrTx): Promise<{ slug: string; liveDefinition: boolean }[]> {
+  const rows = await sql<{ slug: string; live_definition: boolean }[]>`
+    SELECT e.slug, EXISTS (SELECT 1 FROM exercise_definitions d WHERE d.exercise_id = e.id AND d.status = 'live') AS live_definition
+    FROM exercises e WHERE e.status = 'live'`;
+  return rows.map((r) => ({ slug: r.slug, liveDefinition: r.live_definition }));
 }
 
 export async function updateChallenge(tx: TransactionSql, gymId: string, challengeId: string, challenge: ChallengeFields, at: Date): Promise<void> {

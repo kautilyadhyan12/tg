@@ -417,6 +417,7 @@ d("a gym's challenges (real Postgres)", () => {
 
       const staffRoutes: ["GET" | "POST" | "PUT", string, unknown][] = [
         ["GET", `${base(gym.id)}/staff`, undefined],
+        ["GET", `${base(gym.id)}/subjects`, undefined],
         ["GET", `${base(gym.id)}/${c.id}/board/staff`, undefined],
         ["POST", base(gym.id), fields()],
         ["PUT", `${base(gym.id)}/${c.id}`, changed({ name: "Taken over" })],
@@ -768,6 +769,7 @@ d("a gym's challenges (real Postgres)", () => {
         subject: "gym_visits",
         measure: "days",
         countedBy: "app",
+        exercises: [],
         words: {
           about: "Gym visits",
           one: "gym day",

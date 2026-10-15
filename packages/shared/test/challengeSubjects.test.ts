@@ -2,7 +2,7 @@
 // gym may ask for, how each may be won, and the words each is sent with. The expected
 // answers are written out from the spec's table and words, case by case.
 import { describe, expect, it } from "vitest";
-import { CHALLENGE_SUBJECTS, addGymChallengeRequestSchema, challengeWords, kindOnTheList, oneOf, type ChallengeKind } from "../src/index.js";
+import { CATALOG_58, CHALLENGE_SUBJECTS, GYM_CHALLENGE_UNIT_MAX, addGymChallengeRequestSchema, appCountsExercise, exerciseCountWord, exerciseIsHeld, challengeWords, kindOnTheList, offeredSubjects, oneOf, type ChallengeKind } from "../src/index.js";
 
 const body = (over: Record<string, unknown> = {}) => ({
   challengeKey: "00000000-0000-4000-8000-000000000118",
@@ -174,5 +174,63 @@ describe("one of the gym's own word", () => {
   ])("%s → %s", (typed, one) => {
     expect(oneOf(typed)).toBe(one);
     expect(challengeWords({ subject: "own", measure: null, countedBy: "staff", unit: typed }, "Iron Gym")).toMatchObject({ one, many: typed });
+  });
+});
+
+// ROADMAP 19d-iii-a-ii: a challenge about one exercise of the library, counted by the staff
+// until the camera's count (19d-iii-b).
+describe("a challenge about an exercise", () => {
+  const exercise = { subject: "exercise", measure: null, countedBy: "staff", unit: "squats", exercises: ["squat"] };
+  it.each([
+    ["one exercise, counted by the staff", exercise, true],
+    ["one exercise, everyone in the app", { ...exercise, who: "everyone" }, true],
+    ["one exercise, the lowest wins (a fastest time)", { ...exercise, lowestWins: true }, true],
+    // The worst thing: the app never counts an exercise yet, so nobody wins by a set the camera never counted.
+    ["counted by the app, in reps", { ...exercise, countedBy: "app", measure: "reps", unit: "" }, false],
+    ["counted by the app, in days", { ...exercise, countedBy: "app", measure: "days", unit: "" }, false],
+    ["no exercise", { ...exercise, exercises: [] }, false],
+    ["two exercises (from 19d-iii-c)", { ...exercise, exercises: ["squat", "push_up"] }, false],
+    ["an exercise in capitals", { ...exercise, exercises: ["Squat"] }, false],
+    ["an exercise of nothing", { ...exercise, exercises: [""] }, false],
+    ["gym visits with an exercise", { exercises: ["squat"] }, false],
+    ["something of the gym's own with an exercise", { ...staff, exercises: ["squat"] }, false],
+    ["no exercises sent for gym visits", {}, true],
+  ])("%s", (_what, over, accepted) => {
+    expect(ok(over)).toBe(accepted);
+  });
+
+  it("its words: what it is about is the library's name for the exercise, counted by the staff in their word", () => {
+    const words = (slug: string, unit: string) => challengeWords({ subject: "exercise", measure: null, countedBy: "staff", unit, exercises: [slug] }, "Iron Gym");
+    expect([words("squat", "squats").about, words("squat", "squats").one, words("squat", "squats").howLine]).toEqual(["Squats", "squat", "Counted by the staff at Iron Gym"]);
+    expect(words("chair_squat", "chair squats").about).toBe("Chair Squats");
+    expect(words("worlds_greatest_stretch", "stretches").about).toBe("World's Greatest Stretch");
+    expect([words("plank", "seconds").about, words("plank", "seconds").many]).toEqual(["Plank", "seconds"]);
+    // An exercise this build has never heard of: what it is about, never another exercise's name.
+    expect(words("cossack_squat", "squats").about).toBe("An exercise");
+    expect(challengeWords({ subject: "exercise", measure: null, countedBy: "staff", unit: "reps" }, "Iron Gym").about).toBe("An exercise");
+  });
+
+  it("what the form is offered: the four subjects in order, in the gym's word, and the app counts no exercise yet", () => {
+    const offered = offeredSubjects("client");
+    expect(offered.map((s) => [s.id, s.title, s.pickExercise, s.staffWord, s.appCounts.map((m) => m.measure)])).toEqual([
+      ["gym_visits", "Gym visits", false, "visits", ["days"]],
+      ["workouts", "Workouts in the app", false, "workouts", ["days"]],
+      ["exercise", "An exercise", true, "", []],
+      ["own", "Something else", false, "", []],
+    ]);
+    expect(offered[0]?.hint).toBe("Days a client is checked in, at your front desk or by your staff.");
+    expect(offered[0]?.appCounts[0]?.howLine).toBe("Checked in at the front desk");
+    expect([appCountsExercise(true), appCountsExercise(false)]).toEqual([false, false]);
+  });
+});
+
+describe("the word each exercise of the library is counted in", () => {
+  it("every one of the 58 has a word that fits the staff's box, and a hold or a pose is counted in seconds", () => {
+    for (const e of CATALOG_58) {
+      const word = exerciseCountWord(e.slug);
+      expect([e.slug, word !== null && word.trim() !== "" && word.length <= GYM_CHALLENGE_UNIT_MAX]).toEqual([e.slug, true]);
+      expect([e.slug, word === "seconds"]).toEqual([e.slug, exerciseIsHeld(e.slug)]);
+    }
+    expect(exerciseCountWord("no_such_exercise")).toBeNull();
   });
 });

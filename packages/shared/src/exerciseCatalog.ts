@@ -156,3 +156,46 @@ const SLUG_BY_LEGACY_NAME: ReadonlyMap<string, string> = new Map(
 export function slugForLegacyName(name: string): string | null {
   return SLUG_BY_LEGACY_NAME.get(name) ?? null;
 }
+
+const NAME_BY_SLUG: ReadonlyMap<string, string> = new Map(
+  CATALOG_58.map((e) => [e.slug, e.legacyName]),
+);
+
+const HELD: ReadonlySet<string> = new Set(
+  CATALOG_58.filter((e) => e.family === "F10" || e.family === "F12" || e.tracking === "timer").map((e) => e.slug),
+);
+
+/** An exercise done for a time, not counted in reps: a hold (F10), a pose or stretch (F12),
+ *  or one the camera only times (Part 2 §5). A challenge about one is counted in seconds. */
+export function exerciseIsHeld(slug: string): boolean {
+  return HELD.has(slug);
+}
+
+/** The word a count of an exercise is said in, where its name is not that word: a name that
+ *  is one of a thing ("Glute Bridge"), a proper name ("Bulgarian"), or a thing that is not
+ *  what is counted ("Skipping Rope": skips). Superman Hold is counted in reps by the engine
+ *  (Part 2 §6, "hold-ish reps"). Every other exercise done in reps is said in its name. */
+const COUNT_WORDS: ReadonlyMap<string, string> = new Map([
+  ["glute_bridge", "glute bridges"],
+  ["hip_thrust", "hip thrusts"],
+  ["bulgarian_split_squat", "Bulgarian split squats"],
+  ["superman", "reps"],
+  ["russian_twist", "Russian twists"],
+  ["skipping_rope", "skips"],
+  ["resistance_band_pull", "band pulls"],
+  ["jogging_in_place", "steps"],
+  ["bicycle_crunch", "bicycle crunches"],
+]);
+
+/** The word a count of an exercise is said in after a number: "seconds" for one done for a
+ *  time, else "squats", "push-ups", "glute bridges"; null for a slug the catalog does not have. */
+export function exerciseCountWord(slug: string): string | null {
+  if (HELD.has(slug)) return "seconds";
+  return COUNT_WORDS.get(slug) ?? NAME_BY_SLUG.get(slug)?.toLowerCase() ?? null;
+}
+
+/** Catalog slug → the library's name for it ("squat" → "Squats"), or null for a slug
+ *  the catalog does not have. */
+export function exerciseNameOf(slug: string): string | null {
+  return NAME_BY_SLUG.get(slug) ?? null;
+}

@@ -9,14 +9,13 @@ import { DateField, Field } from './ClassFields';
 import {
   CHALLENGE_LIMITS,
   CHALLENGE_NOTES,
-  COUNTED_BY_CHOICES,
   LOCKED_NOTE,
   NUMBER_NOTES,
   TEAMS_BUTTON,
   TEAM_LIMITS,
   TEAM_NOTES,
+  aboutChoices,
   amountOf,
-  appCountChoices,
   badBox,
   boardButton,
   boardLines,
@@ -24,7 +23,7 @@ import {
   cardFacts,
   challengeProblem,
   challengeTag,
-  countedBy,
+  countedByChoices,
   datesLine,
   dayAfter,
   daysBar,
@@ -32,6 +31,7 @@ import {
   draftOf,
   draftSummary,
   emptyBoard,
+  exerciseChoices,
   fieldsForKept,
   fieldsOf,
   inSaves,
@@ -67,12 +67,14 @@ import {
   whoChoices,
   winChoices,
   withCountedBy,
-  withCounts,
+  withExercise,
   withNumberLine,
   withStartDay,
+  withSubject,
   withTeamAdded,
   withTeamNamed,
   withTeamRemoved,
+  withWin,
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -115,7 +117,7 @@ function Choices({ label, choices, value, onPick, disabled }) {
       <span className="c-label">{label}</span>
       <div role="radiogroup" aria-label={label} className={`grid grid-cols-1 gap-2.5 ${choices.length === 3 ? 'md:grid-cols-3' : 'sm:grid-cols-2'}`}>
         {choices.map((choice) => (
-          <Choice key={choice.id} on={value === choice.id} title={choice.title} sub={choice.sub} onClick={() => onPick(choice.id)} disabled={disabled} />
+          <Choice key={choice.id} on={value === choice.id} title={choice.title} sub={choice.sub} onClick={() => onPick(choice.id)} disabled={disabled || choice.off === true} />
         ))}
       </div>
     </div>
@@ -153,9 +155,32 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
   };
   const chars = detailsLine(draft.details);
   const title = adding ? 'Add a challenge' : `Edit ${challenge.name}`;
-  const quiet = notCheckingInNote(draft.counts, list, words);
+  // What this gym may pick, asked each time the form opens: null while it is on its way.
+  const [offered, setOffered] = useState(null);
+  const [offeredFailed, setOfferedFailed] = useState(false);
+  const fetchOffered = useCallback(
+    () =>
+      staffChallengesService.subjects(gymId).then(
+        (data) => {
+          setOffered(data);
+          setOfferedFailed(false);
+        },
+        () => setOfferedFailed(true),
+      ),
+    [gymId],
+  );
+  useEffect(() => {
+    fetchOffered();
+  }, [fetchOffered]);
+  const loadOffered = () => {
+    setOfferedFailed(false);
+    fetchOffered();
+  };
+  const quiet = notCheckingInNote(draft, list, words);
   const started = startHint(draft, list.today);
-  const own = draft.counts === 'own';
+  const own = draft.countedBy === 'staff';
+  const byWho = offered === null ? null : countedByChoices(draft, offered, words);
+  const subject = offered?.subjects.find((s) => s.id === draft.subject);
   const teamed = draft.teams !== 'none';
   const removing = removedTeamLines(draft, challenge);
   const unitAfter = targetUnit(draft);
@@ -208,16 +233,51 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
       ) : null}
 
       <div className="flex flex-col gap-3">
-        <Choices label="Who counts it" choices={COUNTED_BY_CHOICES} value={countedBy(draft)} onPick={(by) => changeCounts((d) => withCountedBy(d, by))} disabled={saving || locked} />
+        {offered === null ? (
+          offeredFailed ? (
+            <p className="c-s14 c-t2" role="alert">
+              {"We couldn't load what a challenge can be about. "}
+              <button type="button" onClick={loadOffered} className="c-btn c-btn-link">
+                Try again
+              </button>
+            </p>
+          ) : (
+            <p className="c-s14 c-t2">Loading what a challenge can be about…</p>
+          )
+        ) : (
+          <>
+            <Choices label="What is the challenge about" choices={aboutChoices(offered)} value={draft.subject} onPick={(id) => changeCounts((d) => withSubject(d, id, offered))} disabled={saving || locked} />
+            {subject?.pickExercise ? (
+              <label className="c-field">
+                <span className="c-label">Which exercise</span>
+                <select value={draft.exercise} onChange={(e) => changeCounts((d) => withExercise(d, e.target.value, offered))} disabled={saving || locked} className="c-sel" style={{ maxWidth: 320 }}>
+                  <option value="" disabled>
+                    Pick an exercise
+                  </option>
+                  {exerciseChoices(offered).map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {byWho.line !== null ? (
+              <p className="c-s14 c-t2" data-testid="counted-by-line">
+                {byWho.line}
+              </p>
+            ) : (
+              <Choices label="Who counts it" choices={byWho.choices} value={draft.countedBy} onPick={(by) => changeCounts((d) => withCountedBy(d, by, offered))} disabled={saving || locked} />
+            )}
+          </>
+        )}
         {own ? (
           <label className="c-field">
             <span className="c-label">What your staff count</span>
             <input value={draft.unit} onChange={(e) => set({ unit: e.target.value })} aria-label="What your staff count" disabled={saving} maxLength={CHALLENGE_LIMITS.unit * 2} className="c-input" style={{ maxWidth: 320 }} placeholder="push-ups" />
             <span className="c-hint">{`As you would say it after a number: push-ups, kilometres, seconds. From the challenge's first day, open it and press Enter numbers to add each ${words.person}'s number.`}</span>
           </label>
-        ) : (
-          <Choices label="What the app counts" choices={appCountChoices(words)} value={draft.counts} onPick={(counts) => changeCounts((d) => withCounts(d, counts))} disabled={saving || locked} />
-        )}
+        ) : null}
         {quiet !== null ? (
           <span className="c-hint" role="note" style={{ color: 'var(--warn)' }}>
             {quiet}
@@ -260,7 +320,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 
       <Part n={2} title="How it is won, and who is in it">
       <div className="flex flex-col gap-3">
-        <Choices label="How it is won" choices={winChoices(draft.counts, draft.teams, draft.unit, words)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
+        <Choices label="How it is won" choices={winChoices(draft, words, offered)} value={draft.win} onPick={(win) => changeCounts((d) => withWin(d, win, offered))} disabled={saving || locked} />
         {draft.win === 'target' ? (
           <div className="c-field">
             <span className="c-label">Target</span>

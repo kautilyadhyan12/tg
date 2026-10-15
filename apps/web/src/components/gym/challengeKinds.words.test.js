@@ -830,7 +830,7 @@ const SAID = {
   },
   ownLowestRunning: {
     member: {
-      howToWin: 'Lowest seconds wins',
+      howToWin: 'Fastest time wins',
       whatCounts: "The staff at Iron Gym count the seconds and add each person's number. If yours is missing or wrong, ask at the front desk.",
       placeLine: '2nd of 4 · 130 fewer seconds to reach 1st',
       boardNote: null,
@@ -852,11 +852,11 @@ const SAID = {
       post: null,
     },
     console: {
-      won: 'Lowest seconds wins',
+      won: 'Fastest time wins',
       facts: [
         {
           label: 'How it is won',
-          value: 'Lowest seconds wins',
+          value: 'Fastest time wins',
           note: 'Equal numbers share a place',
         },
         {
@@ -872,7 +872,7 @@ const SAID = {
       empty: 'Nobody has joined yet.',
       teamLines: [],
       rowLeader: 'Asha Rao · 3 seconds',
-      rowSummary: 'Lowest seconds wins · Members who join · 4 people have joined',
+      rowSummary: 'Fastest time wins · Members who join · 4 people have joined',
       help: "Type each person's seconds and press Save numbers. An empty box is no number. Your members see a saved number straight away.",
     },
   },
@@ -1012,7 +1012,7 @@ const SAID = {
   },
   ownTeamsLowestEnded: {
     member: {
-      howToWin: 'The team with the lowest metres wins',
+      howToWin: 'The fastest team wins',
       whatCounts: "The staff at Iron Gym count the metres and add each person's number. If yours is missing or wrong, ask at the front desk.",
       placeLine: null,
       boardNote: null,
@@ -1054,7 +1054,7 @@ const SAID = {
         challengeId: 'c1',
         headline: 'Winner: Reds, with 780 metres.',
         mine: 'Your team, Blues, finished 2nd, with 850 metres. You had 500 metres.',
-        facts: 'The team with the lowest metres wins · Mon 5 Oct – Tue 6 Oct',
+        facts: 'The fastest team wins · Mon 5 Oct – Tue 6 Oct',
         rows: [
           {
             key: 't1',
@@ -1085,11 +1085,11 @@ const SAID = {
       },
     },
     console: {
-      won: 'The team with the lowest metres wins',
+      won: 'The fastest team wins',
       facts: [
         {
           label: 'How it is won',
-          value: 'The team with the lowest metres wins',
+          value: 'The fastest team wins',
           note: "A team's number is its people's added together",
         },
         {
@@ -1108,7 +1108,7 @@ const SAID = {
         ['2nd', 'Blues', '850 metres'],
       ],
       rowLeader: 'Reds · 780 metres',
-      rowSummary: 'The team with the lowest metres wins · Everyone in the app · 143 people',
+      rowSummary: 'The fastest team wins · Everyone in the app · 143 people',
       help: "Type each person's metres and press Save numbers. An empty box is no number. Your members see a saved number straight away.",
     },
   },
