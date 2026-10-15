@@ -736,7 +736,9 @@ d("nutrition + body routes (real Postgres, fake providers)",()=>{
     // all — and may still not type one. Read off the flag this passes; read off
     // the reasons, as the server does, it is refused at the same figure.
     const teen=await person("p26a-own3@example.com");
-    expect((await call("PATCH","/v1/users/me/onboarding",teen.access,{weightGoal:"maintain",age:17,gender:"female",heightCm:165,weightKg:60,dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    expect((await call("PATCH","/v1/users/me/onboarding",teen.access,{weightGoal:"maintain",age:40,gender:"female",heightCm:165,weightKg:60,dayActivity:"sitting",trainingDays:3,sessionMinutes:45})).statusCode).toBe(200);
+    // No route saves an age under 18 since the app became 18+ (RULINGS 2026-09-15); the floor stays for a row from before.
+    await sql`UPDATE user_fitness_profiles SET age = 17 WHERE user_id = ${teen.userId}`;
     const teenRings=(await get(teen.access)).json<{targets:{tdee:number;kcal:number;noCalorieCut:boolean}}>().targets;
     expect(teenRings.kcal,"eating what they burn").toBe(teenRings.tdee);
     expect(teenRings.noCalorieCut,"no cut was asked for, so none was held back").toBe(false);

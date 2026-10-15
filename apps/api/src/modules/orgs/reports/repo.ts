@@ -1,6 +1,7 @@
-// The Reports page's reads (ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i, 21d-ii): counts of the gym's member list, its
-// leads, its visits and its classes.
-// Every read names the gym in the WHERE and returns counts, never a person.
+// The Reports page's reads (ROADMAP 21a-i, 21a-ii, 21b-i, 21b-ii, 21d-i, 21d-ii): counts of the gym's member list, its
+// leads, its visits, its classes and its money.
+// Every read names the gym in the WHERE and returns counts, never a member; the money read
+// names the staff who recorded payments and sales (21b-ii).
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import { REPORT_LIST_LAG_DAYS, REPORT_MONTHS, newCountedFrom, type AttendanceWindows, type ReportClassCounts, type YearEarlierSpan } from "@app/shared";
@@ -316,9 +317,9 @@ const moneyGymSchema = z.object({
 });
 
 /** How many days after its due date an unpaid bill reads Overdue, and the currencies the
- *  gym's notebook holds: those of its standing payments, the newest first, and its newest
- *  membership's. A membership keeps the currency it was given in, so after a gym's
- *  country changes its money is still there to count. */
+ *  gym's notebook holds: those of its standing payments and sales, the newest first, and
+ *  its newest membership's. A membership keeps the currency it was given in, so after a
+ *  gym's country changes its money is still there to count. */
 export async function readMoneyGym(
   sql: Sql | TransactionSql,
   gymId: string,
@@ -326,8 +327,13 @@ export async function readMoneyGym(
   const rows = await sql<Record<string, unknown>[]>`
     SELECT g.country, g.bills_overdue_days,
            (SELECT COALESCE(array_agg(x.currency ORDER BY x.newest DESC), '{}')
-            FROM (SELECT p.currency, max(p.seq) AS newest FROM gym_member_payments p
-                  WHERE p.gym_id = g.id AND p.undone_at IS NULL GROUP BY p.currency) x) AS paid_currencies,
+            FROM (SELECT y.currency, max(y.at) AS newest
+                  FROM (SELECT p.currency, p.created_at AS at FROM gym_member_payments p
+                        WHERE p.gym_id = g.id AND p.undone_at IS NULL
+                        UNION ALL
+                        SELECT s.currency, s.created_at FROM gym_sales s
+                        WHERE s.gym_id = g.id AND s.undone_at IS NULL) y
+                  GROUP BY y.currency) x) AS paid_currencies,
            (SELECT h.currency FROM gym_held_memberships h
             WHERE h.gym_id = g.id
             ORDER BY h.created_at DESC, h.id LIMIT 1) AS held_currency
@@ -340,11 +346,16 @@ export async function readMoneyGym(
 const minor = z.number().int().min(0);
 const moneyRowSchema = z.object({
   any_membership: z.boolean(),
+  any_sale: z.boolean(),
   first_paid_on: z.string().nullable(),
+  first_sold_on: z.string().nullable(),
   other_currency: z.boolean(),
   months: z.array(
     z.object({ typeId: z.string(), typeName: z.string(), month: z.string(), paidMinor: minor, refundedMinor: minor, periodPaidMinor: minor, periodRefundedMinor: minor }),
   ),
+  sales: z.array(z.object({ month: z.string(), soldMinor: minor, periodSoldMinor: minor })),
+  products: z.array(z.object({ productId: z.string(), name: z.string(), sold: count, minor })),
+  staff: z.array(z.object({ userId: z.string().nullable(), name: z.string().nullable(), login: z.string().nullable(), paidMinor: minor, soldMinor: minor })),
   current_minor: minor,
   current_people: count,
   past_minor: minor,
@@ -361,7 +372,10 @@ export type MoneyCounts = z.infer<typeof moneyRowSchema>;
  *  not money). A refund of a payment that was taken back is not counted either. Both are
  *  given for each membership type, over the last `REPORT_MONTHS` months, with the part of
  *  each that falls from `periodFrom` on: the first day of the period the page shows,
- *  never earlier than those months.
+ *  never earlier than those months. A sale at the desk counts the same way, in the month
+ *  of the day it was sold, while it stands; the period's sales are also given by product,
+ *  and its payments and sales by the staff member who recorded them (21b-ii); an account
+ *  since deleted (or deleted for good) is no name, all of them one row.
  *
  *  Owed is every bill still open whose day has come, less what is paid on it, for the
  *  people on the list and for past members apart; overdue is the part of both that is
@@ -377,7 +391,26 @@ export async function readMoney(
   const rows = await sql<Record<string, unknown>[]>`
     WITH clock AS (
       SELECT ${today}::date AS today,
-             (date_trunc('month', ${today}::date) - make_interval(months => ${REPORT_MONTHS - 1}))::date AS from_day
+             (date_trunc('month', ${today}::date) - make_interval(months => ${REPORT_MONTHS - 1}))::date AS from_day,
+             greatest((date_trunc('month', ${today}::date) - make_interval(months => ${REPORT_MONTHS - 1}))::date, ${periodFrom}::date) AS period_from,
+             (date_trunc('month', ${today}::date) + interval '1 month')::date AS after_month
+    ),
+    sold AS (
+      SELECT s.product_id, s.recorded_by, s.sold_on, s.quantity, s.total_minor
+      FROM gym_sales s CROSS JOIN clock c
+      WHERE s.gym_id = ${gymId} AND s.undone_at IS NULL AND s.currency = ${currency} AND s.sold_on >= c.from_day
+    ),
+    by_staff AS (
+      SELECT x.recorded_by, sum(x.paid) AS paid_minor, sum(x.sold) AS sold_minor
+      FROM (SELECT p.recorded_by, p.amount_minor AS paid, 0 AS sold
+            FROM gym_member_payments p CROSS JOIN clock c
+            WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency}
+              AND p.paid_on >= c.period_from AND p.paid_on < c.after_month
+            UNION ALL
+            SELECT s.recorded_by, 0, s.total_minor
+            FROM sold s CROSS JOIN clock c
+            WHERE s.sold_on >= c.period_from AND s.sold_on < c.after_month) x
+      GROUP BY x.recorded_by
     ),
     paid AS (
       SELECT h.membership_type_id AS type_id, to_char(p.paid_on, 'YYYY-MM') AS month, sum(p.amount_minor) AS minor,
@@ -420,10 +453,15 @@ export async function readMoney(
     )
     SELECT
       EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = ${gymId}) AS any_membership,
+      EXISTS (SELECT 1 FROM gym_sales s WHERE s.gym_id = ${gymId}) AS any_sale,
       (SELECT to_char(min(p.paid_on), 'YYYY-MM-DD') FROM gym_member_payments p
        WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency}) AS first_paid_on,
+      (SELECT to_char(min(s.sold_on), 'YYYY-MM-DD') FROM gym_sales s
+       WHERE s.gym_id = ${gymId} AND s.undone_at IS NULL AND s.currency = ${currency}) AS first_sold_on,
       (EXISTS (SELECT 1 FROM gym_member_payments p
                WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency <> ${currency})
+       OR EXISTS (SELECT 1 FROM gym_sales s
+                  WHERE s.gym_id = ${gymId} AND s.undone_at IS NULL AND s.currency <> ${currency})
        OR EXISTS (SELECT 1 FROM gym_member_bills b, clock c
                   WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.due_on <= c.today AND b.currency <> ${currency})) AS other_currency,
       (SELECT COALESCE(json_agg(json_build_object(
@@ -432,6 +470,23 @@ export async function readMoney(
                 'periodPaidMinor', m.period_paid_minor, 'periodRefundedMinor', m.period_refunded_minor)), '[]'::json)
        FROM by_month m
        JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = m.type_id) AS months,
+      (SELECT COALESCE(json_agg(json_build_object('month', m.month, 'soldMinor', m.sold_minor, 'periodSoldMinor', m.period_minor)), '[]'::json)
+       FROM (SELECT to_char(s.sold_on, 'YYYY-MM') AS month, sum(s.total_minor) AS sold_minor,
+                    COALESCE(sum(s.total_minor) FILTER (WHERE s.sold_on >= ${periodFrom}::date), 0) AS period_minor
+             FROM sold s GROUP BY 1) m) AS sales,
+      (SELECT COALESCE(json_agg(json_build_object('productId', x.product_id, 'name', pr.name, 'sold', x.sold, 'minor', x.minor)), '[]'::json)
+       FROM (SELECT s.product_id, sum(s.quantity) AS sold, sum(s.total_minor) AS minor
+             FROM sold s CROSS JOIN clock c
+             WHERE s.sold_on >= c.period_from AND s.sold_on < c.after_month
+             GROUP BY s.product_id) x
+       JOIN gym_products pr ON pr.gym_id = ${gymId} AND pr.id = x.product_id) AS products,
+      (SELECT COALESCE(json_agg(json_build_object('userId', x.user_id, 'name', x.name, 'login', x.login, 'paidMinor', x.paid_minor, 'soldMinor', x.sold_minor)), '[]'::json)
+       FROM (SELECT CASE WHEN u.status = 'active' THEN b.recorded_by END AS user_id,
+                    CASE WHEN u.status = 'active' THEN u.display_name END AS name,
+                    CASE WHEN u.status = 'active' THEN split_part(u.email, '@', 1) END AS login,
+                    sum(b.paid_minor) AS paid_minor, sum(b.sold_minor) AS sold_minor
+             FROM by_staff b LEFT JOIN users u ON u.id = b.recorded_by
+             GROUP BY 1, 2, 3) x) AS staff,
       (SELECT COALESCE(sum(left_minor) FILTER (WHERE NOT past), 0)::float8 FROM owed) AS current_minor,
       (SELECT (count(DISTINCT entry_id) FILTER (WHERE NOT past))::int FROM owed) AS current_people,
       (SELECT COALESCE(sum(left_minor) FILTER (WHERE past), 0)::float8 FROM owed) AS past_minor,
@@ -441,23 +496,26 @@ export async function readMoney(
   return moneyRowSchema.parse(rows[0]);
 }
 
-/** Payments and refunds in `currency` that stand, over `span`'s days, both ends among
+/** Payments, sales and refunds in `currency` that stand, over `span`'s days, both ends among
  *  them, as `readMoney` counts them: a refund of a payment that was taken back is not money. */
 export async function readCollected(
   sql: Sql | TransactionSql,
   gymId: string,
   currency: string,
   span: YearEarlierSpan,
-): Promise<{ paidMinor: number; refundedMinor: number }> {
+): Promise<{ paidMinor: number; soldMinor: number; refundedMinor: number }> {
   const rows = await sql<Record<string, unknown>[]>`
     SELECT
       (SELECT COALESCE(sum(p.amount_minor), 0)::float8 FROM gym_member_payments p
        WHERE p.gym_id = ${gymId} AND p.undone_at IS NULL AND p.currency = ${currency}
          AND p.paid_on >= ${span.from}::date AND p.paid_on <= ${span.to}::date) AS paid_minor,
+      (SELECT COALESCE(sum(s.total_minor), 0)::float8 FROM gym_sales s
+       WHERE s.gym_id = ${gymId} AND s.undone_at IS NULL AND s.currency = ${currency}
+         AND s.sold_on >= ${span.from}::date AND s.sold_on <= ${span.to}::date) AS sold_minor,
       (SELECT COALESCE(sum(r.amount_minor), 0)::float8 FROM gym_member_refunds r
        JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
        WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND p.undone_at IS NULL AND r.currency = ${currency}
          AND r.refunded_on >= ${span.from}::date AND r.refunded_on <= ${span.to}::date) AS refunded_minor`;
-  const row = z.object({ paid_minor: minor, refunded_minor: minor }).parse(rows[0]);
-  return { paidMinor: row.paid_minor, refundedMinor: row.refunded_minor };
+  const row = z.object({ paid_minor: minor, sold_minor: minor, refunded_minor: minor }).parse(rows[0]);
+  return { paidMinor: row.paid_minor, soldMinor: row.sold_minor, refundedMinor: row.refunded_minor };
 }

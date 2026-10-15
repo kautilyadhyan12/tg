@@ -291,7 +291,7 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
         // Money: the payments of those days, less the refund where it falls in them.
         const paid = DAYS.reduce((sum, day, i) => (inSpan(day, key) ? sum + 100 * 2 ** i : sum), 0) + (inSpan(PAID_ONCE, key) ? 1000 : 0);
         const refunded = inSpan("2025-09-24", key) ? 20 : 0;
-        expect((await moneyOf(gym, owner, key)).yearEarlier, key).toEqual({ state: "ok", ...span, paidMinor: paid, refundedMinor: refunded, netMinor: paid - refunded });
+        expect((await moneyOf(gym, owner, key)).yearEarlier, key).toEqual({ state: "ok", ...span, paidMinor: paid, soldMinor: 0, refundedMinor: refunded, netMinor: paid - refunded });
       }
 
       // The sums, said once as numbers, so a fault in the test's own arithmetic shows.

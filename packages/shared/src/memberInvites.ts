@@ -6,7 +6,7 @@
 // The filters an Invite takes are the list's own, so the preview and the press are in
 // memberList.ts beside them; this file imports nothing from it.
 import { z } from "zod";
-import { ADULT_AGE } from "./plan.js";
+import { ADULT_AGE } from "./users.js";
 
 /** Whether a date of birth ('YYYY-MM-DD', or null) on a gym's list makes the person
  *  under 18 on `today` ('YYYY-MM-DD'): nobody under 18 is invited (RULINGS 2026-09-24).

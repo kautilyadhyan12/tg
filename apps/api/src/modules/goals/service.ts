@@ -209,3 +209,12 @@ export async function putGoal(
 export async function deleteGoal(deps: GoalsDeps, userId: string, id: string): Promise<boolean> {
   return await repo.deleteGoal(deps.sql, userId, id);
 }
+
+/** The person's training-days goal for a week; null when they have none. Progress's
+ *  predictions read it (35a), so the week's words and the goal agree: the app's own
+ *  goals are given first, as on the goals' own read. */
+export async function weeklyTrainingDaysTarget(sql: Sql, userId: string): Promise<number | null> {
+  await giveStarterGoals({ sql }, userId);
+  const rows = await repo.listGoals(sql, userId);
+  return rows.find((r) => r.kind === "training_days" && r.period === "week")?.target ?? null;
+}

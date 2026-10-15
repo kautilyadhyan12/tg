@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0109_tax_rates.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -53,7 +53,7 @@ export const gymProducts = pgTable(
     uniqueIndex("gym_products_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} IS NULL`),
-    // `0109` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
+    // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_products_tax_rate_fk",
       columns: [t.gymId, t.taxRateId],

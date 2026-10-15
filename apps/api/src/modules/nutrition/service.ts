@@ -14,6 +14,8 @@ import {
   MORE_NOT_KNOWN,
   isNoValueWord,
   mealIdeasResponseSchema,
+  type FoodDayTargets,
+  type FoodWeekResponse,
   moreForGrams,
   moreNutrientsSchema,
   shownFoodName,
@@ -35,6 +37,7 @@ import { dayInTz, safeTimeZone } from "../gamification/streak.js";
 import { getUserFoodAnswers, getUserPlanAndCutRules, getUserSyncContext } from "../users/service.js";
 import { LEAST_MEAL_KCAL, suggestAfterWorkout, suggestMeals, type AfterWorkoutIdea, type DayNumbers } from "./suggest.js";
 import { ownTargetsHeld, targetsFromPlan } from "./targets.js";
+import { foodWeek, spanDays } from "./foodWeek.js";
 import { CURATED_FOODS, curatedPieceFdcId, curatedUsdaFdcId, findCurated, findCuratedVersions, holdsEveryWord, searchCurated } from "./foods.js";
 import { dishwareGrams, foodMeasures, gramsPerMl, measureGrams, scanStart, startingMeasure, type UsdaPortion } from "./measures.js";
 import type { FoodReference, FoodSearchProvider } from "./openfoodfacts.adapter.js";
@@ -445,7 +448,7 @@ async function amountOf(
   return { grams, dishwareRung: null, measure: { id: measure.id, name: measure.name, amount: chosen.amount } };
 }
 
-async function findFood(deps: NutritionDeps, query: string): Promise<FoodReference | null> {
+async function findFood(deps: NutritionDeps, query: string, search = true): Promise<FoodReference | null> {
   // An est_* canonical is a scan's own estimate, and lives only in that scan's
   // draft and the meal saved from it: nothing may look one up by name, or a
   // request could price a food at figures no table and no scan gave it.
@@ -472,7 +475,7 @@ async function findFood(deps: NutritionDeps, query: string): Promise<FoodReferen
   // path); full-text search is the last resort.
   const remembered = await canonicalCached(deps, query);
   if (remembered !== null) return remembered;
-  return (await cachedExternal(deps, query, 1))[0] ?? null;
+  return search ? ((await cachedExternal(deps, query, 1))[0] ?? null) : null;
 }
 
 /** Where a scanned food's numbers come from (`scanMatch.ts`): our list by whole
@@ -564,7 +567,7 @@ const asMeal = (r: repo.MealRow): Meal => ({
   itemsVersion: itemsVersion(r.items),
 });
 
-const totals = (items: readonly MealItem[]) => ({
+export const totals = (items: readonly MealItem[]) => ({
   kcalPoint: items.reduce((n, i) => n + i.kcalPoint, 0),
   kcalLow: items.reduce((n, i) => n + i.kcalLow, 0),
   kcalHigh: items.reduce((n, i) => n + i.kcalHigh, 0),
@@ -688,7 +691,68 @@ export async function putTargets(
     }
   }
   const pick = await repo.putRingTargets(deps.sql, userId, body.source, own);
-  return targetsFromPlan(planResult, pick, noCutReasons);
+  const answer = targetsFromPlan(planResult, pick, noCutReasons);
+  await keepTargetsOn(deps, userId, () => Promise.resolve(answer), null);
+  return answer;
+}
+
+const dayTargetsOf = (t: NutritionTargetsResponse["targets"]): FoodDayTargets | null =>
+  t === null ? null : { kcal: t.kcal, proteinG: t.proteinG, carbsG: t.carbsG, fatG: t.fatG };
+
+/** Keep today's targets for "Your week in food" (ROADMAP 34f-i): a later day reads
+ *  the day against them. `takenAt` null keeps them whatever was logged; a meal of
+ *  another day keeps nothing, as that day's targets are not known now.
+ *
+ *  It runs after the meal or the numbers are saved, so it never fails them: a keep
+ *  that fails is logged, and that day is read against today's targets later. */
+async function keepTargetsOn(
+  deps: Pick<NutritionDeps, "sql" | "log">,
+  userId: string,
+  answer: () => Promise<NutritionTargetsResponse>,
+  takenAt: Date | null,
+  now: Date = new Date(),
+): Promise<void> {
+  try {
+    const targets = dayTargetsOf((await answer()).targets);
+    if (targets === null) return;
+    const timeZone = safeTimeZone((await getUserSyncContext(deps.sql, userId)).timezone);
+    const today = dayInTz(now, timeZone);
+    if (takenAt !== null && dayInTz(takenAt, timeZone) !== today) return;
+    await repo.keepDayTargets(deps.sql, userId, today, targets);
+  } catch (err) {
+    deps.log.error({ event: "nutrition.day_targets_not_kept", userId, err }, "a day's targets could not be kept");
+  }
+}
+
+/** Keep today's targets once a meal of today is saved or changed. */
+async function keepTodaysTargets(deps: Pick<NutritionDeps, "sql" | "log">, userId: string, takenAt: Date): Promise<void> {
+  await keepTargetsOn(deps, userId, () => getTargets(deps, userId), takenAt);
+}
+
+/** Your week in food (ROADMAP 34f-i): the last 7 or 30 days of the person's own
+ *  meals, each against its day's targets, and the facts under them. */
+export async function getFoodWeek(
+  deps: Pick<NutritionDeps, "sql">,
+  userId: string,
+  span: 7 | 30,
+  now: Date = new Date(),
+): Promise<FoodWeekResponse> {
+  const [{ targets }, ctx] = await Promise.all([getTargets(deps, userId), getUserSyncContext(deps.sql, userId)]);
+  const timeZone = safeTimeZone(ctx.timezone);
+  const today = dayInTz(now, timeZone);
+  const days = spanDays(today, span);
+  const from = days[0] ?? today;
+  const [logged, kept] = await Promise.all([
+    repo.foodDays(deps.sql, userId, timeZone, from, today),
+    repo.keptDayTargets(deps.sql, userId, from, today),
+  ]);
+  return foodWeek({
+    span,
+    today,
+    logged,
+    kept,
+    current: dayTargetsOf(targets),
+  });
 }
 
 /** A calorie figure as the screen beside it prints one ("1,200"), so a refusal
@@ -1063,11 +1127,15 @@ async function writeMeal(
     await claim?.();
     const row = await repo.createMeal(deps.sql, userId, write);
     await awardMealBadges(deps, userId);
+    await keepTodaysTargets(deps, userId, row.takenAt);
     return { meal: asMeal(row), created: true };
   }
   const saved = await repo.createMealOnce(deps.sql, userId, id, write, claim);
   if (saved === null) throw new NutritionError(404, "not_found", "Meal not found.");
-  if (saved.created) await awardMealBadges(deps, userId);
+  if (saved.created) {
+    await awardMealBadges(deps, userId);
+    await keepTodaysTargets(deps, userId, saved.meal.takenAt);
+  }
   return { meal: asMeal(saved.meal), created: saved.created };
 }
 
@@ -1142,14 +1210,17 @@ async function confirmNewMeal(deps: NutritionDeps, userId: string, input: Confir
 
 /** Search-resolved items for the manual flow — ONE implementation shared by
  *  createManualMeal and previewMeal (T3: divergence here is a trust bug). */
-async function resolveChosenItems(
+export async function resolveChosenItems(
   deps: NutritionDeps,
   userId: string,
   chosenItems: readonly ChosenItem[],
+  /** False where one request may hold many foods (a diet plan's day): only a food a
+   *  search already returned is priced, and none is searched for by its name. */
+  search = true,
 ): Promise<MealItem[]> {
   const foods: FoodReference[] = [];
   for (const chosen of chosenItems) {
-    const food = await findFood(deps, chosen.canonical);
+    const food = await findFood(deps, chosen.canonical, search);
     if (food === null) throw new NutritionError(400, "unknown_food", "Food reference not found.");
     foods.push(food);
   }
@@ -1393,7 +1464,11 @@ export async function patchMeal(
       ...(input.mealName === undefined ? {} : { mealName: input.mealName }),
       ...(items === undefined ? {} : { items }),
     });
-    return row === null ? null : asMeal(row);
+    if (row === null) return null;
+    await keepTodaysTargets(deps, userId, row.takenAt);
+    // A meal moved to another day can finish or undo a week's food challenge (35b).
+    if (input.takenAt !== undefined) await awardMealBadges(deps, userId);
+    return asMeal(row);
   } catch (err) {
     if (err instanceof repo.MealChangedError) throw mealChanged();
     throw err;
@@ -1406,8 +1481,11 @@ export async function patchMeal(
 
 type ReadDeps = Pick<NutritionDeps, "sql">;
 
-export async function deleteMeal(deps: ReadDeps, userId: string, id: string): Promise<boolean> {
-  return await repo.deleteMeal(deps.sql, userId, id);
+export async function deleteMeal(deps: NutritionDeps, userId: string, id: string): Promise<boolean> {
+  const deleted = await repo.deleteMeal(deps.sql, userId, id);
+  // A removed meal can undo a week's food challenge, so its XP is worked out again (35b).
+  if (deleted) await awardMealBadges(deps, userId);
+  return deleted;
 }
 export async function listDishware(
   deps: ReadDeps,

@@ -512,11 +512,11 @@ d("tax on memberships (real Postgres)", () => {
   );
 
   it(
-    "migration 0109 moves a gym's one rate into a rate named Tax, charged on the products that charged it; a gym at 0 gets none",
+    "migration 0112 moves a gym's one rate into a rate named Tax, charged on the products that charged it; a gym at 0 gets none",
     async () => {
       // The two data statements of the migration, as written, run against temporary tables
       // of the shape they read (a temporary table hides the real one of its name), then dropped.
-      const text = readFileSync(new URL("../drizzle/0109_tax_rates.sql", import.meta.url), "utf8");
+      const text = readFileSync(new URL("../drizzle/0112_tax_rates.sql", import.meta.url), "utf8");
       const statements = text.split("--> statement-breakpoint").map((s) => s.replace(/^\s*--.*$/gm, "").trim());
       const insert = statements.find((s) => s.startsWith('INSERT INTO "gym_tax_rates"'));
       const update = statements.find((s) => s.startsWith('UPDATE "gym_products"'));

@@ -362,6 +362,32 @@ export async function getOverviewAgg(
   };
 }
 
+/** Progress's predictions (35a): each workout since `since`, on its day and hour of the
+ *  person's own time zone, oldest first. */
+export async function predictionWorkouts(
+  sql: Sql,
+  userId: string,
+  since: Date,
+  timeZone: string,
+): Promise<{ day: string; hour: number; kcal: number | null; durationMs: number | null; formScore: number | null }[]> {
+  const rows = await sql<{ day: string; hour: number; kcal_point: number | null; duration_ms: number | null; avg_form_score: number | null }[]>`
+    SELECT to_char(started_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day,
+           extract(hour FROM started_at AT TIME ZONE ${timeZone})::int AS hour,
+           kcal_point, duration_ms, avg_form_score
+    FROM workouts
+    WHERE user_id = ${userId} AND started_at >= ${since}
+    ORDER BY started_at ASC`;
+  return rows.map((r) => ({ day: r.day, hour: r.hour, kcal: r.kcal_point, durationMs: r.duration_ms, formScore: r.avg_form_score }));
+}
+
+/** The day of the person's first workout ever, in their own time zone; null when none. */
+export async function firstWorkoutDay(sql: Sql, userId: string, timeZone: string): Promise<string | null> {
+  const [r] = await sql<{ day: string | null }[]>`
+    SELECT to_char(min(started_at) AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS day
+    FROM workouts WHERE user_id = ${userId}`;
+  return r?.day ?? null;
+}
+
 export async function getDailyTrend(
   sql: Sql,
   userId: string,

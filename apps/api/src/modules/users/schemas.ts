@@ -1,6 +1,7 @@
 // P2.2 — module schema surface (R7.2): contracts live in @app/shared; this
 // file only re-exports what the users module consumes.
 export {
+  ADULT_AGE,
   consentListResponseSchema,
   consentRecordResponseSchema,
   consentRecordSchema,
@@ -14,6 +15,7 @@ export {
   deleteAccountRequestSchema,
   dietSchema,
   mealsPerDaySchema,
+  fitnessLevelSchema,
   fitnessProfileResponseSchema,
   fitnessProfileSchema,
   onboardingAnswersSchema,

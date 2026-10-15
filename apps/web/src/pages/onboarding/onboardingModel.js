@@ -149,7 +149,7 @@ const answered = (v) => v !== null && v !== undefined;
 export function screenAnswered(id, a) {
   switch (id) {
     case 'goal':      return answered(a.weightGoal);
-    case 'about':     return answered(a.age) && answered(a.gender) && answered(a.heightCm) && answered(a.weightKg);
+    case 'about':     return answered(a.age) && a.age >= ADULT_AGE && answered(a.gender) && answered(a.heightCm) && answered(a.weightKg);
     case 'target':
       return (
         !asksTarget(a.weightGoal) ||
@@ -330,8 +330,9 @@ export function stepIn(list, current, by) {
 }
 
 export const AGE_REST = 30;
-/** 16 to 120: the server's rails (RULINGS 2026-09-07, 16 and over). */
-export const ageList = (age) => stretched(16, 120, age);
+/** 18 to 120: the server's rails (RULINGS 2026-09-15, 18 and over). An age kept
+ *  from before is still shown, with the line that says why it cannot go on. */
+export const ageList = (age) => stretched(ADULT_AGE, 120, age);
 
 /** Weight: whole kilograms or pounds on one column, tenths on the other. */
 export const WEIGHT_REST = { metric: 70, imperial: 154 };

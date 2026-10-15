@@ -8,6 +8,7 @@ import {
   equipmentSchema,
   fitnessGoalSchema,
   mealsPerDaySchema,
+  ADULT_AGE,
   missingPlanInputSchema,
   missingSetupAnswerSchema,
   onboardingAnswersSchema,
@@ -50,6 +51,35 @@ const answersFixture = onboardingAnswersSchema.parse({
   mealsPerDay: null,
   onboardingCompleted: false,
   updatedAt: null,
+});
+
+// The worst thing this rule could do: let a 17-year-old save an age and go on into
+// the app (and its Gemini meal scanner), or turn away somebody who is 18
+// (RULINGS 2026-09-15; ROADMAP Stage 4 item 9).
+describe("the app is for 18 and over, on both places that save an age", () => {
+  it("refuses every age under 18 and takes 18 and every age above it, to 120", () => {
+    expect(ADULT_AGE).toBe(18);
+    const cases: [unknown, boolean][] = [
+      [17, false],
+      [16, false],
+      [13, false],
+      [0, false],
+      [-18, false],
+      [17.9, false],
+      ["18", false], // a number, never text
+      [18, true],
+      [19, true],
+      [65, true],
+      [120, true],
+      [121, false],
+      [18.5, false],
+      [null, true], // an age cleared is not an age under 18
+    ];
+    for (const [age, taken] of cases) {
+      expect(patchOnboardingRequestSchema.safeParse({ age }).success, `setup, ${String(age)}`).toBe(taken);
+      expect(putFitnessProfileRequestSchema.safeParse({ age }).success, `settings, ${String(age)}`).toBe(taken);
+    }
+  });
 });
 
 describe("screen 1: one weight choice, and any number of goals beside it (RULINGS 2026-09-10)", () => {
@@ -158,9 +188,9 @@ describe("one screen's save", () => {
     expect(bothAgree(5, "sessionDurationMin", "sessionMinutes")).toBe(true);
     expect(bothAgree(240, "sessionDurationMin", "sessionMinutes")).toBe(true);
     expect(bothAgree(241, "sessionDurationMin", "sessionMinutes")).toBe(false);
-    // The age rail is the ruled one on both (RULINGS 2026-09-07: 16 and over).
-    expect(bothAgree(15, "age", "age")).toBe(false);
-    expect(bothAgree(16, "age", "age")).toBe(true);
+    // The age rail is the ruled one on both (RULINGS 2026-09-15: 18 and over).
+    expect(bothAgree(17, "age", "age")).toBe(false);
+    expect(bothAgree(18, "age", "age")).toBe(true);
 
     // Equipment is one column asked by two screens as well. Its CAP is not
     // pinned here and cannot be: the two surfaces share one rail object

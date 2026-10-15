@@ -477,6 +477,20 @@ Migration is a drop-in: same routes, same JSON shapes, delete three heavy
 dependencies, and the numbers stop moving between refreshes — which users
 will *feel* even if they never articulate it.
 
+**Built in 35a (2026-10-14), on the new server, not as a drop-in:** `GET /v1/progress/predictions`
+(shapes in `@app/shared` `progress.ts`, the rule in `apps/api/src/modules/workouts/predictions.ts`).
+Days and hours are the person's own time zone; the week runs Monday to Sunday, as the goals'.
+The forecast is tomorrow and the six days after it, from the 28 days before today (5 workouts there,
+and a first workout 7 days back); a day before the first workout is never read as a skipped one.
+The week's goal reads the person's training-days goal (none: hidden) over the finished weeks since
+their first workout, 6 at most, weighted 6 down to 1 (3 weeks needed; the first workout's week only
+when it began on a Monday or met the goal); a training DAY cannot be
+doubled, so feasibility is 1 or 0; a week already met reads **reached**, never a band. Steady is
+the last 14 days against the 28 before them (8 workouts, 3 each side), each figure an average of
+the workouts that have it, steady when every comparable one moved under 5 % as shown to one
+decimal, the same either way (nothing comparable: hidden, and says so). Best time reads 90 days of workouts with a form score (6 needed), a time of day needing 2;
+a tie goes to more workouts, then the earlier time. Every read is the plan's history limit at most.
+
 ---
 
 ## 6. The display standard (cross-cutting — applies to every number in the

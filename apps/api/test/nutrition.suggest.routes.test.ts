@@ -217,7 +217,9 @@ d("meal ideas route (real Postgres)", () => {
   });
 
   it("a person the plan may not cut is sized to the whole daily burn", { timeout: 60_000 }, async () => {
-    const teen = await makeUser("teen", { ...PLAN_ANSWERS, weightGoal: "lose", targetWeightKg: 65, pace: "steady", age: 16, diet: "non_vegetarian", mealsPerDay: 3 });
+    const teen = await makeUser("teen", { ...PLAN_ANSWERS, weightGoal: "lose", targetWeightKg: 65, pace: "steady", diet: "non_vegetarian", mealsPerDay: 3 });
+    // No route saves an age under 18 since the app became 18+ (RULINGS 2026-09-15); the floor stays for a row from before.
+    await sql`UPDATE user_fitness_profiles SET age = 16 WHERE user_id = (SELECT id FROM users WHERE email = 'ideas-teen@example.com')`;
     const targets = JSON.parse((await inject({ method: "GET", url: "/v1/nutrition/targets", cookies: teen })).body) as { targets: { kcal: number } };
     expect(targets.targets.kcal).toBe(1901);
     expect((await ok(teen)).kcalLeft).toBe(1901);

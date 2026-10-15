@@ -1,0 +1,559 @@
+// A person's own diet plan (ROADMAP 34e-i) against REAL Postgres. DATABASE_URL-gated;
+// needs migration 0109. The first block is the job's worst thing through the routes:
+// a vegan's or vegetarian's plan holding meat, fish, egg or milk, made or swapped, and
+// a plan below the calories of somebody the app may not cut. Then each route: the
+// happy path, a validation failure, the stranger, and a change sent twice.
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import postgres from "postgres";
+import {
+  DIET_LABEL_CAUTION, FOOD_ALLERGY_CAUTION, dietAllows, dietPlanResponseSchema, nutritionTargetsResponseSchema,
+  type Diet, type DietPlanResponse,
+} from "@app/shared";
+import { buildApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+import type { EmailSender } from "../src/modules/auth/email.js";
+import type { FoodSearchProvider } from "../src/modules/nutrition/openfoodfacts.adapter.js";
+import { foodOf, tableLowest } from "./foodDietByTable.js";
+
+const url = process.env["DATABASE_URL"];
+const d = describe.skipIf(url === undefined || url === "");
+
+const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+
+const baseEnv = {
+  NODE_ENV: "test",
+  DATABASE_URL: url ?? "",
+  WEB_ORIGIN: "http://localhost:5173",
+  JWT_SECRET: "ofp-test-secret-0123456789abcdef-32", // dummy test value, gitleaks:allow
+  LOG_LEVEL: "error",
+};
+
+type App = Awaited<ReturnType<typeof buildApp>>;
+type Cookies = Record<string, string>;
+
+const silentAuthSender = (): EmailSender => ({
+  sendVerificationEmail: () => Promise.resolve(),
+  sendPasswordResetEmail: () => Promise.resolve(),
+  sendSignInCodeEmail: () => Promise.resolve(),
+});
+/** Counts the searches that would go out to Open Food Facts. */
+let searches = 0;
+const noExternal: FoodSearchProvider = {
+  search: () => {
+    searches++;
+    return Promise.resolve([]);
+  },
+};
+type Res = { statusCode: number; body: string };
+
+let ipCounter = 0;
+const nextIp = () => `10.12.${String(Math.floor(ipCounter / 250))}.${String((ipCounter++ % 250) + 1)}`;
+const cookieMap = (res: { cookies: { name: string; value: string }[] }) =>
+  Object.fromEntries(res.cookies.map((c) => [c.name, c.value]));
+
+/** A plan that keeps the weight: 1,817 kcal a day (users.onboarding.routes.test.ts's golden person). */
+const PLAN_ANSWERS = {
+  weightGoal: "maintain",
+  age: 30,
+  gender: "female",
+  heightCm: 165,
+  weightKg: 70,
+  dayActivity: "sitting",
+  trainingDays: 3,
+  sessionMinutes: 45,
+};
+/** The same person losing weight: 1,267 kcal a day where the plan may cut. */
+const LOSING = { ...PLAN_ANSWERS, weightGoal: "lose", targetWeightKg: 65, pace: "steady" };
+
+d("diet plan routes (real Postgres)", () => {
+  const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  let app: App | undefined;
+  const api = (): App => {
+    if (app === undefined) throw new Error("beforeAll did not build the app");
+    return app;
+  };
+
+  const inject = (opts: { method: "GET" | "POST" | "PUT" | "PATCH"; url: string; body?: unknown; cookies?: Cookies }) =>
+    api().inject({
+      method: opts.method,
+      url: opts.url,
+      remoteAddress: nextIp(),
+      headers: opts.body !== undefined ? { "content-type": "application/json" } : {},
+      cookies: opts.cookies ?? {},
+      ...(opts.body !== undefined ? { payload: JSON.stringify(opts.body) } : {}),
+    });
+
+  const makeUser = async (name: string, answers: Record<string, unknown> | null): Promise<Cookies> => {
+    const email = `dietplan-${name}@example.com`;
+    const reg = await inject({ method: "POST", url: "/v1/auth/register", body: { email, password: PASSWORD, displayName: "Plan Fixture" } });
+    expect(reg.statusCode).toBe(201);
+    const login = await inject({ method: "POST", url: "/v1/auth/login", body: { email, password: PASSWORD } });
+    expect(login.statusCode).toBe(200);
+    const cookies = cookieMap(login);
+    if (answers !== null) {
+      expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: answers, cookies })).statusCode).toBe(200);
+    }
+    return cookies;
+  };
+  const eater = (name: string, diet: Diet, mealsPerDay = 3) => makeUser(name, { ...PLAN_ANSWERS, diet, mealsPerDay });
+
+  const parsed = (res: { statusCode: number; body: string }): DietPlanResponse => {
+    expect(res.statusCode, res.body).toBe(200);
+    return dietPlanResponseSchema.parse(JSON.parse(res.body));
+  };
+  const read = async (cookies: Cookies) => parsed(await inject({ method: "GET", url: "/v1/nutrition/diet-plan", cookies }));
+  const make = (cookies: Cookies, body: unknown = { changeId: randomUUID() }) =>
+    inject({ method: "POST", url: "/v1/nutrition/diet-plan/make", body, cookies });
+  const putDay = (cookies: Cookies, day: number | string, body: unknown) =>
+    inject({ method: "PUT", url: `/v1/nutrition/diet-plan/days/${String(day)}`, body, cookies });
+  const swap = (cookies: Cookies, day: number | string, body: unknown) =>
+    inject({ method: "POST", url: `/v1/nutrition/diet-plan/days/${String(day)}/swap`, body, cookies });
+  const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error: string }).error;
+  const messageOf = (res: { body: string }) => (JSON.parse(res.body) as { message: string }).message;
+  const idOf = async (name: string): Promise<string> => {
+    const rows = await sql<{ id: string }[]>`SELECT id FROM users WHERE email = ${`dietplan-${name}@example.com`}`;
+    const id = rows[0]?.id;
+    if (id === undefined) throw new Error(`no fixture ${name}`);
+    return id;
+  };
+  /** Until `n` requests wait on a plan row the test itself holds. */
+  const waiting = async (n: number) => {
+    for (let tries = 0; tries < 400; tries++) {
+      const rows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND query LIKE '%FROM diet_plans WHERE user_id%FOR UPDATE%'`;
+      if ((rows[0]?.n ?? 0) >= n) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(`${String(n)} requests never waited on the plan`);
+  };
+  const foodsOf = (plan: DietPlanResponse): string[] => plan.days.flatMap((day) => day.meals.flatMap((m) => m.items.map((i) => i.canonical)));
+  const wrongFor = (diet: Diet, canonicals: readonly string[]): string[] =>
+    [...new Set(canonicals)].map(foodOf)
+      .filter((f) => !dietAllows(diet, f.diet) || !dietAllows(diet, tableLowest(f)))
+      .map((f) => f.name);
+
+  const mine = sql`SELECT id FROM users WHERE email LIKE 'dietplan-%@example.com'`;
+  const clear = async () => {
+    await sql`DELETE FROM diet_plans WHERE user_id IN (${mine})`;
+    await sql`DELETE FROM users WHERE email LIKE 'dietplan-%@example.com'`;
+  };
+
+  beforeAll(async () => {
+    await clear();
+    app = await buildApp(loadConfig(baseEnv), { emailSender: silentAuthSender(), nutrition: { foodSearchProvider: noExternal } });
+  }, 60_000);
+
+  afterAll(async () => {
+    if (app !== undefined) await app.close();
+    await clear();
+    await sql.end({ timeout: 5 });
+  }, 60_000);
+
+  describe("THE WORST THING: a plan holding what the person does not eat, or less than they may eat", () => {
+    it("a vegan's, a vegetarian's and an egg-eating vegetarian's week, made and every meal swapped: no meat, fish, egg or milk the diet rules out", { timeout: 120_000 }, async () => {
+      for (const diet of ["vegan", "vegetarian", "vegetarian_eggs"] as const) {
+        const cookies = await eater(`worst-${diet}`, diet, 4);
+        const made = parsed(await make(cookies));
+        const foods = foodsOf(made);
+        expect(foods.length, diet).toBeGreaterThan(20);
+        let swapped = made;
+        for (const day of swapped.days) {
+          for (const [at] of day.meals.entries()) {
+            swapped = parsed(await swap(cookies, day.day, { changeId: randomUUID(), meal: at }));
+            foods.push(...foodsOf(swapped));
+          }
+        }
+        expect(wrongFor(diet, foods), diet).toEqual([]);
+        expect(swapped.labelCaution).toBe(DIET_LABEL_CAUTION);
+        expect(swapped.caution).toBe(FOOD_ALLERGY_CAUTION);
+      }
+    });
+
+    it("a meat eater who becomes vegan: the plan made before reads which foods their diet no longer eats, and a swap gives a vegan meal", { timeout: 60_000 }, async () => {
+      const cookies = await eater("turned", "non_vegetarian", 3);
+      const made = parsed(await make(cookies));
+      expect(made.days.every((d) => d.meals.every((m) => m.outsideDiet.length === 0))).toBe(true);
+      expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { diet: "vegan" }, cookies })).statusCode).toBe(200);
+      const now = await read(cookies);
+      const flagged = now.days.flatMap((d) => d.meals.flatMap((m, at) => (m.outsideDiet.length > 0 ? [{ day: d.day, at, m }] : [])));
+      expect(flagged.length).toBeGreaterThan(0);
+      for (const { m } of flagged) {
+        const wrong = m.items.filter((i) => !dietAllows("vegan", foodOf(i.canonical).diet)).map((i) => i.name);
+        expect(m.outsideDiet).toEqual(wrong);
+      }
+      // Every meal that is not flagged holds only vegan foods.
+      const unflagged = now.days.flatMap((d) => d.meals.filter((m) => m.outsideDiet.length === 0).flatMap((m) => m.items.map((i) => i.canonical)));
+      expect(wrongFor("vegan", unflagged)).toEqual([]);
+      const first = flagged[0];
+      if (first === undefined) throw new Error("nothing flagged");
+      const swapped = parsed(await swap(cookies, first.day, { changeId: randomUUID(), meal: first.at }));
+      const meal = swapped.days[first.day - 1]?.meals[first.at];
+      expect(meal?.outsideDiet).toEqual([]);
+      expect(wrongFor("vegan", meal?.items.map((i) => i.canonical) ?? [])).toEqual([]);
+    });
+
+    it("under 18: every day is made to at least the calories the rings show, never a cut, past what eight meals hold too, and a swap never lowers it", { timeout: 120_000 }, async () => {
+      const ringsOf = async (cookies: Cookies) => {
+        const res = await inject({ method: "GET", url: "/v1/nutrition/targets", cookies });
+        return nutritionTargetsResponseSchema.parse(JSON.parse(res.body)).targets;
+      };
+      const adultRings = await ringsOf(await makeUser("adult", { ...LOSING, diet: "non_vegetarian", mealsPerDay: 3 }));
+      const TEENS = [
+        // Losing weight: the rings hold the whole burn, never a cut.
+        { name: "teen", answers: { ...LOSING, age: 16, diet: "non_vegetarian", mealsPerDay: 3 } },
+        // A burn past what six meals of the meal ideas' sizes hold (3,200 kcal).
+        { name: "bigteen", answers: { weightGoal: "maintain", age: 17, gender: "male", heightCm: 185, weightKg: 85, dayActivity: "active", trainingDays: 6, sessionMinutes: 90, diet: "vegan", mealsPerDay: 3 } },
+        // Gaining, past what eight meals hold (4,100 kcal): the amounts are made bigger.
+        { name: "hugeteen", answers: { weightGoal: "gain", targetWeightKg: 130, pace: "steady", age: 17, gender: "male", heightCm: 200, weightKg: 120, dayActivity: "very_active", trainingDays: 7, sessionMinutes: 120, diet: "vegetarian", mealsPerDay: 2 } },
+      ];
+      const kcals: number[] = [];
+      for (const { name, answers } of TEENS) {
+        // No route saves an age under 18 since the app became 18+; the rules still hold a row from before.
+        const cookies = await makeUser(name, { ...answers, age: 40 });
+        await sql`UPDATE user_fitness_profiles SET age = ${answers.age} WHERE user_id = ${await idOf(name)}`;
+        const rings = await ringsOf(cookies);
+        if (name === "teen") expect(rings?.kcal).toBe(rings?.tdee);
+        const kcal = rings?.kcal ?? Infinity;
+        kcals.push(kcal);
+        const plan = parsed(await make(cookies));
+        for (const day of plan.days) {
+          expect(day.planned.kcal, `${name} day ${String(day.day)}`).toBeGreaterThanOrEqual(kcal);
+          expect(day.off?.kcal).toBe(day.planned.kcal - kcal);
+        }
+        // Every meal of Monday swapped, one after the other: the day stays at or over.
+        let week = plan;
+        for (let meal = 0; meal < (plan.days[0]?.meals.length ?? 0); meal++) {
+          const res = await swap(cookies, 1, { changeId: randomUUID(), meal });
+          if (res.statusCode === 409 && errorOf(res) === "no_other_meal") continue;
+          week = parsed(res);
+        }
+        expect(week.days[0]?.planned.kcal, `${name} after swaps`).toBeGreaterThanOrEqual(kcal);
+      }
+      const [teenKcal = 0, bigKcal = 0, hugeKcal = 0] = kcals;
+      expect(adultRings?.kcal).toBeLessThan(teenKcal);
+      expect(bigKcal).toBeGreaterThan(3200);
+      expect(hugeKcal).toBeGreaterThan(4100);
+    });
+  });
+
+  describe("GET /v1/nutrition/diet-plan", () => {
+    it("a person with no plan reads seven empty days, the day's targets and whether the app can make one", { timeout: 30_000 }, async () => {
+      const plan = await read(await eater("empty", "non_vegetarian"));
+      expect(plan.days.map((d) => d.day)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+      expect(plan.days.every((d) => d.meals.length === 0 && d.planned.kcal === 0)).toBe(true);
+      expect(plan.days[0]?.target?.kcal).toBe(1817);
+      expect(plan.days[0]?.off?.kcal).toBe(-1817);
+      expect(plan.make).toEqual({ status: "ok" });
+      expect(plan.labelCaution).toBeNull();
+    });
+
+    it("says which answers are missing, or that setup is not finished, and makes nothing", { timeout: 30_000 }, async () => {
+      const none = await makeUser("none", PLAN_ANSWERS);
+      expect((await read(none)).make).toEqual({ status: "needs_answers", missing: ["diet", "mealsPerDay"] });
+      const refused = await make(none);
+      expect(refused.statusCode).toBe(409);
+      expect(errorOf(refused)).toBe("needs_answers");
+
+      const noPlan = await makeUser("noplan", { diet: "vegan", mealsPerDay: 3 });
+      const plan = await read(noPlan);
+      expect(plan.make).toEqual({ status: "needs_plan", reason: "setup" });
+      expect(plan.days[0]?.target).toBeNull();
+      const unfinished = await make(noPlan);
+      expect(errorOf(unfinished)).toBe("needs_plan");
+      expect(messageOf(unfinished)).toBe("Finish setup to get a meal plan.");
+
+      // Setup is finished, but the target weight is behind them: they are asked for a new goal.
+      const passed = await makeUser("passed", { ...PLAN_ANSWERS, weightGoal: "lose", targetWeightKg: 75, pace: "steady", diet: "vegan", mealsPerDay: 3 });
+      expect((await read(passed)).make).toEqual({ status: "needs_plan", reason: "new_goal" });
+      const refusedPassed = await make(passed);
+      expect(errorOf(refusedPassed)).toBe("needs_plan");
+      expect(messageOf(refusedPassed)).toBe("Set a new goal to get a meal plan.");
+    });
+
+    it("needs a signed-in person", async () => {
+      expect((await inject({ method: "GET", url: "/v1/nutrition/diet-plan" })).statusCode).toBe(401);
+      expect((await make({})).statusCode).toBe(401);
+      expect((await putDay({}, 1, { changeId: randomUUID(), meals: [] })).statusCode).toBe(401);
+      expect((await swap({}, 1, { changeId: randomUUID(), meal: 0 })).statusCode).toBe(401);
+    });
+  });
+
+  describe("POST /v1/nutrition/diet-plan/make", () => {
+    it("makes the week to the person's meals a day, sized to their calories", { timeout: 30_000 }, async () => {
+      const cookies = await eater("make", "non_vegetarian", 4);
+      const plan = parsed(await make(cookies));
+      for (const day of plan.days) {
+        expect(day.meals.map((m) => m.mealType)).toEqual(["breakfast", "lunch", "snack", "dinner"]);
+        expect(day.planned.kcal).toBeGreaterThanOrEqual(1817);
+        expect(day.planned.kcal).toBeLessThanOrEqual(1817 + 182);
+        // Each meal is priced as a logged meal is: its totals are its foods'.
+        for (const meal of day.meals) expect(meal.totals.kcalPoint).toBe(meal.items.reduce((n, i) => n + i.kcalPoint, 0));
+      }
+      expect(await read(cookies)).toEqual(plan);
+    });
+
+    it("sent twice, it is made once; made again with a new id, the week is another", { timeout: 30_000 }, async () => {
+      const cookies = await eater("twice", "vegetarian");
+      const changeId = randomUUID();
+      const first = parsed(await make(cookies, { changeId }));
+      // The person changes Monday, then the first make arrives again (its reply was lost).
+      parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: [] }));
+      const again = parsed(await make(cookies, { changeId: changeId.toUpperCase() }));
+      expect(again.days[0]?.meals).toEqual([]);
+      expect(again.days.slice(1)).toEqual(first.days.slice(1));
+      const fresh = parsed(await make(cookies));
+      expect(fresh.days).not.toEqual(first.days);
+    });
+
+    it("sent again after the person cleared an answer, it returns the plan the first send made", { timeout: 30_000 }, async () => {
+      const cookies = await eater("retry", "vegan");
+      const changeId = randomUUID();
+      const first = parsed(await make(cookies, { changeId }));
+      expect((await inject({ method: "PATCH", url: "/v1/users/me/onboarding", body: { diet: null }, cookies })).statusCode).toBe(200);
+      expect(errorOf(await make(cookies))).toBe("needs_answers");
+      expect(parsed(await make(cookies, { changeId })).days).toEqual(first.days);
+    });
+
+    it("makes only the days named, and leaves the others as they are", { timeout: 30_000 }, async () => {
+      const cookies = await eater("days", "vegan");
+      const before = parsed(await make(cookies));
+      const after = parsed(await make(cookies, { changeId: randomUUID(), days: [3] }));
+      expect(after.days[2]).not.toEqual(before.days[2]);
+      expect([...after.days.slice(0, 2), ...after.days.slice(3)]).toEqual([...before.days.slice(0, 2), ...before.days.slice(3)]);
+    });
+
+    it("refuses a body it cannot read", { timeout: 30_000 }, async () => {
+      const cookies = await eater("makebad", "vegan");
+      for (const body of [{}, { changeId: "not-an-id" }, { changeId: randomUUID(), days: [8] }, { changeId: randomUUID(), days: [1, 1] }, { changeId: randomUUID(), extra: 1 }]) {
+        const res = await make(cookies, body);
+        expect(res.statusCode, JSON.stringify(body)).toBe(400);
+        expect(errorOf(res)).toBe("validation_error");
+      }
+    });
+  });
+
+  describe("PUT /v1/nutrition/diet-plan/days/:day", () => {
+    it("keeps the day as the person sends it, priced by the server, with no setup answers needed", { timeout: 30_000 }, async () => {
+      const cookies = await makeUser("own", null);
+      const plan = parsed(await putDay(cookies, 2, {
+        changeId: randomUUID(),
+        meals: [
+          { mealType: "breakfast", items: [{ canonical: "banana", grams: 120 }, { canonical: "oatmeal", grams: 240 }] },
+          { mealType: "dinner", items: [{ canonical: "rice", grams: 200 }] },
+        ],
+      }));
+      const tuesday = plan.days[1];
+      expect(tuesday?.meals.map((m) => m.mealType)).toEqual(["breakfast", "dinner"]);
+      expect(tuesday?.meals[0]?.items.map((i) => i.gramsPoint)).toEqual([120, 240]);
+      expect(tuesday?.planned.kcal).toBe(tuesday?.meals.reduce((n, m) => n + m.totals.kcalPoint, 0));
+      expect(tuesday?.planned.kcal).toBeGreaterThan(0);
+      expect(tuesday?.target).toBeNull();
+      expect(plan.days.filter((d) => d.meals.length > 0).map((d) => d.day)).toEqual([2]);
+    });
+
+    it("changes an amount, removes a meal, and clears the day", { timeout: 30_000 }, async () => {
+      const cookies = await eater("edit", "non_vegetarian");
+      const made = parsed(await make(cookies));
+      const monday = made.days[0];
+      const [first, ...rest] = monday?.meals ?? [];
+      if (first === undefined) throw new Error("Monday has no meal");
+      const bigger = first.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint * 2 }));
+      const edited = parsed(await putDay(cookies, 1, {
+        changeId: randomUUID(),
+        meals: [{ mealType: first.mealType, items: bigger }, ...rest.slice(1).map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }))],
+      }));
+      expect(edited.days[0]?.meals.length).toBe((monday?.meals.length ?? 0) - 1);
+      expect(edited.days[0]?.meals[0]?.totals.kcalPoint).toBeGreaterThan(first.totals.kcalPoint);
+      expect(edited.days.slice(1)).toEqual(made.days.slice(1));
+
+      const cleared = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: [] }));
+      expect(cleared.days[0]?.meals).toEqual([]);
+    });
+
+    it("a packaged product no longer remembered stays in the day while another meal changes; a new amount of it is refused, as for a logged meal", { timeout: 30_000 }, async () => {
+      const cookies = await eater("packaged", "non_vegetarian");
+      const made = parsed(await make(cookies));
+      const userId = await idOf("packaged");
+      const like = made.days[0]?.meals[0]?.items[0];
+      if (like === undefined) throw new Error("no planned food");
+      // An Open Food Facts product put in the day more than a day ago: its search is forgotten.
+      const bar = { ...like, name: "Zqxplan bar · Brand", canonical: "off_zqxplan_gone", gramsPoint: 50, gramsRange: [50, 50], nutritionSource: "openfoodfacts", kcalPoint: 200, kcalLow: 200, kcalHigh: 200 };
+      const stored = made.days.map((d, at) => d.meals.map((m, j) => ({ mealType: m.mealType, items: at === 0 && j === 0 ? [bar] : m.items })));
+      await sql`UPDATE diet_plans SET days = ${sql.json(stored)} WHERE user_id = ${userId}`;
+      const chosen = (meals: readonly { mealType: string; items: readonly { canonical: string; gramsPoint: number }[] }[]) =>
+        meals.map((m) => ({ mealType: m.mealType, items: m.items.map((i) => ({ canonical: i.canonical, grams: i.gramsPoint })) }));
+      const day = stored[0] ?? [];
+
+      // Another meal removed: the bar is kept at its saved price.
+      const after = parsed(await putDay(cookies, 1, { changeId: randomUUID(), meals: chosen(day.slice(0, -1)) }));
+      expect(after.days[0]?.meals[0]?.items).toEqual([bar]);
+      expect(after.days[0]?.meals.length).toBe(day.length - 1);
+
+      const twoBars = await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: day[0]?.mealType, items: [{ canonical: "off_zqxplan_gone", grams: 100 }] }] });
+      expect(twoBars.statusCode).toBe(400);
+      expect(errorOf(twoBars)).toBe("unknown_food");
+    });
+
+    it("sent twice, the second does not undo what came between", { timeout: 30_000 }, async () => {
+      const cookies = await eater("puttwice", "non_vegetarian");
+      const changeId = randomUUID();
+      const body = { changeId, meals: [{ mealType: "lunch", items: [{ canonical: "apple", grams: 150 }] }] };
+      parsed(await putDay(cookies, 5, body));
+      parsed(await putDay(cookies, 5, { changeId: randomUUID(), meals: [] }));
+      const again = parsed(await putDay(cookies, 5, body));
+      expect(again.days[4]?.meals).toEqual([]);
+    });
+
+    it("refuses a day that is not one, a body it cannot read, and a food that is not on the list", { timeout: 30_000 }, async () => {
+      const cookies = await eater("putbad", "vegan");
+      const meals = [{ mealType: "lunch", items: [{ canonical: "apple", grams: 150 }] }];
+      for (const day of ["0", "8", "monday", "1.5"]) {
+        expect((await putDay(cookies, day, { changeId: randomUUID(), meals })).statusCode, day).toBe(400);
+      }
+      for (const body of [
+        { meals },
+        { changeId: randomUUID(), meals: [{ mealType: "brunch", items: meals[0]?.items }] },
+        { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [] }] },
+        { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [{ canonical: "apple", grams: -1 }] }] },
+        { changeId: randomUUID(), meals: Array.from({ length: 9 }, () => meals[0]) },
+        { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [{ canonical: "apple", grams: 150, kcalPoint: 1 }] }] },
+      ]) {
+        const res = await putDay(cookies, 1, body);
+        expect(res.statusCode, JSON.stringify(body)).toBe(400);
+        expect(errorOf(res)).toBe("validation_error");
+      }
+      // A food no search returned is not searched for: a day of 240 such foods must not send 240 searches out.
+      const before = searches;
+      const unknown = await putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [{ canonical: "zz-no-such-food-anywhere", grams: 100 }] }] });
+      expect(unknown.statusCode).toBe(400);
+      expect(errorOf(unknown)).toBe("unknown_food");
+      expect(searches).toBe(before);
+      expect((await read(cookies)).days[0]?.meals).toEqual([]);
+    });
+  });
+
+  describe("POST /v1/nutrition/diet-plan/days/:day/swap", () => {
+    it("swaps one meal for other foods of the same kind, near its calories, and leaves the rest", { timeout: 30_000 }, async () => {
+      const cookies = await eater("swap", "vegetarian_eggs");
+      const made = parsed(await make(cookies));
+      const changeId = randomUUID();
+      const swapped = parsed(await swap(cookies, 4, { changeId, meal: 1 }));
+      const before = made.days[3]?.meals[1];
+      const after = swapped.days[3]?.meals[1];
+      expect(after?.mealType).toBe(before?.mealType);
+      expect(after?.items.map((i) => i.canonical).sort()).not.toEqual(before?.items.map((i) => i.canonical).sort());
+      expect(Math.abs((after?.totals.kcalPoint ?? 0) - (before?.totals.kcalPoint ?? 0))).toBeLessThanOrEqual((before?.totals.kcalPoint ?? 0) * 0.25);
+      expect(swapped.days[3]?.meals.filter((_, i) => i !== 1)).toEqual(made.days[3]?.meals.filter((_, i) => i !== 1));
+      expect(swapped.days.filter((_, i) => i !== 3)).toEqual(made.days.filter((_, i) => i !== 3));
+
+      // Sent again (its reply was lost): the meal is not swapped a second time.
+      expect(parsed(await swap(cookies, 4, { changeId, meal: 1 }))).toEqual(swapped);
+    });
+
+    it("a meal that is not there is not found; a person with no diet answer is told to give it", { timeout: 30_000 }, async () => {
+      const cookies = await eater("swapnone", "vegan");
+      const res = await swap(cookies, 1, { changeId: randomUUID(), meal: 0 });
+      expect(res.statusCode).toBe(404);
+      parsed(await make(cookies));
+      expect((await swap(cookies, 1, { changeId: randomUUID(), meal: 7 })).statusCode).toBe(404);
+
+      const own = await makeUser("swapown", null);
+      parsed(await putDay(own, 1, { changeId: randomUUID(), meals: [{ mealType: "lunch", items: [{ canonical: "rice", grams: 200 }] }] }));
+      const refused = await swap(own, 1, { changeId: randomUUID(), meal: 0 });
+      expect(refused.statusCode).toBe(409);
+      expect(errorOf(refused)).toBe("needs_answers");
+    });
+
+    it("refuses a body it cannot read", { timeout: 30_000 }, async () => {
+      const cookies = await eater("swapbad", "vegan");
+      for (const body of [{ meal: 0 }, { changeId: randomUUID() }, { changeId: randomUUID(), meal: -1 }, { changeId: randomUUID(), meal: 8 }, { changeId: randomUUID(), meal: 0.5 }]) {
+        expect((await swap(cookies, 1, body)).statusCode, JSON.stringify(body)).toBe(400);
+      }
+      expect((await swap(cookies, 9, { changeId: randomUUID(), meal: 0 })).statusCode).toBe(400);
+    });
+  });
+
+  describe("a stranger", () => {
+    it("never reads, changes or swaps another person's plan: each route reaches only the signed-in person's own", { timeout: 60_000 }, async () => {
+      const owner = await eater("owner", "vegan");
+      const stranger = await eater("stranger", "non_vegetarian");
+      const plan = parsed(await make(owner));
+      const changeId = randomUUID();
+
+      expect((await read(stranger)).days.every((d) => d.meals.length === 0)).toBe(true);
+      // The stranger sends the owner's own change id: it is a change of the stranger's plan only.
+      parsed(await putDay(stranger, 1, { changeId, meals: [] }));
+      expect((await swap(stranger, 1, { changeId: randomUUID(), meal: 0 })).statusCode).toBe(404);
+      parsed(await make(stranger, { changeId: randomUUID(), days: [2] }));
+
+      expect(await read(owner)).toEqual(plan);
+      // The owner's change of the same id is still the owner's to make.
+      expect(parsed(await putDay(owner, 1, { changeId, meals: [] })).days[0]?.meals).toEqual([]);
+    });
+  });
+
+  describe("two changes at the same instant", () => {
+    it("the same change sent twice at once is made once; two different ones are both made, one after the other", { timeout: 60_000 }, async () => {
+      const cookies = await eater("race", "non_vegetarian");
+      const changeId = randomUUID();
+      const body = { changeId, meals: [{ mealType: "lunch", items: [{ canonical: "apple", grams: 150 }] }] };
+      const [a, b] = await Promise.all([putDay(cookies, 6, body), putDay(cookies, 6, body)]);
+      expect(parsed(a).days[5]).toEqual(parsed(b).days[5]);
+      const rows = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM diet_plans p, unnest(p.recent_changes) AS c
+        WHERE p.user_id = (SELECT id FROM users WHERE email = 'dietplan-race@example.com') AND c = ${changeId}::uuid`;
+      expect(rows[0]?.n).toBe(1);
+
+      const [mon, tue] = await Promise.all([
+        putDay(cookies, 1, { changeId: randomUUID(), meals: [{ mealType: "dinner", items: [{ canonical: "rice", grams: 200 }] }] }),
+        putDay(cookies, 2, { changeId: randomUUID(), meals: [{ mealType: "dinner", items: [{ canonical: "banana", grams: 120 }] }] }),
+      ]);
+      expect(mon.statusCode).toBe(200);
+      expect(tue.statusCode).toBe(200);
+      const both = await read(cookies);
+      expect(both.days[0]?.meals.length).toBe(1);
+      expect(both.days[1]?.meals.length).toBe(1);
+      expect(both.days[5]?.meals.length).toBe(1);
+    });
+
+    it("two swaps of one meal at once: the first is made, the second is told the plan has changed", { timeout: 60_000 }, async () => {
+      const cookies = await eater("swaprace", "vegetarian");
+      const made = parsed(await make(cookies));
+      const userId = await idOf("swaprace");
+      let both: Promise<Res[]> = Promise.resolve([]);
+      // The test holds the person's row, so both swaps have read the meal before either is made.
+      await sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM diet_plans WHERE user_id = ${userId} FOR UPDATE`;
+        both = Promise.all([swap(cookies, 2, { changeId: randomUUID(), meal: 0 }), swap(cookies, 2, { changeId: randomUUID(), meal: 0 })]);
+        await waiting(2);
+      });
+      const results = await both;
+      expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+      expect(results.filter((r) => r.statusCode === 409).map(errorOf)).toEqual(["plan_changed"]);
+      const after = await read(cookies);
+      expect(after.days[1]?.meals[0]).not.toEqual(made.days[1]?.meals[0]);
+      expect(after.days[1]?.meals.slice(1)).toEqual(made.days[1]?.meals.slice(1));
+    });
+
+    it("a swap of a meal the day lost since it was read is refused, and the day is left as the other change made it", { timeout: 60_000 }, async () => {
+      const cookies = await eater("swapgone", "vegan");
+      const made = parsed(await make(cookies));
+      const userId = await idOf("swapgone");
+      const changed = made.days.map((day, at) => day.meals.slice(at === 2 ? 1 : 0).map((m) => ({ mealType: m.mealType, items: m.items })));
+      let one: Promise<Res> = Promise.resolve({ statusCode: 0, body: "" });
+      await sql.begin(async (tx) => {
+        await tx`SELECT 1 FROM diet_plans WHERE user_id = ${userId} FOR UPDATE`;
+        one = swap(cookies, 3, { changeId: randomUUID(), meal: 0 });
+        await waiting(1);
+        // Another change of the day comes first: its first meal is removed.
+        await tx`UPDATE diet_plans SET days = ${tx.json(changed)} WHERE user_id = ${userId}`;
+      });
+      const res = await one;
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res)).toBe("plan_changed");
+      expect((await read(cookies)).days[2]?.meals).toEqual(made.days[2]?.meals.slice(1));
+    });
+  });
+});

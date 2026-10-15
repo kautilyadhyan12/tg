@@ -1,7 +1,7 @@
 // WHAT A GYM SELLS (Part 3 §13.1; ROADMAP Stage 2 item 17a-i). Mirrors
 // `0069_membership_types.sql`, `0070_held_memberships.sql` and
 // `0073_membership_word_links.sql` 1:1, and `0075_class_bookings.sql`'s bookings; the
-// migrations carry the reasoning. `0109_tax_rates.sql` adds the tax rate columns.
+// migrations carry the reasoning. `0112_tax_rates.sql` adds the tax rate columns.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -51,7 +51,7 @@ export const gymMembershipTypes = pgTable(
     includesPt: boolean("includes_pt").notNull().default(false),
     ptLimit: integer("pt_limit"),
     ptPeriod: text("pt_period"),
-    /** The gym's tax rate its bills charge (0109); null for none. */
+    /** The gym's tax rate its bills charge (0112); null for none. */
     taxRateId: uuid("tax_rate_id"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -94,7 +94,7 @@ export const gymMembershipTypes = pgTable(
     uniqueIndex("gym_membership_types_live_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} IS NULL`),
-    // `0109` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
+    // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_membership_types_tax_rate_fk",
       columns: [t.gymId, t.taxRateId],
@@ -163,10 +163,10 @@ export const gymHeldMemberships = pgTable(
     discountName: text("discount_name"),
     discountMinor: integer("discount_minor").notNull().default(0),
     discountPayments: text("discount_payments"),
-    /** The tax rate it was sold with (0109): every bill opened from it charges that rate's
+    /** The tax rate it was sold with (0112): every bill opened from it charges that rate's
      *  percentage as it is that day. Null for none. */
     taxRateId: uuid("tax_rate_id"),
-    /** Whether its price held that tax when it was sold (0109): kept, so a gym changing how
+    /** Whether its price held that tax when it was sold (0112): kept, so a gym changing how
      *  it charges tax later moves nobody's total. Null with no rate. */
     taxIncluded: boolean("tax_included"),
     createdAt: createdAt(),
@@ -222,7 +222,7 @@ export const gymHeldMemberships = pgTable(
     index("gym_held_memberships_discount_idx")
       .on(t.gymId, t.discountId)
       .where(sql`${t.discountId} IS NOT NULL`),
-    // `0109` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
+    // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_held_memberships_tax_rate_fk",
       columns: [t.gymId, t.taxRateId],
@@ -258,7 +258,7 @@ export const gymMemberBills = pgTable(
     voidReason: text("void_reason"),
     voidedOn: date("voided_on"),
     voidedBy: uuid("voided_by").references(() => users.id, { onDelete: "set null" }),
-    /** The tax inside `amount_minor`, as the bill was opened (0109): how much, the rate's
+    /** The tax inside `amount_minor`, as the bill was opened (0112): how much, the rate's
      *  percentage and name then, and whether the price held it. 0 and nulls for none. */
     taxMinor: integer("tax_minor").notNull().default(0),
     taxBp: integer("tax_bp").notNull().default(0),

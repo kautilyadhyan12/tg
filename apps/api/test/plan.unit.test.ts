@@ -1089,7 +1089,7 @@ describe("plan contract (@app/shared)", () => {
     expect(planAnswersSchema.safeParse({ today: "9990-01-01" }).success).toBe(false);
   });
 
-  it("the app is for 16 and over; the rails match the profile's, two decimals included", () => {
+  it("the plan's own age rail is 16, under the app's 18, so its under-18 rules stay a floor; the rails match the profile's, two decimals included", () => {
     expect(planInputsSchema.safeParse({ ...sample, age: 15 }).success).toBe(false);
     expect(planInputsSchema.safeParse({ ...sample, age: 16 }).success).toBe(true);
     expect(planInputsSchema.safeParse({ ...sample, trainingDays: 8 }).success).toBe(false);

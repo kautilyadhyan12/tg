@@ -604,3 +604,150 @@ export type MealIdeasResponse = z.infer<typeof mealIdeasResponseSchema>;
  *  photo scans say they estimate calories and cannot detect allergens. One
  *  wording, for the web's sheet and the phone app's. */
 export const PHOTO_SCAN_CAUTION = "Calories from a photo are an estimate. A photo cannot detect allergens.";
+
+// ROADMAP 34e-i — a person's own diet plan: a week, Monday to Sunday, that repeats
+// until they change it (RULINGS 2026-09-12, "make their own diet plan").
+/** A day of the plan's week: 1 is Monday, 7 Sunday. */
+export const dietPlanDaySchema = z.number().int().min(1).max(7);
+export const dietPlanDayParamsSchema = z.object({ day: z.coerce.number().pipe(dietPlanDaySchema) }).strict();
+/** The most meals one day of the plan holds. */
+export const MOST_PLAN_MEALS = 8;
+/** One change's id, made by the phone: the same change sent twice is made once. */
+const planChangeIdSchema = z.string().uuid().toLowerCase();
+
+export const dietPlanMealSchema = z.object({
+  mealType: mealTypeSchema,
+  items: z.array(mealItemSchema).min(1).max(30),
+  totals: mealTotalsSchema,
+  /** The names of its foods of the app's own list that the person's diet answer, as it
+   *  is now, does not eat: a plan made before the answer changed, or a food the person
+   *  put in. Empty for a food the list has no diet for, and for no diet answer. */
+  outsideDiet: z.array(z.string()),
+}).strict();
+export type DietPlanMeal = z.infer<typeof dietPlanMealSchema>;
+
+const planNumbersSchema = z.object({
+  kcal: z.number().int(), proteinG: z.number().int(), carbsG: z.number().int(), fatG: z.number().int(),
+}).strict();
+export const dietPlanDayReplySchema = z.object({
+  day: dietPlanDaySchema,
+  meals: z.array(dietPlanMealSchema).max(MOST_PLAN_MEALS),
+  /** What the day's meals hold. */
+  planned: planNumbersSchema,
+  /** The day's targets, the rings' own; null while the person has no calorie number. */
+  target: planNumbersSchema.nullable(),
+  /** planned less target, each figure; null with the target. Below 0 is under it. */
+  off: planNumbersSchema.nullable(),
+}).strict();
+export type DietPlanDayReply = z.infer<typeof dietPlanDayReplySchema>;
+
+/** Whether the app can make the plan: it never makes one on a guessed answer
+ *  (RULINGS 2026-07-15), the same reasons as the meal ideas'. */
+export const dietPlanMakeSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ok") }).strict(),
+  z.object({ status: z.literal("needs_answers"), missing: z.array(foodAnswerSchema).min(1) }).strict(),
+  /** `setup`: the day has no calorie number yet. `new_goal`: the target weight is
+   *  behind the person (reached, or on the other side of their weight goal). */
+  z.object({ status: z.literal("needs_plan"), reason: z.enum(["setup", "new_goal"]) }).strict(),
+]);
+export type DietPlanMake = z.infer<typeof dietPlanMakeSchema>;
+
+export const dietPlanResponseSchema = z.object({
+  days: z.array(dietPlanDayReplySchema).length(7),
+  make: dietPlanMakeSchema,
+  caution: z.literal(FOOD_ALLERGY_CAUTION),
+  /** For a vegetarian or vegan, or somebody with no diet answer; null for somebody who eats meat. */
+  labelCaution: z.literal(DIET_LABEL_CAUTION).nullable(),
+}).strict();
+export type DietPlanResponse = z.infer<typeof dietPlanResponseSchema>;
+
+/** Make the plan: every day of the week, or the days named. It replaces what they held. */
+export const makeDietPlanRequestSchema = z.object({
+  changeId: planChangeIdSchema,
+  days: z.array(dietPlanDaySchema).min(1).max(7).refine((days) => new Set(days).size === days.length, { message: "a day is named once" }).optional(),
+}).strict();
+export type MakeDietPlanRequest = z.infer<typeof makeDietPlanRequestSchema>;
+
+/** A day as the person wants it, whole: its meals in order, each with its foods and
+ *  amounts. A meal left out is removed; no meals clears the day. */
+export const putDietPlanDayRequestSchema = z.object({
+  changeId: planChangeIdSchema,
+  meals: z.array(z.object({ mealType: mealTypeSchema, items: chosenItemsSchema }).strict()).max(MOST_PLAN_MEALS),
+}).strict();
+export type PutDietPlanDayRequest = z.infer<typeof putDietPlanDayRequestSchema>;
+
+/** Swap one meal of a day, by its place in the day, for another idea of the same size. */
+export const swapDietPlanMealRequestSchema = z.object({
+  changeId: planChangeIdSchema,
+  meal: z.number().int().min(0).max(MOST_PLAN_MEALS - 1),
+}).strict();
+export type SwapDietPlanMealRequest = z.infer<typeof swapDietPlanMealRequestSchema>;
+
+// ── Your week in food (ROADMAP 34f-i) ──────────────────────────────────────────
+
+/** The two spans the screen offers: the last 7 days or the last 30, today the last. */
+const foodWeekSpanSchema = z.union([z.literal(7), z.literal(30)]);
+export const foodWeekQuerySchema = z.object({
+  days: z.enum(["7", "30"]).default("7").transform(Number).pipe(foodWeekSpanSchema),
+}).strict();
+export type FoodWeekQuery = z.infer<typeof foodWeekQuerySchema>;
+
+/** Where a day's figure sits against its target: within 10 % either way is "on". */
+export const foodBandSchema = z.enum(["under", "on", "over"]);
+export type FoodBand = z.infer<typeof foodBandSchema>;
+/** The four figures with a target. */
+export const FOOD_WEEK_FIGURES = ["kcal", "proteinG", "carbsG", "fatG"] as const;
+export type FoodWeekFigure = (typeof FOOD_WEEK_FIGURES)[number];
+
+const dayTargetsSchema = z.object({
+  kcal: z.number().int().nonnegative(), proteinG: z.number().int().nonnegative(),
+  carbsG: z.number().int().nonnegative(), fatG: z.number().int().nonnegative(),
+}).strict();
+export type FoodDayTargets = z.infer<typeof dayTargetsSchema>;
+
+const bandsSchema = z.object({
+  kcal: foodBandSchema, proteinG: foodBandSchema, carbsG: foodBandSchema, fatG: foodBandSchema,
+}).strict();
+
+export const foodWeekDaySchema = z.object({
+  /** A day of the person's own time zone, YYYY-MM-DD. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Today: still going, so it is shown and not counted in the facts. */
+  today: z.boolean(),
+  /** How many meals were logged that day; a day with none has no bands. */
+  meals: z.number().int().nonnegative(),
+  /** A food in the day is the scanner's own estimate: the day reads "about". */
+  about: z.boolean(),
+  kcal: z.number().int().nonnegative(),
+  proteinG: z.number().nonnegative(),
+  carbsG: z.number().nonnegative(),
+  fatG: z.number().nonnegative(),
+  /** No target exists for these two; `notKnown` counts the foods without the figure. */
+  fiberG: moreTotalSchema,
+  sodiumMg: moreTotalSchema,
+  /** The day's targets: kept that day, or today's for a day before they were kept.
+   *  Null while the person's plan has no numbers. */
+  targets: dayTargetsSchema.nullable(),
+  /** True when `targets` were kept on the day itself; false when they are today's. */
+  targetsOfTheDay: z.boolean(),
+  /** Null for a day with no meals, or with no targets. */
+  bands: bandsSchema.nullable(),
+}).strict();
+export type FoodWeekDay = z.infer<typeof foodWeekDaySchema>;
+
+/** For each figure, how many finished days with meals and targets were under, on and
+ *  over: "Protein was under target on 5 of 6 days" is `under` of `judged`. Today is
+ *  never judged, so a span of 7 judges 6 days at most, and of 30, 29. */
+const factSchema = z.object({
+  under: z.number().int().nonnegative(), on: z.number().int().nonnegative(),
+  over: z.number().int().nonnegative(), judged: z.number().int().nonnegative(),
+}).strict().refine((f) => f.under + f.on + f.over === f.judged, { message: "the three add up to judged" });
+export type FoodWeekFact = z.infer<typeof factSchema>;
+
+export const foodWeekResponseSchema = z.object({
+  span: foodWeekSpanSchema,
+  /** Oldest first; today is the last. */
+  days: z.array(foodWeekDaySchema).min(7).max(30),
+  facts: z.object({ kcal: factSchema, proteinG: factSchema, carbsG: factSchema, fatG: factSchema }).strict(),
+}).strict();
+export type FoodWeekResponse = z.infer<typeof foodWeekResponseSchema>;
