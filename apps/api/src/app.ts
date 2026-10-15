@@ -30,8 +30,6 @@ import { registerExerciseRoutes } from "./modules/exercises/routes.js";
 import { registerGamificationRoutes } from "./modules/gamification/routes.js";
 import { registerGoalRoutes } from "./modules/goals/routes.js";
 import { GoalsError } from "./modules/goals/service.js";
-import { registerCoachRoutes, type CoachRouteOverrides } from "./modules/coach/routes.js";
-import { CoachError } from "./modules/coach/service.js";
 import { registerEntitlementRoutes } from "./modules/entitlements/routes.js";
 import { createIoRedis, createMemoryRedis, type RedisLike } from "./redis.js";
 import type { AppConfig } from "./config.js";
@@ -64,8 +62,6 @@ export interface BuildAppOverrides {
   /** Tests inject the in-memory adapter (with its `down` switch) to drive
    *  fail-open/fail-closed paths deterministically (P2.4). */
   redis?: RedisLike;
-  /** P2.5b: fake ChatProvider/Embedder — tests never call Groq or load ONNX. */
-  coach?: CoachRouteOverrides;
   /** P2.6a: tests inject fake vision and OpenFoodFacts providers. */
   nutrition?: NutritionRouteOverrides;
   /** P2.6b: tests inject a fake ORS route provider (and the reserved-for-P5
@@ -156,8 +152,8 @@ export async function buildApp(
     origin: [config.WEB_ORIGIN],
     credentials: true,
     // @fastify/cors v11 defaults to 'GET,HEAD,POST' — which silently refused
-    // every browser DELETE/PATCH/PUT at preflight (coach thread delete, user
-    // PATCH, DPDP account DELETE, measurements CRUD). Found by the Card 4
+    // every browser DELETE/PATCH/PUT at preflight (user PATCH, DPDP account
+    // DELETE, measurements CRUD). Found by the Card 4
     // browser smoke; inject() tests bypass CORS so no route test saw it.
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
     // Response headers browser JS may READ. @fastify/cors emits
@@ -212,15 +208,14 @@ export async function buildApp(
     const status = err.statusCode ?? 500;
     // Client-safe allowlist: our typed module errors (messages authored for
     // clients) and Fastify/plugin-authored FST_* errors. These pass through
-    // with THEIR OWN status — including a typed 503 like CoachError's
-    // "coach_unavailable" (P2.5b: an expected-operational outage, warn-logged,
-    // no Sentry — collapsing it to a generic 500 would misreport an upstream
-    // provider blip as an app crash).
+    // with THEIR OWN status — including a typed 503 like NutritionError's
+    // when the scanner's provider is down (an expected-operational outage,
+    // warn-logged, no Sentry — collapsing it to a generic 500 would misreport
+    // an upstream provider blip as an app crash).
     const clientSafe =
       err instanceof AuthError ||
       err instanceof UsersError ||
       err instanceof GoalsError ||
-      err instanceof CoachError ||
       err instanceof NutritionError ||
       err instanceof GeoError ||
       err instanceof OrgsError ||
@@ -321,7 +316,6 @@ export async function buildApp(
   registerExerciseRoutes(app, { sql });
   registerGamificationRoutes(app, { sql });
   registerGoalRoutes(app, { sql, ...(overrides.goals?.now === undefined ? {} : { now: overrides.goals.now }) });
-  registerCoachRoutes(app, { sql, redis, config }, overrides.coach ?? {});
   registerEntitlementRoutes(app, { sql, redis });
   registerNutritionRoutes(app, { sql, redis, config, reportError }, overrides.nutrition ?? {});
   registerGeoRoutes(app, { sql, redis, config }, overrides.geo ?? {});

@@ -121,10 +121,11 @@ describe('the join panel', () => {
     expect(screen.getByText(/what a gym can see/i)).toBeTruthy();
     expect(screen.getByText(/form scores/i)).toBeTruthy();
     expect(screen.getByText(/streak/i)).toBeTruthy();
-    // The five NEVERs, each asserted on its own so deleting one row goes red.
+    // The four NEVERs, each asserted on its own so deleting one row goes red.
     expect(screen.getByText(/meals, or anything about nutrition/i)).toBeTruthy();
     expect(screen.getByText(/weight or body measurements/i)).toBeTruthy();
-    expect(screen.getByText(/conversations with the AI coach/i)).toBeTruthy();
+    // The AI coach was deleted (2026-10-15): nothing names it.
+    expect(screen.queryByText(/AI coach/i)).toBeNull();
     expect(screen.getByText(/where you ran/i)).toBeTruthy();
     expect(screen.getByText(/before you joined, or after you leave/i)).toBeTruthy();
   });

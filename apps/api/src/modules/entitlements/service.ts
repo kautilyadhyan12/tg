@@ -106,8 +106,9 @@ const meterBeats = (own: Entitlements["meal_scan"], gym: Entitlements["meal_scan
 
 /** What a person's own plan gives beyond a gym's member plan — each feature where the
  *  own one is better, in the terms `mergeEqualRank` uses to call one better. The chat
- *  coach is left out: it is switched off (RULINGS 2026-08-18), so naming it would be a
- *  feature nobody can use. Pure; exported for its table test. */
+ *  coach is left out: it was deleted (2026-10-15; its limit stays in the plans until
+ *  ROADMAP 9b), so naming it would be a feature nobody can use. Pure; exported for its
+ *  table test. */
 export function ownPlanExtras(own: Entitlements, gym: Entitlements): OwnPlanExtra[] {
   const extras: OwnPlanExtra[] = [];
   if (meterBeats(own.meal_scan, gym.meal_scan)) extras.push({ feature: "meal_scan", own: own.meal_scan, gym: gym.meal_scan });

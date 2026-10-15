@@ -54,7 +54,6 @@ const CAN_SEE = [
 const NEVER_SEES = [
   'Your meals, or anything about nutrition',
   'Your weight or body measurements',
-  'Your conversations with the AI coach',
   'Where you ran — your routes on the map',
   'Anything from before you joined, or after you leave',
 ];

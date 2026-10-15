@@ -16,7 +16,6 @@ const PERKS = [
   'Automatic rep counting',
   'Personalised workout plans',
   'Progress tracking & analytics',
-  'RAG-powered AI coach',
 ];
 
 export default function Register() {

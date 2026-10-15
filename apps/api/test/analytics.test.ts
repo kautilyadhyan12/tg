@@ -34,7 +34,6 @@ describe("analytics", () => {
       "exercise_completed",
       "paywall_viewed",
       "subscribe_activated",
-      "coach_msg_sent",
       "meal_logged",
       "gym_code_redeemed",
       "gym_trial_started",
@@ -44,7 +43,7 @@ describe("analytics", () => {
     ];
     // @ts-expect-error unknown event names must not compile — the union is closed
     const bad: AnalyticsEvent = "made_up_event";
-    expect(taxonomy).toHaveLength(13);
+    expect(taxonomy).toHaveLength(12);
     expect(bad).toBe("made_up_event");
   });
 });

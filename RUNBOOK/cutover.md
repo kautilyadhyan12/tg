@@ -342,8 +342,8 @@ the operational wrapper around it.
 ## Verify recovered
 
 - `--verify-only` all `ok=true`, `per_user_mismatches=0`, `crossref_ok=true`.
-- `/health` green; a real login, a workout sync, a meal log, and a coach message
-  all succeed against the new API.
+- `/health` green; a real login, a workout sync and a meal log all succeed
+  against the new API.
 - Cost dashboard shows real numbers (Done gate, v1 §22).
 
 ## Post-cutover
