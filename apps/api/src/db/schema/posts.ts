@@ -363,7 +363,7 @@ export const gymChallengePeople = pgTable(
   ],
 );
 
-/** The exercise a challenge is about, picked from the library (`0119_challenge_exercises.sql`;
+/** The exercise a challenge is about, picked from the library (`0120_challenge_exercises.sql`;
  *  spec Part 3 §15.10.2): one row a challenge about an exercise. The gym's own. */
 export const gymChallengeExercises = pgTable(
   "gym_challenge_exercises",

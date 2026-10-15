@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, Loader2, Mail, UserCheck, X } from 'lucide-react';
-import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS } from '@app/shared';
+import { LEAD_JOIN_CHOOSE_ERROR, LEAD_JOIN_STALE_ERROR, LEAD_MAX_NOTES_CHARS, friendGiftLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { ConfirmInline } from '../../components/console/ConsoleStates';
 import PlaceLink from '../../components/console/PlaceLink';
@@ -251,6 +251,24 @@ function ChooseRecord({ name, choice, busy, onPick, onNew, onCancel, words }) {
 export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly, onClose, onChanged, onAdded = () => undefined }) {
   const adding = leadId === null;
   const [lead, setLead] = useState(null);
+  /** Refer a friend's gift, for a joined lead a member invited (20e-ii-b-i): read again when
+   *  the lead joins, so the line says where it will be filled in. */
+  const [giftRead, setGiftRead] = useState(null);
+  const giftAsk = lead !== null && lead.id === leadId && lead.status === 'joined' && lead.invitedBy !== null ? `${lead.id}:${lead.entryId ?? ''}` : null;
+  const gift = giftRead !== null && giftRead.ask === giftAsk ? giftRead.gift : null;
+  useEffect(() => {
+    if (giftAsk === null) return undefined;
+    let live = true;
+    orgService.getLead(gymId, leadId).then(
+      (res) => {
+        if (live) setGiftRead({ ask: giftAsk, gift: res.data.lead.friendGift });
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, leadId, giftAsk]);
   const [loadError, setLoadError] = useState(null);
   const [draft, setDraft] = useState(emptyLeadDraft);
   const [notes, setNotes] = useState('');
@@ -459,6 +477,11 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               {lead !== null ? (
                 <span className="c-s14 c-t2">
                   {addedWords(lead.createdAt)} · {leadSourceLine(lead)}
+                </span>
+              ) : null}
+              {lead !== null && gift !== null ? (
+                <span className="c-s14 c-t2" data-testid="friend-gift-line">
+                  {friendGiftLine(gift, lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
                 </span>
               ) : null}
             </div>

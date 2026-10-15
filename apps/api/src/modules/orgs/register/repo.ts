@@ -23,6 +23,7 @@ import {
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { nextReceipt } from "../receipts/repo.js";
 import { lockedDiscount, returnUse, takeUse } from "./discountsRepo.js";
+import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { rateOf, readRates, taxIncludedOf } from "./taxRepo.js";
 
 export interface ProductRow {
@@ -393,7 +394,9 @@ export type SellOutcome =
   /** The discount takes off the whole price. */
   | { kind: "nothing_to_pay" }
   /** The discount rounds to nothing on this price. */
-  | { kind: "discount_nothing_off"; name: string };
+  | { kind: "discount_nothing_off"; name: string }
+  /** Refer a friend's gift, for somebody who is not an invited friend, or has had it. */
+  | { kind: "friend_gift_not_theirs" };
 
 export interface SellInput {
   gymId: string;
@@ -461,6 +464,11 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
       if (found === null) return { kind: "discount_not_found" };
       const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, productId: item.id, currency: item.currency });
       if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
+      // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i): never to a
+      // walk-in.
+      if (found.referralGift && (input.entryId === null || !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today)))) {
+        return { kind: "friend_gift_not_theirs" };
+      }
       used = { id: found.id, name: found.name, offMinor: discountOff(found, item.price_minor * input.quantity) };
       // No use is spent on a discount that takes nothing off.
       if (used.offMinor === 0) return { kind: "discount_nothing_off", name: found.name };

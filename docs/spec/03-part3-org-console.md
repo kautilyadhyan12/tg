@@ -5217,6 +5217,42 @@ where it came from ("Referred by"). Migration `0117`.
 - **Privacy**: a link is the member's own (deleted at Day 14, exported); the lead's
   `referred_by` is the gym's record, `ON DELETE set null`.
 
+**Built in 20e-ii-b-i (2026-10-15; `rulings/2026-10-15-20e-ii-b-i.md`): the friend's gift
+given, and Add member finds the person in Leads.** Migration `0119`. The member's gift is
+20e-ii-b-ii.
+- **Add member looks in Leads** while staff type (`GET /v1/orgs/{gym}/leads/match`,
+  `members.confirm`): a lead not yet joined with the email or phone typed (cleaned by the
+  list's own rules, so "07700 900123" finds "+44 7700 900123"; case does not matter; a Gmail
+  address with its dots or a "+tag" is another address). With the same name: "Tara Shah is in
+  Leads, invited by Maya Rao. Adding them marks them Joined." With another name: "Tara in
+  Leads has this email or phone…" and a tick, "This is Tara: mark them Joined in Leads"
+  (`joinRule.ts`'s test: a shared contact with another name is not proof), in a coloured box
+  with an icon so it is seen (Kd at the click-through). Saved, the lead
+  shown (`leadId`) is Joined as the new record in Add member's own transaction, while it
+  still shares the email or phone; a lead the screen did not show is never changed (a person
+  added before the lookup answered is added as before). The box says "Tara Shah was in Leads
+  and is now marked Joined."
+- **The friend's gift** (the offer's discount, marked `gym_discounts.referral_gift`) is
+  offered only to a record a lead of THIS business joined after coming by a member's link,
+  who held no membership here before the invite, and who has not had it on a membership or a
+  desk sale that stands: once. It is filled in, under "Friend's gift filled in", with what
+  it is, who invited them and **Remove** (then **Put it back**), on Add member's membership,
+  a person's Add membership, and Sell when the person picked is that friend (a products
+  gift); the Price, Discount and Total lines show it. It is in nobody else's Discount list
+  and no promo code finds it. The server asks the same rule inside the write, under the
+  record's lock, and refuses anybody else (`friend_gift_not_theirs`, "Refer a friend's gift
+  is only for a friend a member invited, and only once."); a walk-in never has it.
+- **The lead says what became of it**, on its own page, once joined: "Friend's gift given on
+  Gold Monthly, 15 October 2026." · "Tara has not had the friend's gift yet (20% off the first
+  payment of a membership). It was not used when Priya Desk added Tara's Gold Monthly on 15
+  October 2026. It will be filled in again when Tara's next membership is added." (who, from the
+  gym's own record of the membership being given; nobody is sent a message, Kd) · "Friend's gift (20% off the first
+  payment of a membership): filled in when Tara's membership is added." · "No friend's gift: Tara had a membership here before they
+  were invited." · "No friend's gift: Refer a friend has no friend's gift that can be used
+  today." (`friendGiftState`, `friendGiftLine`).
+- **A voided payment** leaves the membership's discount as it was: the gift was given on the
+  membership, and voiding a payment records it wrongly taken, not the membership undone.
+
 ### 16.4 At risk
 
 The console lists members whose visits have dropped — came in at least 2 of the last

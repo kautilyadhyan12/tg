@@ -14,6 +14,7 @@ import {
   MEMBER_LIST_MAX_NAME_CHARS,
   MEMBER_LIST_MAX_TYPED_PHONE_CHARS,
 } from "./memberList.js";
+import { friendGiftSchema, leadFriendGiftSchema } from "./friendGift.js";
 
 export const LEAD_STATUSES = ["new", "contacted", "on_trial", "joined", "lost"] as const;
 export const leadStatusSchema = z.enum(LEAD_STATUSES);
@@ -219,6 +220,39 @@ export function invitedByWords(by: LeadInvitedBy): string {
   return by.member ? `Invited by ${by.name}` : `Invited by ${by.name}, who is no longer a member`;
 }
 
+/** Add member (20e-ii-b-i): the lead not yet joined who has the email or phone typed, so
+ *  staff see who they are adding. `sameName`: the lead has the name typed too, and is marked
+ *  Joined by itself; otherwise staff tick that it is the same person. `friendGift`: Refer a
+ *  friend's gift a NEW member they invited is given, filled in on their membership. */
+export const leadMatchSchema = z
+  .object({
+    id: z.string().uuid(),
+    fullName: z.string(),
+    sameName: z.boolean(),
+    invitedBy: leadInvitedBySchema.nullable(),
+    friendGift: friendGiftSchema.nullable(),
+  })
+  .strict();
+export type LeadMatch = z.infer<typeof leadMatchSchema>;
+export const leadMatchResponseSchema = z.object({ lead: leadMatchSchema.nullable() }).strict();
+export type LeadMatchResponse = z.infer<typeof leadMatchResponseSchema>;
+export const leadMatchQuerySchema = z
+  .object({
+    fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS).optional(),
+    email: z.string().max(MEMBER_LIST_MAX_EMAIL_CHARS).optional(),
+    phone: z.string().max(MEMBER_LIST_MAX_TYPED_PHONE_CHARS).optional(),
+  })
+  .strict();
+export type LeadMatchQuery = z.infer<typeof leadMatchQuerySchema>;
+
+/** Add member's line about the lead, under the email and phone. */
+export function leadMatchLine(lead: LeadMatch): string {
+  const by = lead.invitedBy === null ? "" : `, ${invitedByWords(lead.invitedBy).replace(/^Invited/, "invited")}`;
+  return lead.sameName
+    ? `${lead.fullName} is in Leads${by}. Adding them marks them Joined.`
+    : `${lead.fullName} in Leads has this email or phone${by}.`;
+}
+
 export const leadSchema = z
   .object({
     id: z.string().uuid(),
@@ -251,6 +285,9 @@ export const leadSchema = z
     emailProblem: z.enum(["bounced", "refused", "complained"]).nullable().default(null),
     /** The member whose invite link brought the lead (20e-ii-a), or null. */
     invitedBy: leadInvitedBySchema.nullable().default(null),
+    /** Refer a friend's gift for a joined lead a member invited (20e-ii-b-i): given, why
+     *  not, or where it will be filled in. Only on one lead's own read; null in the list. */
+    friendGift: leadFriendGiftSchema.nullable().default(null),
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;

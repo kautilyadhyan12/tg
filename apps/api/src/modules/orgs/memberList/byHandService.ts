@@ -46,6 +46,7 @@ import { invitationsOf, inviteEntryInTx, readyToSend } from "../invites/service.
 import { settle as settleHeldMemberships, typeHeldByBoth } from "../memberships/heldRepo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { insertAudit, placesFree } from "../repo.js";
+import { joinLeadOnAdd } from "../leads/joinOnAdd.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { appViewsOf } from "./appViews.js";
 import { deskSignaturesOf, moveDeskSignatures, signaturesOf, waiverInUse, type SignatureRow } from "../waiver/repo.js";
@@ -272,12 +273,15 @@ interface Done {
   invited?: "queued" | "already_invited";
   /** Put back: the app given back to the people removed with the record, or no place. */
   app?: "back" | "no_place";
+  /** Add member: the lead marked Joined as this person (20e-ii-b-i). */
+  lead?: { id: string; fullName: string };
 }
 
 async function finish(deps: MemberListDeps, gymId: string, done: Done): Promise<WriteAnswer> {
   const entry = await detailAfter(deps, gymId, done.entryId);
   const written: MemberListEntryWritten = { outcome: done.outcome, entry, version: done.version };
   if (done.app !== undefined) written.app = done.app;
+  if (done.lead !== undefined) written.lead = done.lead;
   if (done.invited !== undefined) {
     if (entry.invitation === null) throw new Error("an invited entry has no invitation");
     written.invite = { outcome: done.invited, invitation: entry.invitation };
@@ -372,9 +376,14 @@ export async function addEntry(
     });
     // Somebody already on the list is shown, not invited: the screen offers Invite on
     // that record.
-    if (settings === null || placed.outcome === "already_on_list") return placed;
+    if (placed.outcome === "already_on_list") return placed;
+    // The lead this person is, marked Joined (20e-ii-b-i), so a friend a member invited is
+    // followed from their link to their membership.
+    const lead = await joinLeadOnAdd(tx, { gymId, entryId: placed.entryId, values: applied.values, leadId: input.leadId ?? null, userId, at });
+    const done = lead === null ? placed : { ...placed, lead };
+    if (settings === null) return done;
     const invited = await inviteEntryInTx(tx, settings, { gymId, entryId: placed.entryId, userId, at });
-    return { ...placed, invited: invited.outcome };
+    return { ...done, invited: invited.outcome };
   });
   if ("alike" in done) return { kind: "may_be_on_list", people: done.alike };
   return await finish(deps, gymId, done);
