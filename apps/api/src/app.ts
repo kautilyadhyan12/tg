@@ -152,8 +152,8 @@ export async function buildApp(
     origin: [config.WEB_ORIGIN],
     credentials: true,
     // @fastify/cors v11 defaults to 'GET,HEAD,POST' — which silently refused
-    // every browser DELETE/PATCH/PUT at preflight (coach thread delete, user
-    // PATCH, DPDP account DELETE, measurements CRUD). Found by the Card 4
+    // every browser DELETE/PATCH/PUT at preflight (user PATCH, DPDP account
+    // DELETE, measurements CRUD). Found by the Card 4
     // browser smoke; inject() tests bypass CORS so no route test saw it.
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
     // Response headers browser JS may READ. @fastify/cors emits

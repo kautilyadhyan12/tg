@@ -3,6 +3,7 @@
 // still theirs: in their data download, and removed with their account.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
+import { dpdpExportSchema } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { purgeUser } from "../src/modules/privacy/purge.js";
@@ -45,7 +46,7 @@ d("the deleted chat coach (real Postgres)", () => {
   /** A chat from before the coach was deleted, as its tables still hold it. */
   const oldChat = async (userId: string, words: string): Promise<{ threadId: string; messageId: string }> => {
     const th = await sql<{ id: string }[]>`
-      INSERT INTO coach_threads (user_id, title) VALUES (${userId}, ${`Thread ${words}`}) RETURNING id`;
+      INSERT INTO coach_threads (user_id, title) VALUES (${userId}, 'Old thread') RETURNING id`;
     const threadId = th[0]?.id ?? "";
     const msg = await sql<{ id: string }[]>`
       INSERT INTO coach_messages (thread_id, role, content) VALUES (${threadId}, 'user', ${words}) RETURNING id`;
@@ -82,7 +83,10 @@ d("the deleted chat coach (real Postgres)", () => {
 
     const download = await inject({ method: "GET", url: "/v1/users/me/export", cookies: me.cookies });
     expect(download.statusCode).toBe(200);
-    expect(download.body).toContain("my old question about squats");
+    // The message's own words: the thread's title does not hold them, so only coach_messages can.
+    const file = dpdpExportSchema.parse(JSON.parse(download.body));
+    expect(file.data["coach_messages"]?.map((m) => [m.thread_id, m.content])).toEqual([[mine.threadId, "my old question about squats"]]);
+    expect(file.data["coach_threads"]?.length).toBe(1);
     expect(download.body).not.toContain("somebody else's old question");
 
     // The account is deleted and its two weeks have passed: the removal takes the chats.
