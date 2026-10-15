@@ -3554,7 +3554,7 @@ list's Payment reads the bills.
   under its payment; Record payment and Cancel this bill sit inside the bill they act on,
   which is always drawn however old it is; what acts on the whole membership (Freeze,
   Cancel membership) is in one bar under a line.
-- **Cancel this bill** (the trade's "void") is beside Record payment and acts on the same
+- **Cancel this bill** (the trade's "void"; named **Void bill** since 18o, below) is beside Record payment and acts on the same
   bill: the one a payment would be taken for next, and only while nothing is paid on it
   (a part-paid bill has its payment taken back first, or the rest recorded). Bills are
   cancelled in the order they are paid in. A reason is picked from a list (Billed by
@@ -3815,6 +3815,20 @@ record deleted for good keeps its money.
 payment, a refund or a sale recorded by mistake is **voided**, as gym software does.
 - **The buttons**: Void payment and Void refund on a person's page, Void sale on Sell's list of
   today. Who may, and which one may, are as before; only the name and the reason are new.
+- **A person's Memberships box, one everyday button a line** (Kd's click-through: *"too many
+  buttons stack together void refund cancel all looking like same meaning"*): a payment line has
+  View receipt and a ⋯ whose list offers Note a refund ("You gave some or all of it back.") and,
+  on the one payment that can be, Void payment ("It was recorded by mistake. The bill is owed
+  again."); a refund line has View receipt and a ⋯ with Void refund ("It was noted by mistake.
+  The payment counts in full again."); the bill a payment is taken for has Record payment and a
+  ⋯ with **Void bill** ("Nothing is owed for these days."), the same step that was Cancel this
+  bill, its tag and line now "Voided 20 October 2026 by Sam Owner · Not charging for this one".
+  Freeze and Cancel membership stay in the bar under the bills: "Cancel" is only ever a
+  membership ending. The bill holding the payment that can be voided is always drawn.
+- **After Void payment** the box says who owes what again and what to press next, from the
+  server's answer: "Payment voided. Maya Patel owes ₹2,360.00 for 15 Oct – 14 Nov 2026 again.
+  If they paid, record the right amount. If they owe nothing, void the bill." (the last sentence
+  only where Void bill is offered).
 - **A reason is picked, never typed** (migration `0117`, `void_reason`, a CHECK on each table):
   a payment: Recorded by mistake · Wrong amount · Wrong person · Something else; a refund:
   Noted by mistake · Wrong amount · Something else; a sale: Recorded by mistake · Wrong product

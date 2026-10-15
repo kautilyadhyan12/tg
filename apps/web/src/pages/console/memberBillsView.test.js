@@ -31,6 +31,7 @@ import {
   refundedWords,
   shortDay,
   undoWords,
+  paymentVoidedWords,
   voidRefundWords,
   voidedLine,
 } from './memberBillsView';
@@ -84,7 +85,7 @@ describe('each state the server sends has its own word, and no other', () => {
     expect(billDays({ from: '2026-12-15', to: '2027-01-14' })).toBe('15 Dec 2026 – 14 Jan 2027');
     expect(billDays({ from: '2028-02-01', to: '2028-02-29' })).toBe('1 Feb – 29 Feb 2028');
     expect([shortDay('2026-10-01'), shortDay('2026-10-01', false)]).toEqual(['1 Oct 2026', '1 Oct']);
-    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY)).toMatchObject({ tag: 'Cancelled', tone: 'plain', when: null });
+    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY)).toMatchObject({ tag: 'Voided', tone: 'plain', when: null });
     expect(billRow(bill({ state: 'refunded' }), 'GBP', TODAY)).toMatchObject({ tag: 'Refunded', tone: 'soft', when: null });
     // No two states that can stand side by side share a colour.
     const tones = ['paid', 'due', 'overdue', 'void', 'refunded'].map((state) => billRow(bill({ state }), 'GBP', TODAY).tone);
@@ -194,9 +195,9 @@ describe('who may, and the gym\'s own days of grace', () => {
 describe('a cancelled bill and a refunded one say what happened, in their own words', () => {
   it('a bill staff cancelled says when, why and who; one cancelled with its membership says that', () => {
     const cancelled = billRow(bill({ state: 'void', cancelled: { reason: 'not_charging', on: '2026-10-12', by: 'Sam Owner' } }), 'GBP', TODAY);
-    expect([cancelled.tag, cancelled.cancelled]).toEqual(['Cancelled', 'Cancelled 12 October 2026 · Not charging for this one · by Sam Owner']);
-    expect(billRow(bill({ state: 'void', cancelled: { reason: 'mistake', on: '2026-10-12', by: null } }), 'GBP', TODAY).cancelled).toBe('Cancelled 12 October 2026 · Billed by mistake');
-    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY).cancelled).toBe('Cancelled with the membership');
+    expect([cancelled.tag, cancelled.cancelled]).toEqual(['Voided', 'Voided 12 October 2026 by Sam Owner · Not charging for this one']);
+    expect(billRow(bill({ state: 'void', cancelled: { reason: 'mistake', on: '2026-10-12', by: null } }), 'GBP', TODAY).cancelled).toBe('Voided 12 October 2026 · Billed by mistake');
+    expect(billRow(bill({ state: 'void' }), 'GBP', TODAY).cancelled).toBe('Voided when the membership was cancelled');
     for (const state of ['paid', 'due', 'overdue', 'refunded']) expect(billRow(bill({ state }), 'GBP', TODAY).cancelled, state).toBeNull();
   });
 
@@ -261,19 +262,21 @@ describe('Cancel this bill', () => {
 
   it('names the person, the amount and the days, what stops being owed and what stays', () => {
     expect(cancelBillWords(owing, 'Ada Lovelace', true)).toEqual({
-      question: "Cancel this £49.99 bill for Ada Lovelace's Gold Monthly?",
+      question: "Void this £49.99 bill for Ada Lovelace's Gold Monthly?",
       detail:
-        "It is the bill for 4 October 2026 to 3 November 2026. Ada Lovelace will owe nothing for it. Ada Lovelace keeps the membership and its dates. The bill stays in your records, marked Cancelled. This can't be undone.",
-      button: 'Cancel this bill',
-      done: 'That £49.99 bill was cancelled. Nothing is owed for it.',
+        "It is the bill for 4 October 2026 to 3 November 2026. Ada Lovelace will owe nothing for it. Ada Lovelace keeps the membership and its dates. The bill stays on this page, marked Voided, with who voided it and why. This can't be undone.",
+      button: 'Void bill',
+      done: 'That £49.99 bill was voided. Nothing is owed for it.',
     });
     // A membership that is over, or a fixed term with no days on its bill: nothing said that is not so.
     const over = membership({}, { bills: [bill({ covers: null })], cancel: { billId: bill().id } });
-    expect(cancelBillWords(over, 'this person', false).detail).toBe("It is the bill. This person will owe nothing for it. The bill stays in your records, marked Cancelled. This can't be undone.");
+    expect(cancelBillWords(over, 'this person', false).detail).toBe(
+      "It is the bill. This person will owe nothing for it. The bill stays on this page, marked Voided, with who voided it and why. This can't be undone.",
+    );
   });
 
   it('wants a reason picked, and sends only that', () => {
-    expect(cancelBillBody({ reason: '' })).toEqual({ problem: 'Pick why you are cancelling it.', body: null });
+    expect(cancelBillBody({ reason: '' })).toEqual({ problem: 'Pick why you are voiding it.', body: null });
     expect(cancelBillBody({ reason: 'mistake' })).toEqual({ problem: null, body: { reason: 'mistake' } });
     expect(CANCEL_REASONS.map((r) => r.label)).toEqual(['Billed by mistake', 'Not charging for this one', 'Something else']);
   });
@@ -338,6 +341,21 @@ describe('a bill says its tax (18b-iii)', () => {
 });
 
 describe('a void (18o)', () => {
+  it('after a payment is voided, says who owes what again and what to press next, from the answer sent back', () => {
+    const owed = bill({ state: 'due', paidMinor: 0, payments: [] });
+    const after = membership({}, { bills: [owed], cancel: { billId: owed.id } });
+    expect(paymentVoidedWords(after, 'ada Lovelace', owed.id)).toBe(
+      'Payment voided. Ada Lovelace owes £49.99 for 4 Oct – 3 Nov 2026 again. If they paid, record the right amount. If they owe nothing, void the bill.',
+    );
+    // Part of it still paid: only the rest is owed, and a bill with a payment on it is not offered to be voided.
+    const part = bill({ state: 'due', paidMinor: 1999, payments: [payment({ amountMinor: 1999 })] });
+    expect(paymentVoidedWords(membership({}, { bills: [part], cancel: null }), 'Ada Lovelace', part.id)).toBe(
+      'Payment voided. Ada Lovelace owes £30.00 for 4 Oct – 3 Nov 2026 again. If they paid, record the right amount.',
+    );
+    // The answer did not hold the bill: nothing is said that is not known.
+    expect(paymentVoidedWords(null, 'Ada Lovelace', owed.id)).toBe('Payment voided.');
+  });
+
   it('says when, who and why, and leaves out what is not known', () => {
     const words = { wrong_amount: 'Wrong amount' };
     expect(voidedLine({ reason: 'wrong_amount', on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Voided 15 October 2026 by Priya Desk · Wrong amount');

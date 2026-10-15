@@ -40,7 +40,7 @@ const STATE_TAGS = {
   paid: { tag: 'Paid', tone: 'green' },
   due: { tag: 'Due', tone: 'orange' },
   overdue: { tag: 'Overdue', tone: 'red' },
-  void: { tag: 'Cancelled', tone: 'plain' },
+  void: { tag: 'Voided', tone: 'plain' },
   refunded: { tag: 'Refunded', tone: 'soft' },
 };
 
@@ -75,11 +75,15 @@ export function billDays(covers) {
 }
 
 /** The bills a membership's box draws: the newest `BILLS_FOLDED`, or all of them; and
- *  always the one a payment can be taken for, so what is owed is never folded away. */
+ *  always the one a payment can be taken for, so what is owed is never folded away, and
+ *  the one holding the payment that can be voided, whose ⋯ offers it. */
 export function billsToDraw(billing, all) {
   const newest = all ? billing.bills : billing.bills.slice(0, BILLS_FOLDED);
   const owed = billing.pay === null ? undefined : billing.bills.find((b) => b.periodIndex === billing.pay.periodIndex);
-  const bills = owed === undefined || newest.includes(owed) ? newest : [...newest, owed];
+  const undo = billing.undo?.kind === 'payment' ? billing.undo.paymentId : null;
+  const voidable = undo === null ? undefined : billing.bills.find((b) => b.payments.some((p) => p.id === undo));
+  const bills = [...newest];
+  for (const extra of [owed, voidable]) if (extra !== undefined && !bills.includes(extra)) bills.push(extra);
   return { bills, hidden: billing.bills.length - bills.length };
 }
 
@@ -105,6 +109,7 @@ const refundLine = (r, currency) => ({
   id: r.id,
   receiptNumber: r.receiptNumber,
   amount: `${formatMinor(r.amountMinor, currency)} refunded`,
+  money: formatMinor(r.amountMinor, currency),
   detail: joined([methodWords(r.method), shortDay(r.refundedOn), REFUND_REASON_WORDS[r.reason] ?? null, byWords(r.by)]),
   voided: null,
 });
@@ -126,10 +131,7 @@ export function billRow(bill, currency, today) {
   const state = partRefunded ? { tag: 'Part refunded', tone: 'soft' } : (STATE_TAGS[bill.state] ?? STATE_TAGS.due);
   let cancelled = null;
   if (bill.state === 'void') {
-    cancelled =
-      bill.cancelled === null
-        ? 'Cancelled with the membership'
-        : joined([`Cancelled ${dayWords(bill.cancelled.on)}`, BILL_CANCEL_REASON_WORDS[bill.cancelled.reason] ?? null, byWords(bill.cancelled.by)]);
+    cancelled = bill.cancelled === null ? 'Voided when the membership was cancelled' : voidedLine(bill.cancelled, BILL_CANCEL_REASON_WORDS);
   }
   const open = bill.state === 'due' || bill.state === 'overdue';
   const left = bill.amountMinor - bill.paidMinor;
@@ -171,24 +173,49 @@ export function billToCancel(m) {
   return id === null ? null : (m.billing.bills.find((b) => b.id === id) ?? null);
 }
 
-/** The box a press of "Cancel this bill" opens: whose bill, what stops being owed and
- *  what stays as it is. `live`: the membership is in use. */
+/** The box Void bill opens (the server's "cancel" of a bill): whose bill, what stops being
+ *  owed and what stays as it is. `live`: the membership is in use. */
 export function cancelBillWords(m, name, live) {
   const bill = billToCancel(m);
   const amount = formatMinor(bill.amountMinor, m.currency);
   const days = bill.covers === null ? '' : ` for ${dayWords(bill.covers.from)} to ${dayWords(bill.covers.to)}`;
   const keeps = live ? ` ${capital(name)} keeps the membership and its dates.` : '';
   return {
-    question: `Cancel this ${amount} bill for ${name}'s ${m.typeName}?`,
-    detail: `It is the bill${days}. ${capital(name)} will owe nothing for it.${keeps} The bill stays in your records, marked Cancelled. This can't be undone.`,
-    button: 'Cancel this bill',
-    done: `That ${amount} bill was cancelled. Nothing is owed for it.`,
+    question: `Void this ${amount} bill for ${name}'s ${m.typeName}?`,
+    detail: `It is the bill${days}. ${capital(name)} will owe nothing for it.${keeps} The bill stays on this page, marked Voided, with who voided it and why. This can't be undone.`,
+    button: 'Void bill',
+    done: `That ${amount} bill was voided. Nothing is owed for it.`,
   };
 }
 
-/** Why the cancel cannot be sent as it stands, or null; and the body it sends. */
+/** Why the void of a bill cannot be sent as it stands, or null; and the body it sends. */
 export function cancelBillBody(draft) {
-  return draft.reason === '' ? { problem: 'Pick why you are cancelling it.', body: null } : { problem: null, body: { reason: draft.reason } };
+  return voidBody(draft);
+}
+
+/** What each ⋯ list offers, in a name and one line that says what it does (18o). */
+export const MENU_WORDS = {
+  refund: { label: 'Note a refund', hint: 'You gave some or all of it back.' },
+  voidPayment: { label: 'Void payment', hint: 'It was recorded by mistake. The bill is owed again.' },
+  voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. The payment counts in full again.' },
+  voidBill: { label: 'Void bill', hint: 'Nothing is owed for these days.' },
+};
+
+/** Said where the payment was, once it is voided: who owes what again, and what to press
+ *  next. `after` is the membership as the server sent it back; `billId` the bill it was on. */
+export function paymentVoidedWords(after, name, billId) {
+  const bill = after?.billing?.bills.find((b) => b.id === billId) ?? null;
+  // Nothing is owed on it as the answer reads it: nothing more is said.
+  if (bill === null || bill.amountMinor - bill.paidMinor <= 0) return 'Payment voided.';
+  const left = formatMinor(bill.amountMinor - bill.paidMinor, after.currency);
+  const what = bill.covers === null ? after.typeName : billDays(bill.covers);
+  const voidable = after.billing.cancel?.billId === billId ? ' If they owe nothing, void the bill.' : '';
+  return `Payment voided. ${capital(name)} owes ${left} for ${what} again. If they paid, record the right amount.${voidable}`;
+}
+
+/** The bill a payment is on, by the payment's id, or null. */
+export function billOfPayment(m, paymentId) {
+  return m.billing?.bills.find((b) => b.payments.some((p) => p.id === paymentId)) ?? null;
 }
 
 /** One payment of a membership by its id, or null. */

@@ -4,6 +4,7 @@ import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import ReceiptBox from '../../components/console/ReceiptBox';
+import MoreMenu from '../../components/console/MoreMenu';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
 import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
@@ -37,6 +38,8 @@ import {
   PAYMENT_VOID_CHOICES,
   REFUND_REASON_CHOICES,
   REFUND_VOID_CHOICES,
+  MENU_WORDS,
+  billOfPayment,
   billRow,
   billToCancel,
   billsToDraw,
@@ -47,6 +50,7 @@ import {
   paymentBody,
   paymentDraft,
   paymentOf,
+  paymentVoidedWords,
   paymentWords,
   refundBody,
   refundDraft,
@@ -69,10 +73,13 @@ import {
 // recorded against it. Record payment takes an amount and how it was paid; a membership
 // that is over and still owes a bill stays in the list above the fold until it is paid.
 // Each bill is a box of its own: its days, amount and tag across the top, its payments
-// in columns under them with Note a refund at the end of each line, a refund indented
-// under its payment with Void refund, and Record payment and Cancel this bill inside the
-// bill they act on (ROADMAP 18a-ii). A payment or refund voided stays where it was, crossed
-// out, with who voided it, when and why, each picked from a list (ROADMAP 18o). What acts on the whole membership (Freeze, Cancel
+// in columns under them, a refund indented under its payment, and Record payment inside
+// the bill it is for (ROADMAP 18a-ii). Each line keeps one everyday button (View receipt,
+// Record payment) and puts what fixes a mistake or gives money back in a ⋯ list of its own,
+// each item saying what it does: Note a refund and Void payment on a payment, Void refund
+// on a refund, Void bill on a bill (Kd's click-through of 18o). A payment, refund or bill
+// voided stays where it was, marked, with who voided it, when and why, each picked from a
+// list (ROADMAP 18o). "Cancel" is only ever a membership ending. What acts on the whole membership (Freeze, Cancel
 // membership) is in one bar under a line. Each press opens a box that names the person,
 // the amount and what does and does not change.
 //
@@ -93,10 +100,9 @@ const SMALL = 'c-btn c-btn-s c-btn-sm';
 const DANGER = 'c-btn c-btn-danger';
 const LINK = 'c-btn c-btn-link c-btn-sm';
 // A small button's colour says what kind of thing it does: taking a payment is the
-// page's main colour, giving money back its soft one, anything that cancels is red, and
-// the rest (Freeze, Void) stay plain.
+// page's main colour, ending a membership is red, and the rest (Freeze, View receipt, ⋯)
+// stay plain. In a ⋯ list a void is red and a refund plain.
 const PAY = 'c-btn c-btn-p c-btn-sm';
-const REFUND = 'c-btn c-btn-soft c-btn-sm';
 const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
@@ -144,7 +150,7 @@ export default function MemberMemberships({
   const [ending, setEnding] = useState(null);
   /** The Record payment form: { requestKey, amount, method, tried }, for the membership in `open`. */
   const [payForm, setPayForm] = useState(null);
-  /** The Cancel this bill box: { reason, tried }, for the membership in `open`. */
+  /** The Void bill box: { reason, tried }, for the membership in `open`. */
   const [billForm, setBillForm] = useState(null);
   /** The Note a refund form: { paymentId, requestKey, amount, method, reason, tried }. */
   const [refundForm, setRefundForm] = useState(null);
@@ -246,7 +252,8 @@ export default function MemberMemberships({
       setBillForm(null);
       setRefundForm(null);
       setVoidForm(null);
-      setNotice(said ?? doneWords(what, m));
+      // What a press says when done may read the server's answer (a void's "owes … again").
+      setNotice(typeof said === 'function' ? said(res.data) : (said ?? doneWords(what, m)));
       // The list behind this page says what the person holds (23a-i): it reads again.
       onChanged?.();
     } catch (err) {
@@ -390,7 +397,7 @@ export default function MemberMemberships({
     );
   };
 
-  /** Cancel this bill: whose it is, what stops being owed, and why. */
+  /** Void bill: whose it is, what stops being owed, and why. */
   const renderCancelBill = (m) => {
     const bill = billToCancel(m);
     if (bill === null) return null;
@@ -415,7 +422,7 @@ export default function MemberMemberships({
         <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
         <label className="c-field">
-          <span className="c-label">Why are you cancelling it?</span>
+          <span className="c-label">Why are you voiding it?</span>
           <select className="c-sel" value={billForm.reason} onChange={(e) => setBillForm((f) => ({ ...f, reason: e.target.value }))}>
             <option value="">Choose one</option>
             {CANCEL_REASONS.map((reason) => (
@@ -605,6 +612,8 @@ export default function MemberMemberships({
     // under this membership.
     const acts = !readOnly && !(open !== null && open.id === m.id);
     const cancelId = billToCancel(m)?.id ?? null;
+    // The one payment that can be voided now: its ⋯ offers Void payment.
+    const voidId = canAct && billing.undo?.kind === 'payment' ? billing.undo.paymentId : null;
     const SPLIT = { borderTop: '1px solid var(--line)' };
     // A payment or a refund: columns with its button at the end; on a phone, one under another.
     const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
@@ -657,27 +666,25 @@ export default function MemberMemberships({
                       </span>
                       <span className="c-s13 c-t2 md:flex-1 flex flex-col">
                         <span>{p.detail}</span>
-                        {p.voided === null ? null : (
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="c-tag c-tag-plain">Voided</span>
-                            <span>{p.voided}</span>
-                          </span>
-                        )}
+                        {p.voided === null ? null : <span>{p.voided}</span>}
                       </span>
-                      <button
-                        type="button"
-                        className={`${SMALL} self-start md:self-auto`}
-                        aria-expanded={receiptFor === p.receiptNumber}
-                        aria-label={receiptButtonLabel(p.receiptNumber, `the payment of ${p.amount}`)}
-                        onClick={() => toggleReceipt(p.receiptNumber)}
-                      >
-                        {RECEIPT_BUTTON}
-                      </button>
-                      {acts && p.refundable ? (
-                        <button type="button" className={`${REFUND} self-start md:self-auto`} disabled={busy} onClick={() => startRefund(m, p.id)}>
-                          Note a refund
+                      <span className="flex items-center gap-2 self-start md:self-auto">
+                        <button
+                          type="button"
+                          className={SMALL}
+                          aria-expanded={receiptFor === p.receiptNumber}
+                          aria-label={receiptButtonLabel(p.receiptNumber, `the payment of ${p.amount}`)}
+                          onClick={() => toggleReceipt(p.receiptNumber)}
+                        >
+                          {RECEIPT_BUTTON}
                         </button>
-                      ) : null}
+                        {(() => {
+                          const items = [];
+                          if (acts && p.voided === null && p.refundable) items.push({ ...MENU_WORDS.refund, onPick: () => startRefund(m, p.id) });
+                          if (acts && p.voided === null && p.id === voidId) items.push({ ...MENU_WORDS.voidPayment, danger: true, onPick: () => ask('undo', m) });
+                          return items.length === 0 ? null : <MoreMenu label={null} alignRight ariaLabel={`More for the payment of ${p.amount}`} items={items} disabled={busy} />;
+                        })()}
+                      </span>
                     </div>
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                     {p.refunds.map((r) => (
@@ -692,27 +699,28 @@ export default function MemberMemberships({
                         </span>
                         <span className="c-s13 c-t2 md:flex-1 flex flex-col">
                           <span>{r.detail}</span>
-                          {r.voided === null ? null : (
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="c-tag c-tag-plain">Voided</span>
-                              <span>{r.voided}</span>
-                            </span>
-                          )}
+                          {r.voided === null ? null : <span>{r.voided}</span>}
                         </span>
-                        <button
-                          type="button"
-                          className={`${SMALL} self-start md:self-auto`}
-                          aria-expanded={receiptFor === r.receiptNumber}
-                          aria-label={receiptButtonLabel(r.receiptNumber, `the refund of ${r.amount}`)}
-                          onClick={() => toggleReceipt(r.receiptNumber)}
-                        >
-                          {RECEIPT_BUTTON}
-                        </button>
-                        {acts && r.voided === null && p.voided === null ? (
-                          <button type="button" className={`${SMALL} self-start md:self-auto`} disabled={busy} onClick={() => askVoidRefund(m, p.id, r.id)}>
-                            Void refund
+                        <span className="flex items-center gap-2 self-start md:self-auto">
+                          <button
+                            type="button"
+                            className={SMALL}
+                            aria-expanded={receiptFor === r.receiptNumber}
+                            aria-label={receiptButtonLabel(r.receiptNumber, `the refund of ${r.amount}`)}
+                            onClick={() => toggleReceipt(r.receiptNumber)}
+                          >
+                            {RECEIPT_BUTTON}
                           </button>
-                        ) : null}
+                          {acts && r.voided === null && p.voided === null ? (
+                            <MoreMenu
+                              label={null}
+                              alignRight
+                              ariaLabel={`More for the refund of ${r.money}`}
+                              items={[{ ...MENU_WORDS.voidRefund, danger: true, onPick: () => askVoidRefund(m, p.id, r.id) }]}
+                              disabled={busy}
+                            />
+                          ) : null}
+                        </span>
                       </div>
                     ))}
                     {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
@@ -724,9 +732,12 @@ export default function MemberMemberships({
                       {payLabel(m, today)}
                     </button>
                     {cancelId === row.id ? (
-                      <button type="button" className={STOP} disabled={busy} onClick={() => startCancelBill(m)}>
-                        Cancel this bill
-                      </button>
+                      <MoreMenu
+                        label={null}
+                        ariaLabel={`More for the bill ${row.days}`}
+                        items={[{ ...MENU_WORDS.voidBill, danger: true, onPick: () => startCancelBill(m) }]}
+                        disabled={busy}
+                      />
                     ) : null}
                   </div>
                 ) : null}
@@ -832,8 +843,10 @@ export default function MemberMemberships({
     if (undo !== null && undo.kind === 'payment') {
       if (voidForm === null) return null;
       const path = `payments/${encodeURIComponent(undo.paymentId)}/void`;
+      const billId = billOfPayment(m, undo.paymentId)?.id ?? null;
+      const said = (data) => paymentVoidedWords(data?.memberships?.find((x) => x.id === m.id) ?? null, name, billId);
       return renderVoid(m, words, PAYMENT_VOID_CHOICES, 'held-void-payment', (body) =>
-        run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, body), words.done),
+        run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, body), said),
       );
     }
     const act = {
@@ -874,8 +887,9 @@ export default function MemberMemberships({
     const inUse = canAct && isLive(m);
     // A bill left owing is paid whatever became of the membership or the person.
     const canPay = !readOnly && owes(m);
-    // A payment recorded by mistake is voided on a membership that is over too.
-    const canUndo = canAct && m.billing !== null && m.billing.undo !== null;
+    // A payment recorded by mistake is voided from its own ⋯, on a membership that is over
+    // too; an older mark with no payment behind it is taken back from here.
+    const canUndo = canAct && m.billing !== null && m.billing.undo?.kind === 'mark';
     const undoLink = canUndo ? (
       <button type="button" className={LINK} disabled={busy} onClick={() => ask('undo', m)}>
         {undoWords(m, name).link}
