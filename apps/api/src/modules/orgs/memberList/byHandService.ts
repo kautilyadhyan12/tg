@@ -845,6 +845,10 @@ export async function mergeEntries(
       );
     }
     const memberships = await repo.moveHeldMemberships(tx, gymId, goneId, keepId);
+    // Its payments would stay as a deleted member's, the person still on the list (18m).
+    if (memberships.leftPaid !== null) {
+      throw new OrgsError(409, "merge_membership_twice", `Both records have ${memberships.leftPaid}. Cancel it on one of them first, then merge.`);
+    }
     await repo.moveVisitLinks(tx, gymId, goneId, keepId);
     await repo.moveSaleLinks(tx, gymId, goneId, keepId);
     await repo.moveBookingLinks(tx, gymId, goneId, keepId);

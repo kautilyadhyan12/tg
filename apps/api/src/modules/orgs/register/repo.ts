@@ -77,6 +77,8 @@ export interface SaleRow {
   soldAt: Date;
   by: string | null;
   person: { entryId: string; name: string } | null;
+  /** Sold to somebody whose record was deleted for good since: no person, not a walk-in. */
+  personDeleted: boolean;
   undone: boolean;
   receiptNumber: number;
 }
@@ -101,6 +103,7 @@ interface RawSale {
   by: string | null;
   entry_id: string | null;
   person_name: string | null;
+  for_member: boolean;
   undone: boolean;
   receipt_number: number;
 }
@@ -128,6 +131,7 @@ const sale = (r: RawSale): SaleRow => ({
   soldAt: r.created_at,
   by: r.by,
   person: r.entry_id === null ? null : { entryId: r.entry_id, name: r.person_name === null || r.person_name.trim() === "" ? NO_NAME : r.person_name },
+  personDeleted: r.entry_id === null && r.for_member,
   undone: r.undone,
   receiptNumber: r.receipt_number,
 });
@@ -136,7 +140,7 @@ const sale = (r: RawSale): SaleRow => ({
 const saleColumns = (sql: Sql | TransactionSql) => sql`
   s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
   s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
-  e.full_name AS person_name, s.undone_at IS NOT NULL AS undone, s.receipt_number`;
+  e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.receipt_number`;
 
 export interface RegisterRow {
   country: string | null;

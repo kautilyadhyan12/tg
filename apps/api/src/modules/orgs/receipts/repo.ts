@@ -125,6 +125,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       cancelled: boolean;
       by: string | null;
       full_name: string | null;
+      person_deleted: boolean;
       type_name: string;
       bill_minor: number;
       covers_from: string | null;
@@ -141,7 +142,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     }[]
   >`
     SELECT h.price_minor AS held_price, h.discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
-           u.display_name AS by, e.full_name, t.name AS type_name,
+           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, t.name AS type_name,
            b.amount_minor AS bill_minor, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
@@ -150,7 +151,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     LEFT JOIN users u ON u.id = p.recorded_by
     WHERE p.gym_id = ${gymId} AND p.receipt_number = ${number}`;
   if (r === undefined) return null;
@@ -163,8 +164,8 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     kind: "payment",
     number,
     on: r.paid_on,
-    person: personName(r.full_name),
-    personDeleted: false,
+    person: r.person_deleted ? null : personName(r.full_name),
+    personDeleted: r.person_deleted,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
@@ -187,6 +188,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
       cancelled: boolean;
       by: string | null;
       full_name: string | null;
+      person_deleted: boolean;
       type_name: string;
       covers_from: string | null;
       covers_to: string | null;
@@ -195,14 +197,14 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
   >`
     SELECT r.amount_minor, r.currency, r.method, r.refunded_on::text AS refunded_on,
            (r.undone_at IS NOT NULL OR p.undone_at IS NOT NULL) AS cancelled,
-           u.display_name AS by, e.full_name, t.name AS type_name,
+           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, t.name AS type_name,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, p.receipt_number AS for_receipt
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
-    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     LEFT JOIN users u ON u.id = r.recorded_by
     WHERE r.gym_id = ${gymId} AND r.receipt_number = ${number}`;
   if (r === undefined) return null;
@@ -210,8 +212,8 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
     kind: "refund",
     number,
     on: r.refunded_on,
-    person: personName(r.full_name),
-    personDeleted: false,
+    person: r.person_deleted ? null : personName(r.full_name),
+    personDeleted: r.person_deleted,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
