@@ -39,6 +39,10 @@ export const GYM_CHALLENGE_TEAM_PEOPLE_A_SAVE = 200;
 export const GYM_CHALLENGE_NAME_MAX = 80;
 export const GYM_CHALLENGE_DETAILS_MAX = 500;
 export const GYM_CHALLENGE_PRIZE_MAX = 120;
+/** How many of the library's exercises one challenge is about (one until 19d-iii-c). */
+export const GYM_CHALLENGE_EXERCISES_MAX = 1;
+/** An exercise's slug, as the library keeps it. */
+const EXERCISE_SLUG_PATTERN = /^[a-z][a-z0-9_]{0,59}$/u;
 /** The gym's own word for what it counts: "push-ups", "kilometres". */
 export const GYM_CHALLENGE_UNIT_MAX = 30;
 /** The largest number staff may type for a person, and the largest target of the gym's own count. */
@@ -111,6 +115,9 @@ const challengeFields = {
   /** The number the app counts for it; null where the staff count. */
   measure: z.string().regex(CHALLENGE_ID_PATTERN).nullable(),
   countedBy: z.enum(CHALLENGE_COUNTED_BY),
+  /** Where it is about an exercise, the one picked from the library, by slug; none otherwise.
+   *  The server keeps only one the library offers. */
+  exercises: z.array(z.string().regex(EXERCISE_SLUG_PATTERN)).max(GYM_CHALLENGE_EXERCISES_MAX).default([]),
   startsOn: challengeDaySchema,
   endsOn: challengeDaySchema,
   /** The number to reach, which everybody who reaches it wins; null: the most wins. */
@@ -143,6 +150,7 @@ interface Dated {
   subject: string;
   measure: string | null;
   countedBy: ChallengeCountedBy;
+  exercises: readonly string[];
   who: GymChallengeWho;
   startsOn: string;
   endsOn: string;
@@ -168,6 +176,9 @@ const targetInReach = (c: Dated): boolean =>
 const unitFits = (c: Dated): boolean => (c.countedBy === "staff" ? eventNameIsSeen(c.unit) : c.unit === "");
 /** Lowest wins only where the way it is counted allows it, and never with a number to reach. */
 const lowestFits = (c: Dated): boolean => !c.lowestWins || (kindWins(c).includes("lowest") && c.target === null);
+/** One exercise for a subject the gym picks one for; none for anything else. */
+const exercisesFit = (c: Dated): boolean =>
+  challengeSubject(c.subject)?.pickExercise === true ? c.exercises.length === 1 : c.exercises.length === 0;
 /** Alone: no team. In teams: two to eight, no two with one name, no team listed twice. */
 const teamsFit = (c: Dated): boolean => {
   if (c.teams === "none") return c.teamList.length === 0;
@@ -189,7 +200,8 @@ export const addGymChallengeRequestSchema = z
   .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] })
   .refine(unitFits, { message: "say what is counted", path: ["unit"] })
   .refine(lowestFits, { message: "lowest wins is for a count the staff make, with no target", path: ["lowestWins"] })
-  .refine(teamsFit, { message: "two to eight teams, each with its own name", path: ["teamList"] });
+  .refine(teamsFit, { message: "two to eight teams, each with its own name", path: ["teamList"] })
+  .refine(exercisesFit, { message: "one exercise from the library for a challenge about an exercise, none otherwise", path: ["exercises"] });
 export type AddGymChallengeRequest = z.infer<typeof addGymChallengeRequestSchema>;
 
 export const changeGymChallengeRequestSchema = z
@@ -200,7 +212,8 @@ export const changeGymChallengeRequestSchema = z
   .refine(targetInReach, { message: "the target is more than the challenge's days", path: ["target"] })
   .refine(unitFits, { message: "say what is counted", path: ["unit"] })
   .refine(lowestFits, { message: "lowest wins is for a count the staff make, with no target", path: ["lowestWins"] })
-  .refine(teamsFit, { message: "two to eight teams, each with its own name", path: ["teamList"] });
+  .refine(teamsFit, { message: "two to eight teams, each with its own name", path: ["teamList"] })
+  .refine(exercisesFit, { message: "one exercise from the library for a challenge about an exercise, none otherwise", path: ["exercises"] });
 export type ChangeGymChallengeRequest = z.infer<typeof changeGymChallengeRequestSchema>;
 
 export const cancelGymChallengeRequestSchema = z.object({ cancelled: z.boolean() }).strict();
@@ -259,6 +272,8 @@ export interface ChallengeRules {
   teams: GymChallengeTeams;
   /** A kept team has its id; a new one null. */
   teamList: readonly { id: string | null; name: string }[];
+  /** The library's exercises it is about, by slug. */
+  exercises: readonly string[];
 }
 
 const sameTeams = (a: ChallengeRules, b: ChallengeRules): boolean =>
@@ -266,6 +281,8 @@ const sameTeams = (a: ChallengeRules, b: ChallengeRules): boolean =>
     const other = b.teamList[i];
     return other !== undefined && team.id !== null && team.id === other.id && team.name === other.name;
   });
+
+const sameList = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 const dayAfter = (day: string, days: number): string => new Date((dayNumber(day) + days) * 86_400_000).toISOString().slice(0, 10);
 
@@ -275,7 +292,7 @@ export function challengeSaveProblem(input: { today: string; before: ChallengeRu
   const { today, before, next } = input;
   if (before !== null && challengeState(before, today) === "ended") return "ended";
   if (before !== null && challengeState(before, today) === "running") {
-    const same = before.subject === next.subject && before.measure === next.measure && before.countedBy === next.countedBy && before.startsOn === next.startsOn && before.who === next.who && before.target === next.target && before.lowestWins === next.lowestWins && sameTeams(before, next);
+    const same = before.subject === next.subject && before.measure === next.measure && before.countedBy === next.countedBy && sameList(before.exercises, next.exercises) && before.startsOn === next.startsOn && before.who === next.who && before.target === next.target && before.lowestWins === next.lowestWins && sameTeams(before, next);
     if (!same) return "started_locked";
   } else {
     if (next.startsOn < dayAfter(today, -GYM_CHALLENGE_MAX_DAYS_BACK)) return "starts_too_early";
@@ -360,6 +377,8 @@ const challengeSchema = z
     subject: z.string(),
     measure: z.string().nullable(),
     countedBy: z.enum(CHALLENGE_COUNTED_BY),
+    /** The library's exercises it is about, by slug; none for anything else. */
+    exercises: z.array(z.string()),
     words: challengeWordsSchema,
     startsOn: classDaySchema,
     endsOn: classDaySchema,
@@ -647,9 +666,36 @@ export const GYM_CHALLENGE_WORDS = {
   teams_none: "This is an individual challenge, so it has no teams.",
   teams_staff: "At this challenge the staff put people in teams, so a team can't be picked here.",
   team_gone: "That team isn't in this challenge any more. Load the page again.",
+  exercise_not_offered: "That exercise isn't in the app's library any more. Pick another one.",
   pick_to_join: "Pick a team to join this challenge.",
   team_locked: "This challenge has started, so you can't change team now.",
   team_person: "One of these people isn't in this challenge any more. Load the list again.",
   team_ended: "This challenge has ended, so its teams can't be changed.",
   scores_closed: `This challenge ended more than ${String(GYM_CHALLENGE_ENDED_DAYS)} days ago, so its numbers can't be changed now.`,
 } as const;
+
+// ── WHAT THE FORM IS OFFERED (spec Part 3 §15.10.1) ──
+
+/** What a gym's form may pick: every subject on the list with what the app can count for
+ *  it, and the library's exercises, each saying whether the app can count it. Only what the
+ *  app can really do is offered as counted by it. */
+export const challengeSubjectsResponseSchema = z
+  .object({
+    subjects: z.array(
+      z
+        .object({
+          id: z.string(),
+          title: z.string(),
+          hint: z.string(),
+          pickExercise: z.boolean(),
+          everyone: z.boolean(),
+          staffWord: z.string(),
+          /** What the app can count for it; none: only the staff can. */
+          appCounts: z.array(z.object({ measure: z.string(), one: z.string(), many: z.string(), howLine: z.string() }).strict()),
+        })
+        .strict(),
+    ),
+    exercises: z.array(z.object({ slug: z.string(), name: z.string(), appCounts: z.boolean() }).strict()),
+  })
+  .strict();
+export type ChallengeSubjectsResponse = z.infer<typeof challengeSubjectsResponseSchema>;

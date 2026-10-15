@@ -7,11 +7,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { GYM_CHALLENGE_WORDS } from '@app/shared';
+import { GYM_CHALLENGE_WORDS, offeredSubjects } from '@app/shared';
 import { closureDateLabel } from './hoursView';
 import { sentChallenge } from '../../components/gym/__fixtures__/sentChallenge';
 
-const svc = { list: vi.fn(), board: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), setScores: vi.fn() };
+const svc = { list: vi.fn(), subjects: vi.fn(), board: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), setScores: vi.fn() };
+/** What the server offers the form: its own list, and three of the library. */
+const OFFERED = {
+  subjects: offeredSubjects('member'),
+  exercises: [
+    { slug: 'chair_squat', name: 'Chair Squats', appCounts: false },
+    { slug: 'plank', name: 'Plank', appCounts: false },
+    { slug: 'squat', name: 'Squats', appCounts: false },
+  ],
+};
+/** The form's first question, there once what the gym can pick has come. */
+const ABOUT = 'What is the challenge about';
+const aboutAsked = () => screen.findByRole('radiogroup', { name: ABOUT });
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/challengesApi', () => ({ staffChallengesService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -94,6 +106,7 @@ const picked = (group) => within(form().getByRole('radiogroup', { name: group })
 const openAdd = async () => {
   open();
   fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
+  await aboutAsked();
 };
 
 beforeEach(() => {
@@ -101,6 +114,7 @@ beforeEach(() => {
   orgApi.getMine.mockReset();
   resetConsoleOrgs();
   svc.list.mockResolvedValue(listOf());
+  svc.subjects.mockResolvedValue(OFFERED);
 });
 afterEach(() => cleanup());
 
@@ -165,15 +179,17 @@ describe("the console's Challenges page", () => {
     svc.add.mockImplementation(async (_gym, _key, fields) => challenge('new', fields.name, { ...fields, state: 'coming', joinedCount: 0 }));
     await openAdd();
     // It opens on the commonest challenge.
-    expect(picked('Who counts it')).toBe("The appIt counts gym check-ins or workouts by itself. Your staff don't enter any numbers.");
-    expect(picked('What the app counts')).toBe('Gym daysA day a member is checked in, at your front desk or by your staff. Two visits in one day count once.');
+    expect(picked(ABOUT)).toBe('Gym visitsDays a member is checked in, at your front desk or by your staff.');
+    expect(within(form().getByRole('radiogroup', { name: ABOUT })).getAllByRole('radio').map((r) => r.textContent.split('Days')[0].split('One')[0].split('Anything')[0])).toEqual(['Gym visits', 'Workouts in the app', 'An exercise', 'Something else']);
+    expect(picked('Who counts it')).toBe("The appIt counts gym days by itself. Your staff don't enter any numbers.");
+    expect(svc.subjects).toHaveBeenCalledWith('g1');
     expect(picked('How it is won')).toBe('Most gym days winsThe member with the most gym days when it ends comes 1st.');
     expect(picked('Who is in it')).toContain('Everyone in the app');
     expect(form().getByText('Everybody using the app is in it: 143 people. Nobody has to do anything.')).toBeTruthy();
     expect(form().queryByLabelText(/^Target/)).toBeNull();
 
     type('Challenge name', '  Autumn Twelve ');
-    pick('What the app counts', 'Workout days');
+    pick(ABOUT, 'Workouts in the app');
     // The choices follow what is counted.
     expect(picked('How it is won')).toBe('Most workout days winsThe member with the most workout days when it ends comes 1st.');
     pickDate('First day', '2026-10-12');
@@ -192,7 +208,7 @@ describe("the console's Challenges page", () => {
     const [gymId, key, fields] = svc.add.mock.calls[0];
     expect(gymId).toBe('g1');
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
-    expect(fields).toEqual({ name: 'Autumn Twelve', details: '', prize: 'A free month', unit: '', subject: 'workouts', measure: 'days', countedBy: 'app', startsOn: '2026-10-12', endsOn: '2026-11-08', target: 12, who: 'joined', lowestWins: false, teams: 'none', teamList: [] });
+    expect(fields).toEqual({ name: 'Autumn Twelve', details: '', prize: 'A free month', unit: '', subject: 'workouts', measure: 'days', countedBy: 'app', exercises: [], startsOn: '2026-10-12', endsOn: '2026-11-08', target: 12, who: 'joined', lowestWins: false, teams: 'none', teamList: [] });
     expect((await screen.findByRole('status')).textContent).toBe('Challenge added. Your members can see it now.');
     expect(screen.queryByTestId('challenge-form')).toBeNull();
     expect(svc.change).not.toHaveBeenCalled();
@@ -244,10 +260,10 @@ describe("the console's Challenges page", () => {
     svc.list.mockResolvedValue(listOf([], { checkingIn: false }));
     await openAdd();
     expect(form().getByRole('note').textContent).toMatch(/^Nobody has been checked in at your front desk in the last 30 days\./);
-    pick('What the app counts', 'Workout days');
+    pick(ABOUT, 'Workouts in the app');
     expect(form().queryByRole('note')).toBeNull();
     // Nor where the staff count: no gym day is needed.
-    pick('What the app counts', 'Gym days');
+    pick(ABOUT, 'Gym visits');
     expect(form().getByRole('note')).toBeTruthy();
     pick('Who counts it', 'Your staff');
     expect(form().queryByRole('note')).toBeNull();
@@ -260,8 +276,9 @@ describe("the console's Challenges page", () => {
     open();
     await waitFor(() => expect(cards()).toHaveLength(1));
     fireEvent.click(within(cardOf('October Week')).getByRole('button', { name: 'Edit October Week' }));
+    await aboutAsked();
     expect(form().getByTestId('locked-note').textContent).toMatch(/^This challenge has started/);
-    for (const group of ['Who counts it', 'What the app counts', 'How it is won', 'Who is in it']) {
+    for (const group of [ABOUT, 'Who counts it', 'How it is won', 'Who is in it']) {
       for (const radio of within(form().getByRole('radiogroup', { name: group })).getAllByRole('radio')) expect(radio.disabled).toBe(true);
     }
     expect(form().getByLabelText('Target, in gym days').disabled).toBe(true);
@@ -273,7 +290,7 @@ describe("the console's Challenges page", () => {
     pickDate('Last day', '2026-10-18');
     fireEvent.click(form().getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
-    expect(svc.change.mock.calls[0]).toEqual(['g1', 'a', { name: 'October Fortnight', details: '', prize: 'A towel', unit: '', subject: 'gym_visits', measure: 'days', countedBy: 'app', startsOn: '2026-10-05', endsOn: '2026-10-18', target: 5, who: 'joined', lowestWins: false, teams: 'none', teamList: [] }]);
+    expect(svc.change.mock.calls[0]).toEqual(['g1', 'a', { name: 'October Fortnight', details: '', prize: 'A towel', unit: '', subject: 'gym_visits', measure: 'days', countedBy: 'app', exercises: [], startsOn: '2026-10-05', endsOn: '2026-10-18', target: 5, who: 'joined', lowestWins: false, teams: 'none', teamList: [] }]);
     expect((await screen.findByRole('status')).textContent).toBe('Changes saved. Your members see them now.');
   });
 
@@ -347,16 +364,16 @@ describe("the console's Challenges page", () => {
     expect(screen.queryByTestId('challenge-board')).toBeNull();
   });
 
-  it("the gym's own count: the form asks what is counted and offers lowest wins, and sends both", async () => {
+  it("the gym's own count: Something else is counted by the staff, who say what they count; lowest wins is offered, and both are sent", async () => {
     svc.add.mockImplementation(async (_gym, _key, fields) => challenge('new', fields.name, { ...fields, state: 'running', joinedCount: null }));
     await openAdd();
     expect(form().queryByLabelText('What your staff count')).toBeNull();
     const wins = () => within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio').map((r) => r.textContent);
     expect(wins()).toHaveLength(2);
-    pick('Who counts it', 'Your staff');
-    expect(picked('Who counts it')).toBe("Your staffFor anything the app can't count: push-ups, a 5 km time, weight lifted. Your staff enter each person's number.");
-    // What the app counts is no longer asked; what the staff count is.
-    expect(form().queryByRole('radiogroup', { name: 'What the app counts' })).toBeNull();
+    pick(ABOUT, 'Something else');
+    // Only the staff can count it: said in one line, not asked.
+    expect(form().queryByRole('radiogroup', { name: 'Who counts it' })).toBeNull();
+    expect(form().getByTestId('counted-by-line').textContent).toBe('Counted by your staff.');
     expect(form().getByText("As you would say it after a number: push-ups, kilometres, seconds. From the challenge's first day, open it and press Enter numbers to add each member's number.")).toBeTruthy();
     // Until their word is typed the three ways to win read in general words; then in theirs.
     expect(wins()).toEqual([
@@ -379,19 +396,62 @@ describe("the console's Challenges page", () => {
     expect(picked('How it is won')).toContain('Lowest seconds wins');
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
-    expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Row 500 m', details: '', prize: '', unit: 'seconds', subject: 'own', measure: null, countedBy: 'staff', startsOn: '2026-10-07', endsOn: '2026-10-14', target: null, who: 'everyone', lowestWins: true, teams: 'none', teamList: [] });
-    // Back on the app's own count, lowest wins is gone and is not sent.
+    expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Row 500 m', details: '', prize: '', unit: 'seconds', subject: 'own', measure: null, countedBy: 'staff', exercises: [], startsOn: '2026-10-07', endsOn: '2026-10-14', target: null, who: 'everyone', lowestWins: true, teams: 'none', teamList: [] });
+    // Back on gym visits, the app counts them: lowest wins is gone and is not sent.
     fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
-    pick('Who counts it', 'Your staff');
-    pick('How it is won', 'Lowest number wins');
-    pick('Who counts it', 'The app');
-    expect(picked('What the app counts')).toContain('Gym days');
+    await aboutAsked();
+    pick(ABOUT, 'Something else');
+    type('What your staff count', 'push-ups');
+    pick('How it is won', 'Lowest push-ups wins');
+    pick(ABOUT, 'Gym visits');
+    expect(picked('Who counts it')).toContain('The app');
     expect(picked('How it is won')).toContain('Most gym days wins');
-    // The app goes back to what it was last picked to count.
-    pick('What the app counts', 'Workout days');
-    pick('Who counts it', 'Your staff');
-    pick('Who counts it', 'The app');
-    expect(picked('What the app counts')).toContain('Workout days');
+    // What was typed for something of their own is there again when they come back to it.
+    pick(ABOUT, 'Something else');
+    expect(form().getByLabelText('What your staff count').value).toBe('push-ups');
+  });
+
+  it('a challenge about an exercise: picked from the library, never counted by the app, and the one picked is the one sent', async () => {
+    svc.add.mockImplementation(async (_gym, _key, fields) => challenge('new', fields.name, { counts: undefined, ...fields, state: 'coming', joinedCount: null, words: { about: 'Squats', one: 'squat', many: 'squats', print: 'whole', how: 'staff', howLine: 'Counted by the staff at Iron House', explain: 'x', perDay: false } }));
+    await openAdd();
+    pick(ABOUT, 'An exercise');
+    // A list to pick from, never a box to type in; nothing picked yet.
+    const which = form().getByLabelText('Which exercise');
+    expect(which.tagName).toBe('SELECT');
+    expect(which.value).toBe('');
+    expect(within(which).getAllByRole('option').map((o) => o.textContent)).toEqual(['Pick an exercise', 'Chair Squats', 'Plank', 'Squats']);
+    // The app is shown switched off, with its reason; the staff count it.
+    const app = within(form().getByRole('radiogroup', { name: 'Who counts it' })).getByRole('radio', { name: /^The app/ });
+    expect(app.disabled).toBe(true);
+    expect(app.textContent).toBe("The appThe camera can't count this exercise yet, so your staff count it.");
+    expect(picked('Who counts it')).toBe("Your staffYour staff enter each member's number.");
+    fireEvent.click(app);
+    expect(picked('Who counts it')).toContain('Your staff');
+    type('Challenge name', 'Squat October');
+    pickDate('First day', '2026-10-12');
+    pickDate('Last day', '2026-10-31');
+    fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
+    expect(form().getByRole('alert').textContent).toBe('Pick the exercise.');
+    expect(svc.add).not.toHaveBeenCalled();
+    fireEvent.change(which, { target: { value: 'squat' } });
+    expect(form().getByLabelText('What your staff count').value).toBe('squats');
+    expect(app.textContent).toBe("The appThe camera can't count Squats yet, so your staff count it.");
+    expect(within(screen.getByTestId('challenge-summary')).getAllByRole('definition')[2].textContent).toBe('Squats · counted by your staff');
+    fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
+    await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
+    expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Squat October', details: '', prize: '', unit: 'squats', subject: 'exercise', measure: null, countedBy: 'staff', exercises: ['squat'], startsOn: '2026-10-12', endsOn: '2026-10-31', target: null, who: 'everyone', lowestWins: false, teams: 'none', teamList: [] });
+  });
+
+  it('what a challenge can be about is asked of the server each time the form opens; if it cannot be read, Try again reads it again', async () => {
+    svc.subjects.mockRejectedValueOnce(new Error('offline'));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Add challenge' }));
+    expect((await form().findByRole('alert')).textContent).toBe("We couldn't load what a challenge can be about. Try again");
+    expect(form().queryByRole('radiogroup', { name: 'Who counts it' })).toBeNull();
+    fireEvent.click(form().getByRole('button', { name: 'Try again' }));
+    await aboutAsked();
+    expect(picked(ABOUT)).toContain('Gym visits');
+    expect(svc.subjects).toHaveBeenCalledTimes(2);
   });
 
   it("the gym's own count: staff type each person's number on its board, and only the changed ones are saved", async () => {
@@ -582,7 +642,7 @@ describe('the page is a list, one challenge, or the form: never all at once', ()
     ]);
     // Each question sits in its own part.
     expect(within(form().getByRole('group', { name: 'Part 1: What it is, and when' })).getByRole('radiogroup', { name: 'Who counts it' })).toBeTruthy();
-    expect(within(form().getByRole('group', { name: 'Part 1: What it is, and when' })).getByRole('radiogroup', { name: 'What the app counts' })).toBeTruthy();
+    expect(within(form().getByRole('group', { name: 'Part 1: What it is, and when' })).getByRole('radiogroup', { name: ABOUT })).toBeTruthy();
     expect(within(form().getByRole('group', { name: 'Part 2: How it is won, and who is in it' })).getByRole('radiogroup', { name: 'Who is in it' })).toBeTruthy();
     expect(within(form().getByRole('group', { name: 'Part 3: Teams, prize and details' })).getByRole('radiogroup', { name: 'Individual or teams' })).toBeTruthy();
 
@@ -593,7 +653,7 @@ describe('the page is a list, one challenge, or the form: never all at once', ()
     type('Challenge name', '  Autumn Twelve ');
     pickDate('First day', '2026-10-12');
     pickDate('Last day', '2026-10-18');
-    pick('What the app counts', 'Workout days');
+    pick(ABOUT, 'Workouts in the app');
     pick('How it is won', 'Reach a target');
     type('Target, in workout days', '5');
     pick('Who is in it', 'Only people who join');

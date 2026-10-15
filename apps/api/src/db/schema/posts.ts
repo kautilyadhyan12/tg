@@ -8,6 +8,7 @@
 // reactions, reports and a stop on their posting are (`DIRECT_DELETE_TABLES`).
 import { sql } from "drizzle-orm";
 import { bigint, boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { exercises } from "./catalog.js";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -359,6 +360,23 @@ export const gymChallengePeople = pgTable(
     primaryKey({ name: "gym_challenge_people_pk", columns: [t.challengeId, t.userId] }),
     foreignKey({ name: "gym_challenge_people_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
     index("gym_challenge_people_user_idx").on(t.userId),
+  ],
+);
+
+/** The exercise a challenge is about, picked from the library (`0119_challenge_exercises.sql`;
+ *  spec Part 3 §15.10.2): one row a challenge about an exercise. The gym's own. */
+export const gymChallengeExercises = pgTable(
+  "gym_challenge_exercises",
+  {
+    gymId: uuid("gym_id").notNull(),
+    challengeId: uuid("challenge_id").notNull(),
+    exerciseId: uuid("exercise_id")
+      .notNull()
+      .references(() => exercises.id),
+  },
+  (t) => [
+    primaryKey({ name: "gym_challenge_exercises_pk", columns: [t.challengeId, t.exerciseId] }),
+    foreignKey({ name: "gym_challenge_exercises_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
   ],
 );
 

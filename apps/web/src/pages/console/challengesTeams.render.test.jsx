@@ -7,10 +7,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { offeredSubjects } from '@app/shared';
 import { closureDateLabel } from './hoursView';
 import { sentChallenge } from '../../components/gym/__fixtures__/sentChallenge';
 
-const svc = { list: vi.fn(), board: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), setScores: vi.fn(), setTeamPeople: vi.fn() };
+const svc = { list: vi.fn(), subjects: vi.fn(), board: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), setScores: vi.fn(), setTeamPeople: vi.fn() };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/challengesApi', () => ({ staffChallengesService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -100,6 +101,7 @@ beforeEach(() => {
   orgApi.getMine.mockReset();
   resetConsoleOrgs();
   svc.list.mockResolvedValue(listOf());
+  svc.subjects.mockResolvedValue({ subjects: offeredSubjects('member'), exercises: [{ slug: 'squat', name: 'Squats', appCounts: false }] });
 });
 afterEach(() => cleanup());
 
@@ -519,6 +521,7 @@ describe('round one', () => {
     expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
     pick('Individual or teams', 'Teams: your members pick their own');
     expect(joined()).toBe('Only people who joinYour members see it and join by picking a team.');
+    await screen.findByRole('radiogroup', { name: 'Who counts it' });
     pick('Who counts it', 'Your staff');
     type('What your staff count', 'seconds');
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(

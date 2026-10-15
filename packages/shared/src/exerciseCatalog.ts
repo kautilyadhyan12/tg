@@ -156,3 +156,13 @@ const SLUG_BY_LEGACY_NAME: ReadonlyMap<string, string> = new Map(
 export function slugForLegacyName(name: string): string | null {
   return SLUG_BY_LEGACY_NAME.get(name) ?? null;
 }
+
+const NAME_BY_SLUG: ReadonlyMap<string, string> = new Map(
+  CATALOG_58.map((e) => [e.slug, e.legacyName]),
+);
+
+/** Catalog slug → the library's name for it ("squat" → "Squats"), or null for a slug
+ *  the catalog does not have. */
+export function exerciseNameOf(slug: string): string | null {
+  return NAME_BY_SLUG.get(slug) ?? null;
+}

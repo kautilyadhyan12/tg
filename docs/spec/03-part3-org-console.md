@@ -4520,7 +4520,10 @@ holding `leaderboard.manage`). Running is not on the list until the phone app re
 runs. For an exercise the reply marks which ones the camera can count today (those with
 a live definition: squat, chair squat and jump squat of the 58, counted on Folder B's
 local database on 2026-10-09), and of any other the form says "The camera can't count
-{Plank} yet, so your staff count it". Nothing is offered that the app cannot do, and
+{Plank} yet, so your staff count it". An exercise is marked only once the list also has
+a measure for an exercise (19d-iii-b): until then the reply marks none, and the form says
+of every one that the camera can't count it yet (19d-iii-a-ii, `appCountsExercise`).
+Nothing is offered that the app cannot do, and
 nothing a gym has is taken away: every challenge made before is one of the first, second
 or last row.
 

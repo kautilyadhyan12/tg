@@ -827,6 +827,13 @@
       "when": 1790726400118,
       "tag": "0118_challenge_subjects",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1790726400119,
+      "tag": "0119_challenge_exercises",
+      "breakpoints": true
     }
   ]
 }
