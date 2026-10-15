@@ -13,10 +13,12 @@ import PhotoViewer from '../components/common/PhotoViewer';
 // frame a gym puts in its own website. Whatever happened to the message, a sent form
 // says the same thanks.
 
-const INK = '#1A1916';
-const MUTED = '#5E5A52';
-const LINE = '#E4E1DA';
-const ACCENT = '#E8590C';
+// The public pages' own look (this page and a member's invite page): light, whatever the
+// app's look, as a business's website around it may be.
+export const INK = '#1A1916';
+export const MUTED = '#5E5A52';
+export const LINE = '#E4E1DA';
+export const ACCENT = '#E8590C';
 
 const inputClass = 'w-full rounded-xl px-3.5 py-3 text-[15px] outline-none focus:ring-2';
 const inputStyle = { border: `1px solid ${LINE}`, background: '#fff', color: INK, '--tw-ring-color': ACCENT };
@@ -37,7 +39,10 @@ function Field({ label, hint, children, htmlFor }) {
   );
 }
 
-function EnquiryForm({ slug, page }) {
+/** The form: on the business's own page, and on a member's invite page (20e-ii-a), where
+ *  `send` posts to that link and "How did you hear about us?" is not asked. `page` gives
+ *  the business's name and the robot check's key. */
+export function EnquiryForm({ page, send: post, askSource = true }) {
   const [form, setForm] = useState(EMPTY_ENQUIRY);
   const [problem, setProblem] = useState(null);
   const [sending, setSending] = useState(false);
@@ -64,7 +69,7 @@ function EnquiryForm({ slug, page }) {
     }
     setSending(true);
     try {
-      await orgService.sendGymEnquiry(slug, enquiryBody(form, robotToken));
+      await post(enquiryBody(form, robotToken));
       setSentTo(form.fullName.trim().split(/\s+/)[0] ?? '');
     } catch (err) {
       resetRobot();
@@ -115,16 +120,18 @@ function EnquiryForm({ slug, page }) {
       <p className="text-[13px] -mt-2" style={{ color: MUTED }}>
         An email address or a phone number, so they can reach you.
       </p>
-      <Field label="How did you hear about us?" htmlFor="enq-source">
-        <select id="enq-source" value={form.source} onChange={set('source')} className={inputClass} style={inputStyle}>
-          <option value="">Choose one (optional)</option>
-          {LEAD_SOURCES.map((source) => (
-            <option key={source} value={source}>
-              {ENQUIRY_SOURCE_WORDS[source]}
-            </option>
-          ))}
-        </select>
-      </Field>
+      {askSource ? (
+        <Field label="How did you hear about us?" htmlFor="enq-source">
+          <select id="enq-source" value={form.source} onChange={set('source')} className={inputClass} style={inputStyle}>
+            <option value="">Choose one (optional)</option>
+            {LEAD_SOURCES.map((source) => (
+              <option key={source} value={source}>
+                {ENQUIRY_SOURCE_WORDS[source]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <Field label="Message (optional)" htmlFor="enq-message">
         <textarea
           id="enq-message"
@@ -271,7 +278,7 @@ export default function GymPublicPage() {
         <h1 className="text-xl font-bold" style={{ color: INK }}>
           Get in touch with {page.name}
         </h1>
-        <EnquiryForm slug={slug} page={page} />
+        <EnquiryForm page={page} send={(body) => orgService.sendGymEnquiry(slug, body)} />
       </section>,
     );
   }
@@ -341,7 +348,7 @@ export default function GymPublicPage() {
 
       <section className={card} style={cardStyle}>
         <h2 className="text-lg font-bold" style={{ color: INK }}>Get in touch</h2>
-        <EnquiryForm slug={slug} page={page} />
+        <EnquiryForm page={page} send={(body) => orgService.sendGymEnquiry(slug, body)} />
       </section>
     </>,
   );

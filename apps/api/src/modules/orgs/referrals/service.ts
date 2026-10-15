@@ -86,6 +86,7 @@ async function settingsView(sql: Sql, gymId: string, gymName: string, today: str
       name: d.name,
       code: d.code,
       words: referralGiftWords(terms(d)),
+      status: discountStatus(terms(d), today),
       problem: referralGiftProblem(terms(d), today),
     })),
     memberLines: referralOfferLines(gymName, member?.words ?? null, friend?.words ?? null),

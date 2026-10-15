@@ -185,6 +185,8 @@ export const referralDiscountOptionSchema = z
     name: z.string(),
     code: z.string().nullable(),
     words: z.string(),
+    /** What it is today: only an active one with a code is promised. */
+    status: z.enum(["active", "scheduled", "expired", "used_up", "archived"]),
     /** Why it is not promised today; null when it can be. */
     problem: z.string().nullable(),
   })

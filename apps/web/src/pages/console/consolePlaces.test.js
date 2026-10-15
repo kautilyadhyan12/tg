@@ -26,6 +26,8 @@ const PLACES = {
   frontDesk: '/console/iron-house/settings#check-in-devices',
   leadEmails: '/console/iron-house/settings#follow-up-emails',
   memberships: '/console/iron-house/memberships',
+  membershipDiscounts: '/console/iron-house/memberships#discounts',
+  referrals: '/console/iron-house/settings#refer-a-friend',
   members: '/console/iron-house/members',
   importMembers: '/console/iron-house/members?open=import',
   addMember: '/console/iron-house/members?open=add',
@@ -51,6 +53,8 @@ const NEEDS = {
   frontDesk: 'org.manage',
   leadEmails: 'org.manage',
   memberships: 'memberships.manage',
+  membershipDiscounts: 'memberships.manage',
+  referrals: 'org.manage',
   members: null,
   importMembers: null,
   addMember: null,
@@ -93,6 +97,7 @@ describe('where each place is', () => {
       frontDesk: 'check-in-devices',
       leadEmails: 'follow-up-emails',
       waiver: 'waiver',
+      referrals: 'refer-a-friend',
     });
     // The postal address and the country are boxes inside the details: a link to either opens them.
     expect(DETAILS_SECTIONS).toEqual(['gym-details', 'postal-address', 'country']);
