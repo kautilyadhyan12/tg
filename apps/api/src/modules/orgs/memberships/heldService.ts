@@ -71,7 +71,7 @@ function billingOf(
   bills: readonly BillRow[],
   payments: readonly PaymentRow[],
   refunds: readonly RefundRow[],
-  ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string }> },
+  ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }> },
 ): MemberBilling {
   const view = heldMembershipView(row.membership, ctx.today);
   const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
@@ -165,7 +165,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // A member's own Refer a friend gift (20e-ii-b-ii-a): what it took off a bill, and the one
   // waiting, filled in on Add.
   const [gifts, memberGift] = await Promise.all([
-    canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string }>(),
+    canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string; friendName: string | null }>(),
     canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId) : null,
   ]);
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts };

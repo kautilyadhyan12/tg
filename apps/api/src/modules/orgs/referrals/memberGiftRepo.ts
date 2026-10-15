@@ -326,13 +326,20 @@ export async function giftUseUndone(tx: TransactionSql, gymId: string, on: { bil
   }
 }
 
-/** What a gift took off, by bill: the bills named that a gift was taken off. */
-export async function giftsOnBills(sql: SqlOrTx, gymId: string, billIds: readonly string[]): Promise<Map<string, { offMinor: number; currency: string }>> {
+/** What a gift took off, by bill, and the friend it was for inviting (by the gym's list;
+ *  null where that record is gone): the bills named that a gift was taken off. */
+export async function giftsOnBills(
+  sql: SqlOrTx,
+  gymId: string,
+  billIds: readonly string[],
+): Promise<Map<string, { offMinor: number; currency: string; friendName: string | null }>> {
   if (billIds.length === 0) return new Map();
-  const rows = await sql<{ used_bill_id: string; used_off_minor: number; used_currency: string }[]>`
-    SELECT used_bill_id, used_off_minor, used_currency FROM gym_referral_member_gifts
-    WHERE gym_id = ${gymId} AND used_bill_id = ANY(${[...billIds]}::uuid[])`;
-  return new Map(rows.map((r) => [r.used_bill_id, { offMinor: r.used_off_minor, currency: r.used_currency }]));
+  const rows = await sql<{ used_bill_id: string; used_off_minor: number; used_currency: string; friend_name: string | null }[]>`
+    SELECT g.used_bill_id, g.used_off_minor, g.used_currency, NULLIF(btrim(f.full_name), '') AS friend_name
+    FROM gym_referral_member_gifts g
+    LEFT JOIN gym_member_list_entries f ON f.gym_id = g.gym_id AND f.id = g.friend_entry_id
+    WHERE g.gym_id = ${gymId} AND g.used_bill_id = ANY(${[...billIds]}::uuid[])`;
+  return new Map(rows.map((r) => [r.used_bill_id, { offMinor: r.used_off_minor, currency: r.used_currency, friendName: r.friend_name }]));
 }
 
 interface RawLeadGift extends RawTerms {

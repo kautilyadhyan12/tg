@@ -230,6 +230,9 @@ export const gymSaleSchema = z
      *  0 where there was none. */
     discountName: z.string().nullable(),
     discountMinor: minorSchema,
+    /** Where that discount was a member's Refer a friend gift (20e-ii-b-ii-a): the friend they
+     *  invited, by the gym's list; null otherwise, or where that record is gone. */
+    giftFor: z.string().nullable().default(null),
     currency: currencySchema,
     method: memberPaymentByHandSchema,
     /** The gym's own day, and the instant. */

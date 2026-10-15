@@ -120,9 +120,11 @@ export function memberGiftWaitingLine(gift: MemberGift): string {
   return `Refer a friend gift, ${gift.words}, ${why}. It comes off their next bill by itself, or is filled in when you add a membership or sell to them.`;
 }
 
-/** What a gift took off one bill, as the bill's row says it. */
-export function memberGiftBillLine(offMinor: number, currency: string): string {
-  return `Refer a friend gift: ${formatMinor(offMinor, currency)} off`;
+/** What a gift took off one bill or sale, as staff read it: who it was for inviting, so
+ *  anybody can see why at a glance (Kd at the click-through), and what came off. */
+export function memberGiftBillLine(offMinor: number, currency: string, friendName: string | null = null): string {
+  const why = friendName === null ? "" : ` for inviting ${friendName}`;
+  return `Refer a friend gift${why}: ${formatMinor(offMinor, currency)} off`;
 }
 
 /** A sale's discount line where the gift was taken off it, on its receipt and in reports. */

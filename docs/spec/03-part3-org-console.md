@@ -5268,8 +5268,10 @@ gift, money off.** Migration `0120`. Free days, the owner's second choice, is 20
   else the next bill the hourly run opens; else it is filled in, with Remove, on Add
   membership (off the first bill, after any discount) and at Sell (in a discount's place).
   The bill is opened again at its own price less the gift, with its own tax rate, and says
-  "Refer a friend gift: £10.00 off"; a sale keeps it as its discount line, "Refer a friend
-  gift" (`gym_sales.member_gift`). It comes off only where something is left to pay, as every
+  "Refer a friend gift for inviting Tara Shah: £10.00 off", so staff see why at a glance (Kd
+  at the click-through); a sale keeps it as its discount line, "Refer a friend gift"
+  (`gym_sales.member_gift`), which Sell's list says the same way, and the member's own
+  receipt says without the friend's name. It comes off only where something is left to pay, as every
   discount here: a gift as large as the price waits for a payment it is smaller than, and the
   screen says "It can't be used on Protein tub, so it is kept for their next payment." A bill
   paid ahead before it opens is opened at its full price; the gift waits for the next. Until

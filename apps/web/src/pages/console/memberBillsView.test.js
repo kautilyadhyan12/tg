@@ -230,7 +230,10 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
 
 describe("a member's Refer a friend gift on a bill (20e-ii-b-ii-a)", () => {
   it('says what it took off, and nothing on a bill it was not taken off', () => {
-    expect(billRow(bill({ amountMinor: 3999, gift: { offMinor: 1000, currency: 'GBP' } }), 'GBP', TODAY).gift).toBe('Refer a friend gift: £10.00 off');
+    expect(billRow(bill({ amountMinor: 3999, gift: { offMinor: 1000, currency: 'GBP', friendName: 'Tara Shah' } }), 'GBP', TODAY).gift).toBe(
+      'Refer a friend gift for inviting Tara Shah: £10.00 off',
+    );
+    expect(billRow(bill({ amountMinor: 3999, gift: { offMinor: 1000, currency: 'GBP', friendName: null } }), 'GBP', TODAY).gift).toBe('Refer a friend gift: £10.00 off');
     expect(billRow(bill({ gift: null }), 'GBP', TODAY).gift).toBeNull();
     expect(billRow(bill(), 'GBP', TODAY).gift).toBeNull();
   });

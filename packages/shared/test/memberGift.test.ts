@@ -56,6 +56,7 @@ describe("the words", () => {
     expect(memberGiftWords(pct(1250))).toBe("12.5% off");
     expect(memberGiftWords(gbp(1000))).toBe("£10.00 off");
     expect(memberGiftBillLine(1000, "GBP")).toBe("Refer a friend gift: £10.00 off");
+    expect(memberGiftBillLine(1000, "GBP", "Tara Shah")).toBe("Refer a friend gift for inviting Tara Shah: £10.00 off");
   });
 
   it("tells the member without naming the friend", () => {

@@ -75,6 +75,8 @@ export interface SaleRow {
   taxIncluded: boolean;
   discountName: string | null;
   discountMinor: number;
+  /** The friend a member's Refer a friend gift on it was for inviting; null otherwise. */
+  giftFor: string | null;
   currency: string;
   method: MemberPaymentByHand;
   soldOn: string;
@@ -100,6 +102,7 @@ interface RawSale {
   tax_included: boolean;
   discount_name: string | null;
   discount_minor: number;
+  gift_for: string | null;
   currency: string;
   method: string;
   sold_on: string;
@@ -128,6 +131,7 @@ const sale = (r: RawSale): SaleRow => ({
   taxIncluded: r.tax_included,
   discountName: r.discount_name,
   discountMinor: r.discount_minor,
+  giftFor: r.gift_for,
   currency: r.currency,
   // Text under a CHECK: parsed, so a method this build does not know fails here.
   method: memberPaymentByHandSchema.parse(r.method),
@@ -143,7 +147,13 @@ const sale = (r: RawSale): SaleRow => ({
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. */
 const saleColumns = (sql: Sql | TransactionSql) => sql`
   s.id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
-  s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
+  s.discount_name, s.discount_minor,
+  CASE WHEN s.member_gift THEN (
+    SELECT NULLIF(btrim(f.full_name), '') FROM gym_referral_member_gifts g
+    JOIN gym_member_list_entries f ON f.gym_id = g.gym_id AND f.id = g.friend_entry_id
+    WHERE g.gym_id = s.gym_id AND g.used_sale_id = s.id
+  ) END AS gift_for,
+  s.currency, s.method, s.sold_on::text AS sold_on, s.created_at, u.display_name AS by, s.entry_id,
   e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.receipt_number`;
 
 export interface RegisterRow {

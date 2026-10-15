@@ -333,7 +333,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
 
         // What the person's page and the lead's page say.
         const page = await memberships(gymA.org.id, maya.entryId, owner.cookies);
-        expect(page.memberships[0]?.billing?.bills[0]).toMatchObject({ amountMinor: 4000, gift: { offMinor: 1000, currency: "GBP" } });
+        expect(page.memberships[0]?.billing?.bills[0]).toMatchObject({ amountMinor: 4000, gift: { offMinor: 1000, currency: "GBP", friendName: "Tara Shah" } });
         expect(page.memberGift).toBeNull();
         const lead = await leadPage(gymA.org.id, tara.leadId, owner.cookies);
         expect(lead.memberGift).toEqual({ gift: { state: "used", words: "£10.00 off", on: { kind: "bill", what: "Gold Monthly", dueOn: today } }, memberName: "Maya Patel" });
@@ -484,6 +484,9 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const saleId = (JSON.parse(sold.body) as { saleId: string }).saleId;
         const [row] = await sql<{ total_minor: number; discount_name: string; discount_minor: number }[]>`SELECT total_minor, discount_name, discount_minor FROM gym_sales WHERE id = ${saleId}`;
         expect(row).toEqual({ total_minor: 1500, discount_name: "Refer a friend gift", discount_minor: 1000 });
+        // Sell's list says who the gift was for inviting.
+        const register = (JSON.parse(sold.body) as { register: { sales: { id: string; giftFor: string | null }[] } }).register;
+        expect(register.sales.find((s) => s.id === saleId)?.giftFor).toBe("Eve Stone");
         expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGift).toBeNull();
         const twice = await post(`/v1/orgs/${gymA.org.id}/register/sales`, sale(1000, 1500), owner.cookies);
         expect([twice.statusCode, errorOf(twice)]).toEqual([409, "member_gift_not_theirs"]);

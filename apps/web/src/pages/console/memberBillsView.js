@@ -114,7 +114,7 @@ export function billRow(bill, currency, today) {
     tone: state.tone,
     tax: billTaxLine(bill, currency),
     // A member's Refer a friend gift taken off it (20e-ii-b-ii-a).
-    gift: bill.gift === null || bill.gift === undefined ? null : memberGiftBillLine(bill.gift.offMinor, bill.gift.currency),
+    gift: bill.gift === null || bill.gift === undefined ? null : memberGiftBillLine(bill.gift.offMinor, bill.gift.currency, bill.gift.friendName ?? null),
     when,
     // Part paid: what is still owed, said in money.
     left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} left` : null,
