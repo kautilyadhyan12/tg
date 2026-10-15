@@ -332,20 +332,24 @@ describe('what it is about, and how it is counted (19d-iii-a-i)', () => {
 
   it('prints a distance in km cut to a tenth, never rounded up past a target, and a time in minutes and seconds', () => {
     expect([printed(12_480, km), printed(19_990, km), printed(20_000, km), printed(950, km), printed(1_234_560, km)]).toEqual(['12.4 km', '19.9 km', '20.0 km', '0.9 km', '1,234.5 km']);
-    expect([printed(45, time), printed(60, time), printed(125, time), printed(3_720, time), printed(0, time)]).toEqual(['45 s', '1 min 00 s', '2 min 05 s', '1 h 02 min', '0 s']);
+    expect([printed(45, time), printed(60, time), printed(125, time), printed(3_720, time), printed(3_725, time), printed(0, time)]).toEqual(['45 s', '1 min 00 s', '2 min 05 s', '1 h 02 min 00 s', '1 h 02 min 05 s', '0 s']);
+    // A distance still needed is rounded up: doing exactly that much gets there.
+    expect([printed(7_520, km, true), printed(360, km, true), printed(7_500, km, true)]).toEqual(['7.6 km', '0.4 km', '7.5 km']);
     expect(printed(1_200, words('gym_days'))).toBe('1,200');
   });
 
   it('a distance or a time reads in its own units on the card, never as a whole number with a word after it', () => {
     const run = challenge({ counts: undefined, subject: 'running', measure: 'metres', countedBy: 'app', words: km, target: 20_000, me: me({ value: 12_480, place: 2, toNextPlace: 360, nextPlace: 1 }) });
     expect(howToWin(run)).toBe('Reach 20.0 km');
-    expect(progress(run)).toMatchObject({ big: 12_480, of: 20_000, unit: '', note: '7.5 km to go' });
-    expect(placeLine(run)).toBe('2nd of 24 · 0.3 km more to reach 1st');
+    expect(progress(run)).toMatchObject({ big: 12_480, of: 20_000, unit: '', note: '7.6 km to go' });
+    expect(placeLine(run)).toBe('2nd of 24 · 0.4 km more to reach 1st');
     expect(resultOf({ ...run, state: 'ended', target: null, board: board({ top: [row('Maya K.', 1, 21_090)] }) }).headline).toBe('Winner: Maya K., with 21.0 km.');
     expect(resultOf({ ...run, state: 'ended', board: board({ reached: 0 }) })).toEqual({ headline: 'Nobody reached 20.0 km.', mine: 'You got to 12.4 km of 20.0 km.' });
     const plank = challenge({ counts: undefined, subject: 'exercise', measure: 'best_hold', countedBy: 'app', words: time, me: me({ value: 125, place: 1 }) });
     expect(progress(plank)).toMatchObject({ big: 125, unit: '' });
     expect(countText(125, time)).toBe('2 min 05 s');
+    const race = challenge({ counts: undefined, subject: 'exercise', measure: 'best_time', countedBy: 'app', words: time, lowestWins: true, me: me({ value: 1_450, place: 2, toNextPlace: 5, nextPlace: 1 }) });
+    expect(placeLine(race)).toBe('2nd of 24 · 5 s faster to reach 1st');
   });
 
   it('draws no days for a kind that is not one a day, and says no front desk where none counts it', () => {

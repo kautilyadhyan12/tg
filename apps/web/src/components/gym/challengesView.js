@@ -17,17 +17,21 @@ const dayAt = (number) => new Date(number * 86_400_000).toISOString().slice(0, 1
 const staffCount = (challenge) => challenge.countedBy === 'staff';
 
 /** A challenge's number as it is printed (`words.print`, spec §15.10.2): a whole number;
- *  a time kept in seconds ("45 s", "2 min 05 s", "1 h 02 min"); a distance kept in metres,
- *  in km cut to a tenth, never rounded up past a target ("12.4 km"). */
-export function printed(n, words) {
+ *  a time kept in seconds ("45 s", "2 min 05 s", "1 h 02 min 05 s"); a distance kept in
+ *  metres, in km to a tenth ("12.4 km"). A distance done is cut down, never rounded up past
+ *  a target; a distance still `needed` is rounded up, so doing that much is enough. */
+export function printed(n, words, needed = false) {
   if (words?.print === 'time') {
     const h = Math.floor(n / 3600);
     const min = Math.floor((n % 3600) / 60);
-    const s = n % 60;
-    if (h > 0) return `${h.toLocaleString('en')} h ${String(min).padStart(2, '0')} min`;
-    return min > 0 ? `${min} min ${String(s).padStart(2, '0')} s` : `${s} s`;
+    const s = String(n % 60).padStart(2, '0');
+    if (h > 0) return `${h.toLocaleString('en')} h ${String(min).padStart(2, '0')} min ${s} s`;
+    return min > 0 ? `${min} min ${s} s` : `${n % 60} s`;
   }
-  if (words?.print === 'km') return `${(Math.floor(n / 100) / 10).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+  if (words?.print === 'km') {
+    const tenths = needed ? Math.ceil(n / 100) : Math.floor(n / 100);
+    return `${(tenths / 10).toLocaleString('en', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+  }
   return n.toLocaleString('en');
 }
 /** A printed time or distance carries its own unit; a whole number is followed by its word. */
@@ -107,7 +111,7 @@ export function progress(challenge) {
   const percent = Math.min(100, Math.round((me.value / challenge.target) * 100));
   if (me.reached) return { big: me.value, of: challenge.target, unit, percent: 100, note: `Done. You reached ${amount(challenge, challenge.target)}.`, done: true };
   const toGo = challenge.target - me.value;
-  const note = waiting ?? (challenge.state === 'ended' ? null : `${printed(toGo, challenge.words)} to go`);
+  const note = waiting ?? (challenge.state === 'ended' ? null : `${printed(toGo, challenge.words, true)} to go`);
   return { big: me.value, of: challenge.target, unit, percent, note, done: false };
 }
 
@@ -119,8 +123,9 @@ export function placeLine(challenge) {
   const where = `${ordinal(me.place)} of ${challenge.board.ranked.toLocaleString('en')}`;
   if (challenge.state === 'ended' || me.toNextPlace === null || me.nextPlace === null) return where;
   const less = challenge.lowestWins ? 'fewer' : 'more';
+  // A time where the lowest wins is a gap of seconds faster.
   const gap = !whole(challenge)
-    ? `${printed(me.toNextPlace, challenge.words)} ${less}`
+    ? `${printed(me.toNextPlace, challenge.words, true)} ${challenge.lowestWins ? (challenge.words.print === 'time' ? 'faster' : 'less') : 'more'}`
     : staffCount(challenge)
       ? `${me.toNextPlace.toLocaleString('en')} ${less} ${challenge.words.many}`
       : `${me.toNextPlace.toLocaleString('en')} more ${wordFor(challenge, me.toNextPlace)}`;

@@ -305,7 +305,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                     <Initials text={row.initials} />
                     <span className="flex-1 min-w-0 text-sm text-white truncate">{row.isMe ? 'You' : row.name}</span>
                     {row.reached && <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0" strokeWidth={3} style={{ color: ORANGE }} />}
-                    <span className="w-10 text-right text-sm font-semibold text-white tabular-nums">{printed(row.value, challenge.words)}</span>
+                    <span className={`${challenge.words.print === 'whole' ? 'w-10' : 'min-w-10'} text-right text-sm font-semibold text-white tabular-nums whitespace-nowrap`}>{printed(row.value, challenge.words)}</span>
                   </button>
                 </li>
               ))}
@@ -317,7 +317,7 @@ function BoardSheet({ gym, challenge, onClose, onPerson }) {
                 <span className="w-9 text-right font-bold" style={{ color: MUTED }}>{me.place === null ? '—' : ordinal(me.place)}</span>
                 <Initials text="You" greyed={me.hidden !== null} />
                 <span className="flex-1">You</span>
-                <span className="w-10 text-right font-semibold tabular-nums">{printed(me.value, challenge.words)}</span>
+                <span className={`${challenge.words.print === 'whole' ? 'w-10' : 'min-w-10'} text-right font-semibold tabular-nums whitespace-nowrap`}>{printed(me.value, challenge.words)}</span>
               </p>
               {me.hidden !== null && <p className="text-xs mt-1 pl-12" style={{ color: MUTED }}>{hiddenText(me.hidden, gym.name)}</p>}
               {me.hidden === null && me.place !== null && <p className="text-xs mt-1 pl-12" style={{ color: MUTED }}>The board shows the first 100; your place is shown here.</p>}
