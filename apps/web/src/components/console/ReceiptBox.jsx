@@ -1,47 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Printer } from 'lucide-react';
 import { orgWords } from '@app/shared';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
-import { cancelledLine, noAddressLine, receiptDay, receiptLines, receiptNotes, receiptPerson, receiptTitle } from '../../pages/console/receiptView';
+import { cancelledLine, noAddressLine, receiptDay, receiptLines, receiptNotes, receiptPerson, receiptPrintHtml, receiptTitle } from '../../pages/console/receiptView';
+import { printHtml } from './receiptPrint';
 import PostalAddressBox from './PostalAddressBox';
 import SentencePlace from './SentencePlace';
 
 // ONE RECEIPT, OPENED UNDER THE ROW WHOSE BUTTON WAS PRESSED (spec Part 3 §14.3; ROADMAP
 // 18g-i). It is read from the server each time it opens, so it says what the gym's notebook
-// says now: a payment taken back since reads Cancelled. Print prints this receipt alone.
+// says now: a payment taken back since reads Cancelled. Print prints the receipt alone, laid
+// out as a page of its own (`receiptPrintHtml`).
 // A gym with no postal address is asked for it here, by whoever may add it.
-
-/** Prints one receipt: a copy of it goes straight in the page's body, the page's print rule
- *  shows only that copy, and the copy and the mark come off once the print window closes. */
-function printReceipt(element) {
-  if (element === null) return;
-  const body = globalThis.document?.body;
-  if (body === undefined) return;
-  const copy = element.cloneNode(true);
-  copy.classList.add('c-receipt-printing');
-  const done = () => {
-    body.classList.remove('c-printing-receipt');
-    copy.remove();
-    globalThis.removeEventListener?.('afterprint', done);
-  };
-  body.appendChild(copy);
-  body.classList.add('c-printing-receipt');
-  globalThis.addEventListener?.('afterprint', done);
-  try {
-    globalThis.print?.();
-  } finally {
-    // Most browsers return from print() once its window is closed; afterprint covers the rest.
-    done();
-  }
-}
 
 export default function ReceiptBox({ gymId, gym, number, onClose }) {
   const [state, setState] = useState({ number: null, receipt: null, error: null });
   const [asked, setAsked] = useState(0);
-  const paper = useRef(null);
   const words = orgWords(gym?.orgType);
   const mayAddAddress = canManageOrg(viewerPrivileges(gym));
 
@@ -72,7 +49,7 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
           {state.error}
         </p>
       ) : (
-        <div ref={paper} className="c-receipt flex flex-col gap-1" data-testid="receipt">
+        <div className="c-receipt flex flex-col gap-1" data-testid="receipt">
           <p className="c-s16 c-w7 c-t1 m-0">{receipt.gym.name}</p>
           {receipt.gym.address !== null ? (
             <p className="c-s13 c-t2 m-0" style={{ whiteSpace: 'pre-line' }}>
@@ -110,7 +87,7 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
       ) : null}
       <div className="flex flex-wrap gap-2">
         {receipt !== null ? (
-          <button type="button" className="c-btn c-btn-p c-btn-sm" onClick={() => printReceipt(paper.current)}>
+          <button type="button" className="c-btn c-btn-p c-btn-sm" onClick={() => printHtml(receiptPrintHtml(receipt))}>
             <Printer aria-hidden="true" className="w-4 h-4" />
             Print
           </button>

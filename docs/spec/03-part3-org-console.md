@@ -3780,8 +3780,10 @@ the app never picks one.
   back for.
 - **View receipt** on each of Sell's rows for today, on the sale just recorded, on a person's
   payments and refunds and on what they bought at the desk: the receipt opens under the row,
-  **Print** prints it alone, black on white. A gym with no postal address is asked for it
-  there, by whoever may add it.
+  **Print** prints it as a page of its own, laid out for paper (the gym at the top, the
+  number, day and who for, a Description and Amount table, the notes, "Thank you."), from a
+  frame nobody sees. A gym with no postal address is asked for it there, by whoever may add
+  it; a receipt prints without one.
 - **Not built**: a receipt by email (18g-ii); receipts in the member's app (Stage 5 item 16).
 
 ### 14.4 Pay by the gym's own link

@@ -91,3 +91,60 @@ export function receiptDay(receipt) {
 export function noAddressLine(words) {
   return `Your ${words.it}'s address is not on its receipts yet.`;
 }
+
+// ── The receipt on paper ─────────────────────────────────────────────────────
+
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** The paper's own stylesheet: a receipt as a front desk prints it, on A4, Letter or a
+ *  receipt printer's roll alike. Nothing of the console's is used, so neither look reaches it. */
+const PAPER_CSS = `
+@page { margin: 14mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; }
+.r { max-width: 110mm; margin: 0 auto; }
+.head { text-align: center; padding-bottom: 8pt; border-bottom: 1.5pt solid #111; }
+.gym { font-size: 16pt; font-weight: 700; }
+.addr { margin-top: 2pt; font-size: 9.5pt; color: #333; white-space: pre-line; }
+.kind { margin-top: 8pt; font-size: 11pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.cancel { margin-top: 8pt; padding: 5pt 6pt; border: 1.5pt solid #111; text-align: center; font-weight: 700; }
+table { width: 100%; border-collapse: collapse; }
+.meta { margin: 8pt 0 10pt; font-size: 10pt; }
+.meta td { padding: 1.5pt 0; vertical-align: top; }
+.meta td + td { text-align: right; }
+.items th { padding: 0 0 4pt; border-bottom: 1pt solid #111; font-size: 8.5pt; font-weight: 700; letter-spacing: 0.06em; text-align: left; text-transform: uppercase; }
+.items td { padding: 4pt 0; vertical-align: top; }
+.items .amt { padding-left: 10pt; text-align: right; white-space: nowrap; }
+.items tr.total td { padding-top: 6pt; border-top: 1pt solid #111; font-size: 12.5pt; font-weight: 700; }
+.items tr.strong td { font-weight: 700; }
+.items tr.plain td { padding-top: 1pt; padding-bottom: 1pt; font-size: 9.5pt; color: #333; }
+.notes { margin-top: 10pt; padding-top: 6pt; border-top: 0.75pt solid #bbb; font-size: 9.5pt; color: #333; }
+.notes p { margin: 0 0 2pt; }
+.foot { margin-top: 14pt; padding-top: 6pt; border-top: 0.75pt dashed #999; font-size: 9.5pt; color: #333; text-align: center; }
+`;
+
+/** The receipt as a page of its own, to print or save as a PDF: the gym at the top, the
+ *  receipt's number, day and who it is for, its lines with their amounts, then its notes.
+ *  The same lines the box on screen draws (`receiptLines`), so the two never differ. */
+export function receiptPrintHtml(receipt) {
+  const e = escapeHtml;
+  const rows = receiptLines(receipt)
+    .map((line) => {
+      if (line.amount === null) return `<tr class="plain"><td colspan="2">${e(line.label)}</td></tr>`;
+      const kind = line.total ? 'total' : line.strong ? 'strong' : /^Includes /.test(line.label) ? 'plain' : '';
+      return `<tr${kind === '' ? '' : ` class="${kind}"`}><td>${e(line.label)}</td><td class="amt">${e(line.amount)}</td></tr>`;
+    })
+    .join('');
+  const cancelled = cancelledLine(receipt);
+  const notes = receiptNotes(receipt);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${e(`${receiptTitle(receipt)} · ${receipt.gym.name}`)}</title><style>${PAPER_CSS}</style></head><body><div class="r">
+<div class="head"><div class="gym">${e(receipt.gym.name)}</div>${receipt.gym.address === null ? '' : `<div class="addr">${e(receipt.gym.address)}</div>`}<div class="kind">${receipt.kind === 'refund' ? 'Refund receipt' : 'Receipt'}</div></div>
+${cancelled === null ? '' : `<div class="cancel">${e(cancelled)}</div>`}
+<table class="meta"><tr><td>Receipt no.</td><td>${e(String(receipt.number))}</td></tr><tr><td>Date</td><td>${e(receiptDay(receipt))}</td></tr><tr><td>For</td><td>${e(receiptPerson(receipt))}</td></tr></table>
+<table class="items"><thead><tr><th>Description</th><th class="amt">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+${notes.length === 0 ? '' : `<div class="notes">${notes.map((n) => `<p>${e(n)}</p>`).join('')}</div>`}
+<div class="foot">Thank you.</div>
+</div></body></html>`;
+}

@@ -7,6 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 const svc = { purchases: vi.fn(), receipt: vi.fn() };
 vi.mock('../../api/registerApi', () => ({ registerService: svc }));
+const printHtml = vi.fn();
+vi.mock('../../components/console/receiptPrint', () => ({ printHtml }));
 const updateOrg = vi.fn();
 vi.mock('../../api/orgsApi', async (original) => ({ ...(await original()), orgService: { updateOrg } }));
 // The console reads its gyms again after a save; that read is not this box's.
@@ -96,24 +98,17 @@ describe('a receipt', () => {
     expect(screen.queryByTestId('receipt-box')).toBeNull();
   });
 
-  it('Print prints this receipt alone, and the page is as it was afterwards', async () => {
+  it('Print sends the receipt, laid out as a page of its own, to the printer, and nothing of the console', async () => {
     svc.purchases.mockResolvedValue({ sales: [sale()], notShown: 0 });
     svc.receipt.mockResolvedValue(receipt());
-    const seen = [];
-    const print = vi.spyOn(window, 'print').mockImplementation(() => {
-      const marked = [...document.querySelectorAll('.c-receipt-printing')];
-      seen.push([document.body.classList.contains('c-printing-receipt'), marked.map((e) => e.parentElement === document.body), marked.map((e) => e.textContent.includes('Receipt #7'))]);
-    });
     open();
     const row = await pressReceipt();
     await within(row).findByTestId('receipt');
     fireEvent.click(within(row).getByRole('button', { name: 'Print' }));
-    expect(print).toHaveBeenCalledTimes(1);
-    // One copy of this receipt, straight in the page's body, while the print window is open.
-    expect(seen).toEqual([[true, [true], [true]]]);
-    expect(document.body.classList.contains('c-printing-receipt')).toBe(false);
-    expect(document.querySelectorAll('.c-receipt-printing')).toHaveLength(0);
-    print.mockRestore();
+    expect(printHtml).toHaveBeenCalledTimes(1);
+    const html = printHtml.mock.calls[0][0];
+    for (const words of ['Iron House', '12 High Street', 'Receipt no.', '>7<', '15 Oct 2026', 'Maya Patel', '2 × Water at $2.50 each', '$4.33', 'Paid by cash', 'Thank you.']) expect(html).toContain(words);
+    for (const console of ['View receipt', 'Bought at the desk', 'Close', 'c-btn']) expect(html).not.toContain(console);
   });
 
   it('a sale taken back reads Cancelled on its receipt', async () => {
