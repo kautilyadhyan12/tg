@@ -326,6 +326,19 @@ export async function giftUseUndone(tx: TransactionSql, gymId: string, on: { bil
   }
 }
 
+/** Two records joined: a gift given for the friend on the record not kept is the kept one's,
+ *  so the friend's next payment never gives a second (once a friend). Where the kept record
+ *  already has a gift standing (two members invited what were two records of one person), the
+ *  other stays with the record not kept and is let go with it; one taken back always moves. */
+export async function moveGiftLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<void> {
+  await tx`
+    UPDATE gym_referral_member_gifts g SET friend_entry_id = ${toEntryId}
+    WHERE g.gym_id = ${gymId} AND g.friend_entry_id = ${fromEntryId}
+      AND (g.taken_back_at IS NOT NULL OR NOT EXISTS (
+        SELECT 1 FROM gym_referral_member_gifts k
+        WHERE k.gym_id = g.gym_id AND k.friend_entry_id = ${toEntryId} AND k.taken_back_at IS NULL))`;
+}
+
 /** What a gift took off, by bill, and the friend it was for inviting (by the gym's list;
  *  null where that record is gone): the bills named that a gift was taken off. */
 export async function giftsOnBills(

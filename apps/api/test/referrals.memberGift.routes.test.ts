@@ -424,6 +424,26 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     );
   });
 
+  describe("two records of one friend joined", () => {
+    it(
+      "the gift moves to the kept record, so the friend's next payment gives no second one",
+      async () => {
+        const amy = await memberWithBill("amy", "Amy Ross", true);
+        const first = await friendJoins(amy.code, "Noor Ali", "noor.ali@example.com", true);
+        // Staff added Noor a second time, and join the first record into it.
+        const second = await added(gymA.org.id, owner.cookies, { fullName: "Noor Ali", phone: "+447700900456", acknowledgedDuplicates: [first.entryId] });
+        const merged = await post(`/v1/orgs/${gymA.org.id}/member-list/entries/${first.entryId}/merge`, { keepEntryId: second, acknowledgeLeavesList: true }, owner.cookies);
+        expect(merged.statusCode, merged.body).toBe(200);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === amy.person.id)).toMatchObject([{ friend_entry_id: second, taken_back_why: null }]);
+        const tub = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: second, method: "cash", totalMinor: 2500 }, owner.cookies);
+        expect(tub.statusCode, tub.body).toBe(201);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === amy.person.id)).toHaveLength(1);
+        expect(await messagesOf(amy.person.id)).toHaveLength(1);
+      },
+      TIMEOUT_MS,
+    );
+  });
+
   describe("where the gift comes off", () => {
     it(
       "with no open bill it waits, then comes off the next bill the hourly run opens",
