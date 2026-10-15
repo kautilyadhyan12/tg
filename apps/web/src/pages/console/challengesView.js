@@ -128,7 +128,23 @@ export function withCountedBy(draft, by, offered, force = false) {
   const measure = by === 'app' ? appMeasure(draft, offered) : null;
   if (by === 'app' && measure === null) return draft;
   const app = by === 'app';
-  return { ...draft, countedBy: by, measure: app ? measure.measure : null, unit: app ? '' : staffWordFor(draft, offered), win: app && draft.win === 'lowest' ? 'most' : draft.win };
+  return { ...draft, countedBy: by, measure: app ? measure.measure : null, unit: app ? '' : timedWord(draft, staffWordFor(draft, offered)), win: app && draft.win === 'lowest' ? 'most' : draft.win };
+}
+
+/** The word a fastest time is typed in. */
+const TIME_WORD = 'seconds';
+/** Where the fastest time wins, the staff's word is a time: their own word, else seconds. */
+const timedWord = (draft, word) => (draft.win === 'lowest' && (word.trim() === '' || picksExercise(draft) || word === subjectWordOf(draft)) ? TIME_WORD : word);
+const subjectWordOf = (draft) => challengeSubject(draft.subject)?.staffWord ?? '';
+
+/** Another way to win. The fastest time is typed in seconds: the word the form gave becomes
+ *  seconds, and back on the most or a target the form's word comes back. A word the staff
+ *  typed stays theirs. */
+export function withWin(draft, win, offered) {
+  if (win === draft.win) return draft;
+  const given = staffWordFor(draft, offered);
+  if (win === 'lowest') return { ...draft, win, unit: draft.unit.trim() === '' || draft.unit === given ? TIME_WORD : draft.unit };
+  return { ...draft, win, unit: draft.win === 'lowest' && draft.unit === TIME_WORD && given !== '' ? given : draft.unit };
 }
 
 /** Another exercise picked: the staff's word follows it, unless they changed it. */
@@ -147,21 +163,24 @@ export function winChoices(draft, words = { person: 'person' }) {
   const own = isOwn(draft);
   const theMost = u === '' ? 'highest number' : `most ${u}`;
   const most = u === '' ? 'Highest number wins' : `Most ${u} wins`;
-  const lowest = u === '' ? 'Lowest number wins' : `Lowest ${u} wins`;
+  const lowest = 'Fastest time wins';
   const example = (n) => (u === '' ? count(n) : `${count(n)} ${u}`);
+  // A time is typed in the staff's word once the fastest wins, else in seconds.
+  const timeWord = draft.win === 'lowest' && u !== '' ? u : TIME_WORD;
+  const aTime = '100 squats as fast as possible, or a 500 m row';
   if (teams !== 'none') {
     const choices = [
       { id: 'most', title: most, sub: `The team with the ${theMost} when it ends comes 1st. A team's number is its people's numbers added together.` },
       { id: 'target', title: 'Reach a target', sub: `You set a target for a whole team, such as ${example(own ? 500 : 60)}. Every team that reaches it wins.` },
     ];
-    if (own) choices.push({ id: 'lowest', title: lowest, sub: 'For a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.' });
+    if (own) choices.push({ id: 'lowest', title: lowest, sub: `For a time, such as ${aTime}. Your staff enter each ${words.person}'s time in ${timeWord}, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.` });
     return choices;
   }
   const choices = [
     { id: 'most', title: most, sub: `The ${words.person} with the ${theMost} when it ends comes 1st.` },
     { id: 'target', title: 'Reach a target', sub: `You set the target, such as ${example(own ? 100 : 12)}. Everyone who reaches it wins.` },
   ];
-  if (own) choices.push({ id: 'lowest', title: lowest, sub: `For a fastest time. The ${words.person} with the lowest number when it ends comes 1st.` });
+  if (own) choices.push({ id: 'lowest', title: lowest, sub: `For a time, such as ${aTime}. Your staff enter each ${words.person}'s time in ${timeWord}, and the lowest comes 1st.` });
   return choices;
 }
 

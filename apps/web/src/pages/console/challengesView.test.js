@@ -55,6 +55,7 @@ import {
   withNumberLine,
   withStartDay,
   withSubject,
+  withWin,
   wonLine,
 } from './challengesView';
 
@@ -619,22 +620,46 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(winChoices(draft({ counts: 'own', unit: 'push-ups' }), WORDS)).toEqual([
       { id: 'most', title: 'Most push-ups wins', sub: 'The member with the most push-ups when it ends comes 1st.' },
       { id: 'target', title: 'Reach a target', sub: 'You set the target, such as 100 push-ups. Everyone who reaches it wins.' },
-      { id: 'lowest', title: 'Lowest push-ups wins', sub: 'For a fastest time. The member with the lowest number when it ends comes 1st.' },
+      { id: 'lowest', title: 'Fastest time wins', sub: "For a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st." },
     ]);
     // Before the staff's own word is typed, the choices still read as sentences.
-    expect(winChoices(draft({ counts: 'own', unit: ' ' })).map((c) => c.title)).toEqual(['Highest number wins', 'Reach a target', 'Lowest number wins']);
+    expect(winChoices(draft({ counts: 'own', unit: ' ' })).map((c) => c.title)).toEqual(['Highest number wins', 'Reach a target', 'Fastest time wins']);
     expect(winChoices(draft({ counts: 'own', unit: '' }), WORDS).map((c) => c.sub)).toEqual([
       'The member with the highest number when it ends comes 1st.',
       'You set the target, such as 100. Everyone who reaches it wins.',
-      'For a fastest time. The member with the lowest number when it ends comes 1st.',
+      "For a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
     ]);
     expect(winChoices(draft({ counts: 'own', unit: '', teams: 'staff' }))[0].sub).toBe("The team with the highest number when it ends comes 1st. A team's number is its people's numbers added together.");
     const teams = winChoices(draft({ counts: 'own', unit: ' seconds ', teams: 'members' }));
-    expect(teams.map((c) => c.title)).toEqual(['Most seconds wins', 'Reach a target', 'Lowest seconds wins']);
-    // The form's own example of a time reads as a sentence.
-    expect(winChoices(draft({ counts: 'own', unit: '5 km time' }))[2].title).toBe('Lowest 5 km time wins');
+    expect(teams.map((c) => c.title)).toEqual(['Most seconds wins', 'Reach a target', 'Fastest time wins']);
+    // Once the fastest time wins, the time is typed in the staff's own word.
+    expect(winChoices(draft({ counts: 'own', unit: 'minutes', win: 'lowest' }), WORDS)[2].sub).toBe("For a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in minutes, and the lowest comes 1st.");
     expect(teams[1].sub).toBe('You set a target for a whole team, such as 500 seconds. Every team that reaches it wins.');
-    expect(teams[2].sub).toBe('For a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.');
+    expect(teams[2].sub).toBe("For a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each person's time in seconds, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.");
+  });
+
+  it('the fastest time is typed in seconds: the word the form gave becomes seconds and comes back; a word the staff typed stays theirs', () => {
+    const squats = withExercise(withSubject(draft(), 'exercise', OFFERED), 'squat', OFFERED);
+    const fastest = withWin(squats, 'lowest', OFFERED);
+    expect([fastest.win, fastest.unit]).toEqual(['lowest', 'seconds']);
+    expect(withWin(fastest, 'most', OFFERED)).toMatchObject({ win: 'most', unit: 'squats' });
+    expect(withWin(fastest, 'target', OFFERED)).toMatchObject({ win: 'target', unit: 'squats' });
+    // Typed by the staff: kept, either way.
+    expect(withWin({ ...squats, unit: 'reps' }, 'lowest', OFFERED).unit).toBe('reps');
+    expect(withWin({ ...fastest, unit: 'minutes' }, 'most', OFFERED).unit).toBe('minutes');
+    // Something of the gym's own: nothing typed yet becomes seconds; what they typed stays.
+    const own = withSubject(draft(), 'own', OFFERED);
+    expect(withWin(own, 'lowest', OFFERED).unit).toBe('seconds');
+    expect(withWin({ ...own, unit: 'push-ups' }, 'lowest', OFFERED).unit).toBe('push-ups');
+    expect(withWin(withWin(own, 'lowest', OFFERED), 'most', OFFERED).unit).toBe('seconds');
+    // Gym visits the staff count: visits, then seconds, then visits again.
+    const visits = withCountedBy(draft(), 'staff', OFFERED);
+    expect(withWin(withWin(visits, 'lowest', OFFERED), 'most', OFFERED).unit).toBe('visits');
+    // Another exercise while the fastest time wins: still seconds.
+    expect(withExercise(fastest, 'chair_squat', OFFERED).unit).toBe('seconds');
+    // Moved to an exercise while the fastest time wins: its word is a time.
+    expect(withSubject(withWin(own, 'lowest', OFFERED), 'exercise', OFFERED)).toMatchObject({ win: 'lowest', unit: 'seconds' });
+    expect(withWin(fastest, 'lowest', OFFERED)).toBe(fastest);
   });
 
   it('individual or teams, and who puts people in the teams, in the words of the kind of place', () => {

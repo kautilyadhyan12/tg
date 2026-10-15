@@ -74,6 +74,7 @@ import {
   withTeamAdded,
   withTeamNamed,
   withTeamRemoved,
+  withWin,
 } from './challengesView';
 import { nameOf } from './leaderboardStaffView';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -319,7 +320,7 @@ function ChallengeForm({ gymId, challenge, list, words, onSaved, onClose }) {
 
       <Part n={2} title="How it is won, and who is in it">
       <div className="flex flex-col gap-3">
-        <Choices label="How it is won" choices={winChoices(draft, words)} value={draft.win} onPick={(win) => set({ win })} disabled={saving || locked} />
+        <Choices label="How it is won" choices={winChoices(draft, words)} value={draft.win} onPick={(win) => changeCounts((d) => withWin(d, win, offered))} disabled={saving || locked} />
         {draft.win === 'target' ? (
           <div className="c-field">
             <span className="c-label">Target</span>

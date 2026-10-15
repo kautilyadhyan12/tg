@@ -525,7 +525,7 @@ describe('round one', () => {
     pick('Who counts it', 'Your staff');
     type('What your staff count', 'seconds');
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
-      'Lowest seconds winsFor a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.',
+      "Fastest time winsFor a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.",
     );
   });
 

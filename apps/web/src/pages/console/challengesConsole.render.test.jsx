@@ -379,21 +379,22 @@ describe("the console's Challenges page", () => {
     expect(wins()).toEqual([
       'Highest number winsThe member with the highest number when it ends comes 1st.',
       'Reach a targetYou set the target, such as 100. Everyone who reaches it wins.',
-      'Lowest number winsFor a fastest time. The member with the lowest number when it ends comes 1st.',
+      "Fastest time winsFor a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
     ]);
     type('Challenge name', 'Row 500 m');
     pickDate('First day', '2026-10-07');
     pickDate('Last day', '2026-10-14');
-    pick('How it is won', 'Lowest number wins');
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     expect(form().getByRole('alert').textContent).toBe('Say what your staff count, for example push-ups.');
-    type('What your staff count', 'seconds');
+    // The fastest time: the word becomes seconds, in front of them.
+    pick('How it is won', 'Fastest time wins');
+    expect(form().getByLabelText('What your staff count').value).toBe('seconds');
     expect(wins()).toEqual([
       'Most seconds winsThe member with the most seconds when it ends comes 1st.',
       'Reach a targetYou set the target, such as 100 seconds. Everyone who reaches it wins.',
-      'Lowest seconds winsFor a fastest time. The member with the lowest number when it ends comes 1st.',
+      "Fastest time winsFor a time, such as 100 squats as fast as possible, or a 500 m row. Your staff enter each member's time in seconds, and the lowest comes 1st.",
     ]);
-    expect(picked('How it is won')).toContain('Lowest seconds wins');
+    expect(picked('How it is won')).toContain('Fastest time wins');
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
     expect(svc.add.mock.calls[0][2]).toEqual({ name: 'Row 500 m', details: '', prize: '', unit: 'seconds', subject: 'own', measure: null, countedBy: 'staff', exercises: [], startsOn: '2026-10-07', endsOn: '2026-10-14', target: null, who: 'everyone', lowestWins: true, teams: 'none', teamList: [] });
@@ -402,7 +403,8 @@ describe("the console's Challenges page", () => {
     await aboutAsked();
     pick(ABOUT, 'Something else');
     type('What your staff count', 'push-ups');
-    pick('How it is won', 'Lowest push-ups wins');
+    pick('How it is won', 'Fastest time wins');
+    expect(form().getByLabelText('What your staff count').value).toBe('push-ups');
     pick(ABOUT, 'Gym visits');
     expect(picked('Who counts it')).toContain('The app');
     expect(picked('How it is won')).toContain('Most gym days wins');
