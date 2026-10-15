@@ -1,4 +1,4 @@
-import { memberPurchasesResponseSchema, receiptSchema, salePeopleResponseSchema, sellPageResponseSchema, sellProductResponseSchema } from '@app/shared';
+import { friendGiftResponseSchema, memberPurchasesResponseSchema, receiptSchema, salePeopleResponseSchema, sellPageResponseSchema, sellProductResponseSchema } from '@app/shared';
 import authApi from './authApi';
 
 // THE CONSOLE'S SELL PAGE (spec Part 3 §14.3; ROADMAP 18b-i): for staff holding
@@ -46,6 +46,9 @@ export const registerService = {
   /** One receipt by the gym's own number (18g-i), for staff who may record payments. */
   receipt: async (gymId, number) => read(receiptSchema, 'that receipt', await authApi.get(`${gymPath(gymId)}/receipts/${encodeURIComponent(String(number))}`)),
   /** What one person has bought at the desk, newest first. */
+  /** Refer a friend's gift for the person picked, if they are a friend a member invited (20e-ii-b-i). */
+  friendGift: async (gymId, entryId) =>
+    read(friendGiftResponseSchema, "this person's friend's gift", await authApi.get(`${gymPath(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/friend-gift`)),
   purchases: async (gymId, entryId) =>
     read(memberPurchasesResponseSchema, "this person's purchases", await authApi.get(`${gymPath(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/purchases`)),
 };

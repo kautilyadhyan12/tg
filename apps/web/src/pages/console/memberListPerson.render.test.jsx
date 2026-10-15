@@ -39,6 +39,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberListEntries: vi.fn(),
       getMemberListEntry: vi.fn(),
       addMemberListEntry: vi.fn(),
+      matchLead: vi.fn(() => Promise.resolve({ data: { lead: null } })),
       changeMemberListEntry: vi.fn(),
       takeOffMemberListEntry: vi.fn(),
       restoreMemberListEntry: vi.fn(),

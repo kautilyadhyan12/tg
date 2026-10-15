@@ -23,6 +23,7 @@ const svc = {
   restoreProduct: vi.fn(),
   purchases: vi.fn(),
   receipt: vi.fn(),
+  friendGift: vi.fn(),
 };
 const orgApi = { getMine: vi.fn(), getMemberList: vi.fn(), getMembershipTypes: vi.fn(), giveHeldMembership: vi.fn() };
 vi.mock('../../api/registerApi', () => ({ registerService: svc }));
@@ -136,6 +137,7 @@ beforeEach(() => {
   resetConsoleOrgs();
   svc.get.mockResolvedValue(page());
   svc.findPeople.mockResolvedValue([MAYA]);
+  svc.friendGift.mockResolvedValue({ friendGift: null });
   svc.sell.mockResolvedValue({ saleId: 's1', register: withSale() });
   orgApi.getMemberList.mockResolvedValue({ data: { list: null } });
   orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [MONTH] } });
@@ -214,6 +216,35 @@ describe('a product sale', () => {
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
     expect(svc.sell.mock.calls[0][1]).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', totalMinor: 541 });
+  });
+
+  it("Refer a friend's gift is filled in for the friend picked, never for a walk-in or anybody else, and Remove takes it off (20e-ii-b-i)", async () => {
+    const gift = {
+      id: 'd-friend', name: "Refer a friend: friend's gift, WELCOME10", code: 'WELCOME10', kind: 'percent', percentBp: 1000, amountMinor: null, currency: null,
+      startsOn: null, endsOn: null, maxUses: null, uses: 0, forProducts: true, allProducts: true, productIds: [], forMemberships: false, allMembershipTypes: true,
+      membershipTypeIds: [], membershipPayments: null, referralGift: true, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z',
+    };
+    // The gym's own list holds it, for the Discounts box; the sale offers it to its friend alone.
+    svc.get.mockResolvedValue(page({ discounts: [gift] }));
+    svc.friendGift.mockImplementation((_gym, entryId) => Promise.resolve({ friendGift: entryId === 'e-maya' ? { discount: gift, words: '10% off products', invitedBy: 'Ravi Kumar' } : null }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Product', 'p-towel');
+    expect(within(newSale()).queryByTestId('friend-gift')).toBeNull();
+    expect(within(newSale()).queryByRole('option', { name: /WELCOME10/ })).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('A member'));
+    fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
+    fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
+    const note = within(await within(newSale()).findByTestId('friend-gift'));
+    expect(note.getByText("Friend's gift filled in")).toBeTruthy();
+    expect(note.getByText('10% off products. Refer a friend: Ravi Kumar invited them.')).toBeTruthy();
+    fireEvent.click(note.getByRole('button', { name: 'Remove' }));
+    expect(note.getByText("Friend's gift removed")).toBeTruthy();
+    fireEvent.click(note.getByRole('button', { name: 'Put it back' }));
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    expect(svc.sell.mock.calls[0][1]).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', discountId: 'd-friend' });
   });
 
   it('nobody found says what to do, with a button to add a member that asks before leaving', async () => {

@@ -59,7 +59,7 @@ export function oldMoneySaleLine(page, use = 'product') {
   // Only the ones that would otherwise be in use here: an expired or used-up one, or one
   // for the other kind of sale, is not missed.
   const forThis = (d) => (use === 'product' ? d.forProducts : d.forMemberships);
-  const old = page.discounts.filter((d) => forThis(d) && discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
+  const old = offeredDiscounts(page).filter((d) => forThis(d) && discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
   if (old.length === 0) return null;
   const names = old.length === 1 ? old[0].name : old.length === 2 ? `${old[0].name} and ${old[1].name}` : `${old[0].name} and ${String(old.length - 1)} more`;
   return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. ${
@@ -173,16 +173,22 @@ const typeTarget = (type) => ({ name: type.name, currency: type.currency, on: { 
 const fitsTarget = (discount, target, today) => discountFits(terms(discount), { today, currency: target.currency, ...target.on });
 
 /** The discounts that can be used on this product today. */
+/** The discounts staff may pick here: Refer a friend's friend's gift only where it is this
+ *  person's own (`page.friendGiftId`), filled in for them (20e-ii-b-i). */
+export function offeredDiscounts(page) {
+  return page.discounts.filter((d) => d.referralGift !== true || d.id === page.friendGiftId);
+}
+
 export function discountsFor(page, product) {
   if (product === null || product === undefined) return [];
-  return page.discounts.filter((discount) => fitsTarget(discount, productTarget(product), page.today).ok);
+  return offeredDiscounts(page).filter((discount) => fitsTarget(discount, productTarget(product), page.today).ok);
 }
 
 /** The discounts that can be used on this membership type today, and that take something
  *  off its price and leave something to pay. */
 export function discountsForType(page, type) {
   if (type === null || type === undefined) return [];
-  return page.discounts.filter((discount) => fitsTarget(discount, typeTarget(type), page.today).ok && membershipDiscount(discount, type).ok);
+  return offeredDiscounts(page).filter((discount) => fitsTarget(discount, typeTarget(type), page.today).ok && membershipDiscount(discount, type).ok);
 }
 
 /** Why a discount cannot be used on this product today, said before anything is sold. */
@@ -234,7 +240,7 @@ function applyCode(page, text, why, pickFirst) {
   const typed = text.trim();
   if (typed === '') return { discount: null, note: 'Type the promo code, then press Apply.' };
   const code = promoCodeFrom(typed);
-  const found = code === null ? undefined : page.discounts.find((discount) => discount.code === code);
+  const found = code === null ? undefined : offeredDiscounts(page).find((discount) => discount.code === code);
   if (found === undefined) return { discount: null, note: `There is no promo code ${typed.toUpperCase()}. Check the spelling with the customer.` };
   if (why === null) return { discount: null, note: pickFirst };
   const reason = why(found);

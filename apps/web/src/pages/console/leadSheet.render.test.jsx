@@ -244,6 +244,24 @@ describe('adding and keeping a lead', () => {
     expect(screen.queryByRole('button', { name: 'Joined · add to your members' })).toBeNull();
   });
 
+  it("a joined friend a member invited says what became of Refer a friend's gift (20e-ii-b-i)", async () => {
+    const invited = { ...tom, source: 'friend', status: 'joined', entryId: OWN, onList: true, invitedBy: { name: 'Maya Patel', member: true } };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: { state: 'given', on: 'Gold Monthly', day: '2026-10-15' } } } });
+    const { unmount } = render(sheet(TOM));
+    expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("Friend's gift given on Gold Monthly, 15 October 2026.");
+    unmount();
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: { state: 'member_before' } } } });
+    render(sheet(TOM));
+    expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("No friend's gift: Tom had a membership here before they were invited.");
+  });
+
+  it('a lead nobody invited has no line about a gift', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.queryByTestId('friend-gift-line')).toBeNull();
+  });
+
   it('a joined lead whose record was taken off says so, and Put back sends Joined for that lead', async () => {
     const off = { ...tom, status: 'joined', entryId: OWN, onList: false };
     orgService.getLead.mockResolvedValue({ data: { lead: off } });

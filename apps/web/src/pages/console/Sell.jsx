@@ -16,7 +16,8 @@ import SellProducts from './SellProducts';
 import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
-import { applyPromoCode, discountOption, discountsFor, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
+import { applyPromoCode, discountOption, discountsFor, offeredDiscounts, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
+import { FriendGiftNote } from './FriendGift';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -188,7 +189,7 @@ function PayPicker({ method, setMethod, disabled }) {
 }
 
 /** A product, how many, who and how: one press records the sale. */
-function ProductSale({ gymId, org, page, locked, firstPerson, addMemberTo, canAdd, onAddProduct, onPage }) {
+function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, canAdd, onAddProduct, onPage }) {
   const [productId, setProductId] = useState('');
   const [quantityText, setQuantityText] = useState('1');
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
@@ -198,6 +199,29 @@ function ProductSale({ gymId, org, page, locked, firstPerson, addMemberTo, canAd
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const [discountId, setDiscountId] = useState('');
   const [code, setCode] = useState({ text: '', note: null, appliedId: null });
+  /** Refer a friend's gift for the person picked, where they are a friend a member invited
+   *  (20e-ii-b-i): filled in on the sale, with Remove. */
+  const [giftRead, setGiftRead] = useState(null);
+  const buyerId = who === 'member' && person !== null ? person.entryId : null;
+  const gift = giftRead !== null && giftRead.buyerId === buyerId ? giftRead.gift : null;
+  useEffect(() => {
+    if (buyerId === null) return undefined;
+    let live = true;
+    registerService.friendGift(gymId, buyerId).then(
+      (res) => {
+        const found = res.friendGift;
+        if (!live || found === null || !found.discount.forProducts) return;
+        setGiftRead({ buyerId, gift: found });
+        setDiscountId(found.discount.id);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, buyerId]);
+  // The gift is offered for its own friend only; any other discount as the gym set it.
+  const page = gift === null ? gymPage : { ...gymPage, friendGiftId: gift.discount.id };
   const productSelect = useId();
   const quantityId = useId();
   const discountSelect = useId();
@@ -209,7 +233,7 @@ function ProductSale({ gymId, org, page, locked, firstPerson, addMemberTo, canAd
   // another product, or since used up, falls back to none.
   const usable = discountsFor(page, product);
   const discount = usable.find((d) => d.id === discountId) ?? null;
-  const hasCodes = page.discounts.some((d) => d.code !== null);
+  const hasCodes = offeredDiscounts(page).some((d) => d.code !== null);
   const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, discount) : null;
   const problem = saleProblem({ product, quantity, who, person, currency: page.currency, discount });
   // "Applied" is said only while the applied discount is the one on the sale.
@@ -355,7 +379,24 @@ function ProductSale({ gymId, org, page, locked, firstPerson, addMemberTo, canAd
         disabled={locked || state.busy}
         addMemberTo={addMemberTo}
       />
-      {product !== null && page.discounts.length > 0 ? (
+      {product !== null && gift !== null ? (
+        <FriendGiftNote
+          gift={gift}
+          applied={discount !== null && discount.id === gift.discount.id}
+          fits={usable.some((d) => d.id === gift.discount.id)}
+          what={product.name}
+          onRemove={() => {
+            setDiscountId('');
+            touched();
+          }}
+          onPutBack={() => {
+            setDiscountId(gift.discount.id);
+            touched();
+          }}
+          disabled={locked || state.busy}
+        />
+      ) : null}
+      {product !== null && offeredDiscounts(page).length > 0 ? (
         <div className="flex flex-col gap-3">
           <div className="c-field">
             <label className="c-label" htmlFor={discountSelect}>

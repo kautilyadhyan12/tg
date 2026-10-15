@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { applyPromoCodeToType, discountOption, discountsForType, membershipPromoCodeNote, oldMoneySaleLine } from './sellDiscountsView';
+import { applyPromoCodeToType, discountOption, discountsForType, membershipPromoCodeNote, offeredDiscounts, oldMoneySaleLine } from './sellDiscountsView';
 
 // A DISCOUNT ON A MEMBERSHIP (spec Part 3 §14.3; ROADMAP 18b-ii-b): the Discount list and
 // the Promo code box, drawn the same on the Sell page's membership box and a person's Add
@@ -9,7 +9,7 @@ import { applyPromoCodeToType, discountOption, discountsForType, membershipPromo
 export function MembershipDiscountPicker({ page, type, discountId, setDiscountId, code, setCode, disabled }) {
   const listId = useId();
   const codeId = useId();
-  const forMemberships = page.discounts.filter((d) => d.forMemberships);
+  const forMemberships = offeredDiscounts(page).filter((d) => d.forMemberships);
   if (type === null || forMemberships.length === 0) return null;
   const usable = discountsForType(page, type);
   const discount = usable.find((d) => d.id === discountId) ?? null;
