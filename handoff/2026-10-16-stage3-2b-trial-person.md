@@ -1,0 +1,7 @@
+# Handoff · 2026-10-16 · Stage 3 item 2b, one free trial per person (Folder B)
+
+- **Why:** the trial was one per ACCOUNT, so `kd.gym+2@gmail.com` or an unconfirmed made-up address got a second one (RULINGS 2026-09-08, layer 1).
+- **Built:** `trialPersonKey` in `@app/shared` (Gmail without dots, googlemail.com read as gmail.com, a `+tag` dropped everywhere); migration `0127_trial_person_key` adds the database's copy as a function and `users.trial_person_key`, worked out by the database, cleared by the purge with the email. The trial button and the subscribe prompt both count the owner's account and every confirmed account with the same key; a trial needs a confirmed address (`email_not_confirmed`, with a "Sign in with an email code" button). `POST /v1/orgs` refuses a throwaway address (`email_throwaway`, 9,196 domains from the CC0 list at commit 7cd238d, with a "Sign in with another email" button).
+- **Verified:** `tsc` and `eslint` for `api`, `@app/shared` and web's console folders, all 0; `orgs.trialPerson.test.ts` and the six trial test files, 311 tests on `aihg_b`; shared's 25 cases from Google's and Microsoft's own pages, run through the database's copy too; planPrompt's 31 web tests. Broken on purpose three ways (the button forgets other spellings; the prompt forgets them; an unconfirmed account counts), red each time.
+- **Open:** the shared rule is ready for the member list's Gmail matching (ROADMAP's after-launch list); nobody uses it there yet.
+- **Next in Folder B:** 2d, the trial belongs to the gym.
