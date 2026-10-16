@@ -126,6 +126,11 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
    *  button that can only ever refuse, behind a prompt they cannot close** —
    *  :5807 1a's second half, somebody blocked from finishing something. */
   const [trialSpent, setTrialSpent] = useState(false);
+  // An account from the old password sign-up whose address was never confirmed (2b): the
+  // trial waits for the code sign-in, which confirms it. Only the owner can do that, so
+  // anybody else is told who can, with no button that cannot help them.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [waitsForOwner, setWaitsForOwner] = useState(false);
   const [plans, setPlans] = useState({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable' });
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
@@ -283,6 +288,8 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       refreshConsoleOrgsAfterChange();
     } catch (err) {
       if (errorCode(err) === 'trial_already_used') setTrialSpent(true);
+      if (errorCode(err) === 'email_not_confirmed') setNeedsCode(true);
+      if (errorCode(err) === 'owner_email_not_confirmed') setWaitsForOwner(true);
       setError(errorText(err, "We couldn't start your trial. Please try again."));
     } finally {
       setBusy(false);
@@ -468,7 +475,17 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           </p>
         ) : null}
 
-        {showing === 'overdue' ? null : showing === 'trial' ? (
+        {showing === 'overdue' || (showing === 'trial' && waitsForOwner) ? null : showing === 'trial' && needsCode ? (
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={signingOut}
+            className="mt-5 w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            {signingOut ? 'Signing out…' : 'Sign in with an email code'}
+          </button>
+        ) : showing === 'trial' ? (
           <button
             type="button"
             onClick={start}

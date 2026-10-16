@@ -49,6 +49,7 @@ import { loadConfig } from "../src/config.js";
 import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
 import { restoreGym } from "../src/modules/orgs/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
+import { confirmOwnerOf } from "./confirmOwner.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -251,6 +252,7 @@ d("gym archive sweep (real Postgres)", () => {
   test("a real gym, whose real trial ended, is closed four months later", async () => {
     const trialOwner = await makeUser();
     const org = await makeOrg(trialOwner.cookies);
+    await confirmOwnerOf(sql, org.org.id);
     const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, trialOwner.cookies);
     expect(started.statusCode).toBe(200);
 
