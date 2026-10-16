@@ -1,6 +1,7 @@
 import {
   CLASS_BOOKING_LIMITS,
   CLASS_HAS_BOOKINGS_ERROR,
+  orgWords,
   classBookingsEndingSchema,
 } from '@app/shared';
 import { dayHeading } from './classesView';
@@ -232,9 +233,9 @@ const freeUntil = (minutes) => (minutes === 0 ? 'until it starts' : `until ${spa
 
 /** The rules in one sentence, on the page they apply to: the classes' on Classes, personal
  *  training's own two on Personal training. */
-export function bookingRulesLine(settings) {
+export function bookingRulesLine(settings, orgType) {
   const ahead = `${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} ahead`;
-  return `Members can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;
+  return `${orgWords(orgType).peopleCap} can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;
 }
 
 /** The same for staff who may not change the rules, from the one they are sent; null

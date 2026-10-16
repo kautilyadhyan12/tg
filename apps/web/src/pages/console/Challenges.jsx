@@ -1153,7 +1153,7 @@ export default function Challenges() {
       <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between min-w-0">
         <div className="flex flex-col gap-1.5 min-w-0">
           <h1 className="c-h1">Challenges</h1>
-          <p className="c-sub">{`Contests for your ${words.people} at ${org.name}. The app counts gym check-ins and workouts for you, or your staff count anything else.`}</p>
+          <p className="c-sub">{`Contests for your ${words.people} at ${org.name}. The app counts check-ins and workouts for you, or your staff count anything else.`}</p>
         </div>
         {!readOnly && !state.refused && list !== null && view === 'list' ? (
           <button type="button" onClick={() => open(null)} className="c-btn c-btn-p self-start md:self-auto">
@@ -1231,7 +1231,7 @@ export default function Challenges() {
               <p className="c-s15 c-t2">
                 {readOnly
                   ? 'Nothing to show yet.'
-                  : `A challenge is a contest with a start and an end, such as "Most gym days in October" or "Most push-ups in a minute". The app counts gym check-ins and workouts for you, and your staff can count anything else. Press Add challenge to set one up.`}
+                  : `A challenge is a contest with a start and an end, such as "Most gym days in October" or "Most push-ups in a minute". The app counts check-ins and workouts for you, and your staff can count anything else. Press Add challenge to set one up.`}
               </p>
             </section>
           ) : null}

@@ -182,7 +182,7 @@ export const gyms = pgTable(
     ),
     check(
       "gyms_org_type_check",
-      sql`${t.orgType} IN ('gym','studio','personal_trainer','clinic')`,
+      sql`${t.orgType} IN ('gym','studio','crossfit_box','yoga_studio','pilates_studio','personal_trainer','clinic')`,
     ),
     check("gyms_status_check", sql`${t.status} IN ('active','archived')`),
     check("gyms_country_check", sql`${t.country} IS NULL OR ${t.country} ~ '^[A-Z]{2}$'`),

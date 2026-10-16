@@ -437,8 +437,8 @@ const MUTANTS = [
     target: 'shared',
     why: "KD RULING RESTORED-AWAY: clinics can be created again, against his 2026-08-18 ruling that the product is gyms and fitness centres only",
     expect: 'refuses to create a clinic',
-    from: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "personal_trainer"]);',
-    to: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "personal_trainer", "clinic"]);',
+    from: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "crossfit_box", "yoga_studio", "pilates_studio"]);',
+    to: 'export const createOrgTypeSchema = z.enum(["gym", "studio", "crossfit_box", "yoga_studio", "pilates_studio", "clinic"]);',
   },
   {
     id: 'O20',

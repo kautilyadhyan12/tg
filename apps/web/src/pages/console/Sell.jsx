@@ -532,13 +532,13 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
 
 /** Memberships are sold on the member's own page (Kd, 2026-10-14): find them here, and
  *  their page opens with Add membership already open. */
-function MembershipFinder({ gymId, locked, addMemberTo, onOpen }) {
+function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
   const [person, setPerson] = useState(null);
   return (
     <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Sell a membership">
       <div className="flex flex-col gap-1">
         <h2 className="c-h2">Sell a membership</h2>
-        <p className="c-s14 c-t2 m-0">Memberships are sold on the member&apos;s own page, where you pick the membership, a discount if there is one, and how they paid.</p>
+        <p className="c-s14 c-t2 m-0">Memberships are sold on the {words.person}&apos;s own page, where you pick the membership, a discount if there is one, and how they paid.</p>
       </div>
       <WhoPicker gymId={gymId} who="member" setWho={() => undefined} person={person} setPerson={setPerson} mustPick disabled={locked} addMemberTo={addMemberTo} />
       {person !== null ? (
@@ -913,7 +913,7 @@ export default function Sell() {
             </section>
           )}
 
-          {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
+          {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} words={words} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
 
           {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} /> : null}
 

@@ -38,6 +38,9 @@ export interface OrgWords {
   readonly itToMembers: string;
   /** The same word starting a sentence: *"Your trainer is closed today."*. */
   readonly itToMembersCap: string;
+  /** More than one, for a member's list of places: *"My boxes"*. */
+  readonly itToMembersPlural: string;
+  readonly itToMembersPluralCap: string;
   /** One of the people: *"They stay a client of your studio."* */
   readonly person: string;
   /** Starting a sentence or heading: *"Client"*. */
@@ -51,6 +54,8 @@ export interface OrgWords {
   readonly coach: string;
   /** The role as a label on a button or a badge: *"Coach"*. */
   readonly coachCap: string;
+  /** The third role, more than one: "trainers", "instructors". */
+  readonly coaches: string;
   /** What the create screen calls the name box. */
   readonly nameLabel: string;
   /** An example name, shown greyed in that box. */
@@ -62,11 +67,14 @@ const GYM: OrgWords = {
   itCap: "Gym",
   itToMembers: "gym",
   itToMembersCap: "Gym",
+  itToMembersPlural: "gyms",
+  itToMembersPluralCap: "Gyms",
   person: "member",
   personCap: "Member",
   people: "members",
   peopleCap: "Members",
   coach: "trainer",
+  coaches: "trainers",
   coachCap: "Trainer",
   nameLabel: "Gym name",
   placeholder: "Iron House",
@@ -77,26 +85,91 @@ const STUDIO: OrgWords = {
   itCap: "Studio",
   itToMembers: "studio",
   itToMembersCap: "Studio",
+  itToMembersPlural: "studios",
+  itToMembersPluralCap: "Studios",
   person: "client",
   personCap: "Client",
   people: "clients",
   peopleCap: "Clients",
   coach: "coach",
+  coaches: "coaches",
   coachCap: "Coach",
   nameLabel: "Studio name",
   placeholder: "Flow Studio",
 };
 
+/** Kd's five kinds of business (2026-10-16, ROADMAP 5f): a CrossFit box's athletes and
+ *  coaches, a Pilates studio's clients and instructors. A yoga studio has members and
+ *  trainers, as a gym does (Kd: "it is not a school"). */
+const CROSSFIT_BOX: OrgWords = {
+  it: "box",
+  itCap: "Box",
+  itToMembers: "box",
+  itToMembersCap: "Box",
+  itToMembersPlural: "boxes",
+  itToMembersPluralCap: "Boxes",
+  person: "athlete",
+  personCap: "Athlete",
+  people: "athletes",
+  peopleCap: "Athletes",
+  coach: "coach",
+  coaches: "coaches",
+  coachCap: "Coach",
+  nameLabel: "Box name",
+  placeholder: "Steel City CrossFit",
+};
+
+const YOGA_STUDIO: OrgWords = {
+  it: "studio",
+  itCap: "Studio",
+  itToMembers: "studio",
+  itToMembersCap: "Studio",
+  itToMembersPlural: "studios",
+  itToMembersPluralCap: "Studios",
+  person: "member",
+  personCap: "Member",
+  people: "members",
+  peopleCap: "Members",
+  coach: "trainer",
+  coaches: "trainers",
+  coachCap: "Trainer",
+  nameLabel: "Studio name",
+  placeholder: "Lotus Yoga",
+};
+
+const PILATES_STUDIO: OrgWords = {
+  it: "studio",
+  itCap: "Studio",
+  itToMembers: "studio",
+  itToMembersCap: "Studio",
+  itToMembersPlural: "studios",
+  itToMembersPluralCap: "Studios",
+  person: "client",
+  personCap: "Client",
+  people: "clients",
+  peopleCap: "Clients",
+  coach: "instructor",
+  coaches: "instructors",
+  coachCap: "Instructor",
+  nameLabel: "Studio name",
+  placeholder: "Core Pilates",
+};
+
+/** Closed at sign-up on 2026-10-16 (Kd: a trainer working alone is not a kind of
+ *  business any more); its words stay for a business already made. */
 const PERSONAL_TRAINER: OrgWords = {
   it: "business",
   itCap: "Business",
   itToMembers: "trainer",
   itToMembersCap: "Trainer",
+  itToMembersPlural: "trainers",
+  itToMembersPluralCap: "Trainers",
   person: "client",
   personCap: "Client",
   people: "clients",
   peopleCap: "Clients",
   coach: "coach",
+  coaches: "coaches",
   coachCap: "Coach",
   nameLabel: "Your business name",
   placeholder: "Coach Priya",
@@ -112,11 +185,14 @@ const CLINIC: OrgWords = {
   itCap: "Clinic",
   itToMembers: "clinic",
   itToMembersCap: "Clinic",
+  itToMembersPlural: "clinics",
+  itToMembersPluralCap: "Clinics",
   person: "client",
   personCap: "Client",
   people: "clients",
   peopleCap: "Clients",
   coach: "clinician",
+  coaches: "clinicians",
   coachCap: "Clinician",
   nameLabel: "Clinic name",
   placeholder: "Green Lane Practice",
@@ -128,6 +204,9 @@ const CLINIC: OrgWords = {
 const BY_TYPE: Readonly<Record<OrgType, OrgWords>> = {
   gym: GYM,
   studio: STUDIO,
+  crossfit_box: CROSSFIT_BOX,
+  yoga_studio: YOGA_STUDIO,
+  pilates_studio: PILATES_STUDIO,
   personal_trainer: PERSONAL_TRAINER,
   clinic: CLINIC,
 };
@@ -150,6 +229,6 @@ export function orgWords(orgType: unknown): OrgWords {
  *
  *  Those three places cannot look a type up: two of them run before anybody has
  *  typed a code, and the third is the answer to a code that belongs to nobody.
- *  Kept here so the three read the same, and so adding a fourth type is one
- *  edit. `personal_trainer` is "trainer" here, matching what a member joined. */
-export const ORG_TYPES_PHRASE = "gym, studio or trainer";
+ *  Kept here so the three read the same. The five kinds of business (2026-10-16) are a
+ *  gym or a studio to somebody who has not joined one yet: a CrossFit box is a gym. */
+export const ORG_TYPES_PHRASE = "gym or studio";

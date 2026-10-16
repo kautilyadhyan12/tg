@@ -81,6 +81,7 @@ describe('the words a list of memberships is headed with (roadmap 2b)', () => {
       pluralCap: 'Studios',
     });
     expect(myOrgsWords([of('personal_trainer')]).pluralCap).toBe('Trainers');
+    expect(myOrgsWords([of('crossfit_box')])).toEqual({ one: 'box', oneCap: 'Box', plural: 'boxes', pluralCap: 'Boxes' });
     expect(myOrgsWords([of('gym'), of('gym', 'y')]).plural).toBe('gyms');
   });
 

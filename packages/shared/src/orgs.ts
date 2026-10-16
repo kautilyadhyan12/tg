@@ -9,11 +9,11 @@ import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { instantSchema } from "./time.js";
 
-/** The DB vocabulary (Part 4 §3.2's CHECK, widened by migration `0024`), used
- *  to PARSE rows on the way out. It still contains `clinic` on purpose — see
- *  `createOrgTypeSchema`. `personal_trainer` is Kd's ruling of 2026-09-07:
- *  organisation types are gym, studio and personal trainer. */
-export const orgTypeSchema = z.enum(["gym", "studio", "personal_trainer", "clinic"]);
+/** The DB vocabulary (Part 4 §3.2's CHECK, widened by migrations `0024` and `0132`),
+ *  used to PARSE rows on the way out. It still contains `clinic` and
+ *  `personal_trainer` on purpose — see `createOrgTypeSchema`. `studio` is the boutique
+ *  studio. */
+export const orgTypeSchema = z.enum(["gym", "studio", "crossfit_box", "yoga_studio", "pilates_studio", "personal_trainer", "clinic"]);
 export type OrgType = z.infer<typeof orgTypeSchema>;
 
 /** KD RULING 2026-08-18: *"no click will be there only gyms and fitness
@@ -37,10 +37,11 @@ export type OrgType = z.infer<typeof orgTypeSchema>;
  *  business, not a medical one, so it sits inside "gyms and fitness centres".
  *  That call was stated to Kd in one line and not overruled.
  *
- *  `personal_trainer` — Kd ruling 2026-09-07: a trainer's clients join by code
- *  like members, and opening hours are optional for a trainer (they are optional
- *  for everyone: `hours_mode` starts `unset`). */
-export const createOrgTypeSchema = z.enum(["gym", "studio", "personal_trainer"]);
+ *  KD RULING 2026-10-16 (ROADMAP 5f): the app is for five kinds of business — gym,
+ *  boutique studio (`studio`), CrossFit box, yoga studio, Pilates studio — and a
+ *  personal trainer working alone is no longer one. `personal_trainer` is closed here
+ *  the way `clinic` was: a business already made keeps working. */
+export const createOrgTypeSchema = z.enum(["gym", "studio", "crossfit_box", "yoga_studio", "pilates_studio"]);
 export type CreateOrgType = z.infer<typeof createOrgTypeSchema>;
 
 /** Part 3 §2.2. `admin` is deliberately absent — Kd's internal panel is a

@@ -30,7 +30,7 @@ function stepWords(step, orgSlug, orgType) {
     case 'staff':
       return {
         title: 'Invite your staff',
-        line: 'Front desk, managers and trainers each sign in as themselves, and you choose what each of them can do.',
+        line: `Front desk, managers and ${words.coaches} each sign in as themselves, and you choose what each of them can do.`,
         // Members → Staff, with the form open (23c-ii). A gym with no live plan gets it
         // greyed, as the form itself would be.
         actions: [{ label: 'Invite staff', to: to('inviteStaff'), changes: true }],
