@@ -508,7 +508,12 @@ export async function updateOrg(
   }
 }
 
-export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgsResponse> {
+export async function listMyOrgs(
+  deps: OrgsDeps,
+  userId: string,
+  /** The SHA-256 of the browser's trial mark (2c); null when the request has no browser. */
+  deviceHash: string | null,
+): Promise<MyOrgsResponse> {
   // Two reads, one response, ONE SNAPSHOT — T3 round 2 L2-4. They answer
   // different questions (what I belong to now; what recently ended) and neither
   // can be derived from the other, which is why the dashboard was silent about
@@ -518,11 +523,13 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
   // end — or in BOTH, drawn as "You're a member" over a membership that has
   // just ended. One REPEATABLE READ transaction makes the pair one snapshot; at
   // READ COMMITTED each statement takes its own.
-  const { rows, former, newMessages } = await deps.sql.begin("isolation level repeatable read read only", async (tx) => ({
+  const { rows, former, newMessages, deviceTrialUsed } = await deps.sql.begin("isolation level repeatable read read only", async (tx) => ({
     rows: await repo.listOrgsForUser(tx, userId),
     former: await repo.listFormerOrgsForUser(tx, userId),
     // The caller's own new messages a gym, for the menu's dot (20a-ii): the inbox's count.
     newMessages: await messagesRepo.unreadCounts(tx, userId, deps.now?.() ?? new Date()),
+    // One device, one trial (2c): asked once, of the browser, not of any gym.
+    deviceTrialUsed: deviceHash === null ? false : await repo.deviceHadTrial(tx, deviceHash),
   }));
   // Where a gym with too many members for the smaller size it chose would move instead: read
   // only for such a gym, for its billing card.
@@ -595,6 +602,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // to guess an arm. The client requires a definite boolean before it blocks.
       ownerTrialUsed: privileges.includes("billing.manage") ? r.ownerTrialUsed : null,
       trialEndedFirstPeople: privileges.includes("billing.manage") ? r.trialEndedFirstPeople : null,
+      deviceTrialUsed: privileges.includes("billing.manage") ? deviceTrialUsed : null,
       // IS THIS GYM'S CONSOLE READ-ONLY — Part 3 §4.2, and Kd's ruling of
       // 2026-08-29 that it stops EVERY member of staff rather than only whoever
       // can pay. It is the answer `requireWritablePrivilege` reaches, sent ahead
@@ -1157,10 +1165,12 @@ export async function startOrgTrial(
   deps: OrgsDeps,
   userId: string,
   gymId: string,
+  /** The SHA-256 of the browser's trial mark (2c); null when the request has no browser. */
+  deviceHash: string | null,
 ): Promise<StartOrgTrialResponse> {
   const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");
 
-  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });
+  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId, deviceHash });
 
   switch (outcome.kind) {
     case "started":
@@ -1205,6 +1215,14 @@ export async function startOrgTrial(
         409,
         "trial_already_used",
         `You've already used your free trial. It's one per person, not one per ${orgWords(org.orgType).it}.`,
+      );
+    case "trial_used_on_device":
+      // One device, one trial (2c). "This computer", never "you": the person pressing may
+      // never have had a trial, and the line must stay true for them.
+      throw new OrgsError(
+        409,
+        "trial_used_on_device",
+        `A free trial has already been used on this computer, so this ${orgWords(org.orgType).it} needs a plan to start.`,
       );
     case "email_not_confirmed":
       // Only an account from the old password sign-up can be here: the email code and

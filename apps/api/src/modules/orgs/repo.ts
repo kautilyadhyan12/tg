@@ -1855,10 +1855,21 @@ export async function listOrgPlansForCurrency(
   }));
 }
 
+/** Did the browser with this mark start a free trial, for any gym (2c)? `startGymTrial`'s
+ *  own device refusal, asked ahead of the press so the console offers no button it refuses. */
+export async function deviceHadTrial(sql: SqlOrTx, deviceHash: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one FROM subscriptions
+    WHERE trial_device_hash = ${deviceHash} AND owner_type = 'gym'
+    LIMIT 1`;
+  return rows[0] !== undefined;
+}
+
 export type StartTrialOutcome =
   | { kind: "started"; subscription: GymSubscriptionRow }
   | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
   | { kind: "trial_already_used" }
+  | { kind: "trial_used_on_device" }
   // `byOwner`: whether the person who pressed is the owner, who can confirm it.
   | { kind: "email_not_confirmed"; byOwner: boolean }
   // No `currency` on this arm: it carried one for four commits and no caller
@@ -1950,7 +1961,8 @@ export type StartTrialOutcome =
  *  does either silently erases and misattributes trial history. */
 export async function startGymTrial(
   sql: Sql,
-  input: { gymId: string; actorUserId: string },
+  // `deviceHash`: the SHA-256 of the browser's trial mark (2c), never the mark; null with no browser.
+  input: { gymId: string; actorUserId: string; deviceHash: string | null },
 ): Promise<StartTrialOutcome> {
   return await sql.begin(async (tx) => {
     // The trailing note is not decoration: `await lockOrgRow(tx, input.gymId);`
@@ -2035,6 +2047,17 @@ export async function startGymTrial(
         )
       LIMIT 1`;
     if (used[0] !== undefined) return { kind: "trial_already_used" };
+    // One device, one trial (Stage 3 item 2c): a browser that started a free trial starts no
+    // other, under any account. Locked on the mark too, so two gyms pressed at once in one
+    // browser do not both read "never had one"; the person's lock is always taken first.
+    if (input.deviceHash !== null) {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial-device:${input.deviceHash}`}))`;
+      const onDevice = await tx<{ one: number }[]>`
+        SELECT 1 AS one FROM subscriptions
+        WHERE trial_device_hash = ${input.deviceHash} AND owner_type = 'gym'
+        LIMIT 1`;
+      if (onDevice[0] !== undefined) return { kind: "trial_used_on_device" };
+    }
     if (owner?.confirmed !== true) {
       return { kind: "email_not_confirmed", byOwner: input.actorUserId === gym.owner_user_id };
     }
@@ -2071,9 +2094,9 @@ export async function startGymTrial(
     // The trial holds its own member limit, below the band's (Kd, RULINGS 2026-09-29).
     const trialSeatCap = plan.seat_cap === null ? GYM_TRIAL_MEMBERS : Math.min(plan.seat_cap, GYM_TRIAL_MEMBERS);
     const inserted = await tx<{ id: string; status: string; trial_ends_at: Date | null }[]>`
-      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap, provider)
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, trial_ends_at, trial_seat_cap, provider, trial_device_hash)
       VALUES ('gym', ${input.gymId}, ${plan.id}, 'trialing',
-              now() + ${plan.trial_days} * INTERVAL '1 day', ${trialSeatCap}, 'none')
+              now() + ${plan.trial_days} * INTERVAL '1 day', ${trialSeatCap}, 'none', ${input.deviceHash})
       RETURNING id, status, trial_ends_at`;
     const row = inserted[0];
     if (row === undefined) throw new Error("subscription insert returned no row");

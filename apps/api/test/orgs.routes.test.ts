@@ -6220,8 +6220,8 @@ d("orgs routes (real Postgres)", () => {
     try {
       await confirmOwnerOf(sql, org.org.id);
       const [one, two] = await Promise.all([
-        orgRepo.startGymTrial(a, { gymId: org.org.id, actorUserId: owner.userId }),
-        orgRepo.startGymTrial(b, { gymId: org.org.id, actorUserId: owner.userId }),
+        orgRepo.startGymTrial(a, { gymId: org.org.id, actorUserId: owner.userId, deviceHash: null }),
+        orgRepo.startGymTrial(b, { gymId: org.org.id, actorUserId: owner.userId, deviceHash: null }),
       ]);
       expect([one.kind, two.kind].sort()).toEqual(["already_subscribed", "started"]);
     } finally {

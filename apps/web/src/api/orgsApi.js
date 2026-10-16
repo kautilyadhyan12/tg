@@ -2203,12 +2203,13 @@ export function errorStatus(err) {
  *  either:
  *    · `gym_not_on_plan` — the gym has no live plan, and nothing a console can
  *      do changes that (:23711 created it; there is no pay path to offer);
- *    · `trial_already_used` — one trial per OWNER, ever (Part 5 §12).
+ *    · `trial_already_used` — one trial per OWNER, ever (Part 5 §12);
+ *    · `trial_used_on_device` — one trial per browser (Stage 3 item 2c).
  *
  *  **Listed by CODE and not by status**, because a blanket "409 is permanent"
  *  would take the retry away from the races above, which is the opposite defect
  *  and a worse one — a person stuck looking at a refusal that WOULD have cleared. */
-const PERMANENT_ERROR_CODES = ['gym_not_on_plan', 'trial_already_used'];
+const PERMANENT_ERROR_CODES = ['gym_not_on_plan', 'trial_already_used', 'trial_used_on_device'];
 
 /** Is offering "Try again" honest about this failure?
  *

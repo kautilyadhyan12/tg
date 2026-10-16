@@ -4,6 +4,7 @@
 // No entitlement or quota middleware: creating and joining an org are not
 // metered, and gating the JOIN on the joiner's own plan would be backwards —
 // the gym's plan is what grants them anything (Part 4 §4.1).
+import "@fastify/cookie"; // module augmentation: reply.setCookie / req.cookies
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
@@ -11,6 +12,9 @@ import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import type { OnlinePayments } from "../billing/online.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
+import { mintOpaqueToken, sha256Hex, trialMarkCookieOptions } from "../auth/tokens.js";
+import { TRIAL_DEVICE_COOKIE, trialDeviceMarkSchema } from "@app/shared";
+import type { AppConfig } from "../../config.js";
 import {
   addOrgStaffRequestSchema,
   applicationParamsSchema,
@@ -106,6 +110,17 @@ export interface OrgRouteOverrides {
   now?: () => Date;
 }
 
+/** The browser's trial mark (Stage 3 item 2c: one device, one trial). It goes only to the
+ *  routes that ask about a gym's trial, and lasts 400 days, the longest a browser keeps one. */
+const TRIAL_MARK_PATH = "/v1/orgs";
+const TRIAL_MARK_MAX_AGE_S = 400 * 24 * 60 * 60;
+
+/** The mark this request's browser carries, through the shared schema; anything else is none. */
+function trialMarkOf(req: FastifyRequest): string | null {
+  const parsed = trialDeviceMarkSchema.safeParse(req.cookies[TRIAL_DEVICE_COOKIE]);
+  return parsed.success ? parsed.data : null;
+}
+
 export function registerOrgRoutes(
   app: FastifyInstance,
   deps: {
@@ -122,6 +137,8 @@ export function registerOrgRoutes(
     webOrigin: string;
     joinCodes: boolean;
     memberTap: boolean;
+    /** For the browser's trial mark, set as the session cookies are (2c). */
+    config: AppConfig;
   },
   overrides: OrgRouteOverrides = {},
 ): void {
@@ -265,7 +282,13 @@ export function registerOrgRoutes(
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
-      const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId);
+      // One device, one trial (2c): a browser with no mark is given one here, so the trial
+      // it starts is recorded against it. Only the mark's hash reaches the database.
+      const mark = trialMarkOf(req) ?? mintOpaqueToken();
+      const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId, sha256Hex(mark));
+      if (started.outcome === "started") {
+        reply.setCookie(TRIAL_DEVICE_COOKIE, mark, trialMarkCookieOptions(deps.config, TRIAL_MARK_MAX_AGE_S, TRIAL_MARK_PATH));
+      }
       // ONE status code for both arms, and the body's `outcome` is what says
       // which happened — the same shape `/v1/orgs/join` uses. A 201-vs-200 split
       // would be a SECOND answer to that question, in a channel the typed client
@@ -692,7 +715,8 @@ export function registerOrgRoutes(
   );
 
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const orgs = await service.listMyOrgs(orgDeps, requireUserId(req));
+    const mark = trialMarkOf(req);
+    const orgs = await service.listMyOrgs(orgDeps, requireUserId(req), mark === null ? null : sha256Hex(mark));
     return reply.status(200).send(orgs);
   });
 

@@ -123,6 +123,9 @@ export const subscriptions = pgTable(
     trialCheck: text("trial_check"),
     trialCheckGymId: uuid("trial_check_gym_id"),
     trialCheckedAt: timestamp("trial_checked_at", { withTimezone: true }),
+    /** The SHA-256 of the browser mark that started this free trial (2c, migration `0133`):
+     *  one device, one trial. Never the mark itself. */
+    trialDeviceHash: text("trial_device_hash"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -152,6 +155,8 @@ export const subscriptions = pgTable(
     ),
     check("subscriptions_trial_seat_cap_check", sql`${t.trialSeatCap} IS NULL OR ${t.trialSeatCap} > 0`),
     check("subscriptions_trial_check_check", sql`${t.trialCheck} IS NULL OR ${t.trialCheck} IN ('ended','look')`),
+    check("subscriptions_trial_device_hash_check", sql`${t.trialDeviceHash} IS NULL OR ${t.trialDeviceHash} ~ '^[0-9a-f]{64}$'`),
+    index("subscriptions_trial_device_idx").on(t.trialDeviceHash).where(sql`${t.trialDeviceHash} IS NOT NULL`),
     check(
       "subscriptions_trial_check_pairing_check",
       sql`(${t.trialCheck} IS NULL) = (${t.trialCheckGymId} IS NULL) AND (${t.trialCheck} IS NULL) = (${t.trialCheckedAt} IS NULL)`,

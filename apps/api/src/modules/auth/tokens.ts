@@ -18,6 +18,20 @@ const accessClaimsSchema = z.object({
   fid: z.string().uuid().optional(),
 });
 
+/** The browser's free-trial mark (orgs routes, Stage 3 item 2c), set as the session cookies
+ *  are (`auth/routes.ts`): cross-site in production needs sameSite 'none' + secure (GAP-2,
+ *  DECISIONS 2026-07-11); dev/test localhost is same-site. httpOnly, so no page script reads it. */
+export function trialMarkCookieOptions(config: AppConfig, maxAgeSeconds: number, path: string) {
+  const prod = config.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: prod,
+    sameSite: prod ? ("none" as const) : ("lax" as const),
+    path,
+    maxAge: maxAgeSeconds,
+  };
+}
+
 // Cookie names live here so plugin.ts and routes.ts can't drift (T3 2026-07-11).
 export const ACCESS_COOKIE = "accessToken";
 export const REFRESH_COOKIE = "refreshToken";

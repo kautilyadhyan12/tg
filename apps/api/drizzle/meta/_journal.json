@@ -925,6 +925,13 @@
       "when": 1790726400132,
       "tag": "0132_five_kinds_of_business",
       "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1790726400133,
+      "tag": "0133_trial_device_mark",
+      "breakpoints": true
     }
   ]
 }

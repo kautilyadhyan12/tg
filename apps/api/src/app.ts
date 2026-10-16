@@ -342,6 +342,7 @@ export async function buildApp(
       webOrigin: config.WEB_ORIGIN,
       joinCodes: config.JOIN_CODES,
       memberTap: config.MEMBER_TAP,
+      config,
     },
     overrides.orgs ?? {},
   );
