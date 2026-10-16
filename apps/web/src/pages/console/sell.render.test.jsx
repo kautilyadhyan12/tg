@@ -858,7 +858,7 @@ describe('refund a sale (18p)', () => {
     );
     open();
     await screen.findByRole('region', { name: "Today's takings" });
-    fireEvent.click(within(today()).getByRole('button', { name: 'Show another day' }));
+    fireEvent.click(within(today()).getByRole('button', { name: "See another day's sales" }));
     expect(within(today()).getByRole('button', { name: 'Tue 13 Oct 2026' }).disabled).toBe(true);
     fireEvent.click(within(today()).getByRole('button', { name: 'Fri 9 Oct 2026' }));
     const region = await screen.findByRole('region', { name: 'Takings on another day' });

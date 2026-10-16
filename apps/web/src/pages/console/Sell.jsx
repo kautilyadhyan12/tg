@@ -631,18 +631,20 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
 
   return (
-    <section className="c-card overflow-hidden" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
+    <section className="c-card" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
       <div className="flex flex-col gap-1 p-4 md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="c-h2">{shownPage === null ? '…' : takingsHeading(shownPage)}</h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <DatePick label="Show another day" value={pick ?? page.today} min="2000-01-01" max={page.today} today={page.today} onChange={(day) => showDay(day)} newLook floating />
-            {!onToday ? (
-              <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => showDay(page.today)}>
-                Back to today
-              </button>
-            ) : null}
+        <h2 className="c-h2">{shownPage === null ? '…' : takingsHeading(shownPage)}</h2>
+        {/* The calendar opens in place, pushing the list down: this card clips what sticks out. */}
+        <div className="flex flex-wrap items-end gap-2 pb-1">
+          <div className="c-field">
+            <span className="c-label">See another day's sales</span>
+            <DatePick label="See another day's sales" value={pick ?? page.today} min="2000-01-01" max={page.today} today={page.today} onChange={(day) => showDay(day)} newLook />
           </div>
+          {!onToday ? (
+            <button type="button" className="c-btn c-btn-s" onClick={() => showDay(page.today)}>
+              Back to today
+            </button>
+          ) : null}
         </div>
         {shownPage === null ? (
           other.error !== null ? (
