@@ -143,7 +143,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 4a-i. [x] **Invite, the email, Accept** — merged 2026-10-01 (PR #145).
      - 4a-ii. [x] **Send again, removing staff from the app, and a Staff tab on Members** — merged 2026-10-01 (PR #147).
    - 4b. **Co-owners, and a gym handed to another owner** (split 2026-10-16, `rulings/2026-10-16-4b-i.md`; a gym's name, city and time zone could already be changed).
-     - 4b-i. [ ] **Co-owners**: the owner asks a staff member, who accepts on Overview.
+     - 4b-i. [x] **Co-owners** — merged 2026-10-16 (PR #296).
      - 4b-ii. [ ] **The owner hands the gym to a co-owner, who accepts**, for a gym not on a paid plan; the free trial it used stays counted against whoever started it.
      - 4b-iii. [ ] **A paid gym handed over**: who pays moves at Paddle or Razorpay (Kd's own laptop, with the Paddle test keys).
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
