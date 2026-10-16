@@ -237,7 +237,7 @@ d("refund a sale at the desk (real Postgres)", () => {
       // Yesterday's list: the sale stands, with its refund under it.
       const after = await sellPage(gymId, owner.cookies, "2026-10-15");
       const shown = after.sales.find((s) => s.id === mayaSale);
-      expect(shown).toMatchObject({ undone: false, totalMinor: 8000, refundedMinor: 4000, canRefund: true, canUndo: false });
+      expect(shown).toMatchObject({ undone: false, totalMinor: 8000, refundedMinor: 4000, canRefund: true, canUndo: false, stockCounted: false });
       expect(shown?.refunds).toEqual([
         { id: expect.any(String) as string, amountMinor: 4000, method: "cash", reason: "returned", restocked: 0, refundedOn: "2026-10-16", by: "Priya Desk", receiptNumber, voided: null },
       ]);
@@ -274,7 +274,7 @@ d("refund a sale at the desk (real Postgres)", () => {
       expect(await stockOf(water.id)).toBe(7);
 
       // Today's own sale: Refund sale and Void sale are both offered until a refund stands.
-      expect((await sellPage(gymId, owner.cookies)).sales[0]).toMatchObject({ canRefund: true, canUndo: true });
+      expect((await sellPage(gymId, owner.cookies)).sales[0]).toMatchObject({ canRefund: true, canUndo: true, stockCounted: true });
 
       // One bottle brought back, onto the shelf. The same press again is the same refund.
       const key = nextForm();
