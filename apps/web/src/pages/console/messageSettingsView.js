@@ -233,7 +233,7 @@ export function messageMissing(kind, orgType, use) {
       place: 'classes',
       button: 'Open Classes',
       ask: 'Staff who can change the timetable add classes on Classes.',
-      note: `There is no class on your calendar and no trainer offers personal training, so no ${words.person} has a booking and nobody will get this yet.`,
+      note: `There is no class on your calendar and no ${words.coach} offers personal training, so no ${words.person} has a booking and nobody will get this yet.`,
     };
   }
   if (kind === 'payment_overdue' && use?.payments === false) {

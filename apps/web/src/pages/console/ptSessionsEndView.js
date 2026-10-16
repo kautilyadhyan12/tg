@@ -34,7 +34,7 @@ export function ptEndingRow(session, clockFormat, onePerson = false) {
 }
 
 /** Nobody is told by the app yet (the inbox is ROADMAP 20a). */
-export const PT_ENDING_NOT_TOLD = "The app doesn't tell them or the trainer yet. Let them know yourself.";
+export const PT_ENDING_NOT_TOLD = "The app doesn't tell anybody yet. Let them know yourself.";
 
 /** Said when the sessions are not the ones the box listed a moment ago: one was booked or
  *  cancelled between the box and its button, and the press did nothing. */

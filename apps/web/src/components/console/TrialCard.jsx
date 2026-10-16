@@ -327,7 +327,7 @@ export default function TrialCard({ org }) {
       ) : null}
       {payNow ? (
         <div className="text-sm mt-3" style={muted}>
-          Your free trial carries on until it ends. To have more members now, choose a plan: you pay today and get its full size at once.
+          {`Your free trial carries on until it ends. To have more ${words.people} now, choose a plan: you pay today and get its full size at once.`}
         </div>
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">

@@ -383,7 +383,7 @@ describe('a person’s profile, opened from their picture or name', () => {
     expect(svc.person).toHaveBeenCalledWith('g1', 'u2');
     expect(boards.profile).toHaveBeenCalledWith('g1', 'u2', 'this_week');
     // The numbers in a row, as a profile has them: how many posts, then each board.
-    expect(stats(sheet)).toEqual(['2Posts', '1stGym days3 gym days this week']);
+    expect(stats(sheet)).toEqual(['2Posts', '1stVisits3 visits this week']);
     // The picture and the name are one thing to press.
     expect(screen.getByRole('button', { name: 'See what Chen W. has posted' }).textContent).toContain('CW');
     expect(sheet.getAllByTestId('post').map((p) => within(p).getByText(/First 5k done|Leg day/).textContent)).toEqual(['First 5k done', 'Leg day']);
@@ -404,7 +404,7 @@ describe('a person’s profile, opened from their picture or name', () => {
     await waitFor(() => expect(sheet.getAllByTestId('post')).toHaveLength(1));
     expect(stats(sheet)).toEqual(['1Post']);
     expect(sheet.queryByText(/leaderboard/i)).toBeNull();
-    expect(sheet.queryByText(/gym days|weeks|workout/i)).toBeNull();
+    expect(sheet.queryByText(/visits|weeks|workout/i)).toBeNull();
   });
 
   it('places that could not be read are said, and never drawn as none', async () => {

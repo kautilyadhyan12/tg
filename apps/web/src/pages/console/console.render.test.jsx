@@ -654,8 +654,8 @@ describe('Create a gym', () => {
     drawNew();
     fireEvent.click(screen.getByText('CrossFit box'));
     const group = screen.getByRole('radiogroup', { name: 'Do you train here too?' });
-    expect(within(group).getByRole('radio', { name: /^Yes, I train here too/ }).textContent).toContain("one of your athletes' places, like any athlete");
-    expect(within(group).getByRole('radio', { name: /^No, I only run it/ }).textContent).toContain('add yourself later from Athletes');
+    expect(within(group).getByRole('radio', { name: /^Yes, I train here too/ }).textContent).toContain("one of your members' places, like any member");
+    expect(within(group).getByRole('radio', { name: /^No, I only run it/ }).textContent).toContain('add yourself later from Members');
     fireEvent.click(screen.getByText('Gym'));
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');

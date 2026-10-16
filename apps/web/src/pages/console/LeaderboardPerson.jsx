@@ -36,7 +36,7 @@ import PersonPosts from './PersonPosts';
 // three boards, what counted for each, and Take off the board / Put back. Before either
 // happens a box names who changes and what is kept. In the middle on a computer, from the
 // bottom on a phone, as Members' boxes. Staff who check people in also fix a visit here
-// (19a-iv): Remove beside each visit and Add a visit under Gym days, each behind its own box.
+// (19a-iv): Remove beside each visit and Add a visit under Visits, each behind its own box.
 
 // A click anywhere on the box opens the calendar, not only its small icon.
 const openCalendar = (e) => {
@@ -80,7 +80,7 @@ function Counted({ gymId, userId, boardId, period, canFix, onRemove, onAdd }) {
     <div className="flex flex-col gap-3" data-testid={`counted-${boardId}`}>
       {boardId === 'gym_days' ? (
         d.days.length === 0 ? (
-          <p className="c-s14 c-t2">No gym days in this period.</p>
+          <p className="c-s14 c-t2">No visits in this period.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {d.days.map((day) => (

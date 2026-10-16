@@ -1,4 +1,4 @@
-import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod } from '@app/shared';
+import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod, orgWords } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -11,8 +11,8 @@ export function sessionSpan(startMinute, minutes) {
   return `${clockText(startMinute)} – ${clockText((startMinute + minutes) % 1440)}`;
 }
 
-/** "Sam Trainer", or "a trainer" for one who has typed no name. */
-export const trainerText = (name) => name ?? 'a trainer';
+/** "Sam Trainer", or "a member of staff" for one who has typed no name. */
+export const trainerText = (name) => name ?? 'a member of staff';
 
 /** "this week" where the day is in the week or the month today is in, else "that week". */
 function periodWords(period, day, today) {
@@ -108,8 +108,8 @@ export function ptDay(view, localDate) {
 }
 
 /** The line where a week holds no time anybody can press, or null. */
-export function emptyText(view, gymName) {
-  if (view.trainers.length === 0) return `${gymName} has no trainers taking personal training sessions yet.`;
+export function emptyText(view, gymName, orgType = undefined) {
+  if (view.trainers.length === 0) return `${gymName} has no ${orgWords(orgType).coaches} taking personal training sessions yet.`;
   if (view.from > view.lastDay) return `Booking for these days isn't open yet. You can book up to ${dayLabel(view.lastDay)}.`;
   return null;
 }

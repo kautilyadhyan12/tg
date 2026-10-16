@@ -71,7 +71,7 @@ const SAME = "It is the same count as the Leaderboard.";
 export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
   {
     id: "gym_visits",
-    title: "Gym visits",
+    title: "Visits",
     hint: (person) => `Days a ${person} is checked in, at your front desk or by your staff.`,
     pickExercise: false,
     staffWord: "visits",
@@ -79,13 +79,13 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
     measures: [
       {
         id: "days",
-        one: "gym day",
-        many: "gym days",
+        one: "visit",
+        many: "visits",
         print: "whole",
         how: "desk",
         wins: ["most", "target"],
         perDay: true,
-        explain: (gym) => `A gym day is a day you're checked in at ${gym}: a scan at the front desk, or a check-in by staff. Two visits on one day are one. ${SAME}`,
+        explain: (gym) => `A visit is a day you're checked in at ${gym}: a scan at the front desk, or a check-in by staff. Two check-ins on one day are one visit. ${SAME}`,
       },
     ],
   },

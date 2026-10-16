@@ -718,6 +718,12 @@ d("a trainer's time off (real Postgres, two api instances)", { timeout: T }, () 
       // Staff with no hours are not trainers yet; somebody not on the staff is nobody.
       const none = await off(open, desk);
       expect([none.statusCode, errorOf(none)]).toEqual([409, "time_off_no_hours"]);
+      expect((JSON.parse(none.body) as { message: string }).message).toBe("Set this trainer's hours first.");
+      // A Pilates studio's refusal names its instructors (5f-ii), read from the gym's own row.
+      await sql`UPDATE gyms SET org_type = 'pilates_studio' WHERE id = ${open.id}`;
+      const asStudio = await off(open, desk);
+      expect([asStudio.statusCode, (JSON.parse(asStudio.body) as { message: string }).message]).toEqual([409, "Set this instructor's hours first."]);
+      await sql`UPDATE gyms SET org_type = 'gym' WHERE id = ${open.id}`;
       const nobody = await off(open, stranger);
       expect([nobody.statusCode, errorOf(nobody)]).toEqual([404, "trainer_not_found"]);
       expect(await offRows(open, sam)).toHaveLength(1);

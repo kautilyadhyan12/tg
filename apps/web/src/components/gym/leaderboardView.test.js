@@ -31,7 +31,7 @@ const board = (over = {}) => ({
 describe('the leaderboard in words', () => {
   it('prints the board’s dates in the gym’s calendar', () => {
     expect(datesLine(board())).toBe("Mon 5 Oct – Sun 11 Oct · Iron House's time");
-    expect(datesLine(board({ from: null, to: '2026-10-07' }))).toBe("Every gym day up to Wed 7 Oct · Iron House's time");
+    expect(datesLine(board({ from: null, to: '2026-10-07' }))).toBe("Every visit up to Wed 7 Oct · Iron House's time");
     expect(datesLine(board({ board: 'workout_days', from: null, to: '2026-10-07' }))).toBe("Every workout day up to Wed 7 Oct · Iron House's time");
     expect(datesLine(board({ board: 'streak', from: null }))).toBe("Weeks in a row, up to this week · Iron House's time");
     // 29 February is printed as itself, never moved by the reader's zone.
@@ -40,11 +40,11 @@ describe('the leaderboard in words', () => {
 
   it('says why there is no board, and nothing when there is one', () => {
     expect(statusText(board())).toBeNull();
-    expect(statusText(board({ status: 'too_few' }))).toBe('The board shows once 3 people have a gym day in this period.');
+    expect(statusText(board({ status: 'too_few' }))).toBe('The board shows once 3 people have a visit in this period.');
     expect(statusText(board({ status: 'too_few', board: 'workout_days' }))).toBe('The board shows once 3 people have a workout day in this period.');
     expect(statusText(board({ status: 'too_few', board: 'streak' }))).toBe('The board shows once 3 people have a streak.');
     expect(statusText(board({ status: 'no_checkins' }))).toBe(
-      "Iron House hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing. Workout days doesn't need the front desk — see that tab.",
+      "Iron House hasn't checked anyone in at the front desk in the last 30 days, so Visits and Streak aren't showing. Workout days doesn't need the front desk — see that tab.",
     );
     expect(statusText(board({ status: 'paused' }))).toBe("The leaderboard isn't available at Iron House right now.");
   });
@@ -72,15 +72,15 @@ describe('the leaderboard in words', () => {
 
   it('places, numbers and the next place up', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 101, 111].map(ordinal)).toEqual(['1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '101st', '111th']);
-    expect(valueText(1, 'gym_days')).toBe('1 gym day');
+    expect(valueText(1, 'gym_days')).toBe('1 visit');
     expect(valueText(4, 'streak')).toBe('4 weeks');
     expect(valueText(1, 'workout_days')).toBe('1 workout day');
     expect(valueText(0, 'workout_days')).toBe('0 workout days');
     expect(nextPlaceText({ place: 4, toNextPlace: 2, nextPlace: 3 }, 'workout_days')).toBe('2 more workout days to reach 3rd');
     expect(nextPlaceText({ place: 2, toNextPlace: 1, nextPlace: 1 }, 'workout_days')).toBe('1 more workout day to reach 1st');
-    expect(nextPlaceText({ place: 4, toNextPlace: 2, nextPlace: 3 }, 'gym_days')).toBe('2 more gym days to reach 3rd');
+    expect(nextPlaceText({ place: 4, toNextPlace: 2, nextPlace: 3 }, 'gym_days')).toBe('2 more visits to reach 3rd');
     // 4th behind two people tied 2nd: the next place is 2nd, never a 3rd nobody holds.
-    expect(nextPlaceText({ place: 4, toNextPlace: 1, nextPlace: 2 }, 'gym_days')).toBe('1 more gym day to reach 2nd');
+    expect(nextPlaceText({ place: 4, toNextPlace: 1, nextPlace: 2 }, 'gym_days')).toBe('1 more visit to reach 2nd');
     expect(nextPlaceText({ place: 2, toNextPlace: 1, nextPlace: 1 }, 'streak')).toBe('1 more week to reach 1st');
     expect(nextPlaceText({ place: 1, toNextPlace: null, nextPlace: null }, 'gym_days')).toBeNull();
     expect(nextPlaceText({ place: null, toNextPlace: null, nextPlace: null }, 'gym_days')).toBeNull();
@@ -134,10 +134,10 @@ describe('the leaderboard in words', () => {
 
   it('a Streak week says what happened to it', () => {
     expect(weekText({ weekStart: '2026-09-21', state: 'skipped', gymDays: 0 }, 'Iron House').text).toMatch(/checked nobody in — skipped/);
-    expect(weekText({ weekStart: '2026-09-28', state: 'counted', gymDays: 2 }, 'Iron House')).toEqual({ label: 'Week of 28 Sep', text: '2 gym days — counted' });
+    expect(weekText({ weekStart: '2026-09-28', state: 'counted', gymDays: 2 }, 'Iron House')).toEqual({ label: 'Week of 28 Sep', text: '2 visits — counted' });
     expect(circleLabel('open', '2026-10-05', 'streak')).toBe('Week of 5 Oct: this week, still open');
-    expect(circleLabel('yes', '2026-10-05', 'gym_days')).toBe('Mon 5 Oct: gym day');
-    expect(circleLabel('no', '2026-10-06', 'gym_days')).toBe('Tue 6 Oct: no gym day');
+    expect(circleLabel('yes', '2026-10-05', 'gym_days')).toBe('Mon 5 Oct: visit');
+    expect(circleLabel('no', '2026-10-06', 'gym_days')).toBe('Tue 6 Oct: no visit');
   });
 
   it('the gym picker remembers a gym only while the person is still in it', () => {
@@ -169,7 +169,7 @@ describe('boards the gym switched off (19a-iii)', () => {
     const board = { status: 'no_checkins', board: 'gym_days', gymName: 'Iron House' };
     expect(statusText({ ...board, boardsOff: [] })).toMatch(/see that tab\.$/);
     const quiet = statusText({ ...board, boardsOff: ['workout_days'] });
-    expect(quiet).toBe("Iron House hasn't checked anyone in at the front desk in the last 30 days, so Gym days and Streak aren't showing.");
+    expect(quiet).toBe("Iron House hasn't checked anyone in at the front desk in the last 30 days, so Visits and Streak aren't showing.");
     expect(quiet).not.toMatch(/Workout days|that tab/);
   });
 });

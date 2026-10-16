@@ -130,8 +130,8 @@ describe('the result post on the console’s Updates', () => {
     svc.list.mockResolvedValue(feed([post()]));
     open();
     const box = await screen.findByTestId('challenge-result');
-    expect(within(box).getByText('Winner: Asha R., with 5 gym days.')).toBeTruthy();
-    expect(within(box).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['1st: Asha R., 5 gym days', '2nd: Vera V., 4 gym days', '3rd: Bilal K., 2 gym days']);
+    expect(within(box).getByText('Winner: Asha R., with 5 visits.')).toBeTruthy();
+    expect(within(box).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['1st: Asha R., 5 visits', '2nd: Vera V., 4 visits', '3rd: Bilal K., 2 visits']);
     expect(within(box).getByText('Prize: A month free')).toBeTruthy();
     expect(within(box).getByText('This is what your members see. It changes by itself if a number changes, or if someone is hidden from boards or leaves.')).toBeTruthy();
     expect(within(box).getByRole('link', { name: 'Open the challenge' }).getAttribute('href')).toBe('/console/iron-house/challenges?challenge=c1');

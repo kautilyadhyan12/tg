@@ -129,7 +129,7 @@ describe('the board for staff', () => {
       '—No name yet1No name yet',
     ]);
     expect(screen.getByTestId('board-dates').textContent).toBe(
-      "Mon 5 Oct – Sun 11 Oct · Iron House's time · Updated 10:42 am · 6 people have a gym day · 2 are hidden from members",
+      "Mon 5 Oct – Sun 11 Oct · Iron House's time · Updated 10:42 am · 6 people have a visit · 2 are hidden from members",
     );
     expect(screen.getByTestId('not-in-app').textContent).toBe("12 members on your list don't have the app yet, so they aren't on any board.");
     expect(svc.board).toHaveBeenCalledWith('g1', 'gym_days', 'this_week', 1);
@@ -219,7 +219,7 @@ describe('which boards members see', () => {
     open();
     await screen.findByText('Chen Wu');
     const days = within(screen.getByTestId('switch-gym_days'));
-    expect(days.getByRole('switch', { name: 'Members see Gym days' }).getAttribute('aria-checked')).toBe('true');
+    expect(days.getByRole('switch', { name: 'Members see Visits' }).getAttribute('aria-checked')).toBe('true');
     expect(days.getByText('Members see this board.')).toBeTruthy();
     const streak = within(screen.getByTestId('switch-streak'));
     expect(streak.getByRole('switch', { name: 'Members see Streak' }).getAttribute('aria-checked')).toBe('false');
@@ -232,9 +232,9 @@ describe('which boards members see', () => {
     open();
     await screen.findByText('Chen Wu');
     svc.board.mockResolvedValue(answer({ boardsOff: ['gym_days', 'streak'], memberStatus: 'switched_off' }));
-    fireEvent.click(screen.getByRole('switch', { name: 'Members see Gym days' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Members see Visits' }));
     await waitFor(() => expect(svc.setBoardOff).toHaveBeenCalledWith('g1', 'gym_days', true));
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Members see Gym days' }).getAttribute('aria-checked')).toBe('false'));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Members see Visits' }).getAttribute('aria-checked')).toBe('false'));
     // Staff still see the people.
     expect(screen.getByText('Chen Wu')).toBeTruthy();
   });
@@ -252,7 +252,7 @@ describe('which boards members see', () => {
     svc.board.mockResolvedValue(answer({ live: false, memberStatus: 'paused' }));
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     await screen.findByText('Chen Wu');
-    expect(screen.getByRole('switch', { name: 'Members see Gym days' }).disabled).toBe(true);
+    expect(screen.getByRole('switch', { name: 'Members see Visits' }).disabled).toBe(true);
     expect(screen.getAllByText('Not showing to members: this gym has no plan right now.').length).toBe(3);
   });
 });
@@ -277,8 +277,8 @@ describe('a person’s panel', () => {
     open();
     fireEvent.click((await screen.findAllByTestId('board-row'))[0]);
     const box = within(await screen.findByTestId('person-box'));
-    expect(await box.findByText('Gym days, this week')).toBeTruthy();
-    expect(box.getByTestId('person-gym_days').textContent).toContain('1st · 3 gym days');
+    expect(await box.findByText('Visits, this week')).toBeTruthy();
+    expect(box.getByTestId('person-gym_days').textContent).toContain('1st · 3 visits');
     expect(box.getByTestId('person-workout_days').textContent).toContain('No place · 0 workout days');
     expect(box.getByTestId('person-streak').textContent).toContain('1st · 4 weeks');
     expect(svc.profile).toHaveBeenCalledWith('g1', 'u-chen', 'this_week');
@@ -372,7 +372,7 @@ describe('a person’s panel', () => {
     open({ ...ORG, subscription: null, consoleReadOnly: true });
     fireEvent.click((await screen.findAllByTestId('board-row'))[1]);
     const lapsed = within(await screen.findByTestId('person-box'));
-    await lapsed.findByText('Gym days, this week');
+    await lapsed.findByText('Visits, this week');
     expect(lapsed.queryByTestId('take-off-open')).toBeNull();
   });
 
@@ -411,7 +411,7 @@ describe('a board members do not see', () => {
     expect(rows()).toEqual(['—Chen Wu3Board not showing', '—Bilal Khan2Board not showing']);
     fireEvent.click(screen.getAllByTestId('board-row')[0]);
     const box = within(await screen.findByTestId('person-box'));
-    expect((await box.findByTestId('person-gym_days')).textContent).toContain("No place — members don't see this board now · 3 gym days");
+    expect((await box.findByTestId('person-gym_days')).textContent).toContain("No place — members don't see this board now · 3 visits");
     expect(box.getByTestId('person-workout_days').textContent).toContain('No place · 0 workout days');
     expect(box.queryByText('On the board')).toBeNull();
   });
@@ -471,7 +471,7 @@ describe('fixing a visit from a person’s panel', () => {
     const asked = await box.findByTestId('visit-box');
     expect(screen.getByRole('dialog', { name: 'Remove this visit of Chen Wu?' })).toBeTruthy();
     expect(asked.textContent).toContain('Chen Wu — the 12:00 pm visit on Tue 6 Oct is removed.');
-    expect(asked.textContent).toContain('Their Gym days, this week, go from 2 to 1.');
+    expect(asked.textContent).toContain('Their visits, this week, go from 2 to 1.');
     expect(orgApi.removeVisit).not.toHaveBeenCalled();
 
     const before = svc.counted.mock.calls.length;
@@ -538,7 +538,7 @@ describe('fixing a visit from a person’s panel', () => {
 
     fireEvent.change(box.getByTestId('add-visit-day'), { target: { value: '2026-10-07' } });
     expect(asked.textContent).toContain('Chen Wu — a visit is added for Wed 7 Oct.');
-    expect(asked.textContent).toContain('Their Gym days, this week, go from 2 to 3.');
+    expect(asked.textContent).toContain('Their visits, this week, go from 2 to 3.');
     fireEvent.click(box.getByTestId('visit-press'));
     await waitFor(() => expect(orgApi.addVisit).toHaveBeenCalledTimes(1));
     expect(orgApi.addVisit).toHaveBeenCalledWith('g1', { userId: 'u-chen' }, '2026-10-07');

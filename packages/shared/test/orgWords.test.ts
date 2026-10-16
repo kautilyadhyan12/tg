@@ -5,7 +5,7 @@
 // door, and — for the fallback — anybody at all during the seconds before an
 // org row has arrived.
 import { describe, expect, it } from "vitest";
-import { ORG_TYPES_PHRASE, orgTypeSchema, orgWords } from "../src/index.js";
+import { ORG_TYPES_PHRASE, aCoach, orgTypeSchema, orgWords, ptMemberWords, ptTimeOffOverMessage, ptWords } from "../src/index.js";
 
 describe("orgWords", () => {
   it("gives a gym its own words, unchanged from before this card", () => {
@@ -83,11 +83,48 @@ describe("orgWords", () => {
     expect(orgWords("personal_trainer").it).not.toBe(orgWords("gym").it);
   });
 
+  /** The worst 5f-ii could do: a refusal or a heading that reads "undefined", "a instructor"
+   *  or a gym's word for one of the other kinds. Every kind a row can hold, and one this
+   *  build has never heard of. */
+  it("says every personal training refusal whole, in each kind's word for its staff", () => {
+    const rows: [unknown, string, string, string][] = [
+      ["gym", "trainer", "a trainer", "Trainers"],
+      ["studio", "coach", "a coach", "Coaches"],
+      ["crossfit_box", "coach", "a coach", "Coaches"],
+      ["yoga_studio", "trainer", "a trainer", "Trainers"],
+      ["pilates_studio", "instructor", "an instructor", "Instructors"],
+      ["personal_trainer", "coach", "a coach", "Coaches"],
+      ["clinic", "clinician", "a clinician", "Clinicians"],
+      ["climbing_wall", "trainer", "a trainer", "Trainers"],
+      [undefined, "trainer", "a trainer", "Trainers"],
+    ];
+    for (const [type, coach, a, heading] of rows) {
+      const label = String(type);
+      expect(orgWords(type).coach, label).toBe(coach);
+      expect(aCoach(type), label).toBe(a);
+      expect(orgWords(type).coachesCap, label).toBe(heading);
+      const said = [...Object.values(ptWords(type)), ...Object.values(ptMemberWords(type)), ptTimeOffOverMessage(type)];
+      for (const line of said) {
+        expect(line, label).not.toMatch(/undefined|null|\ba [aeiou]/u);
+        expect(line, label).toMatch(/^[A-Z].*[.]$/u);
+      }
+      const others = ["trainer", "coach", "instructor", "clinician"].filter((w) => w !== coach);
+      for (const line of said) for (const w of others) expect(line, label).not.toMatch(new RegExp(`\\b${w}s?\\b`, "u"));
+      expect(ptWords(type).trainer_off, label).toBe(`This ${coach} has time off at that time.`);
+      expect(ptWords(type).time_off_too_many, label).toBe(`${a.charAt(0).toUpperCase()}${a.slice(1)} can have up to 50 times off coming. Remove one first.`);
+      expect(ptMemberWords(type).trainer_not_offering, label).toBe(`This ${coach} isn't taking personal training sessions right now.`);
+    }
+    // The person list is the kind's own: a Pilates studio's clients.
+    expect(ptWords("pilates_studio").person_not_found).toBe("That person isn't on your client list.");
+    expect(ptWords("crossfit_box").person_not_found).toBe("That person isn't on your member list.");
+  });
+
   /** Kd's five kinds of business (2026-10-16), each in the words its own software uses. */
   it("speaks for a CrossFit box, a yoga studio and a Pilates studio in their own words", () => {
-    // A yoga studio has members and trainers, as a gym does (Kd: "it is not a school").
+    // A yoga studio has members and trainers, as a gym does (Kd: "it is not a school"); a
+    // CrossFit box has members and coaches (Kd, 5f-ii: members, as Wodify says).
     const rows: [string, string, string, string, string, string][] = [
-      ["crossfit_box", "box", "athletes", "Coach", "coaches", "Box name"],
+      ["crossfit_box", "box", "members", "Coach", "coaches", "Box name"],
       ["yoga_studio", "studio", "members", "Trainer", "trainers", "Studio name"],
       ["pilates_studio", "studio", "clients", "Instructor", "instructors", "Studio name"],
     ];

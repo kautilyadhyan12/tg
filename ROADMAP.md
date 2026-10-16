@@ -183,7 +183,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 5e-i. [x] **Add member numbers people** — merged 2026-10-16 (PR #288).
      - 5e-ii. [x] **An import's numbers** — merged 2026-10-16 (PR #292).
    - 5f. [x] **Five kinds of business at sign-up** — merged 2026-10-16 (PR #300).
-   - 5f-ii. [ ] **Personal training and Gym days in each kind's words** (5f's word sweep): a yoga studio's Personal training pages say teacher, not trainer, and "Gym days" is named for the kind of business, in the console and the member app. Web folder 1, after 5f.
+   - 5f-ii. [ ] **Personal training and Gym days in each kind's words** (5f's word sweep): Personal training says each kind's staff word (a Pilates studio's instructors), and "Gym days" is "Visits" for every kind (Kd, `rulings/2026-10-16-5f-ii.md`). Web folder 1, after 5f.
 6. [ ] Gym profile page for members; ~~gym announcements feed~~ (**item 19b since 2026-09-22**); gym greeting and branding on the member home.
 7. [ ] Member-to-coach / gym messaging. **2026-09-22: no private chat now** (RULINGS that day: reactions, no comments, no private chat — it needs far more safety work); a gym talks to its members on the shared page (item 19) and by the messages of Part 7.
 8. ~~Classes, schedules and booking (the largest gym item).~~ **Planned 2026-09-21 as item 17 (17b–17f).**

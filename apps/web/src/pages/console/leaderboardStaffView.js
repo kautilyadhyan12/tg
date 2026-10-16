@@ -8,7 +8,7 @@ export function canSeeLeaderboard(privileges) {
 }
 
 const count = (n) => n.toLocaleString('en');
-const UNIT = { gym_days: 'gym day', workout_days: 'workout day', streak: 'streak' };
+const UNIT = { gym_days: 'visit', workout_days: 'workout day', streak: 'streak' };
 
 /** What each board counts, in one line a new gym understands. */
 export const WHAT_IT_COUNTS = {
@@ -68,7 +68,7 @@ export function boardSwitch(boardId, board, words) {
   return { id: boardId, label, on, line, showing: on && boardId === board.board && board.memberStatus === 'shown' };
 }
 
-/** "9 people have a gym day · members see 4" */
+/** "9 people have a visit · members see 4" */
 export function countLine(board, words) {
   if (board.total === 0) return null;
   const unit = board.board === 'streak' ? 'a streak' : `a ${UNIT[board.board]}`;
@@ -112,7 +112,7 @@ export function rowTag(row, board) {
   return { tag: false, text: board.memberStatus === 'shown' ? 'On the board' : 'Board not showing' };
 }
 
-/** One board's line on a person's panel: "1st · 3 gym days", or why there is no place. */
+/** One board's line on a person's panel: "1st · 3 visits", or why there is no place. */
 export function panelPlace(board, hidden) {
   if (board.place !== null) return null;
   if (hidden === null && board.value > 0 && board.memberStatus !== 'shown') return "No place — members don't see this board now";
@@ -217,7 +217,7 @@ const periodWords = (period) => (PERIODS.find((p) => p.id === period)?.label ?? 
 const KEPT = "Nobody else's visits change.";
 
 /** The box before a visit is removed. `day` is the counted day it is on and `counted` the
- *  person's Gym days for the period on screen. */
+ *  person's visits for the period on screen. */
 export function removeVisitBox(name, visit, day, counted) {
   const what =
     typeof visit.addedOn === 'string'
@@ -226,8 +226,8 @@ export function removeVisitBox(name, visit, day, counted) {
   const period = periodWords(counted.period);
   const number =
     day.visits.length === 1
-      ? `Their Gym days, ${period}, go from ${counted.value} to ${counted.value - 1}. Their streak is worked out again without that day.`
-      : `They have another visit that day, so their Gym days, ${period}, stay at ${counted.value}.`;
+      ? `Their visits, ${period}, go from ${counted.value} to ${counted.value - 1}. Their streak is worked out again without that day.`
+      : `They have another visit that day, so their visits, ${period}, stay at ${counted.value}.`;
   return {
     title: `Remove this visit of ${name}?`,
     button: 'Remove visit',
@@ -256,7 +256,7 @@ export function addVisitBox(name, day, counted) {
   const period = periodWords(counted.period);
   const inPeriod = (counted.from === null || day >= counted.from) && day <= counted.to;
   const number = inPeriod
-    ? `Their Gym days, ${period}, go from ${counted.value} to ${counted.value + 1}.`
+    ? `Their visits, ${period}, go from ${counted.value} to ${counted.value + 1}.`
     : `${dayLabel(day)} is outside ${period}, so the number here stays at ${counted.value}. It counts wherever that day does.`;
   return {
     title,

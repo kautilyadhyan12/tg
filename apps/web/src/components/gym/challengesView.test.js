@@ -72,15 +72,15 @@ describe('its dates and how it is won', () => {
   });
 
   it('says how it is won', () => {
-    expect(howToWin(challenge())).toBe('Most gym days wins');
+    expect(howToWin(challenge())).toBe('Most visits wins');
     expect(howToWin(challenge({ counts: 'workout_days' }))).toBe('Most workout days wins');
-    expect(howToWin(challenge({ target: 12 }))).toBe('Reach 12 gym days');
+    expect(howToWin(challenge({ target: 12 }))).toBe('Reach 12 visits');
     expect(howToWin(challenge({ target: 1, counts: 'workout_days' }))).toBe('Reach 1 workout day');
   });
 
   it('says what is counted, in words for somebody new', () => {
     expect(whatCounts(challenge(), 'Iron House')).toBe(
-      "A gym day is a day you're checked in at Iron House: a scan at the front desk, or a check-in by staff. Two visits on one day are one. It is the same count as the Leaderboard.",
+      "A visit is a day you're checked in at Iron House: a scan at the front desk, or a check-in by staff. Two check-ins on one day are one visit. It is the same count as the Leaderboard.",
     );
     expect(whatCounts(challenge({ counts: 'workout_days' }), 'Iron House')).toBe(
       'A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.',
@@ -97,15 +97,15 @@ describe('its dates and how it is won', () => {
 
 describe("the member's own number", () => {
   it('with a target: the bar, what is left, and Done at the target', () => {
-    expect(progress(challenge({ target: 12, me: me({ value: 8 }) }))).toEqual({ big: 8, of: 12, unit: 'gym days', percent: 67, note: '4 to go', done: false });
-    expect(progress(challenge({ target: 12, me: me({ value: 0 }) }))).toEqual({ big: 0, of: 12, unit: 'gym days', percent: 0, note: '12 to go', done: false });
-    expect(progress(challenge({ target: 12, me: me({ value: 12, reached: true }) }))).toEqual({ big: 12, of: 12, unit: 'gym days', percent: 100, note: 'Done. You reached 12 gym days.', done: true });
+    expect(progress(challenge({ target: 12, me: me({ value: 8 }) }))).toEqual({ big: 8, of: 12, unit: 'visits', percent: 67, note: '4 to go', done: false });
+    expect(progress(challenge({ target: 12, me: me({ value: 0 }) }))).toEqual({ big: 0, of: 12, unit: 'visits', percent: 0, note: '12 to go', done: false });
+    expect(progress(challenge({ target: 12, me: me({ value: 12, reached: true }) }))).toEqual({ big: 12, of: 12, unit: 'visits', percent: 100, note: 'Done. You reached 12 visits.', done: true });
     // Past the target the bar stays full.
     expect(progress(challenge({ target: 12, me: me({ value: 15, reached: true }) })).percent).toBe(100);
   });
 
   it('with no target: the number and its word, no bar', () => {
-    expect(progress(challenge({ me: me({ value: 1 }) }))).toEqual({ big: 1, of: null, unit: 'gym day', percent: null, note: null, done: false });
+    expect(progress(challenge({ me: me({ value: 1 }) }))).toEqual({ big: 1, of: null, unit: 'visit', percent: null, note: null, done: false });
     expect(progress(challenge({ counts: 'workout_days', me: me({ value: 5 }) }))).toMatchObject({ big: 5, unit: 'workout days', percent: null });
   });
 
@@ -115,7 +115,7 @@ describe("the member's own number", () => {
   });
 
   it('their place, and what it takes to move up', () => {
-    expect(placeLine(challenge({ me: me({ value: 5, place: 3, toNextPlace: 2, nextPlace: 2 }) }))).toBe('3rd of 24 · 2 more gym days to reach 2nd');
+    expect(placeLine(challenge({ me: me({ value: 5, place: 3, toNextPlace: 2, nextPlace: 2 }) }))).toBe('3rd of 24 · 2 more visits to reach 2nd');
     expect(placeLine(challenge({ me: me({ value: 5, place: 4, toNextPlace: 1, nextPlace: 1 }), counts: 'workout_days' }))).toBe('4th of 24 · 1 more workout day to reach 1st');
     expect(placeLine(challenge({ me: me({ value: 9, place: 1 }) }))).toBe('1st of 24');
     expect(placeLine(challenge({ state: 'ended', me: me({ value: 5, place: 3, toNextPlace: 2, nextPlace: 2 }) }))).toBe('3rd of 24');
@@ -128,7 +128,7 @@ describe("the member's own number", () => {
 
 describe('when there is nothing to show', () => {
   it('says why there are no places yet', () => {
-    expect(boardNote(challenge({ board: board({ status: 'too_few', ranked: 0 }) }))).toBe('The places show once 3 people have a gym day in this challenge.');
+    expect(boardNote(challenge({ board: board({ status: 'too_few', ranked: 0 }) }))).toBe('The places show once 3 people have a visit in this challenge.');
     expect(boardNote(challenge({ counts: 'workout_days', board: board({ status: 'too_few', ranked: 0 }) }))).toBe('The places show once 3 people have a workout day in this challenge.');
     expect(boardNote(challenge())).toBeNull();
     expect(boardNote(challenge({ state: 'coming', board: board({ status: 'not_started' }) }))).toBeNull();
@@ -136,7 +136,7 @@ describe('when there is nothing to show', () => {
 
   it('a gym that checks nobody in: a gym-days challenge says nothing is being counted, never a bare 0', () => {
     const list = { gymName: 'Iron House', checkingIn: false };
-    expect(notCountingNote(challenge(), list)).toBe("Iron House hasn't checked anyone in at the front desk in the last 30 days, so no gym days are being counted.");
+    expect(notCountingNote(challenge(), list)).toBe("Iron House hasn't checked anyone in at the front desk in the last 30 days, so no visits are being counted.");
     expect(notCountingNote(challenge(), { ...list, checkingIn: true })).toBeNull();
     expect(notCountingNote(challenge({ counts: 'workout_days' }), list)).toBeNull();
     expect(notCountingNote(challenge({ state: 'ended' }), list)).toBeNull();
@@ -159,44 +159,44 @@ describe('how it finished', () => {
 
   it('most wins: the winner by name, and the member\'s own finish', () => {
     expect(resultOf(ended({ board: board({ top }), me: me({ value: 9, place: 5 }) }))).toEqual({
-      headline: 'Winner: Maya K., with 14 gym days.',
-      mine: 'You finished 5th, with 9 gym days.',
+      headline: 'Winner: Maya K., with 14 visits.',
+      mine: 'You finished 5th, with 9 visits.',
     });
     expect(resultOf(ended({ board: board({ top: [row('Maya K.', 1, 14, { isMe: true }), top[1], top[2]] }), me: me({ value: 14, place: 1 }) }))).toEqual({
-      headline: 'You won, with 14 gym days.',
+      headline: 'You won, with 14 visits.',
       mine: null,
     });
-    expect(resultOf(ended({ board: board({ top }), me: me({ value: 0 }) })).mine).toBe('You had no gym days in it.');
+    expect(resultOf(ended({ board: board({ top }), me: me({ value: 0 }) })).mine).toBe('You had no visits in it.');
     expect(resultOf(ended({ board: board({ top }), me: null })).mine).toBeNull();
     // A hidden member is told their number, never a place.
-    expect(resultOf(ended({ board: board({ top }), me: me({ value: 20, place: 1, hidden: 'hide_me' }) })).mine).toBe('You had 20 gym days.');
+    expect(resultOf(ended({ board: board({ top }), me: me({ value: 20, place: 1, hidden: 'hide_me' }) })).mine).toBe('You had 20 visits.');
   });
 
   it.each([
-    ['two share first', [row('Maya K.', 1, 14), row('Tom B.', 1, 14), row('Priya S.', 3, 11)], 2, 'Joint winners: Maya K. and Tom B., with 14 gym days each.'],
-    ['three share first', [row('Maya K.', 1, 14), row('Tom B.', 1, 14), row('Priya S.', 1, 14)], 3, 'Joint winners: Maya K., Tom B. and Priya S., with 14 gym days each.'],
-    ['five share first, three named', [row('Maya K.', 1, 14), row('Tom B.', 1, 14), row('Priya S.', 1, 14)], 5, 'Joint winners: Maya K., Tom B., Priya S. and 2 more, with 14 gym days each.'],
-    ['the member is one of two', [row('Maya K.', 1, 1), row('Tom B.', 1, 1, { isMe: true }), row('Priya S.', 3, 11)], 2, 'Joint winners: Maya K. and You, with 1 gym day each.'],
+    ['two share first', [row('Maya K.', 1, 14), row('Tom B.', 1, 14), row('Priya S.', 3, 11)], 2, 'Joint winners: Maya K. and Tom B., with 14 visits each.'],
+    ['three share first', [row('Maya K.', 1, 14), row('Tom B.', 1, 14), row('Priya S.', 1, 14)], 3, 'Joint winners: Maya K., Tom B. and Priya S., with 14 visits each.'],
+    ['five share first, three named', [row('Maya K.', 1, 14), row('Tom B.', 1, 14), row('Priya S.', 1, 14)], 5, 'Joint winners: Maya K., Tom B., Priya S. and 2 more, with 14 visits each.'],
+    ['the member is one of two', [row('Maya K.', 1, 1), row('Tom B.', 1, 1, { isMe: true }), row('Priya S.', 3, 11)], 2, 'Joint winners: Maya K. and You, with 1 visit each.'],
   ])('%s', (_what, rows, leaders, headline) => {
     expect(resultOf(ended({ board: board({ top: rows, leaders }), me: null })).headline).toBe(headline);
   });
 
   it('a target: how many reached it, and whether the member did', () => {
     expect(resultOf(ended({ target: 12, board: board({ top, reached: 7 }), me: me({ value: 12, reached: true, place: 3 }) }))).toEqual({
-      headline: '7 people reached 12 gym days.',
-      mine: 'You reached it: 12 gym days.',
+      headline: '7 people reached 12 visits.',
+      mine: 'You reached it: 12 visits.',
     });
     expect(resultOf(ended({ target: 12, board: board({ top, reached: 1 }), me: me({ value: 8, place: 9 }) }))).toEqual({
-      headline: '1 person reached 12 gym days.',
+      headline: '1 person reached 12 visits.',
       mine: 'You got to 8 of 12.',
     });
-    expect(resultOf(ended({ target: 12, board: board({ top, reached: 0 }), me: null })).headline).toBe('Nobody reached 12 gym days.');
+    expect(resultOf(ended({ target: 12, board: board({ top, reached: 0 }), me: null })).headline).toBe('Nobody reached 12 visits.');
   });
 
   it('fewer than three people in it: says so, and still the member\'s own number', () => {
     expect(resultOf(ended({ board: board({ status: 'too_few', ranked: 0, leaders: 0 }), me: me({ value: 3 }) }))).toEqual({
       headline: 'It finished with fewer than 3 people in it, so there are no places.',
-      mine: 'You had 3 gym days.',
+      mine: 'You had 3 visits.',
     });
   });
 });
@@ -231,7 +231,7 @@ describe('the days as flames', () => {
   });
 
   it('names each flame for a screen reader', () => {
-    expect(markLabel({ day: '2026-10-05', state: 'yes' }, words('gym_days'))).toBe('Mon 5 Oct: gym day');
+    expect(markLabel({ day: '2026-10-05', state: 'yes' }, words('gym_days'))).toBe('Mon 5 Oct: visit');
     expect(markLabel({ day: '2026-10-06', state: 'no' }, words('workout_days'))).toBe('Tue 6 Oct: no workout day');
     expect(markLabel({ day: '2026-10-07', state: 'open' }, words('gym_days'))).toBe('Wed 7 Oct: today, not counted yet');
     expect(markLabel({ day: '2026-10-08', state: 'ahead' }, words('gym_days'))).toBe('Thu 8 Oct: still to come');
@@ -241,7 +241,7 @@ describe('the days as flames', () => {
 describe('joining and leaving', () => {
   it('says what joining does', () => {
     const open = { join: true, leave: false };
-    expect(joinNote(challenge({ who: 'joined', can: open }))).toBe('Your gym days since Mon 5 Oct count as soon as you join.');
+    expect(joinNote(challenge({ who: 'joined', can: open }))).toBe('Your visits since Mon 5 Oct count as soon as you join.');
     expect(joinNote(challenge({ who: 'joined', can: open, state: 'coming', startsOn: '2026-10-12', counts: 'workout_days' }))).toBe("Join now and you're in from Mon 12 Oct.");
     expect(joinNote(challenge())).toBeNull();
   });
@@ -256,7 +256,7 @@ describe('joining and leaving', () => {
   });
 
   it('counts in words', () => {
-    expect([countText(1, words('gym_days')), countText(2, words('workout_days')), countText(1200, words('gym_days'))]).toEqual(['1 gym day', '2 workout days', '1,200 gym days']);
+    expect([countText(1, words('gym_days')), countText(2, words('workout_days')), countText(1200, words('gym_days'))]).toEqual(['1 visit', '2 workout days', '1,200 visits']);
   });
 });
 
@@ -297,7 +297,7 @@ describe("the gym's own count, in the gym's own word", () => {
 
 describe('what it is about, and how it is counted (19d-iii-a-i)', () => {
   it('says each kind a gym can make in one line', () => {
-    expect(aboutLine(challenge())).toBe('Gym visits · Checked in at the front desk');
+    expect(aboutLine(challenge())).toBe('Visits · Checked in at the front desk');
     expect(aboutLine(challenge({ counts: 'workout_days' }))).toBe('Workouts in the app · Counted by the app');
     expect(aboutLine(challenge({ counts: 'own', unit: 'push-ups' }))).toBe('Push-ups · Counted by the staff at Iron House');
   });
@@ -355,6 +355,6 @@ describe('what it is about, and how it is counted (19d-iii-a-i)', () => {
   it('draws no days for a kind that is not one a day, and says no front desk where none counts it', () => {
     expect(dayMarks(steps, TODAY)).toBeNull();
     expect(notCountingNote(steps, { checkingIn: false, gymName: 'Iron House' })).toBeNull();
-    expect(JSON.stringify([howToWin(steps), placeLine(steps), leaveBox(steps).line])).not.toMatch(/gym day|workout day|front desk/u);
+    expect(JSON.stringify([howToWin(steps), placeLine(steps), leaveBox(steps).line])).not.toMatch(/visit|workout day|front desk/u);
   });
 });

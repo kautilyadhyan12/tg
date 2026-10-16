@@ -134,7 +134,7 @@ export default function PersonalTraining({ gym }) {
   const shown = row === null ? null : row.days.some((d) => d.localDate === picked) ? picked : row.first;
   const day = view === null || shown === null ? null : ptDay(view, shown);
   const shownLabel = row?.days.find((d) => d.localDate === shown)?.label ?? '';
-  const empty = view === null ? null : emptyText(view, gym.name);
+  const empty = view === null ? null : emptyText(view, gym.name, gym.orgType);
   const note = view === null ? null : ptZoneNote(view.timezone, gym.name, deviceZone(), new Date());
   const ask = asking === null || view === null ? null : ptCancelAsk(asking, view.timezone, gym.name);
   const bookAsk = choosing === null ? null : ptBookAsk({ trainerName: choosing.trainer.name, dayLabel: choosing.label, timeText: choosing.time.text, pay: choosing.pay });

@@ -264,7 +264,7 @@ describe('fixing a visit on Attendance', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a visit for Anita Kumar' }));
     const box = screen.getByRole('group', { name: 'Add a visit for Anita Kumar' });
     expect(box.textContent).toContain(`Add a visit for Anita Kumar on ${dayLabel(yesterday)}?`);
-    expect(box.textContent).toContain('It counts as a gym day on the leaderboard, unless they already have a visit that day.');
+    expect(box.textContent).toContain('It counts as a visit on the leaderboard, unless they already have a visit that day.');
     expect(box.textContent).toContain("In their app, they see who added it and today's date.");
     // Nothing yet, and nobody else can be pressed while the box is open.
     expect(api.addVisit).not.toHaveBeenCalled();

@@ -413,11 +413,11 @@ describe('a member’s personal training', () => {
     expect(screen.getAllByRole('button', { name: /^Cancel session/ })).toHaveLength(1);
   });
 
-  it('a session that has started has no Cancel; a trainer with no name reads "a trainer"', async () => {
+  it('a session that has started has no Cancel; a trainer with no name reads "a member of staff"', async () => {
     serve(view({ sessions: [session(S1, { cancel: null, trainerName: null, packCharged: false })] }));
     render(<PersonalTraining gym={GYM} />);
     const mine = await screen.findByRole('list', { name: 'Your sessions' });
-    expect(mine.textContent).toContain('with a trainer');
+    expect(mine.textContent).toContain('with a member of staff');
     expect(mine.textContent).not.toContain('pack');
     expect(within(mine).queryByRole('button')).toBeNull();
   });

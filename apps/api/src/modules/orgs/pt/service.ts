@@ -25,11 +25,9 @@ import {
   PT_HORIZON_DAYS,
   PT_KEPT_USED_ERROR,
   PT_MEMBER_CANCEL_WORDS,
-  PT_MEMBER_WORDS,
   PT_NOT_KEPT_ERROR,
   PT_PAST_DAYS,
   PT_PEOPLE_SHOWN,
-  PT_TIME_OFF_OVER_MESSAGE,
   PT_TIME_OFF_OVER_SHOWN,
   PT_WEEK_DAYS,
   PT_WORDS,
@@ -67,6 +65,9 @@ import {
   type PtWeekQuery,
   type PtWeekResponse,
   type SavePtTrainerRequest,
+  ptMemberWords,
+  ptTimeOffOverMessage,
+  ptWords,
 } from "@app/shared";
 import { getOrgById, getStaffAuthority, insertAudit, lockOrgRow, type OrgRow } from "../repo.js";
 import { OrgsError, holdsPrivilege, requireWritableGym } from "../service.js";
@@ -366,7 +367,6 @@ export async function book(deps: PtDeps, staffId: string, gymId: string, req: Bo
  *  held to the days the gym's bookings are open, and is answered in a member's words. The
  *  session's id, or the refusal. */
 export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string, req: BookPtRequest, by: PtActor): Promise<OrgsError | string> {
-  const words = by.member ? PT_MEMBER_WORDS : PT_WORDS;
   // The same request again: the session it made stands, and nothing is added.
   const again = await repo.byKey(tx, gymId, req.requestKey);
   if (again !== null) {
@@ -385,8 +385,9 @@ export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string
   ]);
   const trainer = trainers[0];
   if (clock === null) return notFound();
+  const words = by.member ? ptMemberWords(clock.orgType) : ptWords(clock.orgType);
   if (trainer === undefined) return new OrgsError(404, "trainer_not_found", by.member ? words.trainer_not_offering : PT_WORDS.trainer_not_found);
-  if (entry === null) return new OrgsError(404, "person_not_found", PT_WORDS.person_not_found);
+  if (entry === null) return new OrgsError(404, "person_not_found", ptWords(clock.orgType).person_not_found);
 
   const today = dayInTz(now, clock.timezone);
   const minutes = trainer.sessionMinutes;
@@ -611,8 +612,8 @@ export async function mark(
 /** The 409 a time off answers while sessions or classes in it are not confirmed. */
 export class PtTimeOffAsk extends Error {
   readonly over: PtTimeOffOver;
-  constructor(over: PtTimeOffOver) {
-    super(PT_TIME_OFF_OVER_MESSAGE);
+  constructor(over: PtTimeOffOver, orgType: unknown) {
+    super(ptTimeOffOverMessage(orgType));
     this.name = "PtTimeOffAsk";
     this.over = over;
   }
@@ -657,7 +658,7 @@ export async function addTimeOff(
     const trainer = trainers[0];
     if (clock === null) return notFound();
     if (trainer === undefined) return new OrgsError(404, "trainer_not_found", PT_WORDS.trainer_not_found);
-    if (trainer.sessionMinutes === null) return new OrgsError(409, "time_off_no_hours", PT_WORDS.time_off_no_hours);
+    if (trainer.sessionMinutes === null) return new OrgsError(409, "time_off_no_hours", ptWords(clock.orgType).time_off_no_hours);
 
     const now = deps.now();
     const today = dayInTz(now, clock.timezone);
@@ -669,7 +670,7 @@ export async function addTimeOff(
       fromDate: req.fromDate,
       coming: coming.length,
     });
-    if (refusal !== null) return new OrgsError(409, refusal, PT_WORDS[refusal]);
+    if (refusal !== null) return new OrgsError(409, refusal, ptWords(clock.orgType)[refusal]);
 
     // The calendar's far edge is written by the nightly job; should it have missed a night,
     // this trainer's classes are written first, so every class in the window can be named.
@@ -698,6 +699,7 @@ export async function addTimeOff(
           classes: { count: classes.length, shown: classes.slice(0, PT_TIME_OFF_OVER_SHOWN) },
           classesUpTo: lastDay,
         }),
+        clock.orgType,
       );
     }
 
