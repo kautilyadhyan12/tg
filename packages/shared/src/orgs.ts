@@ -9,7 +9,7 @@ import { GYM_POSTAL_ADDRESS_MAX_CHARS } from "./memberInvites.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { instantSchema } from "./time.js";
 
-/** The DB vocabulary (Part 4 §3.2's CHECK, widened by migrations `0024` and `0131`),
+/** The DB vocabulary (Part 4 §3.2's CHECK, widened by migrations `0024` and `0132`),
  *  used to PARSE rows on the way out. It still contains `clinic` and
  *  `personal_trainer` on purpose — see `createOrgTypeSchema`. `studio` is the boutique
  *  studio. */
@@ -1153,6 +1153,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  console, so the client requires a definite answer before it blocks
    *  anything. */
   ownerTrialUsed: z.boolean().nullable().default(null),
+  /** This gym's free trial ended early because most of its first people came from another
+   *  gym that already had one and never paid (Stage 3 item 2d): the subscribe prompt says why.
+   *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
+  trialEndedFirstPeople: z.boolean().nullable().default(null),
   /** IS THIS GYM'S CONSOLE READ-ONLY RIGHT NOW — Part 3 §4.2's *"the console
    *  stays read-only 14 days, then archived"*, and Kd's ruling of 2026-08-29
    *  that it stops **every member of staff**, not only whoever can pay.

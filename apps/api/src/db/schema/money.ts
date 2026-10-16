@@ -115,6 +115,14 @@ export const subscriptions = pgTable(
     /** When our server told the provider to end a plan set to end (migration `0058`): Razorpay
      *  cannot take a cancel back, so it is sent in the hours before the paid month ends. */
     cancelSentAt: timestamp("cancel_sent_at", { withTimezone: true }),
+    /** The first time this subscription was paid for, written by a trigger (migration `0131`):
+     *  a gym that never paid has none on any of its rows (Stage 3 item 2d). */
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    /** What the first-people check decided about this free trial (2d): `ended` or `look`, the
+     *  gym its first people came from, and when. All three or none (`0131`). */
+    trialCheck: text("trial_check"),
+    trialCheckGymId: uuid("trial_check_gym_id"),
+    trialCheckedAt: timestamp("trial_checked_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -143,6 +151,12 @@ export const subscriptions = pgTable(
       sql`${t.pastDueSince} IS NULL OR ${t.status} IN ('past_due','expired')`,
     ),
     check("subscriptions_trial_seat_cap_check", sql`${t.trialSeatCap} IS NULL OR ${t.trialSeatCap} > 0`),
+    check("subscriptions_trial_check_check", sql`${t.trialCheck} IS NULL OR ${t.trialCheck} IN ('ended','look')`),
+    check(
+      "subscriptions_trial_check_pairing_check",
+      sql`(${t.trialCheck} IS NULL) = (${t.trialCheckGymId} IS NULL) AND (${t.trialCheck} IS NULL) = (${t.trialCheckedAt} IS NULL)`,
+    ),
+    index("subscriptions_trial_look_idx").on(t.trialCheckedAt).where(sql`${t.trialCheck} = 'look'`),
     index("subscriptions_grace_idx").on(t.pastDueSince).where(sql`${t.status} = 'past_due'`),
     check(
       "subscriptions_pending_plan_check",

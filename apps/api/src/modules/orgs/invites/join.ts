@@ -100,7 +100,7 @@ export async function myInvitations(deps: JoinDeps, caller: Caller): Promise<MyI
 
 type AcceptOutcome =
   | { kind: "none" }
-  | { kind: "joined" | "already_member"; org: OrgRow }
+  | { kind: "joined" | "already_member"; org: OrgRow; featuresOn: boolean }
   | { kind: "full" | "not_taking" | "under_age" | "waiver_needed" | "waiver_changed"; org: OrgRow };
 
 /** Join: the ONE tap, on "What {gym} can see". Everything that decides it is checked
@@ -128,7 +128,7 @@ export async function acceptInvitation(
     const invite = await repo.lockInvitation(tx, { gymId, inviteId, hmac });
     if (invite === null || invite.state === "withdrawn") return { kind: "none" };
     if (invite.state === "accepted") {
-      return (await repo.isLiveMember(tx, gymId, caller.id)) ? { kind: "already_member", org } : { kind: "none" };
+      return (await repo.isLiveMember(tx, gymId, caller.id)) ? { kind: "already_member", org, featuresOn: await gymHasLivePlan(tx, gymId) } : { kind: "none" };
     }
     // The list is the gym's yes today: an address no current record holds is let in by
     // nothing, and is let in again the moment a record holds it.
@@ -165,7 +165,10 @@ export async function acceptInvitation(
       targetId: claim.membership.id,
       meta: { invitationId: invite.id, via: "invitation", ...(entryId === null ? {} : { entryId }) },
     });
-    return { kind: claim.kind === "joined" ? "joined" : "already_member", org };
+    // This join can end the gym's free trial (2d), so whether its features are on is read
+    // after it, not assumed from the check above.
+    const featuresOn = await gymHasLivePlan(tx, gymId);
+    return { kind: claim.kind === "joined" ? "joined" : "already_member", org, featuresOn };
   });
 
   switch (outcome.kind) {
@@ -189,6 +192,7 @@ export async function acceptInvitation(
       return {
         outcome: outcome.kind,
         gym: { id: outcome.org.id, slug: outcome.org.slug, name: outcome.org.name, orgType: outcome.org.orgType },
+        featuresOn: outcome.featuresOn,
       };
   }
 }
