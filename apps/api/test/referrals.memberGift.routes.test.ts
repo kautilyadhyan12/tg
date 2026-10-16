@@ -797,6 +797,36 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     );
 
     it(
+      "a friend's sale at the desk refunded in full before the gift is used: taken back; a part refund keeps it, and the refund voided gives it again (18p)",
+      async () => {
+        const viv = await memberWithBill("viv", "Viv Lowe", true);
+        const leadId = await invited(viv.code, "Nell Shaw", "nell.shaw@example.com");
+        const nell = await added(gymA.org.id, owner.cookies, { fullName: "Nell Shaw", email: "nell.shaw@example.com", leadId });
+        const sold = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: nell, method: "cash", totalMinor: 2500 }, owner.cookies);
+        expect(sold.statusCode, sold.body).toBe(201);
+        const saleId = (JSON.parse(sold.body) as { saleId: string }).saleId;
+        const nells = async () => (await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === nell).map((g) => g.taken_back_why);
+        expect(await nells()).toEqual([null]);
+
+        const refunds = `/v1/orgs/${gymA.org.id}/register/sales/${saleId}/refunds`;
+        const part = await post(refunds, { requestKey: nextForm(), amountMinor: 1000, method: "cash", reason: "charged_too_much", restock: 0 }, owner.cookies);
+        expect(part.statusCode, part.body).toBe(201);
+        expect(await nells()).toEqual([null]);
+        const rest = await post(refunds, { requestKey: nextForm(), amountMinor: 1500, method: "cash", reason: "returned", restock: 1 }, owner.cookies);
+        expect(rest.statusCode, rest.body).toBe(201);
+        expect(await nells()).toEqual(["refunded"]);
+        expect((await memberships(gymA.org.id, viv.entryId, owner.cookies)).memberGift).toBeNull();
+
+        const [last] = await sql<{ id: string }[]>`SELECT id FROM gym_sale_refunds WHERE gym_id = ${gymA.org.id} AND sale_id = ${saleId} AND amount_minor = 1500`;
+        if (last === undefined) throw new Error("no refund");
+        expect((await post(`${refunds}/${last.id}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+        expect(await nells()).toEqual(["refunded", null]);
+        expect(await messagesOf(viv.person.id)).toHaveLength(1);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
       "a bill the gift came off, cancelled by staff: the gift waits for the next one",
       async () => {
         const tom = await memberWithBill("tom", "Tom Hart", false);

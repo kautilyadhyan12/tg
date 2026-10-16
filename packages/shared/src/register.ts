@@ -11,6 +11,7 @@ import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
 import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { saleRefundSchema } from "./saleRefunds.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
 
 export const PRODUCT_NAME_MAX = 80;
@@ -261,8 +262,14 @@ export const gymSaleSchema = z
     /** Who voided it, on the gym's own day, and why (18o); null while it stands. The reason
      *  is null for one voided before reasons were kept. */
     voided: z.object({ reason: saleVoidReasonSchema.nullable(), on: daySchema, by: z.string().nullable() }).strict().nullable(),
-    /** Whether it can still be voided: a sale of the gym's own today. */
+    /** Whether it can still be voided: a sale of the gym's own today with no refund standing. */
     canUndo: z.boolean(),
+    /** Its refunds, oldest first, voided ones too (18p). */
+    refunds: z.array(saleRefundSchema).default([]),
+    /** What the refunds that stand gave back. */
+    refundedMinor: minorSchema.default(0),
+    /** Whether money can still be given back for it: it stands, and not all of it went back. */
+    canRefund: z.boolean().default(false),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
   })
@@ -325,6 +332,8 @@ export const sellPageResponseSchema = z
     /** null where the gym's country has no money to price in. */
     currency: currencySchema.nullable(),
     today: daySchema,
+    /** The day whose sales and payments are listed: today, or an earlier day staff picked (18p). */
+    day: daySchema,
     tax: salesTaxSchema,
     products: z.array(gymProductSchema),
     archived: z.array(gymProductSchema),
@@ -364,6 +373,9 @@ export const sellPageResponseSchema = z
   })
   .strict();
 export type SellPageResponse = z.infer<typeof sellPageResponseSchema>;
+
+/** The Sell page for an earlier day: its sales and payments, to find one to refund (18p). */
+export const sellPageQuerySchema = z.object({ day: daySchema.optional() }).strict();
 
 /** `requestKey` is made by the screen once a form: the same key twice is one sale.
  *  `totalMinor` is the total the screen showed: a sale that would now come to anything

@@ -14,6 +14,16 @@ import type { Sql } from "postgres";
 import {
   DISCOUNT_WORDS,
   FRIEND_GIFT_WORDS,
+  SALE_REFUND_WORDS,
+  formatMinor,
+  refundSaleResponseSchema,
+  saleRefundTooMuchWords,
+  saleRestockTooManyWords,
+  voidSaleRefundResponseSchema,
+  type RefundSaleRequest,
+  type RefundSaleResponse,
+  type VoidSaleRefundRequest,
+  type VoidSaleRefundResponse,
   MEMBER_GIFT_WORDS,
   friendGiftResponseSchema,
   type FriendGiftResponse,
@@ -102,22 +112,31 @@ const iso = (p: repo.ProductRow) => ({ ...p, archivedAt: p.archivedAt === null ?
 
 const isoDiscount = (d: discounts.DiscountRow) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() });
 
-const shownSale = (s: repo.SaleRow, today: string, canSell: boolean) => ({
-  ...s,
-  soldAt: s.soldAt.toISOString(),
-  canUndo: canSell && !s.undone && s.soldOn === today,
-});
+/** A sale as a screen reads it. Void sale is for the sale's own day and only while no refund
+ *  stands on it; Refund sale for any day while some of it is left to give back (18p). */
+const shownSale = (s: repo.SaleRow, today: string, canSell: boolean) => {
+  const standing = s.refunds.some((r) => r.voided === null);
+  return {
+    ...s,
+    soldAt: s.soldAt.toISOString(),
+    canUndo: canSell && !s.undone && s.soldOn === today && !standing,
+    canRefund: canSell && !s.undone && s.refundedMinor < s.totalMinor,
+  };
+};
 
-async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<SellPageResponse> {
+async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: string | null = null): Promise<SellPageResponse> {
   const today = dayInTz(deps.now(), viewer.timezone);
+  // An earlier day is picked to find a sale to refund; one that has not come is refused.
+  if (asked !== null && asked > today) throw new OrgsError(409, "day_ahead", SALE_REFUND_WORDS.day_ahead);
+  const day = asked ?? today;
   // A sale names who bought it and a payment who paid: both are read only for whoever
   // may record one. Staff who only change prices are sent the products and the tax.
   // One connection and one moment: a sale or payment another desk records meanwhile is in
   // every list and count here, or in none, so the rows never outnumber their count.
   const [row, paid, offered, types] = await deps.sql.begin("isolation level repeatable read read only", async (tx) =>
     Promise.all([
-      repo.readRegister(tx, gymId, today, SALES_SHOWN, viewer.canSell),
-      viewer.canSell ? paymentsOn(tx, gymId, today, SALES_SHOWN) : null,
+      repo.readRegister(tx, gymId, today, day, SALES_SHOWN, viewer.canSell),
+      viewer.canSell ? paymentsOn(tx, gymId, day, SALES_SHOWN) : null,
       discounts.readDiscounts(tx, gymId),
       discounts.membershipTypeNames(tx, gymId),
     ]),
@@ -137,6 +156,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
   return sellPageResponseSchema.parse({
     currency,
     today,
+    day,
     tax: row.tax,
     products: row.products.map(iso),
     archived: row.archived.map(iso),
@@ -174,15 +194,15 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<
       bank_transfer: (sold?.bank_transfer ?? 0) + of("bank_transfer"),
       link: of("link"),
       company: of("company"),
-      refundedMinor: (paid?.refunds ?? []).filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
+      refundedMinor: [...(paid?.refunds ?? []), ...row.refunds].filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
       discountMinor: sold?.discountMinor ?? 0,
       otherCurrency,
     },
   });
 }
 
-export async function getRegister(deps: RegisterDeps, gymId: string, viewer: Viewer): Promise<SellPageResponse> {
-  return await read(deps, gymId, viewer);
+export async function getRegister(deps: RegisterDeps, gymId: string, viewer: Viewer, day: string | null = null): Promise<SellPageResponse> {
+  return await read(deps, gymId, viewer, day);
 }
 
 function throwOnProductFailure(outcome: repo.ProductWriteOutcome): void {
@@ -429,7 +449,59 @@ export async function voidSale(deps: RegisterDeps, userId: string, gymId: string
   const outcome = await repo.voidSale(deps.sql, { gymId, saleId, reason: req.reason, today: dayInTz(now, viewer.timezone), actorUserId: userId, now });
   if (outcome.kind === "sale_not_found") throw new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
   if (outcome.kind === "not_today") throw new OrgsError(409, "sale_not_today", REGISTER_WORDS.sale_not_today);
+  if (outcome.kind === "has_refund") throw new OrgsError(409, "sale_has_refund", SALE_REFUND_WORDS.has_refund);
   return await read(deps, gymId, viewer);
+}
+
+/** Refund sale (18p): on any day, for whoever may sell. */
+export async function refundSale(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, saleId: string, req: RefundSaleRequest): Promise<RefundSaleResponse> {
+  const now = deps.now();
+  const outcome = await repo.refundSale(deps.sql, {
+    gymId,
+    saleId,
+    requestKey: req.requestKey,
+    amountMinor: req.amountMinor,
+    method: req.method,
+    reason: req.reason,
+    restock: req.restock,
+    today: dayInTz(now, viewer.timezone),
+    actorUserId: userId,
+    now,
+  });
+  switch (outcome.kind) {
+    case "ok":
+      return refundSaleResponseSchema.parse({ receiptNumber: outcome.receiptNumber });
+    case "sale_not_found":
+      throw new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
+    case "voided":
+      throw new OrgsError(409, "sale_voided", SALE_REFUND_WORDS.voided);
+    case "request_reused":
+      throw new OrgsError(409, "request_reused", SALE_REFUND_WORDS.request_reused);
+    case "too_much":
+      throw new OrgsError(409, "refund_too_much", saleRefundTooMuchWords(formatMinor(outcome.leftMinor, outcome.currency), outcome.leftMinor === 0));
+    case "too_many_back":
+      throw new OrgsError(409, "restock_too_many", saleRestockTooManyWords(outcome.leftCount));
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled sale refund outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+/** Void refund on a sale's refund noted by mistake (18p). */
+export async function voidSaleRefund(
+  deps: RegisterDeps,
+  userId: string,
+  gymId: string,
+  viewer: Viewer,
+  saleId: string,
+  refundId: string,
+  req: VoidSaleRefundRequest,
+): Promise<VoidSaleRefundResponse> {
+  const now = deps.now();
+  const outcome = await repo.voidSaleRefund(deps.sql, { gymId, saleId, refundId, reason: req.reason, today: dayInTz(now, viewer.timezone), actorUserId: userId, now });
+  if (outcome.kind === "refund_not_found") throw new OrgsError(404, "refund_not_found", SALE_REFUND_WORDS.refund_not_found);
+  return voidSaleRefundResponseSchema.parse({ voided: true });
 }
 
 const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `\\${char}`);

@@ -47,6 +47,10 @@ export interface MoneyMonthOfSales {
   soldMinor: number;
   /** The part that falls on the period's own days. */
   periodSoldMinor: number;
+  /** Refunds of sales that stand, by the day the money was given back (18p), and their part
+   *  on the period's own days. */
+  refundedMinor?: number;
+  periodRefundedMinor?: number;
 }
 
 /** One product's sales that stand, over the period's days. */
@@ -112,7 +116,7 @@ export interface MoneyReportFacts {
   /** The list's own counts, for churn: lifetime value divides by it. */
   members: Pick<MembersReportFacts, "today" | "firstListedOn" | "everLeft" | "months">;
   /** Payments, sales and refunds that stand, over the same days a year earlier (`yearEarlierOf`). */
-  yearEarlier: { paidMinor: number; soldMinor: number; refundedMinor: number };
+  yearEarlier: { paidMinor: number; soldMinor: number; refundedMinor: number; saleRefundedMinor?: number };
 }
 
 const collectedShape = { paidMinor: minorSchema, soldMinor: minorSchema, refundedMinor: minorSchema, netMinor: netSchema };
@@ -300,10 +304,18 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     type.moved ||= row.periodPaidMinor > 0 || row.periodRefundedMinor > 0;
     if (row.month === thisMonth) type.monthNetMinor += row.paidMinor - row.refundedMinor;
   }
+  // A sale's refund comes off Collected and its Refunded line, never off lifetime value, which
+  // is membership money only: those months keep their membership refunds apart.
+  const inPeriodMemberRefunded = inPeriod.refundedMinor;
+  const memberRefunded = new Map<string, number>();
+  for (const [month, sums] of byMonth) memberRefunded.set(month, sums.refundedMinor);
   for (const row of facts.sales) {
     if (row.month > thisMonth) continue;
     inPeriod.soldMinor += row.periodSoldMinor;
-    sumsOf(row.month).soldMinor += row.soldMinor;
+    inPeriod.refundedMinor += row.periodRefundedMinor ?? 0;
+    const sums = sumsOf(row.month);
+    sums.soldMinor += row.soldMinor;
+    sums.refundedMinor += row.refundedMinor ?? 0;
   }
   const net = (sums: Sums): number => sums.paidMinor + sums.soldMinor - sums.refundedMinor;
   const monthSums = (month: string): Sums & { month: string; netMinor: number } => {
@@ -325,7 +337,7 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     recurring: { monthlyMinor, memberships },
     thisMonth: monthSums(thisMonth),
     inPeriod: { ...inPeriod, netMinor: net(inPeriod) },
-    yearEarlier: collectedEarlier(facts, inPeriod, earlier),
+    yearEarlier: collectedEarlier(facts, { ...inPeriod, refundedMinor: inPeriodMemberRefunded }, earlier),
     owed: {
       minor: facts.owed.currentMinor,
       people: facts.owed.currentPeople,
@@ -338,7 +350,7 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     },
     lifetimeValue: lifetimeValue(facts, (month) => {
       const sums = monthSums(month);
-      return sums.paidMinor - sums.refundedMinor;
+      return sums.paidMinor - (memberRefunded.get(month) ?? 0);
     }),
     months: shown.map(monthSums),
     types: [...types.values()]
@@ -370,6 +382,7 @@ function told(m: MoneyStaff, all: readonly MoneyStaff[]): string | null {
  *  left out of both sides. */
 function collectedEarlier(
   facts: MoneyReportFacts,
+  /** `refundedMinor` here is the membership refunds alone: they are history of payments. */
   now: { paidMinor: number; soldMinor: number; refundedMinor: number },
   earlier: { from: string; to: string },
 ): CollectedEarlier {
@@ -386,7 +399,7 @@ function collectedEarlier(
   }
   const then = {
     paidMinor: paidCovered ? facts.yearEarlier.paidMinor : 0,
-    refundedMinor: paidCovered ? facts.yearEarlier.refundedMinor : 0,
+    refundedMinor: (paidCovered ? facts.yearEarlier.refundedMinor : 0) + (soldCovered ? (facts.yearEarlier.saleRefundedMinor ?? 0) : 0),
     soldMinor: soldCovered ? facts.yearEarlier.soldMinor : 0,
   };
   return { state: "ok", ...earlier, ...then, netMinor: then.paidMinor + then.soldMinor - then.refundedMinor };

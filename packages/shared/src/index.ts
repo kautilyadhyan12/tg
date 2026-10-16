@@ -70,6 +70,7 @@ export * from "./gymGroupMessages.js";
 export * from "./atRisk.js";
 export * from "./staffActivity.js";
 export * from "./register.js";
+export * from "./saleRefunds.js";
 export * from "./discounts.js";
 export * from "./referrals.js";
 export * from "./friendGift.js";

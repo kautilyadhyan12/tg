@@ -17,9 +17,14 @@ import {
   MEMBER_GIFT_SALE_NAME,
   memberCurrencyForCountry,
   memberPaymentByHandSchema,
+  refundSale as refundSaleCheck,
+  refundVoidReasonSchema,
   saleAmounts,
+  saleRefundReasonSchema,
   saleVoidReasonSchema,
   type DiscountRefusal,
+  type RefundVoidReason,
+  type SaleRefundReason,
   type SalesTax,
   type MemberPaymentByHand,
   type SaleVoidReason,
@@ -91,6 +96,22 @@ export interface SaleRow {
   /** Who voided it, on the gym's own day, and why (18o); null while it stands. */
   voided: { reason: SaleVoidReason | null; on: string; by: string | null } | null;
   receiptNumber: number;
+  /** Its refunds, oldest first, voided ones too (18p). */
+  refunds: SaleRefundRow[];
+  /** What the refunds that stand gave back. */
+  refundedMinor: number;
+}
+
+export interface SaleRefundRow {
+  id: string;
+  amountMinor: number;
+  method: MemberPaymentByHand;
+  reason: SaleRefundReason;
+  restocked: number;
+  refundedOn: string;
+  by: string | null;
+  receiptNumber: number;
+  voided: { reason: RefundVoidReason; on: string; by: string | null } | null;
 }
 
 interface RawSale {
@@ -120,6 +141,7 @@ interface RawSale {
   voided_on: string | null;
   voided_by: string | null;
   receipt_number: number;
+  refunded_minor: number;
 }
 
 /** A record with no name typed is still somebody: the row says so. */
@@ -153,7 +175,58 @@ const sale = (r: RawSale): SaleRow => ({
       ? { reason: r.void_reason === null ? null : saleVoidReasonSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by }
       : null,
   receiptNumber: r.receipt_number,
+  refunds: [],
+  refundedMinor: r.refunded_minor,
 });
+
+interface RawSaleRefund {
+  id: string;
+  sale_id: string;
+  amount_minor: number;
+  method: string;
+  reason: string;
+  restocked: number;
+  refunded_on: string;
+  by: string | null;
+  receipt_number: number;
+  void_reason: string | null;
+  voided_on: string | null;
+  voided_by: string | null;
+}
+
+/** The refunds of these sales, voided ones too, oldest first: one read for a list of sales. */
+async function refundsOf(sql: Sql | TransactionSql, gymId: string, sales: SaleRow[]): Promise<SaleRow[]> {
+  if (sales.length === 0) return sales;
+  const rows = await sql<RawSaleRefund[]>`
+    SELECT r.id, r.sale_id, r.amount_minor, r.method, r.reason, r.restocked, r.refunded_on::text AS refunded_on,
+           u.display_name AS by, r.receipt_number, r.void_reason,
+           CASE WHEN r.undone_at IS NOT NULL THEN (r.undone_at AT TIME ZONE g.timezone)::date::text END AS voided_on,
+           v.display_name AS voided_by
+    FROM gym_sale_refunds r
+    JOIN gyms g ON g.id = r.gym_id
+    LEFT JOIN users u ON u.id = r.recorded_by
+    LEFT JOIN users v ON v.id = r.undone_by
+    WHERE r.gym_id = ${gymId} AND r.sale_id = ANY(${sales.map((s) => s.id)}::uuid[])
+    ORDER BY r.receipt_number`;
+  const bySale = new Map<string, SaleRefundRow[]>();
+  for (const r of rows) {
+    const list = bySale.get(r.sale_id) ?? [];
+    list.push({
+      id: r.id,
+      amountMinor: r.amount_minor,
+      // Text under a CHECK: parsed, so a value this build does not know fails here.
+      method: memberPaymentByHandSchema.parse(r.method),
+      reason: saleRefundReasonSchema.parse(r.reason),
+      restocked: r.restocked,
+      refundedOn: r.refunded_on,
+      by: r.by,
+      receiptNumber: r.receipt_number,
+      voided: r.voided_on === null ? null : { reason: refundVoidReasonSchema.parse(r.void_reason ?? ""), on: r.voided_on, by: r.voided_by },
+    });
+    bySale.set(r.sale_id, list);
+  }
+  return sales.map((s) => ({ ...s, refunds: bySale.get(s.id) ?? [] }));
+}
 
 /** The columns every read of a sale takes, from `gym_sales s` with its two joins. Who
  *  voided one and on what day are read on their own, for the few that were. */
@@ -169,7 +242,9 @@ const saleColumns = (sql: Sql | TransactionSql) => sql`
   e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.void_reason,
   CASE WHEN s.undone_at IS NOT NULL THEN (s.undone_at AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = s.gym_id))::date::text END AS voided_on,
   CASE WHEN s.undone_by IS NOT NULL THEN (SELECT v.display_name FROM users v WHERE v.id = s.undone_by) END AS voided_by,
-  s.receipt_number`;
+  s.receipt_number,
+  COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f
+            WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS refunded_minor`;
 
 export interface RegisterRow {
   country: string | null;
@@ -181,19 +256,29 @@ export interface RegisterRow {
   salesTotal: number;
   /** The day's sales that stand, added up in each money they were taken in. */
   totals: { currency: string; count: number; totalMinor: number; taxMinor: number; discountMinor: number; cash: number; card_at_desk: number; bank_transfer: number }[];
+  /** Refunds of sales noted on the day that stand, in each money (18p). */
+  refunds: { currency: string; totalMinor: number }[];
 }
 
 /** The Sell page in one go, or null where the gym does not exist: what is on sale (bounded
- *  by the cap the writes hold), a page of what was archived, and the day's sales. A sale
- *  names who bought it, so the day's sales are read only `withSales`. */
-export async function readRegister(sql: Sql | TransactionSql, gymId: string, today: string, salesShown: number, withSales: boolean): Promise<RegisterRow | null> {
+ *  by the cap the writes hold), a page of what was archived, and the sales of `day` (today, or
+ *  an earlier day staff picked, 18p). A sale names who bought it, so the day's sales are read
+ *  only `withSales`. */
+export async function readRegister(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  today: string,
+  day: string,
+  salesShown: number,
+  withSales: boolean,
+): Promise<RegisterRow | null> {
   const readProducts = (archived: boolean, limit: number) => sql<RawProduct[]>`
     SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at
     FROM gym_products
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
     LIMIT ${limit}`;
-  const [gymRows, included, rates, live, archived, archivedTotal, sales, totals] = await Promise.all([
+  const [gymRows, included, rates, live, archived, archivedTotal, sales, totals, refunds] = await Promise.all([
     sql<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${gymId}`,
     taxIncludedOf(sql, gymId),
     readRates(sql, gymId, today),
@@ -207,7 +292,7 @@ export async function readRegister(sql: Sql | TransactionSql, gymId: string, tod
       FROM gym_sales s
       LEFT JOIN users u ON u.id = s.recorded_by
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
-      WHERE s.gym_id = ${gymId} AND s.sold_on = ${today}::date
+      WHERE s.gym_id = ${gymId} AND s.sold_on = ${day}::date
       ORDER BY s.seq DESC
       LIMIT ${salesShown}`,
     !withSales
@@ -221,7 +306,13 @@ export async function readRegister(sql: Sql | TransactionSql, gymId: string, tod
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'cash'), 0)::text AS cash,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'card_at_desk'), 0)::text AS card,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'bank_transfer'), 0)::text AS bank
-      FROM gym_sales WHERE gym_id = ${gymId} AND sold_on = ${today}::date
+      FROM gym_sales WHERE gym_id = ${gymId} AND sold_on = ${day}::date
+      GROUP BY currency`,
+    !withSales
+      ? []
+      : sql<{ currency: string; total: string }[]>`
+      SELECT currency, sum(amount_minor)::text AS total
+      FROM gym_sale_refunds WHERE gym_id = ${gymId} AND refunded_on = ${day}::date AND undone_at IS NULL
       GROUP BY currency`,
   ]);
   const gym = gymRows[0];
@@ -232,7 +323,7 @@ export async function readRegister(sql: Sql | TransactionSql, gymId: string, tod
     products: live.map(product),
     archived: archived.map(product),
     archivedTotal: archivedTotal[0]?.n ?? 0,
-    sales: sales.map(sale),
+    sales: await refundsOf(sql, gymId, sales.map(sale)),
     salesTotal: totals.reduce((n, row) => n + row.n, 0),
     totals: totals.map((row) => ({
       currency: row.currency,
@@ -244,6 +335,7 @@ export async function readRegister(sql: Sql | TransactionSql, gymId: string, tod
       card_at_desk: Number(row.card),
       bank_transfer: Number(row.bank),
     })),
+    refunds: refunds.map((row) => ({ currency: row.currency, totalMinor: Number(row.total) })),
   };
 }
 
@@ -586,7 +678,7 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
   });
 }
 
-export type VoidSaleOutcome = { kind: "ok" } | { kind: "sale_not_found" } | { kind: "not_today" };
+export type VoidSaleOutcome = { kind: "ok" } | { kind: "sale_not_found" } | { kind: "not_today" } | { kind: "has_refund" };
 
 /** Voids one sale (18o): its row is kept, marked with who, when and why, what it took
  *  from the stock count is returned where the product is still counted, and the use of
@@ -603,6 +695,10 @@ export async function voidSale(
     if (row === undefined) return { kind: "sale_not_found" };
     if (row.undone) return { kind: "ok" };
     if (row.sold_on !== input.today) return { kind: "not_today" };
+    // A refund standing on it is voided first: a refund only ever stands on a sale that stands.
+    const [refunded] = await tx<{ id: string }[]>`
+      SELECT id FROM gym_sale_refunds WHERE gym_id = ${input.gymId} AND sale_id = ${input.saleId} AND undone_at IS NULL LIMIT 1`;
+    if (refunded !== undefined) return { kind: "has_refund" };
     await tx`
       UPDATE gym_sales SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.saleId} AND undone_at IS NULL`;
@@ -623,6 +719,158 @@ export async function voidSale(
       targetType: "gym_sale",
       targetId: input.saleId,
       meta: { product: row.item_name, quantity: String(row.quantity), totalMinor: String(row.total_minor), currency: row.currency, reason: input.reason },
+    });
+    return { kind: "ok" };
+  });
+}
+
+export type RefundSaleOutcome =
+  | { kind: "ok"; receiptNumber: number }
+  | { kind: "sale_not_found" }
+  | { kind: "voided" }
+  | { kind: "request_reused" }
+  | { kind: "too_much"; leftMinor: number; currency: string }
+  | { kind: "too_many_back"; leftCount: number };
+
+export interface RefundSaleInput {
+  gymId: string;
+  saleId: string;
+  requestKey: string;
+  amountMinor: number;
+  method: MemberPaymentByHand;
+  reason: SaleRefundReason;
+  restock: number;
+  /** The gym's own day. */
+  today: string;
+  actorUserId: string;
+  now: Date;
+}
+
+/** ONE REFUND OF A SALE (18p): its row, what went back on the shelf, and its note in the gym's
+ *  record, together or not at all. Under the gym's lock, so two members of staff at one
+ *  instant are taken one after the other and together never give back more than the sale took;
+ *  the same request twice is one refund. The sale stays as it was. A friend's sale refunded in
+ *  full no longer stands for a member's Refer a friend gift not yet used. */
+export async function refundSale(sql: Sql, input: RefundSaleInput): Promise<RefundSaleOutcome> {
+  return await sql.begin(async (tx): Promise<RefundSaleOutcome> => {
+    await lockOrgRow(tx, input.gymId);
+
+    // The same key with anything else in it, or after its refund was voided, is not the same
+    // request: it is refused, never answered as noted.
+    const [again] = await tx<{ sale_id: string; amount_minor: number; method: string; reason: string; restocked: number; undone: boolean; receipt_number: number }[]>`
+      SELECT sale_id, amount_minor, method, reason, restocked, undone_at IS NOT NULL AS undone, receipt_number
+      FROM gym_sale_refunds WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
+    if (again !== undefined) {
+      const same =
+        again.sale_id === input.saleId &&
+        again.amount_minor === input.amountMinor &&
+        again.method === input.method &&
+        again.reason === input.reason &&
+        again.restocked === input.restock &&
+        !again.undone;
+      return same ? { kind: "ok", receiptNumber: again.receipt_number } : { kind: "request_reused" };
+    }
+
+    const [row] = await tx<
+      { product_id: string; quantity: number; total_minor: number; currency: string; item_name: string; stock_counted: boolean; undone: boolean; refunded: number; restocked: number }[]
+    >`
+      SELECT s.product_id, s.quantity, s.total_minor, s.currency, s.item_name, s.stock_counted, s.undone_at IS NOT NULL AS undone,
+             COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS refunded,
+             COALESCE((SELECT sum(f.restocked) FROM gym_sale_refunds f WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS restocked
+      FROM gym_sales s WHERE s.gym_id = ${input.gymId} AND s.id = ${input.saleId}`;
+    if (row === undefined) return { kind: "sale_not_found" };
+    const check = refundSaleCheck(
+      { totalMinor: row.total_minor, quantity: row.quantity, voided: row.undone, refundedMinor: row.refunded, restocked: row.restocked },
+      { amountMinor: input.amountMinor, restock: input.restock },
+    );
+    if (!check.ok) {
+      if (check.reason === "too_much") return { kind: "too_much", leftMinor: check.leftMinor, currency: row.currency };
+      if (check.reason === "too_many_back") return { kind: "too_many_back", leftCount: check.leftCount };
+      // The request's own schema lets no amount through that is not one: what is left is a voided sale.
+      return { kind: "voided" };
+    }
+
+    // The refund takes the gym's next receipt number in the statement that writes it (18g-i).
+    const [created] = await tx<{ id: string; receipt_number: number }[]>`
+      WITH n AS (${nextReceipt(tx, input.gymId)})
+      INSERT INTO gym_sale_refunds
+        (gym_id, sale_id, amount_minor, currency, method, reason, restocked, request_key, refunded_on, recorded_by, receipt_number, created_at)
+      SELECT ${input.gymId}, ${input.saleId}, ${input.amountMinor}, ${row.currency}, ${input.method}, ${input.reason}, ${input.restock},
+             ${input.requestKey}, ${input.today}::date, ${input.actorUserId}, n.number, ${input.now}
+      FROM n
+      RETURNING id, receipt_number`;
+    if (created === undefined) throw new Error("sale refund insert returned no row");
+    // Back on the shelf, where the product still keeps a count; never past the count's ceiling.
+    if (input.restock > 0 && row.stock_counted) {
+      await tx`
+        UPDATE gym_products SET stock = LEAST(stock + ${input.restock}, 100000), updated_at = ${input.now}
+        WHERE gym_id = ${input.gymId} AND id = ${row.product_id} AND stock IS NOT NULL`;
+    }
+    if (check.refundedInFull) {
+      await friendPaymentGone(tx, { gymId: input.gymId, by: { saleId: input.saleId }, why: "refunded", today: input.today, now: input.now });
+    }
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.sale_refund_noted",
+      targetType: "gym_sale_refund",
+      targetId: created.id,
+      meta: {
+        saleId: input.saleId,
+        product: row.item_name,
+        amountMinor: String(input.amountMinor),
+        currency: row.currency,
+        method: input.method,
+        reason: input.reason,
+        restocked: String(input.restock),
+        refundedInFull: String(check.refundedInFull),
+      },
+    });
+    return { kind: "ok", receiptNumber: created.receipt_number };
+  });
+}
+
+export type VoidSaleRefundOutcome = { kind: "ok" } | { kind: "refund_not_found" };
+
+/** Voids a refund of a sale noted by mistake (18p): its row is kept, marked with who, when and
+ *  why; what it put back on the shelf comes off the count again, never below nothing; a friend's
+ *  sale that stands again gives the member's gift where none stands. Pressed twice it is voided
+ *  once. */
+export async function voidSaleRefund(
+  sql: Sql,
+  input: { gymId: string; saleId: string; refundId: string; reason: RefundVoidReason; today: string; actorUserId: string; now: Date },
+): Promise<VoidSaleRefundOutcome> {
+  return await sql.begin(async (tx): Promise<VoidSaleRefundOutcome> => {
+    await lockOrgRow(tx, input.gymId);
+    const [row] = await tx<
+      { undone: boolean; amount_minor: number; currency: string; restocked: number; product_id: string; stock_counted: boolean; entry_id: string | null; sale_undone: boolean }[]
+    >`
+      SELECT r.undone_at IS NOT NULL AS undone, r.amount_minor, r.currency, r.restocked,
+             s.product_id, s.stock_counted, s.entry_id, s.undone_at IS NOT NULL AS sale_undone
+      FROM gym_sale_refunds r
+      JOIN gym_sales s ON s.gym_id = r.gym_id AND s.id = r.sale_id
+      WHERE r.gym_id = ${input.gymId} AND r.id = ${input.refundId} AND r.sale_id = ${input.saleId}`;
+    if (row === undefined) return { kind: "refund_not_found" };
+    if (row.undone) return { kind: "ok" };
+    await tx`
+      UPDATE gym_sale_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
+      WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND undone_at IS NULL`;
+    if (row.restocked > 0 && row.stock_counted) {
+      await tx`
+        UPDATE gym_products SET stock = GREATEST(stock - ${row.restocked}, 0), updated_at = ${input.now}
+        WHERE gym_id = ${input.gymId} AND id = ${row.product_id} AND stock IS NOT NULL`;
+    }
+    // The sale stands again: a friend's sale gives the member's gift where none stands.
+    if (!row.sale_undone && row.entry_id !== null) {
+      await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: row.entry_id, by: { saleId: input.saleId }, today: input.today, now: input.now });
+    }
+    await insertAudit(tx, {
+      actorUserId: input.actorUserId,
+      gymId: input.gymId,
+      action: "org.sale_refund_undone",
+      targetType: "gym_sale_refund",
+      targetId: input.refundId,
+      meta: { saleId: input.saleId, amountMinor: String(row.amount_minor), currency: row.currency, restocked: String(row.restocked), reason: input.reason },
     });
     return { kind: "ok" };
   });
@@ -669,5 +917,5 @@ export async function purchasesOf(sql: Sql, gymId: string, entryId: string, limi
       LIMIT ${limit}`,
     sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymId} AND entry_id = ${entryId}`,
   ]);
-  return { sales: rows.map(sale), total: count[0]?.n ?? 0 };
+  return { sales: await refundsOf(sql, gymId, rows.map(sale)), total: count[0]?.n ?? 0 };
 }
