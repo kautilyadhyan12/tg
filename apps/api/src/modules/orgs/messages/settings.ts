@@ -43,13 +43,15 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
   const now = deps.now();
   const today = await settingsRepo.gymToday(deps.sql, gymId, now);
   if (today === null) throw notFound();
-  const [rows, checkIn, list, money, bookings, version] = await Promise.all([
+  // The version first and the rows after it: a save between the two hands the page an old
+  // version with the new rows, which only ever refuses its next save, never lets a stale one through.
+  const version = await settingsStamp(deps.sql, gymId);
+  const [rows, checkIn, list, money, bookings] = await Promise.all([
     settingsRepo.settingRows(deps.sql, gymId),
     settingsRepo.checkedInLately(deps.sql, gymId, today, GYM_MESSAGE_CHECK_IN_DAYS),
     priceListUse(deps.sql, gymId),
     gymMoney(deps.sql, gymId, today),
     hasBookings(deps.sql, gymId, today),
-    settingsStamp(deps.sql, gymId),
   ]);
   const settings = gymMessageSettingsFrom(rows);
   return gymMessageSettingsResponseSchema.parse({

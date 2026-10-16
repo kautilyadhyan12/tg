@@ -111,7 +111,10 @@ function giftView(discounts: readonly DiscountRow[], id: string | null, today: s
 const memberWords = (gift: repo.MemberGift | null): { gift: string; instead: string | null } | null => (gift === null ? null : referralMemberGiftWords(gift));
 
 async function settingsView(sql: Sql, org: { id: string; name: string; country: string | null }, today: string): Promise<ReferralSettings> {
-  const [now, version] = await Promise.all([repo.settingsFor(sql, org.id), repo.settingsVersion(sql, org.id)]);
+  // The version first and the offer after it: a save between the two hands the page an old
+  // version with the new offer, which only ever refuses its next save, never lets a stale one through.
+  const version = await repo.settingsVersion(sql, org.id);
+  const now = await repo.settingsFor(sql, org.id);
   const discounts = await referralDiscounts(sql, org.id, now.friendDiscountId === null ? [] : [now.friendDiscountId]);
   const friend = liveGift(discounts, now.friendDiscountId, today);
   const member = memberWords(now.member);
