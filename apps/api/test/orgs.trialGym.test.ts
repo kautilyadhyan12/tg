@@ -11,23 +11,44 @@
 // join decides it joins through the real routes (the gym adds them and they accept), so
 // the test proves the door runs the check. The join is by invitation, the one way into a gym
 // (spec Part 3 §10); a code join reaches the same seat-taking step.
+//
+// A gym that pays during its free trial (2d-ii) is checked until the money is taken, through
+// the real payment window and a fake Razorpay and Paddle: paying in the trial charges that day
+// (RULINGS 2026-09-30), and Razorpay keeps a plan that starts at once "created", which our server
+// writes nothing for, until its first payment is taken (Razorpay, "Subscription States").
+import { randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { FakePaddle, paddleId } from "./fakePaddle.js";
+import { FakeRazorpay } from "./fakeRazorpay.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 
 const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
+/** Fakes in Razorpay's and Paddle's shapes, built at run time so no key-shaped text is in the repository. */
+const RZP_KEY_ID = ["rzp", "test", "T".repeat(14)].join("_");
+const PADDLE_KEY = ["pdl", "sdbx", "apikey", "01" + "t".repeat(24), "TrialGymTrialGymTrialG", "Xyz"].join("_");
+const RZP_PLAN_CODE = "zz_trialgym_rzp";
+const PADDLE_PLAN_CODE = "zz_trialgym_pdl";
+const PADDLE_PRICE = paddleId("pri");
 const baseEnv = {
   NODE_ENV: "test",
   DATABASE_URL: url ?? "",
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "trialgym-test-secret-0123456789ab", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
+  RAZORPAY_KEY_ID: RZP_KEY_ID,
+  RAZORPAY_KEY_SECRET: "T".repeat(24),
+  RAZORPAY_WEBHOOK_SECRET: ["rzp", "webhook", "trialgym"].join("-"),
+  PADDLE_ENV: "sandbox",
+  PADDLE_API_KEY: PADDLE_KEY,
+  PADDLE_CLIENT_TOKEN: ["test", "1".repeat(27)].join("_"),
+  PADDLE_WEBHOOK_SECRET: ["pdl", "ntfset", "01" + "t".repeat(24), "TrialGymWebhookSecret"].join("_"),
 };
 const TIMEOUT_MS = 120_000;
 
@@ -46,6 +67,12 @@ const nextEmail = () => `${TAG}.${run}.${String(seq++)}@gmail.com`;
 
 d("the trial belongs to the gym (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
+  const razorpay = new FakeRazorpay();
+  const RZP_PLAN = razorpay.addPlan(750000);
+  const paddle = new FakePaddle({ [PADDLE_PRICE]: { amount: "4000", currency: "USD" } });
+  // A window paid with the email it is filled in with: the gym's owner's (1e).
+  paddle.payerEmailFor = async (gymId) =>
+    (await sql<{ email: string }[]>`SELECT u.email FROM gyms g JOIN users u ON u.id = g.owner_user_id WHERE g.id = ${gymId}`)[0]?.email ?? null;
   let app: App | undefined;
   // The address key only; a run with no database still reads this line.
   const settings = inviteSettings(loadConfig({ ...baseEnv, DATABASE_URL: "postgres://unused@localhost:5432/unused" }));
@@ -58,6 +85,8 @@ d("the trial belongs to the gym (real Postgres)", () => {
   const cleanup = async () => {
     const people = sql`SELECT id FROM users WHERE email ILIKE ${`${TAG}.%`}`;
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (${people})`;
+    await sql`DELETE FROM billing_refunds WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_invite_sends WHERE gym_id IN (${mine})`;
@@ -76,11 +105,26 @@ d("the trial belongs to the gym (real Postgres)", () => {
 
   beforeAll(async () => {
     await cleanup();
-    app = await buildApp(loadConfig(baseEnv));
+    // trial_days 0: the free trial stays on the seeded plan with a trial; `zz_` keeps them out of
+    // the price lists other tests read.
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap,
+                         trial_days, rank, entitlements, member_entitlements, razorpay_plan_id)
+      VALUES (${RZP_PLAN_CODE}, 'org', 'plan.zz_trialgym_rzp', 750000, 'INR', 'month', 200, 0, 10,
+              '{}'::jsonb, '{}'::jsonb, ${RZP_PLAN})
+      ON CONFLICT (code) DO UPDATE SET active = true, razorpay_plan_id = ${RZP_PLAN}`;
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap,
+                         trial_days, rank, entitlements, member_entitlements, paddle_price_id)
+      VALUES (${PADDLE_PLAN_CODE}, 'org', 'plan.zz_trialgym_pdl', 4000, 'USD', 'month', 200, 0, 10,
+              '{}'::jsonb, '{}'::jsonb, ${PADDLE_PRICE})
+      ON CONFLICT (code) DO UPDATE SET active = true, paddle_price_id = ${PADDLE_PRICE}`;
+    app = await buildApp(loadConfig(baseEnv), { razorpayApi: razorpay, paddleApi: paddle });
   }, TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanup();
+    await sql`DELETE FROM plans WHERE code IN (${RZP_PLAN_CODE}, ${PADDLE_PLAN_CODE})`;
     await app?.close();
     await sql.end();
   }, TIMEOUT_MS);
@@ -121,12 +165,14 @@ d("the trial belongs to the gym (real Postgres)", () => {
     return ids;
   };
 
-  /** A gym with its free trial started through the real route. */
-  const trialGym = async (owner: Account): Promise<string> => {
+  /** A gym with its free trial started through the real route: in India unless `us`. */
+  const trialGym = async (owner: Account, us = false): Promise<string> => {
     const res = await send(
       "POST",
       "/v1/orgs",
-      { trainsHere: false, name: `Trial Gym ${run} ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" },
+      us
+        ? { trainsHere: false, name: `Trial Gym ${run} ${String(seq++)}`, city: "Austin", country: "US", timezone: "America/Chicago" }
+        : { trainsHere: false, name: `Trial Gym ${run} ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" },
       owner.cookies,
     );
     expect(res.statusCode).toBe(201);
@@ -277,7 +323,7 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
-    "an old gym that paid counts nobody; a trial the gym paid for is never touched",
+    "an old gym that paid counts nobody",
     async () => {
       const paid = await oldGym({ paid: true });
       const eleven = await people(11);
@@ -287,15 +333,6 @@ d("the trial belongs to the gym (real Postgres)", () => {
       await earlierInNewGym(gym, eleven.slice(0, 10));
       await joinsThroughDoor(gym, owner, paid);
       expect(await trialOf(gym)).toEqual({ status: "trialing", trial_check: null, trial_check_gym_id: null });
-
-      const unpaid = await oldGym();
-      await inGym(unpaid, eleven, 39);
-      const owner2 = await makeUser();
-      const gym2 = await trialGym(owner2);
-      await sql`UPDATE subscriptions SET provider = 'paddle', provider_ref = ${`sub_${TAG}_${run}_t`} WHERE owner_type = 'gym' AND owner_id = ${gym2}`;
-      await earlierInNewGym(gym2, eleven.slice(0, 10));
-      await joinsThroughDoor(gym2, owner2, unpaid);
-      expect(await trialOf(gym2)).toEqual({ status: "trialing", trial_check: null, trial_check_gym_id: null });
     },
     TIMEOUT_MS,
   );
@@ -478,6 +515,138 @@ d("the trial belongs to the gym (real Postgres)", () => {
       expect((await onScreen(trainer, gym))?.trialEndedFirstPeople).toBeNull();
       const stranger = await makeUser();
       expect(await onScreen(stranger, gym)).toBeUndefined();
+    },
+    TIMEOUT_MS,
+  );
+
+  // ── 2d-ii: a gym that pays during its free trial ────────────────────────────────────────
+
+  /** The owner presses Pay on a plan: the payment window opens; nothing is paid yet. */
+  const opensWindow = async (gymId: string, owner: Account, planCode: string) => {
+    const res = await api().inject({
+      method: "POST",
+      url: `/v1/orgs/${gymId}/billing/checkout`,
+      remoteAddress: nextIp(),
+      headers: { "content-type": "application/json", "idempotency-key": randomBytes(8).toString("hex") },
+      cookies: owner.cookies,
+      payload: JSON.stringify({ planCode }),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return JSON.parse(res.body) as { checkoutId: string; subscriptionId?: string; transactionId?: string };
+  };
+  /** Our server reads the window back, as the console does once it closes. */
+  const synced = async (gymId: string, owner: Account, checkoutId: string) => {
+    const res = await send("POST", `/v1/orgs/${gymId}/billing/checkouts/${checkoutId}/sync`, {}, owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { state: string }).state;
+  };
+  /** Every row of the gym's plans, oldest first. */
+  const rowsOf = async (gymId: string) =>
+    await sql<{ provider: string; status: string; paid: boolean; trial_check: string | null }[]>`
+      SELECT provider, status, paid_at IS NOT NULL AS paid, trial_check FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${gymId} ORDER BY created_at, provider`;
+  /** An old gym that never paid, and `n` of its people already in a new gym's app. */
+  const newGymWithFollowers = async (n: number, us = false) => {
+    const old = await oldGym();
+    const followers = await people(n);
+    await inGym(old, followers, 40);
+    const owner = await makeUser();
+    const gym = await trialGym(owner, us);
+    await earlierInNewGym(gym, followers);
+    return { old, owner, gym };
+  };
+
+  it(
+    "WORST THING (2d-ii): a gym that paid during its trial is never checked again; one that only opened the window still is, and its payment then is a plan from that day",
+    async () => {
+      // Paid through Razorpay in the trial: charged that day, and then 11 of its first 20 from a
+      // gym that never paid changes nothing.
+      const paid = await newGymWithFollowers(9);
+      const window = await opensWindow(paid.gym, paid.owner, RZP_PLAN_CODE);
+      if (window.subscriptionId === undefined) throw new Error("no Razorpay window");
+      razorpay.authenticate(window.subscriptionId);
+      expect(razorpay.subs.get(window.subscriptionId)?.paid_count).toBe(1);
+      expect(await synced(paid.gym, paid.owner, window.checkoutId)).toBe("paid");
+      expect(await rowsOf(paid.gym)).toEqual([
+        { provider: "none", status: "expired", paid: false, trial_check: null },
+        { provider: "razorpay", status: "active", paid: true, trial_check: null },
+      ]);
+      expect(await joinsThroughDoor(paid.gym, paid.owner, paid.old)).toBe(true); // 10th from the old gym
+      expect(await joinsThroughDoor(paid.gym, paid.owner, paid.old)).toBe(true); // 11th
+      expect(await rowsOf(paid.gym)).toEqual([
+        { provider: "none", status: "expired", paid: false, trial_check: null },
+        { provider: "razorpay", status: "active", paid: true, trial_check: null },
+      ]);
+      expect(razorpay.cancelled).not.toContain(window.subscriptionId);
+
+      // The window opened and not paid: Razorpay holds it "created", our server writes nothing,
+      // and the free trial is checked as before.
+      const open = await newGymWithFollowers(10);
+      const openWindow = await opensWindow(open.gym, open.owner, RZP_PLAN_CODE);
+      if (openWindow.subscriptionId === undefined) throw new Error("no Razorpay window");
+      expect(razorpay.subs.get(openWindow.subscriptionId)?.status).toBe("created");
+      expect(await synced(open.gym, open.owner, openWindow.checkoutId)).not.toBe("paid");
+      expect(await rowsOf(open.gym)).toEqual([{ provider: "none", status: "trialing", paid: false, trial_check: null }]);
+      expect(await joinsThroughDoor(open.gym, open.owner, open.old)).toBe(false); // 11th: the trial ends
+      expect(await rowsOf(open.gym)).toEqual([{ provider: "none", status: "expired", paid: false, trial_check: "ended" }]);
+      expect((await onScreen(open.owner, open.gym))?.trialEndedFirstPeople).toBe(true);
+
+      // Paid afterwards: a plan from that day, charged that day, which no later join touches.
+      razorpay.authenticate(openWindow.subscriptionId);
+      expect(await synced(open.gym, open.owner, openWindow.checkoutId)).toBe("paid");
+      expect(await joinsThroughDoor(open.gym, open.owner, open.old)).toBe(true);
+      expect(await rowsOf(open.gym)).toEqual([
+        { provider: "none", status: "expired", paid: false, trial_check: "ended" },
+        { provider: "razorpay", status: "active", paid: true, trial_check: null },
+      ]);
+      expect((await onScreen(open.owner, open.gym))?.trialEndedFirstPeople).toBe(false);
+      expect(razorpay.cancelled).not.toContain(openWindow.subscriptionId);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a gym that pays through Paddle during its trial is charged that day and never checked again",
+    async () => {
+      const paid = await newGymWithFollowers(10, true);
+      const window = await opensWindow(paid.gym, paid.owner, PADDLE_PLAN_CODE);
+      if (window.transactionId === undefined) throw new Error("no Paddle window");
+      expect(await rowsOf(paid.gym)).toEqual([{ provider: "none", status: "trialing", paid: false, trial_check: null }]);
+      const subId = paddle.pay(window.transactionId);
+      expect(await synced(paid.gym, paid.owner, window.checkoutId)).toBe("paid");
+      expect(await joinsThroughDoor(paid.gym, paid.owner, paid.old)).toBe(true); // 11th from the old gym
+      expect(await rowsOf(paid.gym)).toEqual([
+        { provider: "none", status: "expired", paid: false, trial_check: null },
+        { provider: "paddle", status: "active", paid: true, trial_check: null },
+      ]);
+      expect(paddle.cancelledSubs).not.toContain(subId);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "one free trial per owner: an owner who had a trial on their first gym and then paid gets none on a second",
+    async () => {
+      const owner = await makeUser();
+      const first = await trialGym(owner);
+      const window = await opensWindow(first, owner, RZP_PLAN_CODE);
+      if (window.subscriptionId === undefined) throw new Error("no Razorpay window");
+      razorpay.authenticate(window.subscriptionId);
+      expect(await synced(first, owner, window.checkoutId)).toBe("paid");
+
+      const made = await send(
+        "POST",
+        "/v1/orgs",
+        { trainsHere: false, name: `Trial Gym ${run} ${String(seq++)}`, city: "Pune", country: "IN", timezone: "Asia/Kolkata" },
+        owner.cookies,
+      );
+      expect(made.statusCode).toBe(201);
+      const second = (JSON.parse(made.body) as { org: { id: string } }).org.id;
+      const trial = await send("POST", `/v1/orgs/${second}/trial`, {}, owner.cookies);
+      expect(trial.statusCode).toBe(409);
+      expect((JSON.parse(trial.body) as { error: string }).error).toBe("trial_already_used");
+      expect(await rowsOf(second)).toEqual([]);
+      expect((await onScreen(owner, second))?.ownerTrialUsed).toBe(true);
     },
     TIMEOUT_MS,
   );
