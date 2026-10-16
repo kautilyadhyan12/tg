@@ -93,7 +93,7 @@ d("the deleted chat coach (real Postgres)", () => {
     expect(left.map((r) => r.id)).toEqual([theirs]);
   });
 
-  // 0123's plan and badge statements are tested on rows that hold them, in db.migration.test.ts.
+  // 0124's plan and badge statements are tested on rows that hold them, in db.migration.test.ts.
   it("the chat tables are gone from the database", { timeout: 60_000 }, async () => {
     const tables = await sql<{ t: string }[]>`
       SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('coach_threads', 'coach_messages', 'kb_chunks')`;

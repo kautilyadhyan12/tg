@@ -15,7 +15,7 @@ import {
   MEMBER_LIST_MAX_TYPED_PHONE_CHARS,
 } from "./memberList.js";
 import { friendGiftSchema, leadFriendGiftSchema } from "./friendGift.js";
-import { leadMemberGiftSchema } from "./memberGift.js";
+import { leadMemberGiftSchema, memberGiftOnSchema } from "./memberGift.js";
 
 export const LEAD_STATUSES = ["new", "contacted", "on_trial", "joined", "lost"] as const;
 export const leadStatusSchema = z.enum(LEAD_STATUSES);
@@ -291,7 +291,16 @@ export const leadSchema = z
     friendGift: leadFriendGiftSchema.nullable().default(null),
     /** What became of the inviting member's own gift for this friend (20e-ii-b-ii-a), with
      *  that member's name (null where their account is gone); null where none was given. */
-    memberGift: z.object({ gift: leadMemberGiftSchema, memberName: z.string().min(1).nullable() }).strict().nullable().default(null),
+    memberGift: z
+      .object({
+        gift: leadMemberGiftSchema,
+        memberName: z.string().min(1).nullable(),
+        /** What a waiting gift of money comes off (20e-ii-b-ii-b). */
+        on: memberGiftOnSchema.default("membership"),
+      })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export type Lead = z.infer<typeof leadSchema>;

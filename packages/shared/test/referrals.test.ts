@@ -75,25 +75,38 @@ describe("a gift is promised only while its code can be used today", () => {
 });
 
 describe("what the member reads", () => {
-  const next = (g: { kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null; currency: string | null }): string => referralMemberGiftWords(g);
+  const next = (g: { kind: "percent" | "amount"; percentBp: number | null; amountMinor: number | null; currency: string | null }): string => referralMemberGiftWords(g).gift;
   it.each([
-    [{ kind: "percent" as const, percentBp: 1000, amountMinor: null, currency: null }, "10% off your next payment"],
-    [{ kind: "percent" as const, percentBp: 1250, amountMinor: null, currency: null }, "12.5% off your next payment"],
-    [{ kind: "amount" as const, percentBp: null, amountMinor: 50000, currency: "INR" }, "₹500.00 off your next payment"],
-    [{ kind: "amount" as const, percentBp: null, amountMinor: 500, currency: "GBP" }, "£5.00 off your next payment"],
+    [{ kind: "percent" as const, percentBp: 1000, amountMinor: null, currency: null }, "10% off your next membership payment"],
+    [{ kind: "percent" as const, percentBp: 1250, amountMinor: null, currency: null }, "12.5% off your next membership payment"],
+    [{ kind: "amount" as const, percentBp: null, amountMinor: 50000, currency: "INR" }, "₹500.00 off your next membership payment"],
+    [{ kind: "amount" as const, percentBp: null, amountMinor: 500, currency: "GBP" }, "£5.00 off your next membership payment"],
   ])("the member's gift %j reads %s", (gift, words) => {
     expect(next(gift)).toBe(words);
   });
+  it("off products, and free days with the money a member with no membership gets instead", () => {
+    const gbp = { kind: "amount" as const, percentBp: null, amountMinor: 500, currency: "GBP" };
+    expect(referralMemberGiftWords({ ...gbp, on: "products" })).toEqual({ gift: "£5.00 off your next purchase at the desk", instead: null });
+    const days = referralMemberGiftWords({ ...gbp, on: "membership", days: 14 });
+    expect(days).toEqual({ gift: "14 free days on your membership", instead: "£5.00 off your next membership payment" });
+    expect(referralOfferLines("Iron Gym", days, null)).toEqual([
+      "When a friend you invite joins Iron Gym and makes their first payment, you get 14 free days on your membership. They are added by themselves, and we'll tell you in your inbox.",
+      "If you have no membership then, you get £5.00 off your next membership payment instead.",
+      "Your link shows your first name to whoever opens it.",
+      "This offer is set by Iron Gym and may change.",
+    ]);
+  });
   it("both gifts, that it comes off by itself, the name their link shows, and who set the offer", () => {
-    expect(referralOfferLines("Northside Gym", "10% off your next payment", "₹500.00 off the first payment of a membership", "Maya")).toEqual([
-      "When a friend you invite joins Northside Gym and makes their first payment, you get 10% off your next payment. It comes off by itself, and we'll tell you in your inbox.",
+    const pct = referralMemberGiftWords({ kind: "percent", percentBp: 1000, amountMinor: null, currency: null });
+    expect(referralOfferLines("Northside Gym", pct, "₹500.00 off the first payment of a membership", "Maya")).toEqual([
+      "When a friend you invite joins Northside Gym and makes their first payment, you get 10% off your next membership payment. It comes off by itself, and we'll tell you in your inbox.",
       "Your friend gets ₹500.00 off the first payment of a membership when they join.",
       "Your link shows your first name, Maya, to whoever opens it.",
       "This offer is set by Northside Gym and may change.",
     ]);
   });
   it("the member's gift alone, in the owner's preview where no member is named", () => {
-    expect(referralOfferLines("Ann's Yoga ", "£5.00 off your next payment", null)).toEqual([
+    expect(referralOfferLines("Ann's Yoga ", { gift: "£5.00 off your next payment", instead: null }, null)).toEqual([
       "When a friend you invite joins Ann's Yoga and makes their first payment, you get £5.00 off your next payment. It comes off by itself, and we'll tell you in your inbox.",
       "Your link shows your first name to whoever opens it.",
       "This offer is set by Ann's Yoga and may change.",
@@ -170,8 +183,8 @@ describe("the parsers", () => {
   ])("an invite code %s is %s", (code, ok) => {
     expect(referralCodeSchema.safeParse(code).success).toBe(ok);
   });
-  const member = { kind: "percent", percentBp: 1000, amountMinor: null };
-  const gift = { ...member, on: "first" };
+  const member = { kind: "percent", percentBp: 1000, amountMinor: null, on: "membership", days: null };
+  const gift = { kind: "percent", percentBp: 1000, amountMinor: null, on: "first" };
   it.each([
     ["on with a gift for the member", { on: true, member, friend: null }, true],
     ["on with a gift for the friend", { on: true, member: null, friend: gift }, true],
@@ -180,7 +193,15 @@ describe("the parsers", () => {
     ["a percentage that carries an amount", { on: true, member: { ...member, amountMinor: 500 }, friend: null }, false],
     ["an amount with no amount", { on: true, member: { ...member, kind: "amount", percentBp: null }, friend: null }, false],
     ["100% off", { on: true, member: { ...member, percentBp: 10000 }, friend: null }, false],
-    ["the member's gift says what it comes off: it is always their next payment", { on: true, member: gift, friend: null }, false],
+    ["the member's gift off products", { on: true, member: { ...member, on: "products" }, friend: null }, true],
+    ["the member's gift off something the box does not offer", { on: true, member: gift, friend: null }, false],
+    ["the member's gift with no word of what it comes off", { on: true, member: { kind: "percent", percentBp: 1000, amountMinor: null, days: null }, friend: null }, false],
+    ["free days, with the money for a member with none", { on: true, member: { ...member, days: 14 }, friend: null }, true],
+    ["free days: 90 at most", { on: true, member: { ...member, days: 90 }, friend: null }, true],
+    ["free days: 91", { on: true, member: { ...member, days: 91 }, friend: null }, false],
+    ["free days: none", { on: true, member: { ...member, days: 0 }, friend: null }, false],
+    ["free days: part of one", { on: true, member: { ...member, days: 1.5 }, friend: null }, false],
+    ["free days with no money for a member with none", { on: true, member: { ...member, kind: "amount", percentBp: null, days: 14 }, friend: null }, false],
     ["the friend's gift off something the box does not offer", { on: true, member: null, friend: { ...gift, on: "everything" } }, false],
     ["a key it does not know", { on: false, member: null, friend: null, by: "x" }, false],
   ])("%s", (_name, body, ok) => {

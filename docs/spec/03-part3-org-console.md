@@ -5302,6 +5302,52 @@ gift, money off.** Migration `0121`. Free days, the owner's second choice, is 20
   run taking 200 waiting gifts off 200 bills at once 166 to 284 ms (written in one statement
   each), 7 to 9 ms with nothing waiting.
 
+**Built in 20e-ii-b-ii-b (2026-10-16; `rulings/2026-10-16-20e-ii-b-ii-b.md`): the member's
+gift as free days, and what money off comes off.** Migration `0123`.
+- **Four choices** for the member's gift in Settings → Refer a friend (Kd: "money off" alone
+  was vague): No gift · money off **their next membership payment** (their next bill by itself,
+  else filled in at Add membership) · money off **products bought at the desk** (filled in at
+  Sell) · **free days on their membership**, 1 to 90, with money off their next membership
+  payment for a member who has no membership then (a percentage or an amount, both required).
+  Each gift is kept as the offer was when it was given (`gift_on`, `days`). A gift off products
+  is never filled in at Add membership, nor one off a membership at Sell, and the server refuses
+  either (`member_gift_not_theirs`). The member's words say which: "£10.00 off your next
+  membership payment" · "…off your next purchase at the desk" · "14 free days on your
+  membership", and then "If you have no membership then, you get £10.00 off your next
+  membership payment instead."
+- **Where the days go** (`addGiftDays`, `giftDaysTarget`, pure, in `heldMemberships.ts`): on the
+  record the inviting member's own account holds at this business, the paid membership in use
+  (active or frozen, not free, not over) whose next date, its renewal else its last day, comes
+  first; a frozen one after those. They are added at the end of the period the member is in, or
+  of what they have paid where that is further on: that period and every later one start that
+  many days later, and nothing already begun moves, so what is owed today, and since when, is
+  unchanged (Kd's example: paid to 14 November, 14 days on 3 November, the next bill 29
+  November and every one after on the 29th; a freeze already moves the billing day the same
+  way). A membership that ends ends later; a class pack's last day moves and its classes do
+  not. Kept on the membership as `gift_days` before period `gift_from`; a second gift before
+  those days begin joins them, and one after folds them into `frozen_days`. Where earlier days
+  and what is paid no longer meet (paid on past where the days wait, or owed for a period from
+  before them) no place moves nothing paid or owed, and the money is given instead. With no
+  membership that can take them, or no record on the list, the money is given, as 20e-ii-b-ii-a
+  gives it. The days are written with the gift, under the gym's lock and the member's record's,
+  once a friend.
+- **Told**: "A friend you invited has joined Iron Gym and made their first payment. You get 14
+  free days, added to your Gold Monthly: it now renews on 29 November 2026." ("…it now ends on…";
+  while frozen, no date: it moves when unfrozen). The friend is not named.
+- **Seen**: under the membership on the person's page, "Refer a friend gift for inviting Tara
+  Shah: 14 days added", its dates already holding them; on the friend's lead, "Maya Rao's gift for
+  inviting Tara (14 free days) was added to their Gold Monthly on 3 November 2026."
+- **Taken back** (Kd: what happens when the friend's payment is voided): the friend's payment
+  voided or refunded in full while the member has reached none of the days, and no other payment
+  of the friend's stands: the days are taken off and the renewal is where it was, with no
+  message, and the lead says "…(14 free days) was taken back: Tara's payment of … was voided."
+  Once the member is in them, they stay, as money already taken off a bill stays.
+- **Square** (ROADMAP 18d, Kd 2026-10-16): when a payment company charges a saved card, any
+  change to a membership's dates, a freeze or free days, moves its charge date in the same step.
+- **Cost**: not a list of people. One gift reads and writes the inviting member's own record
+  (at most 500 memberships, `IN_USE_READ`) inside the friend's payment, under the gym's lock;
+  the person's page reads the days of the memberships it already shows, in one statement.
+
 ### 16.4 At risk
 
 The console lists members whose visits have dropped — came in at least 2 of the last

@@ -41,6 +41,8 @@ const membership = (over: Partial<HeldMembership> = {}): HeldMembership => ({
   free: false,
   startsOn: "2026-10-01",
   frozenDays: 0,
+  giftDays: 0,
+  giftFrom: 0,
   status: "active",
   frozenOn: null,
   cancelledOn: null,

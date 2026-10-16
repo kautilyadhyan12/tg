@@ -501,7 +501,7 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
     if (input.memberGift !== null) {
       if (input.discountId !== null) return { kind: "member_gift_with_discount" };
       if (input.entryId === null) return { kind: "member_gift_not_theirs" };
-      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id);
+      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "products");
       if (found === null) return { kind: "member_gift_not_theirs" };
       const off = memberGiftOff(found, item.price_minor * input.quantity, item.currency);
       if (off === 0 || off !== input.memberGift.offMinor) return { kind: "member_gift_changed" };
