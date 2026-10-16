@@ -2147,9 +2147,10 @@ export const memberListDeletePreviewResponseSchema = z.object({ preview: memberL
 export const memberListDeleteSelectedRequestSchema = z.object({ selection: memberListSelectionSchema, digest: sha256Schema }).strict();
 export type MemberListDeleteSelectedRequest = z.infer<typeof memberListDeleteSelectedRequestSchema>;
 
-/** `alreadyDeleted`: nobody chosen was there any more, the same press sent again after it was done. */
+/** `nothingLeft`: nobody chosen is a past member any more (the same press sent again after it
+ *  was done, or a colleague deleted or put them back), so nothing was deleted. */
 export const memberListDeletedSchema = z
-  .object({ deleted: z.number().int().min(0), alreadyDeleted: z.boolean().default(false), version: z.number().int().min(0) })
+  .object({ deleted: z.number().int().min(0), nothingLeft: z.boolean().default(false), version: z.number().int().min(0) })
   .strict();
 export type MemberListDeleted = z.infer<typeof memberListDeletedSchema>;
 export const memberListDeletedResponseSchema = z.object({ done: memberListDeletedSchema });

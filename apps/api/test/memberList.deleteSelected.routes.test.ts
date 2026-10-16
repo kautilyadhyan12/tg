@@ -226,10 +226,11 @@ d("member list: Delete permanently on the past members selected (real Postgres)"
       // The same press, sent again with the new box, deletes Esha once.
       const again = await press(gym, owner, ticked(one, two), body.preview.digest);
       expect(memberListDeletedResponseSchema.parse(JSON.parse(again.body)).done.deleted).toBe(1);
-      // The same press again, its reply lost the first time: already deleted, nobody else.
+      // The same press again, its reply lost the first time: Esha is gone and Farah is back on
+      // the list, so nobody chosen is a past member any more and nothing is deleted.
       const twice = await press(gym, owner, ticked(one, two), body.preview.digest);
       expect(twice.statusCode, twice.body).toBe(200);
-      expect(memberListDeletedResponseSchema.parse(JSON.parse(twice.body)).done).toMatchObject({ deleted: 0, alreadyDeleted: true });
+      expect(memberListDeletedResponseSchema.parse(JSON.parse(twice.body)).done).toMatchObject({ deleted: 0, nothingLeft: true });
       expect(await namesIn(gym)).toEqual(["Farah Past"]);
     },
     TEST_TIMEOUT_MS,
@@ -275,6 +276,11 @@ d("member list: Delete permanently on the past members selected (real Postgres)"
       expect(preview).toMatchObject({ count: 3, onList: 0 });
       const res = await press(gym, owner, selection, preview.digest);
       expect(memberListDeletedResponseSchema.parse(JSON.parse(res.body)).done.deleted).toBe(3);
+      expect(await namesIn(gym)).toEqual(["Gita Current"]);
+      // The same Select all pressed again: nobody is a past member now, and nothing is deleted.
+      const again = await press(gym, owner, selection, preview.digest);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(memberListDeletedResponseSchema.parse(JSON.parse(again.body)).done).toMatchObject({ deleted: 0, nothingLeft: true });
       expect(await namesIn(gym)).toEqual(["Gita Current"]);
     },
     TEST_TIMEOUT_MS,

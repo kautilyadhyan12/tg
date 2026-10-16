@@ -34,6 +34,6 @@ export function deleteButton(preview) {
 
 /** "3 past members deleted permanently." */
 export function deleteDoneLine(done, words) {
-  if (done.alreadyDeleted) return `These past ${words.people} were already deleted.`;
+  if (done.nothingLeft) return `None of these are past ${words.people} any more, so nothing was deleted.`;
   return `${pastPeople(done.deleted, words)} deleted permanently.`;
 }

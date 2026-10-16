@@ -10,7 +10,7 @@ import { MEMBER_LIST_DELETE_MAX, MEMBER_LIST_DELETE_NAMES_SHOWN, type MemberList
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { keptWith } from "./memberNumbers.js";
 import * as repo from "./repo.js";
-import { selectedIds, selectionDigest } from "./selection.js";
+import { SelectionChanged, selectedIds, selectionDigest } from "./selection.js";
 import type { MemberListDeps } from "./service.js";
 
 type Records = Awaited<ReturnType<typeof repo.recordsAmong>>;
@@ -52,22 +52,30 @@ export async function deleteSelected(
 ): Promise<DeleteSelectedAnswer> {
   await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return { kind: "rate_limited" };
-  const ids = await selectedIds(deps, gymId, input.selection);
+  // NOBODY CHOSEN IS A PAST MEMBER ANY MORE: the same press sent again after it was done (a
+  // reply lost on the way), or a colleague deleted or put them back. Nothing is deleted, and
+  // the answer says only that, which is true in every one of those cases.
+  const nothingLeft = async (sql: Parameters<typeof repo.listState>[0]): Promise<DeleteSelectedAnswer> => ({
+    kind: "deleted",
+    done: { deleted: 0, nothingLeft: true, version: (await repo.listState(sql, gymId))?.version ?? 0 },
+  });
+  let ids: string[];
+  try {
+    ids = await selectedIds(deps, gymId, input.selection);
+  } catch (err) {
+    // A "Select all" that now chooses nobody at all.
+    if (err instanceof SelectionChanged && err.now.count === 0) return await nothingLeft(deps.sql);
+    throw err;
+  }
   const at = deps.now();
   return await deps.sql.begin(async (tx): Promise<DeleteSelectedAnswer> => {
     await repo.lockGym(tx, gymId);
     const records = await repo.recordsAmong(tx, gymId, ids);
+    const past = records.filter((record) => record.past);
+    if (past.length === 0) return await nothingLeft(tx);
     const preview = previewOf(gymId, records);
-    // Nobody chosen can be deleted now and some of them are no longer there: the same press,
-    // sent again after it was done (a reply lost on the way). Somebody put back since is still
-    // there, so that reads as changed instead.
-    if (records.every((record) => !record.past) && records.length < ids.length) {
-      return { kind: "deleted", done: { deleted: 0, alreadyDeleted: true, version: (await repo.listState(tx, gymId))?.version ?? 0 } };
-    }
     if (preview.digest !== input.digest) return { kind: "changed", preview };
     if (preview.tooMany) throw new OrgsError(400, "too_many_to_delete", `Delete up to ${MEMBER_LIST_DELETE_MAX.toLocaleString("en")} past members at a time.`);
-    const past = records.filter((record) => record.past);
-    if (past.length === 0) return { kind: "deleted", done: { deleted: 0, alreadyDeleted: false, version: (await repo.listState(tx, gymId))?.version ?? 0 } };
 
     // Their numbers are never given to somebody new (5e-i), kept in one write.
     const before = await repo.memberNumbersKept(tx, gymId);
@@ -87,6 +95,6 @@ export async function deleteSelected(
       gymId,
       rows: past.map((record) => ({ action: "org.member_list_entry_deleted", targetType: "member_list_entry", targetId: record.id, meta: { via: "selected" } })),
     });
-    return { kind: "deleted", done: { deleted: past.length, alreadyDeleted: false, version } };
+    return { kind: "deleted", done: { deleted: past.length, nothingLeft: false, version } };
   });
 }
