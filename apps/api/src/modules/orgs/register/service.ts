@@ -13,6 +13,10 @@
 import type { Sql } from "postgres";
 import {
   DISCOUNT_WORDS,
+  FRIEND_GIFT_WORDS,
+  MEMBER_GIFT_WORDS,
+  friendGiftResponseSchema,
+  type FriendGiftResponse,
   PURCHASES_SHOWN,
   REGISTER_WORDS,
   SALES_SHOWN,
@@ -48,6 +52,8 @@ import { MEMBER_LIST_BY_HAND_WORDS } from "@app/shared";
 import { OrgsError, requireStaff, requireWritablePrivilege } from "../service.js";
 import { paymentsOn } from "../memberships/billsSql.js";
 import * as discounts from "./discountsRepo.js";
+import { friendGiftOffer } from "../referrals/friendGift.js";
+import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import * as repo from "./repo.js";
 import * as tax from "./taxRepo.js";
 
@@ -301,6 +307,7 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
     method: req.method,
     totalMinor: req.totalMinor,
     discountId: req.discountId,
+    memberGift: req.memberGift,
     today: dayInTz(now, viewer.timezone),
     actorUserId: userId,
     now,
@@ -328,6 +335,14 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
       throw new OrgsError(409, "discount_nothing_to_pay", DISCOUNT_WORDS.nothing_to_pay);
     case "discount_nothing_off":
       throw new OrgsError(409, "discount_takes_nothing_off", discountNothingOffWords(outcome.name));
+    case "friend_gift_not_theirs":
+      throw new OrgsError(409, "friend_gift_not_theirs", FRIEND_GIFT_WORDS.not_theirs);
+    case "member_gift_not_theirs":
+      throw new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
+    case "member_gift_changed":
+      throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
+    case "member_gift_with_discount":
+      throw new OrgsError(409, "member_gift_with_discount", MEMBER_GIFT_WORDS.with_discount);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale outcome: ${JSON.stringify(never)}`);
@@ -424,6 +439,13 @@ const escapeLike = (text: string): string => text.replace(/[\\%_]/g, (char) => `
 export async function findPeople(deps: RegisterDeps, gymId: string, viewer: Viewer, query: string): Promise<SalePeopleResponse> {
   const people = await repo.peopleLike(deps.sql, gymId, `%${escapeLike(query)}%`, SALE_PEOPLE_FOUND, viewer.seesEmail);
   return salePeopleResponseSchema.parse({ people });
+}
+
+/** Refer a friend's gift for the person Sell has picked (20e-ii-b-i): null where they are
+ *  not a friend a member invited, or have had it. */
+export async function getFriendGift(deps: RegisterDeps, gymId: string, viewer: Viewer, entryId: string): Promise<FriendGiftResponse> {
+  const [friendGift, memberGift] = await Promise.all([friendGiftOffer(deps.sql, gymId, entryId, dayInTz(deps.now(), viewer.timezone)), waitingGiftFor(deps.sql, gymId, entryId)]);
+  return friendGiftResponseSchema.parse({ friendGift, memberGift });
 }
 
 /** What one person has bought at the desk, for their page. */

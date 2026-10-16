@@ -151,7 +151,7 @@ try {
   const discounted = untaxed.price_minor - discountOff({ kind: "percent", percentBp: 1000, amountMinor: null }, untaxed.price_minor);
   const sold: string[] = [];
   const sell = async (gym: Made): Promise<void> => {
-    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: discounted, discountId: gym.discountId });
+    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: discounted, discountId: gym.discountId, memberGift: null });
     sold.push(answer.saleId);
   };
 

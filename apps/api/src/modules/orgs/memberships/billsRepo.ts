@@ -29,6 +29,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
+import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
@@ -154,6 +155,8 @@ export async function recordPayment(
     if (paymentId === null) throw new Error("a payment was not recorded under the gym's lock");
     if (paid.status === "paid") await setBillStatus(tx, input.gymId, bill.id, "paid", input.now);
     if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
+    // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
+    await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -213,6 +216,8 @@ export async function voidPayment(
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND undone_at IS NULL`;
     if (target.reopens) await setBillStatus(tx, input.gymId, payment.bill_id, "open", input.now);
     if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
+    // Where this was a friend's payment that gave a member their Refer a friend gift.
+    await friendPaymentGone(tx, { gymId: input.gymId, by: { paymentId: input.paymentId }, why: "voided", today: input.today, now: input.now });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -299,6 +304,8 @@ export async function cancelMemberBill(
 
     const done = await cancelBill(tx, { gymId: input.gymId, billId: bill.id, reason: input.reason, on: input.today, by: input.actorUserId, now: input.now });
     if (!done) throw new Error("a bill to cancel was not open under the gym's lock");
+    // A Refer a friend gift taken off it waits for the next bill.
+    await giftUseUndone(tx, input.gymId, { billIds: [bill.id] }, input.today, input.now);
     if (count.paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, count.paidPeriods, input.now);
 
     await insertAudit(tx, {
@@ -410,6 +417,10 @@ export async function noteRefund(
     );
     if (refundId === null) throw new Error("a refund was not noted under the gym's lock");
     if (refund.billStatus === "refunded") await setBillStatus(tx, input.gymId, bill.id, "refunded", input.now);
+    // A friend's payment refunded in full no longer stands for a member's Refer a friend gift.
+    if (standing.refundedMinor + input.amountMinor >= standing.amountMinor) {
+      await friendPaymentGone(tx, { gymId: input.gymId, by: { paymentId: input.paymentId }, why: "refunded", today: input.today, now: input.now });
+    }
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -438,7 +449,7 @@ export async function noteRefund(
  *  and a bill that read Refunded reads Paid again. Nothing else moves. */
 export async function voidRefund(
   sql: Sql,
-  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; refundId: string; reason: RefundVoidReason; actorUserId: string; now: Date },
+  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; refundId: string; reason: RefundVoidReason; today: string; actorUserId: string; now: Date },
 ): Promise<BillWriteOutcome> {
   return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
     const entry = await lockedEntry(tx, input.gymId, input.entryId);
@@ -462,6 +473,8 @@ export async function voidRefund(
     await tx`
       UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND id = ${payment.bill_id} AND status = 'refunded'`;
+    // The payment stands again: a friend's payment gives the member's gift where none stands.
+    if (!payment.undone) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId: input.paymentId }, today: input.today, now: input.now });
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -620,6 +633,8 @@ export async function openDueBills(deps: OpenBillsDeps, opts: { now?: Date; gymI
         if (work === undefined) return 0;
         await writeCountsAfterGap(tx, { gymId, moves: work.counts, today: work.today, now });
         const rows = await insertBills(tx, gymId, work.bills, now);
+        // A member's Refer a friend gift waiting for their next bill comes off it.
+        if (rows.length > 0) await giftsOntoOpenBills(tx, gymId, now);
         if (rows.length > 0) {
           await insertAudit(tx, {
             actorUserId: null,

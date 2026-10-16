@@ -199,7 +199,9 @@ d("a gym's challenges (real Postgres)", () => {
     name: "October Week",
     details: "",
     prize: "",
-    counts: "gym_days",
+    subject: "gym_visits",
+    measure: "days",
+    countedBy: "app",
     startsOn: "2026-10-05",
     endsOn: "2026-10-11",
     target: null,
@@ -415,6 +417,7 @@ d("a gym's challenges (real Postgres)", () => {
 
       const staffRoutes: ["GET" | "POST" | "PUT", string, unknown][] = [
         ["GET", `${base(gym.id)}/staff`, undefined],
+        ["GET", `${base(gym.id)}/subjects`, undefined],
         ["GET", `${base(gym.id)}/${c.id}/board/staff`, undefined],
         ["POST", base(gym.id), fields()],
         ["PUT", `${base(gym.id)}/${c.id}`, changed({ name: "Taken over" })],
@@ -484,7 +487,7 @@ d("a gym's challenges (real Postgres)", () => {
       await workout(vera.userId, "2026-10-04"); // the day before it starts
 
       const gymDays = await add(gym, { name: "Week of gym days" });
-      const workoutDays = await add(gym, { name: "Week of workouts", counts: "workout_days" });
+      const workoutDays = await add(gym, { name: "Week of workouts", subject: "workouts", measure: "days", countedBy: "app" });
 
       for (const [challenge, board] of [[gymDays, "gym_days"], [workoutDays, "workout_days"]] as const) {
         const lb = await inject("GET", `/v1/orgs/${gym.id}/leaderboard?board=${board}&period=this_week`, vera.cookies);
@@ -763,7 +766,20 @@ d("a gym's challenges (real Postgres)", () => {
         name: "Autumn 20",
         details: "",
         prize: "A shaker",
-        counts: "gym_days",
+        subject: "gym_visits",
+        measure: "days",
+        countedBy: "app",
+        exercises: [],
+        words: {
+          about: "Gym visits",
+          one: "gym day",
+          many: "gym days",
+          print: "whole",
+          how: "desk",
+          howLine: "Checked in at the front desk",
+          explain: "A gym day is a day you're checked in at Maker Gym: a scan at the front desk, or a check-in by staff. Two visits on one day are one. It is the same count as the Leaderboard.",
+          perDay: true,
+        },
         startsOn: "2026-10-05",
         endsOn: "2026-10-11",
         target: 5,
@@ -830,13 +846,15 @@ d("a gym's challenges (real Postgres)", () => {
       const gym = await makeGym("Change Gym");
       const coming = await add(gym, { name: "Next week", startsOn: "2026-10-12", endsOn: "2026-10-18" });
       const put = (id: string, body: Record<string, unknown>) => inject("PUT", `${base(gym.id)}/${id}`, gym.owner.cookies, body);
-      const all = await put(coming.id, changed({ name: "Next fortnight", details: "Bring a friend", prize: "A towel", counts: "workout_days", startsOn: "2026-10-13", endsOn: "2026-10-26", target: 10, who: "joined" }));
+      const all = await put(coming.id, changed({ name: "Next fortnight", details: "Bring a friend", prize: "A towel", subject: "workouts", measure: "days", countedBy: "app", startsOn: "2026-10-13", endsOn: "2026-10-26", target: 10, who: "joined" }));
       expect(all.statusCode).toBe(200);
       expect((JSON.parse(all.body) as { challenge: StaffGymChallenge }).challenge).toMatchObject({
         name: "Next fortnight",
         details: "Bring a friend",
         prize: "A towel",
-        counts: "workout_days",
+        subject: "workouts",
+        measure: "days",
+        countedBy: "app",
         startsOn: "2026-10-13",
         endsOn: "2026-10-26",
         target: 10,
@@ -846,7 +864,7 @@ d("a gym's challenges (real Postgres)", () => {
 
       const running = await add(gym, { name: "Running", target: 2, who: "joined" });
       const kept = { name: "Running", target: 2, who: "joined" };
-      for (const over of [{ counts: "workout_days" }, { startsOn: "2026-10-06" }, { who: "everyone" }, { target: 5 }, { target: null }]) {
+      for (const over of [{ subject: "workouts", measure: "days", countedBy: "app" }, { startsOn: "2026-10-06" }, { who: "everyone" }, { target: 5 }, { target: null }]) {
         const res = await put(running.id, changed({ ...kept, ...over }));
         expect([res.statusCode, codeOf(res), (JSON.parse(res.body) as { message: string }).message], JSON.stringify(over)).toEqual([409, "challenge_started", GYM_CHALLENGE_WORDS.started_locked]);
       }
@@ -854,7 +872,7 @@ d("a gym's challenges (real Postgres)", () => {
       expect([early.statusCode, codeOf(early)]).toEqual([400, "challenge_ends_before_today"]);
       const allowed = await put(running.id, changed({ ...kept, name: "Running on", details: "Longer now", prize: "A shaker", endsOn: "2026-10-18" }));
       expect(allowed.statusCode).toBe(200);
-      expect((await staffList(gym)).current.find((c) => c.id === running.id)).toMatchObject({ name: "Running on", details: "Longer now", prize: "A shaker", endsOn: "2026-10-18", counts: "gym_days", target: 2 });
+      expect((await staffList(gym)).current.find((c) => c.id === running.id)).toMatchObject({ name: "Running on", details: "Longer now", prize: "A shaker", endsOn: "2026-10-18", subject: "gym_visits", measure: "days", countedBy: "app", target: 2 });
       expect(await audits(gym.id, "org.challenge_changed")).toBe(2);
       expect((await put(randomUUID(), changed())).statusCode).toBe(404);
     },
@@ -912,8 +930,8 @@ d("a gym's challenges (real Postgres)", () => {
       const trainer = await signedIn("Tia Trainer");
       await addStaff(gym.id, trainer.userId, "trainer");
 
-      const c = await add(gym, { name: "Push-up Day", counts: "own", unit: "push-ups", target: 50 });
-      expect([c.counts, c.unit, c.target, c.lowestWins]).toEqual(["own", "push-ups", 50, false]);
+      const c = await add(gym, { name: "Push-up Day", subject: "own", measure: null, countedBy: "staff", unit: "push-ups", target: 50 });
+      expect([c.subject, c.measure, c.countedBy, c.unit, c.target, c.lowestWins]).toEqual(["own", null, "staff", "push-ups", 50, false]);
       // Nothing typed yet: staff are sent everybody in it, each at 0, to type beside.
       const empty = await staffBoard(gym, c.id);
       expect([empty.total, empty.rows.every((r) => r.value === 0 && r.place === null)]).toEqual([5, true]);
@@ -973,10 +991,10 @@ d("a gym's challenges (real Postgres)", () => {
       expect(await refusedSave(setScores(gym, c.id, []))).toEqual([400, "validation_error"]);
       const counted = await add(gym, { name: "Gym days" });
       expect(await refusedSave(setScores(gym, counted.id, one))).toEqual([409, "challenge_not_own"]);
-      const coming = await add(gym, { name: "Next week", counts: "own", unit: "laps", startsOn: "2026-10-12", endsOn: "2026-10-18" });
+      const coming = await add(gym, { name: "Next week", subject: "own", measure: null, countedBy: "staff", unit: "laps", startsOn: "2026-10-12", endsOn: "2026-10-18" });
       expect(await refusedSave(setScores(gym, coming.id, one))).toEqual([409, "challenge_not_started"]);
       // One people join: a number only for somebody who joined.
-      const joiners = await add(gym, { name: "Joiners", counts: "own", unit: "laps", who: "joined" });
+      const joiners = await add(gym, { name: "Joiners", subject: "own", measure: null, countedBy: "staff", unit: "laps", who: "joined" });
       expect(await refusedSave(setScores(gym, joiners.id, one))).toEqual([409, "challenge_person_not_in"]);
       expect((await joinAs(gym, vera, joiners.id)).statusCode).toBe(200);
       expect((await setScores(gym, joiners.id, [{ userId: vera.userId, value: 7 }])).statusCode).toBe(200);
@@ -1001,7 +1019,7 @@ d("a gym's challenges (real Postgres)", () => {
       const bilal = await account("Bilal Khan");
       const chen = await account("Chen Wu");
       for (const p of [asha, bilal, chen]) await inGym(gym.id, p.userId);
-      const c = await add(gym, { name: "Row 500 m", counts: "own", unit: "seconds", lowestWins: true });
+      const c = await add(gym, { name: "Row 500 m", subject: "own", measure: null, countedBy: "staff", unit: "seconds", lowestWins: true });
       expect((await setScores(gym, c.id, [{ userId: asha.userId, value: 95 }, { userId: bilal.userId, value: 110 }, { userId: chen.userId, value: 110 }, { userId: vera.userId, value: 130 }])).statusCode).toBe(200);
       const mine = await seen(gym, vera, c.id);
       expect(places(mine.board.top)).toEqual([["Asha R.", 1, 95], ["Bilal K.", 2, 110], ["Chen W.", 2, 110]]);
@@ -1015,18 +1033,18 @@ d("a gym's challenges (real Postgres)", () => {
 
       const refusedAdd = async (over: Record<string, unknown>) => (await inject("POST", base(gym.id), gym.owner.cookies, fields(over))).statusCode;
       expect(await refusedAdd({ lowestWins: true })).toBe(400); // the app's counts are never lowest-wins
-      expect(await refusedAdd({ counts: "own", unit: "seconds", lowestWins: true, target: 60 })).toBe(400);
-      expect(await refusedAdd({ counts: "own" })).toBe(400); // no word for what is counted
-      expect(await refusedAdd({ counts: "own", unit: "  " })).toBe(400);
+      expect(await refusedAdd({ subject: "own", measure: null, countedBy: "staff", unit: "seconds", lowestWins: true, target: 60 })).toBe(400);
+      expect(await refusedAdd({ subject: "own", measure: null, countedBy: "staff" })).toBe(400); // no word for what is counted
+      expect(await refusedAdd({ subject: "own", measure: null, countedBy: "staff", unit: "  " })).toBe(400);
       expect(await refusedAdd({ unit: "push-ups" })).toBe(400); // a word on the app's own count
-      expect(await refusedAdd({ counts: "own", unit: "u".repeat(31) })).toBe(400);
+      expect(await refusedAdd({ subject: "own", measure: null, countedBy: "staff", unit: "u".repeat(31) })).toBe(400);
       // The gym's own count may aim past the challenge's days.
-      expect(await refusedAdd({ counts: "own", unit: "kilometres", target: 500 })).toBe(201);
+      expect(await refusedAdd({ subject: "own", measure: null, countedBy: "staff", unit: "kilometres", target: 500 })).toBe(201);
       // Once started, lowest-wins cannot be switched.
-      const put = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, changed({ name: "Row 500 m", counts: "own", unit: "seconds", lowestWins: false }));
+      const put = await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, changed({ name: "Row 500 m", subject: "own", measure: null, countedBy: "staff", unit: "seconds", lowestWins: false }));
       expect([put.statusCode, codeOf(put)]).toEqual([409, "challenge_started"]);
       // Its word can still be corrected.
-      expect((await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, changed({ name: "Row 500 m", counts: "own", unit: "secs", lowestWins: true }))).statusCode).toBe(200);
+      expect((await inject("PUT", `${base(gym.id)}/${c.id}`, gym.owner.cookies, changed({ name: "Row 500 m", subject: "own", measure: null, countedBy: "staff", unit: "secs", lowestWins: true }))).statusCode).toBe(200);
     },
     T,
   );
@@ -1060,7 +1078,7 @@ d("a gym's challenges (real Postgres)", () => {
     async () => {
       clock = WEDNESDAY;
       const gym = await makeGym("Big Board");
-      const c = await add(gym, { name: "Push-up Day", counts: "own", unit: "push-ups", endsOn: "2026-10-07" });
+      const c = await add(gym, { name: "Push-up Day", subject: "own", measure: null, countedBy: "staff", unit: "push-ups", endsOn: "2026-10-07" });
       // 105 people, each with a number of their own, put in the database directly.
       const made = await sql<{ id: string }[]>`
         INSERT INTO users (email, display_name)
@@ -1118,8 +1136,8 @@ d("a gym's challenges (real Postgres)", () => {
       // Three more that ended earlier: of the four, the newest three are sent.
       for (const [name, ends] of [["Ended 6th", "2026-10-06"], ["Ended 5th", "2026-10-05"], ["Ended 4th", "2026-10-04"]] as const) {
         await sql`
-          INSERT INTO gym_challenges (gym_id, challenge_key, name, counts, starts_on, ends_on, who)
-          VALUES (${gym.id}, ${randomUUID()}, ${name}, 'gym_days', '2026-09-28', ${ends}::date, 'everyone')`;
+          INSERT INTO gym_challenges (gym_id, challenge_key, name, subject, measure, counted_by, starts_on, ends_on, who)
+          VALUES (${gym.id}, ${randomUUID()}, ${name}, 'gym_visits', 'days', 'app', '2026-09-28', ${ends}::date, 'everyone')`;
       }
       expect((await list(gym, vera)).challenges.map((x) => [x.name, x.state])).toEqual([["Ends tonight", "ended"], ["Ended 6th", "ended"], ["Ended 5th", "ended"]]);
       clock = WEDNESDAY;

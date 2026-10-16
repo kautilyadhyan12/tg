@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { resultPostNote } from './challengesView';
+import { sentChallenge } from '../../components/gym/__fixtures__/sentChallenge';
 
 const svc = { list: vi.fn(), add: vi.fn(), setPinned: vi.fn(), remove: vi.fn(), reactors: vi.fn(), reported: vi.fn(), keep: vi.fn(), setMembersCanPost: vi.fn(), stopped: vi.fn(), setStopped: vi.fn(), person: vi.fn() };
 const orgApi = { getMine: vi.fn() };
@@ -64,7 +65,7 @@ describe('the result post on the console’s Updates', () => {
     subscription: { status: 'trialing', trialEndsAt: '2099-01-01T00:00:00.000Z' },
   };
   const row = (name, place, value) => ({ userId: `u-${name}`, name, initials: name.slice(0, 1), place, value, reached: false, isMe: false });
-  const ended = {
+  const ended = sentChallenge({
     id: 'c1',
     name: 'October Six',
     details: '',
@@ -85,7 +86,7 @@ describe('the result post on the console’s Updates', () => {
     teamBoard: null,
     board: { status: 'shown', ranked: 12, top: [row('Asha R.', 1, 5), row('Vera V.', 2, 4), row('Bilal K.', 3, 2)], leaders: 1, reached: null },
     me: null,
-  };
+  });
   const post = (over = {}) => ({
     id: 'r',
     author: { name: null, initials: '' },

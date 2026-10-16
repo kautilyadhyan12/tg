@@ -230,6 +230,17 @@ describe('a cancelled bill and a refunded one say what happened, in their own wo
   });
 });
 
+describe("a member's Refer a friend gift on a bill (20e-ii-b-ii-a)", () => {
+  it('says what it took off, and nothing on a bill it was not taken off', () => {
+    expect(billRow(bill({ amountMinor: 3999, gift: { offMinor: 1000, currency: 'GBP', friendName: 'Tara Shah' } }), 'GBP', TODAY).gift).toBe(
+      'Refer a friend gift for inviting Tara Shah: £10.00 off',
+    );
+    expect(billRow(bill({ amountMinor: 3999, gift: { offMinor: 1000, currency: 'GBP', friendName: null } }), 'GBP', TODAY).gift).toBe('Refer a friend gift: £10.00 off');
+    expect(billRow(bill({ gift: null }), 'GBP', TODAY).gift).toBeNull();
+    expect(billRow(bill(), 'GBP', TODAY).gift).toBeNull();
+  });
+});
+
 describe('which bills are drawn', () => {
   const b = (periodIndex, state) => bill({ id: `bill-${String(periodIndex)}`, periodIndex, state });
   const pay = (periodIndex) => ({ periodIndex, covers: null, leftMinor: 4999, dueOn: '2026-07-04', state: 'overdue' });
@@ -250,7 +261,7 @@ describe('which bills are drawn', () => {
   });
 });
 
-describe('Cancel this bill', () => {
+describe('Void bill (was Cancel this bill)', () => {
   const owing = membership({}, { cancel: { billId: bill().id } });
 
   it('is offered for the bill the server names, and for no other', () => {

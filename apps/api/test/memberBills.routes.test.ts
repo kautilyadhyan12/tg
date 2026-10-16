@@ -259,7 +259,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       if (m === undefined) throw new Error("no membership");
       expect(made.canBill).toBe(true);
       expect(m.billing).toEqual({
-        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, payments: [], voidedPayments: [] }],
+        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [], voidedPayments: [] }],
         billsNotShown: 0,
         pay: { periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, leftMinor: 4999, dueOn: today, state: "due" },
         cancel: { billId: expect.any(String) as string },

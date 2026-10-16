@@ -2320,6 +2320,9 @@ export const memberListEntryInputSchema = z
     /** "Add anyway" (5b-iv-b): the records the warning named. The add goes ahead only if
      *  every record alike now is one of them; the exact "already on your list" still stops it. */
     acknowledgedDuplicates: z.array(z.string().uuid()).min(1).max(MEMBER_LIST_POSSIBLE_MATCHES_MAX).optional(),
+    /** The lead staff were shown as this person (20e-ii-b-i), marked Joined with the new
+     *  record where it still shares the email or phone typed. Left out, no lead is changed. */
+    leadId: z.string().uuid().optional(),
   })
   .strict();
 export type MemberListEntryInput = z.infer<typeof memberListEntryInputSchema>;
@@ -2442,6 +2445,8 @@ export const memberListEntryWrittenSchema = z
     /** Put back, when staff had removed someone in the app with this record: their app
      *  access given back, or no free place on the plan for it. Absent otherwise. */
     app: z.enum(["back", "no_place"]).optional(),
+    /** Add member: the lead marked Joined as this person (20e-ii-b-i). Absent otherwise. */
+    lead: z.object({ id: z.string().uuid(), fullName: z.string() }).strict().optional(),
   })
   .strict();
 export type MemberListEntryWritten = z.infer<typeof memberListEntryWrittenSchema>;
@@ -2592,6 +2597,21 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
   not_them_needs_remove: "Your role can't remove app access. Ask the owner.",
   not_them_staff: "This person is staff or has a complimentary place, so their access isn't changed here.",
 } as const;
+
+/** Add member or Change with a member number another record holds (5e-i): nobody is
+ *  given a number somebody has, a past member's included. */
+export function memberNumberTakenWords(memberNumber: string, fullName: string, former: boolean): string {
+  const who = fullName.trim() === "" ? "another person" : fullName;
+  return former
+    ? `Member number ${memberNumber} belongs to ${who}, who is no longer on your list. Use another number, or open their record.`
+    : `Member number ${memberNumber} belongs to ${who}. Use another number, or open their record.`;
+}
+
+/** The member number Add member fills in (5e-i): the gym's next one. A suggestion: the
+ *  number a person is given is worked out again when they are added. Null where the next
+ *  number would be too long to store. */
+export const memberListNextNumberSchema = z.object({ memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable() }).strict();
+export type MemberListNextNumber = z.infer<typeof memberListNextNumberSchema>;
 
 /** "Not this person": which account in the app it is about (§18.4). */
 export const memberListNotThemRequestSchema = z.object({ userId: z.string().uuid() }).strict();

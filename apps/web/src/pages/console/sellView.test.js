@@ -37,6 +37,7 @@ import {
   saleVoidedLine,
   voidSaleQuestion,
 } from './sellView';
+import { saleDiscountWords } from './sellView';
 
 const water = (over = {}) => ({ id: 'p1', name: 'Water', priceMinor: 199, currency: 'USD', taxRateId: 'r1', stock: null, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z', ...over });
 const rate = (over = {}) => ({ id: 'r1', name: 'Sales tax', bp: 825, products: 0, membershipTypes: 0, memberships: 0, ...over });
@@ -171,6 +172,15 @@ describe('the sale as it is shown', () => {
   it('a person the search found', () => {
     expect(personOption({ name: 'Maya Patel', email: null, memberNumber: null, past: false })).toBe('Maya Patel');
     expect(personOption({ name: 'Maya Patel', email: 'maya@example.com', memberNumber: '1042', past: true })).toBe('Maya Patel · No. 1042 · maya@example.com · Past member');
+  });
+});
+
+describe("a member's Refer a friend gift on a sale (20e-ii-b-ii-a)", () => {
+  it('names the friend it was for inviting, so staff can see why', () => {
+    const sale = { discountName: 'Refer a friend gift', discountMinor: 1000, currency: 'GBP' };
+    expect(saleDiscountWords({ ...sale, giftFor: 'Leo Grant' })).toBe('Refer a friend gift for inviting Leo Grant: £10.00 off');
+    expect(saleDiscountWords({ ...sale, giftFor: null })).toBe('Refer a friend gift: £10.00 off');
+    expect(saleDiscountWords({ ...sale, discountName: 'Summer', discountMinor: 80 })).toBe('Summer: £0.80 off');
   });
 });
 

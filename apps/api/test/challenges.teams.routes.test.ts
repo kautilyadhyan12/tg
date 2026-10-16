@@ -186,7 +186,9 @@ d("teams in a challenge (real Postgres)", () => {
     name: "October Teams",
     details: "",
     prize: "",
-    counts: "gym_days",
+    subject: "gym_visits",
+    measure: "days",
+    countedBy: "app",
     startsOn: "2026-10-01",
     endsOn: "2026-10-31",
     target: null,
@@ -838,7 +840,7 @@ d("teams in a challenge (real Postgres)", () => {
       ]);
 
       // The gym's own count, the lowest wins: staff type each person's seconds.
-      const sprint = await add(gym, { name: "Relay", counts: "own", unit: "seconds", lowestWins: true });
+      const sprint = await add(gym, { name: "Relay", subject: "own", measure: null, countedBy: "staff", unit: "seconds", lowestWins: true });
       await putOk(gym, sprint.id, [
         { userId: asha.userId, teamId: teamId(sprint, "Red Team") },
         { userId: bilal.userId, teamId: teamId(sprint, "Red Team") },
@@ -954,7 +956,7 @@ d("teams in a challenge (real Postgres)", () => {
       const mates: { userId: string }[] = [];
       for (let i = 0; i < 13; i++) mates.push(await quiet(gym, `Mate ${String.fromCharCode(65 + i)}`));
       const idle = await quiet(gym, "Ida Idle");
-      const challenge = await add(gym, { counts: "own", unit: "push-ups" });
+      const challenge = await add(gym, { subject: "own", measure: null, countedBy: "staff", unit: "push-ups" });
       const red = teamId(challenge, "Red Team");
       await putOk(gym, challenge.id, [vera, ...mates, idle].map((p) => ({ userId: p.userId, teamId: red })));
       // Vera has the fewest, so she is past the ten and still on her own list.
@@ -989,7 +991,7 @@ d("teams in a challenge (real Postgres)", () => {
       const [asha, bilal, chen, dev] = [await quiet(gym, "Asha Rao"), await quiet(gym, "Bilal Khan"), await quiet(gym, "Chen Wu"), await quiet(gym, "Dev Shah")];
       const hema = await quiet(gym, "Hema Hidden");
       await sql`UPDATE users SET leaderboard_opt_out = true WHERE id = ${hema.userId}`;
-      const relay = await add(gym, { name: "Relay", counts: "own", unit: "seconds", lowestWins: true });
+      const relay = await add(gym, { name: "Relay", subject: "own", measure: null, countedBy: "staff", unit: "seconds", lowestWins: true });
       const red = teamId(relay, "Red Team");
       const blue = teamId(relay, "Blue Team");
       await putOk(gym, relay.id, [
@@ -1027,7 +1029,7 @@ d("teams in a challenge (real Postgres)", () => {
         ["Blue Team", 98, 1, 0],
       ]);
       // Where the most wins, nobody waits for anybody.
-      const most = await add(gym, { name: "Most", counts: "own", unit: "push-ups" });
+      const most = await add(gym, { name: "Most", subject: "own", measure: null, countedBy: "staff", unit: "push-ups" });
       await putOk(gym, most.id, [
         { userId: asha.userId, teamId: teamId(most, "Red Team") },
         { userId: bilal.userId, teamId: teamId(most, "Red Team") },

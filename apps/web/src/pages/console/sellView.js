@@ -13,6 +13,7 @@ import {
   bpToTaxRateText,
   discountOff,
   formatMinor,
+  memberGiftBillLine,
   isVisibleText,
   minorToPriceText,
   priceToMinor,
@@ -151,6 +152,8 @@ export function soldWords(sale) {
 /** "Summer sale: $0.80 off", for a sale made with a discount; null for one made without. */
 export function saleDiscountWords(sale) {
   if (sale.discountName === null || sale.discountName === undefined) return null;
+  // A member's Refer a friend gift names the friend it was for inviting (20e-ii-b-ii-a).
+  if (typeof sale.giftFor === 'string') return memberGiftBillLine(sale.discountMinor, sale.currency, sale.giftFor);
   return `${sale.discountName}: ${formatMinor(sale.discountMinor, sale.currency)} off`;
 }
 

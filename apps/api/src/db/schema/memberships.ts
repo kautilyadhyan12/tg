@@ -326,7 +326,7 @@ export const gymMemberPayments = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
-    /** Why staff voided it, picked from a list (0118; 18o); null for one voided before. */
+    /** Why staff voided it, picked from a list (0123; 18o); null for one voided before. */
     voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
@@ -377,7 +377,7 @@ export const gymMemberRefunds = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
-    /** Why staff voided it, picked from a list (0118; 18o); null for one voided before. */
+    /** Why staff voided it, picked from a list (0123; 18o); null for one voided before. */
     voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),

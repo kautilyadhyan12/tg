@@ -244,6 +244,52 @@ describe('adding and keeping a lead', () => {
     expect(screen.queryByRole('button', { name: 'Joined · add to your members' })).toBeNull();
   });
 
+  it("a joined friend a member invited says what became of Refer a friend's gift (20e-ii-b-i)", async () => {
+    const invited = { ...tom, source: 'friend', status: 'joined', entryId: OWN, onList: true, invitedBy: { name: 'Maya Patel', member: true } };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: { state: 'given', on: 'Gold Monthly', day: '2026-10-15' } } } });
+    const { unmount } = render(sheet(TOM));
+    expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("Friend's gift given on Gold Monthly, 15 October 2026.");
+    unmount();
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: { state: 'member_before' } } } });
+    render(sheet(TOM));
+    expect((await screen.findByTestId('friend-gift-line')).textContent).toBe("No friend's gift: Tom was already on your Members list before they were invited.");
+  });
+
+  it("a joined friend's lead says what became of the inviting member's own gift (20e-ii-b-ii-a)", async () => {
+    const invited = { ...tom, source: 'friend', status: 'joined', entryId: OWN, onList: true, invitedBy: { name: 'Maya Patel', member: true } };
+    const memberGift = { gift: { state: 'used', words: '£10.00 off', on: { kind: 'bill', what: 'Gold Monthly', dueOn: '2026-11-01' } }, memberName: 'Maya Patel' };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift } } });
+    const { unmount } = render(sheet(TOM));
+    expect((await screen.findByTestId('member-gift-line')).textContent).toBe("Maya Patel's gift for inviting Tom (£10.00 off) came off their Gold Monthly bill due 1 November 2026.");
+    unmount();
+    const back = { gift: { state: 'taken_back', words: '£10.00 off', why: 'voided', day: '2026-10-15' }, memberName: null };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift: back } } });
+    render(sheet(TOM));
+    expect((await screen.findByTestId('member-gift-line')).textContent).toBe(
+      "The inviting member's gift for inviting Tom (£10.00 off) was taken back: Tom's payment of 15 October 2026 was voided.",
+    );
+  });
+
+  it("a member's gift waiting for a member not on the list says so, with the place to find them (round one, H3)", async () => {
+    const invited = { ...tom, source: 'friend', status: 'joined', entryId: OWN, onList: true, invitedBy: { name: 'Ned Fox', member: true } };
+    const memberGift = { gift: { state: 'waiting_no_record', words: '£10.00 off' }, memberName: 'Ned Fox' };
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...invited, friendGift: null, memberGift } } });
+    render(sheet(TOM));
+    expect((await screen.findByTestId('member-gift-line')).textContent).toBe(
+      "Ned Fox's gift for inviting Tom (£10.00 off) is waiting: Ned Fox is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.",
+    );
+    const find = screen.getByTestId('member-gift-find');
+    expect(find.textContent).toBe('Find Ned Fox in the app');
+    expect(find.getAttribute('href')).toMatch(/\/members\?view=app$/);
+  });
+
+  it('a lead nobody invited has no line about a gift', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: { ...tom, status: 'joined', entryId: OWN, onList: true } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.queryByTestId('friend-gift-line')).toBeNull();
+  });
+
   it('a joined lead whose record was taken off says so, and Put back sends Joined for that lead', async () => {
     const off = { ...tom, status: 'joined', entryId: OWN, onList: false };
     orgService.getLead.mockResolvedValue({ data: { lead: off } });

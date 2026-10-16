@@ -380,8 +380,10 @@ d("the Members list says what each person holds (real Postgres)", () => {
       const file = new Map((await csvOf(gymId, owner, await selectAll(gymId, owner, {}))).map((row) => [row["Name"] ?? "", row["Payment status"]]));
       expect(Object.fromEntries(file)).toEqual({ "Uma Costa": "Not due yet", "Vik Rao": "Payment due", "Wren Hale": "Not due yet" });
 
-      // On its day, with nobody pressing anything, it is owed.
-      const onTheDay = await listService.readEntries(at(new Date(Date.now() + 10 * DAY_MS)), owner.userId, gymId, { paymentStatus: "payment due" }, yes);
+      // On its day, with nobody pressing anything, it is owed. Midday on that day, never
+      // "ten times 24 hours from now": across the clocks going back (London, 25 October
+      // 2026), 240 hours from the first hour of a day lands an hour short of its tenth day.
+      const onTheDay = await listService.readEntries(at(new Date(`${starts}T12:00:00Z`)), owner.userId, gymId, { paymentStatus: "payment due" }, yes);
       expect(onTheDay?.entries.map((entry) => entry.fullName).sort()).toEqual(["Uma Costa", "Vik Rao", "Wren Hale"]);
     },
     TEST_TIMEOUT_MS,

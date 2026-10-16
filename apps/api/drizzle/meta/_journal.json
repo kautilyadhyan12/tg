@@ -825,7 +825,42 @@
       "idx": 117,
       "version": "7",
       "when": 1790726400118,
-      "tag": "0118_void_reasons",
+      "tag": "0118_challenge_subjects",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1790726400119,
+      "tag": "0119_friend_gift",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1790726400120,
+      "tag": "0120_challenge_exercises",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1790726400121,
+      "tag": "0121_member_gift",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1790726400122,
+      "tag": "0122_member_number_kept",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1790726400123,
+      "tag": "0123_void_reasons",
       "breakpoints": true
     }
   ]

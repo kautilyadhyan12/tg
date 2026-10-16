@@ -369,12 +369,12 @@ describe('an older mark with no payment behind it', () => {
   });
 });
 
-// ── 18a-ii: Cancel this bill, Note a refund, Void refund (18o) ──────────────
+// ── 18a-ii: Void bill, Note a refund, Void refund (18o) ─────────────────────
 //
 // The worst this screen could do: cancel a bill or note a refund against a membership,
 // a bill or a payment other than the one on screen, or without saying what it changes.
 
-describe('Cancel this bill', () => {
+describe('Void bill (was Cancel this bill)', () => {
   it('asks first, naming the person, the amount and what stays; sends the bill on screen with the reason picked', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const pack = held(2, PACK, '2026-10-10', false);

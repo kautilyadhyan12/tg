@@ -208,7 +208,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
   }));
 }
 
-/** Who voided a row, on the gym's own day, and why: null for a reason before 0118. */
+/** Who voided a row, on the gym's own day, and why: null for a reason before 0123. */
 export interface Voided<R> {
   reason: R | null;
   on: string;

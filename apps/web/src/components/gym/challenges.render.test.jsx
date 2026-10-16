@@ -2,6 +2,7 @@
 // network is mocked: what a member sees is read off the real component.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { sentChallenge } from './__fixtures__/sentChallenge';
 
 const svc = { list: vi.fn(), board: vi.fn(), join: vi.fn(), leave: vi.fn() };
 vi.mock('../../api/challengesApi', () => ({ challengesService: svc }));
@@ -18,7 +19,7 @@ const GYM = { id: 'g1', name: 'Iron House' };
 const me = (over = {}) => ({ value: 0, place: null, hidden: null, toNextPlace: null, nextPlace: null, reached: false, days: [], ...over });
 const row = (id, name, place, value, over = {}) => ({ userId: id, name, initials: name.slice(0, 1), place, value, reached: false, isMe: false, ...over });
 const TOP = [row('u1', 'Maya K.', 1, 5, { reached: true }), row('u2', 'Tom B.', 2, 4), row('u3', 'Priya S.', 3, 3)];
-const challenge = (id, name, over = {}) => ({
+const challenge = (id, name, over = {}) => sentChallenge({
   id,
   name,
   details: '',
@@ -75,6 +76,8 @@ describe("a member's Challenges", () => {
     expect(card.getByText('Reach 5 gym days')).toBeTruthy();
     expect(card.getByText('5 days left')).toBeTruthy();
     expect(card.getByText('Mon 5 Oct – Sun 11 Oct')).toBeTruthy();
+    // What it is about and how it is counted, in the words the server sent (19d-iii-a-i).
+    expect(card.getByText('Gym visits · Checked in at the front desk')).toBeTruthy();
     expect(card.getByText('A shaker for everyone who gets there')).toBeTruthy();
     expect(card.getByText('Everyone at Iron House is in')).toBeTruthy();
     expect(card.getByText('Any five days this week.')).toBeTruthy();

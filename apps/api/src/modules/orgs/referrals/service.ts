@@ -229,7 +229,7 @@ async function placeGift(
   // code or name: WELCOME20B, never a second WELCOME20 (the re-check of round one, L7).
   const code = await freeCode(tx, ctx.gymId, gift, ctx.currency, null);
   if (live !== undefined) await archive(live);
-  const made = await createDiscountInTx(tx, { ...want, name: giftName(code), code, gymId: ctx.gymId, actorUserId: ctx.userId });
+  const made = await createDiscountInTx(tx, { ...want, name: giftName(code), code, gymId: ctx.gymId, actorUserId: ctx.userId, referralGift: true });
   if (made.kind !== "created") throw refused(made);
   return made.id;
 }
