@@ -27,6 +27,22 @@ export function paymentsSummaryLine(summary) {
   return `${linesText(summary.lines)} · ${parts.join(' · ')}`;
 }
 
+const pad = (n) => String(n).padStart(2, '0');
+const lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+
+/** The quick choices, as Square's and Mindbody's date pickers offer them, from the gym's today:
+ *  this month so far, the whole of last month, and this year so far. */
+export function quickDays(today) {
+  const [y, m] = today.split('-').map(Number);
+  const prevY = m === 1 ? y - 1 : y;
+  const prevM = m === 1 ? 12 : m - 1;
+  return [
+    { key: 'this-month', label: 'This month', from: `${y}-${pad(m)}-01`, to: today },
+    { key: 'last-month', label: 'Last month', from: `${prevY}-${pad(prevM)}-01`, to: `${prevY}-${pad(prevM)}-${pad(lastDay(prevY, prevM))}` },
+    { key: 'this-year', label: 'This year', from: `${y}-01-01`, to: today },
+  ];
+}
+
 /** Said in the box once the file is saved. */
 export const downloadedLine = (filename) => `Downloaded ${filename}. Open it in Excel or Google Sheets, or send it to your accountant.`;
 

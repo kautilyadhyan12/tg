@@ -4,7 +4,7 @@ import DatePick from '../../components/console/DatePick';
 import { reportsService } from '../../api/reportsApi';
 import { blobError, errorText } from '../../api/orgsApi';
 import { saveFile } from './saveFile';
-import { DOWNLOAD_FAILED, SUMMARY_FAILED, downloadedLine, paymentsSummaryLine } from './paymentsDownloadView';
+import { DOWNLOAD_FAILED, SUMMARY_FAILED, downloadedLine, paymentsSummaryLine, quickDays } from './paymentsDownloadView';
 
 // Download payments on Reports (spec Part 3 §14.3; ROADMAP 18n): an Excel file of every
 // payment, refund and product sale on the days picked, for the gym's accountant. The button
@@ -80,9 +80,40 @@ export default function PaymentsDownload({ gymId, period, today }) {
             <h3 className="c-h3">Download payments</h3>
             <p className="c-s14 c-t2 m-0">An Excel file of every membership payment, refund and product sale on these days, with its receipt number, for your accountant.</p>
           </div>
+          <div role="radiogroup" aria-label="Quick choices" className="flex flex-wrap gap-2">
+            {quickDays(today).map((q) => {
+              const on = q.from === from && q.to === to;
+              return (
+                <button
+                  key={q.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  className={on ? 'c-chip c-chip-on' : 'c-chip'}
+                  onClick={() => {
+                    setNote(null);
+                    setFrom(q.from);
+                    setTo(q.to);
+                  }}
+                >
+                  {q.label}
+                </button>
+              );
+            })}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <DatePick newLook label="From" value={from} max={today} today={today} onChange={pickFrom} />
-            <DatePick newLook label="To" value={to} max={today} today={today} onChange={pickTo} />
+            <div className="flex flex-col gap-1">
+              <span className="c-label" aria-hidden="true">
+                From
+              </span>
+              <DatePick newLook label="From" value={from} max={today} today={today} onChange={pickFrom} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="c-label" aria-hidden="true">
+                To
+              </span>
+              <DatePick newLook label="To" value={to} max={today} today={today} onChange={pickTo} />
+            </div>
           </div>
           {mine.error !== null ? (
             <p className="c-s14 m-0" style={{ color: 'var(--bad)' }} role="alert" data-testid="payments-download-line">

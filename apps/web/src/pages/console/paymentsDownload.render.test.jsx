@@ -2,7 +2,7 @@
 // Only the network is mocked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { paymentsSummaryLine } from './paymentsDownloadView';
+import { paymentsSummaryLine, quickDays } from './paymentsDownloadView';
 
 const svc = { paymentsSummary: vi.fn(), downloadPayments: vi.fn() };
 vi.mock('../../api/reportsApi', () => ({ reportsService: svc }));
@@ -61,6 +61,33 @@ describe('the box on Reports', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Download payments' }));
     expect((await screen.findByRole('alert')).textContent).toBe("Couldn't reach the server. Check your connection and try again.");
     expect(screen.getByRole('button', { name: 'Download' }).disabled).toBe(true);
+  });
+});
+
+describe('the quick choices', () => {
+  it('this month so far, the whole of last month, and this year so far, across a new year too', () => {
+    expect(quickDays('2026-10-20').map((q) => [q.label, q.from, q.to])).toEqual([
+      ['This month', '2026-10-01', '2026-10-20'],
+      ['Last month', '2026-09-01', '2026-09-30'],
+      ['This year', '2026-01-01', '2026-10-20'],
+    ]);
+    expect(quickDays('2027-01-05').map((q) => [q.from, q.to])).toEqual([
+      ['2027-01-01', '2027-01-05'],
+      ['2026-12-01', '2026-12-31'],
+      ['2027-01-01', '2027-01-05'],
+    ]);
+    expect(quickDays('2028-03-31')[1]).toMatchObject({ from: '2028-02-01', to: '2028-02-29' });
+  });
+
+  it('a choice pressed asks for its days, and is shown picked', async () => {
+    render(<PaymentsDownload gymId="g1" period={PERIOD} today={TODAY} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Download payments' }));
+    await screen.findByText(/4 transactions/);
+    fireEvent.click(screen.getByRole('radio', { name: 'Last month' }));
+    await waitFor(() => expect(svc.paymentsSummary).toHaveBeenLastCalledWith('g1', { from: '2026-09-01', to: '2026-09-30' }));
+    expect(screen.getByRole('radio', { name: 'Last month' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }));
+    await waitFor(() => expect(svc.downloadPayments).toHaveBeenCalledWith('g1', { from: '2026-09-01', to: '2026-09-30' }));
   });
 });
 
