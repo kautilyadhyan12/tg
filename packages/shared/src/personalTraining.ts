@@ -414,7 +414,7 @@ export function ptWords(orgType: unknown) {
     too_far: "Sessions can be booked up to 8 weeks ahead.",
     not_open_yet: "Booking for that time isn't open yet.",
     time_taken: `This ${coach} already has a session at that time.`,
-    trainer_in_class: `This ${coach} is coaching a class at that time.`,
+    trainer_in_class: `This ${coach} has a class at that time.`,
     trainer_off: `This ${coach} has time off at that time.`,
     person_busy: "This person already has a personal training session at that time.",
     no_membership: "This person has no membership in use on that day.",

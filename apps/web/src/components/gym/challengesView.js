@@ -37,7 +37,7 @@ export function printed(n, words, needed = false) {
 /** A printed time or distance carries its own unit; a whole number is followed by its word. */
 const whole = (challenge) => (challenge.words?.print ?? 'whole') === 'whole';
 
-/** The word after a number, as the server sent it: "gym days", "gym day", "push-ups". */
+/** The word after a number, as the server sent it: "visits", "visit", "push-ups". */
 const wordFor = (challenge, n) => (n === 1 ? challenge.words.one : challenge.words.many);
 const amount = (challenge, n) => (whole(challenge) ? `${printed(n, challenge.words)} ${wordFor(challenge, n)}` : printed(n, challenge.words));
 
@@ -45,10 +45,10 @@ const amount = (challenge, n) => (whole(challenge) ? `${printed(n, challenge.wor
 export const inTeams = (challenge) => (challenge.teams ?? 'none') !== 'none' && (challenge.teamBoard ?? null) !== null;
 const teamCount = (n) => (n === 1 ? '1 team' : `${n.toLocaleString('en')} teams`);
 
-/** "3 gym days", "1 workout day", "40 push-ups": a number in a challenge's own words. */
+/** "3 visits", "1 workout day", "40 push-ups": a number in a challenge's own words. */
 export const countText = (value, words) => amount({ words }, value);
 
-/** What it is about and how it is counted, in one line: "Gym visits · Checked in at the front desk". */
+/** What it is about and how it is counted, in one line: "Visits · Checked in at the front desk". */
 export const aboutLine = (challenge) => `${challenge.words.about} · ${challenge.words.howLine}`;
 
 /** The mark beside a challenge's name: where it is on the gym's calendar. `tone` picks its

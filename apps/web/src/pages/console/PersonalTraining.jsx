@@ -130,7 +130,7 @@ function HoursForm({ trainer, clockFormat, orgType, saving, error, onSave, onClo
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <span className="c-label">Hours they are available each week, on {`the ${orgWords(orgType).it}'s`} clock</span>
+          <span className="c-label">Hours they are available each week, on {`your ${orgWords(orgType).it}'s`} clock</span>
           <span className="c-s13 c-t3">A split day? Add a second set of hours, for example a morning and an evening.</span>
         </div>
         {WEEKDAYS.map((day) => {

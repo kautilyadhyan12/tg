@@ -51,9 +51,9 @@ const type = (over = {}) => ({
 });
 const listOf = (over = {}) => ({ currency: 'GBP', types: [], archived: [], archivedTotal: 0, classChoices: [], ...over });
 
-function open(list, { readOnly = false } = {}) {
+function open(list, { readOnly = false, org = ORG } = {}) {
   orgService.getMembershipTypes.mockResolvedValue({ data: list });
-  render(<MembershipTypesPanel org={ORG} readOnly={readOnly} />);
+  render(<MembershipTypesPanel org={org} readOnly={readOnly} />);
 }
 
 const type_ = (label, value) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -290,6 +290,14 @@ describe('a limit on personal training sessions', () => {
     expect(orgService.createMembershipType.mock.calls[0][1]).toMatchObject({ includesPt: true, ptLimit: 2, ptPeriod: 'week' });
     // The list that comes back says the limit on the type's own line.
     expect(await screen.findByText(/2 personal training sessions a week/)).toBeTruthy();
+  });
+
+  it("a Pilates studio's form names its instructors (5f-ii)", async () => {
+    open(listOf(), { org: { ...ORG, orgType: 'pilates_studio' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));
+    expect(screen.getByText('Sessions with an instructor can be booked on this membership.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /^Class pack/ }));
+    expect(screen.getByText('Each session booked with an instructor uses one from the pack.')).toBeTruthy();
   });
 
   it('a pack is offered no limit: each session uses one from the pack', async () => {

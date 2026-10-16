@@ -34,7 +34,7 @@ export const CHALLENGE_ID_PATTERN = /^[a-z][a-z_]{0,39}$/u;
 /** A number the APP works out for a subject. */
 export interface ChallengeMeasure {
   id: string;
-  /** The word after a number: "1 gym day", "3 gym days". */
+  /** The word after a number: "1 visit", "3 visits". */
   one: string;
   many: string;
   print: ChallengePrint;
@@ -183,7 +183,7 @@ const HOW_LINE: Record<Exclude<ChallengeCountedHow, "staff">, string> = {
 /** The words a challenge is sent with, so that a screen prints them and never looks its
  *  subject up. */
 export interface ChallengeWords {
-  /** What it is about: "Gym visits", or the gym's own word: "Push-ups". */
+  /** What it is about: "Visits", or the gym's own word: "Push-ups". */
   about: string;
   /** The word after a number. */
   one: string;

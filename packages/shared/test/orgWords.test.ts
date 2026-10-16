@@ -111,6 +111,7 @@ describe("orgWords", () => {
       const others = ["trainer", "coach", "instructor", "clinician"].filter((w) => w !== coach);
       for (const line of said) for (const w of others) expect(line, label).not.toMatch(new RegExp(`\\b${w}s?\\b`, "u"));
       expect(ptWords(type).trainer_off, label).toBe(`This ${coach} has time off at that time.`);
+      expect(ptWords(type).trainer_in_class, label).toBe(`This ${coach} has a class at that time.`);
       expect(ptWords(type).time_off_too_many, label).toBe(`${a.charAt(0).toUpperCase()}${a.slice(1)} can have up to 50 times off coming. Remove one first.`);
       expect(ptMemberWords(type).trainer_not_offering, label).toBe(`This ${coach} isn't taking personal training sessions right now.`);
     }

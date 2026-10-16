@@ -131,12 +131,12 @@ export function ordinal(n) {
   return `${n}${{ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th'}`;
 }
 
-/** "5 gym days", "2 workout days", "1 week" */
+/** "5 visits", "2 workout days", "1 week" */
 export function valueText(value, boardId) {
   return plural(value, UNIT[boardId]);
 }
 
-/** "2 more gym days to reach 3rd", or null. */
+/** "2 more visits to reach 3rd", or null. */
 export function nextPlaceText(me, boardId) {
   if (me.toNextPlace === null || me.nextPlace === null) return null;
   return `${plural(me.toNextPlace, `more ${UNIT[boardId]}`)} to reach ${ordinal(me.nextPlace)}`;
