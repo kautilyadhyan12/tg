@@ -158,7 +158,7 @@ export function coachLine(holder) {
   const name = holder?.coachName;
   if (typeof name === 'string' && name !== '') return name;
   return typeof holder?.coachUserId === 'string' && holder.coachUserId !== ''
-    ? 'Coach no longer on your staff'
+    ? 'Coach no longer available'
     : '';
 }
 
@@ -282,7 +282,7 @@ export function coachChoices(staff, draft) {
   const set = draft?.coachUserId ?? '';
   if (set === '' || list.some((person) => person?.userId === set)) return list;
   return [
-    { userId: set, displayName: draft?.coachName ?? 'No longer on your staff' },
+    { userId: set, displayName: draft?.coachName ?? 'No longer available' },
     ...list,
   ];
 }
@@ -326,7 +326,7 @@ export function repeatDraft(type, today) {
   // active staff, so an id with no name is somebody who has gone, and the save
   // would be refused with `coach_not_staff` — for a field the gym never typed,
   // on the first Save of an unrelated new Tuesday. The EDIT forms keep the value
-  // as they have it (`coachChoices` shows it as "No longer on your staff" and
+  // as they have it (`coachChoices` shows it as "No longer available" and
   // the server's sentence says what to do): there the gym is changing something
   // that already names them. A NEW repeat starts with nobody instead.
   const gone = fields.coachUserId !== '' && (fields.coachName === null || fields.coachName === '');

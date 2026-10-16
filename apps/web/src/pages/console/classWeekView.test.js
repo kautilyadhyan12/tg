@@ -73,7 +73,7 @@ describe('one date, in words', () => {
     expect(sessionWhenLine(s({}), '24h')).toBe('Tue 22 Sep · 18:00–18:45');
     expect(peopleLine(s({}))).toBe('12 places · Dana Okafor');
     expect(peopleLine(s({ places: null, coachUserId: null, coachName: null }))).toBe('No limit');
-    expect(peopleLine(s({ coachName: null }))).toBe("12 places · Coach no longer on your staff");
+    expect(peopleLine(s({ coachName: null }))).toBe("12 places · Coach no longer available");
     expect(sessionName(s({}), '24h')).toBe('Spin on Tue 22 Sep 2026 at 18:00');
   });
 

@@ -205,7 +205,8 @@ describe('the places and the coach', () => {
   // id with no name is a coach who has gone.
   it('names the coach, and says so when the one who was picked is gone', () => {
     expect(coachLine({ coachUserId: 'x', coachName: 'Dana' })).toBe('Dana');
-    expect(coachLine({ coachUserId: 'x', coachName: null })).toBe("Coach no longer on your staff");
+    // Gone from the staff, or their account closed: either way nobody to name (5f-iii).
+    expect(coachLine({ coachUserId: 'x', coachName: null })).toBe('Coach no longer available');
     expect(coachLine({ coachUserId: null, coachName: null })).toBe('');
     expect(coachLine(undefined)).toBe('');
   });
@@ -425,7 +426,7 @@ describe('the time slot form', () => {
     // Nobody named on the class stays nobody.
     expect(repeatDraft({ ...gone, coachUserId: null }, '2026-09-21').coachUserId).toBe('');
     // And the EDIT form is deliberately different: it keeps the id it was
-    // given, so `coachChoices` can show "No longer on your staff" and the gym
+    // given, so `coachChoices` can show "No longer available" and the gym
     // decides — it is changing something that already names that person.
     expect(repeatEditDraft(gone).coachUserId).toBe('dana-id');
   });
@@ -617,7 +618,7 @@ describe('editing a time slot', () => {
     ]);
     // Not named at all — they have left. It SAYS so rather than showing blank.
     expect(coachChoices(staff, { coachUserId: 'u8', coachName: null })).toEqual([
-      { userId: 'u8', displayName: 'No longer on your staff' },
+      { userId: 'u8', displayName: 'No longer available' },
       ...staff,
     ]);
     expect(coachChoices(undefined, undefined)).toEqual([]);

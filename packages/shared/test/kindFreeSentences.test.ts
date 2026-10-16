@@ -83,7 +83,7 @@ describe("sentences every kind of business reads", () => {
   it.each(sentences)("%s: never calls the place a gym, and is whole: %s", (_where, sentence) => {
     // "{gym}" is filled with the business's own name before it is shown.
     expect(sentence.replaceAll("AI Home Gym", "").replaceAll("gym or studio", "").replaceAll("{gym}", "")).not.toMatch(/\bgyms?\b|gym['’]s/i);
-    expect(sentence).not.toMatch(/undefined|\[object|NaN/);
+    expect(sentence).not.toMatch(/undefined|null|\[object|NaN/);
     expect(sentence.trim()).not.toBe("");
   });
 
