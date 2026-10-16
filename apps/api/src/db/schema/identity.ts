@@ -21,6 +21,8 @@ export const users = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     email: citext("email").unique(), // null allowed: OAuth-only accounts
+    // One person for trial counting across spellings (0127; `trialPersonKey` in shared).
+    trialPersonKey: text("trial_person_key").generatedAlwaysAs(sql`trial_person_key(email::text)`),
     passwordHash: text("password_hash"),
     hashAlgo: text("hash_algo"),
     displayName: text("display_name").notNull(), // leaderboard identity; profanity-filtered at write
@@ -43,6 +45,7 @@ export const users = pgTable(
   (t) => [
     check("users_hash_algo_check", sql`${t.hashAlgo} IN ('bcrypt','argon2id')`),
     check("users_status_check", sql`${t.status} IN ('active','deleted')`),
+    index("users_trial_person_key_idx").on(t.trialPersonKey).where(sql`${t.trialPersonKey} IS NOT NULL`),
   ],
 );
 
