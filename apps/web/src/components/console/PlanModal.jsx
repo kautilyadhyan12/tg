@@ -134,7 +134,11 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
   // anybody else is told who can, with no button that cannot help them.
   const [needsCode, setNeedsCode] = useState(false);
   const [waitsForOwner, setWaitsForOwner] = useState(false);
-  const [plans, setPlans] = useState({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable' });
+  // A second-trial code from us (2e-i): what is typed, the press under way, and the answer.
+  const [code, setCode] = useState('');
+  const [usingCode, setUsingCode] = useState(false);
+  const [codeError, setCodeError] = useState(null);
+  const [plans, setPlans] = useState({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable', supportEmail: null });
   const [attempt, setAttempt] = useState(0);
   const gymId = org?.id ?? null;
   /** A payment under way, in Paddle's window; the prompt closes once it is on the gym. */
@@ -189,7 +193,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
     if (e.key !== 'Tab') return;
     const root = dialogRef.current;
     if (root === null) return;
-    const focusable = [...root.querySelectorAll('a[href], button:not([disabled])')];
+    const focusable = [...root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled])')];
     // Nothing to move between — hold focus where it is rather than letting Tab
     // fall out of the dialog into the screen behind it.
     if (focusable.length === 0) {
@@ -230,6 +234,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           retryable: true,
           list: res.data?.plans ?? [],
           payOnline: res.data?.payOnline ?? 'unavailable',
+          supportEmail: res.data?.supportEmail ?? null,
         });
       })
       .catch((err) => {
@@ -243,6 +248,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           retryable: isRetryable(err),
           list: null,
           payOnline: 'unavailable',
+          supportEmail: null,
         });
       });
     return () => {
@@ -302,6 +308,24 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       setError(errorText(err, "We couldn't start your trial. Please try again."));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** A second-trial code from us (2e-i) starts the free trial the door refused. Started, the
+   *  prompt closes as it does for the trial button; refused, the server's line shows here. */
+  const submitCode = async (e) => {
+    e.preventDefault();
+    if (gymId === null || usingCode || code.trim() === '') return;
+    setUsingCode(true);
+    setCodeError(null);
+    try {
+      const res = await orgService.startTrial(gymId, code);
+      applyStartedTrial(gymId, res.data?.subscription ?? null);
+      refreshConsoleOrgsAfterChange();
+    } catch (err) {
+      setCodeError(errorText(err, "We couldn't check that code. Please try again."));
+    } finally {
+      setUsingCode(false);
     }
   };
 
@@ -425,7 +449,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setPlans({ loading: true, error: null, retryable: true, list: null });
+                      setPlans({ loading: true, error: null, retryable: true, list: null, payOnline: 'unavailable', supportEmail: null });
                       setAttempt((n) => n + 1);
                     }}
                     className="self-start rounded-xl px-4 py-2 text-sm font-medium"
@@ -521,6 +545,53 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                     : `There's no way to pay online yet. We'll be in touch about setting your ${words.it} up.`}
           </p>
         )}
+
+        {/* How to reach us, and a second-trial code from us (2e-i): only where a plan is needed. */}
+        {showing === 'subscribe' ? (
+          <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            {plans.supportEmail !== null ? (
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                Questions, or opening a second {words.it}? Write to us at{' '}
+                <a href={`mailto:${plans.supportEmail}`} style={{ color: '#FF8A1F' }}>
+                  {plans.supportEmail}
+                </a>
+                .
+              </p>
+            ) : null}
+            <form onSubmit={submitCode} className="mt-3 flex flex-col gap-2">
+              <label htmlFor={`${titleId}-code`} className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Have a free trial code from us?
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id={`${titleId}-code`}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="ABCDE-FGHJK"
+                  maxLength={40}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="flex-1 min-w-0 rounded-xl px-3 py-2 text-sm uppercase"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+                />
+                <button
+                  type="submit"
+                  disabled={usingCode || code.trim() === ''}
+                  className="rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                  style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+                >
+                  {usingCode ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {usingCode ? 'Checking…' : 'Use code'}
+                </button>
+              </div>
+              {codeError !== null ? (
+                <p className="text-sm" style={{ color: '#ef4444' }}>
+                  {codeError}
+                </p>
+              ) : null}
+            </form>
+          </div>
+        ) : null}
 
         {/* A gym on no plan may still take a copy of its own list (Stage 4 item 14) and its payments (18n). */}
         {showing === 'trial' ? null : <ListDownload org={org} />}

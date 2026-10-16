@@ -23,6 +23,8 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { makeSecondTrialCode, saveSecondTrialCode } from "../src/modules/orgs/secondTrialCode.js";
+import { sha256Hex } from "../src/modules/auth/tokens.js";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { FakeRazorpay } from "./fakeRazorpay.js";
 
@@ -82,11 +84,14 @@ d("the trial belongs to the gym (real Postgres)", () => {
     return app;
   };
 
+  // The second-trial codes this file made (2e-i), by their hashes.
+  const codesMade: string[] = [];
   const cleanup = async () => {
     const people = sql`SELECT id FROM users WHERE email ILIKE ${`${TAG}.%`}`;
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (${people})`;
     await sql`DELETE FROM billing_refunds WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM second_trial_codes WHERE code_hash = ANY(${codesMade})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_invite_sends WHERE gym_id IN (${mine})`;
@@ -679,6 +684,33 @@ d("the trial belongs to the gym (real Postgres)", () => {
       expect((JSON.parse(trial.body) as { error: string }).error).toBe("trial_already_used");
       expect(await rowsOf(second)).toEqual([]);
       expect((await onScreen(owner, second))?.ownerTrialUsed).toBe(true);
+    },
+    TIMEOUT_MS,
+  );
+  it(
+    "a gym the first-people rule ended starts again with a second-trial code, and the rule leaves that trial alone",
+    async () => {
+      const old = await oldGym();
+      const followers = await people(10);
+      await inGym(old, followers, 40);
+      const owner = await makeUser();
+      const gym = await trialGym(owner);
+      await earlierInNewGym(gym, followers);
+      expect(await joinsThroughDoor(gym, owner, old)).toBe(false);
+      expect(await trialOf(gym)).toMatchObject({ status: "expired", trial_check: "ended" });
+
+      // Kd has looked, and sends the owner a code.
+      const code = makeSecondTrialCode();
+      codesMade.push(sha256Hex(code));
+      await saveSecondTrialCode(sql, { email: owner.email, codeHash: sha256Hex(code) });
+      const res = await send("POST", `/v1/orgs/${gym}/trial`, { code }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      expect((JSON.parse(res.body) as { outcome: string }).outcome).toBe("started");
+      expect((await onScreen(owner, gym))?.trialEndedFirstPeople).toBe(false);
+
+      // The next person from the old gym joins: the trial goes on, nothing looked at.
+      expect(await joinsThroughDoor(gym, owner, old)).toBe(true);
+      expect(await trialOf(gym)).toEqual({ status: "trialing", trial_check: null, trial_check_gym_id: null });
     },
     TIMEOUT_MS,
   );

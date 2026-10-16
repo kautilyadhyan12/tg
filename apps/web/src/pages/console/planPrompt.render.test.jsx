@@ -664,6 +664,51 @@ describe('the forced subscribe prompt', () => {
     expect(screen.queryByText(/on this computer/i)).toBeNull();
   });
 
+  it('says where to write to us, and a free trial code from us starts the trial and closes the prompt (2e-i)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(spent));
+    orgService.getPlans.mockResolvedValue({ data: { plans: PLANS, supportEmail: 'help@gmail.com' } });
+    orgService.startTrial.mockResolvedValue({
+      data: { outcome: 'started', subscription: { status: 'trialing', trialEndsAt: daysFromNow(10), seatCap: 200 } },
+    });
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    const line = screen.getByText(/Questions, or opening a second gym\? Write to us at/);
+    expect(line.textContent).toBe('Questions, or opening a second gym? Write to us at help@gmail.com.');
+    expect(within(line).getByRole('link', { name: 'help@gmail.com' }).getAttribute('href')).toBe('mailto:help@gmail.com');
+
+    const use = screen.getByRole('button', { name: 'Use code' });
+    expect(use.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Have a free trial code from us?'), { target: { value: 'abcde-fghjk' } });
+    fireEvent.click(use);
+
+    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
+    expect(orgService.startTrial).toHaveBeenCalledWith(GYM_ID, 'abcde-fghjk');
+  });
+
+  it("shows the server's line under the code box when a code is refused, and no address it was not given", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...spent, trialEndedFirstPeople: true }));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'trial_code_not_valid',
+          message: "That code isn't valid. Check it and try again, or ask us for a new one.",
+        },
+      },
+    });
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    expect(screen.queryByText(/Write to us at/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Have a free trial code from us?'), { target: { value: 'WRONG-CODE1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use code' }));
+
+    expect(await screen.findByText("That code isn't valid. Check it and try again, or ask us for a new one.")).toBeTruthy();
+    expect(screen.getByTestId('plan-modal')).toBeTruthy();
+    expect(screen.getByText('$35 a month')).toBeTruthy();
+  });
+
   it('promises no payment it cannot take', async () => {
     // A server with no Paddle set up says so, and draws no button that could only fail.
     orgService.getMine.mockResolvedValue(mineIs(spent));

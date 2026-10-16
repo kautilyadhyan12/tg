@@ -662,6 +662,28 @@ export type StartOrgTrialResponse = z.infer<typeof startOrgTrialResponseSchema>;
 export const TRIAL_DEVICE_COOKIE = "trial_mark";
 export const trialDeviceMarkSchema = z.string().regex(/^[0-9a-f]{64}$/);
 
+/** The second-trial code (Stage 3 item 2e-i): ten letters and numbers Kd sends a real owner
+ *  of two gyms, written as two groups of five. Nothing that reads like another (I, L, O, 0,
+ *  1) is in one. */
+export const SECOND_TRIAL_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+export const SECOND_TRIAL_CODE_LENGTH = 10;
+
+/** A code as typed, made the one way it is stored: spaces and dashes dropped, small letters
+ *  read as capitals. Null when what is left cannot be a code. */
+export function normaliseSecondTrialCode(typed: string): string | null {
+  const code = typed.replace(/[\s-]/g, "").toUpperCase();
+  if (code.length !== SECOND_TRIAL_CODE_LENGTH) return null;
+  for (const ch of code) if (!SECOND_TRIAL_CODE_ALPHABET.includes(ch)) return null;
+  return code;
+}
+
+/** Starting the gym's free trial. `code` is a second-trial code; a code of the wrong shape is
+ *  answered as one that is not valid, not as a broken request. */
+export const startOrgTrialRequestSchema = z
+  .object({ code: z.string().max(40).optional() })
+  .strict();
+export type StartOrgTrialRequest = z.infer<typeof startOrgTrialRequestSchema>;
+
 /** ONE PLAN A GYM COULD BUY, as the subscribe prompt draws it — Kd's ruling of
  *  2026-08-28 (:22697): a second gym's owner, whose one trial is spent, is shown
  *  *"the real plans at their real prices"*.
@@ -747,6 +769,9 @@ export const orgPlansResponseSchema = z.object({
    *  gym) or `unavailable` (not set up on this server). `coming_soon` was an Indian gym's
    *  answer until Razorpay was connected (ROADMAP Stage 3 item 1d-i); no server sends it now. */
   payOnline: z.enum(["available", "coming_soon", "unavailable"]).default("unavailable"),
+  /** Where a gym that needs a plan writes to us (Stage 3 item 2e-i): `SUPPORT_EMAIL`, null
+   *  until one is set. */
+  supportEmail: z.string().email().nullable().default(null),
 });
 export type OrgPlansResponse = z.infer<typeof orgPlansResponseSchema>;
 
