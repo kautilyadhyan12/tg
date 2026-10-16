@@ -3820,7 +3820,8 @@ payment, a refund or a sale recorded by mistake is **voided**, as gym software d
   View receipt and a ⋯ whose list offers Note a refund ("You gave some or all of it back.") and,
   on the one payment that can be, Void payment ("It was recorded by mistake. The bill is owed
   again."); a refund line has View receipt and a ⋯ with Void refund ("It was noted by mistake.
-  The payment counts in full again."); the bill a payment is taken for has Record payment and a
+  It will no longer count."; its box says "The payment counts in full again." only where no other
+  refund stands on that payment, else "The other refund on this payment still counts."); the bill a payment is taken for has Record payment and a
   ⋯ with **Void bill** ("Nothing is owed for these days."), the same step that was Cancel this
   bill, its tag and line now "Voided 20 October 2026 by Sam Owner · Not charging for this one".
   Freeze and Cancel membership stay in the bar under the bills: "Cancel" is only ever a
@@ -3839,8 +3840,9 @@ payment, a refund or a sale recorded by mistake is **voided**, as gym software d
   voided refunds under it; it offers only View receipt. On Sell and a person's Purchases a
   voided sale reads the same. It counts in nothing: takings, reports and what is owed read only
   what stands, as before.
-- **Its receipt** keeps its number and reads "Voided. This payment was voided, so nothing was paid
-  on it." (a refund, a sale: the same in their words).
+- **Its receipt** keeps its number and reads "Voided. This payment no longer counts." (a refund, a
+  sale: the same in their words). The audit log keeps its older names (`org.member_payment_undone`,
+  `org.member_refund_undone`, `org.sale_undone`), with the reason added; no screen reads them.
 - **Left as it is**: a membership payment voided leaves Sell's list of today's takings, as
   before; it is shown, crossed out, on the person's page. A payment taken by a connected company
   (18d) is given back through that company, not voided here.

@@ -147,7 +147,7 @@ export function moneyTiles(report, words, orgSlug) {
       value: owedMinor === 0 ? null : moneyText(owedMinor, cur),
       line: owedMinor === 0 ? 'No bill in the app is due.' : null,
       note: [owedMinor === 0 ? null : `${owingPeople(report.owed, words)} · ${overdueText}`, listOnlyText].filter((part) => part !== null).join(' · ') || null,
-      how: `Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue ${overdueWhen}; you set this in Memberships, under Bills. Cancelled bills are not counted. A new month's bill appears within the hour after the month begins.`,
+      how: `Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue ${overdueWhen}; you set this in Memberships, under Bills. Voided bills are not counted. A new month's bill appears within the hour after the month begins.`,
       links: [
         ...(report.owed.people + listOnly > 0 ? [{ to: `${base}/members?show=${PAYMENT_DUE_SHOW}`, button: 'See who' }] : []),
         ...(report.owed.pastPeople > 0 ? [{ to: `${base}/members?show=${PAST_PAYMENT_DUE_SHOW}`, button: `See past ${words.people}` }] : []),

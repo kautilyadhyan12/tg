@@ -201,7 +201,7 @@ describe('the money figures', () => {
     fireEvent.click(due.getByRole('button', { name: 'How Payment due is worked out' }));
     expect(
       due.getByText(
-        "Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue 7 days after its due date; you set this in Memberships, under Bills. Cancelled bills are not counted. A new month's bill appears within the hour after the month begins.",
+        "Bills that have fallen due and are not fully paid, less what has been paid on them. A bill is overdue 7 days after its due date; you set this in Memberships, under Bills. Voided bills are not counted. A new month's bill appears within the hour after the month begins.",
       ),
     ).toBeTruthy();
     const life = within(tile('lifetime'));

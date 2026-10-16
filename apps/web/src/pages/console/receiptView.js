@@ -20,12 +20,12 @@ export function receiptButtonLabel(number, what) {
   return `View receipt #${String(number)}${what ? ` for ${what}` : ''}`;
 }
 
-/** Said at the top of a receipt staff voided: its number stands, and nothing is owed on it. */
+/** Said at the top of a receipt staff voided: its number stands, and it no longer counts. */
 export function cancelledLine(receipt) {
   if (!receipt.cancelled) return null;
-  if (receipt.kind === 'sale') return 'Voided. This sale was voided, so nothing was paid on it.';
-  if (receipt.kind === 'refund') return 'Voided. This refund was voided, so nothing was given back on it.';
-  return 'Voided. This payment was voided, so nothing was paid on it.';
+  if (receipt.kind === 'sale') return 'Voided. This sale no longer counts.';
+  if (receipt.kind === 'refund') return 'Voided. This refund no longer counts.';
+  return 'Voided. This payment no longer counts.';
 }
 
 /** "Gold Monthly, 15 Oct – 14 Nov 2026": the membership type by its own name (which may

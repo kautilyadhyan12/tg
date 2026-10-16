@@ -614,6 +614,14 @@ export default function MemberMemberships({
     const cancelId = billToCancel(m)?.id ?? null;
     // The one payment that can be voided now: its ⋯ offers Void payment.
     const voidId = canAct && billing.undo?.kind === 'payment' ? billing.undo.paymentId : null;
+    // A box a ⋯ opened is drawn inside the line it is about, never under the whole membership.
+    const here = open !== null && open.id === m.id ? open : null;
+    const boxUnderPayment = (paymentId) => {
+      if (here === null) return null;
+      if (here.what === 'refund' && refundForm !== null && refundForm.paymentId === paymentId) return renderRefund(m);
+      if (here.what === 'undo' && voidForm !== null && voidId === paymentId) return renderAsk(m);
+      return null;
+    };
     const SPLIT = { borderTop: '1px solid var(--line)' };
     // A payment or a refund: columns with its button at the end; on a phone, one under another.
     const LINE = 'flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3';
@@ -687,6 +695,7 @@ export default function MemberMemberships({
                       </span>
                     </div>
                     {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                    {boxUnderPayment(p.id)}
                     {p.refunds.map((r) => (
                       <div
                         key={r.id}
@@ -715,7 +724,7 @@ export default function MemberMemberships({
                             <MoreMenu
                               label={null}
                               alignRight
-                              ariaLabel={`More for the refund of ${r.money}`}
+                              ariaLabel={`More for the refund of ${r.money}, receipt #${String(r.receiptNumber)}`}
                               items={[{ ...MENU_WORDS.voidRefund, danger: true, onPick: () => askVoidRefund(m, p.id, r.id) }]}
                               disabled={busy}
                             />
@@ -724,6 +733,7 @@ export default function MemberMemberships({
                       </div>
                     ))}
                     {p.refunds.some((r) => r.receiptNumber === receiptFor) ? <ReceiptBox gymId={gymId} gym={gym} number={receiptFor} onClose={() => setReceiptFor(null)} /> : null}
+                    {here !== null && here.what === 'voidRefund' && voidForm !== null && here.paymentId === p.id ? renderVoidRefund(m) : null}
                   </div>
                 ))}
                 {pays ? (
@@ -739,6 +749,11 @@ export default function MemberMemberships({
                         disabled={busy}
                       />
                     ) : null}
+                  </div>
+                ) : null}
+                {here !== null && here.what === 'cancelBill' && billForm !== null && cancelId === row.id ? (
+                  <div className="px-3 py-2.5" style={SPLIT}>
+                    {renderCancelBill(m)}
                   </div>
                 ) : null}
               </li>
@@ -930,13 +945,8 @@ export default function MemberMemberships({
         {asking ? (
           open.what === 'pay' && payForm !== null ? (
             renderPay(m)
-          ) : open.what === 'cancelBill' && billForm !== null ? (
-            renderCancelBill(m)
-          ) : open.what === 'refund' && refundForm !== null ? (
-            renderRefund(m)
-          ) : open.what === 'voidRefund' && voidForm !== null ? (
-            renderVoidRefund(m)
-          ) : (
+          ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
+            // Drawn inside the bill, payment or refund they are about (`renderBills`).
             renderAsk(m)
           )
         ) : !inUse && (payButton !== null || canUndo) ? (

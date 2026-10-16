@@ -118,7 +118,7 @@ describe('a receipt', () => {
     svc.receipt.mockResolvedValue(receipt({ cancelled: true }));
     open();
     const row = await pressReceipt();
-    expect((await within(row).findByTestId('receipt-cancelled')).textContent).toBe('Voided. This sale was voided, so nothing was paid on it.');
+    expect((await within(row).findByTestId('receipt-cancelled')).textContent).toBe('Voided. This sale no longer counts.');
   });
 
   it('a gym with no address: the owner types it in the box, and the receipt is read again with it', async () => {

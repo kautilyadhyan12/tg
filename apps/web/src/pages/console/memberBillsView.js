@@ -197,7 +197,7 @@ export function cancelBillBody(draft) {
 export const MENU_WORDS = {
   refund: { label: 'Note a refund', hint: 'You gave some or all of it back.' },
   voidPayment: { label: 'Void payment', hint: 'It was recorded by mistake. The bill is owed again.' },
-  voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. The payment counts in full again.' },
+  voidRefund: { label: 'Void refund', hint: 'It was noted by mistake. It will no longer count.' },
   voidBill: { label: 'Void bill', hint: 'Nothing is owed for these days.' },
 };
 
@@ -264,11 +264,18 @@ export function refundedWords(m, amountMinor) {
 
 /** The box "Void refund" opens, for one refund noted against one payment. */
 export function voidRefundWords(m, name, paymentId, refundId) {
-  const refund = paymentOf(m, paymentId)?.refunds.find((r) => r.id === refundId) ?? null;
+  const refunds = paymentOf(m, paymentId)?.refunds ?? [];
+  const refund = refunds.find((r) => r.id === refundId) ?? null;
   const what = refund === null ? 'this refund' : `the ${formatMinor(refund.amountMinor, m.currency)} refund noted on ${dayWords(refund.refundedOn)}`;
+  // Another refund may still stand on the same payment: then the payment does not count in full.
+  const others = refunds.filter((r) => r.id !== refundId).length;
+  const after =
+    others === 0
+      ? 'The payment counts in full again.'
+      : `It no longer counts. The other ${others === 1 ? 'refund' : `${String(others)} refunds`} on this payment still ${others === 1 ? 'counts' : 'count'}.`;
   return {
     question: `Void ${what} for ${name}'s ${m.typeName}?`,
-    detail: 'Use this when a refund was noted by mistake. The payment counts in full again. The refund stays on this page, crossed out, with who voided it and why.',
+    detail: `Use this when a refund was noted by mistake. ${after} The refund stays on this page, crossed out, with who voided it and why.`,
     label: 'Why are you voiding it?',
     button: 'Void refund',
     done: 'That refund was voided.',

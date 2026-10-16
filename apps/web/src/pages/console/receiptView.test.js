@@ -119,9 +119,9 @@ describe('the rest of a receipt', () => {
 
   it('a receipt voided says Voided, in words for what it was', () => {
     expect(cancelledLine(payment())).toBeNull();
-    expect(cancelledLine(payment({ cancelled: true }))).toBe('Voided. This payment was voided, so nothing was paid on it.');
-    expect(cancelledLine(sale({ cancelled: true }))).toBe('Voided. This sale was voided, so nothing was paid on it.');
-    expect(cancelledLine(refund({ cancelled: true }))).toBe('Voided. This refund was voided, so nothing was given back on it.');
+    expect(cancelledLine(payment({ cancelled: true }))).toBe('Voided. This payment no longer counts.');
+    expect(cancelledLine(sale({ cancelled: true }))).toBe('Voided. This sale no longer counts.');
+    expect(cancelledLine(refund({ cancelled: true }))).toBe('Voided. This refund no longer counts.');
   });
 
   it('the notes: refunds against a payment, and who took it', () => {
@@ -162,7 +162,7 @@ describe('the receipt on paper', () => {
   });
 
   it('a receipt voided says so at the top', () => {
-    expect(receiptPrintHtml(sale({ cancelled: true }))).toContain('<div class="cancel">Voided. This sale was voided, so nothing was paid on it.</div>');
+    expect(receiptPrintHtml(sale({ cancelled: true }))).toContain('<div class="cancel">Voided. This sale no longer counts.</div>');
   });
 
   it("what staff or a member typed is printed as words, never as the page's own markup", () => {

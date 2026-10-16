@@ -148,7 +148,7 @@ export function filtersAreEmpty(filters) {
 export function overSignWords(n, words, { inView = false, readOnly = false, owing = 0, owingInView = false } = {}) {
   const people = (k) => `${k.toLocaleString('en')} ${k === 1 ? words.person : words.people}`;
   const owingButton = owing === 0 || owingInView ? null : owing === 1 ? `Show this ${words.person}` : `Show these ${words.people}`;
-  const first = 'Record the payment or cancel the bill on their page first.';
+  const first = 'Record the payment or void the bill on their page first.';
   if (n === 0) {
     return {
       title: `${people(owing)} with a membership that is over still ${owing === 1 ? 'owes' : 'owe'} a payment`,

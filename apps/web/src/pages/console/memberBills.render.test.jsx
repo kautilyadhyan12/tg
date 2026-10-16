@@ -259,6 +259,8 @@ describe('a membership that is over', () => {
     const [row] = await rowsSoon();
     expect(buttonsIn(row)).toEqual(['View receipt', 'More for the payment of £5.00', 'Record payment']);
     fromMenu(row, 'More for the payment of £5.00', 'Void payment');
+    // The box opens inside the bill whose payment it is about.
+    expect(within(row).getByTestId('held-bill').contains(screen.getByTestId('held-void-payment'))).toBe(true);
     const voidBox = within(screen.getByTestId('held-void-payment'));
     expect(voidBox.getByText("Void the £5.00 payment recorded on 19 October 2026 for Ada Lovelace's One week?")).toBeTruthy();
     // Nothing is sent until a reason is picked.
@@ -506,7 +508,7 @@ describe('Note a refund', () => {
     expect(within(row).getByTestId('held-payment').textContent).toBe('Refunded · next payment due 4 November 2026');
     // Nothing is left to refund or void on the payment: it has no ⋯; the refund has its own.
     expect(within(row).queryByRole('button', { name: 'More for the payment of £49.99' })).toBeNull();
-    expect(menuOf(row, 'More for the refund of £49.99')).toEqual(['Void refundIt was noted by mistake. The payment counts in full again.']);
+    expect(menuOf(row, 'More for the refund of £49.99, receipt #9000')).toEqual(['Void refundIt was noted by mistake. It will no longer count.']);
     fireEvent.click(within(row).getByRole('menuitem', { name: /^Void refund/ }));
     const box = within(within(row).getByTestId('held-void-refund'));
     expect(box.getByText("Void the £49.99 refund noted on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
@@ -520,6 +522,23 @@ describe('Note a refund', () => {
     const payment = refunded.billing.bills[0].payments[0];
     expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `payments/${payment.id}/refunds/${payment.refunds[0].id}/void`, { reason: 'mistake' });
     expect(await screen.findByText('That refund was voided.')).toBeTruthy();
+  });
+
+  it('with two refunds on one payment, voiding one says the other still counts, never that the payment counts in full, and opens in that bill', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const [first] = gold.billing.bills;
+    const refund = (n) => ({ id: `77777777-7777-4777-8777-00000000005${String(n)}`, amountMinor: 1000, method: 'cash', refundedOn: '2026-10-05', reason: 'charged_too_much', by: 'Sam Owner', receiptNumber: 50 + n });
+    const payment = { ...first.payments[0], refunds: [refund(1), refund(2)], refundableMinor: 2999 };
+    const bill = { ...first, refundedMinor: 2000, payments: [payment] };
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...gold, billing: { ...gold.billing, bills: [bill], undo: null } }]));
+    render(draw());
+    const [row] = await rowsSoon();
+    expect(menuOf(row, 'More for the refund of £10.00, receipt #51').map((line) => line.replace(/^Void refund/, ''))[0]).toBe('It was noted by mistake. It will no longer count.');
+    fireEvent.click(within(row).getByRole('menuitem', { name: /^Void refund/ }));
+    const box = screen.getByTestId('held-void-refund');
+    expect(within(row).getByTestId('held-bill').contains(box)).toBe(true);
+    expect(box.textContent).toContain('It no longer counts. The other refund on this payment still counts.');
+    expect(box.textContent).not.toContain('counts in full');
   });
 
   it('a voided payment and a voided refund stay in their bill, crossed out, with who, when and why, and nothing to press but the receipt', async () => {

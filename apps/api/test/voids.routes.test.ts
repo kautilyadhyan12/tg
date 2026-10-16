@@ -72,7 +72,9 @@ d("void a payment, a refund or a sale (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const redis = createMemoryRedis();
   // 12:00 in Chicago on 15 October 2026.
-  const clock = new Date("2026-10-15T17:00:00Z");
+  const NOON = new Date("2026-10-15T17:00:00Z");
+  /** The server's clock: moved by one test, and put back. */
+  let clock = NOON;
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -478,6 +480,42 @@ d("void a payment, a refund or a sale (real Postgres)", () => {
       // One voided before 0118: who and when, and no reason.
       await sql`UPDATE gym_sales SET undone_at = ${clock}, undone_by = ${owner.userId} WHERE id = ${towelSale.id}`;
       expect((await sellPage(gymId, owner.cookies)).sales.find((s) => s.id === towelSale.id)?.voided).toEqual({ reason: null, on: "2026-10-15", by: "Sam Owner" });
+    },
+    T,
+  );
+
+  it(
+    "a void at 22:00 in Chicago, 03:00 the next day by the world clock, is said on the gym's own day, for a payment, a refund and a sale",
+    async () => {
+      const owner = await makeUser("late-owner", "Sam Owner");
+      const gymId = await makeGym(owner, "Vd Late Gym");
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
+      const ivy = await addPerson(gymId, owner.cookies, "Ivy Chen", "vd-p-ivy@example.com");
+      await givePaid(gymId, ivy, owner.cookies, gold, 5000);
+      const m = await only(gymId, ivy, owner.cookies);
+      const pay = m.billing?.bills[0]?.payments[0];
+      if (pay === undefined) throw new Error("no payment");
+      const noted = await post(`${paymentUrl(gymId, ivy, m.id, pay.id)}/refunds`, { requestKey: nextForm(), amountMinor: 1000, method: "cash", reason: "other" }, owner.cookies);
+      expect(noted.statusCode, noted.body).toBe(200);
+      const refund = (await only(gymId, ivy, owner.cookies)).billing?.bills[0]?.payments[0]?.refunds[0];
+      if (refund === undefined) throw new Error("no refund");
+      const water = await addProduct(gymId, owner.cookies, "Water", 250, null);
+      await sell(gymId, owner.cookies, water.id, 1, 250);
+      const sale = (await sellPage(gymId, owner.cookies)).sales[0];
+      if (sale === undefined) throw new Error("no sale");
+
+      clock = new Date("2026-10-16T03:00:00Z");
+      try {
+        expect((await post(`${paymentUrl(gymId, ivy, m.id, pay.id)}/refunds/${refund.id}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+        expect((await post(paymentUrl(gymId, ivy, m.id, pay.id) + "/void", { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+        const voidedSale = await post(saleUrl(gymId, sale.id), { reason: "mistake" }, owner.cookies);
+        expect(voidedSale.statusCode, voidedSale.body).toBe(200);
+        const voided = (await only(gymId, ivy, owner.cookies)).billing?.bills[0]?.voidedPayments[0];
+        expect([voided?.voided.on, voided?.voidedRefunds[0]?.voided.on]).toEqual(["2026-10-15", "2026-10-15"]);
+        expect(page(voidedSale).sales.find((s) => s.id === sale.id)?.voided?.on).toBe("2026-10-15");
+      } finally {
+        clock = NOON;
+      }
     },
     T,
   );
