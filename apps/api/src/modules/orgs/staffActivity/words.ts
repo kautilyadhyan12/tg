@@ -208,6 +208,14 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `Sold ${what}${total === null ? "" : ` for ${total}`}${s.about === null ? "" : ` to ${s.about}`}${methodWords(s)}`;
   },
   "org.sale_undone": (s) => `Undid the sale of ${String(count(s, "quantity") ?? 1)} × ${text(s, "product") ?? "a product"}`,
+  "org.sale_refund_noted": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Recorded a refund${amount === null ? "" : ` of ${amount}`} for ${text(s, "product") ?? "a product"}${methodWords(s)}`;
+  },
+  "org.sale_refund_undone": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Undid a refund${amount === null ? "" : ` of ${amount}`} for ${text(s, "product") ?? "a product"}`;
+  },
   "org.tax_rate_created": (s) => `Added the tax rate${quoted(text(s, "name"))}`,
   "org.tax_rate_updated": (s) => `Changed the tax rate${quoted(text(s, "after") ?? text(s, "before"))}`,
   "org.tax_rate_removed": (s) => `Removed the tax rate${quoted(text(s, "name"))}`,

@@ -21,7 +21,8 @@ import {
   taxRateToBp,
 } from '@app/shared';
 import { sentTime } from './memberListPeople';
-import { voidedLine } from './memberBillsView';
+import { shortDay, voidedLine } from './memberBillsView';
+import { saleRefundTag } from './saleRefundView';
 
 // THE SELL PAGE'S WORDS AND SUMS (spec Part 3 §14.3; ROADMAP 18b-i). Every sentence the
 // page says is made here, from what the server sent; the page only draws them. The total
@@ -168,10 +169,19 @@ export function personOption(person) {
 
 const count = (n, one, many) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
 
-/** The line above today's list: how much was taken and how. */
+/** Whether the list is another day's than today (18p): its words then name the day. */
+const pastDay = (page) => typeof page.day === 'string' && page.day !== page.today;
+
+/** The list's heading: "Today", or the day picked. */
+export function takingsHeading(page) {
+  return pastDay(page) ? shortDay(page.day) : 'Today';
+}
+
+/** The line above the day's list: how much was taken and how. */
 export function takingsWords(page) {
   const { totals, currency } = page;
-  if (totals.count === 0 && totals.payments === 0) return 'Nothing taken yet today.';
+  const past = pastDay(page);
+  if (totals.count === 0 && totals.payments === 0) return past ? `Nothing was taken on ${shortDay(page.day)}.` : 'Nothing taken yet today.';
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
   const what = [];
   if (totals.count > 0) what.push(count(totals.count, 'sale', 'sales'));
@@ -183,7 +193,7 @@ export function takingsWords(page) {
   // Named as each payment's own row names it.
   if (totals.link > 0) how.push(`${methodWords('link')} ${money(totals.link)}`);
   if (totals.company > 0) how.push(`${methodWords('company')} ${money(totals.company)}`);
-  return `Taken today: ${money(totals.totalMinor)} from ${what.join(' and ')}. ${how.join(' · ')}.`;
+  return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(totals.totalMinor)} from ${what.join(' and ')}. ${how.join(' · ')}.`;
 }
 
 /** The smaller lines under it, each only where it is true. */
@@ -191,12 +201,14 @@ export function takingsNotes(page) {
   const { totals, currency } = page;
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
   const notes = [];
+  const past = pastDay(page);
+  const that = past ? 'that day' : 'today';
   if (totals.taxMinor > 0) notes.push(`${money(totals.taxMinor)} of the product sales is tax.`);
-  if (totals.discountMinor > 0) notes.push(`Discounts took ${money(totals.discountMinor)} off today's product sales. The total above is what was paid.`);
-  if (totals.refundedMinor > 0) notes.push(`Refunds noted today: ${money(totals.refundedMinor)}. They are not taken off the total above.`);
+  if (totals.discountMinor > 0) notes.push(`Discounts took ${money(totals.discountMinor)} off ${past ? "that day's" : "today's"} product sales. The total above is what was paid.`);
+  if (totals.refundedMinor > 0) notes.push(`Refunds noted ${that}: ${money(totals.refundedMinor)}. They are not taken off the total above.`);
   if (totals.otherCurrency > 0) {
     notes.push(
-      `${count(totals.otherCurrency, 'sale or payment today was', 'sales or payments today were')} taken in another currency. ${totals.otherCurrency === 1 ? 'It is' : 'They are'} listed below and not added to the total above.`,
+      `${count(totals.otherCurrency, `sale or payment ${that} was`, `sales or payments ${that} were`)} taken in another currency. ${totals.otherCurrency === 1 ? 'It is' : 'They are'} listed below and not added to the total above.`,
     );
   }
   const hidden = page.salesNotShown + page.paymentsNotShown;
@@ -225,7 +237,9 @@ export function takingsRows(page, timeZone, clockFormat) {
     person: sale.person,
     undone: sale.undone,
     voided: saleVoidedLine(sale),
+    refundTag: saleRefundTag(sale),
     canUndo: sale.canUndo,
+    canRefund: sale.canRefund === true,
     receiptNumber: sale.receiptNumber,
     sale,
   }));
@@ -239,7 +253,9 @@ export function takingsRows(page, timeZone, clockFormat) {
     person: payment.person,
     undone: false,
     voided: null,
+    refundTag: null,
     canUndo: false,
+    canRefund: false,
     receiptNumber: payment.receiptNumber,
     sale: null,
   }));
@@ -283,6 +299,7 @@ export function purchaseLine(sale) {
     facts: [when, methodWords(sale.method), saleDiscountWords(sale), saleTaxWords(sale)].filter((x) => x !== null).join(' · '),
     undone: sale.undone,
     voided: saleVoidedLine(sale),
+    refundTag: saleRefundTag(sale),
     receiptNumber: sale.receiptNumber,
   };
 }
