@@ -30,7 +30,9 @@ try {
   if (normaliseSecondTrialCode(code) !== code) throw new Error("a made code does not read back as itself");
   const saved = await saveSecondTrialCode(sql, { email, codeHash: sha256Hex(code) });
   console.log(`Second-trial code for ${email}: ${showSecondTrialCode(code)}`);
-  console.log(`It works once, for this person only, until ${saved.expiresAt.toUTCString()}.`);
+  // In this computer's own time zone: Kd's.
+  const until = saved.expiresAt.toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" });
+  console.log(`It works once, for this person only, until ${until}.`);
   console.log(
     saved.hasAccount
       ? "They have an account with this address."

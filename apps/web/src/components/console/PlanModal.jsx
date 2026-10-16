@@ -571,13 +571,13 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                   maxLength={40}
                   autoComplete="off"
                   spellCheck={false}
-                  className="flex-1 min-w-0 rounded-xl px-3 py-2 text-sm uppercase"
+                  className="flex-1 min-w-0 rounded-xl px-3 py-3 text-sm uppercase"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
                 />
                 <button
                   type="submit"
                   disabled={usingCode || code.trim() === ''}
-                  className="rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                  className="rounded-xl px-4 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
                   style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
                 >
                   {usingCode ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
