@@ -147,6 +147,12 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.member_list_unlisted_removed": (s) => `Removed ${people(count(s, "removed"), s.words)} who are no longer on the list from the app`,
   "org.member_list_selected_removed": (s) => `Took ${people(count(s, "moved"), s.words)} off the ${s.words.person} list`,
   "org.member_list_exported": (s) => `Downloaded the ${s.words.person} list`,
+  "org.payments_downloaded": (s) => {
+    const from = dayWords(text(s, "from"));
+    const to = dayWords(text(s, "to"));
+    if (s.meta.everyDay === "yes" || from === null || to === null) return "Downloaded every payment";
+    return from === to ? `Downloaded the payments of ${from}` : `Downloaded the payments from ${from} to ${to}`;
+  },
   "org.member_list_invited": (s) => `Invited ${s.words.people} on the list to the app`,
   "org.member_list_entry_invited": (s) => `Invited ${person(s)} to the app`,
   "org.member_list_invite_sent_again": (s) => `Sent ${whose(s, "invitation to the app")} again`,
