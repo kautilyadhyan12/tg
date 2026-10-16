@@ -2,16 +2,20 @@
 // public reader finds an invite by its code alone, and answers the gym the code is of.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
-import { DISCOUNT_KINDS, type DiscountKind } from "@app/shared";
+import { DISCOUNT_KINDS, memberGiftOnSchema, type DiscountKind, type MemberGiftOn } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
-/** The member's gift, off their next payment: a percentage, or an amount in `currency`. */
+/** The member's gift: a percentage, or an amount in `currency`, off their next membership
+ *  payment or their next purchase at the desk (`on`); or `days` free days on their
+ *  membership, the money then being for a member who has none. */
 export interface MemberGift {
   kind: DiscountKind;
   percentBp: number | null;
   amountMinor: number | null;
   currency: string | null;
+  on: MemberGiftOn;
+  days: number | null;
 }
 
 export interface SettingsRow {
@@ -30,6 +34,8 @@ type DbSettings = {
   member_percent_bp: number | null;
   member_amount_minor: number | null;
   member_currency: string | null;
+  member_gift_on: string;
+  member_days: number | null;
   friend_discount_id: string | null;
 };
 const settingsRow = (r: DbSettings): SettingsRow => {
@@ -37,7 +43,17 @@ const settingsRow = (r: DbSettings): SettingsRow => {
   const kind = kindSchema.parse(r.member_gift_kind);
   return {
     on: r.switched_on,
-    member: kind === null ? null : { kind, percentBp: r.member_percent_bp, amountMinor: r.member_amount_minor, currency: r.member_currency },
+    member:
+      kind === null
+        ? null
+        : {
+            kind,
+            percentBp: r.member_percent_bp,
+            amountMinor: r.member_amount_minor,
+            currency: r.member_currency,
+            on: memberGiftOnSchema.parse(r.member_gift_on),
+            days: r.member_days,
+          },
     friendDiscountId: r.friend_discount_id,
   };
 };
@@ -45,7 +61,7 @@ const settingsRow = (r: DbSettings): SettingsRow => {
 /** The gym's offer, or off when it has never saved one. */
 export async function settingsFor(sql: SqlOrTx, gymId: string): Promise<SettingsRow> {
   const rows = await sql<DbSettings[]>`
-    SELECT switched_on, member_gift_kind, member_percent_bp, member_amount_minor, member_currency, friend_discount_id
+    SELECT switched_on, member_gift_kind, member_percent_bp, member_amount_minor, member_currency, member_gift_on, member_days, friend_discount_id
     FROM gym_referral_settings WHERE gym_id = ${gymId}`;
   const row = rows[0];
   return row === undefined ? SETTINGS_OFF : settingsRow(row);
@@ -55,13 +71,14 @@ export async function writeSettings(tx: TransactionSql, gymId: string, values: S
   const m = values.member;
   await tx`
     INSERT INTO gym_referral_settings (gym_id, switched_on, member_gift_kind, member_percent_bp, member_amount_minor, member_currency,
-                                       friend_discount_id, updated_by, updated_at)
+                                       member_gift_on, member_days, friend_discount_id, updated_by, updated_at)
     VALUES (${gymId}, ${values.on}, ${m?.kind ?? null}, ${m?.percentBp ?? null}, ${m?.amountMinor ?? null}, ${m?.currency ?? null},
-            ${values.friendDiscountId}, ${userId}, ${at})
+            ${m?.on ?? "membership"}, ${m?.days ?? null}::int, ${values.friendDiscountId}, ${userId}, ${at})
     ON CONFLICT (gym_id) DO UPDATE
     SET switched_on = EXCLUDED.switched_on, member_gift_kind = EXCLUDED.member_gift_kind,
         member_percent_bp = EXCLUDED.member_percent_bp, member_amount_minor = EXCLUDED.member_amount_minor,
-        member_currency = EXCLUDED.member_currency, friend_discount_id = EXCLUDED.friend_discount_id,
+        member_currency = EXCLUDED.member_currency, member_gift_on = EXCLUDED.member_gift_on, member_days = EXCLUDED.member_days,
+        friend_discount_id = EXCLUDED.friend_discount_id,
         updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`;
 }
 

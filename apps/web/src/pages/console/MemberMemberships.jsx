@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
+import { memberGiftDaysLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
@@ -828,6 +829,12 @@ export default function MemberMemberships({
         {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
         {heldTaxLine(m) !== null ? <span className="c-s14 c-t2">{heldTaxLine(m)}</span> : null}
         <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
+        {/* Refer a friend's free days (20e-ii-b-ii-b): why its dates moved, and for whom. */}
+        {(m.freeDays ?? []).map((d, i) => (
+          <span key={`free-days-${String(i)}`} className="c-s14 c-t2" data-testid="held-free-days">
+            {memberGiftDaysLine(d.days, d.friendName)}
+          </span>
+        ))}
         {pay !== null ? (
           <span className="c-s14 c-w5" style={{ color: pay.due ? 'var(--warn)' : 'var(--t1)' }} data-testid="held-payment">
             {pay.text}
@@ -894,7 +901,8 @@ export default function MemberMemberships({
     const free = choice.type !== null && choice.type.priceMinor === 0;
     // A discount is used by whoever takes payments; the server sends nobody else any.
     const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
-    // The person's own Refer a friend gift (20e-ii-b-ii-a), filled in unless Removed.
+    // The person's own Refer a friend gift (20e-ii-b-ii-a), filled in unless Removed: only one
+    // off a membership (one off products is Sell's, 20e-ii-b-ii-b).
     const memberGift = shown.canBill && !free && shown.memberGift !== null && shown.memberGift !== undefined ? shown.memberGift : null;
     const giftFits = memberGift !== null && choice.type !== null && membershipSummary(choice.type, discount, shown.taxIncluded, memberGift)?.giftOffMinor > 0;
     const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
@@ -998,6 +1006,7 @@ export default function MemberMemberships({
         ) : null}
       </div>
       {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
+      {shown.canBill && shown.memberGiftAtSell !== null && shown.memberGiftAtSell !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGiftAtSell} /> : null}
       {shown.past && shown.memberships.length > 0 ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-past-note">
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}

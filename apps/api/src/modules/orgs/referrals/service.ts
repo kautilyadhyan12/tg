@@ -105,8 +105,9 @@ function giftView(discounts: readonly DiscountRow[], id: string | null, today: s
   };
 }
 
-/** The member's gift in words; null for none. */
-const memberWords = (gift: repo.MemberGift | null): string | null => (gift === null ? null : referralMemberGiftWords(gift));
+/** The member's gift in words, and the money a member with no membership gets instead of
+ *  free days; null for none. */
+const memberWords = (gift: repo.MemberGift | null): { gift: string; instead: string | null } | null => (gift === null ? null : referralMemberGiftWords(gift));
 
 async function settingsView(sql: Sql, org: { id: string; name: string; country: string | null }, today: string): Promise<ReferralSettings> {
   const now = await repo.settingsFor(sql, org.id);
@@ -115,7 +116,7 @@ async function settingsView(sql: Sql, org: { id: string; name: string; country: 
   const member = memberWords(now.member);
   return {
     on: now.on,
-    member: now.member === null || member === null ? null : { ...now.member, words: member },
+    member: now.member === null || member === null ? null : { ...now.member, words: member.gift },
     friend: giftView(discounts, now.friendDiscountId, today),
     currency: memberCurrencyForCountry(org.country),
     memberLines: referralOfferLines(org.name, member, friend?.words ?? null),
@@ -259,7 +260,14 @@ export async function setReferralSettings(
     const member: repo.MemberGift | null =
       body.member === null
         ? null
-        : { kind: body.member.kind, percentBp: body.member.percentBp, amountMinor: body.member.amountMinor, currency: body.member.kind === "amount" ? ctx.currency : null };
+        : {
+            kind: body.member.kind,
+            percentBp: body.member.percentBp,
+            amountMinor: body.member.amountMinor,
+            currency: body.member.kind === "amount" ? ctx.currency : null,
+            on: body.member.on,
+            days: body.member.days,
+          };
     const friendDiscountId = await placeGift(tx, ctx, body.friend, discounts.find((d) => d.id === before.friendDiscountId));
     await repo.writeSettings(tx, gymId, { on: body.on, member, friendDiscountId }, userId, at);
     await insertAudit(tx, {
@@ -268,7 +276,12 @@ export async function setReferralSettings(
       action: "org.referrals_changed",
       targetType: "gym",
       targetId: gymId,
-      meta: { on: String(body.on), memberGift: String(body.member !== null), friendGift: String(body.friend !== null) },
+      meta: {
+        on: String(body.on),
+        memberGift: String(body.member !== null),
+        ...(body.member === null ? {} : { memberGiftOn: body.member.on, memberDays: String(body.member.days ?? 0) }),
+        friendGift: String(body.friend !== null),
+      },
     });
   });
   return await settingsView(deps.sql, org, dayInTz(at, org.timezone));
@@ -293,7 +306,7 @@ export async function getMemberReferral(deps: ReferralDeps, userId: string, gymI
     status: "on",
     gymName: gate.name,
     path: referralPath(code),
-    memberGift: member,
+    memberGift: member?.gift ?? null,
     friendGift: friend?.words ?? null,
     lines: referralOfferLines(gate.name, member, friend?.words ?? null, firstName),
   };

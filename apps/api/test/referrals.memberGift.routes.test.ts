@@ -157,9 +157,14 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
   };
 
   /** The offer: the member's gift as given, and the friend's 20% off their first payment. */
-  const setOffer = async (org: CreatedOrg, owner: Cookies, member: { kind: "amount" | "percent"; amountMinor: number | null; percentBp: number | null } | null) => {
+  const setOffer = async (
+    org: CreatedOrg,
+    owner: Cookies,
+    member: { kind: "amount" | "percent"; amountMinor: number | null; percentBp: number | null } | null,
+    on: "membership" | "products" = "membership",
+  ) => {
     const friend = { kind: "percent", percentBp: 2000, amountMinor: null, on: "first" };
-    const res = await put(`/v1/orgs/${org.org.id}/referral-settings`, { on: true, member, friend }, owner);
+    const res = await put(`/v1/orgs/${org.org.id}/referral-settings`, { on: true, member: member === null ? null : { ...member, on, days: null }, friend }, owner);
     expect(res.statusCode, res.body).toBe(200);
   };
   const TEN_POUNDS = { kind: "amount" as const, amountMinor: 1000, percentBp: null };
@@ -174,7 +179,8 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
   const invited = async (code: string, fullName: string, email: string): Promise<string> => {
     const res = await post(`/v1/public/invites/${code}/enquiries`, { fullName, email, robotToken: "ok-token" });
     expect(res.statusCode, res.body).toBe(202);
-    const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_leads WHERE email = ${email}::citext AND referred_at IS NOT NULL`;
+    // This file's businesses' lead alone: another test file may invite the same address at once.
+    const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_leads WHERE gym_id IN (SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'mgift-t-%@example.com')) AND email = ${email}::citext AND referred_at IS NOT NULL`;
     if (row === undefined) throw new Error(`no invited lead for ${email}`);
     return row.id;
   };
@@ -319,7 +325,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
           {
             gym_id: gymA.org.id,
             kind: "referral_gift",
-            body: "A friend you invited has joined Northside Member Gift A and made their first payment. You get £10.00 off your next payment: it comes off by itself.",
+            body: "A friend you invited has joined Northside Member Gift A and made their first payment. You get £10.00 off your next membership payment: it comes off by itself.",
           },
         ]);
         expect(await messagesOf(ben.person.id)).toEqual([]);
@@ -336,7 +342,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         expect(page.memberships[0]?.billing?.bills[0]).toMatchObject({ amountMinor: 4000, gift: { offMinor: 1000, currency: "GBP", friendName: "Tara Shah" } });
         expect(page.memberGift).toBeNull();
         const lead = await leadPage(gymA.org.id, tara.leadId, owner.cookies);
-        expect(lead.memberGift).toEqual({ gift: { state: "used", words: "£10.00 off", on: { kind: "bill", what: "Gold Monthly", dueOn: today } }, memberName: "Maya Patel" });
+        expect(lead.memberGift).toEqual({ gift: { state: "used", words: "£10.00 off", on: { kind: "bill", what: "Gold Monthly", dueOn: today } }, memberName: "Maya Patel", on: "membership" });
         if (lead.memberGift === null) throw new Error("no line");
         expect(memberGiftLine(lead.memberGift.gift, "Maya Patel", "Tara")).toMatch(/^Maya Patel's gift for inviting Tara \(£10\.00 off\) came off their Gold Monthly bill due /);
       },
@@ -488,20 +494,26 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         expect((await memberships(gymA.org.id, wes.entryId, owner.cookies)).memberGift).toMatchObject({ words: "£10.00 off", friendName: "Ola Hart" });
 
         // A sale the gift came off, voided after the friend's only sale was voided: taken back.
+        // The offer's money comes off products here (20e-ii-b-ii-b), so Sell fills it in.
+        await setOffer(gymA, owner.cookies, TEN_POUNDS, "products");
+        try {
         const kim = await memberWithBill("kim", "Kim Ford", true);
         const leadId = await invited(kim.code, "Ian Webb", "ian.webb@example.com");
         const ian = await added(gymA.org.id, owner.cookies, { fullName: "Ian Webb", email: "ian.webb@example.com", leadId });
         const iansSale = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: ian, method: "cash", totalMinor: 2500 }, owner.cookies);
         expect(iansSale.statusCode).toBe(201);
-        const waiting = (await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGift;
+        const waiting = (await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGiftAtSell;
         if (waiting === null) throw new Error("no waiting gift");
         const kimsSale = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: kim.entryId, method: "cash", totalMinor: 1500, memberGift: { id: waiting.id, offMinor: 1000 } }, owner.cookies);
         expect(kimsSale.statusCode, kimsSale.body).toBe(201);
         const idOf = (res: { body: string }) => (JSON.parse(res.body) as { saleId: string }).saleId;
         expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(iansSale)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
         expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(kimsSale)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
-        expect((await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGift).toBeNull();
+        expect((await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGiftAtSell).toBeNull();
         expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === ian)).toMatchObject([{ taken_back_why: "voided", used_sale_id: null }]);
+        } finally {
+          await setOffer(gymA, owner.cookies, TEN_POUNDS);
+        }
       },
       TIMEOUT_MS,
     );
@@ -518,10 +530,10 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
           {
             gym_id: gymA.org.id,
             kind: "referral_gift",
-            body: "A friend you invited has joined Northside Member Gift A and made their first payment. You get £10.00 off your next payment at Northside Member Gift A.",
+            body: "A friend you invited has joined Northside Member Gift A and made their first payment. You get £10.00 off your next membership payment at Northside Member Gift A.",
           },
         ]);
-        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_no_record", words: "£10.00 off" }, memberName: "Ned Fox" });
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_no_record", words: "£10.00 off" }, memberName: "Ned Fox", on: "membership" });
       },
       TIMEOUT_MS,
     );
@@ -538,10 +550,10 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         // Removed from the app.
         await sql`UPDATE gym_member_list_entries SET former_at = NULL WHERE gym_id = ${gymA.org.id} AND id = ${lee.entryId}`;
         await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gymA.org.id} AND user_id = ${lee.person.id}`;
-        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_left", words: "£10.00 off" }, memberName: "Lee Six" });
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "waiting_left", words: "£10.00 off" }, memberName: "Lee Six", on: "membership" });
         // Their account deleted: it will not be used, and nothing promises it might.
         await sql`UPDATE users SET status = 'deleted' WHERE id = ${lee.person.id}`;
-        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "account_gone", words: "£10.00 off" }, memberName: null });
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift).toEqual({ gift: { state: "account_gone", words: "£10.00 off" }, memberName: null, on: "membership" });
       },
       TIMEOUT_MS,
     );
@@ -650,12 +662,22 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     );
 
     it(
-      "filled in at Add membership and at Sell, worked out again on the server; a voided sale makes it wait again",
+      "filled in at Sell where it is off products, and at Add membership where it is off a membership, worked out again on the server; a voided sale makes it wait again",
       async () => {
+        await setOffer(gymA, owner.cookies, TEN_POUNDS, "products");
         const max = await memberWithBill("max", "Max Brandt", true);
-        await friendJoins(max.code, "Eve Stone", "eve.stone@example.com", true);
-        const waiting = (await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGift;
+        try {
+          await friendJoins(max.code, "Eve Stone", "eve.stone@example.com", true);
+        } finally {
+          await setOffer(gymA, owner.cookies, TEN_POUNDS);
+        }
+        const waiting = (await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGiftAtSell;
+        expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGift).toBeNull();
         if (waiting === null) throw new Error("no waiting gift");
+        expect(waiting.on).toBe("products");
+        // It is off products: Add membership refuses it.
+        const notHere = await give(gymA.org.id, max.entryId, owner.cookies, packA, true, { priceMinor: 9000, memberGiftId: waiting.id, memberGiftMinor: 1000, totalMinor: 8000 });
+        expect([notHere.statusCode, errorOf(notHere)]).toEqual([409, "member_gift_not_theirs"]);
 
         // Sell reads it with the person; a total the gift does not make is refused.
         const offered = friendGiftResponseSchema.parse(JSON.parse((await get(`/v1/orgs/${gymA.org.id}/member-list/entries/${max.entryId}/friend-gift`, owner.cookies)).body));
@@ -671,22 +693,37 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         // Sell's list says who the gift was for inviting.
         const register = (JSON.parse(sold.body) as { register: { sales: { id: string; giftFor: string | null }[] } }).register;
         expect(register.sales.find((s) => s.id === saleId)?.giftFor).toBe("Eve Stone");
-        expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGift).toBeNull();
+        expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGiftAtSell).toBeNull();
         const twice = await post(`/v1/orgs/${gymA.org.id}/register/sales`, sale(1000, 1500), owner.cookies);
         expect([twice.statusCode, errorOf(twice)]).toEqual([409, "member_gift_not_theirs"]);
 
-        // The sale voided: the gift waits again, and Add membership takes it off the first bill.
+        // The sale voided: the gift waits again for Sell.
         expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${saleId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
-        expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGift?.id).toBe(waiting.id);
-        const changed = await give(gymA.org.id, max.entryId, owner.cookies, packA, true, { priceMinor: 9000, memberGiftId: waiting.id, memberGiftMinor: 900, totalMinor: 8100 });
+        expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGiftAtSell?.id).toBe(waiting.id);
+
+        // A gift off a membership: Add membership takes it off the first bill, and Sell does not offer it.
+        const lou = await memberWithBill("lou", "Lou Grant", true);
+        await friendJoins(lou.code, "Rex Hale", "rex.hale@example.com", true);
+        const forLou = (await memberships(gymA.org.id, lou.entryId, owner.cookies)).memberGift;
+        if (forLou === null) throw new Error("no waiting gift");
+        expect(forLou.on).toBe("membership");
+        const atSell = friendGiftResponseSchema.parse(JSON.parse((await get(`/v1/orgs/${gymA.org.id}/member-list/entries/${lou.entryId}/friend-gift`, owner.cookies)).body));
+        expect(atSell.memberGift).toBeNull();
+        const notSold = await post(
+          `/v1/orgs/${gymA.org.id}/register/sales`,
+          { requestKey: nextForm(), productId: barA, quantity: 1, entryId: lou.entryId, method: "cash", totalMinor: 1500, memberGift: { id: forLou.id, offMinor: 1000 } },
+          owner.cookies,
+        );
+        expect([notSold.statusCode, errorOf(notSold)]).toEqual([409, "member_gift_not_theirs"]);
+        const changed = await give(gymA.org.id, lou.entryId, owner.cookies, packA, true, { priceMinor: 9000, memberGiftId: forLou.id, memberGiftMinor: 900, totalMinor: 8100 });
         expect([changed.statusCode, errorOf(changed)]).toEqual([409, "member_gift_changed"]);
-        const pack = await give(gymA.org.id, max.entryId, owner.cookies, packA, true, { priceMinor: 9000, memberGiftId: waiting.id, memberGiftMinor: 1000, totalMinor: 8000 });
+        const pack = await give(gymA.org.id, lou.entryId, owner.cookies, packA, true, { priceMinor: 9000, memberGiftId: forLou.id, memberGiftMinor: 1000, totalMinor: 8000 });
         expect(pack.statusCode, pack.body).toBe(201);
-        expect((await billsOfEntry(gymA.org.id, max.entryId)).at(-1)).toMatchObject({ amount_minor: 8000, status: "paid" });
+        expect((await billsOfEntry(gymA.org.id, lou.entryId)).at(-1)).toMatchObject({ amount_minor: 8000, status: "paid" });
         const paid = await sql<{ amount_minor: number }[]>`
           SELECT p.amount_minor FROM gym_member_payments p JOIN gym_member_bills b ON b.id = p.bill_id
           JOIN gym_held_memberships h ON h.id = b.held_membership_id
-          WHERE h.entry_id = ${max.entryId} AND h.membership_type_id = ${packA}`;
+          WHERE h.entry_id = ${lou.entryId} AND h.membership_type_id = ${packA}`;
         expect(paid).toEqual([{ amount_minor: 8000 }]);
       },
       TIMEOUT_MS,

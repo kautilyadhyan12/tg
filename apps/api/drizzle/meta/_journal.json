@@ -855,6 +855,13 @@
       "when": 1790726400122,
       "tag": "0122_member_number_kept",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1790726400123,
+      "tag": "0123_member_gift_days",
+      "breakpoints": true
     }
   ]
 }
