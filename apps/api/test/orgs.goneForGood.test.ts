@@ -412,12 +412,32 @@ d("a gym gone for good (real Postgres)", () => {
       const bothEmail = `${PREFIX}both${String(seq)}@example.com`;
       const both = await user(bothEmail);
       const payOnly = await user(`${PREFIX}payonly${String(seq)}@example.com`);
+      const deskEmail = `${PREFIX}desk${String(seq)}@example.com`;
+      const desk = await user(deskEmail);
+      const booksEmail = `${PREFIX}books${String(seq)}@example.com`;
+      const books = await user(booksEmail);
       await sql`
         INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES
           (${g.gymId}, ${both}, 'manager', ${["billing.manage", "members.confirm", "members.read"]}),
-          (${g.gymId}, ${payOnly}, 'manager', ${["billing.manage", "members.read"]})`;
+          (${g.gymId}, ${payOnly}, 'manager', ${["billing.manage", "members.read"]}),
+          (${g.gymId}, ${desk}, 'manager', ${["billing.manage", "members.confirm", "members.read", "billing.members"]}),
+          (${g.gymId}, ${books}, 'manager', ${["billing.manage", "members.confirm", "members.read", "billing.members", "reports.read"]})`;
       await run(rec, [g.gymId], plus(addMonths(T0, 6), -30));
-      expect(rec.sent.map((m) => m.to).sort()).toEqual([bothEmail, g.ownerEmail].sort());
+      expect(rec.sent.map((m) => m.to).sort()).toEqual([bothEmail, deskEmail, booksEmail, g.ownerEmail].sort());
+      // Told to download payments: the owner, and staff given both Reports and payments, who
+      // have the button. Staff who may record payments without Reports do not, and are not.
+      const said = Object.fromEntries(rec.sent.map((m) => [m.to, m.text.includes("then Download payments:")]));
+      expect(said).toEqual({ [g.ownerEmail]: true, [bothEmail]: false, [deskEmail]: false, [booksEmail]: true });
+
+      // A gym with no payment, refund or sale has no Download payments button, and its owner is not told to press one.
+      const empty = recorder();
+      const none = await makeGym({ created: addMonths(T0, -12) });
+      await plan(none.gymId, "expired", T0);
+      await sql`DELETE FROM gym_member_payments WHERE gym_id = ${none.gymId}`;
+      await run(empty, [none.gymId], plus(addMonths(T0, 6), -30));
+      expect(empty.sent.map((m) => m.to)).toEqual([none.ownerEmail]);
+      expect(empty.sent[0]?.text).toContain("To keep a copy of your list, sign in and press Download member list:");
+      expect(empty.sent[0]?.text).not.toContain("Download payments");
     },
     TIMEOUT,
   );
