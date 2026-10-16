@@ -281,7 +281,8 @@ describe('H2: the Members box for an owner\'s place in the app', () => {
     const coOwnerReading = { isOwner: false, userId: 'u3' };
     expect(staffRemoveView(row('u1', { role: 'owner', roleName: null, coOwner: false }), words, coOwnerReading)).toMatchObject({ locked: true, staffLine: 'Only the owner can remove Dan Roy from the app.' });
     expect(staffRemoveView(row('u4', { role: 'owner', roleName: null, coOwner: true }), words, coOwnerReading)).toMatchObject({ locked: true });
-    expect(staffRemoveView(row('u3', { role: 'owner', roleName: null, coOwner: true }), words, coOwnerReading).locked).toBeUndefined();
+    // Their own row speaks to them (the re-check's Low).
+    expect(staffRemoveView(row('u3', { role: 'owner', roleName: null, coOwner: true }), words, coOwnerReading)).toMatchObject({ staffLine: "You're a co-owner of this gym.", tickLabel: 'Also leave the staff', keepLine: 'You stay a co-owner and can still open the console.' });
     // L2: the owner may take a co-owner off the staff in the same step.
     expect(staffRemoveView(row('u4', { role: 'owner', roleName: null, coOwner: true }), words, { isOwner: true, userId: 'u1' })).toMatchObject({ isOwner: false, tickLabel: 'Also remove Dan Roy from staff' });
     expect(staffRemoveView(row('u1', { role: 'owner', roleName: null, coOwner: false }), words, { isOwner: true, userId: 'u1' })).toMatchObject({ isOwner: true, tickLabel: null });

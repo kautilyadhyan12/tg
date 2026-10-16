@@ -210,6 +210,15 @@ export function staffRemoveView(member, words, viewer = { isOwner: false, userId
       goLine: null,
     };
   }
+  if (staff.role === 'owner' && isSelf) {
+    return {
+      isOwner: false,
+      staffLine: `You're a co-owner of this ${words.it}.`,
+      tickLabel: 'Also leave the staff',
+      keepLine: 'You stay a co-owner and can still open the console.',
+      goLine: "You stop being a co-owner and can't open the console any more.",
+    };
+  }
   if (staff.role === 'owner') {
     return {
       isOwner: false,
