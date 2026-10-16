@@ -420,7 +420,7 @@ describe('the forced trial prompt', () => {
         status: 409,
         data: {
           error: 'email_not_confirmed',
-          message: "The free trial starts once the owner's email address is confirmed. The owner confirms it by signing in with a code sent to that email.",
+          message: "Confirm your email address to start the free trial. Sign in with a code sent to your email to confirm it.",
         },
       },
     });
@@ -429,10 +429,30 @@ describe('the forced trial prompt', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
 
-    await waitFor(() => expect(screen.getByText(/once the owner's email address is confirmed/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Confirm your email address to start the free trial/i)).toBeTruthy());
     expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with an email code' }));
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+  });
+
+  it('a manager waiting on an unconfirmed owner is told who can, with no button that cannot help', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'owner_email_not_confirmed',
+          message: "Only the owner can start this gym's free trial, once their email address is confirmed. They confirm it by signing in with a code sent to their email.",
+        },
+      },
+    });
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
+
+    await waitFor(() => expect(screen.getByText(/Only the owner can start this gym's free trial/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in with an email code' })).toBeNull();
   });
 });
 

@@ -1204,11 +1204,19 @@ export async function startOrgTrial(
       );
     case "email_not_confirmed":
       // Only an account from the old password sign-up can be here: the email code and
-      // Google both confirm the address. The screen's button is the code sign-in.
+      // Google both confirm the address. The owner's screen offers the code sign-in;
+      // anybody else with billing.manage can only be told who can.
+      if (outcome.byOwner) {
+        throw new OrgsError(
+          409,
+          "email_not_confirmed",
+          "Confirm your email address to start the free trial. Sign in with a code sent to your email to confirm it.",
+        );
+      }
       throw new OrgsError(
         409,
-        "email_not_confirmed",
-        "The free trial starts once the owner's email address is confirmed. The owner confirms it by signing in with a code sent to that email.",
+        "owner_email_not_confirmed",
+        `Only the owner can start this ${orgWords(org.orgType).it}'s free trial, once their email address is confirmed. They confirm it by signing in with a code sent to their email.`,
       );
     case "no_plan":
       // TRUE AND SPECIFIC, because the alternative is a person concluding the

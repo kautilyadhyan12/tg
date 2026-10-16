@@ -4,7 +4,7 @@
 --
 -- The rule is `trialPersonKey` in packages/shared: Gmail without dots and googlemail.com
 -- read as gmail.com, a `+tag` dropped on every domain. This function is its copy for the
--- database, and apps/api/test/trialPerson.db.test.ts runs both over the same cases.
+-- database, and apps/api/test/orgs.trialPerson.test.ts runs both over the same cases.
 -- The column is worked out by the database, so every way a user is written gets it, and
 -- the Day-14 purge's `email = NULL` clears it with the address.
 CREATE FUNCTION "trial_person_key"("address" text) RETURNS text

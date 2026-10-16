@@ -208,12 +208,53 @@ d("one free trial per person (real Postgres)", () => {
     expect(refused.statusCode).toBe(409);
     expect(JSON.parse(refused.body)).toMatchObject({
       error: "email_not_confirmed",
-      message: "The free trial starts once the owner's email address is confirmed. The owner confirms it by signing in with a code sent to that email.",
+      message: "Confirm your email address to start the free trial. Sign in with a code sent to your email to confirm it.",
     });
     expect(await sql`SELECT 1 FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gymId}`).toHaveLength(0);
     await confirm(owner.userId);
     expect((await startTrial(owner, gymId)).statusCode).toBe(200);
   }, TIMEOUT_MS);
+
+  it("an unconfirmed spelling cannot read whether a real person had a trial", async () => {
+    const [real, spy] = addresses("rahul.gym@gmail.com", "rahulgym+spy@gmail.com");
+    const owner = await makeUser(real);
+    expect((await startTrial(owner, await makeGym(owner))).statusCode).toBe(200);
+    const spyAccount = await makeUser(spy, false);
+    const spyGym = await makeGym(spyAccount);
+    // The same answers as for an address nobody has ever used.
+    expect(await trialUsedOnScreen(spyAccount, spyGym)).toBe(false);
+    const refused = await startTrial(spyAccount, spyGym);
+    expect(refused.statusCode).toBe(409);
+    expect(code(refused)).toBe("email_not_confirmed");
+  }, TIMEOUT_MS);
+
+  it("a manager is told only the owner can start it, while the owner is unconfirmed", async () => {
+    const [a, b] = addresses("owner.unconfirmed@gmail.com", "manager@gmail.com");
+    const owner = await makeUser(a, false);
+    const manager = await makeUser(b);
+    const gymId = await makeGym(owner);
+    await sql`
+      INSERT INTO gym_staff (gym_id, user_id, role, privileges)
+      VALUES (${gymId}, ${manager.userId}, 'manager', ${["billing.manage"]})`;
+    const refused = await startTrial(manager, gymId);
+    expect(refused.statusCode).toBe(409);
+    expect(JSON.parse(refused.body)).toMatchObject({
+      error: "owner_email_not_confirmed",
+      message: "Only the owner can start this gym's free trial, once their email address is confirmed. They confirm it by signing in with a code sent to their email.",
+    });
+    await sql`DELETE FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${manager.userId}`;
+  }, TIMEOUT_MS);
+
+  it("two spellings pressing Start trial at the same instant get one trial", async () => {
+    for (let round = 0; round < 4; round += 1) {
+      const [a, b] = addresses("same.instant@gmail.com", "sameinstant+2@googlemail.com");
+      const one = await makeUser(a);
+      const two = await makeUser(b);
+      const [gymOne, gymTwo] = [await makeGym(one), await makeGym(two)];
+      const results = await Promise.all([startTrial(one, gymOne), startTrial(two, gymTwo)]);
+      expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    }
+  }, TIMEOUT_MS * 2);
 
   it("a stranger cannot start another owner's trial", async () => {
     const [a, b] = addresses("owner@outlook.com", "stranger@outlook.com");
@@ -245,6 +286,7 @@ d("one free trial per person (real Postgres)", () => {
       "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "yahoo.co.in",
       "ymail.com", "icloud.com", "me.com", "aol.com", "proton.me", "protonmail.com", "zoho.com", "zohomail.in",
       "rediffmail.com", "gmx.com", "mail.com", "yandex.com", "fastmail.com", "hey.com", "tutanota.com",
+      "sify.com", "vsnl.net", "bsnl.in", "airtelmail.in", "indiatimes.com", "rediff.com",
       "company.co.in", "gym.in", "fitness.com.au", "studio.co.uk",
     ];
     for (const domain of real) expect(isThrowawayEmail(`owner@${domain}`), domain).toBe(false);
