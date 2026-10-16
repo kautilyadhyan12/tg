@@ -1,0 +1,100 @@
+// DELETE PERMANENTLY, FOR THE PAST MEMBERS SELECTED (5e-ii; Kd's click-through, 2026-10-16:
+// "when i select in bulk and remove … how do i delete them").
+//
+// The same deletion as one past member's (`byHandService.deleteFormer`), for everyone ticked
+// on Past members or chosen by "Select all": only past members are deleted, a person on the
+// list is never; their payments stay in the gym's takings as "A deleted member"; their
+// member numbers are never given again (5e-i). The box names who is deleted and carries a
+// digest of exactly them; the press is refused, deleting nobody, if it no longer matches.
+import { MEMBER_LIST_DELETE_MAX, MEMBER_LIST_DELETE_NAMES_SHOWN, type MemberListDeleted, type MemberListDeletePreview, type MemberListDeletePreviewRequest, type MemberListDeleteSelectedRequest } from "@app/shared";
+import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { keptWith } from "./memberNumbers.js";
+import * as repo from "./repo.js";
+import { SelectionChanged, selectedIds, selectionDigest } from "./selection.js";
+import type { MemberListDeps } from "./service.js";
+
+type Records = Awaited<ReturnType<typeof repo.recordsAmong>>;
+
+function previewOf(gymId: string, records: Records): MemberListDeletePreview {
+  const past = records.filter((record) => record.past);
+  return {
+    count: past.length,
+    names: past.slice(0, MEMBER_LIST_DELETE_NAMES_SHOWN).map((record) => record.fullName),
+    onList: records.length - past.length,
+    tooMany: past.length > MEMBER_LIST_DELETE_MAX,
+    digest: selectionDigest(gymId, past.map((record) => record.id)),
+  };
+}
+
+/** The box: who would be deleted. Null when the rate limit has answered. */
+export async function previewDeleteSelected(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  request: MemberListDeletePreviewRequest,
+  limit: () => Promise<boolean>,
+): Promise<MemberListDeletePreview | null> {
+  await requirePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return null;
+  const ids = await selectedIds(deps, gymId, request.selection);
+  return previewOf(gymId, await repo.recordsAmong(deps.sql, gymId, ids));
+}
+
+export type DeleteSelectedAnswer = { kind: "rate_limited" } | { kind: "changed"; preview: MemberListDeletePreview } | { kind: "deleted"; done: MemberListDeleted };
+
+/** Delete permanently the past members the box showed, all or none. */
+export async function deleteSelected(
+  deps: MemberListDeps,
+  userId: string,
+  gymId: string,
+  input: MemberListDeleteSelectedRequest,
+  limit: () => Promise<boolean>,
+): Promise<DeleteSelectedAnswer> {
+  await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
+  if (!(await limit())) return { kind: "rate_limited" };
+  // NOBODY CHOSEN IS A PAST MEMBER ANY MORE: the same press sent again after it was done (a
+  // reply lost on the way), or a colleague deleted or put them back. Nothing is deleted, and
+  // the answer says only that, which is true in every one of those cases.
+  const nothingLeft = async (sql: Parameters<typeof repo.listState>[0]): Promise<DeleteSelectedAnswer> => ({
+    kind: "deleted",
+    done: { deleted: 0, nothingLeft: true, version: (await repo.listState(sql, gymId))?.version ?? 0 },
+  });
+  let ids: string[];
+  try {
+    ids = await selectedIds(deps, gymId, input.selection);
+  } catch (err) {
+    // A "Select all" that now chooses nobody at all.
+    if (err instanceof SelectionChanged && err.now.count === 0) return await nothingLeft(deps.sql);
+    throw err;
+  }
+  const at = deps.now();
+  return await deps.sql.begin(async (tx): Promise<DeleteSelectedAnswer> => {
+    await repo.lockGym(tx, gymId);
+    const records = await repo.recordsAmong(tx, gymId, ids);
+    const past = records.filter((record) => record.past);
+    if (past.length === 0) return await nothingLeft(tx);
+    const preview = previewOf(gymId, records);
+    if (preview.digest !== input.digest) return { kind: "changed", preview };
+    if (preview.tooMany) throw new OrgsError(400, "too_many_to_delete", `Delete up to ${MEMBER_LIST_DELETE_MAX.toLocaleString("en")} past members at a time.`);
+
+    // Their numbers are never given to somebody new (5e-i), kept in one write.
+    const before = await repo.memberNumbersKept(tx, gymId);
+    let kept: Readonly<Record<string, string>> = before;
+    for (const record of past) if (record.memberNumber !== null) kept = keptWith(kept, record.memberNumber) ?? kept;
+    if (kept !== before) await repo.writeMemberNumbersKept(tx, gymId, kept);
+
+    for (const record of past) {
+      if (!(await repo.deleteEntry(tx, gymId, record.id, at, { onlyPast: true }))) {
+        throw new Error(`a past member the box named was not deleted (${record.id})`);
+      }
+    }
+    const version = await repo.bumpListVersion(tx, gymId);
+    // One row a record, as one person's Delete permanently writes: ids, never a name.
+    await repo.insertAuditRows(tx, {
+      actorUserId: userId,
+      gymId,
+      rows: past.map((record) => ({ action: "org.member_list_entry_deleted", targetType: "member_list_entry", targetId: record.id, meta: { via: "selected" } })),
+    });
+    return { kind: "deleted", done: { deleted: past.length, nothingLeft: false, version } };
+  });
+}

@@ -10,12 +10,13 @@ const saveReferralSettings = vi.fn();
 vi.mock('../../api/orgsApi', () => ({
   orgService: { getReferralSettings, saveReferralSettings },
   errorText: (err, fallback) => err?.response?.data?.message ?? fallback,
+  errorCode: (err) => err?.response?.data?.error ?? null,
 }));
 
 const ReferralPanel = (await import('../../components/console/ReferralPanel')).default;
 
 const ORG = { id: 'g1', slug: 'iron-house', name: 'Iron House', orgType: 'gym', staffRole: 'owner', privileges: ['org.manage', 'memberships.manage'] };
-const OFF = { on: false, member: null, friend: null, currency: 'INR', memberLines: [] };
+const OFF = { on: false, member: null, friend: null, currency: 'INR', memberLines: [], version: 'v1' };
 const FRIEND_SAVED = { kind: 'amount', percentBp: null, amountMinor: 50000, currency: 'INR', on: 'first', code: 'WELCOME500', words: '₹500.00 off the first payment of a membership', problem: null, archived: false };
 const MEMBER_SAVED = { kind: 'percent', percentBp: 1000, amountMinor: null, currency: null, on: 'membership', days: null, words: '10% off your next membership payment' };
 
@@ -74,6 +75,8 @@ describe('Refer a friend', () => {
       on: true,
       member: { kind: 'percent', percentBp: 1000, amountMinor: null, on: 'membership', days: null },
       friend: { kind: 'amount', percentBp: null, amountMinor: 50000, on: 'first' },
+      // The offer as the box read it: a save made since in another tab refuses this one.
+      version: 'v1',
     });
     expect(box(FRIEND).getByText('Its promo code: WELCOME500.')).toBeTruthy();
     expect(box(MEMBER).queryByText(/promo code/)).toBeNull();
@@ -109,6 +112,7 @@ describe('Refer a friend', () => {
       on: true,
       member: { kind: 'amount', percentBp: null, amountMinor: 50000, on: 'membership', days: 14 },
       friend: null,
+      version: 'v1',
     });
     // Read back as it was saved, with nothing left unsaved.
     expect(box(MEMBER).getByLabelText(`${MEMBER}: days`).value).toBe('14');
@@ -171,6 +175,23 @@ describe('Refer a friend', () => {
     draw();
     await screen.findByRole('group', { name: FRIEND });
     expect(box(FRIEND).getByText('It was archived. Nobody is promised this gift. Save to make a new code.')).toBeTruthy();
+  });
+
+  it('saved meanwhile in another tab: nothing is saved, it says so where Save is, and the box shows the offer as it now is (item 20\'s passes, H3)', async () => {
+    const changed = 'These settings were changed since you opened them. Nothing was saved: check them and save again.';
+    getReferralSettings.mockResolvedValueOnce({ data: { settings: OFF } }).mockResolvedValueOnce({ data: { settings: { ...OFF, on: true, member: MEMBER_SAVED, version: 'v2' } } });
+    saveReferralSettings.mockRejectedValueOnce({ response: { status: 409, data: { error: 'referral_settings_changed', message: changed } } });
+    draw();
+    await screen.findByRole('group', { name: MEMBER });
+    fireEvent.click(screen.getByLabelText('Turn on Refer a friend'));
+    choose(FRIEND, 'percent', '10', 'first');
+    fireEvent.click(save());
+    expect(await screen.findByText(changed)).toBeTruthy();
+    // Read again: the other tab's offer, with no change waiting to be saved.
+    await screen.findByText(/you get 10% off your next membership payment/);
+    expect(getReferralSettings).toHaveBeenCalledTimes(2);
+    expect(bar().queryByText("You have changes that aren't saved.")).toBeNull();
+    expect(screen.queryByText(/^Saved\./)).toBeNull();
   });
 
   it('a refusal from the server is said, and nothing is shown as saved', async () => {

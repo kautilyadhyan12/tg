@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { REFERRAL_WORDS } from '@app/shared';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 import { placeFor } from '../../pages/console/consolePlaces';
@@ -300,6 +300,9 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
       setSaved(true);
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save that. Please try again."));
+      // Saved since this box was read (another tab, or another owner): the box shows the
+      // offer as it now is, under the sentence that says so.
+      if (errorCode(err) === 'referral_settings_changed') void fetchSettings();
     } finally {
       setSaving(false);
     }

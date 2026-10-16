@@ -31,6 +31,14 @@ import { loadConfig } from "../src/config.js";
 import { archiveLapsedGyms } from "../src/modules/orgs/archiveSweep.js";
 import { expireStagedMemberListUploads } from "../src/modules/orgs/memberList/expiry.js";
 import { memberListRowsPageSchema, type MemberListPreview } from "@app/shared";
+import { identityKey } from "../src/modules/orgs/memberList/fields.js";
+
+/** A record as the list has held one since 5e-i: with a member number, keyed with it, so an
+ *  import that matches it has no number to give (5e-ii). */
+const numbered = (person: { fullName: string; email: string }, at: number) => {
+  const memberNumber = String(at + 1);
+  return { memberNumber, identityKey: identityKey({ fullName: person.fullName, email: person.email, phone: null, memberNumber }) };
+};
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -1147,10 +1155,11 @@ d("member list: upload and preview (real Postgres)", () => {
       const people = rows[0]?.doc.understanding.rows ?? [];
       expect(people).toHaveLength(3);
       await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
-      for (const person of people) {
+      for (const [at, person] of people.entries()) {
+        const record = numbered(person, at);
         await sql`
-          INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
-          VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${person.identityKey}, 'upload')`;
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, member_number, identity_key, source)
+          VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${record.memberNumber}, ${record.identityKey}, 'upload')`;
       }
 
       const preview = body(await upload(org.org.id, owner.cookies, { bytes: file })).preview;
@@ -1248,9 +1257,10 @@ d("member list: upload and preview (real Postgres)", () => {
         SELECT rows AS doc FROM gym_member_list_uploads WHERE id = ${preview.uploadId}`;
       const first = rows[0]?.doc.understanding.rows[0];
       if (first === undefined) throw new Error("the staged file holds no rows");
+      const record = numbered(first, 0);
       await sql`
-        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
-        VALUES (${org.org.id}, ${first.fullName}, ${first.email}, 'Active', ${first.identityKey}, 'upload')`;
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, member_number, identity_key, source)
+        VALUES (${org.org.id}, ${first.fullName}, ${first.email}, 'Active', ${record.memberNumber}, ${record.identityKey}, 'upload')`;
       await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 7)`;
 
       // The stored answer said "2 new". The version has moved, so it is thrown away
@@ -1291,10 +1301,11 @@ d("member list: upload and preview (real Postgres)", () => {
       const people = stored[0]?.doc.understanding.rows ?? [];
       expect(people).toHaveLength(3);
       await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${org.org.id}, 1)`;
-      for (const person of people) {
+      for (const [at, person] of people.entries()) {
+        const record = numbered(person, at);
         await sql`
-          INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, identity_key, source)
-          VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${person.identityKey}, 'upload')`;
+          INSERT INTO gym_member_list_entries (gym_id, full_name, email, status, member_number, identity_key, source)
+          VALUES (${org.org.id}, ${person.fullName}, ${person.email}, 'Active', ${record.memberNumber}, ${record.identityKey}, 'upload')`;
       }
       await sql`UPDATE gym_members SET last_listed_at = now() WHERE gym_id = ${org.org.id} AND user_id = ${member.userId}`;
 

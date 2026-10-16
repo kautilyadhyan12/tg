@@ -1,5 +1,5 @@
 // One person on the gym's own list (ROADMAP 5b-i): their page, Change, Take off, Put
-// back, Delete for good and Join.
+// back, Delete permanently and Join.
 //
 // THE WORST THING THIS SCREEN COULD DO: staff tap one person and the page shows,
 // changes or deletes somebody else's record — an answer for somebody tapped a moment
@@ -378,17 +378,17 @@ describe('round one: a confirm only ever sends what was refused', () => {
     expect(orgService.changeMemberListEntry).toHaveBeenLastCalledWith(GYM, ADA, { email: 'new@members.example', acknowledgeLeavesList: true });
   });
 
-  it('H3: after Remove from list then Delete for good, nothing still says the record is kept', async () => {
+  it('H3: after Remove from list then Delete permanently, nothing still says the record is kept', async () => {
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', { ...ada, formerAt: '2026-09-25T10:00:00.000Z' }));
     orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 6 } });
     openBox(ADA);
     await pickMore('Remove');
     fireEvent.click(within(screen.getByTestId('confirm-take-off')).getByRole('button', { name: 'Remove' }));
     expect(await dialog().findByText(/Their details are kept/)).toBeTruthy();
-    await pickMore('Delete for good');
+    fireEvent.click(await dialog().findByRole('button', { name: 'Delete permanently' }));
     // Before it goes, the box says what stays: the money, with no name (18m).
     expect(within(screen.getByTestId('confirm-delete')).getByText(/Payments they made stay in your takings and reports, as “A deleted member”./)).toBeTruthy();
-    fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
+    fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete permanently' }));
     await screen.findByTestId('deleted-note');
     expect(dialog().queryByText(/Their details are kept/)).toBeNull();
   });
@@ -564,7 +564,7 @@ describe('a person on the list', () => {
     expect(box.queryByText(/lose access/)).toBeNull();
   });
 
-  it('asks before removing somebody from the list, then shows them as a past member with Put back, and Delete for good under More', async () => {
+  it('asks before removing somebody from the list, then shows them as a past member with Put back and Delete permanently beside it', async () => {
     const off = { ...ada, formerAt: '2026-09-25T10:00:00.000Z' };
     orgService.takeOffMemberListEntry.mockResolvedValue(written('taken_off', off));
     openBox(ADA);
@@ -579,8 +579,10 @@ describe('a person on the list', () => {
     await waitFor(() => expect(orgService.takeOffMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
     expect(await dialog().findByText(/Past member since 25 Sep 2026/)).toBeTruthy();
     expect(dialog().getByRole('button', { name: 'Put back on your list' })).toBeTruthy();
+    // In plain view beside Put back, not under More (Kd's click-through, 2026-10-16).
+    expect(dialog().getByTestId('delete-press').textContent).toBe('Delete permanently');
     fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
-    expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
+    expect(dialog().queryByRole('menuitem', { name: /^Delete/ })).toBeNull();
     expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
 
     // Put back undoes both (RULINGS 2026-09-27): the answer says whether their app came back.
@@ -728,8 +730,8 @@ describe('a person on the list', () => {
   it('offers no Remove on a past member whose Remove would change nothing', async () => {
     orgService.getMemberListEntry.mockResolvedValue(entryAnswer({ ...person(ADA, 'Sam Park'), formerAt: '2026-09-25T10:00:00.000Z', removeEndsApp: false }));
     openBox(ADA);
-    fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
-    expect(dialog().getByRole('menuitem', { name: /^Delete for good/ })).toBeTruthy();
+    expect(await dialog().findByRole('button', { name: 'Delete permanently' })).toBeTruthy();
+    fireEvent.click(dialog().getByRole('button', { name: /^More/ }));
     expect(dialog().queryByRole('menuitem', { name: /^Remove/ })).toBeNull();
     expect(dialog().queryByRole('button', { name: 'Remove from app' })).toBeNull();
   });
@@ -743,11 +745,12 @@ describe('a person on the list', () => {
     expect(within(screen.getByTestId('confirm-take-off')).getByText(/pending invitation will be cancelled/)).toBeTruthy();
   });
 
-  it('offers no Delete for good on somebody still on the list', async () => {
+  it('offers no Delete permanently on somebody still on the list', async () => {
     openBox(ADA);
     fireEvent.click(await dialog().findByRole('button', { name: /^More/ }));
     expect(dialog().getByRole('menuitem', { name: /^Merge duplicate/ })).toBeTruthy();
-    expect(dialog().queryByRole('menuitem', { name: /^Delete for good/ })).toBeNull();
+    expect(dialog().queryByRole('menuitem', { name: /^Delete/ })).toBeNull();
+    expect(dialog().queryByRole('button', { name: 'Delete permanently' })).toBeNull();
   });
 
   it('starts Merge duplicate with the name already searched, so a second record under it shows at once', async () => {
@@ -759,14 +762,14 @@ describe('a person on the list', () => {
     expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=all&query=Ada+Lovelace');
   });
 
-  it('deletes a past member for good only on the second tap, and says it was done', async () => {
+  it('deletes a past member permanently only on the second tap, and says it was done', async () => {
     orgService.deleteFormerMemberListEntry.mockResolvedValue({ data: { deleted: true, version: 5 } });
     openBox(ADA_OLD);
-    await pickMore('Delete for good');
+    fireEvent.click(await dialog().findByRole('button', { name: 'Delete permanently' }));
     expect(orgService.deleteFormerMemberListEntry).not.toHaveBeenCalled();
-    fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete for good' }));
+    fireEvent.click(within(screen.getByTestId('confirm-delete')).getByRole('button', { name: 'Delete permanently' }));
     await waitFor(() => expect(orgService.deleteFormerMemberListEntry).toHaveBeenCalledWith(GYM, ADA_OLD));
-    expect((await screen.findByTestId('deleted-note')).textContent).toMatch(/Ada Lovelace's record was deleted/);
+    expect((await screen.findByTestId('deleted-note')).textContent).toBe('Ada Lovelace was deleted permanently.');
     expect(onChanged).toHaveBeenCalled();
   });
 

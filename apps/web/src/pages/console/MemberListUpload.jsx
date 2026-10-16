@@ -9,6 +9,7 @@ import {
   Columns3,
   ExternalLink,
   FileSpreadsheet,
+  Hash,
   Loader2,
   Lock,
   PenLine,
@@ -49,6 +50,11 @@ import {
   missingStatusLine,
   missingTitle,
   neverKeptLines,
+  numberMoveLine,
+  numbersGivenSub,
+  numbersGivenTitle,
+  numbersNotGivenTitle,
+  numbersMovedTitle,
   pastedBytes,
   peopleWord,
   roleOfColumn,
@@ -191,6 +197,29 @@ function WarningRows({ warning, gym }) {
         </button>
       ) : null}
       {unlisted > 0 ? <p>{count(warning.rows)} in all; the list shows the first {count(warning.where.length)}.</p> : null}
+    </div>
+  );
+}
+
+/** Everyone whose member number the file gives to somebody else, and the number each gets
+ *  instead (5e-ii): the first twenty, then all that were sent. */
+function NumberMoves({ numbers }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? numbers.moved : numbers.moved.slice(0, 20);
+  const unlisted = numbers.movedTotal - numbers.moved.length;
+  return (
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-1 c-t1" data-testid="number-moves">
+        {shown.map((m, i) => (
+          <li key={`${m.from}-${String(i)}`}>{numberMoveLine(m)}</li>
+        ))}
+      </ul>
+      {!all && numbers.moved.length > shown.length ? (
+        <button type="button" onClick={() => setAll(true)} className="c-btn c-btn-s c-btn-sm self-start">
+          Show all {count(numbers.moved.length)}
+        </button>
+      ) : null}
+      {unlisted > 0 ? <p>and {count(unlisted)} more</p> : null}
     </div>
   );
 }
@@ -1317,6 +1346,30 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
                 actionDisabled={busy !== null}
               />
             ))}
+            {numbersGivenTitle(preview.numbers, words) !== null ? (
+              <Line icon={Hash} tone="plain" title={numbersGivenTitle(preview.numbers, words)} sub={numbersGivenSub(preview.numbers)} testId="numbers-given" />
+            ) : null}
+            {numbersNotGivenTitle(preview.numbers, words) !== null ? (
+              <Line
+                icon={AlertTriangle}
+                tone="amber"
+                title={numbersNotGivenTitle(preview.numbers, words)}
+                sub="Your member numbers are too long to continue. Give them a number in your file."
+                testId="numbers-not-given"
+              />
+            ) : null}
+            {numbersMovedTitle(preview.numbers) !== null ? (
+              <Line
+                icon={AlertTriangle}
+                tone="amber"
+                title={numbersMovedTitle(preview.numbers)}
+                sub="Your file gives their numbers to other people"
+                action={why === 'numbers' ? 'Hide' : 'See which'}
+                onAction={() => setWhy((open) => (open === 'numbers' ? null : 'numbers'))}
+                detail={why === 'numbers' ? <NumberMoves numbers={preview.numbers} /> : null}
+                testId="numbers-moved"
+              />
+            ) : null}
             {never.map((n) => (
               <Line key={n.reason} icon={Lock} tone="plain" title={n.title} sub={n.columns} />
             ))}

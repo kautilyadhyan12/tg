@@ -19,6 +19,7 @@ import {
   periodIndex,
   periodStart,
   shownRenewal,
+  giftDaysNeverReached,
   takeBackGiftDays,
   type HeldMembership,
   type HeldMembershipTerms,
@@ -222,6 +223,20 @@ describe("free days are taken back only while none of them is reached", () => {
     const folded = addGiftDays({ ...after, paidPeriods: 2 }, 10, "2026-12-05")?.membership ?? after;
     expect(takeBackGiftDays(folded, 14, 1, "2026-12-05")).toBeNull();
     expect(takeBackGiftDays({ ...after, status: "cancelled", cancelledOn: "2026-11-04" }, 14, 1, "2026-11-05")).toBeNull();
+  });
+
+  it("cancelled before the first free day: none of them was had; on or after it, or not cancelled, or another gift's: they were (item 20's passes, L3)", () => {
+    const cancelled = (on: string) => ({ ...after, status: "cancelled" as const, cancelledOn: on });
+    const table: [string, HeldMembership, number, number, boolean][] = [
+      ["cancelled the day the days were added", cancelled("2026-11-03"), 14, 1, true],
+      ["cancelled the day before the first free day", cancelled("2026-11-14"), 14, 1, true],
+      ["cancelled on the first free day", cancelled("2026-11-15"), 14, 1, false],
+      ["cancelled inside the free days", cancelled("2026-11-20"), 14, 1, false],
+      ["running, not cancelled", after, 14, 1, false],
+      ["another gift's period", cancelled("2026-11-04"), 14, 2, false],
+      ["more days than it holds", cancelled("2026-11-04"), 15, 1, false],
+    ];
+    for (const [what, m, days, from, never] of table) expect(giftDaysNeverReached(m, days, from, "2026-11-20"), what).toBe(never);
   });
 });
 

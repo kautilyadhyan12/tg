@@ -74,7 +74,7 @@ export function Tick({ checked, onChange, children }) {
   );
 }
 
-export default function MemberListRemove({ door, gym, words, load, press, onSelectionChanged, onRemoved, onClose }) {
+export default function MemberListRemove({ door, gym, words, load, press, onSelectionChanged, onRemoved, onClose, onSeePast = null }) {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   /** Why the box changed under staff: the people moved, or a big removal needs its tick. */
@@ -157,10 +157,18 @@ export default function MemberListRemove({ door, gym, words, load, press, onSele
         {removeDoneLine(removed, door, words)}
       </p>
     );
+    // Where they went is one press away: Past members, where they can be put back or deleted.
     footer = (
-      <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
-        Done
-      </button>
+      <div className="flex flex-wrap gap-2 md:justify-end">
+        {onSeePast !== null && door === 'list' && removed.moved > 0 ? (
+          <button type="button" onClick={onSeePast} data-testid="remove-see-past" className="c-btn c-btn-s c-btn-lg">
+            {`See past ${words.people}`}
+          </button>
+        ) : null}
+        <button type="button" onClick={onClose} className="c-btn c-btn-p c-btn-lg">
+          Done
+        </button>
+      </div>
     );
   } else if (preview === null) {
     body =

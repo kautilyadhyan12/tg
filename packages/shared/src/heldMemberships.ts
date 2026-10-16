@@ -651,6 +651,16 @@ export function takeBackGiftDays(stored: HeldMembership, days: number, from: num
   return { ...m, giftDays: m.giftDays - days };
 }
 
+/** Free days on a membership cancelled before the first of them: nobody had any of them, so
+ *  the gift can be taken back with the membership left as it is (the data-integrity pass
+ *  over item 20, L3). */
+export function giftDaysNeverReached(stored: HeldMembership, days: number, from: number, today: string): boolean {
+  const m = settle(stored, today);
+  if (m.status !== "cancelled" || m.cancelledOn === null) return false;
+  if (m.giftFrom !== from || m.giftDays < days) return false;
+  return m.cancelledOn < addDays(periodStart(m, from), -m.giftDays);
+}
+
 /** The day a membership given free days next renews on, or ends on, as the member is told;
  *  null while it is frozen, whose dates move when it is unfrozen. */
 export function giftDaysNextDay(m: HeldMembership, from: number): { renews: boolean; day: string } | null {

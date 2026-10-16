@@ -276,6 +276,28 @@ d("deleting the leads selected (real Postgres)", () => {
     TIMEOUT_MS,
   );
 
+  it(
+    "a ticked lead who becomes a member after the box: nothing is deleted, and the new box comes back (the data-integrity pass over item 20, L1)",
+    async () => {
+      const owner = await makeUser("joined-owner");
+      const org = await makeOrg(owner.cookies, "Joined Box Gym");
+      const sam = await addLead(org.org.id, owner.cookies, "Sam Cole");
+      const selection = { kind: "ticked", leadIds: [sam.id] };
+      const preview = previewOf(await post(previewUrl(org.org.id), { selection }, owner.cookies));
+      // Somebody at the desk adds Sam from Add member: the lead is now Joined.
+      const added = await post(`/v1/orgs/${org.org.id}/member-list/entries`, { fullName: "Sam Cole", email: sam.email, leadId: sam.id }, owner.cookies);
+      expect(added.statusCode, added.body).toBe(201);
+
+      const refused = await post(deleteUrl(org.org.id), { selection, digest: preview.digest }, owner.cookies);
+      expect(refused.statusCode).toBe(409);
+      const body = JSON.parse(refused.body) as { error: string; preview: LeadsDeletePreview };
+      expect(body.error).toBe("leads_changed");
+      expect(body.preview.leads.map((l) => l.name)).toEqual(["Sam Cole"]);
+      expect(await storedNames(org.org.id)).toEqual(["Sam Cole"]);
+    },
+    TIMEOUT_MS,
+  );
+
   // ── WHO MAY ────────────────────────────────────────────────────────────────
 
   it(

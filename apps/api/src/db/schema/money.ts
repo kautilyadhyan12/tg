@@ -115,11 +115,11 @@ export const subscriptions = pgTable(
     /** When our server told the provider to end a plan set to end (migration `0058`): Razorpay
      *  cannot take a cancel back, so it is sent in the hours before the paid month ends. */
     cancelSentAt: timestamp("cancel_sent_at", { withTimezone: true }),
-    /** The first time this subscription was paid for, written by a trigger (migration `0130`):
+    /** The first time this subscription was paid for, written by a trigger (migration `0131`):
      *  a gym that never paid has none on any of its rows (Stage 3 item 2d). */
     paidAt: timestamp("paid_at", { withTimezone: true }),
     /** What the first-people check decided about this free trial (2d): `ended` or `look`, the
-     *  gym its first people came from, and when. All three or none (`0130`). */
+     *  gym its first people came from, and when. All three or none (`0131`). */
     trialCheck: text("trial_check"),
     trialCheckGymId: uuid("trial_check_gym_id"),
     trialCheckedAt: timestamp("trial_checked_at", { withTimezone: true }),

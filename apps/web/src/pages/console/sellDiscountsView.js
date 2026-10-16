@@ -330,6 +330,9 @@ export function heldDiscountLine(membership) {
 // ── The form ────────────────────────────────────────────────────────────────
 
 export const TOO_MANY_DISCOUNTS = `You can have ${String(DISCOUNTS_MAX)} discounts at a time. Archive one you no longer offer first.`;
+/** Beside Refer a friend's gift, for staff who may not set the offer: every invite link
+ *  promises it, so it is changed only with the offer. */
+export const REFERRAL_GIFT_OWNER_LINE = "The owner changes this gift in Refer a friend.";
 export const NO_MANAGING_DISCOUNTS = 'The owner, or staff who can change membership types and prices, can add and change discounts.';
 const HIDDEN_TEXT = 'Something hidden was pasted in with this. Delete it and type it again.';
 

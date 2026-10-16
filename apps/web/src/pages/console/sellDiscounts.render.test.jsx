@@ -446,3 +446,31 @@ describe('what the screen says stays true', () => {
   });
 });
 });
+
+describe("Refer a friend's gift under Discounts (the security pass over item 20, H1)", () => {
+  const GIFT = discount({ id: 'd-gift', name: "Refer a friend: friend's gift, WELCOME20", code: 'WELCOME20', referralGift: true });
+  const MANAGER = { ...ORG, staffRole: 'manager', privileges: ['members.read', 'billing.members', 'memberships.manage'] };
+
+  it('has no Change: whoever sets the offer is taken to Refer a friend, anybody else is told the owner changes it there; Archive stays', async () => {
+    svc.get.mockResolvedValue(page({ discounts: [GIFT, discount()] }));
+    open();
+    await screen.findByRole('region', { name: 'Discounts' });
+    const rows = within(discounts()).getAllByTestId('discount-row');
+    const giftRow = within(rows[0]);
+    expect(giftRow.queryByRole('button', { name: /^Change / })).toBeNull();
+    expect(giftRow.getByRole('link', { name: 'Change in Refer a friend' }).getAttribute('href')).toBe('/console/iron-house/settings#refer-a-friend');
+    expect(giftRow.getByRole('button', { name: "Archive Refer a friend: friend's gift, WELCOME20" })).toBeTruthy();
+    // Every other discount keeps its Change.
+    expect(within(rows[1]).getByRole('button', { name: 'Change Summer sale' })).toBeTruthy();
+  });
+
+  it('for a manager who may not set the offer: a plain line, and no link', async () => {
+    svc.get.mockResolvedValue(page({ discounts: [GIFT] }));
+    open(MANAGER);
+    await screen.findByRole('region', { name: 'Discounts' });
+    const giftRow = within(within(discounts()).getByTestId('discount-row'));
+    expect(giftRow.getByText('The owner changes this gift in Refer a friend.')).toBeTruthy();
+    expect(giftRow.queryByRole('link')).toBeNull();
+    expect(giftRow.queryByRole('button', { name: /^Change / })).toBeNull();
+  });
+});

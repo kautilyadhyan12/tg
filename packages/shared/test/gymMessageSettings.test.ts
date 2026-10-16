@@ -307,7 +307,7 @@ describe("what is kept, and the shapes", () => {
 
   it("a save names every kind once and only numbers on offer; a member's switch only a kind with one", () => {
     const messages = GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: true, ownLine: null }));
-    const ok = { messages, missYouDays: 14, milestones: [25, 250], trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 30, classReminderHours: 12 };
+    const ok = { messages, missYouDays: 14, milestones: [25, 250], trialCheckInDay: 3, trialEndingDays: 1, membershipEndingDays: 30, classReminderHours: 12, version: "" };
     expect(messages.map((m) => m.kind)).toEqual(["welcome", "trial_check_in", "trial_ending", "membership_ending", "payment_overdue", "class_reminder", "birthday", "milestone", "miss_you", "review"]);
     expect(gymMessageSettingsRequestSchema.safeParse(ok).success).toBe(true);
     const bad = [
@@ -330,8 +330,10 @@ describe("what is kept, and the shapes", () => {
     ];
     for (const body of bad) expect(gymMessageSettingsRequestSchema.safeParse(body).success, JSON.stringify(body).slice(0, 80)).toBe(false);
     // A page loaded before the four new kinds: the four it knows and its two numbers. Its save still holds.
-    const older = { messages: messages.filter((m) => ["welcome", "birthday", "milestone", "miss_you"].includes(m.kind)), missYouDays: 14, milestones: [25, 250] };
+    const older = { messages: messages.filter((m) => ["welcome", "birthday", "milestone", "miss_you"].includes(m.kind)), missYouDays: 14, milestones: [25, 250], version: "" };
     expect(gymMessageSettingsRequestSchema.parse(older)).toEqual(older);
+    // Every save names the version it read (item 20's passes, H2).
+    expect(gymMessageSettingsRequestSchema.safeParse({ ...ok, version: undefined }).success).toBe(false);
     for (const kind of GYM_MESSAGE_MEMBER_SWITCH_KINDS) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success).toBe(true);
     expect([...GYM_MESSAGE_MEMBER_SWITCH_KINDS]).toEqual(["trial_check_in", "trial_ending", "membership_ending", "class_reminder", "birthday", "milestone", "miss_you", "review"]);
     for (const kind of ["welcome", "payment_overdue", "group", "x"]) expect(gymMessageSwitchRequestSchema.safeParse({ kind, on: false }).success, kind).toBe(false);

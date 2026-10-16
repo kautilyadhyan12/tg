@@ -39,6 +39,8 @@ export function registerMessageRoutes(app: FastifyInstance, deps: service.Messag
       ipMax,
       windowMs: 60 * 60 * 1000,
       identifier: (req) => req.authUser?.id ?? null,
+      // Counted a gym at a time: one person at a shared address never closes another gym's inbox.
+      ipScope: (req) => orgParamsSchema.safeParse(req.params).data?.gymId ?? null,
       redis: deps.redis,
     });
   // A whole gym's members share one address on its wi-fi, hence each explicit `ipMax`.

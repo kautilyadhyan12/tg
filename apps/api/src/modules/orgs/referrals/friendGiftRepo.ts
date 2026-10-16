@@ -15,8 +15,9 @@ type SqlOrTx = Sql | TransactionSql;
 
 export interface FriendGiftRow {
   entryId: string;
-  /** The lead that joined them (the earliest, where two were joined to one record). */
-  leadId: string;
+  /** The lead that joined them (the earliest, where two were joined to one record); null
+   *  where the invitation is kept after its lead was deleted. */
+  leadId: string | null;
   /** The member who invited them; null where that account is gone. */
   referredBy: string | null;
   /** On Members, or holding a membership, before they were invited. */
@@ -32,7 +33,7 @@ export interface FriendGiftRow {
 
 interface DbRow {
   entry_id: string;
-  lead_id: string;
+  lead_id: string | null;
   referred_by: string | null;
   member_before: boolean;
   given_on: string | null;
@@ -43,9 +44,11 @@ interface DbRow {
 }
 
 /** The records among `entryIds` that a lead of this gym joined after coming by a member's
- *  invite link (the earliest such lead, where two were joined to one record). */
+ *  invite link (the earliest such lead, where two were joined to one record), or whose
+ *  invitation was kept when that lead was deleted (`gym_referral_kept_invites`). */
 export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<FriendGiftRow[]> {
   if (entryIds.length === 0) return [];
+  const ids = [...new Set(entryIds)];
   const rows = await sql<DbRow[]>`
     SELECT DISTINCT ON (l.entry_id)
            l.entry_id, l.id AS lead_id, l.referred_by,
@@ -58,7 +61,13 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
             )) AS member_before,
            given.on_what AS given_on, given.at AS given_at,
            skipped.on_what AS skipped_on, skipped.at AS skipped_at, skipped.by AS skipped_by
-    FROM gym_leads l
+    FROM (
+      SELECT gym_id, entry_id, id, referred_by, referred_at FROM gym_leads
+      WHERE gym_id = ${gymId} AND entry_id = ANY(${ids}::uuid[]) AND status = 'joined' AND referred_at IS NOT NULL
+      UNION ALL
+      SELECT gym_id, entry_id, NULL::uuid, referred_by, referred_at FROM gym_referral_kept_invites
+      WHERE gym_id = ${gymId} AND entry_id = ANY(${ids}::uuid[])
+    ) l
     LEFT JOIN LATERAL (
       -- Who added it is the gym's own record of the membership being given.
       SELECT t.name AS on_what, h.created_at AS at,
@@ -100,9 +109,7 @@ export async function friendGiftRows(sql: SqlOrTx, gymId: string, entryIds: read
       ) x
       ORDER BY x.at LIMIT 1
     ) given ON true
-    WHERE l.gym_id = ${gymId} AND l.entry_id = ANY(${[...new Set(entryIds)]}::uuid[])
-      AND l.status = 'joined' AND l.referred_at IS NOT NULL
-    ORDER BY l.entry_id, l.referred_at, l.id`;
+    ORDER BY l.entry_id, l.referred_at, l.id NULLS LAST`;
   return rows.map((r) => ({
     entryId: r.entry_id,
     leadId: r.lead_id,

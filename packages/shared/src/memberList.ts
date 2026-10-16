@@ -802,6 +802,9 @@ const COUNTED_WARNINGS = [
   "phones_need_country",
   "phones_unusual",
   "shared_emails",
+  /** Rows of the file giving one member number to different people (5e-ii): both
+   *  are imported with it. */
+  "shared_member_numbers",
   /** Cells of the gym's own columns that were longer than we keep (§11.1). */
   "cells_cut",
   /** Cells in a date column that are no date, left empty rather than guessed. */
@@ -934,6 +937,8 @@ export function memberListWarningWords(warning: MemberListWarning): string {
       return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone. Correct any that are wrong in your file and upload it again, or in the app after you import.`;
     case "shared_emails":
       return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept, but only one person can join the app with each address — add the others' own email to invite them.`;
+    case "shared_member_numbers":
+      return `${numberWords(warning.rows, "person has", "people have")} the same member number as someone else in this file. They are all imported with it. Give each person their own number in your file and import it again, or change one in the app after you import.`;
     case "placeholders":
       return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
@@ -1151,6 +1156,42 @@ export const memberListSeatSchema = z.object({
 });
 export type MemberListSeat = z.infer<typeof memberListSeatSchema>;
 
+/** How many records whose number an import moves are named on Review. */
+export const MEMBER_LIST_NUMBER_MOVES_SHOWN = 200;
+
+/** A record whose member number the file gives to somebody else (5e-ii): moved to the
+ *  gym's next free number, `to` (null only where that would be too long a number).
+ *  `toName` is who the file gives `from` to. */
+export const memberListNumberMoveSchema = z
+  .object({
+    fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
+    from: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS),
+    to: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    toName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
+  })
+  .strict();
+export type MemberListNumberMove = z.infer<typeof memberListNumberMoveSchema>;
+
+/** WHAT AN IMPORT DOES TO MEMBER NUMBERS (5e-ii; Kd, 2026-10-16): how many of the file's
+ *  people with no number are given one, `first` to `last`; and every record whose number
+ *  moves, the first `MEMBER_LIST_NUMBER_MOVES_SHOWN` named. Kept with the staged file, so
+ *  the names go with its cells. */
+export const memberListImportNumbersSchema = z
+  .object({
+    given: z.number().int().min(0),
+    first: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    last: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    /** Whether that run continues the gym's own numbers; false where it starts at 1. */
+    continued: z.boolean().default(false),
+    /** How many of the file's people with no number get none: the next would be too long. */
+    notGiven: z.number().int().min(0).default(0),
+    moved: z.array(memberListNumberMoveSchema).max(MEMBER_LIST_NUMBER_MOVES_SHOWN),
+    movedTotal: z.number().int().min(0),
+  })
+  .strict();
+export type MemberListImportNumbers = z.infer<typeof memberListImportNumbersSchema>;
+export const MEMBER_LIST_NO_IMPORT_NUMBERS: MemberListImportNumbers = { given: 0, first: null, last: null, continued: false, notGiven: 0, moved: [], movedTotal: 0 };
+
 /** THE PREVIEW — what an upload WOULD do, and the only answer the upload route
  *  gives. Everything in it is a count, a column's own heading with three of its
  *  cells, or a sentence; the people themselves are read one page at a time from
@@ -1193,6 +1234,8 @@ export const memberListPreviewSchema = z.object({
   warnings: z.array(memberListWarningSchema),
   seat: memberListSeatSchema,
   guard: memberListGuardSchema,
+  /** The member numbers this file gives and moves (5e-ii). */
+  numbers: memberListImportNumbersSchema.default(MEMBER_LIST_NO_IMPORT_NUMBERS),
 });
 export type MemberListPreview = z.infer<typeof memberListPreviewSchema>;
 
@@ -1305,7 +1348,14 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *  Absent on an upload staged before it existed, which a read then works out again. */
 const memberListStagedEntryIdSchema = z.string().uuid().nullable().optional();
 const memberListGroupedRowSchema = z
-  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable(), entryId: memberListStagedEntryIdSchema })
+  .object({
+    at: z.number().int().min(0),
+    wasStatus: z.string().nullable(),
+    entryId: memberListStagedEntryIdSchema,
+    /** The member number this person will hold where it is not the row's own: one the
+     *  app gives, or theirs kept over a blank cell (5e-ii). */
+    memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable().optional(),
+  })
   .strict();
 
 /** Somebody the gym's list holds who is not in the file — stored as the GYM's own
@@ -1322,6 +1372,7 @@ export const memberListGroupsSchema = z
     changed: z.array(memberListGroupedRowSchema),
     unchanged: z.array(memberListGroupedRowSchema),
     gone: z.array(memberListStoredPersonSchema),
+    numbers: memberListImportNumbersSchema.default(MEMBER_LIST_NO_IMPORT_NUMBERS),
   })
   .strict();
 export type MemberListGroups = z.infer<typeof memberListGroupsSchema>;
@@ -2067,6 +2118,48 @@ export const memberListRemoveSelectedRequestSchema = z
   .strict();
 export type MemberListRemoveSelectedRequest = z.infer<typeof memberListRemoveSelectedRequestSchema>;
 
+// ── Delete permanently, for the past members selected (5e-ii; Kd's click-through) ──
+
+/** How many past members one press deletes permanently, at most. */
+export const MEMBER_LIST_DELETE_MAX = 200;
+/** How many of their names the box shows. */
+export const MEMBER_LIST_DELETE_NAMES_SHOWN = 200;
+
+export const memberListDeletePreviewRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
+export type MemberListDeletePreviewRequest = z.infer<typeof memberListDeletePreviewRequestSchema>;
+
+/** The box before Delete permanently: the past members it deletes (their names, the first
+ *  `MEMBER_LIST_DELETE_NAMES_SHOWN`), how many ticked are on the list now and are not
+ *  deleted, and the digest the press carries so it deletes exactly these. `tooMany` is
+ *  true where more than `MEMBER_LIST_DELETE_MAX` are chosen: nothing can be deleted. */
+export const memberListDeletePreviewSchema = z
+  .object({
+    count: z.number().int().min(0),
+    names: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+    onList: z.number().int().min(0),
+    tooMany: z.boolean(),
+    digest: sha256Schema,
+  })
+  .strict();
+export type MemberListDeletePreview = z.infer<typeof memberListDeletePreviewSchema>;
+export const memberListDeletePreviewResponseSchema = z.object({ preview: memberListDeletePreviewSchema });
+
+export const memberListDeleteSelectedRequestSchema = z.object({ selection: memberListSelectionSchema, digest: sha256Schema }).strict();
+export type MemberListDeleteSelectedRequest = z.infer<typeof memberListDeleteSelectedRequestSchema>;
+
+/** `nothingLeft`: nobody chosen is a past member any more (the same press sent again after it
+ *  was done, or a colleague deleted or put them back), so nothing was deleted. */
+export const memberListDeletedSchema = z
+  .object({ deleted: z.number().int().min(0), nothingLeft: z.boolean().default(false), version: z.number().int().min(0) })
+  .strict();
+export type MemberListDeleted = z.infer<typeof memberListDeletedSchema>;
+export const memberListDeletedResponseSchema = z.object({ done: memberListDeletedSchema });
+
+/** The past members chosen are no longer the ones the box showed: nothing was deleted. */
+export const MEMBER_LIST_DELETE_CHANGED_WORDS = "Who is ticked has changed since you opened this. Check the names again, then delete.";
+/** That refusal, with the box as it is now. */
+export const memberListDeleteRefusedSchema = z.object({ error: z.literal("delete_changed"), message: z.string(), preview: memberListDeletePreviewSchema });
+
 /** The Remove box, Remove and Keep on list asked from the list of members whose membership
  *  is over, for one member of staff in an hour: a box and a press a person removed, so
  *  300 people one by one. */
@@ -2584,7 +2677,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
     "This would leave people who use the app off your list, because only the record you are removing has their details. Keep that record instead, or confirm to go ahead.",
   entry_not_found: "That person could not be found on your list.",
   member_not_found: "That person isn't a member here.",
-  not_former: "Take this person off the list before deleting their record for good.",
+  not_former: "Remove this person from your list first, then delete them permanently.",
   no_contact:
     "We don't have a proven email address or a phone number for this person, so they can't be put on the list from here. Add them by hand instead.",
   merge_same: "Choose a different record to keep.",

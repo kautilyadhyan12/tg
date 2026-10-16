@@ -85,6 +85,9 @@ export interface GymPageRouteDeps {
 
 /** An invite link's code; one the schema refuses is the same 404 as one that is not there. */
 const inviteParamsSchema = z.object({ code: referralCodeSchema }).strict();
+/** Links that do not exist, an hour, from one address. */
+const INVITE_MISSES_MAX = 600;
+
 const inviteNotFound = (req: FastifyRequest, reply: FastifyReply): FastifyReply =>
   reply.status(404).send({ error: "invite_not_found", message: REFERRAL_WORDS.not_found, requestId: req.id });
 
@@ -158,15 +161,16 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
       redis: deps.redis,
     });
   /** Invite pages opened: 600 an hour of one link from one address, and 6,000 an hour of
-   *  every link together from one address. Per link, never one allowance for the whole app:
-   *  a mobile carrier puts thousands of phones behind one address, and one person reloading
-   *  a page must not close every business's invite there (round one of 20e-ii-a, H3). A
-   *  code is 80 random bits, so guessing one is out of reach either way. The form spends
-   *  only the page form's own limits, counted against the business. */
+   *  one business's links together from one address. Per link and per business, never one
+   *  allowance for the whole app: a mobile carrier puts thousands of phones behind one
+   *  address, and one person reloading a page must not close every business's invite there
+   *  (round one of 20e-ii-a, H3). A code is 80 random bits, so guessing one is out of reach
+   *  either way. The form spends only the page form's own limits, counted against the
+   *  business. */
   const inviteReadLimit = createDualRateLimit({
     name: "referral_invite_read",
     max: 600,
-    ipMax: 6000,
+    ipMax: null,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => {
       const parsed = inviteParamsSchema.safeParse(req.params);
@@ -174,9 +178,30 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     },
     redis: deps.redis,
   });
-  /** The invite form, before its link is looked up: 3,000 an hour from one address, so a
-   *  flood of made-up links cannot make every request three reads (the re-check of round
-   *  one, L6). Far over what people at one shared address send; the page form's own limits
+  /** The business a request's link belongs to, once it is found: the address is counted
+   *  per business from then on, so links that do not exist never spend a real one's. */
+  const inviteGym = new WeakMap<FastifyRequest, string>();
+  const inviteAddressLimit = createDualRateLimit({
+    name: "referral_invite_read",
+    max: 6000,
+    windowMs: 60 * 60 * 1000,
+    identifier: () => null,
+    ipScope: (req) => inviteGym.get(req) ?? null,
+    redis: deps.redis,
+  });
+  /** Links that do not exist: 600 an hour from one address, then refused as too many, so
+   *  guessing stays capped. Counted apart from every real link, which a flood of made-up
+   *  ones never closes (the security pass over item 20, L1); each costs one look-up of the
+   *  code's own index. Redis down: a plain 404, as the other limits let through. */
+  const missed = async (req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> => {
+    const misses = await deps.redis.incrWithTtl(`rl:referral_invite_miss:ip:${req.ip}`, 60 * 60);
+    if (misses !== null && misses > INVITE_MISSES_MAX) {
+      return reply.status(429).send({ error: "rate_limited", message: "Too many attempts. Please try again later.", requestId: req.id });
+    }
+    return inviteNotFound(req, reply);
+  };
+  /** The invite form, once its link is found: 3,000 an hour from one address for one
+   *  business. Far over what people at one shared address send; the page form's own limits
    *  follow, counted against the business. */
   const inviteFormLimit = createDualRateLimit({
     name: "referral_invite_form",
@@ -184,6 +209,7 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     ipMax: 3000,
     windowMs: 60 * 60 * 1000,
     identifier: () => null,
+    ipScope: (req) => inviteGym.get(req) ?? null,
     redis: deps.redis,
   });
   /** …and 120 messages an hour to one page, counted only once the robot check passed. Once
@@ -339,6 +365,10 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
     if (reply.sent) return;
     const parsed = inviteParamsSchema.safeParse(req.params);
     if (!parsed.success) return inviteNotFound(req, reply);
+    const found = await referrals.liveInvite(deps.sql, parsed.data.code);
+    if (found === null) return missed(req, reply);
+    inviteGym.set(req, found.gymId);
+    if (!(await gate(inviteAddressLimit)(req, reply)())) return;
     const invite = await referrals.publicInvite({ sql: deps.sql, now: pageDeps.now, robotCheckKey: deps.robotCheck.siteKey }, parsed.data.code);
     return reply.status(200).header("cache-control", "no-store").send({ invite });
   });
@@ -347,14 +377,15 @@ export function registerGymPageRoutes(app: FastifyInstance, deps: GymPageRouteDe
   // against the same business. The invite is found again here, and asked again in the
   // write's own transaction.
   app.post("/v1/public/invites/:code/enquiries", async (req, reply) => {
-    await inviteFormLimit(req, reply);
-    if (reply.sent) return;
     const parsed = inviteParamsSchema.safeParse(req.params);
     if (!parsed.success) return inviteNotFound(req, reply);
     const body = parseOr400(inviteEnquiryRequestSchema, req.body, req, reply);
     if (body === null) return;
     const invite = await referrals.liveInvite(deps.sql, parsed.data.code);
-    if (invite === null) return inviteNotFound(req, reply);
+    if (invite === null) return missed(req, reply);
+    inviteGym.set(req, invite.gymId);
+    await inviteFormLimit(req, reply);
+    if (reply.sent) return;
     const done = await service.takeEnquiry(
       pageDeps,
       body,
