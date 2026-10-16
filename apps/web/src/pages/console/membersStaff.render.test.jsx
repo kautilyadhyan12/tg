@@ -1502,24 +1502,40 @@ describe('staff activity', () => {
     const panel = await drawPerson();
     fireEvent.click(panel.getByRole('button', { name: 'See activity' }));
     expect(await screen.findByText('Added a note to Amit Rao', { exact: false })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Staff activity' }).getAttribute('aria-selected')).toBe('true');
+    // Staff activity sits inside Staff (Kd, 4d's click-through): no tab of its own, Staff stays lit.
+    expect(screen.queryByRole('tab', { name: 'Staff activity' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Staff' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('address').textContent).toBe('?view=activity&worker=u2');
     expect(activity.list).toHaveBeenLastCalledWith(ORG.id, { worker: 'u2', from: null, to: null, after: null });
     expect(screen.getByLabelText('Who').value).toBe('u2');
   });
 
-  it('leaving the tab drops its who and when from the address', async () => {
-    drawStaff('/console/iron-house/members?view=activity&worker=u2&when=7');
+  it("the Staff tab's Staff activity button opens everybody's list, and Back to staff returns without its who and when", async () => {
+    drawStaff();
+    fireEvent.click(await screen.findByRole('button', { name: 'Staff activity' }));
     expect(await screen.findByText('Added a note to Amit Rao', { exact: false })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Staff' }));
+    expect(screen.getByTestId('address').textContent).toBe('?view=activity');
+    expect(activity.list).toHaveBeenLastCalledWith(ORG.id, { worker: null, from: null, to: null, after: null });
+    fireEvent.change(screen.getByLabelText('When'), { target: { value: '7' } });
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('?view=activity&when=7'));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to staff' }));
     await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('?view=staff'));
+    expect(await screen.findByTestId('staff-tab-u2')).toBeTruthy();
   });
 
-  it("is the owner's alone: a manager has no tab, and its address opens their own list instead", async () => {
+  it('leaving by another tab drops its who and when from the address', async () => {
+    drawStaff('/console/iron-house/members?view=activity&worker=u2&when=7');
+    expect(await screen.findByText('Added a note to Amit Rao', { exact: false })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'In the app' }));
+    await waitFor(() => expect(screen.getByTestId('address').textContent).toBe('?view=app'));
+  });
+
+  it("is the owner's alone: a manager has no Staff tab and no Staff activity, and its address opens their own list instead", async () => {
     orgService.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, staffRole: 'manager' }] } });
     drawStaff('/console/iron-house/members?view=activity');
     expect(await screen.findByRole('tab', { name: 'In the app' })).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: 'Staff activity' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Staff' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Staff activity' })).toBeNull();
     expect(activity.list).not.toHaveBeenCalled();
   });
 });

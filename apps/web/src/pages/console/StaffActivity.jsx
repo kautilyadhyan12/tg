@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { staffActivityService } from '../../api/staffActivityApi';
 import { errorText } from '../../api/orgsApi';
 import DatePick from '../../components/console/DatePick';
@@ -12,7 +12,7 @@ import { WHEN_CHOICES, addDays, emptyWords, groupByDay, noStaffYet, whenRange, w
 // member's "See activity" opens it already on them, and a reload stays where it was.
 
 /** `filters`: { worker, when, day } from the address; `onFilters` writes them back. */
-export default function StaffActivity({ gymId, timezone, clockFormat, filters, onFilters, onInviteStaff }) {
+export default function StaffActivity({ gymId, timezone, clockFormat, filters, onFilters, onInviteStaff, onBack = null }) {
   // The page read for one who-and-when (`key`); a different key is still loading.
   const [state, setState] = useState({ key: null, error: null, page: null, lines: [] });
   const [more, setMore] = useState({ busy: false, error: null });
@@ -62,7 +62,16 @@ export default function StaffActivity({ gymId, timezone, clockFormat, filters, o
 
   return (
     <section className="flex flex-col gap-4" aria-label="Staff activity">
-      <p className="c-s14 c-t2 m-0">What each person on your staff did in the console, newest first.</p>
+      {onBack !== null ? (
+        <button type="button" onClick={onBack} className="c-btn c-btn-s c-btn-sm self-start">
+          <ChevronLeft aria-hidden="true" className="w-4 h-4" />
+          Back to staff
+        </button>
+      ) : null}
+      <div className="flex flex-col gap-1">
+        <h2 className="c-h2 m-0">Staff activity</h2>
+        <p className="c-s14 c-t2 m-0">What each person on your staff did in the console, newest first.</p>
+      </div>
 
       <div className="flex flex-col gap-3 md:flex-row md:items-end">
         <label className="c-field md:w-[260px]">

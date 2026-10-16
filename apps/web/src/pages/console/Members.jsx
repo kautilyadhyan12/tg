@@ -662,15 +662,15 @@ export default function Members() {
           {[
             ['list', 'Your list'],
             ['app', 'In the app'],
-            ...(managesStaff ? [['staff', 'Staff'], ['activity', 'Staff activity']] : []),
+            ...(managesStaff ? [['staff', 'Staff']] : []),
           ].map(([key, label]) => (
             <button
               key={key}
               type="button"
               role="tab"
-              aria-selected={tab === key}
+              aria-selected={tab === key || (key === 'staff' && tab === 'activity')}
               onClick={() => showTab(key)}
-              className={tab === key ? 'c-utab c-utab-on' : 'c-utab'}
+              className={tab === key || (key === 'staff' && tab === 'activity') ? 'c-utab c-utab-on' : 'c-utab'}
             >
               {label}
             </button>
@@ -719,10 +719,11 @@ export default function Members() {
           onInviting={(open) => setStaffInviteFor(open ? gymId : null)}
           onChanged={reloadRoster}
           onSeeActivity={(userId) => showTab('activity', { worker: userId })}
+          onOpenActivity={() => showTab('activity', {})}
         />
       ) : null}
 
-      {/* Which worker did what and when (4d): the owner's, beside Staff. */}
+      {/* Which worker did what and when (4d): the owner's, opened from the Staff tab. */}
       {tab === 'activity' && gymId !== null ? (
         <StaffActivity
           key={`activity-${gymId}`}
@@ -731,6 +732,7 @@ export default function Members() {
           clockFormat={org.clockFormat}
           filters={activityFilters}
           onFilters={(next) => showTab('activity', next)}
+          onBack={() => showTab('staff')}
           onInviteStaff={() => {
             setStaffInviteFor(gymId);
             showTab('staff');
