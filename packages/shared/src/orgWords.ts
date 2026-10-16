@@ -87,6 +87,56 @@ const STUDIO: OrgWords = {
   placeholder: "Flow Studio",
 };
 
+/** Kd's five kinds of business (2026-10-16, ROADMAP 5f), each in the words its own
+ *  software uses: a CrossFit box's athletes and coaches, a yoga studio's students and
+ *  teachers, a Pilates studio's clients and instructors. */
+const CROSSFIT_BOX: OrgWords = {
+  it: "box",
+  itCap: "Box",
+  itToMembers: "box",
+  itToMembersCap: "Box",
+  person: "athlete",
+  personCap: "Athlete",
+  people: "athletes",
+  peopleCap: "Athletes",
+  coach: "coach",
+  coachCap: "Coach",
+  nameLabel: "Box name",
+  placeholder: "Steel City CrossFit",
+};
+
+const YOGA_STUDIO: OrgWords = {
+  it: "studio",
+  itCap: "Studio",
+  itToMembers: "studio",
+  itToMembersCap: "Studio",
+  person: "student",
+  personCap: "Student",
+  people: "students",
+  peopleCap: "Students",
+  coach: "teacher",
+  coachCap: "Teacher",
+  nameLabel: "Studio name",
+  placeholder: "Lotus Yoga",
+};
+
+const PILATES_STUDIO: OrgWords = {
+  it: "studio",
+  itCap: "Studio",
+  itToMembers: "studio",
+  itToMembersCap: "Studio",
+  person: "client",
+  personCap: "Client",
+  people: "clients",
+  peopleCap: "Clients",
+  coach: "instructor",
+  coachCap: "Instructor",
+  nameLabel: "Studio name",
+  placeholder: "Core Pilates",
+};
+
+/** Closed at sign-up on 2026-10-16 (Kd: a trainer working alone is not a kind of
+ *  business any more); its words stay for a business already made. */
 const PERSONAL_TRAINER: OrgWords = {
   it: "business",
   itCap: "Business",
@@ -128,6 +178,9 @@ const CLINIC: OrgWords = {
 const BY_TYPE: Readonly<Record<OrgType, OrgWords>> = {
   gym: GYM,
   studio: STUDIO,
+  crossfit_box: CROSSFIT_BOX,
+  yoga_studio: YOGA_STUDIO,
+  pilates_studio: PILATES_STUDIO,
   personal_trainer: PERSONAL_TRAINER,
   clinic: CLINIC,
 };
@@ -150,6 +203,6 @@ export function orgWords(orgType: unknown): OrgWords {
  *
  *  Those three places cannot look a type up: two of them run before anybody has
  *  typed a code, and the third is the answer to a code that belongs to nobody.
- *  Kept here so the three read the same, and so adding a fourth type is one
- *  edit. `personal_trainer` is "trainer" here, matching what a member joined. */
-export const ORG_TYPES_PHRASE = "gym, studio or trainer";
+ *  Kept here so the three read the same. The five kinds of business (2026-10-16) are a
+ *  gym or a studio to somebody who has not joined one yet: a CrossFit box is a gym. */
+export const ORG_TYPES_PHRASE = "gym or studio";

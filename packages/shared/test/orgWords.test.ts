@@ -82,9 +82,27 @@ describe("orgWords", () => {
     expect(orgWords("personal_trainer").it).not.toBe(orgWords("gym").it);
   });
 
-  it("names all three creatable types where there is no org to name", () => {
+  /** Kd's five kinds of business (2026-10-16), each in the words its own software uses. */
+  it("speaks for a CrossFit box, a yoga studio and a Pilates studio in their own words", () => {
+    const rows: [string, string, string, string, string][] = [
+      ["crossfit_box", "box", "athletes", "Coach", "Box name"],
+      ["yoga_studio", "studio", "students", "Teacher", "Studio name"],
+      ["pilates_studio", "studio", "clients", "Instructor", "Studio name"],
+    ];
+    for (const [type, it, people, coachCap, nameLabel] of rows) {
+      const words = orgWords(type);
+      expect(words.it, type).toBe(it);
+      expect(words.itToMembers, type).toBe(it);
+      expect(words.people, type).toBe(people);
+      expect(words.peopleCap, type).toBe(people.charAt(0).toUpperCase() + people.slice(1));
+      expect(words.coachCap, type).toBe(coachCap);
+      expect(words.nameLabel, type).toBe(nameLabel);
+    }
+  });
+
+  it("names a gym or studio where there is no org to name", () => {
     // The front door, the join screen and the refusal for a code that matched
-    // nothing. `clinic` is absent because none can be created.
-    expect(ORG_TYPES_PHRASE).toBe("gym, studio or trainer");
+    // nothing. A CrossFit box is a gym; a trainer working alone can no longer be made.
+    expect(ORG_TYPES_PHRASE).toBe("gym or studio");
   });
 });

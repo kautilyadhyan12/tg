@@ -294,6 +294,14 @@ d("orgs routes (real Postgres)", () => {
    *
    *  `plan` also names a DIFFERENT band for the seat-cap tests, which used to
    *  call `subscribeGym` afterwards; that still works — see `subscribeGym`. */
+  /** A personal trainer's business as one made before 5f closed the door: created as a gym,
+   *  then given the type the row would already hold. */
+  const makeTrainerOrg = async (cookies: Record<string, string>, name: string): Promise<CreatedOrg> => {
+    const org = await makeOrg(cookies, name);
+    await sql`UPDATE gyms SET org_type = 'personal_trainer' WHERE id = ${org.org.id}`;
+    return { ...org, org: { ...org.org, orgType: "personal_trainer" } };
+  };
+
   const makeOrg = async (
     cookies: Record<string, string>,
     name: string,
@@ -1719,9 +1727,7 @@ d("orgs routes (real Postgres)", () => {
   it("names the organisation in its own word when it refuses a code", { timeout: 60_000 }, async () => {
     const owner = await makeUser("code-words-owner");
     const studio = await makeOrg(owner.cookies, "Orgs Test Word Studio", { orgType: "studio" });
-    const trainer = await makeOrg(owner.cookies, "Orgs Test Word PT", {
-      orgType: "personal_trainer",
-    });
+    const trainer = await makeTrainerOrg(owner.cookies, "Orgs Test Word PT");
     const gym = await makeOrg(owner.cookies, "Orgs Test Word Gym");
 
     await sql`
@@ -1748,7 +1754,7 @@ d("orgs routes (real Postgres)", () => {
     const missing = await post("/v1/orgs/join", { code: "ZZZZZY" }, { cookies: stranger.cookies });
     expect(missing.statusCode).toBe(404);
     expect((JSON.parse(missing.body) as { message: string }).message).toBe(
-      "That code doesn't match any gym, studio or trainer.",
+      "That code doesn't match any gym or studio.",
     );
   });
 
@@ -1815,29 +1821,50 @@ d("orgs routes (real Postgres)", () => {
     expect(studio.org.orgType).toBe("studio");
   });
 
-  it("creates a personal trainer's organisation — Kd ruling 2026-09-07: gym · studio · personal trainer", { timeout: 60_000 }, async () => {
-    const { cookies } = await makeUser("pt-owner");
-    const pt = await makeOrg(cookies, "Orgs Test Personal Trainer", { orgType: "personal_trainer" });
-    expect(pt.org.orgType).toBe("personal_trainer");
-    // Stored as typed, through migration 0024's widened CHECK — read back from
-    // the row, not from the response, so a server that echoed the request and
-    // wrote something else would be caught.
-    const rows = await sql<{ org_type: string; hours_mode: string }[]>`
-      SELECT org_type, hours_mode FROM gyms WHERE id = ${pt.org.id}`;
-    expect(rows[0]?.org_type).toBe("personal_trainer");
-    // Opening hours are optional for a trainer: nothing is invented at creation.
-    expect(rows[0]?.hours_mode).toBe("unset");
-    // A trainer's clients join by code like members: the first code exists and
-    // the owner is client #1 of their own list, complimentary.
-    expect(pt.joinCode.code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/);
-    const mine = await get("/v1/orgs/mine", { cookies });
-    expect(mine.statusCode).toBe(200);
-    const listed = (JSON.parse(mine.body) as { orgs: { id: string; orgType: string }[] }).orgs
-      .find((o) => o.id === pt.org.id);
+  /** 5f's worst thing: closing the door on a trainer working alone locks out one already
+   *  made, or their clients. Kd, 2026-10-16: no new one; nothing already made breaks. */
+  it("keeps a personal trainer's business working for its owner and clients, and refuses a new one", { timeout: 60_000 }, async () => {
+    const owner = await makeUser("pt-owner");
+    const client = await makeUser("pt-client");
+    const pt = await makeTrainerOrg(owner.cookies, "Orgs Test Personal Trainer");
+
+    const listed = (JSON.parse((await get("/v1/orgs/mine", { cookies: owner.cookies })).body) as {
+      orgs: { id: string; orgType: string }[];
+    }).orgs.find((o) => o.id === pt.org.id);
     expect(listed?.orgType).toBe("personal_trainer");
-    // A stranger gets the standing 404 on the new organisation's console reads.
+    expect((await patch(`/v1/orgs/${pt.org.id}`, { name: "Orgs Test PT Renamed" }, { cookies: owner.cookies })).statusCode).toBe(200);
+
+    // A client still joins by code and is confirmed, and both see it.
+    await joinAsMember(client.cookies, pt, owner.cookies);
+    const theirs = (JSON.parse((await get("/v1/orgs/mine", { cookies: client.cookies })).body) as {
+      orgs: { id: string; orgType: string }[];
+    }).orgs.find((o) => o.id === pt.org.id);
+    expect(theirs?.orgType).toBe("personal_trainer");
+    const members = await get(`/v1/orgs/${pt.org.id}/members`, { cookies: owner.cookies });
+    expect(members.statusCode).toBe(200);
+    expect((JSON.parse(members.body) as { items: { userId: string }[] }).items.map((m) => m.userId)).toContain(client.userId);
+
+    // Nobody can open a new one.
+    const refused = await post(
+      "/v1/orgs",
+      { trainsHere: true, name: "Orgs Test New PT", country: "US", timezone: "America/New_York", orgType: "personal_trainer" },
+      { cookies: owner.cookies },
+    );
+    expect(refused.statusCode).toBe(400);
     const stranger = await makeUser("pt-stranger");
     expect((await get(`/v1/orgs/${pt.org.id}/members`, { cookies: stranger.cookies })).statusCode).toBe(404);
+  });
+
+  /** Kd, 2026-10-16: gym, boutique studio, CrossFit box, yoga studio, Pilates studio. */
+  it("creates each of the five kinds of business and stores it as chosen", { timeout: 60_000 }, async () => {
+    const { cookies } = await makeUser("five-kinds-owner");
+    for (const orgType of ["gym", "studio", "crossfit_box", "yoga_studio", "pilates_studio"]) {
+      const made = await makeOrg(cookies, `Orgs Test Kind ${orgType}`, { orgType, plan: null });
+      expect(made.org.orgType, orgType).toBe(orgType);
+      // Read back from the row, so a server that echoed the request and wrote something else is caught.
+      const rows = await sql<{ org_type: string }[]>`SELECT org_type FROM gyms WHERE id = ${made.org.id}`;
+      expect(rows[0]?.org_type, orgType).toBe(orgType);
+    }
   });
 
   it("a legacy clinic row still demands consent on join, and records it (Part 3 §2.4)", { timeout: 90_000 }, async () => {
@@ -3266,7 +3293,7 @@ d("orgs routes (real Postgres)", () => {
     // "wait for scoping" reason (the studio's 403) does not apply to them.
     const owner = await makeUser("pt-assist-owner");
     const assistant = await makeUser("pt-assist-trainer");
-    const pt = await makeOrg(owner.cookies, "Orgs Test PT Assist", { orgType: "personal_trainer" });
+    const pt = await makeTrainerOrg(owner.cookies, "Orgs Test PT Assist");
     await sql`
       INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${pt.org.id}, ${assistant.userId}, 'trainer')`;
     const res = await get(`/v1/orgs/${pt.org.id}/members`, { cookies: assistant.cookies });

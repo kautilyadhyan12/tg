@@ -318,19 +318,18 @@ export function joinedCount(page) {
  *  the owner the member app on one of the places, no the console only. */
 export function trainsHereChoices(orgType) {
   const words = orgWords(orgType);
-  const trainer = orgType === 'personal_trainer';
   return {
-    question: trainer ? 'Do you train with the app yourself too?' : 'Do you train here too?',
+    question: 'Do you train here too?',
     options: [
       {
         value: true,
-        label: trainer ? 'Yes, I train too' : 'Yes, I train here too',
+        label: 'Yes, I train here too',
         hint: `You get the member app on your phone. It takes one of your ${words.people}' places, like any ${words.person}.`,
       },
       {
         value: false,
         label: 'No, I only run it',
-        hint: 'You get the console only. You can add yourself later from Members.',
+        hint: `You get the console only. You can add yourself later from ${words.peopleCap}.`,
       },
     ],
   };
@@ -394,7 +393,10 @@ export function memberCountLine(page, viewerUserId = null, orgType = undefined) 
  *  this app does not know about is better shown as itself than relabelled. */
 const ORG_TYPE_WORDS = {
   gym: 'Gym',
-  studio: 'Studio',
+  studio: 'Boutique studio',
+  crossfit_box: 'CrossFit box',
+  yoga_studio: 'Yoga studio',
+  pilates_studio: 'Pilates studio',
   personal_trainer: 'Personal trainer',
   clinic: 'Clinic',
 };
@@ -463,19 +465,16 @@ export function groupLabelText(member) {
   return typeof label === 'string' && label !== '' ? label : '—';
 }
 
-/** Part 3 §4.0 step 1's org-type picker — Kd's ruling of 2026-09-07: gym,
- *  studio, personal trainer. `clinic` is absent by his ruling of 2026-08-18 —
- *  *"no click will be there only gyms and fitness centers"* — and the create
- *  schema is narrowed to match, so an added option here would be refused by
- *  the server. */
+/** Part 3 §4.0 step 1's org-type picker — Kd's five kinds of business
+ *  (2026-10-16, ROADMAP 5f). A clinic (2026-08-18) and a trainer working alone
+ *  (2026-10-16) are absent, and the create schema is narrowed to match, so an
+ *  added option here would be refused by the server. */
 export const ORG_TYPE_CHOICES = [
   { value: 'gym', label: 'Gym', hint: 'A gym or fitness centre with members' },
-  { value: 'studio', label: 'Studio', hint: 'A boutique or class-based studio with clients' },
-  {
-    value: 'personal_trainer',
-    label: 'Personal trainer',
-    hint: 'You train your own clients and invite them by email',
-  },
+  { value: 'studio', label: 'Boutique studio', hint: 'Small group classes with clients' },
+  { value: 'crossfit_box', label: 'CrossFit box', hint: 'Coached classes with athletes' },
+  { value: 'yoga_studio', label: 'Yoga studio', hint: 'Yoga classes with students' },
+  { value: 'pilates_studio', label: 'Pilates studio', hint: 'Mat and reformer classes with clients' },
 ];
 
 /** THE WORDS EVERY ORG-TYPE SENTENCE IS BUILT FROM — and they live in

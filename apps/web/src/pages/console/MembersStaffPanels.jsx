@@ -3,7 +3,7 @@ import { STAFF_ROLE_NAME_MAX } from '@app/shared';
 import { Check, Loader2, Plus, X } from 'lucide-react';
 import { ConfirmInline, ConsoleFailed } from '../../components/console/ConsoleStates';
 import { readOnlyNote } from './billingView';
-import { formatJoinedAt, staffRoleText } from './consoleView';
+import { formatJoinedAt, orgWords, staffRoleText } from './consoleView';
 import {
   carriedNote,
   carriedPrivileges,
@@ -492,7 +492,7 @@ function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, read
         <p className="c-s14 c-t2 m-0">
           {person.coOwner === true
             ? `A co-owner can do everything here, except add, change or remove co-owners.${isSelf || viewerIsOwner ? '' : ' Only the owner can change this.'}`
-            : `${isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can't be changed here: a ${orgType === 'studio' ? 'studio' : 'gym'} has to keep somebody who can manage its staff.`}
+            : `${isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can't be changed here: a ${orgWords(orgType).it} has to keep somebody who can manage its staff.`}
         </p>
       ) : (
         <>

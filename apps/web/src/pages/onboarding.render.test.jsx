@@ -1309,7 +1309,7 @@ describe('onboarding screens 1–7', () => {
     await heading('Your plan'); // every answer in: the last screen
     tap('Your gym');
     await heading('Your gym');
-    expect(screen.getByText('Invited by a gym, studio or trainer?')).toBeTruthy();
+    expect(screen.getByText('Invited by a gym or studio?')).toBeTruthy();
     expect(screen.queryByLabelText(/your join code/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /ask to join/i })).toBeNull();
     // Nothing here is an answer: the plan and its Finish are one Continue on.

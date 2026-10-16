@@ -220,10 +220,17 @@ describe('the console shell', () => {
 
   it('names the tabs and the organisation after its type', async () => {
     settingsAs('studio');
-    expect(await within(rail()).findByText('Austin · Studio')).toBeTruthy();
+    expect(await within(rail()).findByText('Austin · Boutique studio')).toBeTruthy();
     expect(screen.getAllByText('Clients').length).toBeGreaterThan(0);
     expect(screen.queryByText('Members')).toBeNull();
     expect(screen.queryByText(/Gym console/)).toBeNull();
+  });
+
+  it('names a yoga studio and its students', async () => {
+    settingsAs('yoga_studio');
+    expect(await within(rail()).findByText('Austin · Yoga studio')).toBeTruthy();
+    expect(screen.getAllByText('Students').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Members')).toBeNull();
   });
 
   it('leaves a gym’s tabs exactly as they were — the control', async () => {

@@ -2,7 +2,7 @@
 // something it does not know, so each test here is aimed at the false version
 // rather than at the happy path.
 import { describe, expect, it } from 'vitest';
-import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES } from '@app/shared';
+import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES, createOrgTypeSchema } from '@app/shared';
 import {
   ORG_TYPE_CHOICES,
   canRemoveMembers,
@@ -314,7 +314,10 @@ describe('the member-count line stops contradicting itself (T3 L-5)', () => {
 describe('the database’s words are not the screen’s words (T3 L-6)', () => {
   it('labels org types and roles', () => {
     expect(orgTypeLabel('gym')).toBe('Gym');
-    expect(orgTypeLabel('studio')).toBe('Studio');
+    expect(orgTypeLabel('studio')).toBe('Boutique studio');
+    expect(orgTypeLabel('crossfit_box')).toBe('CrossFit box');
+    expect(orgTypeLabel('yoga_studio')).toBe('Yoga studio');
+    expect(orgTypeLabel('pilates_studio')).toBe('Pilates studio');
     expect(orgTypeLabel('personal_trainer')).toBe('Personal trainer');
     expect(roleLabel('owner')).toBe('Owner');
     expect(roleLabel('manager')).toBe('Manager');
@@ -329,6 +332,9 @@ describe('the database’s words are not the screen’s words (T3 L-6)', () => {
   it('calls the third role Trainer at a gym and Coach at a studio or a trainer', () => {
     expect(roleLabel('trainer', 'studio')).toBe('Coach');
     expect(roleLabel('trainer', 'personal_trainer')).toBe('Coach');
+    expect(roleLabel('trainer', 'crossfit_box')).toBe('Coach');
+    expect(roleLabel('trainer', 'yoga_studio')).toBe('Teacher');
+    expect(roleLabel('trainer', 'pilates_studio')).toBe('Instructor');
     // No type in hand — mid-load, or an api older than this bundle — reads as
     // the gym's word, which is what every console said before this card.
     expect(roleLabel('trainer')).toBe('Trainer');
@@ -473,10 +479,11 @@ describe('the mark that says a member asked again', () => {
 });
 
 describe('the org-type picker matches what the server will accept', () => {
-  it('offers gym, studio and personal trainer, and does not offer clinic', () => {
-    // Kd's 2026-09-07 ruling: gym · studio · personal trainer. Clinics stayed
-    // out (2026-08-18); an option for one here would be a card the server refuses.
-    expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual(['gym', 'studio', 'personal_trainer']);
+  it('offers the five kinds of business, and neither a clinic nor a trainer working alone', () => {
+    // Kd, 2026-10-16: gym · boutique studio · CrossFit box · yoga studio · Pilates studio.
+    expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual(['gym', 'studio', 'crossfit_box', 'yoga_studio', 'pilates_studio']);
+    expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual([...createOrgTypeSchema.options]);
+    expect(ORG_TYPE_CHOICES.map((c) => c.label)).toEqual(['Gym', 'Boutique studio', 'CrossFit box', 'Yoga studio', 'Pilates studio']);
   });
 
   it("uses a trainer's words — clients, not members — and the gym's for anything unknown", () => {

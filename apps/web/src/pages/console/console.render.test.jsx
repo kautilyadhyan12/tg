@@ -479,38 +479,39 @@ describe('Create a gym', () => {
     expect(labels).toHaveLength(24);
   });
 
-  it('offers gym, studio and personal trainer, and does not offer clinic', () => {
+  it('offers the five kinds of business, and neither a clinic nor a personal trainer', () => {
     drawNew();
-    expect(screen.getByText('Gym')).toBeTruthy();
-    expect(screen.getByText('Studio')).toBeTruthy();
-    expect(screen.getByText('Personal trainer')).toBeTruthy();
+    for (const label of ['Gym', 'Boutique studio', 'CrossFit box', 'Yoga studio', 'Pilates studio']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByText('Personal trainer')).toBeNull();
     expect(screen.queryByText('Clinic')).toBeNull();
   });
 
-  it("uses a trainer's words once Personal trainer is picked, and sends that type up", async () => {
-    // Kd 2026-09-07: a trainer's CLIENTS join by code like members. The screen
-    // must not ask a trainer for a "gym name" or promise them "members".
+  it("uses a yoga studio's words once Yoga studio is picked, and sends that type up", async () => {
+    // A yoga studio's people are students: the screen must not ask for a "gym
+    // name" or promise "members".
     drawNew();
     expect(screen.getByText(/bring your members in/i)).toBeTruthy();
-    fireEvent.click(screen.getByText('Personal trainer'));
-    expect(screen.getByText(/bring your clients in/i)).toBeTruthy();
+    fireEvent.click(screen.getByText('Yoga studio'));
+    expect(screen.getByText(/bring your students in/i)).toBeTruthy();
     expect(screen.queryByLabelText('Gym name')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: 'Coach Priya' } });
+    fireEvent.change(screen.getByLabelText('Studio name'), { target: { value: 'Lotus Yoga' } });
     await chooseCountry('India');
     fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
     orgService.createOrg.mockResolvedValue({
       data: {
-        org: { ...ORG, name: 'Coach Priya', orgType: 'personal_trainer', currencyDisplay: 'INR' },
+        org: { ...ORG, name: 'Lotus Yoga', orgType: 'yoga_studio', currencyDisplay: 'INR' },
         joinCode: { code: 'K7QM2X', label: 'Front Desk' },
       },
     });
     fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
-    expect(orgService.createOrg.mock.calls[0][0].orgType).toBe('personal_trainer');
-    // The code screen speaks to a trainer too.
+    expect(orgService.createOrg.mock.calls[0][0].orgType).toBe('yoga_studio');
+    // The code screen speaks to a yoga studio too.
     expect(await screen.findByText('K7QM2X')).toBeTruthy();
-    expect(screen.getByText(/Give this code to your clients/i)).toBeTruthy();
+    expect(screen.getByText(/Give this code to your students/i)).toBeTruthy();
     expect(screen.queryByText(/your members/i)).toBeNull();
   });
 
@@ -664,12 +665,13 @@ describe('Create a gym', () => {
     expect(orgService.createOrg.mock.calls[0][0].trainsHere).toBe(false);
   });
 
-  it('sends a yes, and asks a personal trainer in their own words', async () => {
+  it('sends a yes, and asks a CrossFit box in its own words', async () => {
     orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
     drawNew();
-    fireEvent.click(screen.getByText('Personal trainer'));
-    const group = screen.getByRole('radiogroup', { name: 'Do you train with the app yourself too?' });
-    expect(within(group).getByRole('radio', { name: /^Yes, I train too/ }).textContent).toContain("one of your clients' places, like any client");
+    fireEvent.click(screen.getByText('CrossFit box'));
+    const group = screen.getByRole('radiogroup', { name: 'Do you train here too?' });
+    expect(within(group).getByRole('radio', { name: /^Yes, I train here too/ }).textContent).toContain("one of your athletes' places, like any athlete");
+    expect(within(group).getByRole('radio', { name: /^No, I only run it/ }).textContent).toContain('add yourself later from Athletes');
     fireEvent.click(screen.getByText('Gym'));
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');
