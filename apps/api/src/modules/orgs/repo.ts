@@ -194,7 +194,7 @@ export interface MemberRow {
    *  (§10.2), or null when it names none. */
   listName: string | null;
   /** They also run this gym: their staff role and the gym's own name for it. */
-  staff: { role: OrgRole; roleName: string | null } | null;
+  staff: { role: OrgRole; roleName: string | null; coOwner: boolean } | null;
 }
 
 export interface CodeRow {
@@ -2805,13 +2805,16 @@ export async function listMembers(
       list_name: string | null;
       staff_role: string | null;
       staff_role_name: string | null;
+      co_owner: boolean;
     }[]
   >`
     SELECT m.id, m.user_id, u.display_name, m.joined_at,
            c.label AS group_label, m.complimentary,
            e.full_name AS list_name,
-           st.role AS staff_role, st.role_name AS staff_role_name
+           st.role AS staff_role, st.role_name AS staff_role_name,
+           (st.role = 'owner' AND g.owner_user_id IS DISTINCT FROM st.user_id) IS TRUE AS co_owner
     FROM gym_members m
+    JOIN gyms g ON g.id = m.gym_id
     JOIN users u ON u.id = m.user_id
     LEFT JOIN gym_staff st ON st.gym_id = m.gym_id AND st.user_id = m.user_id
     LEFT JOIN gym_codes c ON c.id = m.code_id
@@ -2857,7 +2860,7 @@ export async function listMembers(
       complimentary: r.complimentary,
       takesSeat: true,
       listName: r.list_name,
-      staff: r.staff_role === null ? null : { role: toOrgRole(r.staff_role), roleName: r.staff_role_name },
+      staff: r.staff_role === null ? null : { role: toOrgRole(r.staff_role), roleName: r.staff_role_name, coOwner: r.co_owner },
     })),
     nextCursor,
   };
@@ -3348,9 +3351,11 @@ export interface StaffRow {
   isMember: boolean;
   /** The gym's own role they hold ("Front desk"), or null. */
   roleName: string | null;
+  /** An owner's row that is not the gym's own owner (ROADMAP 4b-i). */
+  coOwner: boolean;
 }
 
-/** Everyone who runs this gym, owner first and then oldest appointment first.
+/** Everyone who runs this gym, the owner first, then co-owners, then oldest appointment first.
  *
  *  UNBOUNDED, and unlike `listCodes`' cap that is defensible rather than
  *  overlooked: a staff row can only be created by an owner naming an existing
@@ -3383,16 +3388,19 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
       since: Date;
       is_member: boolean;
       role_name: string | null;
+      co_owner: boolean;
     }[]
   >`
     SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
            EXISTS (SELECT 1 FROM gym_members lm
-                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
+                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member,
+           (s.role = 'owner' AND g.owner_user_id <> s.user_id) AS co_owner
     FROM gym_staff s
+    JOIN gyms g ON g.id = s.gym_id
     JOIN users u ON u.id = s.user_id
     WHERE s.gym_id = ${gymId}
       AND u.status = 'active'
-    ORDER BY (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
+    ORDER BY (s.user_id = g.owner_user_id) DESC, (s.role = 'owner') DESC, s.created_at ASC, s.user_id ASC`;
   return rows.map((r) => ({
     userId: r.user_id,
     displayName: r.display_name,
@@ -3402,6 +3410,7 @@ export async function listStaff(sql: Sql, gymId: string): Promise<StaffRow[]> {
     since: r.since,
     isMember: r.is_member,
     roleName: r.role_name,
+    coOwner: r.co_owner,
   }));
 }
 
@@ -3423,12 +3432,15 @@ async function readStaffRow(
       since: Date;
       is_member: boolean;
       role_name: string | null;
+      co_owner: boolean;
     }[]
   >`
     SELECT s.user_id, u.display_name, u.email, s.role, s.privileges, s.created_at AS since, s.role_name,
            EXISTS (SELECT 1 FROM gym_members lm
-                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member
+                   WHERE lm.gym_id = s.gym_id AND lm.user_id = s.user_id AND lm.removed_at IS NULL) AS is_member,
+           (s.role = 'owner' AND g.owner_user_id <> s.user_id) AS co_owner
     FROM gym_staff s
+    JOIN gyms g ON g.id = s.gym_id
     JOIN users u ON u.id = s.user_id
     WHERE s.gym_id = ${gymId} AND s.user_id = ${userId}`;
   const row = rows[0];
@@ -3443,6 +3455,7 @@ async function readStaffRow(
         since: row.since,
         isMember: row.is_member,
         roleName: row.role_name,
+        coOwner: row.co_owner,
       };
 }
 
@@ -3547,7 +3560,22 @@ export type UpdateStaffOutcome =
   | { kind: "updated"; staff: StaffRow }
   | { kind: "unchanged"; staff: StaffRow }
   | { kind: "not_staff" }
-  | { kind: "is_owner" };
+  | { kind: "is_owner" }
+  | { kind: "owner_row_locked" };
+
+/** WHO MAY TOUCH AN OWNER'S ROW (ROADMAP 4b-i, Kd 2026-10-16): only the gym's own owner,
+ *  and only a co-owner's. The owner's own row is changed by nobody, and a co-owner holds
+ *  `staff.manage` but cannot change, tick or remove the owner or another co-owner.
+ *  Written once and asked by all three doors (role, ticks, remove), in their transaction. */
+async function ownerRowRefusal(
+  tx: TransactionSql,
+  input: { gymId: string; targetUserId: string; actorUserId: string },
+): Promise<"main_owner" | "owner_row_locked" | null> {
+  const rows = await tx<{ owner_user_id: string }[]>`SELECT owner_user_id FROM gyms WHERE id = ${input.gymId}`;
+  const owner = rows[0]?.owner_user_id;
+  if (owner === undefined || owner === input.targetUserId) return "main_owner";
+  return owner === input.actorUserId ? null : "owner_row_locked";
+}
 
 /** Change somebody between manager and trainer, or to one of the gym's own roles
  *  (`roleName`: the name shown in the role's place; null for manager and trainer).
@@ -3587,7 +3615,12 @@ export async function updateStaffRole(
     const before = rows[0];
     if (before === undefined) return { kind: "not_staff" };
     const previous = toOrgRole(before.role);
-    if (previous === "owner") return { kind: "is_owner" };
+    // A co-owner is made a manager, trainer or one of the gym's own roles by the owner alone.
+    if (previous === "owner") {
+      const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId });
+      if (refusal === "main_owner") return { kind: "is_owner" };
+      if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
+    }
 
     // The same role under the same name. A gym's own role is a trainer's underneath, so
     // the name is part of the question: "Front desk" to plain trainer is a change. And a
@@ -3632,7 +3665,8 @@ export type SetStaffPrivilegesOutcome =
   | { kind: "unchanged"; staff: StaffRow }
   | { kind: "not_staff" }
   | { kind: "owner_only_privilege" }
-  | { kind: "last_owner_locked" };
+  | { kind: "last_owner_locked" }
+  | { kind: "owner_row_locked" };
 
 /** REPLACE ONE PERSON'S TICKS with the set an owner just looked at.
  *
@@ -3712,6 +3746,18 @@ export async function setStaffPrivileges(
       return { kind: "owner_only_privilege" };
     }
 
+    // An owner's row is ticked by the gym's own owner alone (4b-i), and the owner's own row
+    // always keeps what the last owner may not lose: co-owners cannot give those back.
+    if (role === "owner") {
+      const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId });
+      if (refusal === "owner_row_locked" || (refusal === "main_owner" && input.userId !== input.actorUserId)) {
+        return { kind: "owner_row_locked" };
+      }
+      if (refusal === "main_owner" && input.lastOwnerRequires.some((p) => !input.privileges.includes(p))) {
+        return { kind: "last_owner_locked" };
+      }
+    }
+
     // T3 Low-1: this counted owner ROWS, and stripping a privilege does not
     // remove a row, so with two owners each could strip the other and the count
     // never fell — measured by the reviewer, both owners left unable to manage
@@ -3770,7 +3816,8 @@ export async function setStaffPrivileges(
 export type RemoveStaffOutcome =
   | { kind: "removed" }
   | { kind: "not_staff" }
-  | { kind: "last_owner" };
+  | { kind: "last_owner" }
+  | { kind: "owner_row_locked" };
 
 /** Take somebody off staff. **They stay a MEMBER** — the two are different
  *  relationships and Kd was shown that before approving: this takes away the
@@ -3833,6 +3880,12 @@ export async function removeStaff(
     // forbidden shape (:14493 Low-2) — and, exactly as there, ONE TEST DRIVES
     // BOTH DOORS so the copies cannot drift (:14013's precedent). Edit one, edit
     // the other, or a gym can lock itself out through whichever you left behind.
+    // The owner is never removed; a co-owner, by the owner alone (4b-i).
+    if (role === "owner") {
+      const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId });
+      if (refusal === "main_owner") return { kind: "last_owner" };
+      if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
+    }
     if (role === "owner") {
       const otherOwners = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_staff

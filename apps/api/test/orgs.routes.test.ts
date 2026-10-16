@@ -4978,15 +4978,18 @@ d("orgs routes (real Postgres)", () => {
         )
       ).statusCode,
     ).toBe(200);
-    expect(
-      (await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, { cookies: owner.cookies }))
-        .statusCode,
-    ).toBe(200);
-
-    // And the gym is still runnable by the person who is left, which is the
-    // whole point of both guards rather than a property of their error codes.
+    // Since co-owners (4b-i, Kd 2026-10-16) the gym's own owner never leaves its staff,
+    // however many others hold the keys: handing the gym over is its own job (4b-ii).
+    const ownerLeaves = await del(`/v1/orgs/${org.org.id}/staff/${owner.userId}`, { cookies: owner.cookies });
+    expect(ownerLeaves.statusCode).toBe(409);
+    expect((JSON.parse(ownerLeaves.body) as { error: string }).error).toBe("last_owner");
+    // The second owner, holding the keys again, runs the gym's staff.
     expect(
       (await get(`/v1/orgs/${org.org.id}/staff`, { cookies: second.cookies })).statusCode,
+    ).toBe(200);
+    // And the owner can take them off it: the guard does not refuse every owner.
+    expect(
+      (await del(`/v1/orgs/${org.org.id}/staff/${second.userId}`, { cookies: owner.cookies })).statusCode,
     ).toBe(200);
   });
 

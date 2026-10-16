@@ -176,13 +176,14 @@ export function seatIsFree(member) {
 export function staffTag(member, words) {
   const staff = member?.staff;
   if (!staff || typeof staff !== 'object') return null;
-  if (staff.role === 'owner') return 'Owner';
+  if (staff.role === 'owner') return staff.coOwner === true ? 'Co-owner' : 'Owner';
   return `Staff · ${staffRoleText(staff.role, staff.roleName, words)}`;
 }
 
-/** A role in words: "Owner", "Manager", "Trainer" ("Coach" at a studio), or the gym's own. */
-export function staffRoleText(role, roleName, words) {
-  if (role === 'owner') return 'Owner';
+/** A role in words: "Owner", "Co-owner" (4b-i), "Manager", "Trainer" ("Coach" at a studio),
+ *  or the gym's own. */
+export function staffRoleText(role, roleName, words, coOwner = false) {
+  if (role === 'owner') return coOwner === true ? 'Co-owner' : 'Owner';
   return roleName || (role === 'manager' ? 'Manager' : words.coachCap);
 }
 
@@ -197,7 +198,10 @@ export function staffRemoveView(member, words) {
   if (staff.role === 'owner') {
     return {
       isOwner: true,
-      staffLine: `${name} owns this ${words.it}. They stay the owner and keep the console.`,
+      staffLine:
+        staff.coOwner === true
+          ? `${name} is a co-owner of this ${words.it}. They stay a co-owner and keep the console.`
+          : `${name} owns this ${words.it}. They stay the owner and keep the console.`,
       tickLabel: null,
       keepLine: null,
       goLine: null,

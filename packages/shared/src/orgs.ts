@@ -1718,7 +1718,16 @@ export const orgMemberSchema = z.object({
   /** They also run this gym: their role and the gym's own name for it ("Front desk"), so
    *  Remove can say they keep the console (ROADMAP 4a-ii); null for a member only. Already
    *  readable from `takesSeat` (see above). Optional while an older server leaves it out. */
-  staff: z.object({ role: orgRoleSchema, roleName: z.string().nullable() }).strict().nullable().optional(),
+  staff: z
+    .object({
+      role: orgRoleSchema,
+      roleName: z.string().nullable(),
+      /** An owner who is not the gym's own owner (ROADMAP 4b-i). */
+      coOwner: z.boolean().optional(),
+    })
+    .strict()
+    .nullable()
+    .optional(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
 
@@ -2082,6 +2091,11 @@ export const orgStaffSchema = z.object({
   /** Removing them from the app moves the list record that is certainly theirs to past
    *  members (the Staff tab says so before it happens, 4a-ii). Only on the owner's list. */
   movesRecord: z.boolean().optional(),
+  /** An owner's row that is not the gym's own owner (ROADMAP 4b-i): shown as "Co-owner".
+   *  False on the owner's own row and everybody else's. */
+  coOwner: z.boolean().optional(),
+  /** The owner has asked them to be a co-owner and they have not answered: when it ends. */
+  coOwnerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 

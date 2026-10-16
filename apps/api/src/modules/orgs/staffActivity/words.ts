@@ -100,6 +100,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return to === null ? `Changed ${whose(s, "role")}` : `Changed ${whose(s, "role")} to ${to}`;
   },
   "org.staff_privileges_changed": (s) => `Changed what ${person(s)} can do`,
+  "org.co_owner_requested": (s) => `Asked ${person(s)} to be a co-owner`,
+  "org.co_owner_request_cancelled": (s) => `Cancelled the request to ${person(s)} to be a co-owner`,
+  "org.co_owner_accepted": () => "Became a co-owner",
+  "org.co_owner_request_declined": () => "Said no to being a co-owner",
   "org.staff_invited": (s) => `Invited ${thing(s, "somebody")} to the staff${asRole(s, "roleName", "role")}`,
   "org.staff_invite_cancelled": (s) => `Cancelled the staff invitation to ${thing(s, "somebody")}`,
   "org.staff_invite_resent": (s) => `Sent the staff invitation to ${thing(s, "somebody")} again`,

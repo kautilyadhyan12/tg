@@ -123,3 +123,33 @@ export const gymStaffInviteSends = pgTable(
     check("gym_staff_invite_sends_attempts_check", sql`${t.attempts} >= 0`),
   ],
 );
+
+/** A request to one of the gym's staff to be a co-owner (ROADMAP 4b-i; mirrors
+ *  `0127_co_owner_requests.sql`). Asked by the gym's owner; accepting makes the person's
+ *  staff row an owner's row. One waiting a person a gym. */
+export const gymCoOwnerRequests = pgTable(
+  "gym_co_owner_requests",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    /** Their staff row's `created_at` when asked: the request counts while that row stands. */
+    staffSince: timestamp("staff_since", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    state: text("state").notNull().default("pending"),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("gym_co_owner_requests_pending_uq").on(t.gymId, t.userId).where(sql`${t.state} = 'pending'`),
+    index("gym_co_owner_requests_user_idx").on(t.userId).where(sql`${t.state} = 'pending'`),
+    check("gym_co_owner_requests_state_check", sql`${t.state} IN ('pending','accepted','declined','cancelled','expired')`),
+    check("gym_co_owner_requests_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
+    check("gym_co_owner_requests_expires_check", sql`${t.expiresAt} > ${t.createdAt}`),
+  ],
+);
