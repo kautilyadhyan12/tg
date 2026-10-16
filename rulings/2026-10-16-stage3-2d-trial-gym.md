@@ -1,0 +1,11 @@
+# Rulings · 2026-10-16 · Stage 3 item 2d, the trial belongs to the gym (Folder B)
+
+## Money
+
+- 2026-10-16 · **The trial belongs to the gym**, as ruled on 2026-09-08 (layer 2), made exact at the plan. A free trial looks at the gym's first 20 people, the owner counted as one. When more than half of them came from one other gym that had its free trial first and never paid, the app asks who the owner is: an owner who was staff or a member at that gym (a trainer opening their own) keeps the trial, and the gym goes on Kd's "have a look" list; an owner who was never there loses it, and sees the subscribe box with one line saying why. The other gym is never named. A gym that paid is never touched. Kd asked what happens to a trainer who brings members from a gym that paid (it keeps its trial), to a gym of 2,000 whose 500 also train elsewhere (only the first 20 count; about 2 in 1,000 by chance, measured), and to a trainer from a gym that never paid (the owner check above); then *"ok go"*.
+- 2026-10-16 · **Kd can remove the gyms on the look list from his admin page** when it is built: *"keep a record that when we make admin page for me i can remove them as well"*. Until then the list is the gyms whose subscription reads `trial_check = 'look'` (2e emails it to him).
+- 2026-10-16 · **The terminal's own, Kd's to overrule:** the owner counts by their account until 2c adds the browser mark · "was there" is staff of that gym today, or in its app before its trial ended · a gym "paid" when any of its plans with a payment company reached Paid or Payment due (a database trigger stamps it) · the first 20 are by first join, removed people included · the person whose join ends a trial is let in and told "Your gym's features aren't on right now." · two gyms both over half: one the owner was never at ends the trial.
+
+## How work is done
+
+- 2026-10-16 · **Built at Opus 5.5 medium**, Kd's setting when he said go; xhigh was recommended in the plan and said once at go.
