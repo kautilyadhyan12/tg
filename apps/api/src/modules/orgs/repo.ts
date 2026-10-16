@@ -1961,7 +1961,8 @@ export type StartTrialOutcome =
  *  does either silently erases and misattributes trial history. */
 export async function startGymTrial(
   sql: Sql,
-  // `deviceHash`: the SHA-256 of the browser's trial mark (2c), never the mark; null with no browser.
+  // `deviceHash`: the SHA-256 of the browser's trial mark (2c), never the mark. The route always
+  // sends one (a request with no mark is given a new one); null is a caller with no request.
   input: { gymId: string; actorUserId: string; deviceHash: string | null },
 ): Promise<StartTrialOutcome> {
   return await sql.begin(async (tx) => {

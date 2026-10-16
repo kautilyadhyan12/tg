@@ -1164,7 +1164,7 @@ export const myOrgSchema = orgSummarySchema.extend({
   trialEndedFirstPeople: z.boolean().nullable().default(null),
   /** The browser this list was read in already started a free trial, under any account
    *  (Stage 3 item 2c: one device, one trial). Told to whoever can pay, as `ownerTrialUsed`
-   *  is; false when the request carries no mark (the phone); null means "we could not ask". */
+   *  is; false when the request carries no mark; null means "we could not ask". */
   deviceTrialUsed: z.boolean().nullable().default(null),
   /** IS THIS GYM'S CONSOLE READ-ONLY RIGHT NOW — Part 3 §4.2's *"the console
    *  stays read-only 14 days, then archived"*, and Kd's ruling of 2026-08-29

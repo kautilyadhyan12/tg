@@ -511,7 +511,7 @@ export async function updateOrg(
 export async function listMyOrgs(
   deps: OrgsDeps,
   userId: string,
-  /** The SHA-256 of the browser's trial mark (2c); null when the request has no browser. */
+  /** The SHA-256 of the browser's trial mark (2c); null when the request carries no mark. */
   deviceHash: string | null,
 ): Promise<MyOrgsResponse> {
   // Two reads, one response, ONE SNAPSHOT — T3 round 2 L2-4. They answer
@@ -1165,7 +1165,8 @@ export async function startOrgTrial(
   deps: OrgsDeps,
   userId: string,
   gymId: string,
-  /** The SHA-256 of the browser's trial mark (2c); null when the request has no browser. */
+  /** The SHA-256 of the browser's trial mark (2c). The route always sends one: a request with
+   *  no mark is given a new one. */
   deviceHash: string | null,
 ): Promise<StartOrgTrialResponse> {
   const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");

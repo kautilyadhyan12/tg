@@ -3,7 +3,8 @@
 --
 -- `trial_device_hash`: the SHA-256 of the random mark the browser that started this free
 -- trial carries in its cookie. Only the hash is kept, never the mark, and nothing about the
--- person. Null for a trial started before this column, or with no browser (the phone).
+-- person. Null for a trial started before this column. The trial route gives a request with no
+-- mark a new one, so every trial started through it is marked.
 ALTER TABLE "subscriptions" ADD COLUMN "trial_device_hash" text;--> statement-breakpoint
 ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_trial_device_hash_check"
   CHECK ("trial_device_hash" IS NULL OR "trial_device_hash" ~ '^[0-9a-f]{64}$');--> statement-breakpoint

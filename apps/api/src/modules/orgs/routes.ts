@@ -12,7 +12,7 @@ import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import type { OnlinePayments } from "../billing/online.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
-import { mintOpaqueToken, sha256Hex, trialMarkCookieOptions } from "../auth/tokens.js";
+import { cookieOptions, mintOpaqueToken, sha256Hex } from "../auth/tokens.js";
 import { TRIAL_DEVICE_COOKIE, trialDeviceMarkSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import {
@@ -287,7 +287,7 @@ export function registerOrgRoutes(
       const mark = trialMarkOf(req) ?? mintOpaqueToken();
       const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId, sha256Hex(mark));
       if (started.outcome === "started") {
-        reply.setCookie(TRIAL_DEVICE_COOKIE, mark, trialMarkCookieOptions(deps.config, TRIAL_MARK_MAX_AGE_S, TRIAL_MARK_PATH));
+        reply.setCookie(TRIAL_DEVICE_COOKIE, mark, cookieOptions(deps.config, TRIAL_MARK_MAX_AGE_S, TRIAL_MARK_PATH));
       }
       // ONE status code for both arms, and the body's `outcome` is what says
       // which happened — the same shape `/v1/orgs/join` uses. A 201-vs-200 split

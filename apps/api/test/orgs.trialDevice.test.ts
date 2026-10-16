@@ -9,6 +9,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { cookieOptions } from "../src/modules/auth/tokens.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -37,6 +38,20 @@ const sha256 = (raw: string) => createHash("sha256").update(raw).digest("hex");
 
 const TAG = "trialdevice";
 const run = String(Date.now() % 1_000_000);
+
+// The web and the api are on two sites in production, so a cookie without SameSite=None and
+// Secure is never sent with the console's requests and the mark would quietly never refuse.
+describe("the mark's cookie in production", () => {
+  it("is sent cross-site, only over https, and never to page scripts", () => {
+    expect(cookieOptions({ NODE_ENV: "production" }, 60, "/v1/orgs")).toEqual({
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/v1/orgs",
+      maxAge: 60,
+    });
+  });
+});
 
 d("one device, one free trial (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -247,15 +262,21 @@ d("one device, one free trial (real Postgres)", () => {
     expect(forged.mark).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("a request with no browser (the phone) is never refused by the mark", async () => {
+  it("a request that carries no mark is refused by nobody's mark, and its trial is marked with a new one", async () => {
     const browser: Browser = { mark: null };
     const a = await makeOwner();
     expect((await startTrial(a, browser, await makeGym(a))).statusCode).toBe(200);
     const b = await makeOwner();
     const bGym = await makeGym(b);
-    const noBrowser: Browser = { mark: null };
-    expect(await onScreen(b, noBrowser, bGym)).toEqual({ ownerTrialUsed: false, deviceTrialUsed: false });
-    expect((await startTrial(b, noBrowser, bGym)).statusCode).toBe(200);
+    const res = await send("POST", `/v1/orgs/${bGym}/trial`, b.cookies);
+    expect(res.statusCode).toBe(200);
+    const given = res.cookies.find((c) => c.name === MARK);
+    if (given === undefined) throw new Error("a request with no mark was given none");
+    marksSeen.push(given.value);
+    expect(given.value).not.toBe(browser.mark);
+    const rows = await sql<{ trial_device_hash: string | null }[]>`
+      SELECT trial_device_hash FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${bGym}`;
+    expect(rows.map((r) => r.trial_device_hash)).toEqual([sha256(given.value)]);
   });
 
   it("the person's own rule speaks first: an owner's second gym in the same browser is told it is one per person", async () => {
@@ -300,9 +321,35 @@ d("one device, one free trial (real Postgres)", () => {
     expect(rows.length).toBe(1);
   });
 
-  it("no mark, and no hash of one, is ever written to the log", () => {
+  it("no mark, and no hash of one, is ever written to the log", async () => {
+    // A second server with request logging on (it is off under NODE_ENV test), so every
+    // request line, with its cookie and Set-Cookie, is really written and read here.
+    const loud = await buildApp(loadConfig({ ...baseEnv, NODE_ENV: "development", LOG_LEVEL: "trace" }));
+    try {
+      const a = await makeOwner();
+      const gymId = await makeGym(a);
+      const mark = randomBytes(32).toString("hex");
+      marksSeen.push(mark);
+      const before = written.length;
+      const started = await loud.inject({
+        method: "POST",
+        url: `/v1/orgs/${gymId}/trial`,
+        remoteAddress: nextIp(),
+        headers: { "content-type": "application/json" },
+        cookies: { ...a.cookies, [MARK]: mark },
+        payload: "{}",
+      });
+      expect(started.statusCode).toBe(200);
+      expect(started.cookies.find((c) => c.name === MARK)?.value).toBe(mark);
+      const mine = await loud.inject({ method: "GET", url: "/v1/orgs/mine", remoteAddress: nextIp(), cookies: { ...a.cookies, [MARK]: mark } });
+      expect(mine.statusCode).toBe(200);
+      const lines = written.slice(before);
+      expect(lines).toContain(`/v1/orgs/${gymId}/trial`);
+      expect(lines).toContain("/v1/orgs/mine");
+    } finally {
+      await loud.close();
+    }
     expect(marksSeen.length).toBeGreaterThan(5);
-    expect(written.length).toBeGreaterThan(0);
     for (const mark of marksSeen) {
       expect(written).not.toContain(mark);
       expect(written).not.toContain(sha256(mark));

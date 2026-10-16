@@ -29,20 +29,9 @@ import {
 import * as service from "./service.js";
 import { argon2idHasher } from "./service.js";
 import { createLogOnlyEmailSender } from "./email.js";
-import { ACCESS_COOKIE, OAUTH_STATE_COOKIE, REFRESH_COOKIE, mintOpaqueToken } from "./tokens.js";
-
-/** GAP-2 (DECISIONS 2026-07-11, closes Part IV #6): cross-site prod (Vercel ↔
- *  Hetzner) needs sameSite 'none' + secure; dev/test localhost is same-site. */
-function cookieOptions(config: AppConfig, maxAgeSeconds: number, path: string) {
-  const prod = config.NODE_ENV === "production";
-  return {
-    httpOnly: true,
-    secure: prod,
-    sameSite: prod ? ("none" as const) : ("lax" as const),
-    path,
-    maxAge: maxAgeSeconds,
-  };
-}
+// `cookieOptions` (GAP-2: sameSite 'none' + secure in production) lives in tokens.ts, so the
+// session cookies and the trial mark are set by one rule (round one of 2c, L4).
+import { ACCESS_COOKIE, OAUTH_STATE_COOKIE, REFRESH_COOKIE, cookieOptions, mintOpaqueToken } from "./tokens.js";
 
 // The long-lived refresh token travels ONLY to the auth endpoints, not on
 // every API request (T3 2026-07-11; DECISIONS).

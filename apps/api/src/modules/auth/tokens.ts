@@ -18,10 +18,11 @@ const accessClaimsSchema = z.object({
   fid: z.string().uuid().optional(),
 });
 
-/** The browser's free-trial mark (orgs routes, Stage 3 item 2c), set as the session cookies
- *  are (`auth/routes.ts`): cross-site in production needs sameSite 'none' + secure (GAP-2,
- *  DECISIONS 2026-07-11); dev/test localhost is same-site. httpOnly, so no page script reads it. */
-export function trialMarkCookieOptions(config: AppConfig, maxAgeSeconds: number, path: string) {
+/** GAP-2 (DECISIONS 2026-07-11, closes Part IV #6): cross-site prod (Vercel ↔
+ *  Hetzner) needs sameSite 'none' + secure; dev/test localhost is same-site.
+ *  The session cookies (`auth/routes.ts`) and the browser's free-trial mark (orgs
+ *  routes, Stage 3 item 2c) are both set with these. httpOnly: no page script reads them. */
+export function cookieOptions(config: Pick<AppConfig, "NODE_ENV">, maxAgeSeconds: number, path: string) {
   const prod = config.NODE_ENV === "production";
   return {
     httpOnly: true,

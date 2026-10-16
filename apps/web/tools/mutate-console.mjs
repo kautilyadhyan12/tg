@@ -1648,8 +1648,8 @@ const MUTANTS = [
     suite: PROMPT_SUITE,
     why: "SEALED OUT ON A GUESS, AND THIS IS THE ONE THE SCHEMA WARNS ABOUT IN AS MANY WORDS: `ownerTrialUsed` null means \"we could not ask\" — a non-staff caller, or an api older than this bundle — and treating it as \"has not trialled\" draws an unclosable prompt over an owner during any web-newer-than-api deploy",
     expect: 'never said whether the trial is spent',
-    from: "  if (org?.ownerTrialUsed === false) return 'trial';",
-    to: "  if (org?.ownerTrialUsed !== true) return 'trial';",
+    from: "  if (org?.ownerTrialUsed === false) return org?.deviceTrialUsed === true ? 'subscribe' : 'trial';",
+    to: "  if (org?.ownerTrialUsed !== true) return org?.deviceTrialUsed === true ? 'subscribe' : 'trial';",
   },
   {
     id: 'C98',
