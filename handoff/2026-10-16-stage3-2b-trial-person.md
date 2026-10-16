@@ -8,3 +8,6 @@
 - **Click-through:** passed by Kd, 2026-10-16.
 - **Round one** (`reviews/2b-2-findings.md`): two Highs, both run by the reviewer: an unconfirmed spelling could read whether a real person had had a trial; a manager was offered a code sign-in that could not confirm the owner. Two Lows: `sify.com` was on the copied list; the migration named a missing test. All fixed in 9493ec8b: an unconfirmed owner is only their own account; a manager gets `owner_email_not_confirmed` with no button; `sify.com` kept in `throwaway.ts`; tests for the leak, the manager and two spellings pressing at once, each red with its bug put back.
 - **Re-check** (`reviews/2b-4-verdict.md`): all closed, nothing Critical or High open; the round ends.
+- **Merged** 2026-10-16 on Kd's "merge" (PR #293).
+
+**The ROADMAP line as first written:** 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.

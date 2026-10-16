@@ -386,7 +386,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 1f. [x] **The two extra passes' fixes** — merged 2026-10-01 (PR #149).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
-   - 2b. [ ] Same person, new spelling: Gmail dots and `+tags` collapse for trial counting; throwaway email domains refused at the Manage door.
+   - 2b. [x] **One free trial per person, however the email is spelled** — merged 2026-10-16 (PR #293).
    - 2c. [ ] One device, one trial, whatever the email: a browser mark on the web, the stores on the phone.
    - 2d. [ ] The trial belongs to the gym: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one.
    - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist) and the second-trial code for a real owner of two gyms.
