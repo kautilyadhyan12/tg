@@ -51,6 +51,8 @@ export interface OrgWords {
   readonly coach: string;
   /** The role as a label on a button or a badge: *"Coach"*. */
   readonly coachCap: string;
+  /** The third role, more than one: "trainers", "teachers". */
+  readonly coaches: string;
   /** What the create screen calls the name box. */
   readonly nameLabel: string;
   /** An example name, shown greyed in that box. */
@@ -67,6 +69,7 @@ const GYM: OrgWords = {
   people: "members",
   peopleCap: "Members",
   coach: "trainer",
+  coaches: "trainers",
   coachCap: "Trainer",
   nameLabel: "Gym name",
   placeholder: "Iron House",
@@ -82,6 +85,7 @@ const STUDIO: OrgWords = {
   people: "clients",
   peopleCap: "Clients",
   coach: "coach",
+  coaches: "coaches",
   coachCap: "Coach",
   nameLabel: "Studio name",
   placeholder: "Flow Studio",
@@ -100,6 +104,7 @@ const CROSSFIT_BOX: OrgWords = {
   people: "athletes",
   peopleCap: "Athletes",
   coach: "coach",
+  coaches: "coaches",
   coachCap: "Coach",
   nameLabel: "Box name",
   placeholder: "Steel City CrossFit",
@@ -115,6 +120,7 @@ const YOGA_STUDIO: OrgWords = {
   people: "students",
   peopleCap: "Students",
   coach: "teacher",
+  coaches: "teachers",
   coachCap: "Teacher",
   nameLabel: "Studio name",
   placeholder: "Lotus Yoga",
@@ -130,6 +136,7 @@ const PILATES_STUDIO: OrgWords = {
   people: "clients",
   peopleCap: "Clients",
   coach: "instructor",
+  coaches: "instructors",
   coachCap: "Instructor",
   nameLabel: "Studio name",
   placeholder: "Core Pilates",
@@ -147,6 +154,7 @@ const PERSONAL_TRAINER: OrgWords = {
   people: "clients",
   peopleCap: "Clients",
   coach: "coach",
+  coaches: "coaches",
   coachCap: "Coach",
   nameLabel: "Your business name",
   placeholder: "Coach Priya",
@@ -167,6 +175,7 @@ const CLINIC: OrgWords = {
   people: "clients",
   peopleCap: "Clients",
   coach: "clinician",
+  coaches: "clinicians",
   coachCap: "Clinician",
   nameLabel: "Clinic name",
   placeholder: "Green Lane Practice",

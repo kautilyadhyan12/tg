@@ -8,6 +8,7 @@ import {
   bookingSettingsProblem,
   bookingSettingsSavedLine,
   bookingSettingsSummary,
+  bookingRulesLine,
   bookingsAsked,
   endingChangeLine,
   endingConfirmLabel,
@@ -198,5 +199,14 @@ describe('the four booking settings', () => {
     );
     // With personal training's two not read, they are left out, never made up.
     expect(bookingSettingsSummary(START)).toBe('Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20');
+  });
+});
+
+describe('the booking rules line, in each kind of business’s own words', () => {
+  it('says who can book: members at a gym, students at a yoga studio, athletes at a CrossFit box', () => {
+    const rules = { opensDays: 7, freeCancelMinutes: 120 };
+    expect(bookingRulesLine(rules, 'gym')).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
+    expect(bookingRulesLine(rules, 'yoga_studio')).toBe('Students can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
+    expect(bookingRulesLine(rules, 'crossfit_box')).toBe('Athletes can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
   });
 });

@@ -38,7 +38,7 @@ export default function BookingRulesLine({ org, orgSlug, privileges, of = 'class
   }
   return (
     <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="booking-rules-line">
-      {settings !== null ? <span>{bookingRulesLine(settings)}</span> : null}
+      {settings !== null ? <span>{bookingRulesLine(settings, org.orgType)}</span> : null}
       <PlaceLink to={placeTo(orgSlug, 'bookingRules')} className="c-lk c-w6">
         Change booking rules
       </PlaceLink>
