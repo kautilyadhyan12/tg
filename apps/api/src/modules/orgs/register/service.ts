@@ -481,6 +481,8 @@ export async function refundSale(deps: RegisterDeps, userId: string, gymId: stri
       throw new OrgsError(409, "refund_too_much", saleRefundTooMuchWords(formatMinor(outcome.leftMinor, outcome.currency), outcome.leftMinor === 0));
     case "too_many_back":
       throw new OrgsError(409, "restock_too_many", saleRestockTooManyWords(outcome.leftCount));
+    case "not_counted":
+      throw new OrgsError(409, "restock_not_counted", SALE_REFUND_WORDS.not_counted);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale refund outcome: ${JSON.stringify(never)}`);

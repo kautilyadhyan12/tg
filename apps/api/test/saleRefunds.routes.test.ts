@@ -349,6 +349,33 @@ d("refund a sale at the desk (real Postgres)", () => {
   );
 
   it(
+    "Void sale and Refund sale pressed at one instant: never a voided sale with a refund standing, and the shelf ends where it began",
+    async () => {
+      const owner = await makeUser("cross-owner", "Sam Owner");
+      const priya = await makeUser("cross-priya", "Priya Desk");
+      const gymId = await makeGym(owner, "Sr Cross Gym");
+      await manager(gymId, priya);
+      const water = await addProduct(gymId, owner.cookies, "Water", 250, 100);
+      for (let i = 0; i < 6; i++) {
+        const sale = await sell(gymId, owner.cookies, water.id, 2, 500);
+        const [voided, refunded] = await Promise.all([
+          post(`${register(gymId)}/sales/${sale}/void`, { reason: "mistake" }, owner.cookies),
+          refund(gymId, sale, priya.cookies, 500, 2),
+        ]);
+        // One of the two wins; the other is refused.
+        expect([voided.statusCode, refunded.statusCode].filter((c) => c === 409)).toHaveLength(1);
+        const [row] = await sql<{ undone: boolean; standing: number }[]>`
+          SELECT s.undone_at IS NOT NULL AS undone,
+                 (SELECT count(*)::int FROM gym_sale_refunds r WHERE r.sale_id = s.id AND r.undone_at IS NULL) AS standing
+          FROM gym_sales s WHERE s.id = ${sale}`;
+        expect(row?.undone === true && row.standing > 0).toBe(false);
+        expect(await stockOf(water.id)).toBe(100);
+      }
+    },
+    T,
+  );
+
+  it(
     "its receipt: the refund has its own number and names the sale's; the sale's receipt names its refunds; a voided refund reads voided",
     async () => {
       const owner = await makeUser("receipt-owner", "Sam Owner");
@@ -413,12 +440,22 @@ d("refund a sale at the desk (real Postgres)", () => {
       if (row === undefined) throw new Error("no refund");
       expect(answer(await post(`${refundsUrl(gymId, b)}/${row.id}/void`, { reason: "mistake" }, owner.cookies))).toEqual([404, "refund_not_found"]);
       expect(answer(await post(`${refundsUrl(gymId, a)}/${row.id}/void`, { reason: "oops" }, owner.cookies))[0]).toBe(400);
+      // Next door cannot void it, through their own gym or ours (round one, test gap 1).
+      const nextDoor = await makeUser("asks-nextdoor", "Nora Next");
+      const theirGym = await makeGym(nextDoor, "Sr Asks Next Door");
+      expect(answer(await post(`${register(theirGym)}/sales/${a}/refunds/${row.id}/void`, { reason: "mistake" }, nextDoor.cookies))).toEqual([404, "refund_not_found"]);
+      expect(answer(await post(`${refundsUrl(gymId, a)}/${row.id}/void`, { reason: "mistake" }, nextDoor.cookies))[0]).toBe(404);
+      // A product whose stock is not counted puts nothing back on the shelf (L2).
+      expect(answer(await refund(gymId, b, owner.cookies, 100, 1))).toEqual([409, "restock_not_counted"]);
+      expect(await refundRows(b)).toEqual([]);
       expect(answer(await post(`${refundsUrl(gymId, a)}/${row.id}/void`, { reason: "mistake" }, pricer.cookies))[0]).toBe(403);
       expect((await refundRows(a))[0]?.voided).toBe(false);
 
       // The day picked: not one to come, and only a day.
       expect(answer(await get(`${register(gymId)}?day=2026-10-17`, owner.cookies))).toEqual([409, "day_ahead"]);
       expect(answer(await get(`${register(gymId)}?day=yesterday`, owner.cookies))[0]).toBe(400);
+      // A day with a day's shape that does not exist, or before the calendar's first (L1).
+      for (const day of ["2026-02-31", "2026-13-01", "0000-01-01", "1999-12-31"]) expect(answer(await get(`${register(gymId)}?day=${day}`, owner.cookies))[0]).toBe(400);
       expect(answer(await get(`${register(gymId)}?day=2026-10-15&extra=1`, owner.cookies))[0]).toBe(400);
       // Staff who only change prices are sent no sale, on any day.
       expect((await sellPage(gymId, pricer.cookies, "2026-10-16")).sales).toEqual([]);

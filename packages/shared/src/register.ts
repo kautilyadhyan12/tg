@@ -11,6 +11,7 @@ import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
 import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
+import { isRealDay } from "./discounts.js";
 import { saleRefundSchema } from "./saleRefunds.js";
 import { VISIBLE_TEXT } from "./visibleText.js";
 
@@ -377,7 +378,9 @@ export const sellPageResponseSchema = z
 export type SellPageResponse = z.infer<typeof sellPageResponseSchema>;
 
 /** The Sell page for an earlier day: its sales and payments, to find one to refund (18p). */
-export const sellPageQuerySchema = z.object({ day: daySchema.optional() }).strict();
+export const sellPageQuerySchema = z
+  .object({ day: z.string().refine((d) => isRealDay(d) && d >= "2000-01-01", "not_a_day").optional() })
+  .strict();
 
 /** `requestKey` is made by the screen once a form: the same key twice is one sale.
  *  `totalMinor` is the total the screen showed: a sale that would now come to anything

@@ -74,20 +74,23 @@ export type SaleRefundCheck =
   /** More than is left of what was paid. */
   | { ok: false; reason: "too_much"; leftMinor: number }
   /** More back on the shelf than were sold and not yet put back. */
-  | { ok: false; reason: "too_many_back"; leftCount: number };
+  | { ok: false; reason: "too_many_back"; leftCount: number }
+  /** Some back on the shelf of a sale whose product's stock was not counted. */
+  | { ok: false; reason: "not_counted" };
 
 /** ONE REFUND OF A SALE. Together the refunds that stand never give back more than the sale
  *  took, and never put more back on the shelf than it sold, so a gym's takings never read
  *  less than nothing for a sale and its stock count never grows from one. `refundedMinor` and
  *  `restocked` are what the refunds that stand already hold. */
 export function refundSale(
-  sale: { totalMinor: number; quantity: number; voided: boolean; refundedMinor: number; restocked: number },
+  sale: { totalMinor: number; quantity: number; voided: boolean; refundedMinor: number; restocked: number; stockCounted: boolean },
   ask: { amountMinor: number; restock: number },
 ): SaleRefundCheck {
   if (sale.voided) return { ok: false, reason: "voided" };
   if (!Number.isSafeInteger(ask.amountMinor) || ask.amountMinor <= 0) return { ok: false, reason: "not_an_amount" };
   const leftMinor = Math.max(0, sale.totalMinor - sale.refundedMinor);
   if (ask.amountMinor > leftMinor) return { ok: false, reason: "too_much", leftMinor };
+  if (!sale.stockCounted && ask.restock !== 0) return { ok: false, reason: "not_counted" };
   const leftCount = Math.max(0, sale.quantity - sale.restocked);
   if (!Number.isSafeInteger(ask.restock) || ask.restock < 0 || ask.restock > leftCount) return { ok: false, reason: "too_many_back", leftCount };
   return { ok: true, refundedInFull: sale.refundedMinor + ask.amountMinor >= sale.totalMinor };
@@ -100,6 +103,7 @@ export const SALE_REFUND_WORDS = {
   request_reused: "That form was already used for another refund. Nothing was noted: start again.",
   has_refund: "Money was given back for this sale. Void that refund first, then void the sale.",
   day_ahead: "That day hasn't come yet. Pick today or an earlier day.",
+  not_counted: "This product's stock isn't counted, so nothing goes back on the shelf. Nothing was noted.",
 } as const;
 
 /** More than is left of the sale: what is left, in its own money's words, made by the caller. */

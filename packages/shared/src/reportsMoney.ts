@@ -337,7 +337,7 @@ export function moneyReportFrom(facts: MoneyReportFacts): MoneyReport {
     recurring: { monthlyMinor, memberships },
     thisMonth: monthSums(thisMonth),
     inPeriod: { ...inPeriod, netMinor: net(inPeriod) },
-    yearEarlier: collectedEarlier(facts, { ...inPeriod, refundedMinor: inPeriodMemberRefunded }, earlier),
+    yearEarlier: collectedEarlier(facts, { ...inPeriod, refundedMinor: inPeriodMemberRefunded }, inPeriod.refundedMinor - inPeriodMemberRefunded, earlier),
     owed: {
       minor: facts.owed.currentMinor,
       people: facts.owed.currentPeople,
@@ -384,13 +384,15 @@ function collectedEarlier(
   facts: MoneyReportFacts,
   /** `refundedMinor` here is the membership refunds alone: they are history of payments. */
   now: { paidMinor: number; soldMinor: number; refundedMinor: number },
+  /** The period's refunds of sales (18p): sales money, set beside the sales' own history. */
+  nowSaleRefunded: number,
   earlier: { from: string; to: string },
 ): CollectedEarlier {
   const paidCovered = coversFrom(facts.firstPaidOn, earlier.from);
   const soldCovered = coversFrom(facts.firstSoldOn, earlier.from);
   const paidHere = now.paidMinor > 0 || now.refundedMinor > 0;
   if (facts.firstPaidOn !== null && !paidCovered && paidHere) return { state: "no_history", ...earlier, since: facts.firstPaidOn };
-  if (facts.firstSoldOn !== null && !soldCovered && now.soldMinor > 0) return { state: "no_sales_history", ...earlier, since: facts.firstSoldOn };
+  if (facts.firstSoldOn !== null && !soldCovered && (now.soldMinor > 0 || nowSaleRefunded > 0)) return { state: "no_sales_history", ...earlier, since: facts.firstSoldOn };
   // Nothing in the period, and neither part covers those days.
   if (!paidCovered && !soldCovered) {
     return facts.firstPaidOn !== null

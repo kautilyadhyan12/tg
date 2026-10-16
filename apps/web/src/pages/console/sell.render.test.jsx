@@ -801,7 +801,7 @@ describe('refund a sale (18p)', () => {
     await waitFor(() => expect(svc.refundSale).toHaveBeenCalledTimes(1));
     expect(svc.refundSale).toHaveBeenCalledWith('g1', 's1', { requestKey: expect.any(String), amountMinor: 215, method: 'cash', reason: 'returned', restock: 1 });
     const after = (await within(today()).findAllByTestId('takings-row'))[0];
-    expect((await within(after).findByRole('status')).textContent).toBe('Refund noted: $2.15 back for 2 × Water. 1 went back on the shelf. Its receipt is #42.');
+    expect((await within(after).findByRole('status')).textContent).toBe('Refund noted: $2.15 back on the sale of 2 × Water. 1 went back on the shelf. Its receipt is #42.');
     expect(within(after).getByText('Part refunded')).toBeTruthy();
     expect(svc.get).toHaveBeenCalledTimes(2);
   });

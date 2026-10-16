@@ -360,6 +360,9 @@ describe("products sold at the desk (21b-ii)", () => {
     const then = { ...THEN, saleRefundedMinor: 300 };
     const both = { firstPaidOn: "2025-01-10", firstSoldOn: "2025-06-01", months: PAID_NOW, sales: SOLD_NOW };
     expect(figures({ period: "3m", anySale: true, yearEarlier: then, ...both }).yearEarlier).toEqual({ state: "ok", ...SPAN, paidMinor: 10000, soldMinor: 2500, refundedMinor: 800, netMinor: 11700 });
+    // Only a refund of an earlier sale now, sales records new: no figure, as for a sale now (round one, L5).
+    const refundOnly = { ...both, firstSoldOn: "2025-09-01", sales: [{ month: "2026-09", soldMinor: 0, periodSoldMinor: 0, refundedMinor: 400, periodRefundedMinor: 400 }] };
+    expect(figures({ period: "3m", anySale: true, yearEarlier: then, ...refundOnly }).yearEarlier).toEqual({ state: "no_sales_history", ...SPAN, since: "2025-09-01" });
     // Sales began inside the span with none now: they, and their refunds, are left out of both sides.
     const salesNew = { ...both, firstSoldOn: "2025-09-01", sales: [] };
     expect(figures({ period: "3m", anySale: true, yearEarlier: then, ...salesNew }).yearEarlier).toEqual({ state: "ok", ...SPAN, paidMinor: 10000, soldMinor: 0, refundedMinor: 500, netMinor: 9500 });

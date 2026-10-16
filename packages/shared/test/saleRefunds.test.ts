@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { refundSale, refundSaleRequestSchema, type SaleRefundCheck } from "../src/saleRefunds.js";
 
 // A sale of 3 at ₹50.00 each, ₹150.00 in all.
-const sale = { totalMinor: 15000, quantity: 3, voided: false, refundedMinor: 0, restocked: 0 };
+const sale = { totalMinor: 15000, quantity: 3, voided: false, refundedMinor: 0, restocked: 0, stockCounted: true };
 
 describe("refundSale: never more back than the sale took, nor more on the shelf than it sold", () => {
   const cases: [string, Partial<typeof sale>, { amountMinor: number; restock: number }, SaleRefundCheck][] = [
@@ -24,6 +24,8 @@ describe("refundSale: never more back than the sale took, nor more on the shelf 
     ["the last one back after two went back", { refundedMinor: 10000, restocked: 2 }, { amountMinor: 5000, restock: 1 }, { ok: true, refundedInFull: true }],
     ["less than none back on the shelf", {}, { amountMinor: 100, restock: -1 }, { ok: false, reason: "too_many_back", leftCount: 3 }],
     ["part of one back on the shelf", {}, { amountMinor: 100, restock: 1.5 }, { ok: false, reason: "too_many_back", leftCount: 3 }],
+    ["one back on the shelf of a product whose stock is not counted", { stockCounted: false }, { amountMinor: 5000, restock: 1 }, { ok: false, reason: "not_counted" }],
+    ["money back with none on the shelf, stock not counted", { stockCounted: false }, { amountMinor: 5000, restock: 0 }, { ok: true, refundedInFull: false }],
     ["money back with none on the shelf once all are back", { refundedMinor: 5000, restocked: 3 }, { amountMinor: 10000, restock: 0 }, { ok: true, refundedInFull: true }],
   ];
   it.each(cases)("%s", (_name, over, ask, want) => {

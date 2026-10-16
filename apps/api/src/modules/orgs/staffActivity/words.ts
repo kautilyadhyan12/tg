@@ -214,7 +214,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   },
   "org.sale_refund_undone": (s) => {
     const amount = money(s, "amountMinor");
-    return `Undid a refund${amount === null ? "" : ` of ${amount}`} for a product sale`;
+    return `Undid a refund${amount === null ? "" : ` of ${amount}`} for ${text(s, "product") ?? "a product"}`;
   },
   "org.tax_rate_created": (s) => `Added the tax rate${quoted(text(s, "name"))}`,
   "org.tax_rate_updated": (s) => `Changed the tax rate${quoted(text(s, "after") ?? text(s, "before"))}`,

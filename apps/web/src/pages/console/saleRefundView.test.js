@@ -67,8 +67,8 @@ describe('the Refund sale box', () => {
     const draft = { ...saleRefundDraft(sale(), () => 'k1'), amount: '2.50', reason: 'faulty', restock: '1' };
     expect(saleRefundBody(sale(), draft).body).toEqual({ requestKey: 'k1', amountMinor: 250, method: 'card_at_desk', reason: 'faulty', restock: 1 });
     expect(saleRefundBody(sale({ stockCounted: false }), draft).body).toEqual({ requestKey: 'k1', amountMinor: 250, method: 'card_at_desk', reason: 'faulty', restock: 0 });
-    expect(saleRefundedWords(sale(), { amountMinor: 250, restock: 1 }, 44)).toBe('Refund noted: $2.50 back for 3 × Water. 1 went back on the shelf. Its receipt is #44.');
-    expect(saleRefundedWords(sale(), { amountMinor: 750, restock: 0 }, 45)).toBe('Refund noted: $7.50 back for 3 × Water. Its receipt is #45.');
+    expect(saleRefundedWords(sale(), { amountMinor: 250, restock: 1 }, 44)).toBe('Refund noted: $2.50 back on the sale of 3 × Water. 1 went back on the shelf. Its receipt is #44.');
+    expect(saleRefundedWords(sale(), { amountMinor: 750, restock: 0 }, 45)).toBe('Refund noted: $7.50 back on the sale of 3 × Water. Its receipt is #45.');
   });
 });
 

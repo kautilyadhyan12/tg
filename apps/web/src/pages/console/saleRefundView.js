@@ -88,7 +88,7 @@ export function saleRefundBody(sale, draft) {
 /** Said in the sale's own place once the refund is noted. */
 export function saleRefundedWords(sale, body, receiptNumber) {
   const shelf = body.restock > 0 ? ` ${String(body.restock)} went back on the shelf.` : '';
-  return `Refund noted: ${formatMinor(body.amountMinor, sale.currency)} back for ${String(sale.quantity)} × ${sale.itemName}.${shelf} Its receipt is #${String(receiptNumber)}.`;
+  return `Refund noted: ${formatMinor(body.amountMinor, sale.currency)} back on the sale of ${String(sale.quantity)} × ${sale.itemName}.${shelf} Its receipt is #${String(receiptNumber)}.`;
 }
 
 /** A sale's refunds, those that stand and those voided, in the order they were noted. */

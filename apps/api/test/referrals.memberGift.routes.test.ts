@@ -497,6 +497,22 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         // The offer's money comes off products here (20e-ii-b-ii-b), so Sell fills it in.
         await setOffer(gymA, owner.cookies, TEN_POUNDS, "products");
         try {
+        // A sale the gift came off, refunded in full: the gift stays used, as on a membership
+        // payment refunded (18p's ruling).
+        const ida = await memberWithBill("ida", "Ida Bloom", true);
+        const leadOfIda = await invited(ida.code, "Ned Pike", "ned.pike@example.com");
+        const ned = await added(gymA.org.id, owner.cookies, { fullName: "Ned Pike", email: "ned.pike@example.com", leadId: leadOfIda });
+        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: ned, method: "cash", totalMinor: 2500 }, owner.cookies)).statusCode).toBe(201);
+        const idasGift = (await memberships(gymA.org.id, ida.entryId, owner.cookies)).memberGiftAtSell;
+        if (idasGift === null) throw new Error("no waiting gift");
+        const idasSale = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: ida.entryId, method: "cash", totalMinor: 1500, memberGift: { id: idasGift.id, offMinor: 1000 } }, owner.cookies);
+        expect(idasSale.statusCode, idasSale.body).toBe(201);
+        const idasSaleId = (JSON.parse(idasSale.body) as { saleId: string }).saleId;
+        const back = await post(`/v1/orgs/${gymA.org.id}/register/sales/${idasSaleId}/refunds`, { requestKey: nextForm(), amountMinor: 1500, method: "cash", reason: "faulty", restock: 0 }, owner.cookies);
+        expect(back.statusCode, back.body).toBe(201);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === ned)).toMatchObject([{ taken_back_why: null, used_sale_id: idasSaleId, used_off_minor: 1000 }]);
+        expect((await memberships(gymA.org.id, ida.entryId, owner.cookies)).memberGiftAtSell).toBeNull();
+
         const kim = await memberWithBill("kim", "Kim Ford", true);
         const leadId = await invited(kim.code, "Ian Webb", "ian.webb@example.com");
         const ian = await added(gymA.org.id, owner.cookies, { fullName: "Ian Webb", email: "ian.webb@example.com", leadId });
@@ -812,7 +828,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const part = await post(refunds, { requestKey: nextForm(), amountMinor: 1000, method: "cash", reason: "charged_too_much", restock: 0 }, owner.cookies);
         expect(part.statusCode, part.body).toBe(201);
         expect(await nells()).toEqual([null]);
-        const rest = await post(refunds, { requestKey: nextForm(), amountMinor: 1500, method: "cash", reason: "returned", restock: 1 }, owner.cookies);
+        const rest = await post(refunds, { requestKey: nextForm(), amountMinor: 1500, method: "cash", reason: "returned", restock: 0 }, owner.cookies);
         expect(rest.statusCode, rest.body).toBe(201);
         expect(await nells()).toEqual(["refunded"]);
         expect((await memberships(gymA.org.id, viv.entryId, owner.cookies)).memberGift).toBeNull();

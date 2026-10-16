@@ -109,7 +109,7 @@ describe("refund a sale from the person's page (18p)", () => {
     svc.purchases.mockResolvedValue({ sales: [sale({ canUndo: false, canRefund: false, refundedMinor: 431, refunds: [] })], notShown: 0 });
     fireEvent.click(within(form).getByRole("button", { name: "Note refund" }));
     await waitFor(() => expect(svc.refundSale).toHaveBeenCalledWith("g1", "s1", { requestKey: expect.any(String), amountMinor: 431, method: "cash", reason: "charged_too_much", restock: 0 }));
-    expect((await within(box).findByRole("status")).textContent).toBe("Refund noted: $4.31 back for 2 × Water. Its receipt is #9.");
+    expect((await within(box).findByRole("status")).textContent).toBe("Refund noted: $4.31 back on the sale of 2 × Water. Its receipt is #9.");
     await waitFor(() => expect(svc.purchases).toHaveBeenCalledTimes(2));
     expect(await within(box).findByText("Refunded")).toBeTruthy();
   });

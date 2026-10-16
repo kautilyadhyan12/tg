@@ -733,7 +733,8 @@ export type RefundSaleOutcome =
   | { kind: "voided" }
   | { kind: "request_reused" }
   | { kind: "too_much"; leftMinor: number; currency: string }
-  | { kind: "too_many_back"; leftCount: number };
+  | { kind: "too_many_back"; leftCount: number }
+  | { kind: "not_counted" };
 
 export interface RefundSaleInput {
   gymId: string;
@@ -783,12 +784,13 @@ export async function refundSale(sql: Sql, input: RefundSaleInput): Promise<Refu
       FROM gym_sales s WHERE s.gym_id = ${input.gymId} AND s.id = ${input.saleId}`;
     if (row === undefined) return { kind: "sale_not_found" };
     const check = refundSaleCheck(
-      { totalMinor: row.total_minor, quantity: row.quantity, voided: row.undone, refundedMinor: row.refunded, restocked: row.restocked },
+      { totalMinor: row.total_minor, quantity: row.quantity, voided: row.undone, refundedMinor: row.refunded, restocked: row.restocked, stockCounted: row.stock_counted },
       { amountMinor: input.amountMinor, restock: input.restock },
     );
     if (!check.ok) {
       if (check.reason === "too_much") return { kind: "too_much", leftMinor: check.leftMinor, currency: row.currency };
       if (check.reason === "too_many_back") return { kind: "too_many_back", leftCount: check.leftCount };
+      if (check.reason === "not_counted") return { kind: "not_counted" };
       // The request's own schema lets no amount through that is not one: what is left is a voided sale.
       return { kind: "voided" };
     }
@@ -846,10 +848,10 @@ export async function voidSaleRefund(
   return await sql.begin(async (tx): Promise<VoidSaleRefundOutcome> => {
     await lockOrgRow(tx, input.gymId);
     const [row] = await tx<
-      { undone: boolean; amount_minor: number; currency: string; restocked: number; product_id: string; stock_counted: boolean; entry_id: string | null; sale_undone: boolean }[]
+      { undone: boolean; amount_minor: number; currency: string; restocked: number; product_id: string; item_name: string; stock_counted: boolean; entry_id: string | null; sale_undone: boolean }[]
     >`
       SELECT r.undone_at IS NOT NULL AS undone, r.amount_minor, r.currency, r.restocked,
-             s.product_id, s.stock_counted, s.entry_id, s.undone_at IS NOT NULL AS sale_undone
+             s.product_id, s.item_name, s.stock_counted, s.entry_id, s.undone_at IS NOT NULL AS sale_undone
       FROM gym_sale_refunds r
       JOIN gym_sales s ON s.gym_id = r.gym_id AND s.id = r.sale_id
       WHERE r.gym_id = ${input.gymId} AND r.id = ${input.refundId} AND r.sale_id = ${input.saleId}`;
@@ -873,7 +875,7 @@ export async function voidSaleRefund(
       action: "org.sale_refund_undone",
       targetType: "gym_sale_refund",
       targetId: input.refundId,
-      meta: { saleId: input.saleId, amountMinor: String(row.amount_minor), currency: row.currency, restocked: String(row.restocked), reason: input.reason },
+      meta: { saleId: input.saleId, product: row.item_name, amountMinor: String(row.amount_minor), currency: row.currency, restocked: String(row.restocked), reason: input.reason },
     });
     return { kind: "ok" };
   });
