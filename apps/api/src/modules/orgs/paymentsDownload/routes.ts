@@ -17,7 +17,7 @@ const paramsSchema = z.object({ gymId: z.string().uuid() }).strict();
 
 /** The parsed value, or null once a 400 has been sent: issue paths and codes only, never
  *  the offending value. */
-function parsed<S extends z.ZodTypeAny>(schema: S, value: unknown, req: FastifyRequest, reply: FastifyReply): z.infer<S> | null {
+function parsed<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown, req: FastifyRequest, reply: FastifyReply): T | null {
   const out = schema.safeParse(value);
   if (out.success) return out.data;
   const message = out.error.issues

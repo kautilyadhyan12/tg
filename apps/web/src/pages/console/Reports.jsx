@@ -10,6 +10,7 @@ import { placeFor } from './consolePlaces';
 import { canManageStaff } from './staffView';
 import { LeadBars, MembersTrend, MonthBars, StayBar } from './ReportCharts';
 import { DayLine, HourGrid } from './ReportAttendanceCharts';
+import PaymentsDownload from './PaymentsDownload';
 import {
   WEEK_ROWS_SHOWN,
   classRows,
@@ -595,6 +596,7 @@ function MoneyAsked({ org, orgSlug, period }) {
         <h2 className="c-h2">Money</h2>
         {missing === null ? <p className="c-s14 c-t2">{moneyLine(mine.report)}</p> : null}
       </div>
+      {missing === null ? <PaymentsDownload key={`${gymId} ${period}`} gymId={gymId} period={mine.report.period} today={mine.report.today} /> : null}
       {missing !== null ? (
         <Missing line={missing.line} to={placeFor(orgSlug, viewerPrivileges(org), missing.place)} button={missing.button} ask={missing.ask} />
       ) : (

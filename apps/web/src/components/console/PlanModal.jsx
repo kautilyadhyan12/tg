@@ -6,6 +6,7 @@ import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi
 import { applyStartedTrial, refreshConsoleOrgsAfterChange } from '../../pages/console/consoleOrgs';
 import { planPriceText, planPromptFor, planSeatLabel, pricesNote } from '../../pages/console/billingView';
 import ListDownload from './ListDownload';
+import PaymentsDownloadAll from './PaymentsDownloadAll';
 import ManagePaymentButton from './ManagePaymentButton';
 import RazorpayPlanActions from './RazorpayPlanActions';
 import { usePaddleSubscribe } from './usePaddleSubscribe';
@@ -510,8 +511,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
           </p>
         )}
 
-        {/* A gym on no plan may still take a copy of its own list (Stage 4 item 14). */}
+        {/* A gym on no plan may still take a copy of its own list (Stage 4 item 14) and its payments (18n). */}
         {showing === 'trial' ? null : <ListDownload org={org} />}
+        {showing === 'trial' ? null : <PaymentsDownloadAll org={org} />}
 
         {/* ── The two ways out, and neither is a way past ─────────────────── */}
         <div

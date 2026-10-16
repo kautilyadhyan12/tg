@@ -303,14 +303,14 @@ d("download payments (real Postgres)", () => {
       expect(sheetOf(sheets, "Totals")).toEqual([
         ["Totals", "USD"],
         ["Days", "15 Oct 2026"],
-        ["Lines", 4],
+        ["Transactions", 4],
         [null, null],
         ["Membership payments", 54.13],
         ["Product sales", 5],
         ["Refunds", -10],
         ["Collected", 49.13],
         [null, null],
-        ["Voided lines are listed and count 0. Collected is the same as Collected on Reports for these days.", null],
+        ["Voided transactions are listed and count 0. Collected is the same as Collected on Reports for these days.", null],
       ]);
       // And next door's own file is its own.
       const next = sheetOf((await download(theirGym, nextDoor.cookies)).sheets, "Payments");

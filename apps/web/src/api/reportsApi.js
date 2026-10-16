@@ -1,5 +1,6 @@
-import { attendanceReportResponseSchema, membersReportResponseSchema, moneyReportResponseSchema } from '@app/shared';
+import { attendanceReportResponseSchema, membersReportResponseSchema, moneyReportResponseSchema, paymentsDownloadSummarySchema } from '@app/shared';
 import authApi from './authApi';
+import { downloadName } from './orgsApi';
 
 // THE CONSOLE'S REPORTS PAGE (spec Part 3 §16.5; ROADMAP 21a-i, 21a-ii, 21b-i, 21d-i): for staff holding
 // `reports.read`. The server refuses anyone else whatever a screen shows. The answer is read
@@ -32,5 +33,17 @@ export const reportsService = {
     const parsed = moneyReportResponseSchema.safeParse(res.data);
     if (!parsed.success) throw contractError('the money report');
     return parsed.data.report;
+  },
+  /** What the payments file holds for the days (18n): its lines and totals. No days is every day. */
+  paymentsSummary: async (gymId, days = {}) => {
+    const res = await authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments-download`, { params: days });
+    const parsed = paymentsDownloadSummarySchema.safeParse(res.data);
+    if (!parsed.success) throw contractError('the payments file');
+    return parsed.data;
+  },
+  /** The payments file itself, an Excel workbook, and the name the server gave it. */
+  downloadPayments: async (gymId, days = {}) => {
+    const res = await authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments-download.xlsx`, days, { responseType: 'blob' });
+    return { blob: res.data, filename: downloadName(res.headers?.['content-disposition']) };
   },
 };

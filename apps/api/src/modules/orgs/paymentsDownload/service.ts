@@ -63,19 +63,16 @@ function totalsSheet(days: Days, lines: number, totals: readonly PaymentsTotals[
   const money = (pick: (t: PaymentsTotals) => number, bold = false): Cell[] => totals.map((t) => ({ kind: "money", minor: pick(t), bold }));
   const rows: Cell[][] = [
     [{ kind: "text", value: "Days" }, { kind: "text", value: days.from === days.to ? dayWords(days.from) : coversWords(days.from, days.to) }],
-    [{ kind: "text", value: "Lines" }, { kind: "int", value: lines }],
+    [{ kind: "text", value: "Transactions" }, { kind: "int", value: lines }],
     [],
     [{ kind: "text", value: "Membership payments" }, ...money((t) => t.paidMinor)],
     [{ kind: "text", value: "Product sales" }, ...money((t) => t.soldMinor)],
     [{ kind: "text", value: "Refunds" }, ...money((t) => -t.refundedMinor)],
     [{ kind: "text", value: "Collected", bold: true }, ...money((t) => t.netMinor, true)],
     [],
-    [{ kind: "text", value: "Voided lines are listed and count 0. Collected is the same as Collected on Reports for these days." }],
+    [{ kind: "text", value: "Voided transactions are listed and count 0. Collected is the same as Collected on Reports for these days." }],
   ];
-  async function* one(): AsyncGenerator<Cell[][]> {
-    yield rows;
-  }
-  return { name: "Totals", widths: [24, ...totals.map(() => 18)], header: ["Totals", ...totals.map((t) => t.currency)], filter: false, rows: one() };
+  return { name: "Totals", widths: [24, ...totals.map(() => 18)], header: ["Totals", ...totals.map((t) => t.currency)], filter: false, rows: [rows] };
 }
 
 export interface PaymentsFile {

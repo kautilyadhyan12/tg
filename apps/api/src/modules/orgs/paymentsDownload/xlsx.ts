@@ -25,7 +25,7 @@ export interface Sheet {
   header: readonly string[];
   filter: boolean;
   /** The rows under it, a slice at a time. */
-  rows: AsyncIterable<Cell[][]>;
+  rows: AsyncIterable<Cell[][]> | Iterable<Cell[][]>;
 }
 
 // Styles, by their place in cellXfs below.
@@ -150,7 +150,7 @@ const u32 = (n: number): Buffer => {
 /** Flags: sizes after the data (bit 3), names in UTF-8 (bit 11). */
 const FLAGS = 0x0808;
 
-async function* zipEntry(name: string, parts: AsyncIterable<string>, offset: number, written: Written[]): AsyncGenerator<Buffer> {
+async function* zipEntry(name: string, parts: AsyncIterable<string> | Iterable<string>, offset: number, written: Written[]): AsyncGenerator<Buffer> {
   const entry: Written = { name: Buffer.from(name, "utf8"), crc: 0, size: 0, packed: 0, offset };
   const header = Buffer.concat([u32(0x04034b50), u16(20), u16(FLAGS), u16(8), u16(0), u16(DOS_DATE), u32(0), u32(0), u32(0), u16(entry.name.length), u16(0), entry.name]);
   yield header;
@@ -185,15 +185,11 @@ function centralDirectory(written: readonly Written[], offset: number): Buffer {
   return Buffer.concat([directory, end]);
 }
 
-async function* once(text: string): AsyncGenerator<string> {
-  yield text;
-}
-
 /** The workbook, a slice at a time: its sheets in order, the first one open. */
 export async function* xlsxFile(sheets: readonly Sheet[]): AsyncGenerator<Buffer> {
   const written: Written[] = [];
   let offset = 0;
-  async function* put(name: string, parts: AsyncIterable<string>): AsyncGenerator<Buffer> {
+  async function* put(name: string, parts: AsyncIterable<string> | Iterable<string>): AsyncGenerator<Buffer> {
     for await (const b of zipEntry(name, parts, offset, written)) {
       offset += b.length;
       yield b;
@@ -202,22 +198,22 @@ export async function* xlsxFile(sheets: readonly Sheet[]): AsyncGenerator<Buffer
   const sheetsXml = sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${String(i + 1)}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("");
   yield* put(
     "[Content_Types].xml",
-    once(
+    [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
         `${sheetsXml}</Types>`,
-    ),
+    ],
   );
   yield* put(
     "_rels/.rels",
-    once(
+    [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-    ),
+    ],
   );
-  yield* put("xl/styles.xml", once(STYLES_XML));
+  yield* put("xl/styles.xml", [STYLES_XML]);
   const lastRows: number[] = [];
   for (const [i, sheet] of sheets.entries()) {
     yield* put(`xl/worksheets/sheet${String(i + 1)}.xml`, sheetXml(sheet, (last) => (lastRows[i] = last)));
@@ -225,10 +221,10 @@ export async function* xlsxFile(sheets: readonly Sheet[]): AsyncGenerator<Buffer
   const rels = sheets.map((_, i) => `<Relationship Id="rId${String(i + 1)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${String(i + 1)}.xml"/>`).join("");
   yield* put(
     "xl/_rels/workbook.xml.rels",
-    once(
+    [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         `${rels}<Relationship Id="rId${String(sheets.length + 1)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
-    ),
+    ],
   );
   // The filter's range is named once its last row is known, as Excel itself writes it.
   const names = sheets
@@ -239,10 +235,10 @@ export async function* xlsxFile(sheets: readonly Sheet[]): AsyncGenerator<Buffer
   const list = sheets.map((sheet, i) => `<sheet name="${xmlText(sheet.name)}" sheetId="${String(i + 1)}" r:id="rId${String(i + 1)}"/>`).join("");
   yield* put(
     "xl/workbook.xml",
-    once(
+    [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
         `<bookViews><workbookView activeTab="0"/></bookViews><sheets>${list}</sheets>${names === "" ? "" : `<definedNames>${names}</definedNames>`}</workbook>`,
-    ),
+    ],
   );
   yield centralDirectory(written, offset);
 }
