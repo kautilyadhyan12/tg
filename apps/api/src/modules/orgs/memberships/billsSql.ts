@@ -12,12 +12,16 @@ import {
   memberBillStatusSchema,
   memberPaymentByHandSchema,
   memberPaymentMethodSchema,
+  paymentVoidReasonSchema,
   refundReasonSchema,
+  refundVoidReasonSchema,
   type BillCancelReason,
   type MemberBillStatus,
   type MemberPaymentByHand,
   type MemberPaymentMethod,
+  type PaymentVoidReason,
   type RefundReason,
+  type RefundVoidReason,
   type TaxApplied,
 } from "@app/shared";
 
@@ -201,6 +205,108 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     reason: refundReasonSchema.parse(r.reason),
     by: r.by,
     receiptNumber: r.receipt_number,
+  }));
+}
+
+/** Who voided a row, on the gym's own day, and why: null for a reason before 0126. */
+export interface Voided<R> {
+  reason: R | null;
+  on: string;
+  by: string | null;
+}
+
+export type VoidedPaymentRow = Omit<PaymentRow, "refundedMinor"> & { voided: Voided<PaymentVoidReason> };
+export type VoidedRefundRow = RefundRow & { voided: Voided<RefundVoidReason> };
+
+/** The payments staff voided on the memberships named (18o), in the order they were
+ *  recorded: for the person's page alone, which shows them struck through. Nothing that
+ *  counts money reads this. */
+export async function voidedPaymentsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<VoidedPaymentRow[]> {
+  if (membershipIds.length === 0) return [];
+  const rows = await sql<
+    {
+      id: string;
+      bill_id: string;
+      held_membership_id: string;
+      period_index: number;
+      seq: string;
+      amount_minor: number;
+      method: string;
+      paid_on: string;
+      by: string | null;
+      receipt_number: number;
+      void_reason: string | null;
+      voided_on: string;
+      voided_by: string | null;
+    }[]
+  >`
+    SELECT p.id, p.bill_id, b.held_membership_id, b.period_index, p.seq::text AS seq, p.amount_minor, p.method,
+           p.paid_on::text AS paid_on, u.display_name AS by, p.receipt_number, p.void_reason,
+           (p.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by
+    FROM gym_member_payments p
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    JOIN gyms g ON g.id = p.gym_id
+    LEFT JOIN users u ON u.id = p.recorded_by
+    LEFT JOIN users v ON v.id = p.undone_by
+    WHERE p.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND p.undone_at IS NOT NULL
+    ORDER BY p.seq`;
+  return rows.map((r) => ({
+    id: r.id,
+    billId: r.bill_id,
+    membershipId: r.held_membership_id,
+    periodIndex: r.period_index,
+    seq: Number(r.seq),
+    amountMinor: r.amount_minor,
+    method: memberPaymentMethodSchema.parse(r.method),
+    paidOn: r.paid_on,
+    by: r.by,
+    receiptNumber: r.receipt_number,
+    voided: { reason: r.void_reason === null ? null : paymentVoidReasonSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by },
+  }));
+}
+
+/** The refunds staff voided on the memberships named (18o), against any of their payments,
+ *  in the order they were noted: for the person's page alone, as above. */
+export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<VoidedRefundRow[]> {
+  if (membershipIds.length === 0) return [];
+  const rows = await sql<
+    {
+      id: string;
+      payment_id: string;
+      held_membership_id: string;
+      amount_minor: number;
+      method: string;
+      refunded_on: string;
+      reason: string;
+      by: string | null;
+      receipt_number: number;
+      void_reason: string | null;
+      voided_on: string;
+      voided_by: string | null;
+    }[]
+  >`
+    SELECT r.id, r.payment_id, b.held_membership_id, r.amount_minor, r.method, r.refunded_on::text AS refunded_on, r.reason,
+           u.display_name AS by, r.receipt_number, r.void_reason,
+           (r.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on, v.display_name AS voided_by
+    FROM gym_member_refunds r
+    JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    JOIN gyms g ON g.id = r.gym_id
+    LEFT JOIN users u ON u.id = r.recorded_by
+    LEFT JOIN users v ON v.id = r.undone_by
+    WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND r.undone_at IS NOT NULL
+    ORDER BY r.created_at, r.id`;
+  return rows.map((r) => ({
+    id: r.id,
+    paymentId: r.payment_id,
+    membershipId: r.held_membership_id,
+    amountMinor: r.amount_minor,
+    method: memberPaymentByHandSchema.parse(r.method),
+    refundedOn: r.refunded_on,
+    reason: refundReasonSchema.parse(r.reason),
+    by: r.by,
+    receiptNumber: r.receipt_number,
+    voided: { reason: r.void_reason === null ? null : refundVoidReasonSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by },
   }));
 }
 

@@ -222,7 +222,7 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
             Usage limit
           </label>
           <input id={`${id}-uses`} className="c-input" style={{ maxWidth: 160 }} inputMode="numeric" value={draft.maxUses} disabled={busy} onChange={(e) => set({ maxUses: e.target.value })} placeholder="100" />
-          <p className="c-s13 c-t3 m-0">Each sale or membership made with the discount counts as one use. A product sale you undo gives its use back.</p>
+          <p className="c-s13 c-t3 m-0">Each sale or membership made with the discount counts as one use. A product sale you void gives its use back.</p>
           {problems.maxUses ? <p className="c-s14 m-0" style={BAD}>{problems.maxUses}</p> : null}
         </div>
       ) : null}

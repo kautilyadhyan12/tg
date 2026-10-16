@@ -141,11 +141,14 @@ describe("badge evaluator (badges.py port)", () => {
     expect(evaluate(criteria, { avg_form_last5: 95, total_workouts: 5 })).toBe(true);
   });
 
-  it("missing stats read 0 — meal/coach/photo badges stay unearned until their modules land", () => {
+  it("missing stats read 0 — meal/photo badges stay unearned until their modules land", () => {
     const codes = earnedCodes({ total_workouts: 1, current_streak: 1 });
     expect(codes).toContain("first_workout");
     expect(codes).not.toContain("first_meal");
-    expect(codes).not.toContain("first_chat");
+  });
+
+  it("the coach's first-chat badge is gone with the coach (ROADMAP 9b)", () => {
+    expect(earnedCodes({ coach_messages: 1 })).toEqual([]);
   });
 
   it("thresholds match badges.py:270-298", () => {

@@ -27,6 +27,7 @@ const sale = (over = {}) => ({
   by: 'Sam Desk',
   person: { entryId: 'e1', name: 'Maya Patel' },
   undone: false,
+  voided: null,
   canUndo: true,
   receiptNumber: 7,
   ...over,
@@ -52,12 +53,15 @@ afterEach(() => {
 });
 
 describe('bought at the desk', () => {
-  it('lists what they bought, an undone sale marked, and opens Sell with them already picked', async () => {
-    svc.purchases.mockResolvedValue({ sales: [sale(), sale({ id: 's0', quantity: 1, totalMinor: 215, taxMinor: 16, undone: true })], notShown: 3 });
+  it('lists what they bought, a voided sale marked with who and why, and opens Sell with them already picked', async () => {
+    svc.purchases.mockResolvedValue({
+      sales: [sale(), sale({ id: 's0', quantity: 1, totalMinor: 215, taxMinor: 16, undone: true, voided: { reason: 'returned', on: '2026-10-12', by: 'Priya Desk' } })],
+      notShown: 3,
+    });
     open();
     const box = await screen.findByRole('region', { name: 'Bought at the desk' });
     expect(svc.purchases).toHaveBeenCalledWith('g1', 'e1');
-    expect(within(box).getAllByTestId('purchase-row').map((r) => r.textContent)).toEqual(['2 × Water12 Oct 2026 · Cash · $0.33 tax$4.31View receipt', '1 × Water12 Oct 2026 · Cash · $0.16 tax · Undone$2.15View receipt']);
+    expect(within(box).getAllByTestId('purchase-row').map((r) => r.textContent)).toEqual(['2 × Water12 Oct 2026 · Cash · $0.33 tax$4.31View receipt', '1 × Water12 Oct 2026 · Cash · $0.16 taxVoided 12 October 2026 by Priya Desk · Brought back$2.15View receipt']);
     expect(within(box).getByText('Showing the newest 2.')).toBeTruthy();
     fireEvent.click(within(box).getByRole('link', { name: 'Sell a product to Maya Patel' }));
     expect(screen.getByText('The Sell page for {"sellTo":{"entryId":"e1","name":"Maya Patel","past":false}}')).toBeTruthy();

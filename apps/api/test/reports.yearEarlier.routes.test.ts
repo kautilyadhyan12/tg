@@ -253,7 +253,7 @@ d("Reports, a year earlier: every figure counts the days the answer names (real 
       await heldService.noteMemberRefund(on("2025-09-24"), owner.userId, gym, sam, once.id, once.paymentId, { requestKey: nextKey(), amountMinor: 20, method: "cash", reason: "other" });
       // A payment inside every span that was taken back the next day is not money.
       const mistake = await pay(gym, owner, payer, held.id, NEXT_DOOR_DAY, 77700);
-      await heldService.undoMemberPayment(on("2025-10-02"), owner.userId, gym, payer, held.id, mistake);
+      await heldService.voidMemberPayment(on("2025-10-02"), owner.userId, gym, payer, held.id, mistake, { reason: "mistake" });
       // A payment inside every span with 3.00 refunded, the payment then taken back: neither is money.
       const refundedThenUndone = await pay(gym, owner, payer, held.id, "2025-10-05", 33300);
       // Written straight in: the app refunds only a bill paid in full, and this one is not.

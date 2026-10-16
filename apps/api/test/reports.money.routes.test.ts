@@ -259,7 +259,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
       await pay(gym, owner, ana, "2026-07-10", 1, 4999);
       // Gus's payment is taken back the next day; he cancels, and staff cancel his bill.
       const gus = await give(gym, owner, "Gus Taken Back", gold, "2026-07-15", true);
-      const gusAfter = first(await heldService.undoMemberPayment(on("2026-07-16"), owner.userId, gym, gus.entryId, gus.id, gus.paymentId ?? ""));
+      const gusAfter = first(await heldService.voidMemberPayment(on("2026-07-16"), owner.userId, gym, gus.entryId, gus.id, gus.paymentId ?? "", { reason: "mistake" }));
       await heldService.moveHeldMembership(on("2026-07-20"), owner.userId, gym, gus.entryId, gus.id, { type: "cancel", when: "today" });
       await heldService.cancelMemberBill(on("2026-07-21"), owner.userId, gym, gus.entryId, gus.id, idOf(gusAfter.billing.bills[0]), { reason: "mistake" });
       // August. Hal is taken off the list, still owing.
@@ -298,7 +298,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
           reason: "paid_twice",
         }),
       );
-      await heldService.undoMemberRefund(on("2026-10-03"), owner.userId, gym, ben.entryId, ben.id, ben.paymentId ?? "", idOf(benNoted.billing.bills[0]?.payments[0]?.refunds[0]));
+      await heldService.voidMemberRefund(on("2026-10-03"), owner.userId, gym, ben.entryId, ben.id, ben.paymentId ?? "", idOf(benNoted.billing.bills[0]?.payments[0]?.refunds[0]), { reason: "mistake" });
       await run(gym, "2026-10-10");
       await pay(gym, owner, ana, "2026-10-10", 4, 4999);
       await give(gym, owner, "Cal Weekly", weekly, "2026-10-14", true);
@@ -416,7 +416,7 @@ d("Reports, money: whose figures, who reads them, and what counts as money (real
         lifetimeValue: { state: "nobody_left" },
       });
 
-      await heldService.undoMemberPayment(on("2026-10-16"), owner.userId, gym, amy.entryId, amy.id, idOf(paid.billing.bills[0]?.payments[0]));
+      await heldService.voidMemberPayment(on("2026-10-16"), owner.userId, gym, amy.entryId, amy.id, idOf(paid.billing.bills[0]?.payments[0]), { reason: "mistake" });
       expect((await read(gym, owner)).state).toBe("no_payments");
     },
     TEST_TIMEOUT_MS,

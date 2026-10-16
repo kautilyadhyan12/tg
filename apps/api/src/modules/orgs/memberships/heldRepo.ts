@@ -76,9 +76,13 @@ import {
   refundsFor,
   setBillStatus,
   voidBills,
+  voidedPaymentsFor,
+  voidedRefundsFor,
   type BillRow,
   type PaymentRow,
   type RefundRow,
+  type VoidedPaymentRow,
+  type VoidedRefundRow,
 } from "./billsSql.js";
 import type { HasBookings, MembershipEndConfirmed } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
@@ -264,6 +268,9 @@ export interface HeldList {
   bills: BillRow[];
   payments: PaymentRow[];
   refunds: RefundRow[];
+  /** The payments and refunds staff voided (18o): shown struck through, counted in nothing. */
+  voidedPayments: VoidedPaymentRow[];
+  voidedRefunds: VoidedRefundRow[];
   overdueAfterDays: number;
   /** Whether the gym's prices hold its tax (18b-iii), for the Add form's total. */
   taxIncluded: boolean;
@@ -333,6 +340,8 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       bills: await billsFor(tx, gymId, ids),
       payments: await paymentsFor(tx, gymId, ids),
       refunds: await refundsFor(tx, gymId, ids),
+      voidedPayments: await voidedPaymentsFor(tx, gymId, ids),
+      voidedRefunds: await voidedRefundsFor(tx, gymId, ids),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
     };

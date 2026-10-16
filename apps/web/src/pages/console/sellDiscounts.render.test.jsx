@@ -11,7 +11,7 @@ const svc = {
   get: vi.fn(),
   findPeople: vi.fn(),
   sell: vi.fn(),
-  undoSale: vi.fn(),
+  voidSale: vi.fn(),
   saveTaxMode: vi.fn(),
   addTaxRate: vi.fn(),
   changeTaxRate: vi.fn(),

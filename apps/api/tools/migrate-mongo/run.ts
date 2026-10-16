@@ -4,8 +4,9 @@
 // Env (parsed once, R2.3 spirit): MONGO_URI, DATABASE_URL. Standalone tool —
 // its own entrypoint, not the API boot path. Secrets never printed.
 // Stages run in FK order: users → workouts(+sets) → gamification recompute →
-// meals → body(+legacy profile weight) → meal gamification → coach(threads+messages)
-// → runs → saved_routes (run_schedules deferred, GAP-G).
+// meals → body(+legacy profile weight) → meal gamification → runs
+// → saved_routes (run_schedules deferred, GAP-G). The coach's chats are not
+// copied: the coach and its tables were deleted (ROADMAP 9b).
 // PRECONDITION for --apply: target DB seeded (exercises + achievements are FK
 // targets) — `tsx src/db/seed.ts` (idempotent).
 import { z } from "zod";
@@ -15,9 +16,8 @@ import { insertUser, transformUser } from "./collections/users.js";
 import { insertWorkout, loadExerciseIds, transformWorkout } from "./collections/workouts.js";
 import { insertMeal, transformMeal } from "./collections/meals.js";
 import { insertBody, recordLegacyProfileWeights, transformBody } from "./collections/body.js";
-import { insertCoach, transformCoach } from "./collections/coach.js";
 import { insertRoute, insertRun, transformRoute, transformRun } from "./collections/running.js";
-import { verifyBcrypt, verifyCoachRunning, verifyNutrition, verifyParity, verifyUsersCount, verifyWorkouts } from "./verify.js";
+import { verifyBcrypt, verifyRunning, verifyNutrition, verifyParity, verifyUsersCount, verifyWorkouts } from "./verify.js";
 import { onMealLogged, onWorkoutSynced } from "../../src/modules/gamification/service.js";
 
 const envSchema = z.object({
@@ -216,38 +216,6 @@ async function main(): Promise<void> {
       if (errors > 0) process.exitCode = 1;
     }
 
-    // ── coach (threads + messages) ───────────────────────────────────────
-    {
-      let read = 0;
-      let transformed = 0;
-      let skipped = 0;
-      let threadsInserted = 0;
-      let messagesInserted = 0;
-      let errors = 0;
-      await mongo.each("coach_conversations", async (doc) => {
-        read += 1;
-        const d = transformCoach(doc);
-        if (d === null) {
-          skipped += 1;
-          console.warn(`skip unmigratable conversation (mongo _id ${String(doc["_id"])})`);
-          return;
-        }
-        transformed += 1;
-        if (apply) {
-          try {
-            const o = await insertCoach(sql, d);
-            threadsInserted += o.threadInserted;
-            messagesInserted += o.messagesInserted;
-          } catch (e) {
-            errors += 1;
-            console.error(`insert failed (mongo _id ${String(doc["_id"])}): ${e instanceof Error ? e.message : String(e)}`);
-          }
-        }
-      });
-      console.log(`coach: read=${String(read)} transformed=${String(transformed)} skipped=${String(skipped)} threads_inserted=${String(threadsInserted)} messages_inserted=${String(messagesInserted)} errors=${String(errors)} mode=${apply ? "apply" : "dry-run"}`);
-      if (errors > 0) process.exitCode = 1;
-    }
-
     // ── runs ─────────────────────────────────────────────────────────────
     {
       let read = 0;
@@ -315,7 +283,7 @@ async function main(): Promise<void> {
       const bcrypt = await verifyBcrypt(mongo, sql);
       const w = await verifyWorkouts(mongo, sql, idBySlug);
       const n = await verifyNutrition(mongo, sql);
-      const cr = await verifyCoachRunning(mongo, sql);
+      const cr = await verifyRunning(mongo, sql);
       const p = await verifyParity(mongo, sql, idBySlug);
       console.log(`VERIFY users count: mongo=${String(count.mongo)} pg=${String(count.pg)} ok=${String(count.ok)}`);
       console.log(`VERIFY bcrypt: sampled=${String(bcrypt.sampled)} intact=${String(bcrypt.intact)} ok=${String(bcrypt.ok)}`);
@@ -324,8 +292,6 @@ async function main(): Promise<void> {
       console.log(`VERIFY streaks: users=${String(w.streaks.mongo)} pg=${String(w.streaks.pg)} ok=${String(w.streaks.ok)}`);
       console.log(`VERIFY meals: migratable=${String(n.meals.mongo)} pg=${String(n.meals.pg)} ok=${String(n.meals.ok)}`);
       console.log(`VERIFY body: migratable=${String(n.body.mongo)} pg=${String(n.body.pg)} ok=${String(n.body.ok)}`);
-      console.log(`VERIFY coach_threads: migratable=${String(cr.threads.mongo)} pg=${String(cr.threads.pg)} ok=${String(cr.threads.ok)}`);
-      console.log(`VERIFY coach_messages: expected=${String(cr.messages.mongo)} pg=${String(cr.messages.pg)} ok=${String(cr.messages.ok)}`);
       console.log(`VERIFY runs: migratable=${String(cr.runs.mongo)} pg=${String(cr.runs.pg)} ok=${String(cr.runs.ok)}`);
       console.log(`VERIFY saved_routes: migratable=${String(cr.routes.mongo)} pg=${String(cr.routes.pg)} ok=${String(cr.routes.ok)}`);
       // §7 deep gate: per-user parity + UUIDv5 cross-ref (workout→user).

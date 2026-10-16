@@ -311,7 +311,7 @@ d("Reports, the period: every figure counts the days the answer names (real Post
       }
       // A payment inside every period that was taken back the next day is not money.
       const mistake = await pay(gym, owner, payer, held.id, "2026-10-05", 12800);
-      await heldService.undoMemberPayment(on("2026-10-06"), owner.userId, gym, payer, held.id, mistake);
+      await heldService.voidMemberPayment(on("2026-10-06"), owner.userId, gym, payer, held.id, mistake, { reason: "mistake" });
 
       // Next door: one joiner, one visit and one payment, inside every period.
       await listed(next, "Their First", "2025-01-10");

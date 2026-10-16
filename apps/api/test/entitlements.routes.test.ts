@@ -99,11 +99,11 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     await sql`DELETE FROM users WHERE email LIKE 'p24-%@example.com'`;
 
     app = await buildApp(loadConfig(baseEnv), { redis });
-    // Scratch metered routes: coach/meal features land in P2.5/P2.6 — the
-    // middleware contract is proven here on stand-in handlers (R3.3 order).
+    // Scratch metered routes — the middleware contract is proven here on
+    // stand-in handlers (R3.3 order).
     api().get(
-      "/test/quota/coach",
-      { preHandler: [api().authenticate, requireQuota("coach", { sql, redis })] },
+      "/test/quota/route",
+      { preHandler: [api().authenticate, requireQuota("route_gen", { sql, redis })] },
       async (_req, reply) => reply.status(200).send({ ok: true }),
     );
     api().get(
@@ -130,33 +130,34 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     expect(res.statusCode).toBe(200);
     const me = res.json<{ entitlements: Record<string, unknown>; source: string }>();
     expect(me.source).toBe("free");
-    expect(me.entitlements["coach"]).toEqual({ window: "month", limit: 5 });
+    expect(me.entitlements["route_gen"]).toEqual({ window: "month", limit: 2 });
+    expect(me.entitlements["coach"]).toBeUndefined();
     expect(me.entitlements["history_days"]).toBe(90);
     expect(me.entitlements["share_watermark"]).toBe(true);
   });
 
-  it("quota middleware: free coach = 5/month then a friendly 429 with resetsAt (quotas.py port)", { timeout: 30_000 }, async () => {
-    for (let i = 0; i < 5; i++) {
-      expect((await inject({ url: "/test/quota/coach", access: cookieA })).statusCode).toBe(200);
+  it("quota middleware: free routes = 2/month then a friendly 429 with resetsAt (quotas.py port)", { timeout: 30_000 }, async () => {
+    for (let i = 0; i < 2; i++) {
+      expect((await inject({ url: "/test/quota/route", access: cookieA })).statusCode).toBe(200);
     }
-    const blocked = await inject({ url: "/test/quota/coach", access: cookieA });
+    const blocked = await inject({ url: "/test/quota/route", access: cookieA });
     expect(blocked.statusCode).toBe(429);
     const body = blocked.json<{ error: string; resetsAt: string }>();
     expect(body.error).toBe("quota_exceeded");
     expect(new Date(body.resetsAt).getTime()).toBeGreaterThan(Date.now());
-    // A refused try takes nothing: however many are refused, the five used stay the count.
-    expect((await inject({ url: "/test/quota/coach", access: cookieA })).statusCode).toBe(429);
-    expect(await redis.get(quotaKey("coach", userA, "month", new Date()))).toBe("5");
+    // A refused try takes nothing: however many are refused, the two used stay the count.
+    expect((await inject({ url: "/test/quota/route", access: cookieA })).statusCode).toBe(429);
+    expect(await redis.get(quotaKey("route_gen", userA, "month", new Date()))).toBe("2");
   });
 
-  it("Redis down: coach fails OPEN, meal_scan fails CLOSED 503 (quotas.py:7-11 verbatim)", { timeout: 30_000 }, async () => {
+  it("Redis down: meal_scan and route_gen fail CLOSED 503 (quotas.py:7-11 verbatim)", { timeout: 30_000 }, async () => {
     redis.down = true;
     try {
-      // Even the over-limit coach user passes — cannot meter, cheap feature.
-      expect((await inject({ url: "/test/quota/coach", access: cookieA })).statusCode).toBe(200);
-      const meal = await inject({ url: "/test/quota/meal", access: cookieA });
-      expect(meal.statusCode).toBe(503);
-      expect(meal.json<{ error: string }>().error).toBe("quota_unavailable");
+      for (const url of ["/test/quota/meal", "/test/quota/route"]) {
+        const res = await inject({ url, access: cookieA });
+        expect({ url, status: res.statusCode }).toEqual({ url, status: 503 });
+        expect(res.json<{ error: string }>().error).toBe("quota_unavailable");
+      }
     } finally {
       redis.down = false;
     }
@@ -171,7 +172,7 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     const fresh = await inject({ url: "/v1/entitlements/me", access: cookieA });
     const me = fresh.json<{ entitlements: Record<string, unknown>; source: string }>();
     expect(me.source).toBe("own_subscription");
-    expect(me.entitlements["coach"]).toEqual({ window: "day", limit: 30 });
+    expect(me.entitlements["route_gen"]).toEqual({ window: "day", limit: 2 });
     expect(me.entitlements["history_days"]).toBe(-1);
   });
 
@@ -194,10 +195,10 @@ d("entitlements + quotas + history gate (real Postgres)", () => {
     const res = await inject({ url: "/v1/entitlements/me", access: cookieB });
     const me = res.json<{ entitlements: Record<string, unknown>; source: string }>();
     expect(me.source).toBe("gym_membership");
-    expect(me.entitlements["coach"]).toEqual({ window: "day", limit: 30 }); // Pro block (v1 §9.2)
+    expect(me.entitlements["route_gen"]).toEqual({ window: "day", limit: 2 }); // Pro block (v1 §9.2)
     // THE ONE NUMBER THAT SEPARATES THE GYM-MEMBER BLOCK FROM THE PAID ONE, and
     // until round 2 nothing outside the seed test observed it. **Every other
-    // assertion here — `source`, `coach`, `history_days` — is IDENTICAL in both
+    // assertion here — `source`, `route_gen`, `history_days` — is IDENTICAL in both
     // blocks**, so all of them stay green if 7 becomes 20, which is what round-1
     // claimed this test now covered and round-2 measured false.
     // 7/day is Kd's (RULINGS 2026-09-15; 5 before, :17366 §1, whose §2 measures

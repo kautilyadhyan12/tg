@@ -7,13 +7,13 @@
 // user (R3.2).
 //
 // THE OWNERSHIP TRAP, inherited from the delete side and mirrored here.
-// Three tables cannot be safely read by a `user_id` column:
-//   · meal_log_corrections and coach_messages have NO user_id at all;
+// Two tables cannot be safely read by a `user_id` column:
+//   · meal_log_corrections has NO user_id at all;
 //   · workout_sets HAS one, but it is a DENORMALISED copy — the Day-14 card's
 //     round-3 review proved on Neon that trusting it deletes another user's
 //     row (a set can sit in user B's workout while carrying user A's id).
 // Read by that column and this endpoint hands one user another user's rows —
-// the same bug, pointed the other way. All three therefore join to their
+// the same bug, pointed the other way. Both therefore join to their
 // PARENT and filter on the parent's owner, which is ownership-true by
 // construction. The cross-tenant test exists to pin exactly this.
 import type { Sql } from "postgres";
@@ -60,16 +60,6 @@ export const EXPORT_READERS: Record<ExportedTable, (sql: Sql, userId: string) =>
 
   user_dishware: (sql, u) =>
     sql<Row[]>`SELECT * FROM user_dishware WHERE user_id = ${u} ORDER BY created_at, id`,
-
-  coach_threads: (sql, u) =>
-    sql<Row[]>`SELECT * FROM coach_threads WHERE user_id = ${u} ORDER BY created_at, id`,
-
-  // No user_id — owned through its thread.
-  coach_messages: (sql, u) => sql<Row[]>`
-    SELECT m.* FROM coach_messages m
-    JOIN coach_threads t ON t.id = m.thread_id
-    WHERE t.user_id = ${u}
-    ORDER BY m.created_at, m.id`,
 
   runs: (sql, u) => sql<Row[]>`SELECT * FROM runs WHERE user_id = ${u} ORDER BY started_at, id`,
 

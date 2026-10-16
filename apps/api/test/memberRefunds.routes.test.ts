@@ -632,9 +632,9 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       const payment = m.billing.bills[0]?.payments[0]?.id ?? "";
       expect(m.billing.undo).toEqual({ kind: "payment", paymentId: payment });
       const refundUrl = oneUrl(gymId, person, m.id, `payments/${payment}/refunds`);
-      const undoPayment = () => post(oneUrl(gymId, person, m.id, `payments/${payment}/undo`), {}, owner.cookies);
+      const undoPayment = () => post(oneUrl(gymId, person, m.id, `payments/${payment}/void`), { reason: "mistake" }, owner.cookies);
 
-      // A part refund: Undo last payment is gone from the page and refused by the server.
+      // A part refund: Void payment is gone from the page and refused by the server.
       const noted = first(list(await post(refundUrl, { requestKey: nextKey(), amountMinor: 1000, method: "bank_transfer", reason: "other" }, owner.cookies)));
       const refund = noted.billing.bills[0]?.payments[0]?.refunds[0]?.id ?? "";
       expect(noted.billing.undo).toBeNull();
@@ -644,13 +644,13 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       // Asked for through somebody else's membership, that refund is not found and stands.
       const elsewhere = await addPerson(gymId, owner.cookies, "Omar Aziz");
       const theirMembership = first(await given(gymId, elsewhere, owner.cookies, { typeId: gold, startsOn: today, paid: true }));
-      const wrongDoor = await post(oneUrl(gymId, elsewhere, theirMembership.id, `payments/${payment}/refunds/${refund}/undo`), {}, owner.cookies);
+      const wrongDoor = await post(oneUrl(gymId, elsewhere, theirMembership.id, `payments/${payment}/refunds/${refund}/void`), { reason: "mistake" }, owner.cookies);
       expect(answer(wrongDoor)).toEqual([404, "member_payment_not_found"]);
       expect(await refundsOf(gymId)).toMatchObject([{ id: refund, undone: false }]);
 
       // The refund is taken back, twice at once: marked once, kept, and the page as it was.
-      const backUrl = `${refundUrl}/${refund}/undo`;
-      const backs = await Promise.all([post(backUrl, {}, owner.cookies), post(backUrl, {}, owner.cookies)]);
+      const backUrl = `${refundUrl}/${refund}/void`;
+      const backs = await Promise.all([post(backUrl, { reason: "mistake" }, owner.cookies), post(backUrl, { reason: "mistake" }, owner.cookies)]);
       expect(backs.map((r) => r.statusCode)).toEqual([200, 200]);
       expect(await refundsOf(gymId)).toMatchObject([{ id: refund, undone: true, undone_by: owner.userId }]);
       expect((await auditOf(gymId)).filter((a) => a.action === "org.member_refund_undone")).toHaveLength(1);
@@ -665,9 +665,9 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       const full = first(list(await post(refundUrl, { requestKey: nextKey(), amountMinor: 4999, method: "cash", reason: "paid_twice" }, owner.cookies)));
       expect(full.billing.bills[0]?.state).toBe("refunded");
       const fullId = full.billing.bills[0]?.payments[0]?.refunds[0]?.id ?? "";
-      expect(first(list(await post(`${refundUrl}/${fullId}/undo`, {}, owner.cookies))).billing.bills[0]?.state).toBe("paid");
+      expect(first(list(await post(`${refundUrl}/${fullId}/void`, { reason: "mistake" }, owner.cookies))).billing.bills[0]?.state).toBe("paid");
       // A refund that is not this payment's is not found.
-      expect(answer(await post(`${refundUrl}/${NO_SUCH}/undo`, {}, owner.cookies))).toEqual([404, "member_refund_not_found"]);
+      expect(answer(await post(`${refundUrl}/${NO_SUCH}/void`, { reason: "mistake" }, owner.cookies))).toEqual([404, "member_refund_not_found"]);
 
       // With no refund standing the payment is taken back as before; the bill is then owed,
       // and an owed bill's payment has nothing to refund.
@@ -729,7 +729,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       ] as const) {
         expect((await post(refundUrl, refundBody(), cookies)).statusCode, `refund: ${who}`).toBe(status);
         expect((await post(cancelUrl, cancelBody, cookies)).statusCode, `cancel: ${who}`).toBe(status);
-        expect((await post(`${refundUrl}/${NO_SUCH}/undo`, {}, cookies)).statusCode, `refund undo: ${who}`).toBe(status);
+        expect((await post(`${refundUrl}/${NO_SUCH}/void`, { reason: "mistake" }, cookies)).statusCode, `refund undo: ${who}`).toBe(status);
       }
       // No refusal names anybody.
       const refused = await post(refundUrl, refundBody(), stranger.cookies);
@@ -807,7 +807,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
   );
 
   it(
-    "a refund and Undo last payment for one payment at one instant: one of the two lands, never a refund left on a payment taken back",
+    "a refund and Void payment for one payment at one instant: one of the two lands, never a refund left on a payment voided",
     async () => {
       const owner = await makeUser("race-owner");
       const manager = await makeUser("race-manager");
@@ -823,7 +823,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
         const payment = m.billing.bills[0]?.payments[0]?.id ?? "";
         const [refund, undo] = await Promise.all([
           post(oneUrl(gymId, person, m.id, `payments/${payment}/refunds`), { requestKey: nextKey(), amountMinor: 4999, method: "cash", reason: "other" }, owner.cookies),
-          post(oneUrl(gymId, person, m.id, `payments/${payment}/undo`), {}, manager.cookies),
+          post(oneUrl(gymId, person, m.id, `payments/${payment}/void`), { reason: "mistake" }, manager.cookies),
         ]);
         expect([refund.statusCode, undo.statusCode].sort(), `pair ${String(i)}`).not.toEqual([200, 200]);
         expect([refund.statusCode, undo.statusCode], `pair ${String(i)}`).toContain(200);
@@ -896,7 +896,7 @@ d("a gym's notebook: a bill cancelled, a refund noted, and the list's Payment (r
       // Each asks for something that is not there: nothing is written, and it is still counted.
       const press = {
         refund: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `payments/${NO_SUCH}/refunds`), { requestKey: nextKey(), amountMinor: 1, method: "cash", reason: "other" }, cookies, desk),
-        undo: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `payments/${payment}/refunds/${NO_SUCH}/undo`), {}, cookies, desk),
+        undo: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `payments/${payment}/refunds/${NO_SUCH}/void`), { reason: "mistake" }, cookies, desk),
         cancel: (cookies: Cookies) => post(oneUrl(gymId, person, m.id, `bills/${NO_SUCH}/cancel`), { reason: "other" }, cookies, desk),
       };
       const kinds = [press.refund, press.undo, press.cancel];

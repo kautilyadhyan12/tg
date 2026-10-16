@@ -33,7 +33,7 @@
 export const DIRECT_DELETE_TABLES = [
   "meal_logs", // §5.2 "meal_logs(+corrections)"
   "user_dishware", // §5.2 "dishware"
-  "coach_threads", // §5.2 "coach threads/messages"
+  // §5.2's "coach threads/messages": those tables were dropped with the coach (ROADMAP 9b).
   "runs", // §5.2 "runs/saved_routes/schedules"
   "saved_routes",
   "run_schedules",
@@ -133,11 +133,9 @@ export const DIRECT_DELETE_TABLES = [
  *  denormalised one, which is exactly why deleting by it is a bug — F6).
  *  Verified against the migrations 2026-07-22 / probed 2026-07-23:
  *    meal_log_corrections.meal_log_id -> meal_logs      ON DELETE cascade
- *    coach_messages.thread_id         -> coach_threads   ON DELETE cascade
  *    workout_sets.workout_id          -> workouts        ON DELETE cascade */
 export const CASCADE_COLLECTED_TABLES = [
   "meal_log_corrections",
-  "coach_messages",
   "workout_sets",
 ] as const;
 
@@ -221,7 +219,7 @@ export type PiiTable = (typeof PII_TABLES)[number];
 // constraints in the migrations were parsed (2026-07-22). Nothing OUTSIDE
 // this list references anything INSIDE it, and the only intra-list references
 // are the ON DELETE CASCADE parent→child links (meal_logs→corrections,
-// coach_threads→messages, workouts→sets). So no statement can be blocked by a
+// workouts→sets). So no statement can be blocked by a
 // referrer, in any order.
 
 // NOT DELETED, each for a stated reason (§5.2):
@@ -525,7 +523,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // a live account holds.
   "gym_referral_member_gifts",
   // gym_referral_kept_invites.referred_by — the member who invited a friend whose lead was
-  // since deleted (`0125`), on gym_leads' footing, as its `referred_by` was: the gym's record
+  // since deleted (`0127`), on gym_leads' footing, as its `referred_by` was: the gym's record
   // of where a member came from; `ON DELETE set null`.
   "gym_referral_kept_invites",
   "api_cost_events",
