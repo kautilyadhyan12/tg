@@ -19,6 +19,7 @@ import { createMemoryRedis } from "../src/redis.js";
 import { orgCheckoutResponseSchema } from "@app/shared";
 import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakeRazorpay } from "./fakeRazorpay.js";
+import { confirmOwnerOf } from "./confirmOwner.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -230,6 +231,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const gymId = (JSON.parse(created.body) as { org: { id: string; slug: string } }).org.id;
       const slug = (JSON.parse(created.body) as { org: { slug: string } }).org.slug;
       expect(created.body).not.toContain("9876543210");
+      await confirmOwnerOf(sql, gymId);
       expect((await post(`/v1/orgs/${gymId}/trial`, {}, owner1.cookies)).statusCode).toBe(200);
       expect(await myGym(gymId, owner1.cookies)).toMatchObject({ billingMobile: "+919876543210" });
 
@@ -276,6 +278,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const none = await createGym(user.cookies, {});
       expect(none.statusCode).toBe(201);
       const gymId = (JSON.parse(none.body) as { org: { id: string } }).org.id;
+      await confirmOwnerOf(sql, gymId);
       expect((await post(`/v1/orgs/${gymId}/trial`, {}, user.cookies)).statusCode).toBe(200);
       expect(opened(await checkout(gymId, user.cookies, BIG))).toMatchObject({ contact: null });
 
@@ -440,6 +443,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     "a paid trial made before 2f-i: the mandate given, the first payment when the trial ends, the trial's 100 members until then",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const own = (await sql<{ trial_ends_at: Date }[]>`
         SELECT trial_ends_at FROM subscriptions WHERE owner_id = ${a.gymId} AND provider = 'none'`)[0];
@@ -474,6 +478,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     "WORST THING: a gym that pays in its free trial is charged now at the plan's own price, and gets its full size at once; the trial ends (Razorpay)",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const win = opened(await checkout(a.gymId, a.cookies, BIG));
       // No start date: Razorpay charges when the window is paid, never at the trial's end.
@@ -495,6 +500,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     "a trial window not paid before the trial ends is told so, nothing charged",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const win = await trialWindow(a, SMALL);
       const sub = razorpay.subs.get(win.subscriptionId);
@@ -571,6 +577,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     "WORST THING: a trial paid for through Razorpay is never ended by the nightly trial check, however late its first charge arrives, nor can its country move its money",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const win = await trialWindow(a, BIG);
       razorpay.authenticate(win.subscriptionId);
@@ -754,6 +761,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       const owner1 = await makeUser();
       const created = await createGym(owner1.cookies, { billingMobile: "70123 45678" });
       const gymId = (JSON.parse(created.body) as { org: { id: string } }).org.id;
+      await confirmOwnerOf(sql, gymId);
       expect((await post(`/v1/orgs/${gymId}/trial`, {}, owner1.cookies)).statusCode).toBe(200);
       const ownerEmail = (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${owner1.userId}`)[0]?.email;
       const clerk = await makeUser();
@@ -1079,6 +1087,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     async () => {
       razorpay.clock = Math.floor(Date.now() / 1000);
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const t = await trialWindow(a, BIG);
       razorpay.authenticate(t.subscriptionId);
@@ -1250,6 +1259,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     "a gym with no plan paid through Razorpay is told so, and a bad gym id is a 400",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       for (const res of [await cancelPlan(a.gymId, a.cookies), await payLink(a.gymId, a.cookies), await method(a.gymId, a.cookies), await keepPlan(a.gymId, a.cookies)]) {
         expect([res.statusCode, (JSON.parse(res.body) as { error: string }).error]).toEqual([404, "no_paid_plan"]);
@@ -1420,6 +1430,7 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
     async () => {
       razorpay.clock = Math.floor(Date.now() / 1000);
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const t = await trialWindow(a, BIG);
       razorpay.authenticate(t.subscriptionId);

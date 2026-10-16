@@ -40,6 +40,7 @@ import * as listRepo from "./memberList/repo.js";
 import * as messagesRepo from "./messages/repo.js";
 import * as repo from "./repo.js";
 import { roleById } from "./staffInvites/repo.js";
+import { isThrowawayEmail } from "./throwaway.js";
 import {
   ORG_PRIVILEGES,
   OWNER_ONLY_PRIVILEGES,
@@ -248,6 +249,15 @@ export async function createOrg(
   ownerUserId: string,
   req: CreateOrgRequest,
 ): Promise<CreateOrgResponse> {
+  // Throwaway addresses are refused at the Manage door (Stage 3 item 2b).
+  const ownerEmail = await repo.findUserEmail(deps.sql, ownerUserId);
+  if (ownerEmail !== null && isThrowawayEmail(ownerEmail)) {
+    throw new OrgsError(
+      422,
+      "email_throwaway",
+      `A throwaway email address can't open a ${orgWords(req.orgType).it}. Sign in with an email address you keep, or with Google.`,
+    );
+  }
   const currencyDisplay = resolveCurrency(req.country);
   const billingMobile = billingMobileAt(normaliseCountry(req.country), req.billingMobile);
 
@@ -1194,6 +1204,22 @@ export async function startOrgTrial(
         409,
         "trial_already_used",
         `You've already used your free trial. It's one per person, not one per ${orgWords(org.orgType).it}.`,
+      );
+    case "email_not_confirmed":
+      // Only an account from the old password sign-up can be here: the email code and
+      // Google both confirm the address. The owner's screen offers the code sign-in;
+      // anybody else with billing.manage can only be told who can.
+      if (outcome.byOwner) {
+        throw new OrgsError(
+          409,
+          "email_not_confirmed",
+          "Confirm your email address to start the free trial. Sign in with a code sent to your email to confirm it.",
+        );
+      }
+      throw new OrgsError(
+        409,
+        "owner_email_not_confirmed",
+        `Only the owner can start this ${orgWords(org.orgType).it}'s free trial, once their email address is confirmed. They confirm it by signing in with a code sent to their email.`,
       );
     case "no_plan":
       // TRUE AND SPECIFIC, because the alternative is a person concluding the

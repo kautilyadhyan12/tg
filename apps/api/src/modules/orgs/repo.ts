@@ -353,6 +353,12 @@ export interface CreateOrgResult {
   code: { code: string; label: string } | null;
 }
 
+/** The account's email, or null for an account without one. */
+export async function findUserEmail(sql: SqlOrTx, userId: string): Promise<string | null> {
+  const rows = await sql<{ email: string | null }[]>`SELECT email FROM users WHERE id = ${userId}`;
+  return rows[0]?.email ?? null;
+}
+
 /** One attempt at Part 3 §4.0's steps 1 and 4 as a single transaction: the org, its
  *  owner staff row, its first join code (none while codes are switched off), and — only when the owner answered yes to "Do
  *  you train here too?" — the owner's membership, an ordinary seat (§10.4). All or
@@ -558,11 +564,27 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            -- the copies together is a test driving THIS FIELD and THAT REFUSAL
            -- on one fixture — :14013's six-site precedent, the same instrument
            -- the seat meter above is pinned by.
+           -- Since Stage 3 item 2b the owner is a PERSON: their own account and every
+           -- proved account whose address is a spelling of the same mailbox, as the door;
+           -- an unproved owner is only their own account.
            EXISTS (
              SELECT 1 FROM subscriptions ts JOIN gyms tg ON tg.id = ts.owner_id
              WHERE ts.owner_type = 'gym'
-               AND tg.owner_user_id = g.owner_user_id
                AND ts.trial_ends_at IS NOT NULL
+               AND tg.owner_user_id IN (
+                 SELECT g.owner_user_id
+                 UNION ALL
+                 SELECT tu.id FROM users ou JOIN users tu ON tu.trial_person_key = ou.trial_person_key
+                 WHERE ou.id = g.owner_user_id
+                   AND EXISTS (
+                     SELECT 1 FROM one_time_tokens ot
+                     WHERE ot.user_id = ou.id AND ot.purpose = 'verify_email' AND ot.used_at IS NOT NULL
+                   )
+                   AND EXISTS (
+                     SELECT 1 FROM one_time_tokens tt
+                     WHERE tt.user_id = tu.id AND tt.purpose = 'verify_email' AND tt.used_at IS NOT NULL
+                   )
+               )
            ) AS owner_trial_used,
            ch.preset AS cheer_preset,
            ch.created_at AS cheer_sent_at,
@@ -1822,6 +1844,8 @@ export type StartTrialOutcome =
   | { kind: "started"; subscription: GymSubscriptionRow }
   | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
   | { kind: "trial_already_used" }
+  // `byOwner`: whether the person who pressed is the owner, who can confirm it.
+  | { kind: "email_not_confirmed"; byOwner: boolean }
   // No `currency` on this arm: it carried one for four commits and no caller
   // ever read it (T3 round 1, Low-7). An unread field on a typed outcome reads
   // as a fact somebody uses.
@@ -1962,17 +1986,43 @@ export async function startGymTrial(
       return { kind: "already_subscribed", subscription: toGymSubscription(existing) };
     }
 
-    // One trial per OWNER: the gym's lock does not cover the owner's other gyms, so
-    // two presses on two of them would both read "never had one".
-    await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${gym.owner_user_id}`}))`;
+    // One trial per PERSON (Stage 3 item 2b): the owner's own account, and every other
+    // account whose address is a spelling of the same mailbox and was proved by its owner.
+    // An unproved address is nobody's proof: it can neither spend another person's trial,
+    // nor read whether they had one, nor start one (RULINGS 2026-09-07: a confirmed email or
+    // Google). An unproved owner is therefore only their own account.
+    const ownerRows = await tx<{ trial_person_key: string | null; confirmed: boolean }[]>`
+      SELECT u.trial_person_key,
+             EXISTS (
+               SELECT 1 FROM one_time_tokens t
+               WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
+             ) AS confirmed
+      FROM users u WHERE u.id = ${gym.owner_user_id}`;
+    const owner = ownerRows[0];
+    const personKey = owner?.confirmed === true ? owner.trial_person_key : null;
+    // The gym's lock does not cover the person's other gyms, so two presses on two of
+    // them would both read "never had one"; the lock is the person's.
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${personKey ?? gym.owner_user_id}`}))`;
     const used = await tx<{ one: number }[]>`
       SELECT 1 AS one
       FROM subscriptions s JOIN gyms g ON g.id = s.owner_id
       WHERE s.owner_type = 'gym'
-        AND g.owner_user_id = ${gym.owner_user_id}
         AND s.trial_ends_at IS NOT NULL
+        AND g.owner_user_id IN (
+          SELECT ${gym.owner_user_id}::uuid
+          UNION ALL
+          SELECT u.id FROM users u
+          WHERE u.trial_person_key = ${personKey}
+            AND EXISTS (
+              SELECT 1 FROM one_time_tokens t
+              WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
+            )
+        )
       LIMIT 1`;
     if (used[0] !== undefined) return { kind: "trial_already_used" };
+    if (owner?.confirmed !== true) {
+      return { kind: "email_not_confirmed", byOwner: input.actorUserId === gym.owner_user_id };
+    }
 
     /** THE TRIAL BAND IS THE SMALLEST ONE, WHICH IS KD'S RULING EXPRESSED AS A
      *  QUERY RATHER THAN AS A NUMBER. :19129: *"no plan choice at signup · EVERY

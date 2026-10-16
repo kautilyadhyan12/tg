@@ -413,6 +413,48 @@ describe('the forced trial prompt', () => {
     expect(await screen.findByTestId('plan-list')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
+
+  it('an owner whose email is not confirmed is told so, and the button signs in with a code', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'email_not_confirmed',
+          message: "Confirm your email address to start the free trial. Sign in with a code sent to your email to confirm it.",
+        },
+      },
+    });
+    logout.mockClear();
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
+
+    await waitFor(() => expect(screen.getByText(/Confirm your email address to start the free trial/i)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with an email code' }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
+  });
+
+  it('a manager waiting on an unconfirmed owner is told who can, with no button that cannot help', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'owner_email_not_confirmed',
+          message: "Only the owner can start this gym's free trial, once their email address is confirmed. They confirm it by signing in with a code sent to their email.",
+        },
+      },
+    });
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
+
+    await waitFor(() => expect(screen.getByText(/Only the owner can start this gym's free trial/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in with an email code' })).toBeNull();
+  });
 });
 
 // ── THE MOMENT A GYM IS CREATED ────────────────────────────────────────────
@@ -476,6 +518,26 @@ describe('the screen that says the gym is ready', () => {
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
     fireEvent.click(modal);
     expect(screen.getByTestId('plan-modal')).toBeTruthy();
+  });
+
+  it('a throwaway address is told why, and the button signs in with another email', async () => {
+    orgService.createOrg.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          error: 'email_throwaway',
+          message: "A throwaway email address can't open a gym. Sign in with an email address you keep, or with Google.",
+        },
+      },
+    });
+    logout.mockClear();
+    renderNewGym();
+    await createGym();
+
+    expect(await screen.findByText(/A throwaway email address can't open a gym/)).toBeTruthy();
+    expect(screen.queryByTestId('plan-modal')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with another email' }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
   it('reveals the code once the trial has started', async () => {
