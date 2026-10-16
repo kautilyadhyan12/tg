@@ -203,10 +203,11 @@ describe('the four booking settings', () => {
 });
 
 describe('the booking rules line, in each kind of business’s own words', () => {
-  it('says who can book: members at a gym, students at a yoga studio, athletes at a CrossFit box', () => {
+  it('says who can book: members at a gym and a yoga studio, clients at a Pilates studio, athletes at a CrossFit box', () => {
     const rules = { opensDays: 7, freeCancelMinutes: 120 };
     expect(bookingRulesLine(rules, 'gym')).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
-    expect(bookingRulesLine(rules, 'yoga_studio')).toBe('Students can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
+    expect(bookingRulesLine(rules, 'yoga_studio')).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
+    expect(bookingRulesLine(rules, 'pilates_studio')).toBe('Clients can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
     expect(bookingRulesLine(rules, 'crossfit_box')).toBe('Athletes can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
   });
 });

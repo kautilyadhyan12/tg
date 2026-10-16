@@ -85,9 +85,10 @@ describe("orgWords", () => {
 
   /** Kd's five kinds of business (2026-10-16), each in the words its own software uses. */
   it("speaks for a CrossFit box, a yoga studio and a Pilates studio in their own words", () => {
+    // A yoga studio has members and trainers, as a gym does (Kd: "it is not a school").
     const rows: [string, string, string, string, string, string][] = [
       ["crossfit_box", "box", "athletes", "Coach", "coaches", "Box name"],
-      ["yoga_studio", "studio", "students", "Teacher", "teachers", "Studio name"],
+      ["yoga_studio", "studio", "members", "Trainer", "trainers", "Studio name"],
       ["pilates_studio", "studio", "clients", "Instructor", "instructors", "Studio name"],
     ];
     for (const [type, it, people, coachCap, coaches, nameLabel] of rows) {

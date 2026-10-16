@@ -226,10 +226,10 @@ describe('the console shell', () => {
     expect(screen.queryByText(/Gym console/)).toBeNull();
   });
 
-  it('names a yoga studio and its students', async () => {
-    settingsAs('yoga_studio');
-    expect(await within(rail()).findByText('Austin · Yoga studio')).toBeTruthy();
-    expect(screen.getAllByText('Students').length).toBeGreaterThan(0);
+  it('names a Pilates studio and its clients', async () => {
+    settingsAs('pilates_studio');
+    expect(await within(rail()).findByText('Austin · Pilates studio')).toBeTruthy();
+    expect(screen.getAllByText('Clients').length).toBeGreaterThan(0);
     expect(screen.queryByText('Members')).toBeNull();
   });
 

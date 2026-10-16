@@ -333,7 +333,7 @@ describe('the database’s words are not the screen’s words (T3 L-6)', () => {
     expect(roleLabel('trainer', 'studio')).toBe('Coach');
     expect(roleLabel('trainer', 'personal_trainer')).toBe('Coach');
     expect(roleLabel('trainer', 'crossfit_box')).toBe('Coach');
-    expect(roleLabel('trainer', 'yoga_studio')).toBe('Teacher');
+    expect(roleLabel('trainer', 'yoga_studio')).toBe('Trainer');
     expect(roleLabel('trainer', 'pilates_studio')).toBe('Instructor');
     // No type in hand — mid-load, or an api older than this bundle — reads as
     // the gym's word, which is what every console said before this card.

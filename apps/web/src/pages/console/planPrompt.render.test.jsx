@@ -459,11 +459,9 @@ describe('the forced trial prompt', () => {
 
 // ── THE MOMENT A GYM IS CREATED ────────────────────────────────────────────
 
-describe('the screen that says the gym is ready', () => {
-  /** The create form and its success screen, drawn the way `App.jsx` draws them
-   *  — inside the shell, at `/console/new`, where there is NO gym in the address.
-   *  That is the whole reason this case exists: the shell's own copy of the
-   *  prompt resolves no org there and correctly draws nothing. */
+describe('a gym the moment it is created', () => {
+  /** The create form drawn the way `App.jsx` draws it, inside the shell at
+   *  `/console/new`, and Create opening the new gym's Overview (Kd, 2026-10-16). */
   function renderNewGym() {
     return render(
       <MemoryRouter initialEntries={['/console/new']}>
@@ -473,6 +471,14 @@ describe('the screen that says the gym is ready', () => {
             element={
               <ConsoleLayout>
                 <NewGym />
+              </ConsoleLayout>
+            }
+          />
+          <Route
+            path="/console/:orgSlug"
+            element={
+              <ConsoleLayout>
+                <Overview />
               </ConsoleLayout>
             }
           />
@@ -489,18 +495,8 @@ describe('the screen that says the gym is ready', () => {
     fireEvent.click(screen.getByText('Create'));
   };
 
-  it('is COVERED by the prompt, so a gym on no plan is not handing out its code', async () => {
-    // KD FOUND THIS IN A BROWSER, 2026-08-28: *"i cretaed gym but this one shows
-    // then i click only after that pop shows this is wrong wtf"*.
-    //
-    // He is right and it is his ruling rather than a preference: :22215 puts the
-    // prompt at the moment a gym is CREATED, and this screen was handing out the
-    // join code — under "Give this code to your members" — to a gym on no plan.
-    // That is the exact state the ruling exists to remove, and the prompt
-    // arriving one click later made the wrong thing the first thing.
-    //
-    // Nothing is removed: the code screen is still there, behind the prompt, and
-    // it appears the moment the trial starts.
+  it('opens its console under the prompt, so a gym on no plan is not handing out its code', async () => {
+    // Kd, 2026-08-28: the prompt comes the moment a gym is created, before its code.
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
@@ -508,11 +504,9 @@ describe('the screen that says the gym is ready', () => {
     renderNewGym();
     await createGym();
 
-    // The gym exists and its code screen has been drawn…
-    expect(await screen.findByText(/Iron House is ready/i)).toBeTruthy();
-    // …and the prompt is over it.
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
     expect(screen.getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
+    expect(screen.queryByText(/Iron House is ready/i)).toBeNull();
     // With the same two exits and no way past.
     const modal = screen.getByTestId('plan-modal');
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
@@ -540,67 +534,26 @@ describe('the screen that says the gym is ready', () => {
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
-  it('reveals the code once the trial has started', async () => {
-    // THE CONTROL (:7104's PG1), and without it the case above is satisfied by a
-    // prompt that never goes away — which would be a worse defect than the one
-    // it fixes. The order is the point: start the trial, THEN hand out the code.
-    orgService.createOrg.mockResolvedValue({
-      data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
-    });
-    orgService.getMine.mockResolvedValue(mineIs(ORG));
-    orgService.startTrial.mockResolvedValue({
-      data: {
-        outcome: 'started',
-        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
-      },
-    });
-    renderNewGym();
-    await createGym();
-
-    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
-
-    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
-    expect(screen.getByText('K7QM2X')).toBeTruthy();
-  });
-
-  it('draws no PROMPT before the console has been told the gym exists — but still covers the code', async () => {
-    // Two guarantees that pull in opposite directions, and T3 round 1's Low-4 is
-    // what separated them.
-    //
-    // The create response carries no `ownerTrialUsed`, so the prompt is drawn
-    // from the shared store's row and until that read lands there is no row: a
-    // prompt that cannot be closed must never be drawn on a guess.
-    //
-    // **The COVER does not depend on that at all** — a gym created one second
-    // ago demonstrably has no plan — and without it this screen showed the join
-    // code and its live Copy button for the whole round trip, which is Kd's own
-    // defect in miniature.
+  it('shows no code while the console has not been told the gym exists, nor when that read fails', async () => {
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
     orgService.getMine.mockImplementation(() => new Promise(() => {}));
     renderNewGym();
     await createGym();
-
-    expect(await screen.findByTestId('gym-setup-cover')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByLabelText('Gym name')).toBeNull());
+    expect(screen.queryByText('K7QM2X')).toBeNull();
     expect(screen.queryByTestId('plan-modal')).toBeNull();
-    // It claims no outcome it cannot deliver — the read may never answer.
-    expect(screen.queryByText(/starting your trial|loading your plan/i)).toBeNull();
-  });
 
-  it('KEEPS the code covered when that read fails outright', async () => {
-    // The half that is not merely slow: a failed read leaves `createdOrg` null
-    // for ever, so without the cover the code sat uncovered permanently.
-    orgService.createOrg.mockResolvedValue({
-      data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
-    });
+    cleanup();
+    resetConsoleOrgs();
+    orgService.getMine.mockReset();
     orgService.getMine.mockRejectedValue(new Error('network'));
     renderNewGym();
     await createGym();
-
-    expect(await screen.findByTestId('gym-setup-cover')).toBeTruthy();
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
-    expect(screen.getByTestId('gym-setup-cover')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByLabelText('Gym name')).toBeNull());
+    expect(screen.queryByText('K7QM2X')).toBeNull();
   });
 });
 

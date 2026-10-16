@@ -91,9 +91,9 @@ const STUDIO: OrgWords = {
   placeholder: "Flow Studio",
 };
 
-/** Kd's five kinds of business (2026-10-16, ROADMAP 5f), each in the words its own
- *  software uses: a CrossFit box's athletes and coaches, a yoga studio's students and
- *  teachers, a Pilates studio's clients and instructors. */
+/** Kd's five kinds of business (2026-10-16, ROADMAP 5f): a CrossFit box's athletes and
+ *  coaches, a Pilates studio's clients and instructors. A yoga studio has members and
+ *  trainers, as a gym does (Kd: "it is not a school"). */
 const CROSSFIT_BOX: OrgWords = {
   it: "box",
   itCap: "Box",
@@ -115,13 +115,13 @@ const YOGA_STUDIO: OrgWords = {
   itCap: "Studio",
   itToMembers: "studio",
   itToMembersCap: "Studio",
-  person: "student",
-  personCap: "Student",
-  people: "students",
-  peopleCap: "Students",
-  coach: "teacher",
-  coaches: "teachers",
-  coachCap: "Teacher",
+  person: "member",
+  personCap: "Member",
+  people: "members",
+  peopleCap: "Members",
+  coach: "trainer",
+  coaches: "trainers",
+  coachCap: "Trainer",
   nameLabel: "Studio name",
   placeholder: "Lotus Yoga",
 };
