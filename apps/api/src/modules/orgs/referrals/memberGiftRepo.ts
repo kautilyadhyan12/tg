@@ -344,7 +344,7 @@ export async function friendPaymentGone(tx: TransactionSql, input: { gymId: stri
 }
 
 /** Another of the friend's payments or sales that stands: a membership payment not voided
- *  and not refunded in full, or a sale not voided; the earliest. */
+ *  and not refunded in full, or a sale not voided and not refunded in full (18p); the earliest. */
 async function standingOther(
   tx: TransactionSql,
   gymId: string,
@@ -363,10 +363,12 @@ async function standingOther(
     ORDER BY p.seq LIMIT 1`;
   if (payment !== undefined) return { paymentId: payment.id, saleId: null };
   const [sale] = await tx<{ id: string }[]>`
-    SELECT id FROM gym_sales
-    WHERE gym_id = ${gymId} AND entry_id = ${friendEntryId} AND undone_at IS NULL
-      AND (${saleId}::uuid IS NULL OR id <> ${saleId}::uuid)
-    ORDER BY seq LIMIT 1`;
+    SELECT s.id FROM gym_sales s
+    WHERE s.gym_id = ${gymId} AND s.entry_id = ${friendEntryId} AND s.undone_at IS NULL
+      AND (${saleId}::uuid IS NULL OR s.id <> ${saleId}::uuid)
+      AND s.total_minor > COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f
+                                    WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)
+    ORDER BY s.seq LIMIT 1`;
   return sale === undefined ? undefined : { paymentId: null, saleId: sale.id };
 }
 
@@ -382,9 +384,12 @@ export async function giftUseUndone(tx: TransactionSql, gymId: string, on: { bil
   const gifts = await tx<{ id: string; friend_entry_id: string | null; refunded: boolean }[]>`
     SELECT g.id, g.friend_entry_id,
            COALESCE(p.undone_at IS NULL AND p.amount_minor <= (SELECT COALESCE(sum(r.amount_minor), 0) FROM gym_member_refunds r
-                                                              WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL), false) AS refunded
+                                                              WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL), false)
+           OR COALESCE(bs.undone_at IS NULL AND bs.total_minor <= (SELECT COALESCE(sum(f.amount_minor), 0) FROM gym_sale_refunds f
+                                                                  WHERE f.gym_id = bs.gym_id AND f.sale_id = bs.id AND f.undone_at IS NULL), false) AS refunded
     FROM gym_referral_member_gifts g
     LEFT JOIN gym_member_payments p ON p.gym_id = g.gym_id AND p.id = g.by_payment_id
+    LEFT JOIN gym_sales bs ON bs.gym_id = g.gym_id AND bs.id = g.by_sale_id
     WHERE g.gym_id = ${gymId} AND (g.used_bill_id = ANY(${billIds}::uuid[]) OR g.used_sale_id = ${saleId}::uuid)
     FOR UPDATE OF g`;
   for (const gift of gifts) {

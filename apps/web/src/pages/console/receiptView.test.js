@@ -104,6 +104,10 @@ describe('receiptLines', () => {
   it('a refund: which receipt it gives back for, and how much', () => {
     expect(drawn(refund())).toEqual(['Refund for receipt #12', 'Gold Monthly, 15 Oct – 14 Nov 2026', 'Given back by bank transfer | $10.00']);
   });
+
+  it("a refund of a sale at the desk (18p): the sale's receipt and the product", () => {
+    expect(drawn(refund({ forReceipt: 41, item: { name: 'Protein tub', covers: null }, method: 'cash', refundedMinor: 2500 }))).toEqual(['Refund for receipt #41', 'Protein tub', 'Given back by cash | $25.00']);
+  });
 });
 
 describe('the rest of a receipt', () => {
@@ -128,6 +132,7 @@ describe('the rest of a receipt', () => {
     expect(receiptNotes(payment({ refunds: [{ number: 13, on: '2026-10-16', amountMinor: 1000 }] }))).toEqual(['$10.00 given back on 16 Oct 2026 (refund receipt #13).', 'Taken by Sam.']);
     expect(receiptNotes(refund())).toEqual(['Given back by Sam.']);
     expect(receiptNotes(sale({ by: null }))).toEqual([]);
+    expect(receiptNotes(sale({ by: null, refunds: [{ number: 44, on: '2026-10-16', amountMinor: 250 }] }))).toEqual(['$2.50 given back on 16 Oct 2026 (refund receipt #44).']);
   });
 
   it("the button says what it opens and whose it is; a gym with no address is told in its own word", () => {

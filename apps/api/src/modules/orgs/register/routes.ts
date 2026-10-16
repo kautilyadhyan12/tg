@@ -4,10 +4,12 @@
 // time: a refused ask leaves the gym's address alone, and one gym's desk never uses up
 // another's at a shared address.
 //
-//   GET    /v1/orgs/:gymId/register                         the Sell page (`billing.members` or `memberships.manage`)
+//   GET    /v1/orgs/:gymId/register?day=                    the Sell page, with the sales of today or `day` (`billing.members` or `memberships.manage`)
 //   GET    /v1/orgs/:gymId/register/people?query=           who a sale can be for (`billing.members`)
 //   POST   /v1/orgs/:gymId/register/sales                   one sale (`billing.members`)
 //   POST   /v1/orgs/:gymId/register/sales/:saleId/void      void it, the same day
+//   POST   /v1/orgs/:gymId/register/sales/:saleId/refunds   give some or all of it back, any day (18p)
+//   POST   /v1/orgs/:gymId/register/sales/:saleId/refunds/:refundId/void   void a refund noted by mistake
 //   PUT    /v1/orgs/:gymId/register/tax                     whether prices hold the tax (`memberships.manage`)
 //   POST   /v1/orgs/:gymId/register/tax-rates               add a tax rate (`memberships.manage`)
 //   PUT    /v1/orgs/:gymId/register/tax-rates/:rateId       change its name or rate
@@ -29,7 +31,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import {
+  refundSaleRequestSchema,
   salePeopleQuerySchema,
+  sellPageQuerySchema,
+  voidSaleRefundRequestSchema,
   chargeTaxRateRequestSchema,
   saveTaxRateRequestSchema,
   taxModeRequestSchema,
@@ -49,6 +54,7 @@ const productParamsSchema = z.object({ gymId: z.string().uuid(), productId: z.st
 const discountParamsSchema = z.object({ gymId: z.string().uuid(), discountId: z.string().uuid() }).strict();
 const saleParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid() }).strict();
 const rateParamsSchema = z.object({ gymId: z.string().uuid(), rateId: z.string().uuid() }).strict();
+const saleRefundParamsSchema = z.object({ gymId: z.string().uuid(), saleId: z.string().uuid(), refundId: z.string().uuid() }).strict();
 
 export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
   const registerDeps: service.RegisterDeps = { sql: deps.sql, now: deps.now };
@@ -99,9 +105,14 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
   app.get("/v1/orgs/:gymId/register", pre, async (req, reply) => {
     const params = orgParamsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const query = sellPageQuerySchema.safeParse(req.query);
+    if (!query.success) return reply.status(400).send(refused(query.error.issues, req.id));
     const viewer = await service.requireReader(registerDeps, userOf(req), params.data.gymId);
     if (!(await within(readLimit, req, reply))) return reply;
-    return reply.status(200).header("cache-control", "no-store").send(await service.getRegister(registerDeps, params.data.gymId, viewer));
+    return reply
+      .status(200)
+      .header("cache-control", "no-store")
+      .send(await service.getRegister(registerDeps, params.data.gymId, viewer, query.data.day ?? null));
   });
 
   app.get("/v1/orgs/:gymId/register/people", pre, async (req, reply) => {
@@ -135,6 +146,30 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
     const viewer = await service.requireSeller(registerDeps, userId, params.data.gymId);
     if (!(await within(sellLimit, req, reply))) return reply;
     return reply.status(200).send(await service.voidSale(registerDeps, userId, params.data.gymId, viewer, params.data.saleId, body.data));
+  });
+
+  app.post("/v1/orgs/:gymId/register/sales/:saleId/refunds", pre, async (req, reply) => {
+    const params = saleParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = refundSaleRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireSeller(registerDeps, userId, params.data.gymId);
+    if (!(await within(sellLimit, req, reply))) return reply;
+    return reply.status(201).send(await service.refundSale(registerDeps, userId, params.data.gymId, viewer, params.data.saleId, body.data));
+  });
+
+  app.post("/v1/orgs/:gymId/register/sales/:saleId/refunds/:refundId/void", pre, async (req, reply) => {
+    const params = saleRefundParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = voidSaleRefundRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
+    const userId = userOf(req);
+    const viewer = await service.requireSeller(registerDeps, userId, params.data.gymId);
+    if (!(await within(sellLimit, req, reply))) return reply;
+    return reply
+      .status(200)
+      .send(await service.voidSaleRefund(registerDeps, userId, params.data.gymId, viewer, params.data.saleId, params.data.refundId, body.data));
   });
 
   app.put("/v1/orgs/:gymId/register/tax", pre, async (req, reply) => {

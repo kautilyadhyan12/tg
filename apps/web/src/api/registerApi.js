@@ -1,4 +1,13 @@
-import { friendGiftResponseSchema, memberPurchasesResponseSchema, receiptSchema, salePeopleResponseSchema, sellPageResponseSchema, sellProductResponseSchema } from '@app/shared';
+import {
+  friendGiftResponseSchema,
+  memberPurchasesResponseSchema,
+  receiptSchema,
+  refundSaleResponseSchema,
+  salePeopleResponseSchema,
+  sellPageResponseSchema,
+  sellProductResponseSchema,
+  voidSaleRefundResponseSchema,
+} from '@app/shared';
 import authApi from './authApi';
 
 // THE CONSOLE'S SELL PAGE (spec Part 3 §14.3; ROADMAP 18b-i): for staff holding
@@ -20,8 +29,8 @@ const read = (schema, what, res) => {
 const page = (res) => read(sellPageResponseSchema, 'the Sell page', res);
 
 export const registerService = {
-  /** What there is to sell, the gym's tax and today's takings. */
-  get: async (gymId) => page(await authApi.get(`${gymPath(gymId)}/register`)),
+  /** What there is to sell, the gym's tax and the takings of today, or of `day` (18p). */
+  get: async (gymId, day = null) => page(await authApi.get(`${gymPath(gymId)}/register`, day === null ? undefined : { params: { day } })),
   /** The gym's own records a name or a member number finds. */
   findPeople: async (gymId, query) =>
     read(salePeopleResponseSchema, 'that search', await authApi.get(`${gymPath(gymId)}/register/people`, { params: { query } })).people,
@@ -29,6 +38,16 @@ export const registerService = {
   sell: async (gymId, body) => read(sellProductResponseSchema, 'that sale', await authApi.post(`${gymPath(gymId)}/register/sales`, body)),
   /** Voids one sale of today: `body` is `{ reason }`, picked from a list. */
   voidSale: async (gymId, saleId, body) => page(await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/void`, body)),
+  /** Refund sale, any day: `body` is `{ requestKey, amountMinor, method, reason, restock }`. */
+  refundSale: async (gymId, saleId, body) =>
+    read(refundSaleResponseSchema, 'that refund', await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/refunds`, body)),
+  /** Void refund on a sale's refund noted by mistake: `body` is `{ reason }`. */
+  voidSaleRefund: async (gymId, saleId, refundId, body) =>
+    read(
+      voidSaleRefundResponseSchema,
+      'that void',
+      await authApi.post(`${gymPath(gymId)}/register/sales/${encodeURIComponent(saleId)}/refunds/${encodeURIComponent(refundId)}/void`, body),
+    ),
   /** Whether the gym's prices hold the tax: `{ included }`. */
   saveTaxMode: async (gymId, body) => page(await authApi.put(`${gymPath(gymId)}/register/tax`, body)),
   addTaxRate: async (gymId, body) => page(await authApi.post(`${gymPath(gymId)}/register/tax-rates`, body)),
