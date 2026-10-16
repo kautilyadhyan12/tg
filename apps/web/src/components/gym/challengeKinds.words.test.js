@@ -430,7 +430,7 @@ const SAID = {
   workMostEnded: {
     member: {
       howToWin: 'Most workout days wins',
-      whatCounts: 'A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.',
+      whatCounts: 'A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.',
       placeLine: '1st of 3',
       boardNote: null,
       progress: {
@@ -524,7 +524,7 @@ const SAID = {
   workTargetEnded: {
     member: {
       howToWin: 'Reach 2 workout days',
-      whatCounts: 'A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.',
+      whatCounts: 'A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.',
       placeLine: '2nd of 3',
       boardNote: null,
       progress: {
@@ -607,7 +607,7 @@ const SAID = {
   workJoinComing: {
     member: {
       howToWin: 'Most workout days wins',
-      whatCounts: 'A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.',
+      whatCounts: 'A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.',
       placeLine: null,
       boardNote: null,
       progress: null,
@@ -648,7 +648,7 @@ const SAID = {
   workJoinRunning: {
     member: {
       howToWin: 'Most workout days wins',
-      whatCounts: 'A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.',
+      whatCounts: 'A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.',
       placeLine: null,
       boardNote: null,
       progress: null,

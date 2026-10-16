@@ -771,7 +771,7 @@ d("every kind of challenge reads the same numbers (real Postgres)", () => {
       expect(explained.get("Most gym days")).toBe(
         "A visit is a day you're checked in at Kinds Hall: a scan at the front desk, or a check-in by staff. Two check-ins on one day are one visit. It is the same count as the Leaderboard.",
       );
-      expect(explained.get("Most workout days")).toBe("A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.");
+      expect(explained.get("Most workout days")).toBe("A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.");
     },
     T,
   );

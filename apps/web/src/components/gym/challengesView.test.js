@@ -83,7 +83,7 @@ describe('its dates and how it is won', () => {
       "A visit is a day you're checked in at Iron House: a scan at the front desk, or a check-in by staff. Two check-ins on one day are one visit. It is the same count as the Leaderboard.",
     );
     expect(whatCounts(challenge({ counts: 'workout_days' }), 'Iron House')).toBe(
-      'A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.',
+      'A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.',
     );
   });
 

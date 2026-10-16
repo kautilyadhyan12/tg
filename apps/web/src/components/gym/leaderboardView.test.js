@@ -63,7 +63,7 @@ describe('the leaderboard in words', () => {
     expect(whatCounts('gym_days', 'Iron House').join(' ')).toMatch(/Nothing you tap or type yourself counts/);
     expect(whatCounts('streak', 'Iron House').join(' ')).toMatch(/checked nobody in doesn't count and doesn't break it/);
     expect(whatCounts('workout_days', 'Iron House')).toEqual([
-      'One workout day for each day you finished a workout in the app since you joined Iron House, at the gym or at home.',
+      'One workout day for each day you finished a workout in the app since you joined Iron House, wherever you are.',
       'Two workouts on one day are one workout day. A workout counts however its reps were counted, by the camera or by you.',
       'It needs at least one set with a rep or a hold, and to be saved within 7 days.',
       'Equal numbers share a place. Staff, under-18s and anyone who chose Hide me are not shown.',

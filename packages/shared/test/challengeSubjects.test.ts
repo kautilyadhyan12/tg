@@ -97,7 +97,7 @@ describe("the words a challenge is sent with", () => {
       print: "whole",
       how: "app",
       howLine: "Counted by the app",
-      explain: "A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.",
+      explain: "A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.",
       perDay: true,
     });
   });

@@ -69,7 +69,7 @@ export function whatCounts(boardId, gymName) {
   }
   if (boardId === 'workout_days') {
     return [
-      `One workout day for each day you finished a workout in the app since you joined ${gymName}, at the gym or at home.`,
+      `One workout day for each day you finished a workout in the app since you joined ${gymName}, wherever you are.`,
       'Two workouts on one day are one workout day. A workout counts however its reps were counted, by the camera or by you.',
       'It needs at least one set with a rep or a hold, and to be saved within 7 days.',
       common,
@@ -243,7 +243,7 @@ export function circleLabel(circle, day, boardId) {
   const what = {
     yes: boardId === 'streak' ? 'counted' : UNIT[boardId],
     no: boardId === 'workout_days' ? 'no workout day' : 'no visit',
-    skipped: 'nobody checked in at the gym',
+    skipped: 'nobody was checked in that week',
     open: 'this week, still open',
   }[circle];
   return `${when}: ${what}`;

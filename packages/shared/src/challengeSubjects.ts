@@ -105,7 +105,7 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
         how: "app",
         wins: ["most", "target"],
         perDay: true,
-        explain: () => `A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. ${SAME}`,
+        explain: () => `A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. ${SAME}`,
       },
     ],
   },
