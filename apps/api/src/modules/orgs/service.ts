@@ -594,6 +594,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       // their own console, so the honest failure is to draw NOTHING rather than
       // to guess an arm. The client requires a definite boolean before it blocks.
       ownerTrialUsed: privileges.includes("billing.manage") ? r.ownerTrialUsed : null,
+      trialEndedFirstPeople: privileges.includes("billing.manage") ? r.trialEndedFirstPeople : null,
       // IS THIS GYM'S CONSOLE READ-ONLY — Part 3 §4.2, and Kd's ruling of
       // 2026-08-29 that it stops EVERY member of staff rather than only whoever
       // can pay. It is the answer `requireWritablePrivilege` reaches, sent ahead

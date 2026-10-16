@@ -633,6 +633,20 @@ describe('the forced subscribe prompt', () => {
     expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
   });
 
+  it('says why when the trial ended because the first members came from another gym (2d)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...spent, trialEndedFirstPeople: true }));
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    expect(
+      screen.getByText(
+        'Your free trial has ended because most of your first members came from another gym that already had one. Choose a plan to keep going.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/already used your one free trial/i)).toBeNull();
+    expect(screen.getByText('$35 a month')).toBeTruthy();
+  });
+
   it('promises no payment it cannot take', async () => {
     // A server with no Paddle set up says so, and draws no button that could only fail.
     orgService.getMine.mockResolvedValue(mineIs(spent));

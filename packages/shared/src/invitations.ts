@@ -133,6 +133,9 @@ export const acceptInvitationResponseSchema = z
         orgType: orgTypeSchema,
       })
       .strict(),
+    /** Whether the gym's features are on once this person is in: a join can end a free trial
+     *  (Stage 3 item 2d). Absent from an older api. */
+    featuresOn: z.boolean().optional(),
   })
   .strict();
 export type AcceptInvitationResponse = z.infer<typeof acceptInvitationResponseSchema>;

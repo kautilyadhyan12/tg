@@ -364,6 +364,8 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.restored",
   "org.archived",
   "org.trial_expired",
+  "org.trial_ended_first_people",
+  "org.trial_look",
   "org.member_list_deleted",
   "org.member_bills_opened",
   "org.held_membership_count_moved",
