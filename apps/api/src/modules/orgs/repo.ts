@@ -594,6 +594,11 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            EXISTS (
              SELECT 1 FROM subscriptions fs
              WHERE fs.owner_type = 'gym' AND fs.owner_id = g.id AND fs.trial_check = 'ended'
+               -- Until a free trial a second-trial code started has followed it (2e-i).
+               AND NOT EXISTS (
+                 SELECT 1 FROM subscriptions ls JOIN second_trial_codes c ON c.subscription_id = ls.id
+                 WHERE ls.owner_type = 'gym' AND ls.owner_id = g.id AND ls.created_at > fs.created_at
+               )
            ) AND NOT EXISTS (
              SELECT 1 FROM subscriptions ps
              WHERE ps.owner_type = 'gym' AND ps.owner_id = g.id AND ps.paid_at IS NOT NULL
@@ -1870,6 +1875,8 @@ export type StartTrialOutcome =
   | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
   | { kind: "trial_already_used" }
   | { kind: "trial_used_on_device" }
+  // A second-trial code was typed that is not one Kd made for this owner, unused and in date.
+  | { kind: "trial_code_not_valid" }
   // `byOwner`: whether the person who pressed is the owner, who can confirm it.
   | { kind: "email_not_confirmed"; byOwner: boolean }
   // No `currency` on this arm: it carried one for four commits and no caller
@@ -1963,7 +1970,9 @@ export async function startGymTrial(
   sql: Sql,
   // `deviceHash`: the SHA-256 of the browser's trial mark (2c), never the mark. The route always
   // sends one (a request with no mark is given a new one); null is a caller with no request.
-  input: { gymId: string; actorUserId: string; deviceHash: string | null },
+  // `code`: a second-trial code typed with the press (2e-i), as its SHA-256, or a null hash
+  // when what was typed cannot be a code; null when none was typed.
+  input: { gymId: string; actorUserId: string; deviceHash: string | null; code: { hash: string | null } | null },
 ): Promise<StartTrialOutcome> {
   return await sql.begin(async (tx) => {
     // The trailing note is not decoration: `await lockOrgRow(tx, input.gymId);`
@@ -2047,17 +2056,40 @@ export async function startGymTrial(
             )
         )
       LIMIT 1`;
-    if (used[0] !== undefined) return { kind: "trial_already_used" };
+    let refused: "trial_already_used" | "trial_used_on_device" | null =
+      used[0] === undefined ? null : "trial_already_used";
     // One device, one trial (Stage 3 item 2c): a browser that started a free trial starts no
     // other, under any account. Locked on the mark too, so two gyms pressed at once in one
-    // browser do not both read "never had one"; the person's lock is always taken first.
+    // browser do not both read "never had one"; the person's lock is always taken first. Taken
+    // for a code's trial as well, which is marked with this browser too.
     if (input.deviceHash !== null) {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial-device:${input.deviceHash}`}))`;
+    }
+    if (refused === null && input.deviceHash !== null) {
       const onDevice = await tx<{ one: number }[]>`
         SELECT 1 AS one FROM subscriptions
         WHERE trial_device_hash = ${input.deviceHash} AND owner_type = 'gym'
         LIMIT 1`;
-      if (onDevice[0] !== undefined) return { kind: "trial_used_on_device" };
+      if (onDevice[0] !== undefined) refused = "trial_used_on_device";
+    }
+    // A second-trial code (2e-i) lets past those two rules once: one Kd made for this owner's
+    // address, however spelled, unused and in date. It is spent only when it is needed, and
+    // only by a confirmed owner. The person's lock is held, so one code starts one trial.
+    let codeId: string | null = null;
+    if (refused !== null) {
+      if (input.code === null) return { kind: refused };
+      if (personKey === null) {
+        return { kind: "email_not_confirmed", byOwner: input.actorUserId === gym.owner_user_id };
+      }
+      const codes = await tx<{ id: string }[]>`
+        SELECT id FROM second_trial_codes
+        WHERE code_hash = ${input.code.hash}
+          AND person_hash = encode(sha256(convert_to(${personKey}, 'UTF8')), 'hex')
+          AND used_at IS NULL AND expires_at > now()
+        FOR UPDATE`;
+      const code = codes[0];
+      if (code === undefined) return { kind: "trial_code_not_valid" };
+      codeId = code.id;
     }
     if (owner?.confirmed !== true) {
       return { kind: "email_not_confirmed", byOwner: input.actorUserId === gym.owner_user_id };
@@ -2101,6 +2133,9 @@ export async function startGymTrial(
       RETURNING id, status, trial_ends_at`;
     const row = inserted[0];
     if (row === undefined) throw new Error("subscription insert returned no row");
+    if (codeId !== null) {
+      await tx`UPDATE second_trial_codes SET used_at = now(), subscription_id = ${row.id} WHERE id = ${codeId}`;
+    }
 
     const subscription = toGymSubscription({
       status: row.status,
@@ -2142,6 +2177,8 @@ export async function startGymTrial(
         trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
         seatCap: subscription.seatCap === null ? null : String(subscription.seatCap),
         currency: gym.currency_display,
+        // The second-trial code that let it start (2e-i), or null.
+        secondTrialCode: codeId,
       },
     });
 
@@ -2159,7 +2196,9 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
   const subs = await tx<{ id: string; created_at: Date; trial_check: string | null }[]>`
     SELECT id, created_at, trial_check FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId}
-      AND status = 'trialing' AND provider = 'none' AND (trial_check IS NULL OR trial_check = 'look')`;
+      AND status = 'trialing' AND provider = 'none' AND (trial_check IS NULL OR trial_check = 'look')
+      -- A free trial a second-trial code started is one Kd has looked at (2e-i).
+      AND NOT EXISTS (SELECT 1 FROM second_trial_codes c WHERE c.subscription_id = subscriptions.id)`;
   const sub = subs[0];
   if (sub === undefined) return { kind: "none" };
 

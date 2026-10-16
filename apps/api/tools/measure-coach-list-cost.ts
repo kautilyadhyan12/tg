@@ -80,6 +80,7 @@ try {
     randomBytes: (n) => randomBytes(n),
     joinCodes: false,
     invites: null,
+    supportEmail: null,
     log: { warn: () => undefined },
     onlinePayments: { paddle: false, razorpay: false },
   };

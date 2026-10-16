@@ -13,7 +13,7 @@ import type { RedisLike } from "../../redis.js";
 import type { OnlinePayments } from "../billing/online.js";
 import { createDualRateLimit } from "../auth/rateLimit.js";
 import { cookieOptions, mintOpaqueToken, sha256Hex } from "../auth/tokens.js";
-import { TRIAL_DEVICE_COOKIE, trialDeviceMarkSchema } from "@app/shared";
+import { TRIAL_DEVICE_COOKIE, startOrgTrialRequestSchema, trialDeviceMarkSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
 import {
   addOrgStaffRequestSchema,
@@ -148,6 +148,7 @@ export function registerOrgRoutes(
     randomBytes: overrides.randomBytes ?? ((n) => randomBytes(n)),
     joinCodes: deps.joinCodes,
     invites: deps.invites,
+    supportEmail: deps.supportEmail,
     // Only the attendance hook uses it: a streak that fails to recompute warns
     // rather than losing a visit that is already committed (R8.5 — the
     // alternative is the empty catch that rule forbids).
@@ -282,10 +283,13 @@ export function registerOrgRoutes(
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
+      // A body with no code is an ordinary press; a second-trial code rides in it (2e-i).
+      const body = parseOr400(startOrgTrialRequestSchema, req.body ?? {}, req, reply);
+      if (body === null) return;
       // One device, one trial (2c): a browser with no mark is given one here, so the trial
       // it starts is recorded against it. Only the mark's hash reaches the database.
       const mark = trialMarkOf(req) ?? mintOpaqueToken();
-      const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId, sha256Hex(mark));
+      const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId, sha256Hex(mark), body.code);
       if (started.outcome === "started") {
         reply.setCookie(TRIAL_DEVICE_COOKIE, mark, cookieOptions(deps.config, TRIAL_MARK_MAX_AGE_S, TRIAL_MARK_PATH));
       }

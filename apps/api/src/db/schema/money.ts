@@ -185,6 +185,29 @@ export const subscriptions = pgTable(
   ],
 );
 
+/** A second-trial code Kd made for a real owner of two gyms (Stage 3 item 2e-i, migration
+ *  `0134`). Only hashes: the code's, and the owner's `trial_person_key`'s. Used once. */
+export const secondTrialCodes = pgTable(
+  "second_trial_codes",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    codeHash: text("code_hash").notNull(),
+    personHash: text("person_hash").notNull(),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    subscriptionId: uuid("subscription_id").references(() => subscriptions.id),
+  },
+  (t) => [
+    unique("second_trial_codes_code_hash_uq").on(t.codeHash),
+    unique("second_trial_codes_subscription_uq").on(t.subscriptionId),
+    check("second_trial_codes_code_hash_check", sql`${t.codeHash} ~ '^[0-9a-f]{64}$'`),
+    check("second_trial_codes_person_hash_check", sql`${t.personHash} ~ '^[0-9a-f]{64}$'`),
+    check("second_trial_codes_expires_check", sql`${t.expiresAt} > ${t.createdAt}`),
+    check("second_trial_codes_used_check", sql`(${t.usedAt} IS NULL) = (${t.subscriptionId} IS NULL)`),
+  ],
+);
+
 export const invoices = pgTable(
   "invoices",
   {
