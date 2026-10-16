@@ -625,6 +625,38 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
+    "an at-once Razorpay plan answered as a mandate given, or a first debit failed, with nothing taken, is no payment: the trial is still checked",
+    async () => {
+      // Razorpay documents neither for a plan with no start date; if it ever answers so, the
+      // free trial stays until it counts a payment.
+      const gym = await newGymWithFollowers(10);
+      const window = await opensWindow(gym.gym, gym.owner, RZP_PLAN_CODE);
+      const id = window.subscriptionId;
+      if (id === undefined) throw new Error("no Razorpay window");
+      const made = razorpay.subs.get(id);
+      if (made === undefined || made.start_at !== null) throw new Error("not an at-once window");
+      razorpay.subs.set(id, { ...made, status: "authenticated", customer_id: "cust_trialgymunpaid1" });
+      expect(await synced(gym.gym, gym.owner, window.checkoutId)).not.toBe("paid");
+      expect(await rowsOf(gym.gym)).toEqual([{ provider: "none", status: "trialing", paid: false, trial_check: null }]);
+      razorpay.fail(id);
+      expect(razorpay.subs.get(id)?.status).toBe("pending");
+      expect(await synced(gym.gym, gym.owner, window.checkoutId)).not.toBe("paid");
+      expect(await rowsOf(gym.gym)).toEqual([{ provider: "none", status: "trialing", paid: false, trial_check: null }]);
+      expect(await joinsThroughDoor(gym.gym, gym.owner, gym.old)).toBe(false); // 11th: the trial ends
+      expect(await rowsOf(gym.gym)).toEqual([{ provider: "none", status: "expired", paid: false, trial_check: "ended" }]);
+
+      // Razorpay's retry takes the money: a plan from that day.
+      razorpay.charge(id);
+      expect(await synced(gym.gym, gym.owner, window.checkoutId)).toBe("paid");
+      expect(await rowsOf(gym.gym)).toEqual([
+        { provider: "none", status: "expired", paid: false, trial_check: "ended" },
+        { provider: "razorpay", status: "active", paid: true, trial_check: null },
+      ]);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "one free trial per owner: an owner who had a trial on their first gym and then paid gets none on a second",
     async () => {
       const owner = await makeUser();
