@@ -52,6 +52,9 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'staffact-t-%@example.com'`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_member_notes WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_member_bills WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_attendance WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_attendance_removed WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
@@ -363,18 +366,38 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
   );
 
   it(
-    "a paid mark taken back reads as taken back, never as marked paid",
+    "a paid mark taken back through the real route reads as taken back, never as marked paid",
     async () => {
       const gym = await makeGym(`Mark Gym ${uniq()}`);
       const entryId = await addPerson(gym, "Amit Rao");
-      // As `undoMark` (memberships/billsRepo.ts) writes it.
-      await write(gym, {
-        actor: gym.owner.userId,
-        action: "org.held_membership_paid",
-        targetType: "gym_held_membership",
-        targetId: randomUUID(),
-        meta: { entryId, type: "Gold", on: "2026-10-15", paidBefore: "2", paidAfter: "1" },
+      const made = await inject("POST", `/v1/orgs/${gym.id}/membership-types`, gym.owner.cookies, {
+        name: "Gold",
+        kind: "recurring",
+        priceMinor: 100000,
+        termCount: 1,
+        termUnit: "month",
+        description: null,
+        packClasses: null,
+        packDays: null,
+        access: "all_classes",
+        bookingsLimit: null,
+        bookingsPeriod: null,
+        classTypeIds: null,
+        includesPt: false,
+        ptLimit: null,
+        ptPeriod: null,
       });
+      expect(made.statusCode, made.body).toBe(201);
+      const typeId = (JSON.parse(made.body) as { types: { id: string; name: string }[] }).types.find((t) => t.name === "Gold")?.id ?? "";
+      const today = (await sql<{ d: string }[]>`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS d`)[0]?.d ?? "";
+      const given = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${entryId}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), typeId, startsOn: today, paid: false });
+      expect(given.statusCode, given.body).toBe(201);
+      const heldId = (await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${gym.id} AND entry_id = ${entryId}`)[0]?.id ?? "";
+      // Two periods marked paid with no payment behind them, as a mark made before bills were kept.
+      await sql`DELETE FROM gym_member_bills WHERE gym_id = ${gym.id} AND held_membership_id = ${heldId}`;
+      await sql`UPDATE gym_held_memberships SET paid_periods = 2 WHERE gym_id = ${gym.id} AND id = ${heldId}`;
+      const back = await inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${entryId}/memberships/${heldId}/paid`, gym.owner.cookies, { paidPeriods: 1 });
+      expect(back.statusCode, back.body).toBe(200);
       expect((await read(gym)).lines[0]?.line).toBe("Took back a paid mark on Amit Rao's Gold membership");
     },
     T,
@@ -406,7 +429,7 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
     "a query it cannot read is refused with nothing read: a worker that is no id, half a date range, a range backwards, a stray field, forged cursors",
     async () => {
       const gym = await makeGym(`Strict Gym ${uniq()}`);
-      const forged = ["2026-01-01T00:00:00.000000Z_9999999999999999999", "2026-01-01T99:99:99.000000Z_1", "2026-13-45T00:00:00.000000Z_1", "2026-02-30T00:00:00.000000Z_1", "2026-01-01T00:00:00Z_1"];
+      const forged = ["0000-01-01T00:00:00.000000Z_1", "2026-01-01T00:00:00.000000Z_9999999999999999999", "2026-01-01T99:99:99.000000Z_1", "2026-13-45T00:00:00.000000Z_1", "2026-02-30T00:00:00.000000Z_1", "2026-01-01T00:00:00Z_1"];
       for (const query of [
         "worker=bob",
         "from=2026-03-01",

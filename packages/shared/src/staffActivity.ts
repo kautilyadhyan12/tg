@@ -19,7 +19,8 @@ const cursorSchema = z
   .refine((cursor) => {
     const at = cursor.slice(0, 19);
     const ms = Date.parse(`${at}Z`);
-    return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 19) === at;
+    // Year 0000 is a date to JavaScript and not to Postgres.
+    return Number.isFinite(ms) && at.slice(0, 4) !== "0000" && new Date(ms).toISOString().slice(0, 19) === at;
   });
 
 export const staffActivityQuerySchema = z
