@@ -7,6 +7,9 @@ import {
   guardNumber,
   addedHere,
   handEditWords,
+  numberMoveLine,
+  numbersGivenTitle,
+  numbersMovedTitle,
   marksBody,
   importedColumnCount,
   missingOf,
@@ -196,6 +199,7 @@ describe('what the review shows', () => {
     [{ code: 'phones_unusual', rows: 1 }, '1 phone number looks unusual'],
     [{ code: 'phones_unusual', rows: 30 }, '30 phone numbers look unusual'],
     [{ code: 'shared_emails', rows: 2 }, '2 people share an email'],
+    [{ code: 'shared_member_numbers', rows: 2 }, '2 people share a member number'],
     [{ code: 'dates_not_read', rows: 1 }, "1 date couldn't be read"],
     [{ code: 'card_cells_dropped', rows: 3 }, 'Card numbers removed from 3 cells'],
     [{ code: 'placeholders', rows: 4, values: ['desk@gym.example'] }, 'Front-desk details left out of 4 rows'],
@@ -258,6 +262,7 @@ describe('the rows each warning is about', () => {
     ['garbled_names', row({ name: 'H‚lŠne Dupont', column: null, cell: null }), 'Row 6, H‚lŠne Dupont'],
     ['card_cells_dropped', row({ column: 'Notes', cell: null }), 'Row 6, Di Park: a card number in Notes was removed'],
     ['shared_emails', row({ column: null, cell: 'family@example.com', sameAsRow: 9 }), 'Row 6, Di Park: family@example.com, also on row 9'],
+    ['shared_member_numbers', row({ column: 'Member ID', cell: '500', sameAsRow: 9 }), 'Row 6, Di Park: 500, also on row 9'],
     ['placeholders', row({ column: null, cell: 'desk@gym.example' }), 'Row 6, Di Park: desk@gym.example left out'],
     // A row with no name is found by its number alone.
     ['phones_unusual', row({ name: '' }), 'Row 6: Mobile “00000000000”'],
@@ -416,5 +421,24 @@ describe("the card's numbers once the people added here are counted apart", () =
     const card = fileMissingOf(from, [{ wasStatus: null }, { wasStatus: 'ACTIVE' }]);
     expect(card.statuses.reduce((sum, st) => sum + st.n, 0)).toBe(card.n);
     expect(missingStatusLine(card)).toBe('Status: Cancelled 2');
+  });
+});
+
+describe("an import's member numbers on Review (5e-ii)", () => {
+  const words = { person: 'member', people: 'members' };
+  const none = { given: 0, first: null, last: null, moved: [], movedTotal: 0 };
+  it('says how many get a number and which, and nothing when none', () => {
+    expect(numbersGivenTitle({ ...none, given: 42, first: '1043', last: '1084' }, words)).toBe('42 members will get member numbers 1043 to 1084');
+    expect(numbersGivenTitle({ ...none, given: 1, first: 'M0042', last: 'M0042' }, { person: 'student', people: 'students' })).toBe('1 student will get member number M0042');
+    expect(numbersGivenTitle(none, words)).toBeNull();
+    expect(numbersGivenTitle(undefined, words)).toBeNull();
+  });
+  it('names each number that changes, from what to what, and who the file gives it to', () => {
+    const move = { fullName: 'Asha Rao', from: '1042', to: '1085', toName: 'Ravi Kumar' };
+    expect(numbersMovedTitle({ ...none, moved: [move], movedTotal: 1 })).toBe('1 member number will change');
+    expect(numbersMovedTitle({ ...none, moved: [move, move], movedTotal: 2 })).toBe('2 member numbers will change');
+    expect(numbersMovedTitle(none)).toBeNull();
+    expect(numberMoveLine(move)).toBe('Asha Rao: 1042 → 1085. Your file gives 1042 to Ravi Kumar.');
+    expect(numberMoveLine({ ...move, to: null })).toBe('Asha Rao will have no member number. Your file gives 1042 to Ravi Kumar.');
   });
 });

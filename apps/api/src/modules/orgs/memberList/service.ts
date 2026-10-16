@@ -37,6 +37,7 @@ import {
   MEMBER_LIST_MARKS_MAX,
   MEMBER_LIST_TOO_MANY_MISSING_WORDS,
   MEMBER_LIST_MAX_EXTRA_FIELDS,
+  MEMBER_LIST_NUMBER_MOVES_SHOWN,
   MEMBER_LIST_PARSES_PER_GYM,
   MEMBER_LIST_ROWS_PAGE,
   MEMBER_LIST_STATUS_CHIPS_MAX,
@@ -52,6 +53,7 @@ import {
   type MemberListFilter,
   type MemberListGuard,
   type MemberListHandEdits,
+  type MemberListImportNumbers,
   type MemberListLeavers,
   type MemberListMapping,
   type MemberListMarks,
@@ -80,6 +82,7 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { appViewsOf, currentAppWords } from "./appViews.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { extraForWriting, growFields, keptFields, wordForWriting, type FieldSlot } from "./extraFields.js";
+import { identityKey } from "./fields.js";
 import { understandMemberFile } from "./parseMemberFile.js";
 import {
   inviteCounts,
@@ -213,10 +216,11 @@ async function measure(
   /** The missing records staff marked "Still a member" (§18.8). */
   stay: ReadonlySet<string> = new Set(),
 ): Promise<{ measured: Measured; reconciled: Reconciled; kept: KeptField[]; over: number; entries: ListEntry[] }> {
-  const [entries, members, seatCap] = await Promise.all([
+  const [entries, members, seatCap, numbersKept] = await Promise.all([
     repo.listEntries(sql, gymId),
     repo.listMembers(sql, gymId),
     orgRepo.gymSeatCap(sql, gymId),
+    repo.memberNumbersKept(sql, gymId),
   ]);
   const { kept, over } = keptFields(catalogue, understanding.extraFields);
   const reconciled = reconcile({
@@ -229,6 +233,7 @@ async function measure(
     mode,
     hasList: state !== null,
     stay,
+    numbering: { kept: numbersKept },
   });
   const counts: MemberListUploadSummary = {
     file: understanding.counts,
@@ -293,14 +298,20 @@ function withGymFieldsFull(understanding: MemberListUnderstanding, over: number)
  *  hold written out as they will be shown. */
 function groupsOf(reconciled: Reconciled): MemberListGroups {
   const inFile = (people: readonly ReconciledPerson[]) =>
-    people.map((person) => ({
+    people.map((person) => {
       // Everybody in these three groups came out of a row, so the index is there.
       // `?? 0` would quietly put the first person of the file in somebody else's
       // place, so a missing one is a fault of this module and says so.
-      at: person.at ?? raise(`a person of the file has no place in it (upload's ${String(person.row)})`),
-      wasStatus: person.wasStatus,
-      entryId: person.entryId,
-    }));
+      const at = person.at ?? raise(`a person of the file has no place in it (upload's ${String(person.row)})`);
+      // The number they will hold, where it is not the row's own (5e-ii).
+      const own = reconciled.rows[at]?.memberNumber ?? null;
+      return {
+        at,
+        wasStatus: person.wasStatus,
+        entryId: person.entryId,
+        ...(person.memberNumber === own ? {} : { memberNumber: person.memberNumber }),
+      };
+    });
   // Somebody coming off the list is the GYM's own record of them, and is stored. Not
   // `inApp`: that is a fact about one of the gym's members and is filled in on every
   // read, like every other member fact (review of PR #87, High-1).
@@ -318,6 +329,20 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
       wasStatus: person.wasStatus,
       entryId: person.entryId,
     })),
+    numbers: numbersOf(reconciled),
+  };
+}
+
+/** What the file does to member numbers, as Review shows it (5e-ii). */
+function numbersOf(reconciled: Reconciled): MemberListImportNumbers {
+  const numbers = reconciled.numbers;
+  if (numbers === null) return { given: 0, first: null, last: null, moved: [], movedTotal: 0 };
+  return {
+    given: numbers.given,
+    first: numbers.first,
+    last: numbers.last,
+    moved: numbers.moved.slice(0, MEMBER_LIST_NUMBER_MOVES_SHOWN).map((move) => ({ fullName: move.fullName, from: move.from, to: move.to, toName: move.toName })),
+    movedTotal: numbers.moved.length,
   };
 }
 
@@ -459,6 +484,8 @@ function assemble(input: {
   /** Whose corrections the file would write over: worked out with the counts and never
    *  stored with them, so a preview read back later names nobody. */
   handEditNames: readonly string[];
+  /** The member numbers the file gives and moves, kept with the staged file (5e-ii). */
+  numbers: MemberListImportNumbers;
 }): Omit<MemberListPreview, "uploadId"> {
   const { shell, measured } = input;
   return {
@@ -484,6 +511,7 @@ function assemble(input: {
     warnings: shell.warnings,
     seat: measured.seat,
     guard: measured.counts.guard,
+    numbers: input.numbers,
   };
 }
 
@@ -558,7 +586,7 @@ export async function previewUpload(
     understanding: { ...withGymFieldsFull(understood, over), rows: reconciled.rows },
     groups: groupsOf(reconciled),
   };
-  const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured, handEditNames: reconciled.handEditNames });
+  const body = assemble({ mode: input.mode, expiresAt, fileSha256, shell: shellOf(file), measured, handEditNames: reconciled.handEditNames, numbers: file.groups.numbers });
 
   const uploadId = await repo.stageUpload(deps.sql, {
     gymId,
@@ -732,6 +760,7 @@ export async function readPreview(
       shell: read.shell,
       measured: { counts: read.counts, seat: read.counts.seat, lastFileSha256: read.lastFileSha256 },
       handEditNames: [],
+      numbers: read.groups.numbers,
     }),
   };
 }
@@ -754,7 +783,7 @@ function cutHere(read: Read, group: MemberListRowGroup, cursor: number): { total
       fullName: row.fullName,
       email: row.email,
       phone: row.phone,
-      memberNumber: row.memberNumber,
+      memberNumber: place.memberNumber === undefined ? row.memberNumber : place.memberNumber,
       status: row.status,
       wasStatus: place.wasStatus,
       entryId: place.entryId,
@@ -970,7 +999,8 @@ function toWrite(reconciled: Reconciled, kept: readonly KeptField[], endsOnKind:
       fullName: row.fullName,
       email: row.email,
       phone: row.phone,
-      memberNumber: row.memberNumber,
+      // The number the rule settled (5e-ii): the file's, theirs kept, or one given.
+      memberNumber: person.memberNumber,
       entryKey: person.entryKey,
       clear: person.moved,
     };
@@ -1226,14 +1256,17 @@ export async function confirmUpload(
     await repo.addFields(tx, gymId, grown.fresh);
 
     const carries = carriedFields(file.understanding.mapping);
+    // Every person's number is the rule's (5e-ii), so it is written whether or not the file
+    // has the column: where nothing moved it, it is the number the record already holds.
+    const writes: CarriedFields = reconciled.numbers === null ? carries : { ...carries, memberNumber: true };
     const writing = toWrite(reconciled, kept, file.understanding.endsOnKind);
     const added = await repo.insertEntries(tx, gymId, writing.add, "upload");
     expectApplied(added, writing.add.length, "added", uploadId);
     // A FORMER RECORD THE FILE HOLDS AGAIN IS REVIVED, NEVER INSERTED (§11.1): the same
     // row, its id and everything that hangs off it, with `former_at` cleared.
-    const revived = await repo.updateEntries(tx, gymId, writing.revive, carries, true);
+    const revived = await repo.updateEntries(tx, gymId, writing.revive, writes, true);
     expectApplied(revived, writing.revive.length, "revived", uploadId);
-    const updated = await repo.updateEntries(tx, gymId, writing.change, carries, false);
+    const updated = await repo.updateEntries(tx, gymId, writing.change, writes, false);
     expectApplied(updated, writing.change.length, "changed", uploadId);
     // Everybody this file holds is the file's now, whoever first added them.
     await repo.markFromFile(tx, gymId, [...reconciled.changed, ...reconciled.unchanged, ...reconciled.returning].map((person) => person.identityKey));
@@ -1255,6 +1288,25 @@ export async function confirmUpload(
     await keepLeftDays(tx, gymId, await repo.entryIdsByIdentityKeys(tx, gymId, goneKeys), at);
     const removed = await repo.markEntriesFormer(tx, gymId, reconciled.gone.map((person) => person.identityKey), at);
     expectApplied(removed, reconciled.gone.length, "removed", uploadId);
+
+    // THE RECORDS THIS FILE DOES NOT HOLD WHOSE NUMBER IT GIVES TO SOMEBODY ELSE (5e-ii),
+    // moved to the numbers Review named. By id, after the writes above found them by key.
+    const byId = new Map(entries.map((entry) => [entry.id, entry]));
+    const renumbering = (reconciled.numbers?.moved ?? [])
+      .filter((move) => move.at === null)
+      .map((move) => {
+        const entry = byId.get(move.entryId) ?? raise(`a record whose number an import moves was not read with the list (${move.entryId})`);
+        return {
+          id: entry.id,
+          memberNumber: move.to,
+          identityKey: identityKey({ fullName: entry.fullName, email: entry.email, phone: entry.phone, memberNumber: move.to }),
+        };
+      });
+    const renumbered = await repo.renumberEntries(tx, gymId, renumbering);
+    expectApplied(renumbered, renumbering.length, "renumbered", uploadId);
+    // The numbers given and the numbers that went are never given again (5e-i).
+    const keptAfter = reconciled.numbers?.kept ?? null;
+    if (keptAfter !== null) await repo.writeMemberNumbersKept(tx, gymId, keptAfter);
 
     // "THEY'VE LEFT" ENDS THE APP TOO, as Remove does (RULINGS 2026-09-28): each leaver's
     // membership closed with the record it is removed with (Put back gives both back),
@@ -1299,7 +1351,7 @@ export async function confirmUpload(
     // The version moves only when something actually changed (§9.7): bumping it for a
     // confirm that wrote nothing would throw away every other preview open in the gym
     // for no reason, and the same file uploaded twice is exactly that case.
-    const bump = added + revived + updated + removed > 0;
+    const bump = added + revived + updated + removed + renumbered > 0;
     const after = await repo.moveListOn(tx, { gymId, uploadId, at, bump });
     // The cells go in the same statement that marks it confirmed, and `summary`
     // becomes what was APPLIED rather than what the preview guessed.
@@ -1321,6 +1373,8 @@ export async function confirmUpload(
         updated: String(updated),
         removed: String(removed),
         unchanged: String(reconciled.counts.unchanged),
+        numbersGiven: String(reconciled.numbers?.given ?? 0),
+        numbersMoved: String(reconciled.numbers?.moved.length ?? 0),
         membersLeaving: String(reconciled.members.leaving),
         markedStay: String(reconciled.missing.length - reconciled.gone.length),
         endedApp: String(closed.length),

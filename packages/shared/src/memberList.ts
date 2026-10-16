@@ -802,6 +802,9 @@ const COUNTED_WARNINGS = [
   "phones_need_country",
   "phones_unusual",
   "shared_emails",
+  /** Rows of the file giving one member number to different people (5e-ii): both
+   *  are imported with it. */
+  "shared_member_numbers",
   /** Cells of the gym's own columns that were longer than we keep (§11.1). */
   "cells_cut",
   /** Cells in a date column that are no date, left empty rather than guessed. */
@@ -934,6 +937,8 @@ export function memberListWarningWords(warning: MemberListWarning): string {
       return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone. Correct any that are wrong in your file and upload it again, or in the app after you import.`;
     case "shared_emails":
       return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept, but only one person can join the app with each address — add the others' own email to invite them.`;
+    case "shared_member_numbers":
+      return `${numberWords(warning.rows, "person has", "people have")} the same member number as someone else in this file. Both are imported with it. Give each person their own number in your file and import it again, or change one in the app after you import.`;
     case "placeholders":
       return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
@@ -1151,6 +1156,38 @@ export const memberListSeatSchema = z.object({
 });
 export type MemberListSeat = z.infer<typeof memberListSeatSchema>;
 
+/** How many records whose number an import moves are named on Review. */
+export const MEMBER_LIST_NUMBER_MOVES_SHOWN = 200;
+
+/** A record whose member number the file gives to somebody else (5e-ii): moved to the
+ *  gym's next free number, `to` (null only where that would be too long a number).
+ *  `toName` is who the file gives `from` to. */
+export const memberListNumberMoveSchema = z
+  .object({
+    fullName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
+    from: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS),
+    to: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    toName: z.string().max(MEMBER_LIST_MAX_NAME_CHARS),
+  })
+  .strict();
+export type MemberListNumberMove = z.infer<typeof memberListNumberMoveSchema>;
+
+/** WHAT AN IMPORT DOES TO MEMBER NUMBERS (5e-ii; Kd, 2026-10-16): how many of the file's
+ *  people with no number are given one, `first` to `last`; and every record whose number
+ *  moves, the first `MEMBER_LIST_NUMBER_MOVES_SHOWN` named. Kept with the staged file, so
+ *  the names go with its cells. */
+export const memberListImportNumbersSchema = z
+  .object({
+    given: z.number().int().min(0),
+    first: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    last: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    moved: z.array(memberListNumberMoveSchema).max(MEMBER_LIST_NUMBER_MOVES_SHOWN),
+    movedTotal: z.number().int().min(0),
+  })
+  .strict();
+export type MemberListImportNumbers = z.infer<typeof memberListImportNumbersSchema>;
+export const MEMBER_LIST_NO_IMPORT_NUMBERS: MemberListImportNumbers = { given: 0, first: null, last: null, moved: [], movedTotal: 0 };
+
 /** THE PREVIEW — what an upload WOULD do, and the only answer the upload route
  *  gives. Everything in it is a count, a column's own heading with three of its
  *  cells, or a sentence; the people themselves are read one page at a time from
@@ -1193,6 +1230,8 @@ export const memberListPreviewSchema = z.object({
   warnings: z.array(memberListWarningSchema),
   seat: memberListSeatSchema,
   guard: memberListGuardSchema,
+  /** The member numbers this file gives and moves (5e-ii). */
+  numbers: memberListImportNumbersSchema.default(MEMBER_LIST_NO_IMPORT_NUMBERS),
 });
 export type MemberListPreview = z.infer<typeof memberListPreviewSchema>;
 
@@ -1305,7 +1344,14 @@ export type MemberListRowsPage = z.infer<typeof memberListRowsPageSchema>;
  *  Absent on an upload staged before it existed, which a read then works out again. */
 const memberListStagedEntryIdSchema = z.string().uuid().nullable().optional();
 const memberListGroupedRowSchema = z
-  .object({ at: z.number().int().min(0), wasStatus: z.string().nullable(), entryId: memberListStagedEntryIdSchema })
+  .object({
+    at: z.number().int().min(0),
+    wasStatus: z.string().nullable(),
+    entryId: memberListStagedEntryIdSchema,
+    /** The member number this person will hold where it is not the row's own: one the
+     *  app gives, or theirs kept over a blank cell (5e-ii). */
+    memberNumber: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable().optional(),
+  })
   .strict();
 
 /** Somebody the gym's list holds who is not in the file — stored as the GYM's own
@@ -1322,6 +1368,7 @@ export const memberListGroupsSchema = z
     changed: z.array(memberListGroupedRowSchema),
     unchanged: z.array(memberListGroupedRowSchema),
     gone: z.array(memberListStoredPersonSchema),
+    numbers: memberListImportNumbersSchema.default(MEMBER_LIST_NO_IMPORT_NUMBERS),
   })
   .strict();
 export type MemberListGroups = z.infer<typeof memberListGroupsSchema>;

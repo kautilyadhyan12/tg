@@ -268,6 +268,27 @@ export function groupNote(preview, group, words) {
   return '';
 }
 
+/** The member numbers an import gives (5e-ii): "42 members will get member numbers 1043 to
+ *  1084", or null where it gives none. */
+export function numbersGivenTitle(numbers, words) {
+  if (!numbers || numbers.given === 0 || numbers.first === null) return null;
+  if (numbers.given === 1) return `1 ${words.person} will get member number ${numbers.first}`;
+  return `${count(numbers.given)} ${words.people} will get member numbers ${numbers.first} to ${numbers.last}`;
+}
+
+/** "2 member numbers will change", or null where none moves. */
+export function numbersMovedTitle(numbers) {
+  if (!numbers || numbers.movedTotal === 0) return null;
+  return `${of(numbers.movedTotal, 'member number', 'member numbers')} will change`;
+}
+
+/** One record whose number the file gives to somebody else: who, from what to what, and why. */
+export function numberMoveLine(move) {
+  const who = move.fullName || 'No name';
+  const to = move.to === null ? `${who} will have no member number` : `${who}: ${move.from} → ${move.to}`;
+  return `${to}. Your file gives ${move.from} to ${move.toName || 'someone else'}.`;
+}
+
 /** Each warning as one short line; the server's full sentence sits behind "Why?". */
 export function warningTitle(w) {
   switch (w.code) {
@@ -288,6 +309,8 @@ export function warningTitle(w) {
       return `${of(w.rows, 'phone number looks', 'phone numbers look')} unusual`;
     case 'shared_emails':
       return `${of(w.rows, 'person shares', 'people share')} an email`;
+    case 'shared_member_numbers':
+      return `${of(w.rows, 'person shares', 'people share')} a member number`;
     case 'placeholders':
       return `Front-desk details left out of ${of(w.rows, 'row', 'rows')}`;
     case 'other_sheets_ignored':
@@ -337,6 +360,7 @@ export function warningRowLine(code, w) {
     case 'card_cells_dropped':
       return `${who}: a card number${inColumn} was removed`;
     case 'shared_emails':
+    case 'shared_member_numbers':
       return w.sameAsRow ? `${who}: ${w.cell}, also on row ${String(w.sameAsRow)}` : `${who}: ${w.cell}`;
     case 'placeholders':
       return `${who}: ${w.cell} left out`;

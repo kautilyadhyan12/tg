@@ -737,6 +737,8 @@ export async function stagedPage(
                  SELECT jsonb_agg(
                           (doc.file -> ((g ->> 'at')::int))
                           || jsonb_build_object('wasStatus', g -> 'wasStatus', 'entryId', g -> 'entryId')
+                          -- The number they will hold where it is not the row's own (5e-ii).
+                          || CASE WHEN g ? 'memberNumber' THEN jsonb_build_object('memberNumber', g -> 'memberNumber') ELSE '{}'::jsonb END
                           ORDER BY ord)
                  FROM jsonb_array_elements(doc.grp) WITH ORDINALITY AS t(g, ord)
                  WHERE ord > ${cursor}::int AND ord <= ${cursor + limit}::int
@@ -3290,14 +3292,43 @@ async function keptOf(sql: SqlOrTx, gymId: string): Promise<Record<string, strin
   return row === undefined ? {} : keptSchema.parse(row.kept);
 }
 
+/** The kept numbers an import works from (5e-ii): read under the gym's lock by a confirm. */
+export async function memberNumbersKept(sql: SqlOrTx, gymId: string): Promise<Record<string, string>> {
+  return keptOf(sql, gymId);
+}
+
+/** The kept numbers as a whole, written: an import's, worked out from what it read under
+ *  the gym's lock (5e-ii). */
+export async function writeMemberNumbersKept(tx: TransactionSql, gymId: string, kept: Readonly<Record<string, string>>): Promise<void> {
+  await tx`
+    INSERT INTO gym_member_lists (gym_id, member_numbers_kept)
+    VALUES (${gymId}, ${tx.json({ ...kept })})
+    ON CONFLICT (gym_id) DO UPDATE SET member_numbers_kept = EXCLUDED.member_numbers_kept`;
+}
+
 /** This number kept as its sequence's highest, where it is higher than what is kept. */
 async function keepNumber(tx: TransactionSql, gymId: string, number: string): Promise<void> {
   const kept = keptWith(await keptOf(tx, gymId), number);
   if (kept === null) return;
-  await tx`
-    INSERT INTO gym_member_lists (gym_id, member_numbers_kept)
-    VALUES (${gymId}, ${tx.json(kept)})
-    ON CONFLICT (gym_id) DO UPDATE SET member_numbers_kept = EXCLUDED.member_numbers_kept`;
+  await writeMemberNumbersKept(tx, gymId, kept);
+}
+
+/** Records given another member number by an import (5e-ii), each with the key that number
+ *  makes. By id, within the gym; the number of records written. */
+export async function renumberEntries(
+  tx: TransactionSql,
+  gymId: string,
+  changes: readonly { id: string; memberNumber: string | null; identityKey: string }[],
+): Promise<number> {
+  if (changes.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_list_entries e
+    SET member_number = v.member_number, identity_key = v.identity_key
+    FROM unnest(${changes.map((c) => c.id)}::uuid[], ${changes.map((c) => c.memberNumber)}::text[], ${changes.map((c) => c.identityKey)}::text[])
+      AS v(id, member_number, identity_key)
+    WHERE e.gym_id = ${gymId} AND e.id = v.id
+    RETURNING e.id`;
+  return rows.length;
 }
 
 /** The number "Add member" offers: read on the pool, so it is a suggestion; the number a
