@@ -443,6 +443,16 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
     if (unsaved) setLeaving(where);
     else leave(where);
   };
+  // Closing or reloading the tab with changes not saved asks first, as the browser does.
+  useEffect(() => {
+    if (!unsaved) return undefined;
+    const ask = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', ask);
+    return () => window.removeEventListener('beforeunload', ask);
+  }, [unsaved]);
   const title = adding && lead === null ? 'Add lead' : (lead?.fullName ?? '');
   const off = busy || readOnly;
 
@@ -467,10 +477,12 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
         role="dialog"
         aria-modal="true"
         aria-label={adding && lead === null ? 'Add lead' : 'Lead'}
-        className="c-sheet absolute inset-0 md:left-auto md:w-[540px] md:border-l flex flex-col overflow-y-auto md:overflow-hidden"
+        className="c-sheet absolute inset-0 md:left-auto md:w-[540px] md:border-l flex flex-col overflow-y-auto"
         style={{ borderColor: 'var(--card-line)' }}
       >
-        <div className="flex flex-col gap-4 px-4 pt-5 pb-4 md:px-7 md:pt-7 md:pb-5 border-b" style={{ borderColor: 'var(--line)' }}>
+        {/* ONE PAGE that scrolls as a whole (Kd at 20e-ii-b-ii-b's click-through: a fixed top and
+            bottom left the middle "stuck inside a box"); its Save stays in view at the foot. */}
+        <div className="flex flex-col gap-4 px-4 pt-5 md:px-7 md:pt-7">
           <div className="flex items-start gap-3">
             <div className="flex flex-col gap-1 flex-grow min-w-0">
               <h2 className="c-h1 c-ell" style={{ fontSize: 28, lineHeight: '34px' }}>
@@ -488,7 +500,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
               ) : null}
               {lead !== null && memberGift !== null ? (
                 <span className="c-s14 c-t2" data-testid="member-gift-line">
-                  {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName)}
+                  {memberGiftLine(memberGift.gift, memberGift.memberName ?? 'The inviting member', lead.fullName.trim().split(/\s+/)[0] ?? lead.fullName, memberGift.on ?? 'membership')}
                 </span>
               ) : null}
               {lead !== null && memberGift !== null && memberGift.gift.state === 'waiting_no_record' ? (
@@ -542,6 +554,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
             </div>
           ) : null}
 
+
           {askJoin === 'unsaved' && !joined ? (
             <p className="c-s14 c-w5" role="alert" style={{ color: 'var(--bad)' }}>
               {UNSAVED}
@@ -592,7 +605,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
           ) : null}
         </div>
 
-        <div className="md:flex-grow md:overflow-y-auto flex flex-col gap-4 px-4 py-5 md:px-7">
+        <div className="flex flex-col gap-4 px-4 py-5 md:px-7">
           {loadError !== null ? <p className="c-s15 c-t2">{loadError}</p> : null}
 
           {!adding && lead === null && loadError === null ? (
@@ -625,28 +638,7 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
                 disabled={off}
                 onChange={(v) => setDraft((d) => ({ ...d, mayEmail: v }))}
               />
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p">
-                  {working === 'details' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-                  Save
-                </button>
-                {changed ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraft(leadDraft(lead));
-                      setError(null);
-                      setAskJoin(false);
-                    }}
-                    disabled={busy}
-                    className="c-btn c-btn-s"
-                  >
-                    Cancel
-                  </button>
-                ) : null}
-              </div>
-
-              <div className="flex flex-col gap-2 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
+              <div className="flex flex-col gap-2 pt-4">
                 <NotesBox value={notes} onChange={setNotes} disabled={off} />
                 {notes.trim() !== lead.notes ? (
                   <button type="button" onClick={() => save({ notes: notes.trim() }, 'Notes saved.', 'notes')} disabled={off} className="c-btn c-btn-s self-start">
@@ -658,8 +650,8 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-3 px-4 py-4 md:px-7 border-t" style={{ borderColor: 'var(--line)' }}>
-          {messages}
+        <div className="flex flex-col gap-3 px-4 pb-6 md:px-7">
+          {lead === null ? messages : null}
 
           {adding && lead === null ? (
             <button type="button" onClick={add} disabled={off} className="c-btn c-btn-p c-btn-lg w-full md:w-auto md:self-start">
@@ -706,6 +698,39 @@ export default function LeadSheet({ gymId, gym, leadId, orgSlug, words, readOnly
             </div>
           ) : null}
         </div>
+
+        {/* SAVE STAYS IN VIEW at the foot of the panel, with what is not saved and what
+            happened, however far down the lead runs (as Settings' boxes do). */}
+        {lead !== null ? (
+          <div
+            className="sticky bottom-0 mt-auto flex flex-col gap-2 px-4 py-3 md:px-7"
+            style={{ background: 'var(--sheet)', borderTop: changed ? '1px solid var(--line)' : '1px solid transparent' }}
+            data-testid="lead-save-bar"
+          >
+            {messages}
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={saveDetails} disabled={off || !changed} className="c-btn c-btn-p">
+                {working === 'details' ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                Save
+              </button>
+              {changed ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(leadDraft(lead));
+                    setError(null);
+                    setAskJoin(false);
+                  }}
+                  disabled={busy}
+                  className="c-btn c-btn-s"
+                >
+                  Cancel
+                </button>
+              ) : null}
+              {changed ? <span className="c-s14 c-t2">You have changes that aren&apos;t saved.</span> : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

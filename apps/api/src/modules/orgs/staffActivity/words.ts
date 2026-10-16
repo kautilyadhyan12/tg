@@ -353,6 +353,8 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.referral_member_gift_used",
   "org.referral_member_gift_taken_back",
   "org.referral_member_gift_waiting_again",
+  "org.held_membership_gift_days_added",
+  "org.held_membership_gift_days_taken_back",
   "billing.trial_replaced",
   "billing.size_replaced",
   "billing.duplicate",

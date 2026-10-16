@@ -7,10 +7,13 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import PlaceLink from './PlaceLink';
 import {
+  GIFT_DAYS_MOST,
   GIFT_ON_CHOICES,
+  MEMBER_GIFT_ON_CHOICES,
   friendCodeLine,
   friendPreview,
   giftProblem,
+  memberGiftProblem,
   memberPreview,
   referralBody,
   referralChanged,
@@ -21,9 +24,10 @@ import {
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
 // REFER A FRIEND (ROADMAP 20e-ii-a; spec Part 3 §16.3): the owner switches it on and sets
-// each gift right here: for the member who invites, an amount off their next payment (given
-// by itself, 20e-ii-b); for the friend, an amount off what they buy, with a promo code the
-// app makes when it is saved. Below, exactly what a member and a friend will read. Everything
+// each gift right here: for the member who invites, money off their next membership payment
+// or their next purchase at the desk, or free days on their membership (given by itself,
+// 20e-ii-b); for the friend, an amount off what they buy, with a promo code the app makes
+// when it is saved. Below, exactly what a member and a friend will read. Everything
 // waits for Save, which stays in view at the foot of the screen while anything is not saved
 // (Kd at the click-through: Save "is way bottom, will forget to save").
 
@@ -36,8 +40,8 @@ const labelStyle = { color: 'rgba(255,255,255,0.75)' };
 const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 const badStyle = { color: '#ef4444' };
 
-/** One gift: what they get and how much; the friend's also says what it comes off. */
-function GiftBox({ title, hint, gift, currency, withOn, codeLine = null, discountsTo = null, guard = false, disabled, onChange }) {
+/** The friend's gift: what they get, how much and what it comes off. */
+function GiftBox({ title, hint, gift, currency, codeLine = null, discountsTo = null, guard = false, disabled, onChange }) {
   const set = (change) => onChange({ ...gift, ...change });
   const problem = giftProblem(gift, currency);
   return (
@@ -66,7 +70,7 @@ function GiftBox({ title, hint, gift, currency, withOn, codeLine = null, discoun
             style={inputStyle}
           />
         )}
-        {gift.give === 'none' ? null : withOn ? (
+        {gift.give === 'none' ? null : (
           <select value={gift.on} onChange={(e) => set({ on: e.target.value })} disabled={disabled} aria-label={`${title}: off`} className="rounded-xl px-4 py-3 text-base sm:text-sm" style={inputStyle}>
             {GIFT_ON_CHOICES.map((c) => (
               <option key={c.key} value={c.key}>
@@ -74,10 +78,6 @@ function GiftBox({ title, hint, gift, currency, withOn, codeLine = null, discoun
               </option>
             ))}
           </select>
-        ) : (
-          <span className="text-sm" style={labelStyle}>
-            off their next payment
-          </span>
         )}
       </div>
       {problem !== null && gift.value !== '' ? (
@@ -94,6 +94,114 @@ function GiftBox({ title, hint, gift, currency, withOn, codeLine = null, discoun
         <PlaceLink to={discountsTo} guard={guard} className="c-lk text-xs self-start">
           See it in Discounts
         </PlaceLink>
+      ) : null}
+    </fieldset>
+  );
+}
+
+/** The member's gift: money off a membership or products, or free days on their membership
+ *  with, on a second line, the money a member with no membership gets instead. */
+function MemberGiftBox({ gift, currency, disabled, onChange }) {
+  const title = 'Gift for the member who invites';
+  const set = (change) => onChange({ ...gift, ...change });
+  const problem = memberGiftProblem(gift, currency);
+  const typed = gift.give === 'days' ? gift.days !== '' || gift.backupValue !== '' : gift.value !== '';
+  const amountOptions = (
+    <>
+      <option value="percent">A percentage off</option>
+      <option value="amount">{currency === null ? 'An amount off' : `An amount off (${currency})`}</option>
+    </>
+  );
+  return (
+    <fieldset className="flex flex-col gap-2" aria-label={title}>
+      <legend className="text-sm font-medium" style={labelStyle}>
+        {title}
+      </legend>
+      <span className="block text-xs" style={hintStyle}>
+        Given by itself once their friend joins and makes their first payment.
+      </span>
+      <div className="grid gap-2 items-center sm:grid-cols-[1fr_120px_1.6fr]">
+        <select value={gift.give} onChange={(e) => set({ give: e.target.value })} disabled={disabled} aria-label={`${title}: what they get`} className="rounded-xl px-4 py-3 text-base sm:text-sm" style={inputStyle}>
+          <option value="none">No gift</option>
+          {amountOptions}
+          <option value="days">Free days on their membership</option>
+        </select>
+        {gift.give === 'none' ? null : gift.give === 'days' ? (
+          <input
+            value={gift.days}
+            onChange={(e) => set({ days: e.target.value })}
+            disabled={disabled}
+            inputMode="numeric"
+            aria-label={`${title}: days`}
+            placeholder="14"
+            className="rounded-xl px-4 py-3 text-base sm:text-sm"
+            style={inputStyle}
+          />
+        ) : (
+          <input
+            value={gift.value}
+            onChange={(e) => set({ value: e.target.value })}
+            disabled={disabled}
+            inputMode="decimal"
+            aria-label={gift.give === 'percent' ? `${title}: percentage` : `${title}: amount`}
+            placeholder={gift.give === 'percent' ? '10' : '500'}
+            className="rounded-xl px-4 py-3 text-base sm:text-sm"
+            style={inputStyle}
+          />
+        )}
+        {gift.give === 'none' ? null : gift.give === 'days' ? (
+          <span className="text-sm" style={labelStyle}>
+            {`free days, up to ${String(GIFT_DAYS_MOST)}`}
+          </span>
+        ) : (
+          <select value={gift.on} onChange={(e) => set({ on: e.target.value })} disabled={disabled} aria-label={`${title}: off`} className="rounded-xl px-4 py-3 text-base sm:text-sm" style={inputStyle}>
+            {MEMBER_GIFT_ON_CHOICES.map((c) => (
+              <option key={c.key} value={c.key}>
+                off {c.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {gift.give === 'days' ? (
+        <>
+          <span className="block text-xs" style={hintStyle}>
+            Their next renewal, or the last day of their membership, moves later by these days. What they owe now stays the same.
+          </span>
+          <span className="block text-sm mt-1" style={labelStyle}>
+            A member with no membership then gets instead:
+          </span>
+          <div className="grid gap-2 items-center sm:grid-cols-[1fr_120px_1.6fr]">
+            <select
+              value={gift.backupGive}
+              onChange={(e) => set({ backupGive: e.target.value })}
+              disabled={disabled}
+              aria-label={`${title}: with no membership, what they get`}
+              className="rounded-xl px-4 py-3 text-base sm:text-sm"
+              style={inputStyle}
+            >
+              {amountOptions}
+            </select>
+            <input
+              value={gift.backupValue}
+              onChange={(e) => set({ backupValue: e.target.value })}
+              disabled={disabled}
+              inputMode="decimal"
+              aria-label={gift.backupGive === 'percent' ? `${title}: with no membership, percentage` : `${title}: with no membership, amount`}
+              placeholder={gift.backupGive === 'percent' ? '10' : '500'}
+              className="rounded-xl px-4 py-3 text-base sm:text-sm"
+              style={inputStyle}
+            />
+            <span className="text-sm" style={labelStyle}>
+              off their next membership payment
+            </span>
+          </div>
+        </>
+      ) : null}
+      {problem !== null && typed ? (
+        <span className="block text-xs" style={badStyle}>
+          {problem}
+        </span>
       ) : null}
     </fieldset>
   );
@@ -233,28 +341,21 @@ export default function ReferralPanel({ org, readOnly, startOpen = false }) {
             ) : null}
           </div>
 
-          <GiftBox
-            title="Gift for the member who invites"
-            hint="Comes off their next payment by itself, once their friend joins and makes their first payment."
-            gift={draft.member}
-            currency={settings.currency}
-            withOn={false}
-            disabled={readOnly || saving}
-            onChange={(member) => edit({ ...draft, member })}
-          />
+          <MemberGiftBox gift={draft.member} currency={settings.currency} disabled={readOnly || saving} onChange={(member) => edit({ ...draft, member })} />
           <GiftBox
             title="Gift for the friend"
             hint="Shown on the invite page. It comes off when they join, with a promo code the app makes for your staff."
             gift={draft.friend}
             currency={settings.currency}
-            withOn
             codeLine={friendCodeLine(settings)}
             discountsTo={discountsTo}
             guard={changed}
             disabled={readOnly || saving}
             onChange={(friend) => edit({ ...draft, friend })}
           />
-          {settings.currency === null && countryTo !== null && (draft.member.give === 'amount' || draft.friend.give === 'amount') ? (
+          {settings.currency === null &&
+          countryTo !== null &&
+          (draft.member.give === 'amount' || (draft.member.give === 'days' && draft.member.backupGive === 'amount') || draft.friend.give === 'amount') ? (
             // The country is higher up this same page, so nothing typed here is lost.
             <PlaceLink to={countryTo} className="c-lk text-sm self-start">
               Set your country

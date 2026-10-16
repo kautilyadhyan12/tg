@@ -151,6 +151,9 @@ export const gymHeldMemberships = pgTable(
     packDays: integer("pack_days"),
     startsOn: date("starts_on").notNull(),
     frozenDays: integer("frozen_days").notNull().default(0),
+    /** Refer a friend's free days (20e-ii-b-ii-b), added to period `giftFrom` and after. */
+    giftDays: integer("gift_days").notNull().default(0),
+    giftFrom: integer("gift_from").notNull().default(0),
     status: text("status").notNull().default("active"),
     frozenOn: date("frozen_on"),
     cancelledOn: date("cancelled_on"),
@@ -204,6 +207,7 @@ export const gymHeldMemberships = pgTable(
       END`,
     ),
     check("gym_held_memberships_frozen_days_check", sql`${t.frozenDays} BETWEEN 0 AND 36500`),
+    check("gym_held_memberships_gift_days_check", sql`${t.giftDays} BETWEEN 0 AND 36500 AND ${t.giftFrom} >= 0`),
     check("gym_held_memberships_frozen_check", sql`(${t.status} = 'frozen') = (${t.frozenOn} IS NOT NULL)`),
     check("gym_held_memberships_cancelled_check", sql`(${t.status} = 'cancelled') = (${t.cancelledOn} IS NOT NULL)`),
     check(

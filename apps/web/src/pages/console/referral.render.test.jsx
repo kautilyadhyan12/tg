@@ -17,6 +17,7 @@ const ReferralPanel = (await import('../../components/console/ReferralPanel')).d
 const ORG = { id: 'g1', slug: 'iron-house', name: 'Iron House', orgType: 'gym', staffRole: 'owner', privileges: ['org.manage', 'memberships.manage'] };
 const OFF = { on: false, member: null, friend: null, currency: 'INR', memberLines: [] };
 const FRIEND_SAVED = { kind: 'amount', percentBp: null, amountMinor: 50000, currency: 'INR', on: 'first', code: 'WELCOME500', words: '₹500.00 off the first payment of a membership', problem: null, archived: false };
+const MEMBER_SAVED = { kind: 'percent', percentBp: 1000, amountMinor: null, currency: null, on: 'membership', days: null, words: '10% off your next membership payment' };
 
 const draw = (org = ORG) =>
   render(
@@ -43,7 +44,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Refer a friend', () => {
-  it('both gifts are set in the box: the member gets an amount off their next payment, the friend a code, and both read exactly that', async () => {
+  it('both gifts are set in the box: the member gets an amount off their next membership payment, the friend a code, and both read exactly that', async () => {
     getReferralSettings.mockResolvedValue({ data: { settings: OFF } });
     draw();
     await screen.findByRole('group', { name: MEMBER });
@@ -54,25 +55,24 @@ describe('Refer a friend', () => {
     expect(save().disabled).toBe(true);
 
     choose(MEMBER, 'percent', '10');
-    // The member's gift has no "off what": it is always their next payment.
-    expect(box(MEMBER).queryByLabelText(`${MEMBER}: off`)).toBeNull();
-    expect(box(MEMBER).getByText('off their next payment')).toBeTruthy();
+    // The member's money comes off their next membership payment unless the owner picks products.
+    expect(box(MEMBER).getByLabelText(`${MEMBER}: off`).value).toBe('membership');
     choose(FRIEND, 'amount', '500', 'first');
-    expect(screen.getByText("When a friend you invite joins Iron House and makes their first payment, you get 10% off your next payment. It comes off by itself, and we'll tell you in your inbox.")).toBeTruthy();
+    expect(
+      screen.getByText("When a friend you invite joins Iron House and makes their first payment, you get 10% off your next membership payment. It comes off by itself, and we'll tell you in your inbox."),
+    ).toBeTruthy();
     expect(screen.getByText('Your friend gets ₹500.00 off the first payment of a membership when they join.')).toBeTruthy();
     expect(screen.getByText("[member's first name] invited you to join Iron House.")).toBeTruthy();
     // No code for the friend to remember: the business adds the offer.
     expect(screen.getByText('Your welcome offer: ₹500.00 off the first payment of a membership. Iron House adds it for you when you join.')).toBeTruthy();
     expect(bar().getByText("You have changes that aren't saved.")).toBeTruthy();
 
-    saveReferralSettings.mockResolvedValue({
-      data: { settings: { ...OFF, on: true, member: { kind: 'percent', percentBp: 1000, amountMinor: null, currency: null, words: '10% off your next payment' }, friend: FRIEND_SAVED } },
-    });
+    saveReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, on: true, member: MEMBER_SAVED, friend: FRIEND_SAVED } } });
     fireEvent.click(save());
     await screen.findByText('Saved. Refer a friend is on.');
     expect(saveReferralSettings).toHaveBeenCalledWith('g1', {
       on: true,
-      member: { kind: 'percent', percentBp: 1000, amountMinor: null },
+      member: { kind: 'percent', percentBp: 1000, amountMinor: null, on: 'membership', days: null },
       friend: { kind: 'amount', percentBp: null, amountMinor: 50000, on: 'first' },
     });
     expect(box(FRIEND).getByText('Its promo code: WELCOME500.')).toBeTruthy();
@@ -81,10 +81,56 @@ describe('Refer a friend', () => {
     expect(box(FRIEND).getByRole('link', { name: 'See it in Discounts' }).getAttribute('href')).toBe('/console/iron-house/memberships#discounts');
   });
 
-  it('unticking the switch says what is not saved beside Save, which stays in view', async () => {
-    getReferralSettings.mockResolvedValue({
-      data: { settings: { ...OFF, on: true, member: { kind: 'percent', percentBp: 1000, amountMinor: null, currency: null, words: '10% off your next payment' }, friend: FRIEND_SAVED } },
+  it('free days on their membership, with money off for a member who has none, read and saved as typed', async () => {
+    getReferralSettings.mockResolvedValue({ data: { settings: OFF } });
+    draw();
+    await screen.findByRole('group', { name: MEMBER });
+    fireEvent.click(screen.getByLabelText('Turn on Refer a friend'));
+    fireEvent.change(box(MEMBER).getByLabelText(`${MEMBER}: what they get`), { target: { value: 'days' } });
+    expect(box(MEMBER).getByText('Their next renewal, or the last day of their membership, moves later by these days. What they owe now stays the same.')).toBeTruthy();
+    fireEvent.change(box(MEMBER).getByLabelText(`${MEMBER}: days`), { target: { value: '91' } });
+    expect(box(MEMBER).getByText('Type a number of days from 1 to 90, like 14.')).toBeTruthy();
+    expect(save().disabled).toBe(true);
+    fireEvent.change(box(MEMBER).getByLabelText(`${MEMBER}: days`), { target: { value: '14' } });
+    // Free days alone are not enough: a member with no membership then has nothing to add them to.
+    expect(box(MEMBER).getByText('Choose what a member with no membership gets instead.')).toBeTruthy();
+    expect(save().disabled).toBe(true);
+    fireEvent.change(box(MEMBER).getByLabelText(`${MEMBER}: with no membership, what they get`), { target: { value: 'amount' } });
+    fireEvent.change(box(MEMBER).getByLabelText(`${MEMBER}: with no membership, amount`), { target: { value: '500' } });
+    expect(
+      screen.getByText("When a friend you invite joins Iron House and makes their first payment, you get 14 free days on your membership. They are added by themselves, and we'll tell you in your inbox."),
+    ).toBeTruthy();
+    expect(screen.getByText('If you have no membership then, you get ₹500.00 off your next membership payment instead.')).toBeTruthy();
+    const saved = { kind: 'amount', percentBp: null, amountMinor: 50000, currency: 'INR', on: 'membership', days: 14, words: '14 free days on your membership' };
+    saveReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, on: true, member: saved } } });
+    fireEvent.click(save());
+    await screen.findByText('Saved. Refer a friend is on.');
+    expect(saveReferralSettings).toHaveBeenCalledWith('g1', {
+      on: true,
+      member: { kind: 'amount', percentBp: null, amountMinor: 50000, on: 'membership', days: 14 },
+      friend: null,
     });
+    // Read back as it was saved, with nothing left unsaved.
+    expect(box(MEMBER).getByLabelText(`${MEMBER}: days`).value).toBe('14');
+    expect(box(MEMBER).getByLabelText(`${MEMBER}: with no membership, amount`).value).toBe('500.00');
+    expect(bar().queryByText(/aren't saved/)).toBeNull();
+  });
+
+  it('money off products at the desk', async () => {
+    getReferralSettings.mockResolvedValue({ data: { settings: OFF } });
+    draw();
+    await screen.findByRole('group', { name: MEMBER });
+    fireEvent.click(screen.getByLabelText('Turn on Refer a friend'));
+    choose(MEMBER, 'amount', '200', 'products');
+    expect(screen.getByText(/you get ₹200\.00 off your next purchase at the desk\. It comes off by itself/)).toBeTruthy();
+    saveReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, on: true, member: { ...MEMBER_SAVED, on: 'products' } } } });
+    fireEvent.click(save());
+    await screen.findByText('Saved. Refer a friend is on.');
+    expect(saveReferralSettings.mock.calls[0][1].member).toEqual({ kind: 'amount', percentBp: null, amountMinor: 20000, on: 'products', days: null });
+  });
+
+  it('unticking the switch says what is not saved beside Save, which stays in view', async () => {
+    getReferralSettings.mockResolvedValue({ data: { settings: { ...OFF, on: true, member: MEMBER_SAVED, friend: FRIEND_SAVED } } });
     draw();
     await screen.findByRole('group', { name: MEMBER });
     expect(bar().queryByText(/aren't saved/)).toBeNull();
@@ -104,7 +150,7 @@ describe('Refer a friend', () => {
     expect(save().disabled).toBe(true);
     expect(screen.queryByText(/you get 100%/)).toBeNull();
     choose(MEMBER, 'percent', '12.5');
-    expect(screen.getByText(/you get 12\.5% off your next payment\./)).toBeTruthy();
+    expect(screen.getByText(/you get 12\.5% off your next membership payment\./)).toBeTruthy();
     expect(save().disabled).toBe(false);
   });
 
