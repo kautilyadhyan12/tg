@@ -7,6 +7,7 @@ import { viewerPrivileges } from '../../pages/console/consoleView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import {
   accessChoices,
+  descriptionExample,
   KIND_CHOICES,
   LIMIT_PERIOD_CHOICES,
   PT_LIMIT_CHOICES,
@@ -157,7 +158,7 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
           value={draft.description}
           maxLength={MEMBERSHIP_DESCRIPTION_MAX}
           onChange={text('description')}
-          placeholder="For example: All classes and open gym"
+          placeholder={descriptionExample(orgType)}
           className="c-input"
         />
       </Field>

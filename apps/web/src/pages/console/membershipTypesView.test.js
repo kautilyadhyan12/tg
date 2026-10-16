@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { saveGymMembershipTypeRequestSchema, updateGymMembershipTypeRequestSchema } from '@app/shared';
 import {
   accessChoices,
+  descriptionExample,
   typeTaxLine,
   archivedNote,
   canAddType,
@@ -140,6 +141,8 @@ describe('what each type says on the list', () => {
     expect(includesLine(type({ access: 'gym_only' }), orgType)).toBe(only);
     expect(includesLine(type({ access: 'gym_only', includesPt: true }), orgType)).toBe(`${only} · Personal training`);
     expect(includesLine(packType({ packClasses: 1, packDays: 1 }), orgType)).toBe(dayPass);
+    expect(descriptionExample(orgType)).toMatch(/^For example: All classes and (open gym|open studio|personal training)$/);
+    if (only.includes('studio')) expect(descriptionExample(orgType)).toBe('For example: All classes and open studio');
     if (orgType !== 'gym' && orgType !== 'not_a_kind') expect(`${only} ${dayPass}`).not.toMatch(/\bthe gym\b|, gym only/i);
   });
 

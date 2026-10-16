@@ -32,7 +32,7 @@ export function canManageMemberships(privileges) {
  *  time" and "Trial"). The membership itself, its name, price and what it includes, is
  *  the gym's own. A day pass is kept as a pack of 1 class for 1 day. */
 export const KIND_CHOICES = [
-  { value: 'recurring', label: 'Recurring', hint: 'Charged every week, month or year until the member cancels.' },
+  { value: 'recurring', label: 'Recurring', hint: 'Charged every week, month or year until it is cancelled.' },
   { value: 'one_time', label: 'One-time payment', hint: 'Paid once. Lasts a set time, then ends.' },
   { value: 'pack', label: 'Class pack', hint: 'Paid once. A number of classes to use within a set time.' },
   { value: 'day_pass', label: 'Day pass', hint: 'Paid once. One visit, on the day.' },
@@ -44,10 +44,15 @@ export const KIND_CHOICES = [
  *  kind with neither (an old personal trainer's or clinic's) is told plainly "no classes". */
 function openPlace(orgType) {
   const { it } = orgWords(orgType);
-  if (it === 'gym') return { only: 'No classes, gym only', or: 'The gym or any class' };
-  if (it === 'box') return { only: 'No classes, open gym only', or: 'Open gym or any class' };
-  if (it === 'studio') return { only: 'No classes, open studio only', or: 'Open studio or any class' };
-  return { only: 'No classes', or: 'Any class' };
+  if (it === 'gym') return { only: 'No classes, gym only', or: 'The gym or any class', open: 'open gym' };
+  if (it === 'box') return { only: 'No classes, open gym only', or: 'Open gym or any class', open: 'open gym' };
+  if (it === 'studio') return { only: 'No classes, open studio only', or: 'Open studio or any class', open: 'open studio' };
+  return { only: 'No classes', or: 'Any class', open: 'personal training' };
+}
+
+/** The example under a membership's description: "All classes and open studio". */
+export function descriptionExample(orgType) {
+  return `For example: All classes and ${openPlace(orgType).open}`;
 }
 
 export function accessChoices(orgType) {
