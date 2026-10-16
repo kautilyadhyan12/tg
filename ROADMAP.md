@@ -327,7 +327,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
         - 20e-ii-b-i. [x] **The friend's gift, and Add member finds the person in Leads** — merged 2026-10-15 (PR #284).
         - 20e-ii-b-ii. **The member's gift**, split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-20e-ii-b-ii-a.md`):
           - 20e-ii-b-ii-a. [x] **Money off** — merged 2026-10-16 (PR #287).
-          - 20e-ii-b-ii-b. [ ] **Free days, and what money off comes off** (Kd, 2026-10-15 and 2026-10-16): four choices; days added to the member's membership, a member with none gets the money; a voided payment takes back days not reached. Risky. Before anybody uses Refer a friend.
+          - 20e-ii-b-ii-b. [x] **Free days, and what money off comes off** — merged 2026-10-16 (PR #289).
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
      - 20f-ii. [x] **Sent messages** — merged 2026-10-10 (PR #217).
