@@ -12,7 +12,7 @@ import { loadConfig } from "../src/config.js";
 import type { RobotCheck } from "../src/modules/orgs/gymPage/robotCheck.js";
 import { takeEnquiry } from "../src/modules/orgs/gymPage/service.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { REFERRAL_WORDS, type Lead, type MemberReferralResponse, type PublicInvite, type ReferralSettings } from "@app/shared";
+import { REFERRAL_WORDS, SETTINGS_CHANGED_WORDS, type Lead, type MemberReferralResponse, type PublicInvite, type ReferralSettings } from "@app/shared";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -92,7 +92,14 @@ d("Refer a friend (real Postgres)", () => {
     });
   const get = (path: string, cookies: Record<string, string> = {}, target: App = api()) => send(target, "GET", path, undefined, cookies);
   const post = (path: string, payload: unknown, cookies: Record<string, string> = {}) => send(api(), "POST", path, payload, cookies);
-  const put = (path: string, payload: unknown, cookies: Record<string, string>) => send(api(), "PUT", path, payload, cookies);
+  /** The offer's version as it stands, for a save that does not name one (item 20's passes, H3). */
+  const withVersion = async (path: string, payload: unknown, cookies: Record<string, string>): Promise<unknown> => {
+    if (!path.endsWith("/referral-settings") || typeof payload !== "object" || payload === null || "version" in payload) return payload;
+    const read = await send(api(), "GET", path, undefined, cookies);
+    const version = read.statusCode === 200 ? (JSON.parse(read.body) as { settings: { version: string } }).settings.version : "";
+    return { ...payload, version };
+  };
+  const put = async (path: string, payload: unknown, cookies: Record<string, string>) => send(api(), "PUT", path, await withVersion(path, payload, cookies), cookies);
 
   const makeUser = async (local: string, displayName: string): Promise<Person> => {
     const email = `refer-t-${local}@example.com`;
@@ -243,6 +250,43 @@ d("Refer a friend (real Postgres)", () => {
   }, TIMEOUT_MS);
 
   describe("the worst thing: a lead or a gift credited to the wrong person, or a member named to a stranger", () => {
+    it(
+      "nobody changes what strangers are promised from Discounts: a manager without the offer's tick, and the owner too, are refused, and every link still promises the offer's gift (the security pass over item 20, H1)",
+      async () => {
+        const manager = await makeUser("manager", "Mo Manager");
+        await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gymA.org.id}, ${manager.id}, 'manager', ${["memberships.manage"]})`;
+        // Not allowed the offer itself.
+        expect((await get(settingsUrl(gymA.org.id), manager.cookies)).statusCode).toBe(403);
+        const page = JSON.parse((await get(`/v1/orgs/${gymA.org.id}/register`, manager.cookies)).body) as {
+          discounts: (Record<string, unknown> & { id: string; referralGift: boolean; updatedAt: string })[];
+        };
+        const gift = page.discounts.find((d) => d.referralGift);
+        if (gift === undefined) throw new Error("no friend's gift under Discounts");
+        // What a Discounts form sends back: the discount's own fields, as the list read them.
+        const SENT = ["name", "code", "kind", "percentBp", "amountMinor", "startsOn", "endsOn", "maxUses", "forProducts", "allProducts", "productIds", "forMemberships", "allMembershipTypes", "membershipTypeIds", "membershipPayments", "updatedAt"];
+        const formOf = (row: Record<string, unknown>) => Object.fromEntries(SENT.map((key) => [key, row[key]]));
+        const id = gift.id;
+        const bigger = { ...formOf(gift), percentBp: 9999, membershipPayments: "every" };
+        for (const who of [manager, ownerA]) {
+          const changed = await put(`/v1/orgs/${gymA.org.id}/register/discounts/${id}`, bigger, who.cookies);
+          expect(changed.statusCode, changed.body).toBe(409);
+          expect((JSON.parse(changed.body) as { error: string }).error).toBe("referral_gift_in_settings");
+        }
+        const [kept] = await sql<{ percent_bp: number; membership_payments: string }[]>`SELECT percent_bp, membership_payments FROM gym_discounts WHERE id = ${id}`;
+        expect(kept).toEqual({ percent_bp: 2000, membership_payments: "first" });
+        const invite = (JSON.parse((await get(inviteUrl(await linkOf(gymA, maya)))).body) as { invite: PublicInvite }).invite;
+        expect(invite.friendGift).toEqual({ words: "20% off the first payment of a membership" });
+        // Any other discount the manager may change, as before.
+        const own = await discount(gymA, ownerA.cookies, "Manager's own", null, 5);
+        const ownRow = (JSON.parse((await get(`/v1/orgs/${gymA.org.id}/register`, manager.cookies)).body) as { discounts: typeof page.discounts }).discounts.find((d) => d.id === own);
+        if (ownRow === undefined) throw new Error("no own discount");
+        expect((await put(`/v1/orgs/${gymA.org.id}/register/discounts/${own}`, { ...formOf(ownRow), percentBp: 1000 }, manager.cookies)).statusCode).toBe(200);
+        await sql`DELETE FROM gym_discounts WHERE id = ${own}`;
+        await sql`DELETE FROM gym_staff WHERE gym_id = ${gymA.org.id} AND user_id = ${manager.id}`;
+      },
+      TIMEOUT_MS,
+    );
+
     it(
       "one member of two businesses has two links, and each brings its lead to its own business alone, marked as theirs",
       async () => {
@@ -421,11 +465,38 @@ d("Refer a friend (real Postgres)", () => {
         expect((await at("POST", formUrl(codeA), enquiry({ fullName: "Shared Two", email: "shared.two@example.com" }))).statusCode).toBe(202);
         const names = (await storedLeads(gymA.org.id)).map((l) => l.full_name);
         expect(names).toContain("Shared Two");
-        // The form has a light allowance of its own per address, ahead of the link's lookup
-        // (the re-check, L6): past it, refused there and nowhere else.
-        for (let i = 0; i < 3000; i += 1) await redis.incrWithTtl(`rl:referral_invite_form:ip:${shared}`, 3600);
+        // The form has a light allowance of its own per address for each business (the re-check,
+        // L6; the security pass over item 20, L1): past it, refused there and nowhere else.
+        for (let i = 0; i < 3000; i += 1) await redis.incrWithTtl(`rl:referral_invite_form:ip:${gymB.org.id}:${shared}`, 3600);
         expect((await at("POST", formUrl(codeB), enquiry({ fullName: "Shared Three", email: "shared.three@example.com" }))).statusCode).toBe(429);
         expect((await post(formUrl(codeB), enquiry({ fullName: "Elsewhere", email: "elsewhere@example.com" }))).statusCode).toBe(202);
+        expect((await at("POST", formUrl(codeA), enquiry({ fullName: "Shared Four", email: "shared.four@example.com" }))).statusCode).toBe(202);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "made-up links never close a real one at a shared address, and one business's links never close another's (the security pass over item 20, L1)",
+      async () => {
+        const shared = "10.99.0.2";
+        const codeA = await linkOf(gymA, maya);
+        const codeB = await linkOf(gymB, maya);
+        const at = (method: "GET" | "POST", path: string, payload?: unknown) =>
+          api().inject({ method, url: path, remoteAddress: shared, ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }) });
+        // Made-up links: each one a 404, counted apart from every real link.
+        for (const made of ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb", "cccccccccccccccc"]) expect((await at("GET", inviteUrl(made))).statusCode).toBe(404);
+        expect(await redis.get(`rl:referral_invite_miss:ip:${shared}`)).toBe("3");
+        expect(await redis.get(`rl:referral_invite_read:ip:${shared}`)).toBeNull();
+        // Ten people's worth of guessing: guessing is refused, and a real link still opens.
+        for (let i = 3; i < 600; i += 1) await redis.incrWithTtl(`rl:referral_invite_miss:ip:${shared}`, 3600);
+        expect((await at("GET", inviteUrl("dddddddddddddddd"))).statusCode).toBe(429);
+        expect((await at("POST", formUrl("dddddddddddddddd"), enquiry({ fullName: "Guess", email: "guess@example.com" }))).statusCode).toBe(429);
+        expect((await at("GET", inviteUrl(codeA))).statusCode).toBe(200);
+        expect((await at("POST", formUrl(codeA), enquiry({ fullName: "Real Friend", email: "real.friend@example.com" }))).statusCode).toBe(202);
+        // One business's links opened past their allowance there: another business's still open.
+        for (let i = 0; i < 6000; i += 1) await redis.incrWithTtl(`rl:referral_invite_read:ip:${gymA.org.id}:${shared}`, 3600);
+        expect((await at("GET", inviteUrl(codeA))).statusCode).toBe(429);
+        expect((await at("GET", inviteUrl(codeB))).statusCode).toBe(200);
       },
       TIMEOUT_MS,
     );
@@ -617,15 +688,38 @@ d("Refer a friend (real Postgres)", () => {
     );
 
     it(
-      "two saves at the same instant on two servers make one code for the friend's gift, never two",
+      "a tab opened before another save never puts the old offer back: refused with what to do, the newer offer kept (the data-integrity pass over item 20, H3)",
+      async () => {
+        const gym = await makeOrg(ownerB.cookies, "Two Tabs Refer");
+        await switchOn(gym, ownerB.cookies, mine(10), pct(20));
+        const read = async () => (JSON.parse((await get(settingsUrl(gym.org.id), ownerB.cookies)).body) as { settings: ReferralSettings }).settings.version;
+        const opened = await read();
+        // Tab A saves free days.
+        const days = { kind: "amount", percentBp: null, amountMinor: 1000, on: "membership", days: 14 };
+        expect((await put(settingsUrl(gym.org.id), { on: true, member: days, friend: pct(20), version: opened }, ownerB.cookies)).statusCode).toBe(200);
+        // Tab B, opened before, changes only the friend's gift.
+        const stale = await put(settingsUrl(gym.org.id), { on: true, member: mine(10), friend: pct(25), version: opened }, ownerB.cookies);
+        expect(stale.statusCode).toBe(409);
+        expect(JSON.parse(stale.body)).toMatchObject({ error: "referral_settings_changed", message: SETTINGS_CHANGED_WORDS });
+        const [kept] = await sql<{ member_days: number | null; percent_bp: number }[]>`
+          SELECT s.member_days, d.percent_bp FROM gym_referral_settings s JOIN gym_discounts d ON d.id = s.friend_discount_id WHERE s.gym_id = ${gym.org.id}`;
+        expect(kept).toEqual({ member_days: 14, percent_bp: 2000 });
+        // Read again, the same change goes through.
+        expect((await put(settingsUrl(gym.org.id), { on: true, member: days, friend: pct(25), version: await read() }, ownerB.cookies)).statusCode).toBe(200);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "two saves at the same instant on two servers make one code for the friend's gift, never two; the second is told it changed (item 20's passes, H3)",
       async () => {
         const gym = await makeOrg(ownerB.cookies, "Race Refer C");
-        const body = { on: true, member: mine(30), friend: pct(25) };
+        const body = { on: true, member: mine(30), friend: pct(25), version: "" };
         const [one, two] = await Promise.all([
           send(api(), "PUT", settingsUrl(gym.org.id), body, ownerB.cookies),
           send(second ?? api(), "PUT", settingsUrl(gym.org.id), body, ownerB.cookies),
         ]);
-        expect([one.statusCode, two.statusCode]).toEqual([200, 200]);
+        expect([one.statusCode, two.statusCode].sort()).toEqual([200, 409]);
         const made = await sql<{ code: string }[]>`SELECT code FROM gym_discounts WHERE gym_id = ${gym.org.id} ORDER BY code`;
         expect(made.map((d) => d.code)).toEqual(["WELCOME25"]);
       },
@@ -634,6 +728,20 @@ d("Refer a friend (real Postgres)", () => {
   });
 
   describe("the member's link and what they are told", () => {
+    it(
+      "at one shared address, one business's members past their allowance never shut another business's members out of their links (the security pass over item 20, H2)",
+      async () => {
+        const shared = "10.99.0.3";
+        const at = (gymId: string, who: Person) => api().inject({ method: "GET", url: memberUrl(gymId), remoteAddress: shared, cookies: who.cookies });
+        expect((await at(gymA.org.id, maya)).statusCode).toBe(200);
+        for (let i = 0; i < 6000; i += 1) await redis.incrWithTtl(`rl:orgs_referral_member:ip:${gymA.org.id}:${shared}`, 3600);
+        expect((await at(gymA.org.id, ravi)).statusCode).toBe(429);
+        expect((await at(gymB.org.id, maya)).statusCode).toBe(200);
+        expect(await redis.get(`rl:orgs_referral_member:ip:${shared}`)).toBeNull();
+      },
+      TIMEOUT_MS,
+    );
+
     it(
       "asked twice at once on two servers, the member gets one link",
       async () => {

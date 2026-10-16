@@ -125,7 +125,14 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     });
   const get = (path: string, cookies: Cookies = {}) => send(api(), "GET", path, undefined, cookies);
   const post = (path: string, payload: unknown, cookies: Cookies = {}, target: App = api()) => send(target, "POST", path, payload, cookies);
-  const put = (path: string, payload: unknown, cookies: Cookies) => send(api(), "PUT", path, payload, cookies);
+  /** The offer's version as it stands, for a save that does not name one (item 20's passes, H3). */
+  const withVersion = async (path: string, payload: unknown, cookies: Cookies): Promise<unknown> => {
+    if (!path.endsWith("/referral-settings") || typeof payload !== "object" || payload === null || "version" in payload) return payload;
+    const read = await send(api(), "GET", path, undefined, cookies);
+    const version = read.statusCode === 200 ? (JSON.parse(read.body) as { settings: { version: string } }).settings.version : "";
+    return { ...payload, version };
+  };
+  const put = async (path: string, payload: unknown, cookies: Cookies) => send(api(), "PUT", path, await withVersion(path, payload, cookies), cookies);
 
   const makeUser = async (local: string, displayName: string): Promise<Person> => {
     const email = `mdays-t-${local}@example.com`;
@@ -479,6 +486,28 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
         // Nothing waits as money either, and the member was told once, when it was given.
         expect((await memberships(gymA.org.id, kit.entryId, owner.cookies)).memberGift).toBeNull();
         expect(await messagesOf(kit.person.id)).toHaveLength(1);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "voided after the member's membership was cancelled before the days: the gift is taken back, and the friend's next payment gives one again (the data-integrity pass over item 20, L3)",
+      async () => {
+        const ivy = await memberWithBill("ivy", "Ivy Cole", true);
+        const friend = await friendJoins(ivy.code, "Max Hale", "max.hale@example.com", true);
+        const m = await firstOf(gymA.org.id, ivy.entryId);
+        expect((await post(`${heldUrl(gymA.org.id, ivy.entryId)}/${m.id}/cancel`, { when: "today" }, owner.cookies)).statusCode).toBe(200);
+        await voidFriendPayment(friend.entryId);
+        expect((await daysGifts(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ days: 14, used_membership_id: null, taken_back_why: "voided" }]);
+        expect((await leadPage(gymA.org.id, friend.leadId, owner.cookies)).memberGift?.gift).toMatchObject({ state: "taken_back", why: "voided" });
+
+        // The friend pays again: that payment stands, so the member is given the gift for it.
+        const again = await firstOf(gymA.org.id, friend.entryId);
+        const pay = again.billing?.pay;
+        if (pay === null || pay === undefined) throw new Error("nothing to pay");
+        const paid = await post(`${heldUrl(gymA.org.id, friend.entryId)}/${again.id}/payments`, { requestKey: nextForm(), periodIndex: pay.periodIndex, amountMinor: pay.leftMinor, method: "cash" }, owner.cookies);
+        expect(paid.statusCode, paid.body).toBe(200);
+        expect((await daysGifts(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ taken_back_why: "voided" }, { taken_back_why: null }]);
       },
       TIMEOUT_MS,
     );

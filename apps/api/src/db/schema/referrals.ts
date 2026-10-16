@@ -167,3 +167,27 @@ export const gymReferralMemberGifts = pgTable(
     index("gym_referral_member_gifts_membership_idx").on(t.usedMembershipId).where(sql`${t.usedMembershipId} IS NOT NULL`),
   ],
 );
+
+/** An invited friend whose lead was deleted (item 20's two extra passes; `0125`): who invited
+ *  them and when, the earliest, so the record is still an invited friend. It goes with the
+ *  record. */
+export const gymReferralKeptInvites = pgTable(
+  "gym_referral_kept_invites",
+  {
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    referredBy: uuid("referred_by"),
+    referredAt: timestamp("referred_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_referral_kept_invites_pk", columns: [t.gymId, t.entryId] }),
+    foreignKey({
+      name: "gym_referral_kept_invites_entry_fk",
+      columns: [t.gymId, t.entryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    foreignKey({ name: "gym_referral_kept_invites_referred_by_fk", columns: [t.referredBy], foreignColumns: [users.id] }).onDelete("set null"),
+    index("gym_referral_kept_invites_referred_by_idx").on(t.referredBy).where(sql`${t.referredBy} IS NOT NULL`),
+  ],
+);

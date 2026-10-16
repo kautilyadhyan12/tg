@@ -125,7 +125,14 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
     });
   const get = (path: string, cookies: Cookies = {}) => send(api(), "GET", path, undefined, cookies);
   const post = (path: string, payload: unknown, cookies: Cookies = {}, target: App = api()) => send(target, "POST", path, payload, cookies);
-  const put = (path: string, payload: unknown, cookies: Cookies) => send(api(), "PUT", path, payload, cookies);
+  /** The offer's version as it stands, for a save that does not name one (item 20's passes, H3). */
+  const withVersion = async (path: string, payload: unknown, cookies: Cookies): Promise<unknown> => {
+    if (!path.endsWith("/referral-settings") || typeof payload !== "object" || payload === null || "version" in payload) return payload;
+    const read = await send(api(), "GET", path, undefined, cookies);
+    const version = read.statusCode === 200 ? (JSON.parse(read.body) as { settings: { version: string } }).settings.version : "";
+    return { ...payload, version };
+  };
+  const put = async (path: string, payload: unknown, cookies: Cookies) => send(api(), "PUT", path, await withVersion(path, payload, cookies), cookies);
   const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error?: string }).error;
 
   const makeUser = async (local: string, displayName: string): Promise<Person> => {
@@ -595,6 +602,61 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const mine = (await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === dee.person.id);
         expect(mine.filter((g) => g.used_bill_id !== null)).toHaveLength(1);
         expect((await memberships(gymA.org.id, dee.entryId, owner.cookies)).memberGift).toMatchObject({ words: "£10.00 off" });
+      },
+      TIMEOUT_MS,
+    );
+  });
+
+  describe("the friend's lead deleted (the data-integrity pass over item 20, H1)", () => {
+    const deleteLead = (gymId: string, leadId: string) =>
+      api().inject({ method: "DELETE", url: `/v1/orgs/${gymId}/leads/${leadId}`, remoteAddress: "10.72.200.1", cookies: owner.cookies });
+    const friendGift = async (entryId: string) =>
+      friendGiftResponseSchema.parse(JSON.parse((await get(`/v1/orgs/${gymA.org.id}/member-list/entries/${entryId}/friend-gift`, owner.cookies)).body)).friendGift;
+
+    it(
+      "Delete on a joined friend's lead keeps them invited: the friend is still offered their gift, and the member still gets theirs when the friend pays",
+      async () => {
+        const lia = await memberWithBill("lia", "Lia Moss", true);
+        const leadId = await invited(lia.code, "Rae Friend", "rae.friend@example.com");
+        const entryId = await added(gymA.org.id, owner.cookies, { fullName: "Rae Friend", email: "rae.friend@example.com", leadId });
+        expect((await deleteLead(gymA.org.id, leadId)).statusCode).toBe(204);
+        expect(await sql`SELECT 1 FROM gym_leads WHERE id = ${leadId}`).toHaveLength(0);
+        expect(await friendGift(entryId)).toMatchObject({ words: "20% off the first payment of a membership", invitedBy: "Lia Moss" });
+        expect((await give(gymA.org.id, entryId, owner.cookies, goldA, true)).statusCode).toBe(201);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === lia.person.id)).toMatchObject([{ friend_entry_id: entryId, taken_back_why: null }]);
+        expect(await messagesOf(lia.person.id)).toHaveLength(1);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "Delete many keeps the invitation too, the earlier of two; joining the friend's two records carries it; and somebody nobody invited is never made a friend",
+      async () => {
+        const kai = await memberWithBill("kai", "Kai Lund", true);
+        const leadId = await invited(kai.code, "Sol Friend", "sol.friend@example.com");
+        const entryId = await added(gymA.org.id, owner.cookies, { fullName: "Sol Friend", email: "sol.friend@example.com", leadId });
+        // A walk-in's lead nobody invited, joined to its own record and deleted beside it.
+        const walkIn = await post(`/v1/orgs/${gymA.org.id}/leads`, { fullName: "Walk In", email: "walk.in@example.com", source: "walk_in" }, owner.cookies);
+        const walkInLead = (JSON.parse(walkIn.body) as { lead: Lead }).lead.id;
+        const walkInEntry = await added(gymA.org.id, owner.cookies, { fullName: "Walk In", email: "walk.in@example.com", leadId: walkInLead });
+        const selection = { kind: "ticked", leadIds: [leadId, walkInLead] };
+        const box = await post(`/v1/orgs/${gymA.org.id}/leads/selected/delete-preview`, { selection }, owner.cookies);
+        expect(box.statusCode, box.body).toBe(200);
+        const digest = (JSON.parse(box.body) as { preview: { digest: string } }).preview.digest;
+        const gone = await post(`/v1/orgs/${gymA.org.id}/leads/selected/delete`, { selection, digest }, owner.cookies);
+        expect(gone.statusCode, gone.body).toBe(200);
+        expect(await sql`SELECT entry_id, referred_by FROM gym_referral_kept_invites WHERE gym_id = ${gymA.org.id} AND entry_id IN (${entryId}, ${walkInEntry})`).toEqual([
+          { entry_id: entryId, referred_by: kai.person.id },
+        ]);
+        expect(await friendGift(walkInEntry)).toBeNull();
+        // Staff added Sol a second time and join the first record into it: still invited.
+        const again = await added(gymA.org.id, owner.cookies, { fullName: "Sol Friend", phone: "+447700900789", acknowledgedDuplicates: [entryId] });
+        const merged = await post(`/v1/orgs/${gymA.org.id}/member-list/entries/${entryId}/merge`, { keepEntryId: again, acknowledgeLeavesList: true }, owner.cookies);
+        expect(merged.statusCode, merged.body).toBe(200);
+        expect(await sql`SELECT entry_id FROM gym_referral_kept_invites WHERE gym_id = ${gymA.org.id} AND entry_id IN (${entryId}, ${again})`).toEqual([{ entry_id: again }]);
+        expect(await friendGift(again)).toMatchObject({ invitedBy: "Kai Lund" });
+        expect((await give(gymA.org.id, again, owner.cookies, goldA, true)).statusCode).toBe(201);
+        expect((await giftsOf(gymA.org.id)).filter((g) => g.member_user_id === kai.person.id)).toMatchObject([{ friend_entry_id: again, taken_back_why: null }]);
       },
       TIMEOUT_MS,
     );

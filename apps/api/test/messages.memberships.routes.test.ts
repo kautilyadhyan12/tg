@@ -20,6 +20,9 @@ import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
+/** A box's fields as these tests build them; `save` adds the version it read. */
+type SettingsBody = Omit<GymMessageSettingsRequest, "version">;
+
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 
@@ -229,7 +232,7 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
   const said = async (gym: Gym, who: Person, kind: string): Promise<string | undefined> => (await sentTo(gym)).find((r) => r.user_id === who.userId && r.kind === kind)?.body;
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
-  const START: GymMessageSettingsRequest = {
+  const START: SettingsBody = {
     messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind !== "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
@@ -237,13 +240,20 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
     trialEndingDays: 2,
     membershipEndingDays: 7,
   };
-  const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
+  const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<SettingsBody> = {}): SettingsBody => ({
     ...START,
     ...over,
     messages: START.messages.map((m) => (m.kind === kind ? { ...m, ...change } : m)),
   });
-  const save = async (gym: Gym, body: unknown) => await inject("PUT", settingsPath(gym), gym.owner.cookies, body);
-  const saved = async (gym: Gym, body: GymMessageSettingsRequest): Promise<GymMessageSettingsResponse> => {
+  /** The box as it stands now: a save names the version it read (item 20's passes, H2). */
+  const versionNow = async (gym: Gym): Promise<string> => {
+    const res = await inject("GET", settingsPath(gym), gym.owner.cookies);
+    return res.statusCode === 200 ? (JSON.parse(res.body) as GymMessageSettingsResponse).version : "";
+  };
+  const withVersion = async (gym: Gym, body: unknown): Promise<unknown> =>
+    typeof body === "object" && body !== null && !("version" in body) ? { ...body, version: await versionNow(gym) } : body;
+  const save = async (gym: Gym, body: unknown) => await inject("PUT", settingsPath(gym), gym.owner.cookies, await withVersion(gym, body));
+  const saved = async (gym: Gym, body: SettingsBody): Promise<GymMessageSettingsResponse> => {
     const res = await save(gym, body);
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as GymMessageSettingsResponse;
@@ -629,7 +639,7 @@ d("the four messages that read a membership and its bills (real Postgres)", () =
       }
       // Next door's owner reads and saves nothing here.
       expect((await inject("GET", settingsPath(gym), bare.owner.cookies)).statusCode).toBe(404);
-      expect((await inject("PUT", settingsPath(gym), bare.owner.cookies, START)).statusCode).toBe(404);
+      expect((await inject("PUT", settingsPath(gym), bare.owner.cookies, { ...START, version: "" })).statusCode).toBe(404);
     },
     T,
   );

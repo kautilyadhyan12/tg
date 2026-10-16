@@ -2403,6 +2403,15 @@ export async function moveLeadLinks(tx: TransactionSql, gymId: string, fromEntry
     UPDATE gym_leads SET entry_id = ${toEntryId}
     WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
     RETURNING id`;
+  // An invitation kept after its lead was deleted moves too; the earlier of two stands.
+  await tx`
+    INSERT INTO gym_referral_kept_invites (gym_id, entry_id, referred_by, referred_at)
+    SELECT gym_id, ${toEntryId}, referred_by, referred_at FROM gym_referral_kept_invites
+    WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}
+    ON CONFLICT (gym_id, entry_id) DO UPDATE
+    SET referred_by = EXCLUDED.referred_by, referred_at = EXCLUDED.referred_at
+    WHERE EXCLUDED.referred_at < gym_referral_kept_invites.referred_at`;
+  await tx`DELETE FROM gym_referral_kept_invites WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
   return rows.length;
 }
 

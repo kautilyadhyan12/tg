@@ -869,6 +869,13 @@
       "when": 1790726400124,
       "tag": "0124_staff_activity_former_staff",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1790726400125,
+      "tag": "0125_referral_kept_invites",
+      "breakpoints": true
     }
   ]
 }

@@ -31,6 +31,7 @@ import {
   periodStart,
   giftDaysNextDay,
   giftDaysTarget,
+  giftDaysNeverReached,
   takeBackGiftDays,
   billsAtCancel,
   billsToOpen,
@@ -461,8 +462,9 @@ export async function addGiftDaysTo(
 }
 
 /** Free days given to `membershipId` before its period `from` TAKEN BACK, while its member
- *  has reached none of them (`takeBackGiftDays`); false where they stay. Under the gym's
- *  lock, which the caller holds. */
+ *  has reached none of them (`takeBackGiftDays`), or true with nothing to change where it was
+ *  cancelled before the first of them; false where they stay. Under the gym's lock, which
+ *  the caller holds. */
 export async function takeGiftDaysBack(
   tx: TransactionSql,
   input: { gymId: string; membershipId: string; days: number; from: number; today: string; now: Date },
@@ -479,8 +481,10 @@ export async function takeGiftDaysBack(
   // leaves it (round one, L1).
   if (!found.past) await settle(tx, input.gymId, found.entry_id, input.today, input.now);
   const row = await lockedHeld(tx, input.gymId, found.entry_id, input.membershipId);
-  const back = row === null ? null : takeBackGiftDays(row.membership, input.days, input.from, input.today);
-  if (row === null || back === null) return false;
+  if (row === null) return false;
+  const back = takeBackGiftDays(row.membership, input.days, input.from, input.today);
+  // Cancelled before the first free day: there is nothing to take off it, and the gift goes.
+  if (back === null) return giftDaysNeverReached(row.membership, input.days, input.from, input.today);
   await tx`
     UPDATE gym_held_memberships SET gift_days = ${back.giftDays}, updated_at = ${input.now}
     WHERE gym_id = ${input.gymId} AND id = ${input.membershipId}`;
