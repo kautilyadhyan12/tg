@@ -500,7 +500,7 @@ d("receipts (real Postgres)", () => {
       const his = (await held(gymId, omar, owner.cookies)).memberships[0];
       const undo = his?.billing?.undo;
       if (his === undefined || undo?.kind !== "payment") throw new Error("no payment to undo");
-      expect((await post(`${heldUrl(gymId, omar)}/${his.id}/payments/${undo.paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${heldUrl(gymId, omar)}/${his.id}/payments/${undo.paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       expect(await receipt(gymId, 4, owner.cookies)).toMatchObject({ kind: "payment", person: "Omar Haddad", cancelled: true });
 
       // Two bottles with 20% off, and the sale taken back the same day.
@@ -541,7 +541,7 @@ d("receipts (real Postgres)", () => {
       const sellPage = page(await get(register(gymId), owner.cookies));
       expect(sellPage.sales.map((s) => s.receiptNumber)).toEqual([5]);
       expect(sellPage.payments?.map((p) => p.receiptNumber)).toEqual([2, 1]);
-      expect((await post(`${register(gymId)}/sales/${saleId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${register(gymId)}/sales/${saleId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       expect(await receipt(gymId, 5, owner.cookies)).toMatchObject({ kind: "sale", cancelled: true });
       // What was taken back keeps its number; nothing was numbered twice.
       expect(await numbersOf(gymId)).toEqual(["1 payment", "2 payment", "3 refund", "4 payment", "5 sale"]);

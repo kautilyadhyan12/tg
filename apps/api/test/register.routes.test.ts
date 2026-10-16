@@ -326,7 +326,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
         page: (await get(base(gymId), cookies)).statusCode,
         people: (await get(`${base(gymId)}/people?query=pat`, cookies)).statusCode,
         sell: (await sell(gymId, cookies, sale(water.id, 199))).statusCode,
-        undo: (await post(`${base(gymId)}/sales/${saleId}/undo`, {}, cookies)).statusCode,
+        undo: (await post(`${base(gymId)}/sales/${saleId}/void`, { reason: "mistake" }, cookies)).statusCode,
         tax: (await put(`${base(gymId)}/tax`, { included: true }, cookies)).statusCode,
         rate: (await post(`${base(gymId)}/tax-rates`, { name: "Sales tax", bp: 825 }, cookies)).statusCode,
         add: (await post(`${base(gymId)}/products`, product, cookies)).statusCode,
@@ -502,9 +502,9 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await stockOf(bar.id)).toBe(3);
 
       // Taken back twice at one instant, and once more: taken back once.
-      const undo = await Promise.all([0, 1, 2].map(() => post(`${base(gymId)}/sales/${firstId}/undo`, {}, owner.cookies)));
+      const undo = await Promise.all([0, 1, 2].map(() => post(`${base(gymId)}/sales/${firstId}/void`, { reason: "mistake" }, owner.cookies)));
       expect(undo.map((r) => r.statusCode)).toEqual([200, 200, 200]);
-      expect((await post(`${base(gymId)}/sales/${firstId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${base(gymId)}/sales/${firstId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       expect(await stockOf(bar.id)).toBe(5);
       expect(await auditOf(gymId, "org.sale_undone")).toHaveLength(1);
       now = await read(gymId, owner.cookies);
@@ -519,7 +519,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await stockOf(bar.id)).toBe(4);
       const barNow = (await read(gymId, owner.cookies)).products.find((p) => p.id === bar.id);
       expect((await put(`${base(gymId)}/products/${bar.id}`, { name: "Bar", priceMinor: 300, taxRateId: null, stock: null, updatedAt: barNow?.updatedAt }, owner.cookies)).statusCode).toBe(200);
-      expect((await post(`${base(gymId)}/sales/${thirdId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${base(gymId)}/sales/${thirdId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       expect(await stockOf(bar.id)).toBeNull();
 
       // The next day there: yesterday's sale is not on the page and cannot be taken back.
@@ -528,15 +528,15 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(now.today).toBe("2026-10-14");
       expect(now.sales).toEqual([]);
       expect(now.totals.count).toBe(0);
-      const late = await post(`${base(gymId)}/sales/${secondId}/undo`, {}, owner.cookies);
+      const late = await post(`${base(gymId)}/sales/${secondId}/void`, { reason: "mistake" }, owner.cookies);
       expect(late.statusCode).toBe(409);
       expect(errorOf(late)).toBe("sale_not_today");
       expect((await salesOf(gymId)).find((s) => s.id === secondId)?.undone).toBe(false);
       // A sale that is not this gym's, or nobody's.
       const other = await makeUser("day-other");
       const otherGym = await makeGym(other, "Reg Day Other");
-      expect((await post(`${base(otherGym)}/sales/${secondId}/undo`, {}, other.cookies)).statusCode).toBe(404);
-      expect((await post(`${base(gymId)}/sales/00000000-0000-4000-8000-00000000dead/undo`, {}, owner.cookies)).statusCode).toBe(404);
+      expect((await post(`${base(otherGym)}/sales/${secondId}/void`, { reason: "mistake" }, other.cookies)).statusCode).toBe(404);
+      expect((await post(`${base(gymId)}/sales/00000000-0000-4000-8000-00000000dead/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(404);
       expect((await salesOf(gymId)).find((s) => s.id === secondId)?.undone).toBe(false);
       clock = new Date();
     },
@@ -716,8 +716,8 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(afterRefund.totals).toMatchObject({ payments: 1, totalMinor: 199 + 4999, refundedMinor: 1000 });
       // The payment taken back leaves the takings: the refund first, then the payment.
       const refundId = (JSON.parse(refund.body) as { memberships: { billing: { bills: { payments: { refunds: { id: string }[] }[] }[] } | null }[] }).memberships[0]?.billing?.bills[0]?.payments[0]?.refunds[0]?.id;
-      expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${membership.id}/payments/${paymentId}/refunds/${String(refundId)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
-      expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${membership.id}/payments/${paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${membership.id}/payments/${paymentId}/refunds/${String(refundId)}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${membership.id}/payments/${paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       const afterUndo = await read(gymId, owner.cookies);
       expect(afterUndo.payments).toEqual([]);
       expect(afterUndo.totals).toEqual({ count: 1, payments: 0, totalMinor: 199, taxMinor: 0, cash: 199, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });

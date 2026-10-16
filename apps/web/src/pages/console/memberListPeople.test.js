@@ -190,7 +190,7 @@ describe('the members whose membership is over (21c-iii)', () => {
   });
 
   it('the sign says who is held back because they owe, with a button that shows them; alone, the sign is about them', () => {
-    const first = 'Record the payment or cancel the bill on their page first.';
+    const first = 'Record the payment or void the bill on their page first.';
     expect(overSignWords(3, WORDS, { owing: 2 })).toMatchObject({
       title: '3 memberships have ended or been cancelled',
       button: 'Review them',

@@ -310,7 +310,7 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
     const m = await firstOf(gymA.org.id, entryId);
     const undo = m.billing?.undo;
     if (undo?.kind !== "payment") throw new Error("no payment to void");
-    expect((await post(`${heldUrl(gymA.org.id, entryId)}/${m.id}/payments/${undo.paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+    expect((await post(`${heldUrl(gymA.org.id, entryId)}/${m.id}/payments/${undo.paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
   };
 
   describe("the worst thing: days on somebody else's membership, given twice, or a day already paid for moved", () => {

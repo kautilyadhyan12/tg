@@ -456,9 +456,9 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
           const m = (await memberships(gymA.org.id, entryId, owner.cookies)).memberships[0];
           const undo = m?.billing?.undo;
           if (m === undefined || undo?.kind !== "payment") throw new Error("no payment to void");
-          expect((await post(`${heldUrl(gymA.org.id, entryId)}/${m.id}/payments/${undo.paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+          expect((await post(`${heldUrl(gymA.org.id, entryId)}/${m.id}/payments/${undo.paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
         };
-        // Cancel this bill.
+        // Void the bill.
         const pat = await memberWithBill("pat", "Pat Lowe", false);
         const f1 = await friendJoins(pat.code, "Sol Reid", "sol.reid@example.com", true);
         await voidFriendPayment(f1.entryId);
@@ -507,8 +507,8 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const kimsSale = await post(`/v1/orgs/${gymA.org.id}/register/sales`, { requestKey: nextForm(), productId: barA, quantity: 1, entryId: kim.entryId, method: "cash", totalMinor: 1500, memberGift: { id: waiting.id, offMinor: 1000 } }, owner.cookies);
         expect(kimsSale.statusCode, kimsSale.body).toBe(201);
         const idOf = (res: { body: string }) => (JSON.parse(res.body) as { saleId: string }).saleId;
-        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(iansSale)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
-        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(kimsSale)}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(iansSale)}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${idOf(kimsSale)}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
         expect((await memberships(gymA.org.id, kim.entryId, owner.cookies)).memberGiftAtSell).toBeNull();
         expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === ian)).toMatchObject([{ taken_back_why: "voided", used_sale_id: null }]);
         } finally {
@@ -698,7 +698,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         expect([twice.statusCode, errorOf(twice)]).toEqual([409, "member_gift_not_theirs"]);
 
         // The sale voided: the gift waits again for Sell.
-        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${saleId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`/v1/orgs/${gymA.org.id}/register/sales/${saleId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
         expect((await memberships(gymA.org.id, max.entryId, owner.cookies)).memberGiftAtSell?.id).toBe(waiting.id);
 
         // A gift off a membership: Add membership takes it off the first bill, and Sell does not offer it.
@@ -740,7 +740,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const m = friendPage.memberships[0];
         const undo = m?.billing?.undo;
         if (m === undefined || undo?.kind !== "payment") throw new Error("no payment to void");
-        expect((await post(`${heldUrl(gymA.org.id, friend.entryId)}/${m.id}/payments/${undo.paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`${heldUrl(gymA.org.id, friend.entryId)}/${m.id}/payments/${undo.paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
         expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toMatchObject([{ taken_back_why: "voided", used_bill_id: null }]);
         expect((await memberships(gymA.org.id, ola.entryId, owner.cookies)).memberGift).toBeNull();
         const lead = await leadPage(gymA.org.id, friend.leadId, owner.cookies);
@@ -761,7 +761,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const palMembership = (await memberships(gymA.org.id, pal.entryId, owner.cookies)).memberships[0];
         const palUndo = palMembership?.billing?.undo;
         if (palMembership === undefined || palUndo?.kind !== "payment") throw new Error("no payment to void");
-        expect((await post(`${heldUrl(gymA.org.id, pal.entryId)}/${palMembership.id}/payments/${palUndo.paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`${heldUrl(gymA.org.id, pal.entryId)}/${palMembership.id}/payments/${palUndo.paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
         expect(await billsOfEntry(gymA.org.id, used.entryId)).toMatchObject([{ amount_minor: 4000 }]);
         expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === pal.entryId)).toMatchObject([{ taken_back_why: null, used_off_minor: 1000 }]);
       },
@@ -789,7 +789,7 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
         const refunds = (await memberships(gymA.org.id, friend.entryId, owner.cookies)).memberships[0]?.billing?.bills[0]?.payments[0]?.refunds ?? [];
         const last = refunds.at(-1);
         if (last === undefined) throw new Error("no refund");
-        expect((await post(`${refundUrl}/${last.id}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+        expect((await post(`${refundUrl}/${last.id}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
         expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId).map((g) => g.taken_back_why)).toEqual(["refunded", null]);
         expect(await messagesOf(rae.person.id)).toHaveLength(1);
       },

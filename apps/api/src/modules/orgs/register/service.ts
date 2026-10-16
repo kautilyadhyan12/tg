@@ -45,6 +45,7 @@ import {
   type SellProductResponse,
   type UpdateGymDiscountRequest,
   type UpdateGymProductRequest,
+  type VoidSaleRequest,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { MEMBER_LIST_BY_HAND_WORDS } from "@app/shared";
@@ -423,9 +424,9 @@ export async function restoreDiscount(deps: RegisterDeps, userId: string, gymId:
   return await read(deps, gymId, viewer);
 }
 
-export async function undoSale(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, saleId: string): Promise<SellPageResponse> {
+export async function voidSale(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, saleId: string, req: VoidSaleRequest): Promise<SellPageResponse> {
   const now = deps.now();
-  const outcome = await repo.undoSale(deps.sql, { gymId, saleId, today: dayInTz(now, viewer.timezone), actorUserId: userId, now });
+  const outcome = await repo.voidSale(deps.sql, { gymId, saleId, reason: req.reason, today: dayInTz(now, viewer.timezone), actorUserId: userId, now });
   if (outcome.kind === "sale_not_found") throw new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
   if (outcome.kind === "not_today") throw new OrgsError(409, "sale_not_today", REGISTER_WORDS.sale_not_today);
   return await read(deps, gymId, viewer);

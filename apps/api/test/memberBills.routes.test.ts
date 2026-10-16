@@ -259,7 +259,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       if (m === undefined) throw new Error("no membership");
       expect(made.canBill).toBe(true);
       expect(m.billing).toEqual({
-        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [] }],
+        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [], voidedPayments: [] }],
         billsNotShown: 0,
         pay: { periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, leftMinor: 4999, dueOn: today, state: "due" },
         cancel: { billId: expect.any(String) as string },
@@ -608,7 +608,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       // Taken back, the cancel goes through, and the month they never had is not owed.
       const undo = (await read("2026-01-17T12:00:00Z", ahead.entryId))?.billing?.undo;
       if (undo?.kind !== "payment") throw new Error("no payment to take back");
-      await heldService.undoMemberPayment(at("2026-01-17T12:30:00Z"), owner.userId, gymId, ahead.entryId, ahead.id, undo.paymentId);
+      await heldService.voidMemberPayment(at("2026-01-17T12:30:00Z"), owner.userId, gymId, ahead.entryId, ahead.id, undo.paymentId, { reason: "mistake" });
       expect(await cancel("2026-01-17T13:00:00Z", ahead.entryId, ahead.id, "period_end")).toBe("ok");
       expect(await statuses(ahead.id)).toEqual([[0, "paid"], [1, "void"]]);
       const gone = await read("2026-02-20T12:00:00Z", ahead.entryId);
@@ -791,7 +791,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       const before = await snapshot();
       const writes = (cookies: Cookies) => [
         () => post(oneUrl(gymId, person, membershipId, "payments"), { requestKey: nextKey(), periodIndex: 1, amountMinor: 4999, method: "cash" }, cookies),
-        () => post(`${oneUrl(gymId, person, membershipId, "payments")}/${paymentId}/undo`, {}, cookies),
+        () => post(`${oneUrl(gymId, person, membershipId, "payments")}/${paymentId}/void`, { reason: "mistake" }, cookies),
         () => post(oneUrl(gymId, person, membershipId, "paid"), { paidPeriods: 0 }, cookies),
         () => put(settingsUrl, { overdueAfterDays: 9 }, cookies),
       ];
@@ -842,11 +842,11 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
         expect((await post(path, { ...pay, requestKey: nextKey() }, rival.cookies)).statusCode, what).toBe(404);
       }
       // This gym's payment named under their own membership, and their payment under this gym's address.
-      expect((await post(`${oneUrl(rivalGym, theirPerson, theirMembership, "payments")}/${paymentId}/undo`, {}, rival.cookies)).statusCode).toBe(404);
-      expect((await post(`${oneUrl(gymId, person, membershipId, "payments")}/${theirPayment}/undo`, {}, owner.cookies)).statusCode).toBe(404);
+      expect((await post(`${oneUrl(rivalGym, theirPerson, theirMembership, "payments")}/${paymentId}/void`, { reason: "mistake" }, rival.cookies)).statusCode).toBe(404);
+      expect((await post(`${oneUrl(gymId, person, membershipId, "payments")}/${theirPayment}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(404);
       // Nor this gym's payment under another person of this gym.
       const secondId = (await rowsOf(gymId)).find((r) => r.entry_id === second)?.id ?? "";
-      expect((await post(`${oneUrl(gymId, second, secondId, "payments")}/${paymentId}/undo`, {}, owner.cookies)).statusCode).toBe(404);
+      expect((await post(`${oneUrl(gymId, second, secondId, "payments")}/${paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(404);
       expect((await paymentsOf(gymId)).map((p) => p.undone)).toEqual([false]);
       expect((await paymentsOf(rivalGym)).map((p) => p.undone)).toEqual([false]);
 
@@ -855,7 +855,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect(done.statusCode, done.body).toBe(200);
       const newest = list(done).memberships[0]?.billing?.undo;
       expect(newest?.kind).toBe("payment");
-      const undone = await post(`${oneUrl(gymId, person, membershipId, "payments")}/${newest?.kind === "payment" ? newest.paymentId : ""}/undo`, {}, owner.cookies);
+      const undone = await post(`${oneUrl(gymId, person, membershipId, "payments")}/${newest?.kind === "payment" ? newest.paymentId : ""}/void`, { reason: "mistake" }, owner.cookies);
       expect(undone.statusCode, undone.body).toBe(200);
       expect((await put(settingsUrl, { overdueAfterDays: 9 }, ticked.cookies)).statusCode).toBe(200);
       expect(await overdueDaysOf(gymId)).toBe(9);
@@ -953,7 +953,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       const [first, second, third] = await paymentsOf(gymId);
       const undo = (paymentId: string) =>
         heldService
-          .undoMemberPayment(at("2026-01-29T16:00:00Z"), owner.userId, gymId, person, id, paymentId)
+          .voidMemberPayment(at("2026-01-29T16:00:00Z"), owner.userId, gymId, person, id, paymentId, { reason: "mistake" })
           .then(() => "ok", (err: unknown) => (err instanceof OrgsError ? err.code : "threw"));
       expect(two?.billing?.undo).toEqual({ kind: "payment", paymentId: third?.id });
       expect(await undo(first?.id ?? "")).toBe("held_membership_changed");
@@ -1081,7 +1081,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect(list(settled).memberships[0]?.billing?.pay).toBeNull();
       expect((await pay(left, leftId, 1)).statusCode).toBe(409);
       const theirPayment = list(settled).memberships[0]?.billing?.bills[0]?.payments[0]?.id ?? "";
-      const undoPast = await post(`${oneUrl(gymId, left, leftId, "payments")}/${theirPayment}/undo`, {}, owner.cookies);
+      const undoPast = await post(`${oneUrl(gymId, left, leftId, "payments")}/${theirPayment}/void`, { reason: "mistake" }, owner.cookies);
       expect([undoPast.statusCode, errorOf(undoPast)]).toEqual([409, "past_member"]);
 
       // Put back on the list after paying: Paid, never Payment due beside a paid bill.
@@ -1125,7 +1125,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect(list(await get(heldUrl(gymId, person), owner.cookies)).memberships[0]?.billing?.bills).toHaveLength(1);
       for (const res of [
         await post(oneUrl(gymId, person, id, "payments"), { requestKey: nextKey(), periodIndex: 1, amountMinor: 4999, method: "cash" }, owner.cookies),
-        await post(`${oneUrl(gymId, person, id, "payments")}/${paymentId}/undo`, {}, owner.cookies),
+        await post(`${oneUrl(gymId, person, id, "payments")}/${paymentId}/void`, { reason: "mistake" }, owner.cookies),
         await put(`/v1/orgs/${gymId}/bill-settings`, { overdueAfterDays: 5 }, owner.cookies),
       ]) {
         expect([res.statusCode, errorOf(res)]).toEqual([409, "gym_not_on_plan"]);

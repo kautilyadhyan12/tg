@@ -7,7 +7,7 @@
 //   GET    /v1/orgs/:gymId/register                         the Sell page (`billing.members` or `memberships.manage`)
 //   GET    /v1/orgs/:gymId/register/people?query=           who a sale can be for (`billing.members`)
 //   POST   /v1/orgs/:gymId/register/sales                   one sale (`billing.members`)
-//   POST   /v1/orgs/:gymId/register/sales/:saleId/undo      take it back, the same day
+//   POST   /v1/orgs/:gymId/register/sales/:saleId/void      void it, the same day
 //   PUT    /v1/orgs/:gymId/register/tax                     whether prices hold the tax (`memberships.manage`)
 //   POST   /v1/orgs/:gymId/register/tax-rates               add a tax rate (`memberships.manage`)
 //   PUT    /v1/orgs/:gymId/register/tax-rates/:rateId       change its name or rate
@@ -36,6 +36,7 @@ import {
   saveGymDiscountRequestSchema,
   saveGymProductRequestSchema,
   sellProductRequestSchema,
+  voidSaleRequestSchema,
   updateGymDiscountRequestSchema,
   updateGymProductRequestSchema,
 } from "@app/shared";
@@ -125,13 +126,15 @@ export function registerRegisterRoutes(app: FastifyInstance, deps: { sql: Sql; r
     return reply.status(201).send(await service.sellProduct(registerDeps, userId, params.data.gymId, viewer, body.data));
   });
 
-  app.post("/v1/orgs/:gymId/register/sales/:saleId/undo", pre, async (req, reply) => {
+  app.post("/v1/orgs/:gymId/register/sales/:saleId/void", pre, async (req, reply) => {
     const params = saleParamsSchema.safeParse(req.params);
     if (!params.success) return reply.status(400).send(refused(params.error.issues, req.id));
+    const body = voidSaleRequestSchema.safeParse(req.body);
+    if (!body.success) return reply.status(400).send(refused(body.error.issues, req.id));
     const userId = userOf(req);
     const viewer = await service.requireSeller(registerDeps, userId, params.data.gymId);
     if (!(await within(sellLimit, req, reply))) return reply;
-    return reply.status(200).send(await service.undoSale(registerDeps, userId, params.data.gymId, viewer, params.data.saleId));
+    return reply.status(200).send(await service.voidSale(registerDeps, userId, params.data.gymId, viewer, params.data.saleId, body.data));
   });
 
   app.put("/v1/orgs/:gymId/register/tax", pre, async (req, reply) => {
