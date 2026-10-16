@@ -15,7 +15,7 @@ import {
 /** The gym's next receipt number, as the CTE `n` (`number`) of the statement that writes
  *  the payment, refund or sale it is for: the count and the row move together or not at
  *  all, and the gym's row lock takes two at one instant one after the other. THE ONE DOOR:
- *  the database keeps a number once in each of the three tables, not across them, so every
+ *  the database keeps a number once in each of the four tables, not across them, so every
  *  writer of a payment, a refund or a sale takes its number here. */
 export function nextReceipt(tx: TransactionSql, gymId: string): PendingQuery<Row[]> {
   return tx`UPDATE gyms SET receipts_issued = receipts_issued + 1 WHERE id = ${gymId} RETURNING receipts_issued AS number`;
@@ -37,6 +37,7 @@ const coversOf = (r: { covers_from: string | null; covers_to: string | null }) =
 async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
   const [r] = await sql<
     {
+      id: string;
       item_name: string;
       quantity: number;
       unit_price_minor: number;
@@ -57,7 +58,7 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
       cancelled: boolean;
     }[]
   >`
-    SELECT s.for_member, s.item_name, s.quantity, s.unit_price_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
+    SELECT s.id, s.for_member, s.item_name, s.quantity, s.unit_price_minor, s.tax_minor, s.total_minor, s.tax_bp, s.tax_name, s.tax_included,
            s.discount_name, s.discount_minor, s.currency, s.method, s.sold_on::text AS sold_on, u.display_name AS by,
            s.entry_id, e.full_name, s.undone_at IS NOT NULL AS cancelled
     FROM gym_sales s
@@ -65,6 +66,11 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     LEFT JOIN users u ON u.id = s.recorded_by
     WHERE s.gym_id = ${gymId} AND s.receipt_number = ${number}`;
   if (r === undefined) return null;
+  const refunds = await sql<{ receipt_number: number; refunded_on: string; amount_minor: number }[]>`
+    SELECT receipt_number, refunded_on::text AS refunded_on, amount_minor
+    FROM gym_sale_refunds
+    WHERE gym_id = ${gymId} AND sale_id = ${r.id} AND undone_at IS NULL
+    ORDER BY receipt_number`;
   return {
     kind: "sale",
     number,
@@ -83,6 +89,49 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
       discount: r.discount_name === null ? null : { name: r.discount_name, minor: r.discount_minor },
     }),
     // Text under a CHECK: parsed, so a method this build does not know fails here.
+    method: memberPaymentByHandSchema.parse(r.method),
+    refunds: refunds.map((f) => ({ number: f.receipt_number, on: f.refunded_on, amountMinor: f.amount_minor })),
+  };
+}
+
+/** A refund of a sale at the desk (18p): what went back, for which sale's receipt. */
+async function saleRefundReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
+  const [r] = await sql<
+    {
+      amount_minor: number;
+      currency: string;
+      method: string;
+      refunded_on: string;
+      cancelled: boolean;
+      by: string | null;
+      entry_id: string | null;
+      full_name: string | null;
+      for_member: boolean;
+      item_name: string;
+      for_receipt: number;
+    }[]
+  >`
+    SELECT f.amount_minor, f.currency, f.method, f.refunded_on::text AS refunded_on,
+           (f.undone_at IS NOT NULL OR s.undone_at IS NOT NULL) AS cancelled,
+           u.display_name AS by, s.entry_id, e.full_name, s.for_member, s.item_name, s.receipt_number AS for_receipt
+    FROM gym_sale_refunds f
+    JOIN gym_sales s ON s.gym_id = f.gym_id AND s.id = f.sale_id
+    LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
+    LEFT JOIN users u ON u.id = f.recorded_by
+    WHERE f.gym_id = ${gymId} AND f.receipt_number = ${number}`;
+  if (r === undefined) return null;
+  return {
+    kind: "refund",
+    number,
+    on: r.refunded_on,
+    person: r.entry_id === null ? null : personName(r.full_name),
+    personDeleted: r.entry_id === null && r.for_member,
+    by: r.by,
+    currency: r.currency,
+    cancelled: r.cancelled,
+    forReceipt: r.for_receipt,
+    item: { name: r.item_name, covers: null },
+    refundedMinor: r.amount_minor,
     method: memberPaymentByHandSchema.parse(r.method),
   };
 }
@@ -231,9 +280,14 @@ export async function gymOnReceipt(sql: Sql, gymId: string): Promise<{ name: str
 }
 
 /** One of the gym's receipts by its number, or null where the gym has none by it. A number
- *  is one row's in the gym: the three reads ask the three tables, and one answers. */
+ *  is one row's in the gym: the four reads ask the four tables, and one answers. */
 export async function readReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
-  const found = await Promise.all([saleReceipt(sql, gymId, number), paymentReceipt(sql, gymId, number), refundReceipt(sql, gymId, number)]);
+  const found = await Promise.all([
+    saleReceipt(sql, gymId, number),
+    paymentReceipt(sql, gymId, number),
+    refundReceipt(sql, gymId, number),
+    saleRefundReceipt(sql, gymId, number),
+  ]);
   const rows = found.filter((r): r is ReceiptRow => r !== null);
   if (rows.length > 1) throw new Error("one receipt number is on two rows");
   return rows[0] ?? null;

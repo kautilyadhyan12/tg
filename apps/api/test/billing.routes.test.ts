@@ -18,6 +18,7 @@ import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
 import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 import { FakePaddle, paddleId } from "./fakePaddle.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { confirmOwnerOf } from "./confirmOwner.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -890,6 +891,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     "a gym on no paid plan has no Paddle page to open, and a Paddle answer for another customer is never passed on",
     async () => {
       const trialling = await owner();
+      await confirmOwnerOf(sql, trialling.gymId);
       expect((await post(`/v1/orgs/${trialling.gymId}/trial`, {}, trialling.cookies)).statusCode).toBeLessThan(300);
       const asked = paddle.portalCalls.length;
       const none = await openPortal(trialling.gymId, trialling.cookies);
@@ -1043,6 +1045,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
    *  charged nothing. */
   const payingInTrial = async (planCode: string) => {
     const a = await owner();
+    await confirmOwnerOf(sql, a.gymId);
     expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
     const txn = await trialWindow(a, planCode);
     const subId = paddle.pay(txn.transactionId);
@@ -1200,6 +1203,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   /** A gym in its own free trial, nothing chosen yet. */
   const inTrial = async () => {
     const a = await owner();
+    await confirmOwnerOf(sql, a.gymId);
     const started = await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies);
     expect(started.statusCode).toBe(200);
     return { ...a, started: JSON.parse(started.body) as { subscription: Record<string, unknown> } };
@@ -1281,6 +1285,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     "a second paid trial for one gym is cancelled, and owes no refund for a checkout that charged nothing",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const first = await trialWindow(a, BIG);
       await sql`UPDATE billing_checkouts SET state = 'superseded' WHERE id = ${first.checkoutId}`;
@@ -1322,6 +1327,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     "WORST THING: a trial window paid after the gym's own trial ended gives no free days and charges nothing: it is cancelled",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const txn = await trialWindow(a, BIG);
       expect(paddle.trialCheckouts.at(-1)?.trialDays).toBe(10);
@@ -1365,6 +1371,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     "a trial window left open when the gym's own trial ends is closed at Paddle, once",
     async () => {
       const a = await owner();
+      await confirmOwnerOf(sql, a.gymId);
       expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
       const txn = await trialWindow(a, BIG);
       await runWorker();
@@ -1385,6 +1392,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     async () => {
       for (const refused of [false, true]) {
         const a = await owner();
+        await confirmOwnerOf(sql, a.gymId);
         expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
         const txn = await trialWindow(a, BIG);
         await sql`UPDATE subscriptions SET trial_ends_at = now() + interval '30 minutes' WHERE owner_id = ${a.gymId} AND provider = 'none'`;
@@ -1414,6 +1422,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       ];
       for (const patch of variants) {
         const a = await owner();
+        await confirmOwnerOf(sql, a.gymId);
         expect((await post(`/v1/orgs/${a.gymId}/trial`, {}, a.cookies)).statusCode).toBe(200);
         const txn = await trialWindow(a, BIG);
         const subId = paddle.pay(txn.transactionId);
@@ -1511,6 +1520,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
       expect((await post(`/v1/orgs/${a.gymId}/billing/size`, { planCode: BIG }, a.cookies)).statusCode).toBe(400);
 
       const trial = await owner();
+      await confirmOwnerOf(sql, trial.gymId);
       expect((await post(`/v1/orgs/${trial.gymId}/trial`, {}, trial.cookies)).statusCode).toBe(200);
       expect(JSON.parse((await sizeChange(trial.gymId, trial.cookies, BIG)).body)).toMatchObject({ error: "no_paid_plan" });
 

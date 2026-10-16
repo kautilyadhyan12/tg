@@ -726,7 +726,9 @@ d("\"I'm coming\" on a gym's event (real Postgres, two apis)", () => {
     "somebody the gym removes loses their place, and it goes to the first in line",
     async () => {
       const gym = await makeGym("Leavers House");
-      const event = await add(gym, 1);
+      // A removal frees a place by the real clock, and a waiting person is handed it only until the
+      // gym's hand-over time before the event: this event is a year out, so the test holds on any day.
+      const event = await add(gym, 1, { startsOn: "2027-10-16", endsOn: "2027-10-16" });
       // A removal is stamped by the database's own clock, so this one started on a day that
       // has passed for it too.
       const started = await add(gym, 5, { name: "Already Running", startsOn: "2026-10-05", startMinute: 360, endsOn: "2026-10-20", endMinute: 1200 });

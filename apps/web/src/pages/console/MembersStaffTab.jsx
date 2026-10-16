@@ -8,7 +8,7 @@ import SentencePlace from '../../components/console/SentencePlace';
 import { ptSessionsAsked } from './ptSessionsEndView';
 import { staffRoleText } from './consoleView';
 import { StaffInvitePanel, StaffPersonPanel } from './MembersStaffPanels';
-import { privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote } from './staffView';
+import { privilegesDiffer, sentAgainNotice, staffCountLabel, staffInviteView, staffSeatsNote, viewerIsGymOwner } from './staffView';
 
 // The Members screen's Staff tab (spec Part 3 §10.3, §18; ROADMAP 4a-ii, 23c-ii): everyone
 // who runs the gym, the owner first, and the invitations still out. Invite staff opens the
@@ -45,7 +45,7 @@ function RowNote({ note, onRetry }) {
 /** The invitations waiting, ended or declined: each address, its role, where it stands and
  *  whether its email went, with Send again and Cancel invitation (Remove, for one that
  *  ended or was declined). Both of those ask first. Nothing is drawn when there are none. */
-function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, onCancel, onResend }) {
+function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, note, onRetry, onCancel, onResend }) {
   const [asking, setAsking] = useState(null);
   if (invites.loading) return null;
   if (invites.error !== null) return <ConsoleFailed message={invites.error} newLook />;
@@ -76,7 +76,9 @@ function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, o
                   <SentencePlace kind={view.emailPlace} gym={gym} />
                   {view.sendAgainNote !== null ? <span className="c-s13 c-t2">{view.sendAgainNote}</span> : null}
                 </div>
-                {asking === invite.id ? (
+                {invite.role === 'owner' && !viewerIsOwner ? (
+                  <span className="c-s13 c-t2 md:max-w-[240px]">Only the owner can send this again or cancel it.</span>
+                ) : asking === invite.id ? (
                   <div className="md:max-w-[320px]">
                     <ConfirmInline
                       newLook
@@ -134,6 +136,8 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
   const [panelError, setPanelError] = useState(null);
   // The personal training sessions a Remove from the app would cancel (17e-iv-a).
   const [ptEnding, setPtEnding] = useState(null);
+  // What Send request or Cancel request did, said in that person's Co-owner part (4b-i).
+  const [coOwnerNote, setCoOwnerNote] = useState(null);
   // Only the newest read is drawn; one still on its way when the tab goes is dropped.
   const reads = useRef(0);
 
@@ -258,6 +262,39 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
     onChanged?.();
   };
 
+  /** Make co-owner (4b-i): ask them, or cancel the request. Said in their panel. */
+  const askCoOwner = async (person) => {
+    setBusyId(person.userId);
+    setPanelError(null);
+    setCoOwnerNote(null);
+    try {
+      const done = (await orgService.askCoOwner(gymId, person.userId)).data;
+      setCoOwnerNote({
+        who: person.userId,
+        message: done.emailed
+          ? `Request sent. We've emailed ${person.displayName}; they accept it on the Overview when they open the console.`
+          : `Request sent, but we couldn't email ${person.displayName}. They'll see it on the Overview when they open the console.`,
+      });
+    } catch (err) {
+      setPanelError({ at: 'co-owner', who: person.userId, message: errorText(err, "We couldn't send that request. Please try again."), retryable: false });
+    }
+    await read();
+    setBusyId(null);
+  };
+  const cancelCoOwner = async (person) => {
+    setBusyId(person.userId);
+    setPanelError(null);
+    setCoOwnerNote(null);
+    try {
+      await orgService.cancelCoOwnerRequest(gymId, person.userId);
+      setCoOwnerNote({ who: person.userId, message: `Request cancelled. ${person.displayName} can't accept it any more.` });
+    } catch (err) {
+      setPanelError({ at: 'co-owner', who: person.userId, message: errorText(err, "We couldn't cancel that request. Please try again."), retryable: false });
+    }
+    await read();
+    setBusyId(null);
+  };
+
   // The form stays open with the typing in it when the server refuses, and shows the
   // server's own sentence. No Try again: the form is where it is tried again.
   const sendInvite = async (body) => {
@@ -275,12 +312,16 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
     setNotice(
       done.outcome === 'added'
         ? `${done.staff.displayName} is now ${withArticle(done.staff.roleName || (done.staff.role === 'manager' ? 'manager' : words.coach))} here.`
-        : `Invited ${done.invite.email}. We're sending the email now; the invitation works for 7 days.`,
+        : done.outcome === 'asked'
+          ? `${done.staff.displayName} is already on your staff, so we asked them to be a co-owner. They accept it on the Overview when they open the console.`
+          : done.invite.role === 'owner'
+            ? `Invited ${done.invite.email} to be a co-owner. We're sending the email now; the invitation works for 7 days.`
+            : `Invited ${done.invite.email}. We're sending the email now; the invitation works for 7 days.`,
     );
     onInviting(false);
     await read();
     setBusyId(null);
-    if (done.outcome === 'added') onChanged?.();
+    if (done.outcome !== 'invited') onChanged?.();
   };
 
   /** Save a role of the gym's own. Answers `{ role }`, or `{ error }` with the reason. */
@@ -347,6 +388,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
   };
 
   const open = openId === null ? null : (staff.list.find((person) => person.userId === openId) ?? null);
+  const viewerIsOwner = viewerIsGymOwner(staff.list);
   const count = staffCountLabel(staff.list, orgType);
   // An answer about an invitation that is no longer listed (they were already staff) is
   // said over the lists instead.
@@ -411,6 +453,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
                       // A refusal that came back for this person while their panel was
                       // shut is still theirs to read.
                       setPanelError((was) => (was !== null && was.who === person.userId ? was : null));
+                      setCoOwnerNote((was) => (was !== null && was.who === person.userId ? was : null));
                       onInviting(false);
                       setOpenId(person.userId);
                     }}
@@ -425,7 +468,8 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
                         {person.email ? <span className="c-s13 c-t2 c-ell">{person.email}</span> : null}
                       </span>
                       <span className="flex flex-wrap gap-1.5 md:justify-end md:flex-shrink-0">
-                        <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words)}</span>
+                        <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words, person.coOwner)}</span>
+                        {person.coOwnerRequest ? <span className="c-tag c-tag-warn">Asked to be co-owner</span> : null}
                         {person.isMember ? <span className="c-tag c-tag-good">Uses the app</span> : null}
                       </span>
                     </span>
@@ -435,7 +479,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
               ))}
             </ul>
           </section>
-          <InvitedList invites={invites} gym={gym} orgType={orgType} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
+          <InvitedList invites={invites} gym={gym} orgType={orgType} viewerIsOwner={viewerIsOwner} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
         </>
       ) : null}
 
@@ -459,11 +503,16 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           roles={roles}
           orgType={orgType}
           words={words}
+          gymName={gym?.name ?? ''}
+          viewerIsOwner={viewerIsOwner}
           readOnly={readOnly}
           // Busy while ANY change is on its way, and a refusal only in the panel of the
           // person it was about: one closed mid-save says nothing in the next one opened.
           busy={busyId !== null}
           error={panelError !== null && panelError.who === open.userId ? panelError : null}
+          coOwnerNote={coOwnerNote !== null && coOwnerNote.who === open.userId ? coOwnerNote.message : null}
+          onAskCoOwner={() => void askCoOwner(open)}
+          onCancelCoOwner={() => void cancelCoOwner(open)}
           onRetry={retry}
           onClose={() => {
             // Read, so it goes; a refusal about somebody else waits for their own panel.
@@ -479,6 +528,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       {ready && inviting ? (
         <StaffInvitePanel
           orgType={orgType}
+          canInviteCoOwner={viewerIsOwner}
           words={words}
           roles={roles}
           readOnly={readOnly}

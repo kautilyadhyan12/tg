@@ -1802,7 +1802,7 @@ address has an account (the account-existence oracle `packages/shared/src/orgs.t
 warned about is why the old route looked only inside the roster) · `GET` the pending
 ones · `DELETE …/:id` cancels · `POST …/:id/resend` restarts the 7 days, at most 3
 times. 20 pending and 20 sends a day a gym. The roles offered are manager and trainer;
-a second owner is item 4b's hand-over.
+a second owner is a co-owner (4b-i, below); handing the gym over is 4b-ii.
 
 **Accepting.** The invitation appears in 10.2's `GET /v1/orgs/invitations` with its
 role. Accept writes a `gym_staff` row with the role's default ticks and **no
@@ -1849,6 +1849,14 @@ directions. Marking attendance still needs a membership.
 - **Every permission has words.** `schedule.manage` ("Run classes and personal training") had no box from 17b-i, so every manager's panel said they held "1 permission this screen is too old to show", and a server that sent no set lost it on a save; it is a box for anybody on staff now. `org.manage` ("Change gym details") and `billing.manage` ("Manage the plan and billing") are drawn on the owner's own row, which cannot be changed; whether anybody else may be given them from this screen is not decided. A test holds the words to the server's whole list.
 - **The page's name** (Kd, after the click-through; RULINGS 2026-10-07): the left option and the page's own title read **"Members & staff"** ("Clients & staff" for a studio or trainer) for whoever has the Staff tab, and "Members" for everybody else, whose page holds no staff (`membersPageName` in `consoleMenu.js`). The phone's bottom bar keeps the one word. Sentences that send somebody to the member list still say Members.
 - Tests: `membersStaff.render.test.jsx` (the worst thing first: a table over each kind of person, one box pressed, the whole set that leaves the screen), `staffView.test.js`, and for the role given on a profile `staffInvites.routes.test.ts` on real Postgres (another gym's role, a body that is both or neither, everybody who is not this gym's owner, the same role twice, the owner's own row, a deleted role).
+
+**Out of 4b-i (built 2026-10-16; `rulings/2026-10-16-4b-i.md`).** Co-owners.
+
+- Migration `0129`: `gym_co_owner_requests` (the person asked, who asked, `staff_since` = their staff row's `created_at` when asked, 7 days; `pending` · `accepted` · `declined` · `cancelled` · `expired`; one pending a person a gym, by a partial unique index). A request counts only while that same staff row stands and is not an owner's.
+- Routes: `POST`/`DELETE /v1/orgs/:gymId/staff/:userId/co-owner-request` (the gym's own owner, `gyms.owner_user_id`; `staff.manage` and a live plan to send); `GET /v1/orgs/:gymId/co-owner-request` and `POST …/co-owner-request/:requestId/accept|decline` (the person asked, found by their own id in the WHERE). Accept, under the gym's lock, makes their staff row `owner` with the owner's usual ticks and no role name; the gym's owner does not change. One email to the person, sent after the request is saved; one that fails leaves it waiting and the reply says `emailed: false`.
+- A co-owner's row is an `owner` row that is not `gyms.owner_user_id`; the staff list, the member list's staff tag and the caller's own gym row carry `coOwner`. Only the owner changes, ticks or removes an owner's row (`owner_row_locked`); the owner is never removed (`last_owner`), never changes role (`owner_role_locked`) and always keeps staff management and billing (`last_owner_locked`).
+- **Invite staff offers Co-owner** to the owner alone (`role: "owner"` on `POST …/staff/invites`; `0129` lets an invitation's role be `owner`, with the owner's ticks and no role name of the gym's own). It never skips Accept: an address already in the app gets an invitation rather than being appointed, an address on the staff gets a co-owner request (`outcome: "asked"`), and Accept of a co-owner's invitation opens only while its sender is the gym's owner.
+- Screens: Make co-owner, Send request and Cancel request in a staff member's panel (Members & staff → Staff); "Asked to be co-owner" on the row; "Be a co-owner of {gym}" with Accept and Decline at the top of that gym's Overview; "Co-owner" as the person's role everywhere the console names it.
 
 ### 10.4 A seat is a person using the member app (4c)
 
@@ -3660,7 +3668,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   says it is at the press. The same press again is the same sale even after its buyer's
   record was joined to another.
 - **Not built**: a sale of several different products at once; a refund of a product sale
-  on a later day; receipts (18g); discounts on memberships (18b-ii-b); tax on memberships
+  on a later day (built by 18p, below); receipts (18g); discounts on memberships (18b-ii-b); tax on memberships
   (18b-iii). Product sales reach Reports' money figures with 21b-ii (§16.5).
 
 **As built, 18b-ii-a (2026-10-13; `rulings/2026-10-13-18b-ii-a.md`).** Discounts and promo
@@ -3846,6 +3854,29 @@ payment, a refund or a sale recorded by mistake is **voided**, as gym software d
 - **Left as it is**: a membership payment voided leaves Sell's list of today's takings, as
   before; it is shown, crossed out, on the person's page. A payment taken by a connected company
   (18d) is given back through that company, not voided here.
+
+**As built, 18p (2026-10-16; `rulings/2026-10-15-20e-ii-b-ii-a.md`, `rulings/2026-10-16-18p.md`).**
+**Refund sale**, as Square and Mindbody do it: money given back for a product sale, on its own
+day or any later one.
+- **Finding the sale**: Sell's list has "Show another day" (a calendar, no day after today) and
+  "Back to today" (`GET …/register?day=`); a person's "Bought at the desk" lists the same sales.
+- **The ⋯ on a sale** holds Refund sale ("You gave some or all of the money back.") while some of
+  it is left to give back, and Void sale (its own day only, and only while no refund stands).
+- **The box** opens inside the sale: the amount (all that is left, or part; never more), how it
+  went back (starting at how it was paid), why (Brought back · Charged too much · Faulty or
+  damaged · Something else), and, where the product's stock is counted, how many went back on
+  the shelf (None to what is not back yet). The app moves no money. The same press twice is one
+  refund; two staff at one instant never give back more than the sale took (gym's row lock).
+- **The sale stays**, tagged Part refunded or Refunded; each refund is a line under it (its own
+  receipt number, how, day, why, the shelf, who) with View receipt and a ⋯ holding Void refund
+  (Noted by mistake · Wrong amount · Something else), which takes back what it put on the shelf.
+  What was done is said under the sale. `gym_sale_refunds` (migration `0128`).
+- **Money**: the day's refunds are said beside Sell's total of the day they were noted, as a
+  membership's; Reports' Collected and its Refunded line take them off in the month the money
+  went back; lifetime value and Money by product do not. Its receipt reads "Refund for receipt
+  #n" with the product; the sale's receipt lists its refunds.
+- **Refer a friend**: a friend's sale refunded in full no longer stands for the member's gift (a
+  gift not yet used is taken back); the refund voided gives it again.
 
 ### 14.4 Pay by the gym's own link
 

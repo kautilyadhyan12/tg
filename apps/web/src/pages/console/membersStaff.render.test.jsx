@@ -927,7 +927,7 @@ describe("the gym's own roles", () => {
   it('shows the roles in one row, and choosing one ticks its permissions right underneath', async () => {
     orgService.getStaffRoles.mockResolvedValue({ data: { roles: [FRONT_DESK] } });
     const form = await openInvite();
-    expect(within(form.getByRole('radiogroup')).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Manager', 'Trainer', 'Front desk']);
+    expect(within(form.getByRole('radiogroup')).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Manager', 'Trainer', 'Co-owner', 'Front desk']);
     fireEvent.click(form.getByRole('radio', { name: 'Front desk' }));
     expect(tickedNow(form)).toBe(2);
     fireEvent.change(form.getByLabelText(/Their email address/i), { target: { value: 'desk@example.com' } });

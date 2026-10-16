@@ -66,12 +66,12 @@ export function receiptLines(receipt) {
   return lines;
 }
 
-/** The notes under the lines: the refunds noted against a payment, and who took it. */
+/** The notes under the lines: the refunds noted against a payment or a sale (18p), and who took it. */
 export function receiptNotes(receipt) {
   const money = (minor) => formatMinor(minor, receipt.currency);
   const notes = [];
-  if (receipt.kind === 'payment') {
-    for (const r of receipt.refunds) notes.push(`${money(r.amountMinor)} given back on ${shortDay(r.on)} (refund receipt #${String(r.number)}).`);
+  if (receipt.kind === 'payment' || receipt.kind === 'sale') {
+    for (const r of receipt.refunds ?? []) notes.push(`${money(r.amountMinor)} given back on ${shortDay(r.on)} (refund receipt #${String(r.number)}).`);
   }
   if (receipt.by !== null) notes.push(`${receipt.kind === 'refund' ? 'Given back' : 'Taken'} by ${receipt.by}.`);
   return notes;

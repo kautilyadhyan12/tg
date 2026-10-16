@@ -168,7 +168,7 @@ export const gymReferralMemberGifts = pgTable(
   ],
 );
 
-/** An invited friend whose lead was deleted (item 20's two extra passes; `0127`): who invited
+/** An invited friend whose lead was deleted (item 20's two extra passes; `0130`): who invited
  *  them and when, the earliest, so the record is still an invited friend. It goes with the
  *  record. */
 export const gymReferralKeptInvites = pgTable(
