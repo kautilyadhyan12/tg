@@ -13,6 +13,7 @@
 // other dots, an Apple relay address or another gym's invitation id all find nothing.
 // Accept writes a staff row with the role's starting ticks and NO membership.
 import {
+  CO_OWNER_WORDS,
   STAFF_INVITE_DAYS,
   STAFF_INVITE_EMAILS_PER_ADDRESS_WEEK,
   STAFF_INVITE_EMAILS_PER_DAY,
@@ -48,12 +49,16 @@ import { emailHmac } from "../invites/address.js";
 import { suppressionsFor } from "../invites/repo.js";
 import type { InviteSettings } from "../invites/settings.js";
 import * as repo from "./repo.js";
+import * as coOwnerRepo from "../coOwners/repo.js";
+import { sendCoOwnerRequest, type CoOwnerDeps } from "../coOwners/service.js";
 
 export interface StaffInviteDeps {
   sql: Sql;
   /** Null when invitation emails are switched off: nobody can be invited. */
   invites: InviteSettings | null;
   now: () => Date;
+  /** A co-owner invitation to somebody already on the staff is a co-owner request (4b-i). */
+  coOwners?: CoOwnerDeps;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -73,38 +78,51 @@ export async function createStaffInvite(
   input: CreateStaffInviteRequest,
 ): Promise<CreateStaffInviteResponse> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, "staff.manage");
+  // A CO-OWNER (4b-i): asked by the gym's own owner alone, with the owner's ticks, and never
+  // made at once: somebody already on the staff is asked on their Overview, anybody else
+  // gets an invitation, and either way they become one only by pressing Accept.
+  const coOwner = input.role === "owner";
+  if (coOwner) {
+    if ((await coOwnerRepo.gymOwnerId(deps.sql, gymId)) !== userId) throw new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
+    if (input.roleId !== undefined) throw new OrgsError(409, "co_owner_own_role", STAFF_INVITE_WORDS.co_owner_own_role);
+    const onStaff = await coOwnerRepo.staffAtAddress(deps.sql, gymId, input.email);
+    if (onStaff !== null) {
+      if (deps.coOwners === undefined) throw new Error("staff invitations were registered without the co-owner requests");
+      const asked = await sendCoOwnerRequest(deps.coOwners, userId, gymId, onStaff.userId);
+      const row = (await orgRepo.listStaff(deps.sql, gymId)).find((r) => r.userId === onStaff.userId);
+      if (row === undefined) throw new OrgsError(404, "not_staff", CO_OWNER_WORDS.not_staff);
+      return { outcome: "asked", staff: toOrgStaff(row, userId), emailed: asked.emailed };
+    }
+  }
   // One of the gym's own roles: its name is shown in place of the role, which is a
   // trainer's underneath; the ticks are what the console obeys (RULINGS 2026-10-01).
   const ownRole = input.roleId === undefined ? null : await repo.roleById(deps.sql, gymId, input.roleId);
   if (input.roleId !== undefined && ownRole === null) throw new OrgsError(404, "role_not_found", STAFF_INVITE_WORDS.role_not_found);
   const role = ownRole === null ? input.role : "trainer";
   const roleName = ownRole?.name ?? null;
-  // The ticks the owner chose on the form (Kd, 2026-10-01), else the role's own.
-  const privileges =
-    input.privileges !== undefined
+  // The ticks the owner chose on the form (Kd, 2026-10-01), else the role's own. A
+  // co-owner's are the owner's, whatever the form sent.
+  const privileges = coOwner
+    ? defaultPrivilegesFor("owner")
+    : input.privileges !== undefined
       ? canonicalPrivileges(input.privileges)
       : ownRole !== null
         ? canonicalPrivileges(ownRole.privileges.flatMap((p) => { const known = orgPrivilegeSchema.safeParse(p); return known.success ? [known.data] : []; }))
         : defaultPrivilegesFor(input.role);
-  if (privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
+  if (!coOwner && privileges.some((privilege) => OWNER_ONLY_PRIVILEGES.includes(privilege))) {
     throw new OrgsError(409, "owner_only_privilege", STAFF_INVITE_WORDS.owner_only_privilege);
   }
 
-  // Somebody already in the gym is appointed at once (RULINGS 2026-09-21).
-  const appointed = await orgRepo.addStaff(deps.sql, {
-    gymId,
-    email: input.email,
-    role,
-    privileges,
-    roleName,
-    actorUserId: userId,
-  });
-  switch (appointed.kind) {
+  // Somebody already in the gym is appointed at once (RULINGS 2026-09-21), but never as a
+  // co-owner: that is an invitation they accept.
+  const appointed = coOwner ? null : await orgRepo.addStaff(deps.sql, { gymId, email: input.email, role, privileges, roleName, actorUserId: userId });
+  switch (appointed?.kind) {
     case "added":
       return { outcome: "added", staff: toOrgStaff(appointed.staff, userId) };
     case "already_staff":
       throw alreadyStaff(appointed.staff.displayName, appointed.staff.role, appointed.staff.roleName, org.orgType);
     case "not_a_member":
+    case undefined:
       break;
   }
 
@@ -210,6 +228,7 @@ export async function cancelStaffInvite(
     await orgRepo.lockOrgRow(tx, gymId);
     const invite = await repo.lockOpenInvite(tx, gymId, inviteId);
     if (invite === null) return false;
+    if (invite.role === "owner" && (await coOwnerRepo.gymOwnerId(tx, gymId)) !== userId) throw new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
     if (invite.state === "pending") await repo.answerInvite(tx, { gymId, inviteId, state: "cancelled", by: userId, at });
     else await repo.clearInvite(tx, gymId, inviteId, at);
     await orgRepo.insertAudit(tx, {
@@ -245,6 +264,8 @@ export async function resendStaffInvite(
     await orgRepo.lockOrgRow(tx, gymId);
     const invite = await repo.lockOpenInvite(tx, gymId, inviteId);
     if (invite === null) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
+    // A co-owner's invitation is the owner's offer: only the owner opens it again (round one, H1).
+    if (invite.role === "owner" && (await coOwnerRepo.gymOwnerId(tx, gymId)) !== userId) throw new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
     // Made staff another way since (appointed from the member list): the invitation would
     // promise a role Accept does not give. It leaves the owner's list, and is refused.
     const staff = await repo.staffNameAt(tx, gymId, invite.email);
@@ -436,6 +457,8 @@ export async function acceptStaffInvitation(
       await repo.answerInvite(tx, { gymId, inviteId, state: "accepted", by: caller.id, at });
       return { kind: "already_staff", org, role: toRole(existing.role) };
     }
+    // A co-owner's invitation opens only while the person who sent it is the gym's owner.
+    if (invite.role === "owner" && !(await repo.sentByOwner(tx, gymId, inviteId))) return { kind: "none" };
     // Exactly what the owner ticked when inviting.
     const privileges = invite.privileges;
     await repo.writeStaff(tx, { gymId, userId: caller.id, role: invite.role, privileges, roleName: invite.roleName, at });

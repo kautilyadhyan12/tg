@@ -353,7 +353,7 @@ const moneyRowSchema = z.object({
   months: z.array(
     z.object({ typeId: z.string(), typeName: z.string(), month: z.string(), paidMinor: minor, refundedMinor: minor, periodPaidMinor: minor, periodRefundedMinor: minor }),
   ),
-  sales: z.array(z.object({ month: z.string(), soldMinor: minor, periodSoldMinor: minor })),
+  sales: z.array(z.object({ month: z.string(), soldMinor: minor, periodSoldMinor: minor, refundedMinor: minor, periodRefundedMinor: minor })),
   products: z.array(z.object({ productId: z.string(), name: z.string(), sold: count, minor })),
   staff: z.array(z.object({ userId: z.string().nullable(), name: z.string().nullable(), login: z.string().nullable(), paidMinor: minor, soldMinor: minor })),
   current_minor: minor,
@@ -373,7 +373,8 @@ export type MoneyCounts = z.infer<typeof moneyRowSchema>;
  *  given for each membership type, over the last `REPORT_MONTHS` months, with the part of
  *  each that falls from `periodFrom` on: the first day of the period the page shows,
  *  never earlier than those months. A sale at the desk counts the same way, in the month
- *  of the day it was sold, while it stands; the period's sales are also given by product,
+ *  of the day it was sold, while it stands, and its refunds that stand in the month each went
+ *  back (18p); the period's sales are also given by product,
  *  and its payments and sales by the staff member who recorded them (21b-ii); an account
  *  since deleted (or deleted for good) is no name, all of them one row.
  *
@@ -470,10 +471,19 @@ export async function readMoney(
                 'periodPaidMinor', m.period_paid_minor, 'periodRefundedMinor', m.period_refunded_minor)), '[]'::json)
        FROM by_month m
        JOIN gym_membership_types t ON t.gym_id = ${gymId} AND t.id = m.type_id) AS months,
-      (SELECT COALESCE(json_agg(json_build_object('month', m.month, 'soldMinor', m.sold_minor, 'periodSoldMinor', m.period_minor)), '[]'::json)
+      (SELECT COALESCE(json_agg(json_build_object('month', COALESCE(m.month, f.month), 'soldMinor', COALESCE(m.sold_minor, 0), 'periodSoldMinor', COALESCE(m.period_minor, 0),
+                                                  'refundedMinor', COALESCE(f.refunded_minor, 0), 'periodRefundedMinor', COALESCE(f.period_minor, 0))), '[]'::json)
        FROM (SELECT to_char(s.sold_on, 'YYYY-MM') AS month, sum(s.total_minor) AS sold_minor,
                     COALESCE(sum(s.total_minor) FILTER (WHERE s.sold_on >= ${periodFrom}::date), 0) AS period_minor
-             FROM sold s GROUP BY 1) m) AS sales,
+             FROM sold s GROUP BY 1) m
+       FULL JOIN (SELECT to_char(r.refunded_on, 'YYYY-MM') AS month, sum(r.amount_minor) AS refunded_minor,
+                         COALESCE(sum(r.amount_minor) FILTER (WHERE r.refunded_on >= ${periodFrom}::date), 0) AS period_minor
+                  FROM gym_sale_refunds r
+                  JOIN gym_sales s ON s.gym_id = r.gym_id AND s.id = r.sale_id
+                  CROSS JOIN clock c
+                  WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND s.undone_at IS NULL AND r.currency = ${currency}
+                    AND r.refunded_on >= c.from_day
+                  GROUP BY 1) f ON f.month = m.month) AS sales,
       (SELECT COALESCE(json_agg(json_build_object('productId', x.product_id, 'name', pr.name, 'sold', x.sold, 'minor', x.minor)), '[]'::json)
        FROM (SELECT s.product_id, sum(s.quantity) AS sold, sum(s.total_minor) AS minor
              FROM sold s CROSS JOIN clock c
@@ -497,13 +507,14 @@ export async function readMoney(
 }
 
 /** Payments, sales and refunds in `currency` that stand, over `span`'s days, both ends among
- *  them, as `readMoney` counts them: a refund of a payment that was taken back is not money. */
+ *  them, as `readMoney` counts them: a refund of a payment that was taken back is not money.
+ *  A sale's refunds are apart (18p): they are set beside the sales' own history. */
 export async function readCollected(
   sql: Sql | TransactionSql,
   gymId: string,
   currency: string,
   span: YearEarlierSpan,
-): Promise<{ paidMinor: number; soldMinor: number; refundedMinor: number }> {
+): Promise<{ paidMinor: number; soldMinor: number; refundedMinor: number; saleRefundedMinor: number }> {
   const rows = await sql<Record<string, unknown>[]>`
     SELECT
       (SELECT COALESCE(sum(p.amount_minor), 0)::float8 FROM gym_member_payments p
@@ -515,7 +526,11 @@ export async function readCollected(
       (SELECT COALESCE(sum(r.amount_minor), 0)::float8 FROM gym_member_refunds r
        JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
        WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND p.undone_at IS NULL AND r.currency = ${currency}
-         AND r.refunded_on >= ${span.from}::date AND r.refunded_on <= ${span.to}::date) AS refunded_minor`;
-  const row = z.object({ paid_minor: minor, sold_minor: minor, refunded_minor: minor }).parse(rows[0]);
-  return { paidMinor: row.paid_minor, soldMinor: row.sold_minor, refundedMinor: row.refunded_minor };
+         AND r.refunded_on >= ${span.from}::date AND r.refunded_on <= ${span.to}::date) AS refunded_minor,
+      (SELECT COALESCE(sum(r.amount_minor), 0)::float8 FROM gym_sale_refunds r
+       JOIN gym_sales s ON s.gym_id = r.gym_id AND s.id = r.sale_id
+       WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL AND s.undone_at IS NULL AND r.currency = ${currency}
+         AND r.refunded_on >= ${span.from}::date AND r.refunded_on <= ${span.to}::date) AS sale_refunded_minor`;
+  const row = z.object({ paid_minor: minor, sold_minor: minor, refunded_minor: minor, sale_refunded_minor: minor }).parse(rows[0]);
+  return { paidMinor: row.paid_minor, soldMinor: row.sold_minor, refundedMinor: row.refunded_minor, saleRefundedMinor: row.sale_refunded_minor };
 }

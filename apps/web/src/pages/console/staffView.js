@@ -89,8 +89,8 @@ export function staffRoleChoices(orgType) {
  *  offered every role there is. The role they hold is left out only while they hold its
  *  ticks too: a role made again under the same name, or ticks changed by hand since, and
  *  it is offered, to give them the role as it now stands. */
-export function roleTargets(person, roles, orgType) {
-  if (!canChangeStaff(person)) return [];
+export function roleTargets(person, roles, orgType, viewerIsOwner = false) {
+  if (!canChangeStaff(person, viewerIsOwner)) return [];
   const ownName = typeof person.roleName === 'string' && person.roleName !== '' ? person.roleName : null;
   const builtIn = ['manager', 'trainer']
     .filter((role) => ownName !== null || role !== person.role)
@@ -129,8 +129,35 @@ export function roleTargets(person, roles, orgType) {
  *  the same one in both: **every owner is the LAST owner**, because nothing in
  *  the product can appoint a second one. So the row carries the reason in
  *  words instead of two buttons that are guaranteed to fail. */
-export function canChangeStaff(person) {
+export function canChangeStaff(person, viewerIsOwner = false) {
+  // A co-owner's row is changed by the gym's own owner alone (4b-i): the server answers
+  // anybody else `owner_row_locked`.
+  if (person?.role === 'owner') return person.coOwner === true && viewerIsOwner === true;
   return person?.role === 'manager' || person?.role === 'trainer';
+}
+
+// ── CO-OWNERS (ROADMAP 4b-i) ────────────────────────────────────────────────
+
+/** The gym's own owner's row: an owner's row that is not a co-owner's. */
+export function isGymOwner(person) {
+  return person?.role === 'owner' && person.coOwner !== true;
+}
+
+/** Whether the person reading the Staff tab is the gym's own owner, from the server's list. */
+export function viewerIsGymOwner(staff) {
+  return Array.isArray(staff) && staff.some((person) => person?.isYou === true && isGymOwner(person));
+}
+
+/** What a person's panel says about being a co-owner, or null for nothing.
+ *  `offer`: Make co-owner, for the owner looking at somebody else on the staff.
+ *  `waiting`: the owner has asked and they have not answered (`until` is when it ends).
+ *  `locked`: a co-owner's row, read by somebody who is not the owner. */
+export function coOwnerView(person, viewerIsOwner) {
+  if (!person || isGymOwner(person)) return null;
+  if (person.role === 'owner') return viewerIsOwner ? null : { kind: 'locked' };
+  if (!viewerIsOwner) return null;
+  const until = person.coOwnerRequest?.expiresAt ?? null;
+  return until === null ? { kind: 'offer' } : { kind: 'waiting', until };
 }
 
 /** "3 people run your gym", from the whole list.
@@ -430,6 +457,9 @@ export function privilegesDiffer(before, after) {
  *  new role" is true in both directions. */
 export function roleChangeWarning(person, nextRole, orgType) {
   const name = person?.displayName ?? 'them';
+  if (person?.role === 'owner') {
+    return `Make ${name} a ${roleLabel(nextRole, orgType).toLowerCase()}? They stop being a co-owner, and their permissions become the defaults for the new role.`;
+  }
   return `Make ${name} a ${roleLabel(nextRole, orgType).toLowerCase()}? Their permissions become the defaults for the new role.`;
 }
 
@@ -464,7 +494,8 @@ const BLOCKED_REASONS = ['bounced', 'refused', 'complained', 'unsubscribed'];
 /** One invitation's line on Members → Staff: who, as what, and where it stands, and
  *  whether Send again is offered (4a-ii) or, when it is not, why. */
 export function staffInviteView(invite, orgType, now = Date.now()) {
-  const role = invite.roleName || roleLabel(invite.role, orgType);
+  // An invitation for `owner` is a co-owner's (4b-i): the gym's own owner is never invited.
+  const role = invite.roleName || roleLabel(invite.role, orgType, invite.role === 'owner');
   const status =
     invite.state === 'declined'
       ? `Said no thanks${invite.declinedAt ? ` · ${formatJoinedAt(invite.declinedAt)}` : ''}`

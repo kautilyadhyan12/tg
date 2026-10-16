@@ -140,6 +140,10 @@ import {
   removeMemberResponseSchema,
   removeOrgStaffResponseSchema,
   rotateOrgCodeResponseSchema,
+  sendCoOwnerRequestResponseSchema,
+  cancelCoOwnerRequestResponseSchema,
+  myCoOwnerRequestResponseSchema,
+  answerCoOwnerRequestResponseSchema,
   ptAppointmentResponseSchema,
   ptPeopleResponseSchema,
   ptTrainersResponseSchema,
@@ -1556,6 +1560,29 @@ export const orgService = {
       // 17e-iv-b: `confirmPtSessions` is the `mark` of the personal training sessions booked
       // with them that the box named (409 `pt_sessions_ending`).
       authApi.delete(`/v1/orgs/${gymId}/staff/${userId}`, { params: confirmPtSessions === null ? {} : { confirmPtSessions } }),
+    ),
+
+  /** Co-owners (ROADMAP 4b-i): the owner asks one of the staff, or cancels the request;
+   *  the person asked reads theirs on Overview and accepts or declines it. */
+  askCoOwner: (gymId, userId) =>
+    readThrough(
+      sendCoOwnerRequestResponseSchema,
+      'that request',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/staff/${encodeURIComponent(userId)}/co-owner-request`, {}),
+    ),
+  cancelCoOwnerRequest: (gymId, userId) =>
+    readThrough(
+      cancelCoOwnerRequestResponseSchema,
+      'that request',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/staff/${encodeURIComponent(userId)}/co-owner-request`),
+    ),
+  getMyCoOwnerRequest: (gymId) =>
+    readThrough(myCoOwnerRequestResponseSchema, 'your co-owner request', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/co-owner-request`)),
+  answerCoOwnerRequest: (gymId, requestId, accept) =>
+    readThrough(
+      answerCoOwnerRequestResponseSchema,
+      'your answer',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/co-owner-request/${encodeURIComponent(requestId)}/${accept ? 'accept' : 'decline'}`, {}),
     ),
 
   /** The gym's membership types (Part 3 §13.1): what it sells and what each costs.

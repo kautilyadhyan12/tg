@@ -511,9 +511,10 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 - `FOLDER.md` and `reviews/` are ignored by git: they are the folder's own.
 
 **Since 2026-10-12 (RULINGS that day; ROADMAP Stage 2's header and Stage 5).** The gym's
-web part is built on a borrowed laptop in three web folders (A, B, C) until about
-2026-10-17. Kd's own laptop builds the phone app and the exercises in FOUR folders, two
-running at a time, all checkouts of the one repository:
+web part was built on a borrowed laptop in three web folders (A, B, C) until 2026-10-16,
+and since then in web folders 1 and 2 on Kd's own laptop (ROADMAP Stage 2's header). Kd's
+own laptop builds the phone app and the exercises in FOUR folders, two running at a time,
+all checkouts of the one repository:
 
 | Folder | Path | Builds (ROADMAP Stage 5) |
 |---|---|---|
@@ -527,4 +528,4 @@ folder's list whose needs are met, jobs merge ONE at a time, and a second migrat
 renumbered. `master` itself is open in feature folder 1 only, so the other three start a
 job with `git fetch` and a fresh branch from `origin/master`. Each folder's `FOLDER.md`
 names its database, Redis number and ports, and its own copy of the app on Kd's one
-phone. When the borrowed laptop goes back, what is left of the web gets a fifth folder.
+phone.

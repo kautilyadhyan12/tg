@@ -119,6 +119,32 @@ export function staffInviteEmail(words: {
   return { to: words.to, subject: `Help run ${gym} on ${APP_NAME}`, text, html };
 }
 
+/** The gym's owner asks one of its staff to be a co-owner (ROADMAP 4b-i). The names arrive
+ *  already cleaned (`cleanGymText`), and the one link is to our own console, with no token:
+ *  answering needs a sign-in as this person. */
+export function coOwnerRequestEmail(words: { to: string; ownerName: string; gymName: string; days: number; consoleLink: string }): EmailMessage {
+  const gym = words.gymName;
+  const who = words.ownerName === "" ? `The owner of ${gym}` : words.ownerName;
+  const lines = {
+    lead: `${who} asked you to be a co-owner of ${gym}.`,
+    what: "A co-owner can do everything in the console, except add, change or remove co-owners.",
+    how: `Sign in with this email address, ${words.to}, and press Accept on the Overview:`,
+    only: `The request works for ${String(words.days)} days.`,
+    ignore: "If you weren't expecting it, you can ignore this email.",
+    footer: `Sent by ${APP_NAME} on behalf of ${gym}.`,
+  };
+  const text = `${lines.lead}\n\n${lines.what}\n\n${lines.how}\n${words.consoleLink}\n\n${lines.only}\n\n${lines.ignore}\n\n${lines.footer}\n`;
+  const link = (href: string) => `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`;
+  const html =
+    `<p>${escapeHtml(lines.lead)}</p>` +
+    `<p>${escapeHtml(lines.what)}</p>` +
+    `<p>${escapeHtml(lines.how)}<br>${link(words.consoleLink)}</p>` +
+    `<p>${escapeHtml(lines.only)}</p>` +
+    `<p>${escapeHtml(lines.ignore)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}</p>`;
+  return { to: words.to, subject: `Be a co-owner of ${gym}`, text, html };
+}
+
 /** A lead's follow-up email `step`, sent by the app for the gym (Part 3 §16.3; ROADMAP
  *  20c-v): the letter the lead's panel writes (`leadFollowUpLetter`), signed by the
  *  gym, then who sent it, the gym's postal address and the Stop link. The name, gym

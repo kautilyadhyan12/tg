@@ -36,6 +36,7 @@ import postgres from "postgres";
 import { SUPPORTED_COUNTRIES, currencyForCountry } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { confirmOwnerOf } from "./confirmOwner.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -329,6 +330,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect(org.org.currencyDisplay).toBe(currency);
 
       const before = Date.now();
+      await confirmOwnerOf(sql, org.org.id);
       const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies);
       const after = Date.now();
       expect(started.statusCode, started.body).toBe(200);
@@ -652,6 +654,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const org = await makeOrg(owner.cookies, "CA");
       expect(org.org.currencyDisplay).toBe("USD");
 
+      await confirmOwnerOf(sql, org.org.id);
       const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies);
       expect(started.statusCode, "Canada could not trial at all before :22215").toBe(200);
       const body = JSON.parse(started.body) as {
@@ -708,6 +711,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const owner = await makeUser("arm-expired");
       const org = await makeOrg(owner.cookies, "US");
 
+      await confirmOwnerOf(sql, org.org.id);
       expect((await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies)).statusCode).toBe(200);
       const during = await readMyOrg(org.org.id, owner.cookies);
       expect(during.subscription?.status).toBe("trialing");
@@ -747,6 +751,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect((await readMyOrg(first.org.id, owner.cookies)).ownerTrialUsed).toBe(false);
       expect((await readMyOrg(second.org.id, owner.cookies)).ownerTrialUsed).toBe(false);
 
+      await confirmOwnerOf(sql, first.org.id);
       expect((await post(`/v1/orgs/${first.org.id}/trial`, {}, owner.cookies)).statusCode).toBe(
         200,
       );
@@ -757,6 +762,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       expect(secondAfter.subscription, "the second gym is on nothing").toBeNull();
 
       // THE DOOR, same gym, same breath.
+      await confirmOwnerOf(sql, second.org.id);
       const refused = await post(`/v1/orgs/${second.org.id}/trial`, {}, owner.cookies);
       expect(refused.statusCode).toBe(409);
       expect((JSON.parse(refused.body) as { error: string }).error).toBe("trial_already_used");
@@ -796,6 +802,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
         });
         try {
           await isHeld;
+          for (const id of gymIds) await confirmOwnerOf(sql, id);
           const pressing = Promise.all(gymIds.map((id) => post(`/v1/orgs/${id}/trial`, {}, owner.cookies)));
           for (let i = 0; i < 250; i++) {
             const [row] = await sql<{ n: number }[]>`
@@ -834,6 +841,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const member = await makeUser("arm-member");
       const org = await makeOrg(owner.cookies, "US");
 
+      await confirmOwnerOf(sql, org.org.id);
       expect((await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies)).statusCode).toBe(200);
 
       // A live membership with no staff row — what a member of the gym is.
@@ -873,6 +881,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
       const trainer = await makeUser("arm-trainer");
       const org = await makeOrg(owner.cookies, "US");
 
+      await confirmOwnerOf(sql, org.org.id);
       expect((await post(`/v1/orgs/${org.org.id}/trial`, {}, owner.cookies)).statusCode).toBe(200);
 
       await sql`
