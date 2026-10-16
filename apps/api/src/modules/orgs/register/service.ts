@@ -444,7 +444,11 @@ export async function findPeople(deps: RegisterDeps, gymId: string, viewer: View
 /** Refer a friend's gift for the person Sell has picked (20e-ii-b-i): null where they are
  *  not a friend a member invited, or have had it. */
 export async function getFriendGift(deps: RegisterDeps, gymId: string, viewer: Viewer, entryId: string): Promise<FriendGiftResponse> {
-  const [friendGift, memberGift] = await Promise.all([friendGiftOffer(deps.sql, gymId, entryId, dayInTz(deps.now(), viewer.timezone)), waitingGiftFor(deps.sql, gymId, entryId)]);
+  const [friendGift, memberGift] = await Promise.all([
+    friendGiftOffer(deps.sql, gymId, entryId, dayInTz(deps.now(), viewer.timezone)),
+    // A member's own gift is filled in at Sell only where it is money off products (20e-ii-b-ii-b).
+    waitingGiftFor(deps.sql, gymId, entryId, "products"),
+  ]);
   return friendGiftResponseSchema.parse({ friendGift, memberGift });
 }
 

@@ -36,7 +36,8 @@ const holdsPt = (sql: SqlOrTx, day: PendingQuery<Row[]>) => sql`
     SELECT 1 FROM gym_held_memberships h
     JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
     WHERE h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen') AND mt.includes_pt
-      AND NOT (h.kind = 'pack' AND (h.classes_left = 0 OR h.starts_on + h.pack_days + h.frozen_days < ${day})))`;
+      AND NOT (h.kind = 'pack' AND (h.classes_left = 0
+        OR h.starts_on + h.pack_days + h.frozen_days + CASE WHEN h.gift_from <= 1 THEN h.gift_days ELSE 0 END < ${day})))`;
 
 export interface GymClock {
   timezone: string;

@@ -371,6 +371,34 @@ describe('the details open beside the status (R3)', () => {
     expect(screen.getByLabelText('Notes').value).toBe('Call on Friday');
   });
 
+  it('one page that scrolls as a whole, its Save and Cancel pinned at the foot saying what is not saved (Kd at 20e-ii-b-ii-b)', async () => {
+    orgService.getLead.mockResolvedValue({ data: { lead: tom } });
+    orgService.updateLead.mockResolvedValue({ data: { lead: { ...tom, status: 'on_trial' } } });
+    render(sheet(TOM));
+    await screen.findByRole('heading', { name: 'Tom Reid' });
+    expect(screen.getByRole('dialog').className).toMatch(/overflow-y-auto/);
+    expect(screen.getByRole('dialog').className).not.toMatch(/overflow-hidden/);
+    const bar = () => within(screen.getByTestId('lead-save-bar'));
+    expect(screen.getByTestId('lead-save-bar').className).toMatch(/sticky bottom-0/);
+    expect(bar().getByRole('button', { name: 'Save' }).disabled).toBe(true);
+    expect(bar().queryByText("You have changes that aren't saved.")).toBeNull();
+    // Closing the tab now asks nothing.
+    const quiet = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(quiet);
+    expect(quiet.defaultPrevented).toBe(false);
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'Status' })).getByRole('button', { name: 'On trial' }));
+    expect(bar().getByText("You have changes that aren't saved.")).toBeTruthy();
+    // Closing or reloading the tab now asks first.
+    const asked = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(asked);
+    expect(asked.defaultPrevented).toBe(true);
+    fireEvent.click(bar().getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.updateLead).toHaveBeenCalledWith(GYM, TOM, { status: 'on_trial', fromStatus: 'new' }));
+    expect(await bar().findByText('Saved.')).toBeTruthy();
+    expect(bar().queryByText("You have changes that aren't saved.")).toBeNull();
+  });
+
   it('Save sends only the details that moved, never the notes; Cancel puts the typing back', async () => {
     orgService.getLead.mockResolvedValue({ data: { lead: tom } });
     orgService.updateLead

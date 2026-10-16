@@ -530,7 +530,7 @@ type Owing = ListHeldColumns & {
  *  of them is owed one today is `billsToOpen`'s to say. */
 const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => sql<Owing[]>`
   SELECT h.id, t.name AS type_name, h.kind, h.term_count, h.term_unit, h.pack_classes, h.pack_days,
-         (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
+         (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
          h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
