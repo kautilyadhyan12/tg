@@ -65,6 +65,7 @@ import {
   weekdayLine,
 } from './classesView';
 import { bookingsAsked, endingMark } from './bookingsEndView';
+import { openSessionName } from './membershipTypesView';
 import { sessionsAsked } from './trainerSessionsView';
 
 // CLASSES — the gym's timetable (Part 3 §13.3). Its words are gym software's
@@ -104,7 +105,7 @@ function Problem({ text }) {
 
 /** One form for adding a class and for editing one. The parent keys it on the
  *  class id so a draft is never carried from one class to another. */
-function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, problem, saveLabel, ask = null }) {
+function ClassForm({ draft, setDraft, orgType, staff, disabled, onSave, onClose, saving, problem, saveLabel, ask = null }) {
   const set = (patch) => setDraft({ ...draft, ...patch });
   return (
     <div className="flex flex-col gap-5">
@@ -155,7 +156,7 @@ function ClassForm({ draft, setDraft, staff, disabled, onSave, onClose, saving, 
       </div>
 
       <Tick checked={draft.openGym} onChange={(on) => set({ openGym: on })} disabled={disabled}>
-        Open gym (not a taught class)
+        {openSessionName(orgType)} (not a taught class)
       </Tick>
 
       <Problem text={problem} />
@@ -803,6 +804,7 @@ export default function Classes() {
               <ClassForm
                 draft={addDraft}
                 setDraft={setAddDraft}
+                orgType={org?.orgType}
                 staff={staff}
                 disabled={locked}
                 saving={busy === 'add'}
@@ -852,7 +854,7 @@ export default function Classes() {
                       <div className="flex flex-col gap-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="c-h2">{type.name}</h2>
-                          {type.openGym ? <span className="c-tag c-tag-plain">Open gym</span> : null}
+                          {type.openGym ? <span className="c-tag c-tag-plain">{openSessionName(org?.orgType)}</span> : null}
                         </div>
                         {type.description === null || type.description === '' ? null : (
                           <p className="c-s14 c-t2">{type.description}</p>
@@ -935,6 +937,7 @@ export default function Classes() {
                         key={type.id}
                         draft={editDraft}
                         setDraft={setEditDraft}
+                        orgType={org?.orgType}
                         staff={staff}
                         disabled={locked}
                         saving={busy === `edit:${type.id}`}

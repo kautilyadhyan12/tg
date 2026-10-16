@@ -221,7 +221,7 @@ const next = async (title) => {
  *  Continue, three times. */
 const toPlan = async () => {
   await next('Food');
-  await next('Your gym');
+  await next('Your gym or studio');
   await next('Your plan');
 };
 /** Back to the health screen from where a person with every answer in lands —
@@ -997,7 +997,7 @@ describe('onboarding screens 1–7', () => {
     await agree();
     expect(button(/continue/i).disabled).toBe(true);
     expect(button('Food').disabled).toBe(true);
-    expect(button('Your gym').disabled).toBe(true);
+    expect(button('Your gym or studio').disabled).toBe(true);
     expect(button('Your plan').disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /finish setup/i })).toBeNull();
     expect(screen.queryByText('MEMBER APP')).toBeNull();
@@ -1284,7 +1284,7 @@ describe('onboarding screens 1–7', () => {
     await heading('Food');
     tap('3 meals a day');
     await stored({ mealsPerDay: 3 });
-    await next('Your gym');
+    await next('Your gym or studio');
     await next('Your plan');
     // Cleared from another device meanwhile: the server refuses the finish and
     // names it, though no plan number is missing.
@@ -1307,8 +1307,8 @@ describe('onboarding screens 1–7', () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
     await heading('Your plan'); // every answer in: the last screen
-    tap('Your gym');
-    await heading('Your gym');
+    tap('Your gym or studio');
+    await heading('Your gym or studio');
     expect(screen.getByText('Invited by a gym or studio?')).toBeTruthy();
     expect(screen.queryByLabelText(/your join code/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /ask to join/i })).toBeNull();
@@ -1348,8 +1348,8 @@ describe('onboarding screens 1–7', () => {
     serve(ALL, screeningOf({ hasCondition: false }));
     draw();
     await heading('Your plan');
-    tap('Your gym');
-    await heading('Your gym');
+    tap('Your gym or studio');
+    await heading('Your gym or studio');
     expect((await screen.findAllByText(/Iron House/)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /^join/i })).toBeTruthy();
     // Still in setup.

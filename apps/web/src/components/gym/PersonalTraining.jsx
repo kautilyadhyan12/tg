@@ -132,7 +132,7 @@ export default function PersonalTraining({ gym }) {
   const view = state.view;
   const row = view === null ? null : ptDays(view);
   const shown = row === null ? null : row.days.some((d) => d.localDate === picked) ? picked : row.first;
-  const day = view === null || shown === null ? null : ptDay(view, shown);
+  const day = view === null || shown === null ? null : ptDay(view, shown, gym.orgType);
   const shownLabel = row?.days.find((d) => d.localDate === shown)?.label ?? '';
   const empty = view === null ? null : emptyText(view, gym.name, gym.orgType);
   const note = view === null ? null : ptZoneNote(view.timezone, gym.name, deviceZone(), new Date());

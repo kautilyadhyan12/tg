@@ -26,10 +26,10 @@ export default function InvitationLink() {
           </span>
         </div>
         <h1 className="text-3xl font-bold tracking-tighter mb-3" style={{ color: 'rgba(255,255,255,0.95)' }}>
-          Your gym invited you
+          You're invited
         </h1>
         <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.65)' }}>
-          Sign in with the email address your gym has for you. Your invitation will be waiting.
+          Sign in with the email address the front desk has for you. Your invitation will be waiting.
         </p>
         <Link
           to="/login"

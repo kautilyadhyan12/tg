@@ -300,6 +300,26 @@ describe('a limit on personal training sessions', () => {
     expect(screen.getByText('Each session booked with an instructor uses one from the pack.')).toBeTruthy();
   });
 
+  it("a Pilates studio's list and form say open studio, never gym (5f-iii)", async () => {
+    open(
+      listOf({
+        types: [
+          type({ name: 'Open practice', access: 'gym_only' }),
+          type({ name: 'Day pass', kind: 'pack', termCount: null, termUnit: null, packClasses: 1, packDays: 1, priceMinor: 1500 }),
+        ],
+      }),
+      { org: { ...ORG, orgType: 'pilates_studio' } },
+    );
+    const rows = await screen.findAllByRole('listitem');
+    expect(within(rows[0]).getByText('No classes, open studio only')).toBeTruthy();
+    expect(within(rows[1]).getByText('Open studio or any class')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add a membership type' }));
+    expect(screen.getByLabelText('Description (optional)').getAttribute('placeholder')).toBe('For example: All classes and open studio');
+    expect(screen.getByRole('option', { name: 'No classes, open studio only' })).toBeTruthy();
+    expect(screen.getByText('Charged every week, month or year until it is cancelled.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/\bgym\b/i);
+  });
+
   it('a pack is offered no limit: each session uses one from the pack', async () => {
     open(listOf());
     fireEvent.click(await screen.findByRole('button', { name: 'Add a membership type' }));

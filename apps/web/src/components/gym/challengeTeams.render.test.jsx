@@ -96,7 +96,7 @@ describe('teams, in words', () => {
   it('tells the member where they stand with a team, and nothing when there is nothing to say', () => {
     const cases = [
       ['in a team, counted', {}, null],
-      ['in a team while hidden from boards', { teamBoard: teamBoard({ mine: { ...teamBoard().mine, counted: false } }) }, "Your number isn't added to Blue Team's, because you aren't shown on this gym's boards."],
+      ['in a team while hidden from boards', { teamBoard: teamBoard({ mine: { ...teamBoard().mine, counted: false } }) }, "Your number isn't added to Blue Team's, because you aren't shown on the boards."],
       ['staff make them, in none yet', { teamBoard: teamBoard(noTeam) }, "You're not in a team yet. The staff at Iron House put people in teams."],
       ['staff make them, not in the challenge', { who: 'joined', me: null, can: { join: true, leave: false, pick: false }, teamBoard: teamBoard(noTeam) }, null],
       ['members pick, in the challenge with no team', { teams: 'members', can: { join: false, leave: false, pick: true }, teamBoard: teamBoard(noTeam) }, 'Pick your team.'],
@@ -285,7 +285,7 @@ describe("a member's challenge in teams", () => {
     svc.list.mockResolvedValue(listOf([hidden, none]));
     render(<Challenges gym={GYM} />);
     await screen.findByText('Hidden Week');
-    expect(cardOf('Hidden Week').getByText("Your number isn't added to Blue Team's, because you aren't shown on this gym's boards.")).toBeTruthy();
+    expect(cardOf('Hidden Week').getByText("Your number isn't added to Blue Team's, because you aren't shown on the boards.")).toBeTruthy();
     expect(cardOf('Waiting Week').getByText("You're not in a team yet. The staff at Iron House put people in teams.")).toBeTruthy();
     expect(cardOf('Waiting Week').queryByRole('list', { name: /^People in/ })).toBeNull();
   });

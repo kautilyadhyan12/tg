@@ -71,8 +71,8 @@ describe('noticeLine', () => {
     [{ status: null, payment: 'Overdue', onList: true }, 'Payment: Overdue'],
     [{ status: ' Frozen ', payment: 'Paid', onList: true }, 'Status: Frozen · Payment: Paid'],
     [{ status: '  ', payment: '', onList: true }, null],
-    [{ status: null, payment: null, onList: false }, "Not on the gym's list"],
-    [{ status: 'Cancelled', payment: 'Overdue', onList: false }, "Status: Cancelled · Payment: Overdue · Not on the gym's list"],
+    [{ status: null, payment: null, onList: false }, "Not on the list"],
+    [{ status: 'Cancelled', payment: 'Overdue', onList: false }, "Status: Cancelled · Payment: Overdue · Not on the list"],
     [null, null],
     // 23a-ii: what the person holds in the app, in the Members list's own words.
     [{ status: 'Active', payment: 'Payment due', onList: true }, 'Status: Active · Payment due'],

@@ -66,7 +66,7 @@ const answer = ({ done = [], steps = ALL, hidden = false, canHide = true } = {})
   }),
 });
 const apiError = (status, error, message) => ({ response: { status, data: { error, message, requestId: 'r' } } });
-const retired = () => apiError(410, 'join_codes_retired', 'Join codes have been switched off. A gym now invites people by email.');
+const retired = () => apiError(410, 'join_codes_retired', 'Join codes have been switched off. People are now invited by email.');
 
 const draw = () =>
   render(

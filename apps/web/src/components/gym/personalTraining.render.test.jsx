@@ -214,15 +214,20 @@ describe('a member’s personal training', () => {
     serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(screen.getByText("Your gym hasn't added you to its member list yet. Ask at the front desk.")).toBeTruthy();
+    expect(screen.getByText("You haven't been added to the member list here yet. Ask at the front desk.")).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
+    // A Pilates studio's people are clients (5f-iii).
+    cleanup();
+    render(<PersonalTraining gym={{ ...GYM, orgType: 'pilates_studio' }} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You haven't been added to the client list here yet. Ask at the front desk.")).toBeTruthy();
   });
 
   it('two app accounts on one record: told so, no button, and no session of the record is drawn', async () => {
     serve(view({ record: 'shared', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(screen.getByText("Two app accounts share your record at this gym, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.")).toBeTruthy();
+    expect(screen.getByText("Two app accounts share your record, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.")).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
     expect(screen.queryByRole('list', { name: 'Your sessions' })).toBeNull();
   });

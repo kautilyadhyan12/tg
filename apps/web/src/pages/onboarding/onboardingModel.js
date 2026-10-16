@@ -102,7 +102,7 @@ export const SCREENS = [
   { id: 'equipment', title: 'Equipment',     desc: 'What you have to train with' },
   { id: 'health',    title: 'Health',        desc: 'One question, so your plan is careful' },
   { id: 'food',      title: 'Food',          desc: 'What you eat, so meals can be suggested' },
-  { id: 'gym',       title: 'Your gym',      desc: `Only if a ${ORG_TYPES_PHRASE} invited you` },
+  { id: 'gym',       title: `Your ${ORG_TYPES_PHRASE}`, desc: `Only if a ${ORG_TYPES_PHRASE} invited you` },
   { id: 'plan',      title: 'Your plan',     desc: 'Check it, adjust anything, then finish' },
 ];
 

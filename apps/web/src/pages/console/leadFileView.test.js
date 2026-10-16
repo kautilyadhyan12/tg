@@ -113,7 +113,7 @@ describe('the notes over a file of leads', () => {
     const lines = warningLines({ warnings: [{ code: 'phones_need_country', rows: 2 }, { code: 'phones_unusual', rows: 1 }] });
     expect(lines).toEqual([
       {
-        text: "2 phone numbers were left out because this gym has no country set. Set the gym's country, or write the numbers with their country code, and check again.",
+        text: "2 phone numbers were left out because no country is set in Settings. Set your country, or write the numbers with their country code, and check again.",
         place: 'country',
       },
       { text: '1 phone number looks mistyped. It was kept as written.', place: null },

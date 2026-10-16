@@ -770,7 +770,7 @@ describe('a class that has started says who came, and staff can mark or change i
     draw();
     await openDay('Spin on Tue 22 Sep 2026 at 18:00');
     const list = within(await screen.findByTestId('class-bookings'));
-    expect(list.getByText(/Anyone who checks in at the gym from 1 hour before the class is marked Came/)).toBeTruthy();
+    expect(list.getByText(/Anyone who checks in from 1 hour before the class is marked Came/)).toBeTruthy();
     expect(markOf(list, 'Maya Shah').getByText('Not marked yet')).toBeTruthy();
     expect(markOf(list, 'Leo Grant').getByText('No-show')).toBeTruthy();
     expect(list.getByText('The class stays used on their pack.')).toBeTruthy();
@@ -984,6 +984,6 @@ describe('an online class on the Calendar', () => {
     await openDay('Spin on Tue 22 Sep 2026 at 18:00, online');
     const list = within(await screen.findByTestId('class-bookings'));
     expect(list.getByText('This is an online class, so the app marks nobody by itself. Mark each person Came or No-show here.')).toBeTruthy();
-    expect(list.queryByText(/Anyone who checks in at the gym/)).toBeNull();
+    expect(list.queryByText(/Anyone who checks in from 1 hour/)).toBeNull();
   });
 });

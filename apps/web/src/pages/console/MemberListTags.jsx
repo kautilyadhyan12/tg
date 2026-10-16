@@ -180,7 +180,7 @@ export function MemberTagsSelected({ gymId, selection, picked, gymTags, onSelect
               ))}
             </div>
           ) : (
-            <p className="c-s14 c-t2">{action === 'add' ? 'Your gym has no tags yet. Type the first one below.' : 'Nobody has a tag yet.'}</p>
+            <p className="c-s14 c-t2">{action === 'add' ? 'You have no tags yet. Type the first one below.' : 'Nobody has a tag yet.'}</p>
           )}
         </div>
         {action === 'add' ? (
@@ -364,7 +364,7 @@ export function MemberTagsManage({ gymId, gymTags, words, readOnly, onChanged, o
       }
     >
       <p className="c-s14 c-t2">{MEMBER_TAGS_STAFF_ONLY_WORDS}</p>
-      {gymTags.length === 0 ? <p className="c-s15 c-t1">Your gym has no tags yet. Select people on the list and press Tags to make the first one.</p> : null}
+      {gymTags.length === 0 ? <p className="c-s15 c-t1">You have no tags yet. Select people on the list and press Tags to make the first one.</p> : null}
       <ul className="flex flex-col">
         {gymTags.map((tag) => {
           const mine = open !== null && open.id === tag.id ? open.what : null;

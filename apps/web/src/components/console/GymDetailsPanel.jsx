@@ -382,7 +382,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false, sta
         </Field>
 
         {draft.country === 'IN' && canManageBilling(viewerPrivileges(org)) ? (
-          <Field label="Mobile number for payments" hint="The owner's: Razorpay uses it for messages about this gym's payments. Only people who manage billing here can see it.">
+          <Field label="Mobile number for payments" hint="The owner's: Razorpay uses it for messages about your payments. Only people who manage billing here can see it.">
             <input
               type="tel"
               inputMode="tel"

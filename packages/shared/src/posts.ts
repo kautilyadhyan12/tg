@@ -415,7 +415,7 @@ export const GYM_POST_WORDS = {
   own_report: "This is your own post. You can remove it instead.",
   person_not_found: "This person isn't one of your members.",
   own_block: "This is your own post.",
-  gym_block: "This post is from the gym's staff, so it can't be blocked. You can report it instead.",
+  gym_block: "This post is from staff, so it can't be blocked. You can report it instead.",
   block_not_found: "This person isn't blocked any more.",
   reports_changed: "The reports on this post have changed. Read them again, then choose.",
   /** On a hidden post, for the member who wrote it. */

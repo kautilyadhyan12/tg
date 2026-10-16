@@ -1,4 +1,4 @@
-import { PT_MEMBER_WORDS, PT_NOT_ON_LIST_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod, orgWords } from '@app/shared';
+import { PT_MEMBER_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod, orgWords, ptNotOnListWords } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -30,9 +30,9 @@ function limitUsedText(limit, day, today) {
 
 /** What a booking on a day would use, or why it cannot be made; null where the gym sells
  *  no memberships and there is nothing to say. */
-export function payText(view, day) {
+export function payText(view, day, orgType = undefined) {
   if (view.record === 'shared') return { text: PT_RECORD_SHARED_WORDS, can: false };
-  if (view.record !== 'own') return { text: PT_NOT_ON_LIST_WORDS, can: false };
+  if (view.record !== 'own') return { text: ptNotOnListWords(orgType), can: false };
   const limit = day.limit ?? null;
   if ((day.why === 'limit_week' || day.why === 'limit_month') && limit !== null) {
     return { text: limitUsedText(limit, day.localDate, view.today), can: false };
@@ -82,9 +82,9 @@ export function opensLaterText(opensDays, some) {
 }
 
 /** One day of the page: what a booking on it would use, and each trainer's times on it. */
-export function ptDay(view, localDate) {
+export function ptDay(view, localDate, orgType = undefined) {
   const day = view.days.find((d) => d.localDate === localDate);
-  const pay = day === undefined ? null : payText(view, day);
+  const pay = day === undefined ? null : payText(view, day, orgType);
   return {
     pay,
     // A day past the last one the gym has opened: it has no time to press, and says why

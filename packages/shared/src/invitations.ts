@@ -155,7 +155,7 @@ export type InvitationRefusal = "no_invitation" | "address_not_proved" | "gym_fu
  *  paying). */
 export const INVITATION_WORDS = {
   no_invitation: (address: string): string =>
-    `No invitation for ${address}. Your gym invites the email address it has for you — sign in with that one, or ask the front desk to add this one.`,
+    `No invitation for ${address}. Invitations go to the email address the front desk has for you — sign in with that one, or ask them to add this one.`,
   address_not_proved: (address: string): string => `To see your invitations, sign in again with a code sent to ${address}.`,
   gym_full: (gymName: string): string => `${gymName} has no free places right now — tell the front desk.`,
   gym_not_taking_members: (gymName: string, orgType: unknown): string =>

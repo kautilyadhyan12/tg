@@ -288,7 +288,7 @@ describe("the member list's names are part of the gym's one list of memberships"
 
   it('Set up asks whether it is one of the memberships above or a new one, and the form opens with its name', () => {
     expect(chooserWords(name())).toEqual({
-      question: 'What is “Gold” at your gym?',
+      question: 'What is “Gold” here?',
       existing: 'One of the memberships above',
       pick: 'Choose one',
       fresh: "A new membership. I'll add its price now.",

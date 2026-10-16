@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { saveGymMembershipTypeRequestSchema, updateGymMembershipTypeRequestSchema } from '@app/shared';
 import {
+  accessChoices,
+  descriptionExample,
   typeTaxLine,
   archivedNote,
   canAddType,
@@ -121,6 +123,30 @@ describe('what each type says on the list', () => {
     expect(includesLine(packType({ packClasses: 1, packDays: 1 }))).toBe('The gym or any class');
     expect(includesLine(packType({ packClasses: 1, packDays: 1, classTypes: [YOGA] }))).toBe('Only Yoga');
     expect(includesLine(packType({ classTypes: [YOGA] }))).toBe('Only Yoga');
+    expect(includesLine(type({ access: 'gym_only' }), 'gym')).toBe('No classes, gym only');
+  });
+
+  // 5f-iii: a membership with no classes names the place the way each kind of business does.
+  it.each([
+    ['gym', 'No classes, gym only', 'The gym or any class'],
+    ['crossfit_box', 'No classes, open gym only', 'Open gym or any class'],
+    ['studio', 'No classes, open studio only', 'Open studio or any class'],
+    ['yoga_studio', 'No classes, open studio only', 'Open studio or any class'],
+    ['pilates_studio', 'No classes, open studio only', 'Open studio or any class'],
+    ['personal_trainer', 'No classes, open gym only', 'Open gym or any class'],
+    ['clinic', 'No classes, open gym only', 'Open gym or any class'],
+    ['not_a_kind', 'No classes, gym only', 'The gym or any class'],
+  ])('a %s reads its own words for no classes and a day pass', (orgType, only, dayPass) => {
+    expect(accessChoices(orgType).map((a) => a.label)).toEqual(['Unlimited classes', 'A limit on classes', only]);
+    expect(includesLine(type({ access: 'gym_only' }), orgType)).toBe(only);
+    expect(includesLine(type({ access: 'gym_only', includesPt: true }), orgType)).toBe(`${only} · Personal training`);
+    expect(includesLine(packType({ packClasses: 1, packDays: 1 }), orgType)).toBe(dayPass);
+    expect(descriptionExample(orgType)).toMatch(/^For example: All classes and (open gym|open studio|personal training)$/);
+    if (only.includes('studio')) expect(descriptionExample(orgType)).toBe('For example: All classes and open studio');
+    if (orgType !== 'gym' && orgType !== 'not_a_kind') expect(`${only} ${dayPass}`).not.toMatch(/\bthe gym\b|, gym only/i);
+  });
+
+  it('says what it includes, past the first gym words', () => {
     const five = ['A', 'B', 'C', 'D', 'E'].map((name, i) => ({ id: `33333333-3333-4333-8333-00000000001${String(i)}`, name }));
     expect(includesLine(type({ classTypes: five }))).toBe('Only A, B, C and 2 more');
     expect(includesLine(type({ classTypes: [] }))).toBe('No classes ticked');

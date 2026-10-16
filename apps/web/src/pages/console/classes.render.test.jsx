@@ -325,7 +325,7 @@ describe('reading the timetable', () => {
     api.getClasses.mockResolvedValue(withSlot({ coachName: null }));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText("12 places · Coach not on this gym's staff")).toBeTruthy();
+    expect(screen.getByText("12 places · Coach no longer available")).toBeTruthy();
   });
 
   // The dates are the server's: the fixture's are not what "Mondays and
@@ -437,6 +437,20 @@ describe('adding a class', () => {
     expect(body.places).toBeNull();
     expect('places' in body).toBe(true);
     expect(body.openGym).toBe(true);
+  });
+
+  // 5f-iii: a studio's open session has the name its memberships use ("No classes, open
+  // studio only"), on the tag of the list and on the tick of the form.
+  it("a Pilates studio's open session is Open studio, on the list and in the form", async () => {
+    api.getMine.mockResolvedValue({ data: { orgs: [{ ...ORG, orgType: 'pilates_studio' }], formerOrgs: [] } });
+    api.getClasses.mockResolvedValue(timetable({ entries: [{ type: { ...YOGA, openGym: true }, schedules: [REPEAT] }] }));
+    drawScreen();
+    await screen.findByText('Sunrise Yoga');
+    expect(screen.getByText('Open studio', { selector: '.c-tag' })).toBeTruthy();
+    expect(screen.queryByText('Open gym')).toBeNull();
+    await openAddForm();
+    expect(screen.getByLabelText('Open studio (not a taught class)')).toBeTruthy();
+    expect(screen.queryByLabelText('Open gym (not a taught class)')).toBeNull();
   });
 
   it('will not send a class the server would refuse, and says why', async () => {

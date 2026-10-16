@@ -359,7 +359,7 @@ export function leadFileWarningWords(warning: LeadFileWarning): string {
     case "shortened_by_excel":
       return `${count(warning.rows, "row has", "rows have")} a number the spreadsheet shortened, such as 9.19877E+11, so its last digits are gone. We never guess them back: set that column to Text in your spreadsheet and export again.`;
     case "phones_need_country":
-      return `${count(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country, or write the numbers with their country code, and check again.`;
+      return `${count(warning.rows, "phone number was", "phone numbers were")} left out because no country is set in Settings. Set your country, or write the numbers with their country code, and check again.`;
     case "phones_unusual":
       return `${count(warning.rows, "phone number looks", "phone numbers look")} mistyped. ${warning.rows === 1 ? "It was" : "They were"} kept as written.`;
     case "card_cells_dropped":
@@ -369,6 +369,6 @@ export function leadFileWarningWords(warning: LeadFileWarning): string {
     case "other_sheets_ignored":
       return `This file has more than one sheet. Only one was read; these were ignored: ${warning.sheets.join(", ")}.`;
     case "placeholders":
-      return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a person's: ${warning.values.join(", ")}. They were left out of ${count(warning.rows, "row", "rows")}.`;
+      return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the front desk's, not a person's: ${warning.values.join(", ")}. They were left out of ${count(warning.rows, "row", "rows")}.`;
   }
 }

@@ -56,7 +56,7 @@ export const CHECK_FIRST_OPTIONS: Readonly<Record<CheckFirst, { label: string; d
   not_yet: {
     label: "Not yet",
     detail:
-      "Safe mode: no workout or run plans and no calorie cut until a professional clears you. Meals, the exercise library, gym check-in and consistency goals still work.",
+      "Safe mode: no workout or run plans and no calorie cut until a professional clears you. Meals, the exercise library, check-in and consistency goals still work.",
   },
 };
 

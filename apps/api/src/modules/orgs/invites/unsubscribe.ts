@@ -189,7 +189,7 @@ export function registerUnsubscribeRoutes(
       if (settings === null || sendId === null) return oneClick ? reply.status(404).send() : notValid(reply);
       const done = await stopLeadEmails(deps.sql, settings.hmacKey, sendId, (deps.now ?? (() => new Date()))());
       if (oneClick) return reply.status(200).send();
-      const gym = done === null ? "The gym" : done.gymName;
+      const gym = done === null ? "The gym or studio" : done.gymName;
       return page(reply, 200, "You're unsubscribed", `<p>${escapeHtml(gym)} won't email you through ${APP_NAME} again.</p>`);
     });
 
@@ -201,7 +201,7 @@ export function registerUnsubscribeRoutes(
       const invite = await repo.inviteForUnsubscribe(deps.sql, inviteId);
       if (invite !== null) await repo.suppressForGym(deps.sql, invite.gymId, invite.hmac, "unsubscribed");
       if (oneClick) return reply.status(200).send();
-      const gym = invite === null ? "The gym" : cleanGymText(invite.gymName, GYM_TEXT_IN_EMAIL_CHARS);
+      const gym = invite === null ? "The gym or studio" : cleanGymText(invite.gymName, GYM_TEXT_IN_EMAIL_CHARS);
       return page(reply, 200, "You're unsubscribed", `<p>${escapeHtml(gym)} won't email you through ${APP_NAME} again.</p>`);
     });
 

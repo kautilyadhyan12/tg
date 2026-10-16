@@ -109,7 +109,7 @@ export function withSetUpCount(summary, words) {
 /** "Set up" on a name, where the gym already has types: is it one of them, or new? */
 export function chooserWords(w) {
   return {
-    question: `What is ${quoted(w.word)} at your gym?`,
+    question: `What is ${quoted(w.word)} here?`,
     existing: 'One of the memberships above',
     pick: 'Choose one',
     fresh: "A new membership. I'll add its price now.",

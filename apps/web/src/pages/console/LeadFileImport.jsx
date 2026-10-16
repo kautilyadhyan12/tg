@@ -332,7 +332,7 @@ export default function LeadFileImport({ gymId, gym, readOnly, onClose, onAdded 
                   <span className={ticked ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
                     {ticked ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
                   </span>
-                  <span className="c-s15 c-w5 c-t1">{LEAD_FILE_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym')}</span>
+                  <span className="c-s15 c-w5 c-t1">{LEAD_FILE_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'you')}</span>
                 </button>
               ) : null}
             </>

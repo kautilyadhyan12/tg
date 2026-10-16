@@ -81,7 +81,7 @@ export default function MemberListImportLeavers({ gym, words, answer = null, loa
       </p>
     );
   } else {
-    const changes = removeChangeGroups(leavers.preview, words, gym?.name ?? 'your gym');
+    const changes = removeChangeGroups(leavers.preview, words, gym?.name ?? `your ${words.it}`);
     const kept = removeKept(leavers.preview, words, 'list');
     body = (
       <>

@@ -711,6 +711,16 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
     expect(freeOf(view, tom, FRIDAY)).toEqual(MORNING);
     const no = await book(open, loose, tom);
     expect([no.statusCode, errorOf(no)]).toEqual([409, "not_on_list"]);
+    // In the business's own word for its people, read from its row (5f-iii): a Pilates
+    // studio's are clients. The kind is put back before anything else reads this gym.
+    expect((JSON.parse(no.body) as { message: string }).message).toBe("You haven't been added to the member list here yet. Ask at the front desk.");
+    await sql`UPDATE gyms SET org_type = 'pilates_studio' WHERE id = ${open.id}`;
+    try {
+      const studio = await book(open, loose, tom);
+      expect((JSON.parse(studio.body) as { message: string }).message).toBe("You haven't been added to the client list here yet. Ask at the front desk.");
+    } finally {
+      await sql`UPDATE gyms SET org_type = 'gym' WHERE id = ${open.id}`;
+    }
     // A record that is a past member's is no record.
     const past = await member(open, "Past Record");
     await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${past.entryId}`;

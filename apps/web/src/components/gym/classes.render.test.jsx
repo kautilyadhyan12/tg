@@ -314,7 +314,7 @@ describe('an online class, for a member', () => {
     expect(line('Online Spin')).toBe('Online class. You get the link once you have a place.');
     expect(line('Online Pilates')).toBe('Online class. The link shows here 30 minutes before it starts.');
     expect(line('Online Boxing')).toBe('Online class. Your link is ready.');
-    expect(line('Online Core')).toBe("Online class. Your gym hasn't added the link yet. Ask the front desk.");
+    expect(line('Online Core')).toBe("Online class. The link hasn't been added yet. Ask the front desk.");
     expect(line('Floor Spin')).toBeNull();
 
     // One way in on the whole page, and it is the booked class's own link.

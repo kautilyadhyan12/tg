@@ -1424,7 +1424,7 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
           <div className="flex flex-col gap-1">
             {handEdits.entries > 0 ? <HandEdits handEdits={handEdits} words={words} checked={handTick} onChange={setHandTick} /> : null}
             <Tick checked={permission} onChange={setPermission}>
-              {MEMBER_LIST_PERMISSION_WORDS.replace('{gym}', gym?.name ?? 'your gym').replace('{people}', words.people)}
+              {MEMBER_LIST_PERMISSION_WORDS.replace('{gym}', gym?.name ?? `your ${words.it}`).replace('{people}', words.people)}
             </Tick>
             <button
               type="button"
