@@ -395,7 +395,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 2b. [x] **One free trial per person, however the email is spelled** — merged 2026-10-16 (PR #293).
    - 2c. [ ] One device, one trial, whatever the email: a browser mark on the web, the stores on the phone.
    - 2d. [ ] The trial belongs to the gym: a new organisation whose first members were members of an already-trialled organisation gets no second trial and sees the subscribe prompt; the owner's own device counts as member one.
-   - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist), with the gyms 2d puts on it, which Kd removes from his admin page once it is built (Kd, 2026-10-16), and the second-trial code for a real owner of two gyms.
+   - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist), with the gyms 2d puts on it, which Kd removes from his admin page once it is built (Kd, 2026-10-16), and the second-trial code for a real owner of two gyms; the ended-trial box gets a "Contact us" line (an email address until the website is online; Kd, 2026-10-16).
    - 2f. **Paying during the trial** (Kd, RULINGS 2026-09-29 and 2026-09-30).
      - 2f-i. [x] **Paying in the trial means paying today** — merged 2026-09-30 (PR #140).
      - 2f-ii. ~~"Start my plan now" for a gym that kept its trial~~ **Struck 2026-09-30, never built** (RULINGS that day): paying in the trial always starts the plan now.
