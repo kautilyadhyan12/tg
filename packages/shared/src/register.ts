@@ -268,6 +268,8 @@ export const gymSaleSchema = z
     refunds: z.array(saleRefundSchema).default([]),
     /** What the refunds that stand gave back. */
     refundedMinor: minorSchema.default(0),
+    /** It took from the product's stock count, so a refund can put some back on the shelf. */
+    stockCounted: z.boolean().default(false),
     /** Whether money can still be given back for it: it stands, and not all of it went back. */
     canRefund: z.boolean().default(false),
     /** Its receipt's number, the gym's own (18g-i). */

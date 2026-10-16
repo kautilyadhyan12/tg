@@ -100,6 +100,7 @@ export interface SaleRow {
   refunds: SaleRefundRow[];
   /** What the refunds that stand gave back. */
   refundedMinor: number;
+  stockCounted: boolean;
 }
 
 export interface SaleRefundRow {
@@ -142,6 +143,7 @@ interface RawSale {
   voided_by: string | null;
   receipt_number: number;
   refunded_minor: number;
+  stock_counted: boolean;
 }
 
 /** A record with no name typed is still somebody: the row says so. */
@@ -177,6 +179,7 @@ const sale = (r: RawSale): SaleRow => ({
   receiptNumber: r.receipt_number,
   refunds: [],
   refundedMinor: r.refunded_minor,
+  stockCounted: r.stock_counted,
 });
 
 interface RawSaleRefund {
@@ -242,7 +245,7 @@ const saleColumns = (sql: Sql | TransactionSql) => sql`
   e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.void_reason,
   CASE WHEN s.undone_at IS NOT NULL THEN (s.undone_at AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = s.gym_id))::date::text END AS voided_on,
   CASE WHEN s.undone_by IS NOT NULL THEN (SELECT v.display_name FROM users v WHERE v.id = s.undone_by) END AS voided_by,
-  s.receipt_number,
+  s.receipt_number, s.stock_counted,
   COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f
             WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS refunded_minor`;
 

@@ -15,6 +15,10 @@ import SellDiscounts from './SellDiscounts';
 import SellProducts from './SellProducts';
 import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
+import DatePick from '../../components/console/DatePick';
+import MoreMenu from '../../components/console/MoreMenu';
+import { SaleRefundBox, SaleRefundLines } from './SaleRefunds';
+import { SALE_MENU_WORDS } from './saleRefundView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import { applyPromoCode, discountOption, discountsFor, offeredDiscounts, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote } from './FriendGift';
@@ -33,6 +37,7 @@ import {
   saleProblem,
   saleSummary,
   soldWords,
+  takingsHeading,
   takingsNotes,
   takingsRows,
   takingsWords,
@@ -303,7 +308,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     return (
       <SaleRecorded
         words={state.done}
-        note="It is in today's list below. If it was a mistake, press Void sale on its row."
+        note="It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale."
         onNew={() => setState({ busy: false, error: null, done: null })}
         below={number !== null && state.receiptOpen ? <ReceiptBox gymId={gymId} gym={org} number={number} onClose={() => setState((was) => ({ ...was, receiptOpen: false }))} /> : null}
       >
@@ -553,133 +558,205 @@ function MembershipFinder({ gymId, locked, addMemberTo, onOpen }) {
   );
 }
 
-/** Today's product sales and membership payments, newest first, with the day's total. */
-function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage }) {
-  const rows = takingsRows(page, org.timezone, org.clockFormat);
+/** The day's product sales and membership payments, newest first, with the day's total: today,
+ *  or an earlier day picked to find a sale to refund (18p). */
+function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage, onReload }) {
+  /** The day picked; null is today. Another day's list is read here, apart from the page. */
+  const [pick, setPick] = useState(null);
+  const [other, setOther] = useState({ day: null, page: null, error: null });
+  const onToday = pick === null || pick === page.today;
+  const shownPage = onToday ? page : other.day === pick ? other.page : null;
   const [asking, setAsking] = useState(null);
   /** The Void sale box's reason, and whether Void sale was pressed with none picked. */
   const [voidReason, setVoidReason] = useState({ reason: '', tried: false });
+  /** The sale whose Refund sale box is open, by its row's key. */
+  const [refunding, setRefunding] = useState(null);
   /** The row whose receipt is open under it, by its key. */
   const [receiptFor, setReceiptFor] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
-  const hasPayments = rows.some((r) => r.kind === 'payment');
   const [all, setAll] = useState(false);
-  const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
+
+  const loadOther = useCallback(
+    (day) =>
+      registerService.get(gymId, day).then(
+        (next) => setOther({ day, page: next, error: null }),
+        (err) => setOther({ day, page: null, error: errorText(err, "We couldn't load that day's sales.") }),
+      ),
+    [gymId],
+  );
+  useEffect(() => {
+    if (pick !== null && pick !== page.today) void loadOther(pick);
+  }, [pick, page.today, loadOther]);
+
+  const showDay = (day) => {
+    setPick(day === page.today ? null : day);
+    setAsking(null);
+    setRefunding(null);
+    setReceiptFor(null);
+    setAll(false);
+    setState({ busy: false, error: null, done: null });
+  };
+  /** What a refund or a void of a refund did, said where it was done; the list is read again. */
+  const doneHere = (key) => (words) => {
+    setRefunding(null);
+    setState({ busy: false, error: null, done: { key, words } });
+    if (onToday) void onReload();
+    else void loadOther(pick);
+  };
 
   const askVoid = (key) => {
     setVoidReason({ reason: '', tried: false });
+    setRefunding(null);
     setAsking(key);
   };
 
-  const voidSale = async (sale) => {
+  const voidSale = async (row) => {
     if (voidReason.reason === '') {
       setVoidReason((v) => ({ ...v, tried: true }));
       return;
     }
     setState({ busy: true, error: null, done: null });
     try {
-      onPage(await registerService.voidSale(gymId, sale.id, { reason: voidReason.reason }));
-      setState({ busy: false, error: null, done: saleVoidedWords(sale) });
+      onPage(await registerService.voidSale(gymId, row.sale.id, { reason: voidReason.reason }));
+      setState({ busy: false, error: null, done: { key: row.key, words: saleVoidedWords(row.sale) } });
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't void that sale. Try again."), done: null });
     }
     setAsking(null);
   };
 
+  const rows = shownPage === null ? [] : takingsRows(shownPage, org.timezone, org.clockFormat);
+  const hasPayments = rows.some((r) => r.kind === 'payment');
+  const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
+
   return (
-    <section className="c-card overflow-hidden" aria-label="Today's takings">
+    <section className="c-card overflow-hidden" aria-label={onToday ? "Today's takings" : 'Takings on another day'}>
       <div className="flex flex-col gap-1 p-4 md:p-5">
-        <h2 className="c-h2">Today</h2>
-        <p className="c-s15 c-w6 c-t1 m-0" data-testid="takings-line">
-          {takingsWords(page)}
-        </p>
-        {takingsNotes(page).map((note) => (
-          <p key={note} className="c-s13 c-t3 m-0">
-            {note}
-          </p>
-        ))}
-        {state.done !== null ? (
-          <p className="c-s14 c-t1 c-w6 m-0" role="status">
-            {state.done}
-          </p>
-        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="c-h2">{shownPage === null ? '…' : takingsHeading(shownPage)}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <DatePick label="Show another day" value={pick ?? page.today} min="2000-01-01" max={page.today} today={page.today} onChange={(day) => showDay(day)} newLook floating />
+            {!onToday ? (
+              <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => showDay(page.today)}>
+                Back to today
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {shownPage === null ? (
+          other.error !== null ? (
+            <Refusal>{other.error}</Refusal>
+          ) : (
+            <p className="c-s14 c-t2 m-0">Loading that day…</p>
+          )
+        ) : (
+          <>
+            <p className="c-s15 c-w6 c-t1 m-0" data-testid="takings-line">
+              {takingsWords(shownPage)}
+            </p>
+            {takingsNotes(shownPage).map((note) => (
+              <p key={note} className="c-s13 c-t3 m-0">
+                {note}
+              </p>
+            ))}
+          </>
+        )}
         {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
       </div>
       {rows.length > 0 ? (
         <ul className="list-none m-0 p-0">
-          {shown.map((row) => (
-            <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-col min-w-0">
-                  <p className="c-s15 c-w6 c-t1 m-0">
-                    <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{`${row.title} · ${row.amount}`}</span>
-                    {row.undone ? <span className="c-tag c-tag-plain ml-2">Voided</span> : null}
-                  </p>
-                  <p className="c-s14 c-t2 m-0">{row.facts}</p>
-                  {row.voided !== null ? <p className="c-s13 c-t3 m-0">{row.voided}</p> : null}
-                </div>
-                <div className="flex flex-wrap gap-2 flex-shrink-0">
-                  {row.person !== null && canOpenPeople ? (
-                    <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
-                      Open their page
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="c-btn c-btn-s c-btn-sm"
-                    aria-expanded={receiptFor === row.key}
-                    aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
-                    onClick={() => setReceiptFor((was) => (was === row.key ? null : row.key))}
-                  >
-                    {RECEIPT_BUTTON}
-                  </button>
-                  {row.canUndo && asking !== row.key ? (
-                    <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy} onClick={() => askVoid(row.key)} aria-label={`Void sale of ${row.title}`}>
-                      Void sale
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-              {asking === row.key && row.sale !== null ? (
-                <form
-                  noValidate
-                  className="flex flex-col gap-3"
-                  data-testid="void-sale"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!state.busy) void voidSale(row.sale);
-                  }}
-                >
-                  <p className="c-s14 c-t1 m-0">{voidSaleQuestion(row.sale)}</p>
-                  <label className="c-field">
-                    <span className="c-label">Why are you voiding it?</span>
-                    <select className="c-sel" value={voidReason.reason} onChange={(e) => setVoidReason({ reason: e.target.value, tried: false })}>
-                      <option value="">Choose one</option>
-                      {SALE_VOID_CHOICES.map((reason) => (
-                        <option key={reason.value} value={reason.value}>
-                          {reason.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {voidReason.tried ? (
-                    <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
-                      Pick why you are voiding it.
-                    </span>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button type="submit" disabled={state.busy} className="c-btn c-btn-sm c-btn-danger">
-                      Void sale
-                    </button>
-                    <button type="button" onClick={() => setAsking(null)} disabled={state.busy} className="c-btn c-btn-sm c-btn-s">
-                      Keep it
-                    </button>
+          {shown.map((row) => {
+            const items = [];
+            if (row.canRefund) {
+              items.push({
+                ...SALE_MENU_WORDS.refund,
+                onPick: () => {
+                  setAsking(null);
+                  setRefunding(row.key);
+                },
+              });
+            }
+            if (row.canUndo) items.push({ ...SALE_MENU_WORDS.voidSale, danger: true, onPick: () => askVoid(row.key) });
+            return (
+              <li key={row.key} className="flex flex-col gap-2 p-4" style={LINE} data-testid="takings-row">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-col min-w-0">
+                    <p className="c-s15 c-w6 c-t1 m-0">
+                      <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{`${row.title} · ${row.amount}`}</span>
+                      {row.undone ? <span className="c-tag c-tag-plain ml-2">Voided</span> : null}
+                      {row.refundTag !== null ? <span className="c-tag c-tag-warn ml-2">{row.refundTag}</span> : null}
+                    </p>
+                    <p className="c-s14 c-t2 m-0">{row.facts}</p>
+                    {row.voided !== null ? <p className="c-s13 c-t3 m-0">{row.voided}</p> : null}
                   </div>
-                </form>
-              ) : null}
-              {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-            </li>
-          ))}
+                  <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                    {row.person !== null && canOpenPeople ? (
+                      <button type="button" className="c-btn c-btn-s c-btn-sm" onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
+                        Open their page
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="c-btn c-btn-s c-btn-sm"
+                      aria-expanded={receiptFor === row.key}
+                      aria-label={receiptButtonLabel(row.receiptNumber, row.title)}
+                      onClick={() => setReceiptFor((was) => (was === row.key ? null : row.key))}
+                    >
+                      {RECEIPT_BUTTON}
+                    </button>
+                    {items.length > 0 && !locked ? <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${row.title}`} items={items} disabled={state.busy} /> : null}
+                  </div>
+                </div>
+                {state.done !== null && state.done.key === row.key ? (
+                  <p className="c-s14 c-t1 c-w6 m-0" role="status">
+                    {state.done.words}
+                  </p>
+                ) : null}
+                {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                {refunding === row.key && row.sale !== null ? (
+                  <SaleRefundBox gymId={gymId} sale={row.sale} who={row.sale.person?.name ?? null} onDone={doneHere(row.key)} onClose={() => setRefunding(null)} />
+                ) : null}
+                {asking === row.key && row.sale !== null ? (
+                  <form
+                    noValidate
+                    className="flex flex-col gap-3"
+                    data-testid="void-sale"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!state.busy) void voidSale(row);
+                    }}
+                  >
+                    <p className="c-s14 c-t1 m-0">{voidSaleQuestion(row.sale)}</p>
+                    <label className="c-field">
+                      <span className="c-label">Why are you voiding it?</span>
+                      <select className="c-sel" value={voidReason.reason} onChange={(e) => setVoidReason({ reason: e.target.value, tried: false })}>
+                        <option value="">Choose one</option>
+                        {SALE_VOID_CHOICES.map((reason) => (
+                          <option key={reason.value} value={reason.value}>
+                            {reason.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {voidReason.tried ? (
+                      <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+                        Pick why you are voiding it.
+                      </span>
+                    ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="submit" disabled={state.busy} className="c-btn c-btn-sm c-btn-danger">
+                        Void sale
+                      </button>
+                      <button type="button" onClick={() => setAsking(null)} disabled={state.busy} className="c-btn c-btn-sm c-btn-s">
+                        Keep it
+                      </button>
+                    </div>
+                  </form>
+                ) : null}
+                {row.sale !== null ? <SaleRefundLines gymId={gymId} gym={org} sale={row.sale} canAct={!locked && page.canSell} onDone={doneHere(row.key)} /> : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       {rows.length > TAKINGS_FOLDED ? (
@@ -835,7 +912,7 @@ export default function Sell() {
 
           {page.canSell && sellsMemberships ? <MembershipFinder gymId={gymId} locked={readOnly} addMemberTo={placeFor(orgSlug, privileges, 'addMember')} onOpen={(entryId) => openPerson(entryId, true)} /> : null}
 
-          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} /> : null}
+          {page.canSell ? <Takings gymId={gymId} org={org} page={page} locked={readOnly} canOpenPeople={sellsMemberships} onOpenPerson={openPerson} onPage={setPage} onReload={load} /> : null}
 
           <div ref={productsRef}>
             <SellProducts key={`products-${gymId}`} gymId={gymId} page={page} locked={readOnly} lockedNote={readOnlyNote(org.orgType)} countryTo={placeFor(orgSlug, privileges, 'country')} addAsk={addAsk} onPage={setPage} />

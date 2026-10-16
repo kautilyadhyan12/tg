@@ -244,7 +244,7 @@ describe('today', () => {
     );
   });
   it('a purchase on a person’s page', () => {
-    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false, voided: null });
+    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false, voided: null, refundTag: null });
     // A sale made before rates had names says "tax".
     expect(saleTaxWords(sale({ taxName: null }))).toBe('$0.33 tax');
     expect(saleTaxWords(sale({ taxMinor: 0 }))).toBeNull();
@@ -254,6 +254,7 @@ describe('today', () => {
       facts: '12 Oct 2026 · Bank transfer',
       undone: true,
       voided: 'Voided 12 October 2026 by Sam Desk · Recorded by mistake',
+      refundTag: null,
     });
   });
 });
