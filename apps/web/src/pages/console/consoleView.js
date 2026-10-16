@@ -391,7 +391,8 @@ export function orgTypeLabel(orgType) {
  *  looked up. **The org type is passed in and never guessed**: a missing one
  *  yields the gym's word, which is what every console said before this card and
  *  is right for the type that is not a variation of anything. */
-export function roleLabel(role, orgType) {
+export function roleLabel(role, orgType, coOwner = false) {
+  if (role === 'owner' && coOwner === true) return 'Co-owner';
   if (role === 'trainer') return orgWords(orgType).coachCap;
   return Object.hasOwn(ROLE_WORDS, role ?? '') ? ROLE_WORDS[role] : (role ?? '');
 }

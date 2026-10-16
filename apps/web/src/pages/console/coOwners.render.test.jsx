@@ -38,6 +38,7 @@ const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Members = (await import('./Members')).default;
 const CoOwnerRequest = (await import('../../components/console/CoOwnerRequest')).default;
+const { roleLabel } = await import('./consoleView');
 
 const ORG = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -198,6 +199,13 @@ describe('Make co-owner', () => {
     expect(within(await screen.findByTestId('staff-tab-u3')).getByText('Co-owner')).toBeTruthy();
     expect(within(screen.getByTestId('staff-tab-u1')).getByText('Owner')).toBeTruthy();
   });
+});
+
+it('a co-owner\'s own role reads Co-owner wherever the console names it', () => {
+  expect(roleLabel('owner', 'gym', true)).toBe('Co-owner');
+  expect(roleLabel('owner', 'gym', false)).toBe('Owner');
+  expect(roleLabel('owner', 'gym')).toBe('Owner');
+  expect(roleLabel('manager', 'gym', true)).toBe('Manager');
 });
 
 describe("the person asked, on Overview", () => {

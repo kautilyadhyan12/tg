@@ -123,7 +123,7 @@ export default function ConsoleHome() {
                     rather than three identical rows. */}
                 <div className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>
                   {orgTypeLabel(org.orgType)} · {org.city ? `${org.city} · ` : ''}
-                  {roleLabel(org.staffRole, org.orgType)}
+                  {roleLabel(org.staffRole, org.orgType, org.coOwner)}
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />

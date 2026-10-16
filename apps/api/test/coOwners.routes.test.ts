@@ -350,6 +350,15 @@ d("co-owners (real Postgres)", () => {
     expect(row[0]).toEqual({ role: "owner", role_name: null, privileges: [...ROLE_PRIVILEGES.owner].sort() });
     expect(await ownerOf(gym)).toBe(gym.owner.userId);
     expect(await mineAt(gym, asha)).toBeNull();
+    // The console's own list of their gyms says co-owner, as the Staff tab does.
+    const roleHere = async (who: User) => {
+      const mineRes = await send("GET", "/v1/orgs/mine", who);
+      const orgs = (JSON.parse(mineRes.body) as { orgs: { id: string; staffRole: string | null; coOwner?: boolean }[] }).orgs;
+      const row = orgs.find((o) => o.id === gym.id);
+      return [row?.staffRole, row?.coOwner];
+    };
+    expect(await roleHere(asha)).toEqual(["owner", true]);
+    expect(await roleHere(gym.owner)).toEqual(["owner", false]);
 
     const list = await staffList(gym, asha);
     expect(list.map((s) => [s.userId, s.role, s.coOwner])).toEqual([

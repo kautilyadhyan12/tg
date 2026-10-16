@@ -584,7 +584,7 @@ export default function Overview() {
         </div>
         <Fact label="Currency" value={org.currencyDisplay} />
         <Fact label="Timezone" value={org.timezone} />
-        <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType)} />
+        <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType, org.coOwner)} />
       </ConsoleCard>
 
       {/* The hidden Start here list, brought back by whoever may hide it. */}

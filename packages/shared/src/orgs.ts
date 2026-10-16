@@ -1037,6 +1037,8 @@ export type SendGymNudgeResponse = z.infer<typeof sendGymNudgeResponseSchema>;
  *  same gym twice and invite a screen that double-counts it. */
 export const myOrgSchema = orgSummarySchema.extend({
   staffRole: orgRoleSchema.nullable(),
+  /** An owner here who is not the gym's own owner (ROADMAP 4b-i): "Co-owner". */
+  coOwner: z.boolean().optional(),
   /** WHAT THE CALLER MAY DO AT THIS GYM — their OWN effective set, not anybody
    *  else's (T3 round 1 C/H-1).
    *

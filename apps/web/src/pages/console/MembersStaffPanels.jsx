@@ -419,7 +419,7 @@ function RoleSection({ person, roles, orgType, words, viewerIsOwner, off, error,
  *  An edit not yet saved belongs to the set it was made over: when the server's set for
  *  this person changes (a save, a role change), the edit is dropped and the boxes are the
  *  server's again. The owner's row is drawn and cannot be changed. */
-function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) {
+function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, readOnly, error, onSave }) {
   const current = effectivePrivileges(person);
   // Who they are to the gym and what they hold, as one word: an edit, and what was said of
   // the last save, each belong to one of these.
@@ -474,7 +474,7 @@ function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) 
       {ownerRow ? (
         <p className="c-s14 c-t2 m-0">
           {person.coOwner === true
-            ? `A co-owner can do everything here, except add, change or remove co-owners.${isSelf ? '' : ' Only the owner can change this.'}`
+            ? `A co-owner can do everything here, except add, change or remove co-owners.${isSelf || viewerIsOwner ? '' : ' Only the owner can change this.'}`
             : `${isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can't be changed here: a ${orgType === 'studio' ? 'studio' : 'gym'} has to keep somebody who can manage its staff.`}
         </p>
       ) : (
@@ -668,7 +668,7 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
         />
       ) : null}
       <RoleSection person={person} roles={roles} orgType={orgType} words={words} viewerIsOwner={viewerIsOwner} off={off} error={error?.at === 'role' ? error : null} onRetry={onRetry} onChange={onChangeRole} />
-      <PermissionsSection person={person} orgType={orgType} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} onSave={onSavePrivileges} />
+      <PermissionsSection person={person} orgType={orgType} viewerIsOwner={viewerIsOwner} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} onSave={onSavePrivileges} />
       <RemoveSection person={person} words={words} viewerIsOwner={viewerIsOwner} off={off} error={error?.at === 'remove' ? error : null} onRemove={onRemove} />
     </Panel>
   );

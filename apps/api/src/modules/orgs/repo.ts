@@ -94,6 +94,8 @@ export interface OrgRow {
 
 export interface MyOrgRow extends OrgRow {
   staffRole: OrgRole | null;
+  /** The caller is an owner here who is not the gym's own owner (4b-i). */
+  coOwner: boolean;
   /** THE STORED TICKS ON THE CALLER'S OWN STAFF ROW, raw. `null` means either no
    *  staff row at all (a plain member) or a row written before the column
    *  existed — the service's `privilegesFor` is the one place that tells those
@@ -442,6 +444,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
   const rows = await sql<
     (RawOrg & {
       staff_role: string | null;
+      co_owner: boolean;
       privileges: string[] | null;
       is_member: boolean;
       joined_at: Date | null;
@@ -484,6 +487,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            g.contact_phone,
            g.contact_email,
            s.role AS staff_role,
+           (s.role = 'owner' AND g.owner_user_id <> s.user_id) IS TRUE AS co_owner,
            s.privileges,
            (m.id IS NOT NULL) AS is_member,
            m.joined_at,
@@ -660,6 +664,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
   return rows.map((r) => ({
     ...toOrgRow(r),
     staffRole: r.staff_role === null ? null : toOrgRole(r.staff_role),
+    coOwner: r.co_owner,
     privileges: r.privileges,
     subscription:
       r.sub_status === null

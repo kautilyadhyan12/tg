@@ -535,6 +535,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       return {
       ...toOrgSummary(r),
       staffRole: r.staffRole,
+      coOwner: r.coOwner,
       // WHAT THIS CALLER MAY DO HERE, so the console can stop deciding on the
       // role NAME (T3 round 1 C/H-1). Run through the SAME `privilegesFor` that
       // `requirePrivilege` uses, so the answer a screen draws and the answer the
