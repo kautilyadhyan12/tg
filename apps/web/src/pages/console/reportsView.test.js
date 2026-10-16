@@ -169,7 +169,7 @@ describe('the tiles', () => {
       'Everyone on your member list today, except members whose membership has ended or been cancelled and who have no new one, unless your member list shows a later end date for them. A status from your own file, such as Expired, is not counted. Members you have removed are not counted.',
     );
     expect(tile(r, 'left').how).toBe(
-      'Members removed from your member list from 10 Jun 2026 to today, and members whose membership ended or was cancelled in those days and who have no new one. On your member list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a member the whole time. Records deleted for good are not counted.',
+      'Members removed from your member list from 10 Jun 2026 to today, and members whose membership ended or was cancelled in those days and who have no new one. On your member list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a member the whole time. Members deleted permanently are not counted.',
     );
     expect(tile(r, 'stay').how).toContain('from their join date to the day they were removed or their membership ended.');
     // Somebody Ended is still on the list and is not counted, so churn does not say "on your list".

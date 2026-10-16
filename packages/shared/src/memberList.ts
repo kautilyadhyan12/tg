@@ -2114,6 +2114,44 @@ export const memberListRemoveSelectedRequestSchema = z
   .strict();
 export type MemberListRemoveSelectedRequest = z.infer<typeof memberListRemoveSelectedRequestSchema>;
 
+// ── Delete permanently, for the past members selected (5e-ii; Kd's click-through) ──
+
+/** How many past members one press deletes permanently, at most. */
+export const MEMBER_LIST_DELETE_MAX = 1000;
+/** How many of their names the box shows. */
+export const MEMBER_LIST_DELETE_NAMES_SHOWN = 200;
+
+export const memberListDeletePreviewRequestSchema = z.object({ selection: memberListSelectionSchema }).strict();
+export type MemberListDeletePreviewRequest = z.infer<typeof memberListDeletePreviewRequestSchema>;
+
+/** The box before Delete permanently: the past members it deletes (their names, the first
+ *  `MEMBER_LIST_DELETE_NAMES_SHOWN`), how many ticked are on the list now and are not
+ *  deleted, and the digest the press carries so it deletes exactly these. `tooMany` is
+ *  true where more than `MEMBER_LIST_DELETE_MAX` are chosen: nothing can be deleted. */
+export const memberListDeletePreviewSchema = z
+  .object({
+    count: z.number().int().min(0),
+    names: z.array(z.string().max(MEMBER_LIST_MAX_NAME_CHARS)).max(MEMBER_LIST_DELETE_NAMES_SHOWN),
+    onList: z.number().int().min(0),
+    tooMany: z.boolean(),
+    digest: sha256Schema,
+  })
+  .strict();
+export type MemberListDeletePreview = z.infer<typeof memberListDeletePreviewSchema>;
+export const memberListDeletePreviewResponseSchema = z.object({ preview: memberListDeletePreviewSchema });
+
+export const memberListDeleteSelectedRequestSchema = z.object({ selection: memberListSelectionSchema, digest: sha256Schema }).strict();
+export type MemberListDeleteSelectedRequest = z.infer<typeof memberListDeleteSelectedRequestSchema>;
+
+export const memberListDeletedSchema = z.object({ deleted: z.number().int().min(0), version: z.number().int().min(0) }).strict();
+export type MemberListDeleted = z.infer<typeof memberListDeletedSchema>;
+export const memberListDeletedResponseSchema = z.object({ done: memberListDeletedSchema });
+
+/** The past members chosen are no longer the ones the box showed: nothing was deleted. */
+export const MEMBER_LIST_DELETE_CHANGED_WORDS = "Who is ticked has changed since you opened this. Check the names again, then delete.";
+/** That refusal, with the box as it is now. */
+export const memberListDeleteRefusedSchema = z.object({ error: z.literal("delete_changed"), message: z.string(), preview: memberListDeletePreviewSchema });
+
 /** The Remove box, Remove and Keep on list asked from the list of members whose membership
  *  is over, for one member of staff in an hour: a box and a press a person removed, so
  *  300 people one by one. */
@@ -2631,7 +2669,7 @@ export const MEMBER_LIST_BY_HAND_WORDS = {
     "This would leave people who use the app off your list, because only the record you are removing has their details. Keep that record instead, or confirm to go ahead.",
   entry_not_found: "That person could not be found on your list.",
   member_not_found: "That person isn't a member here.",
-  not_former: "Take this person off the list before deleting their record for good.",
+  not_former: "Remove this person from your list first, then delete them permanently.",
   no_contact:
     "We don't have a proven email address or a phone number for this person, so they can't be put on the list from here. Add them by hand instead.",
   merge_same: "Choose a different record to keep.",

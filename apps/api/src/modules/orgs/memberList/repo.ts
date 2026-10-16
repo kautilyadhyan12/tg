@@ -3313,6 +3313,22 @@ async function keepNumber(tx: TransactionSql, gymId: string, number: string): Pr
   await writeMemberNumbersKept(tx, gymId, kept);
 }
 
+/** These records of the gym, by id (another gym's id is nobody), in name order: whether
+ *  each is a past member, and its member number (Delete permanently, 5e-ii). */
+export async function recordsAmong(
+  sql: SqlOrTx,
+  gymId: string,
+  ids: readonly string[],
+): Promise<{ id: string; fullName: string; memberNumber: string | null; past: boolean }[]> {
+  if (ids.length === 0) return [];
+  const rows = await sql<{ id: string; full_name: string; member_number: string | null; past: boolean }[]>`
+    SELECT id, full_name, member_number, (former_at IS NOT NULL) AS past
+    FROM gym_member_list_entries
+    WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[])
+    ORDER BY lower(full_name), id`;
+  return rows.map((row) => ({ id: row.id, fullName: row.full_name, memberNumber: row.member_number, past: row.past }));
+}
+
 /** Records given another member number by an import (5e-ii), each with the key that number
  *  makes. By id, within the gym; the number of records written. */
 export async function renumberEntries(

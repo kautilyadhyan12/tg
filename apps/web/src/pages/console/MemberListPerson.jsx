@@ -1398,12 +1398,15 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             <UserPlus aria-hidden="true" className="w-4 h-4" />
             Put back on your list
           </button>
+          <button type="button" onClick={() => ask('delete')} disabled={busy || readOnly} className={DANGER} data-testid="delete-press">
+            <Trash2 aria-hidden="true" className="w-4 h-4" />
+            Delete permanently
+          </button>
           <MoreMenu
             disabled={busy || readOnly}
             items={[
               { label: 'Edit', onPick: startEdit },
               { label: 'Merge duplicate', hint: 'When this person is on your list twice', icon: ArrowLeftRight, onPick: startJoin },
-              { label: 'Delete for good', icon: Trash2, danger: true, onPick: () => ask('delete') },
             ]}
           />
         </div>
@@ -1738,16 +1741,16 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       );
     }
     return (
-      <Ask testId="confirm-delete" question={`Delete ${name}'s record for good?`}>
+      <Ask testId="confirm-delete" question={`Delete ${name} permanently?`}>
         <p className="c-s14 c-t2 m-0">
-          Their details and history are gone and can&apos;t be brought back. Payments they made stay in your takings and
+          Their details and history are deleted and can&apos;t be brought back. Payments they made stay in your takings and
           reports, as &ldquo;A deleted member&rdquo;.
         </p>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void deleteForGood()} disabled={busy || readOnly} className={DANGER}>
-            Delete for good
+            Delete permanently
           </button>
-          {cancel('Keep the record')}
+          {cancel("Don't delete")}
         </div>
       </Ask>
     );
@@ -1874,7 +1877,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   if (deleted !== null) {
     body = (
       <p className="c-s14 c-t2 m-0" data-testid="deleted-note">
-        {deleted}&apos;s record was deleted.
+        {deleted} was deleted permanently.
       </p>
     );
   } else if (id === null || (mode === 'edit' && shown !== null)) {

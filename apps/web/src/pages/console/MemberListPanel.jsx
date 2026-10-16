@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PAST_PAYMENT_DUE_SHOW, PAYMENT_DUE_SHOW } from './weekView';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Upload, UserMinus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Download, ListChecks, Loader2, Mail, MessageSquare, Minus, Search, SlidersHorizontal, Tag, Trash2, Upload, UserMinus, UserPlus, X } from 'lucide-react';
 import { HELD_PAYMENT_WORDS, MEMBER_APP_FILTER_WORDS, MEMBER_LIST_QUERY_MAX_CHARS, MEMBER_LIST_TICKED_MAX } from '@app/shared';
 import { orgService, errorText, blobError, selectionChanged } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -9,6 +9,7 @@ import ScrollJump from '../../components/console/ScrollJump';
 import MemberListInvite from './MemberListInvite';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
+import MemberListDelete from './MemberListDelete';
 import { MemberTagsManage, MemberTagsSelected } from './MemberListTags';
 import MemberListMessage from './MemberListMessage';
 import MemberListUpload from './MemberListUpload';
@@ -450,6 +451,8 @@ export default function MemberListPanel({
   /** The people the Remove box was opened for: it keeps them after the list behind clears
    *  its selection, so the box can say what was done. */
   const [removeFor, setRemoveFor] = useState(null);
+  // Delete permanently, for the past members selected (5e-ii).
+  const [deleteFor, setDeleteFor] = useState(null);
   /** The box was opened from the list of members whose membership is over (21c-iii):
    *  nobody whose membership is not over is moved, whoever was selected. */
   const [removeOver, setRemoveOver] = useState(false);
@@ -722,6 +725,8 @@ export default function MemberListPanel({
       (removeOver ? orgService.removeSelected(gymId, removeFor, digest, large, true) : orgService.removeSelected(gymId, removeFor, digest, large)).then((res) => res.data.removed),
     [gymId, removeFor, removeOver],
   );
+  const loadDelete = useCallback(() => orgService.previewDeleteSelected(gymId, deleteFor).then((res) => res.data.preview), [gymId, deleteFor]);
+  const pressDelete = useCallback((digest) => orgService.deleteSelected(gymId, deleteFor, digest).then((res) => res.data.done), [gymId, deleteFor]);
   // ── Members whose membership is over (21c-iii) ──
   const overView = filters.records === 'current' && filters.over;
   const overCount = list?.over?.count ?? 0;
@@ -770,6 +775,13 @@ export default function MemberListPanel({
     (fresh) => {
       selectionMoved(fresh);
       setRemoveFor((r) => (r === null || r.kind !== 'all' ? r : { ...r, count: fresh.count, digest: fresh.digest }));
+    },
+    [selectionMoved],
+  );
+  const deleteMoved = useCallback(
+    (fresh) => {
+      selectionMoved(fresh);
+      setDeleteFor((r) => (r === null || r.kind !== 'all' ? r : { ...r, count: fresh.count, digest: fresh.digest }));
     },
     [selectionMoved],
   );
@@ -875,6 +887,12 @@ export default function MemberListPanel({
         <button type="button" onClick={() => openRemove(selection)} data-testid="bar-remove" className="c-btn c-btn-danger c-btn-sm">
           <UserMinus aria-hidden="true" className="w-4 h-4" />
           {current ? 'Remove' : 'Remove from app'}
+        </button>
+      ) : null}
+      {!current && !readOnly ? (
+        <button type="button" onClick={() => setDeleteFor(selection)} data-testid="bar-delete" className="c-btn c-btn-danger c-btn-sm">
+          <Trash2 aria-hidden="true" className="w-4 h-4" />
+          Delete permanently
         </button>
       ) : null}
       {overView && !readOnly ? (
@@ -1078,6 +1096,17 @@ export default function MemberListPanel({
           onSelectionChanged={removeMoved}
           onRemoved={removedSelected}
           onClose={() => setRemoveFor(null)}
+        />
+      ) : null}
+
+      {deleteFor !== null ? (
+        <MemberListDelete
+          words={words}
+          load={loadDelete}
+          press={pressDelete}
+          onSelectionChanged={deleteMoved}
+          onDeleted={removedSelected}
+          onClose={() => setDeleteFor(null)}
         />
       ) : null}
 
