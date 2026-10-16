@@ -126,7 +126,14 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
     });
   const get = (path: string, cookies: Cookies = {}) => send(api(), "GET", path, undefined, cookies);
   const post = (path: string, payload: unknown, cookies: Cookies = {}, target: App = api()) => send(target, "POST", path, payload, cookies);
-  const put = (path: string, payload: unknown, cookies: Cookies) => send(api(), "PUT", path, payload, cookies);
+  /** The offer's version as it stands, for a save that does not name one (item 20's passes, H3). */
+  const withVersion = async (path: string, payload: unknown, cookies: Cookies): Promise<unknown> => {
+    if (!path.endsWith("/referral-settings") || typeof payload !== "object" || payload === null || "version" in payload) return payload;
+    const read = await send(api(), "GET", path, undefined, cookies);
+    const version = read.statusCode === 200 ? (JSON.parse(read.body) as { settings: { version: string } }).settings.version : "";
+    return { ...payload, version };
+  };
+  const put = async (path: string, payload: unknown, cookies: Cookies) => send(api(), "PUT", path, await withVersion(path, payload, cookies), cookies);
   const errorOf = (res: { body: string }) => (JSON.parse(res.body) as { error?: string }).error;
 
   const makeUser = async (local: string, displayName: string): Promise<Person> => {

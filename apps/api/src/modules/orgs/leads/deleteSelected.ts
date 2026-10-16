@@ -42,6 +42,14 @@ export function leadsDigest(gymId: string, ids: readonly string[]): string {
     .digest("hex");
 }
 
+/** The box's fingerprint: each lead with its status, so a lead that became Joined (or
+ *  anything else) after the box was shown changes it, and the press answers the new box. */
+export function boxDigest(gymId: string, leads: readonly { id: string; status: string }[]): string {
+  return createHash("sha256")
+    .update([gymId, "leads-box", ...leads.map((lead) => `${lead.id}:${lead.status}`).sort()].join("\n"), "utf8")
+    .digest("hex");
+}
+
 /** Every lead the filter chooses now, as the list would show them, read on `sql` (the
  *  lock's transaction, for the press). */
 async function idsMatching(deps: LeadsDeps, sql: Sql | TransactionSql, gymId: string, timezone: string, filter: LeadsFilter): Promise<string[]> {
@@ -65,9 +73,9 @@ async function boxFor(sql: Sql | TransactionSql, gymId: string, ids: readonly st
   const leads = await repo.leadNames(sql, gymId, ids);
   return {
     selected: ids.length,
-    leads,
+    leads: leads.map((lead) => ({ id: lead.id, name: lead.name })),
     gone: ids.length - leads.length,
-    digest: leadsDigest(gymId, leads.map((lead) => lead.id)),
+    digest: boxDigest(gymId, leads),
   };
 }
 
@@ -138,14 +146,14 @@ export async function deleteSelectedLeads(
       }
       throw err;
     }
-    // Only ids: the names were the box's, and its digest names these ids.
+    // Ids and statuses: the names were the box's, and its digest names these leads as they were.
     const held = await repo.leadIdsIn(tx, gymId, ids);
-    if (held.length === 0 || leadsDigest(gymId, held) !== input.digest) {
+    if (held.length === 0 || boxDigest(gymId, held) !== input.digest) {
       const done = held.length === 0 ? await earlier() : null;
       if (done !== null) return done;
       return { kind: "changed", preview: await boxFor(tx, gymId, ids) };
     }
-    const deleted = await repo.deleteLeads(tx, userId, gymId, held);
+    const deleted = await repo.deleteLeads(tx, userId, gymId, held.map((lead) => lead.id));
     // Under the lock the set cannot move between the read and the delete.
     if (deleted !== held.length) {
       throw new Error(`delete-selected deleted ${String(deleted)} leads where the box named ${String(held.length)}`);

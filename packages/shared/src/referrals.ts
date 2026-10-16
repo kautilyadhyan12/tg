@@ -16,6 +16,7 @@ import { GIFT_DAYS_MAX, giftDaysWords, memberGiftOnSchema, type MemberGiftOn } f
 import { orgTypeSchema } from "./orgs.js";
 import { GYM_ENQUIRY_MAX_MESSAGE_CHARS } from "./gymPage.js";
 import { ROBOT_CHECK_TOKEN_MAX_CHARS } from "./robotCheck.js";
+import { settingsVersionSchema } from "./gymMessageSettings.js";
 
 /** A member's invite code: 16 of `a-z2-7`, 80 random bits. */
 export const REFERRAL_CODE_PATTERN = /^[a-z2-7]{16}$/;
@@ -292,6 +293,8 @@ export const referralSettingsSchema = z
     currency: z.string().nullable(),
     /** The offer exactly as a member reads it, today. */
     memberLines: z.array(z.string()),
+    /** When the offer was last saved, as the server keeps it; a save sends it back. */
+    version: settingsVersionSchema,
   })
   .strict();
 export type ReferralSettings = z.infer<typeof referralSettingsSchema>;
@@ -302,6 +305,8 @@ export const setReferralSettingsRequestSchema = z
     on: z.boolean(),
     member: referralMemberGiftInputSchema.nullable(),
     friend: referralGiftInputSchema.nullable(),
+    /** The offer as the page read it: saved since, the save is refused. */
+    version: settingsVersionSchema,
   })
   .strict()
   .refine((v) => !v.on || v.member !== null || v.friend !== null, { message: "no_gift", path: ["on"] });

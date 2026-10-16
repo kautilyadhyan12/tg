@@ -390,6 +390,8 @@ function throwOnDiscountFailure(outcome: discounts.DiscountWriteOutcome): void {
       throw new OrgsError(409, "membership_type_not_found", DISCOUNT_WORDS.membership_type_not_found);
     case "no_currency":
       throw new OrgsError(409, "no_member_currency", DISCOUNT_WORDS.no_currency);
+    case "referral_gift":
+      throw new OrgsError(409, "referral_gift_in_settings", DISCOUNT_WORDS.referral_gift);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled discount outcome: ${JSON.stringify(never)}`);

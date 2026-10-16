@@ -363,10 +363,11 @@ d("member list: possible duplicates (real Postgres)", () => {
       await p("Daniel Wu", { phone: "9876500001" });
       await p("Priya Sha", { phone: "9876500002" });
       await p("Priyanka Shah", { phone: "9876500002", email: "priyanka@members.example" });
-      await p("Tom Reed", { memberNumber: "M-1001", ...own() });
-      // Add member refuses a number somebody holds (5e-i): two records with one come from a file.
+      // Add member refuses a number somebody holds (5e-i), and an import moves a record whose
+      // number the file gives somebody else (5e-ii): two records with one come from one file.
       await importFile(gym, owner, [
         ["Name", "Email", "Member number"],
+        ["Tom Reed", own().email, "M-1001"],
         ["Thomas Reed", own().email, "m-1001"],
       ]);
       // A family's landline pairs them; staff answer Different people.
@@ -549,6 +550,11 @@ d("member list: possible duplicates (real Postgres)", () => {
         row(CONTRACT.keep),
         row(CONTRACT.gone),
       ]);
+      // The contract's record with no number is one from before the app numbered people
+      // (5e-i): the import gave it one (5e-ii), so it is taken away again here.
+      const keepKey = identityKey({ fullName: CONTRACT.keep.fullName, email: CONTRACT.keep.email, phone: CONTRACT.keep.phone, memberNumber: null });
+      await sql`UPDATE gym_member_list_entries SET member_number = NULL, identity_key = ${keepKey}
+                WHERE gym_id = ${gym} AND full_name = ${CONTRACT.keep.fullName}`;
       const read = async (): Promise<(ContractRecord & { id: string })[]> =>
         (
           await sql<

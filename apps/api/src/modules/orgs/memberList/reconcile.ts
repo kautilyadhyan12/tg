@@ -35,6 +35,7 @@ import {
   type MemberListStatusChange,
 } from "@app/shared";
 import { fold, identityKey } from "./fields.js";
+import { importNumbers, type ImportNumbers } from "./importNumbers.js";
 import type { ReviewState } from "./review.js";
 import { matchRows, sameName } from "./samePerson.js";
 
@@ -186,6 +187,9 @@ export interface ReconcileInput {
    *  §18.8): they stay on the list. Absent, every missing record is `gone`. Ignored in
    *  `add` mode. */
   stay?: ReadonlySet<string>;
+  /** An import's member numbers (`importNumbers.ts`), with the gym's kept numbers. Absent,
+   *  the rule numbers nobody: a read of the list, and the cases about other things. */
+  numbering?: { kept: Readonly<Record<string, string>> };
 }
 
 /** What the console prints beside one of the gym's members, measured against the
@@ -313,6 +317,9 @@ export interface Reconciled {
   /** The gym's own members who are on the list being replaced or would be on the new
    *  one — what a confirm stamps `last_listed_at` on (§9.7). See `MembersSide`. */
   onEitherList: string[];
+  /** The numbers this file gives and moves, or null where the rule numbered nobody. Each
+   *  person's `memberNumber` above is already the one written. */
+  numbers: ImportNumbers | null;
 }
 
 /** One spelling for a status word, so two exports of one gym writing "Active"
@@ -694,6 +701,20 @@ export function reconcile(input: ReconcileInput): Reconciled {
   // missing from the file has not left.
   const matched = matchRows(rows, entries, carries, mode === "whole_list");
 
+  // EACH ROW'S MEMBER NUMBER ONCE WRITTEN (5e-ii): compared and written as though the file
+  // carried it, so a number given, or kept over a blank cell, is the record's.
+  const numbers =
+    input.numbering === undefined || rows.length === 0
+      ? null
+      : importNumbers({ rows, matched: matched.map((match) => match?.entry ?? null), entries, carried: carries.memberNumber, kept: input.numbering.kept });
+  const compared: CarriedFields = numbers === null ? carries : { ...carries, memberNumber: true };
+  const numberedRow = (row: MemberListRow, at: number): MemberListRow => {
+    if (numbers === null) return row;
+    const memberNumber = numbers.numbers[at] ?? null;
+    if (memberNumber === row.memberNumber) return row;
+    return { ...row, memberNumber, identityKey: identityKey({ fullName: row.fullName, email: row.email, phone: row.phone, memberNumber }) };
+  };
+
   // How the gym's own members are reached, so "is this person already in the
   // app" is one lookup per person rather than a scan per person. EVERY live member
   // counts here, seat or no seat: the owner and the trainers have the app too.
@@ -750,9 +771,10 @@ export function reconcile(input: ReconcileInput): Reconciled {
     if (editedNames.length < MEMBER_LIST_HAND_EDIT_NAMES_SHOWN) editedNames.push(entry.fullName);
   };
 
-  for (const [at, row] of rows.entries()) {
+  for (const [at, fileRow] of rows.entries()) {
+    const row = numberedRow(fileRow, at);
     const entry = matched[at]?.entry;
-    const moved = entry === undefined ? [] : changedFields(row, entry, carries, endsOnKind);
+    const moved = entry === undefined ? [] : changedFields(row, entry, compared, endsOnKind);
     const movedExtra = entry === undefined ? [] : changedExtra(row, entry, keptFields);
     // The key the record will have once written: the file's value for each field it
     // carries, the record's own for each it does not — exactly what the update writes.
@@ -763,7 +785,7 @@ export function reconcile(input: ReconcileInput): Reconciled {
             fullName: carries.fullName ? row.fullName : entry.fullName,
             email: carries.email ? row.email : entry.email,
             phone: carries.phone ? row.phone : entry.phone,
-            memberNumber: carries.memberNumber ? row.memberNumber : entry.memberNumber,
+            memberNumber: compared.memberNumber ? row.memberNumber : entry.memberNumber,
           });
     const person: ReconciledPerson = {
       identityKey: nextKey,
@@ -980,5 +1002,6 @@ export function reconcile(input: ReconcileInput): Reconciled {
     guard,
     marks,
     onEitherList,
+    numbers,
   };
 }

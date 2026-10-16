@@ -205,7 +205,11 @@ describe("the parsers", () => {
     ["the friend's gift off something the box does not offer", { on: true, member: null, friend: { ...gift, on: "everything" } }, false],
     ["a key it does not know", { on: false, member: null, friend: null, by: "x" }, false],
   ])("%s", (_name, body, ok) => {
-    expect(setReferralSettingsRequestSchema.safeParse(body).success).toBe(ok);
+    // Every save names the version of the offer it read (item 20's passes, H3).
+    expect(setReferralSettingsRequestSchema.safeParse({ ...body, version: "" }).success).toBe(ok);
+  });
+  it("a save that names no version of the offer it read is refused", () => {
+    expect(setReferralSettingsRequestSchema.safeParse({ on: false, member: null, friend: null }).success).toBe(false);
   });
   it.each([
     ["an email", { fullName: "Tara", email: "tara@example.com", robotToken: "t" }, true],

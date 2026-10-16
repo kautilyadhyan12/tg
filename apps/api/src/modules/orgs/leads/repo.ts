@@ -230,7 +230,24 @@ export async function writeLead(
   return toRow(row);
 }
 
+/** Before a joined lead that came by a member's link is deleted, who invited its record and
+ *  when is kept (`gym_referral_kept_invites`): the record is still an invited friend, for
+ *  both Refer a friend gifts. One row a record, the earliest invitation. */
+async function keepInvites(tx: TransactionSql, gymId: string, ids: readonly string[]): Promise<void> {
+  await tx`
+    INSERT INTO gym_referral_kept_invites (gym_id, entry_id, referred_by, referred_at)
+    SELECT DISTINCT ON (l.entry_id) l.gym_id, l.entry_id, l.referred_by, l.referred_at
+    FROM gym_leads l
+    WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...ids]}::uuid[])
+      AND l.status = 'joined' AND l.entry_id IS NOT NULL AND l.referred_at IS NOT NULL
+    ORDER BY l.entry_id, l.referred_at, l.id
+    ON CONFLICT (gym_id, entry_id) DO UPDATE
+    SET referred_by = EXCLUDED.referred_by, referred_at = EXCLUDED.referred_at
+    WHERE EXCLUDED.referred_at < gym_referral_kept_invites.referred_at`;
+}
+
 export async function deleteLead(tx: TransactionSql, gymId: string, leadId: string): Promise<boolean> {
+  await keepInvites(tx, gymId, [leadId]);
   const rows = await tx<{ id: string }[]>`DELETE FROM gym_leads WHERE gym_id = ${gymId} AND id = ${leadId} RETURNING id`;
   return rows.length > 0;
 }
@@ -246,27 +263,28 @@ export async function leadIdsMatching(sql: SqlOrTx, input: LeadsFilterInput): Pr
 
 /** Of `ids`, the gym's leads that are still there, with their names, newest first. Another
  *  gym's id is nobody. */
-export async function leadNames(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<{ id: string; name: string }[]> {
+export async function leadNames(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<{ id: string; name: string; status: string }[]> {
   if (ids.length === 0) return [];
-  const rows = await sql<{ id: string; full_name: string }[]>`
-    SELECT l.id, l.full_name FROM gym_leads l
+  const rows = await sql<{ id: string; full_name: string; status: string }[]>`
+    SELECT l.id, l.full_name, l.status FROM gym_leads l
     WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...ids]}::uuid[])
     ORDER BY l.created_at DESC, l.id DESC`;
-  return rows.map((row) => ({ id: row.id, name: row.full_name }));
+  return rows.map((row) => ({ id: row.id, name: row.full_name, status: row.status }));
 }
 
-/** Of `ids`, the gym's leads that are still there. Another gym's id is nobody. */
-export async function leadIdsIn(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<string[]> {
+/** Of `ids`, the gym's leads that are still there, with their status. Another gym's id is
+ *  nobody. */
+export async function leadIdsIn(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<{ id: string; status: string }[]> {
   if (ids.length === 0) return [];
-  const rows = await sql<{ id: string }[]>`
-    SELECT l.id FROM gym_leads l WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...ids]}::uuid[])`;
-  return rows.map((row) => row.id);
+  return await sql<{ id: string; status: string }[]>`
+    SELECT l.id, l.status FROM gym_leads l WHERE l.gym_id = ${gymId} AND l.id = ANY(${[...ids]}::uuid[])`;
 }
 
 /** Delete these leads of this gym, with one activity-log line for each, in one statement:
  *  a flood of 10,000 builds no rows in the server's own memory. How many were deleted. */
 export async function deleteLeads(tx: TransactionSql, actorUserId: string, gymId: string, ids: readonly string[]): Promise<number> {
   if (ids.length === 0) return 0;
+  await keepInvites(tx, gymId, ids);
   const rows = await tx<{ n: number }[]>`
     WITH gone AS (
       DELETE FROM gym_leads WHERE gym_id = ${gymId} AND id = ANY(${[...ids]}::uuid[]) RETURNING id

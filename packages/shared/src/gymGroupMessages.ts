@@ -142,14 +142,17 @@ export const gymGroupMessagePreviewSchema = z
     ),
     /** How many more group messages the gym can send today. */
     leftToday: z.number().int().min(0).max(GYM_GROUP_MESSAGES_A_DAY),
+    /** Who exactly will get it, as a fingerprint the press sends back: anybody else, and
+     *  nothing is sent. */
+    sendDigest: z.string().max(128),
   })
   .strict();
 export type GymGroupMessagePreview = z.infer<typeof gymGroupMessagePreviewSchema>;
 
 export const gymGroupMessagePreviewResponseSchema = z.object({ preview: gymGroupMessagePreviewSchema }).strict();
 
-/** The press. `sendCount` is the number the box's button named: a different number of
- *  people now and nothing is sent. `key` is made once for a box, so a second press of it
+/** The press. `sendCount` is the number the box's button named and `sendDigest` who
+ *  they are: different people now and nothing is sent. `key` is made once for a box, so a second press of it
  *  sends nothing more. */
 export const gymGroupMessageSendRequestSchema = z
   .object({
@@ -157,6 +160,7 @@ export const gymGroupMessageSendRequestSchema = z
     // Longer than a message, so that one over the limit is told so in a sentence.
     body: z.string().max(GYM_MESSAGE_BODY_MAX * 8),
     sendCount: z.number().int().min(1),
+    sendDigest: z.string().max(128),
     key: z.string().uuid(),
   })
   .strict();

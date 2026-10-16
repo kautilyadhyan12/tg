@@ -529,6 +529,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // sales; `ON DELETE set null`. A deleted account's gift is never used: it is for the record
   // a live account holds.
   "gym_referral_member_gifts",
+  // gym_referral_kept_invites.referred_by — the member who invited a friend whose lead was
+  // since deleted (`0130`), on gym_leads' footing, as its `referred_by` was: the gym's record
+  // of where a member came from; `ON DELETE set null`.
+  "gym_referral_kept_invites",
   "api_cost_events",
   "usage_daily",
   "trace_samples",

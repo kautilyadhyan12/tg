@@ -143,10 +143,13 @@ export function importReviews(input: {
     const review = reviewAfterImport(null, { found: foundFor(person), carried, moved: new Set() });
     if (!sameReview(review, NO_REVIEW)) out.push({ identityKey: person.identityKey, review });
   }
+  // A blank number cell keeps the record's number (5e-ii), so it judges nothing about it.
+  const withoutNumber = new Set([...carried].filter((field) => field !== "memberNumber"));
   for (const person of input.held) {
     const entry = person.entryId === null ? undefined : byId.get(person.entryId);
     if (entry === undefined) throw new Error(`a record the import writes was not read with the list (row ${String(person.row)})`);
-    const review = reviewAfterImport(entry.review, { found: foundFor(person), carried, moved: new Set(person.moved) });
+    const blank = (input.rows[person.at ?? -1]?.memberNumber ?? null) === null;
+    const review = reviewAfterImport(entry.review, { found: foundFor(person), carried: blank ? withoutNumber : carried, moved: new Set(person.moved) });
     if (!sameReview(review, entry.review)) out.push({ identityKey: person.identityKey, review });
   }
   return out;

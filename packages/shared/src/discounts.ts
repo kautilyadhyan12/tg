@@ -316,4 +316,5 @@ export const DISCOUNT_WORDS = {
   membership_nothing_to_pay: "This discount takes off the whole price, so there is nothing to pay. Nothing was saved: add the membership without this discount.",
   membership_discount_changed: "The discount on this membership has changed since you opened it. Nothing was saved: check the total and try again.",
   no_currency: "Set your country in Settings before adding a fixed-amount discount.",
+  referral_gift: "This is the Refer a friend gift. Nothing was saved: it is changed in Refer a friend, where the offer is set.",
 } as const;

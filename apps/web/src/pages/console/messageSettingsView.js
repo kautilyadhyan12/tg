@@ -134,9 +134,11 @@ export function messageDraftFine(draft) {
   return MESSAGE_KINDS.every((kind) => messageProblem(kind, draft) === null);
 }
 
-/** What Save sends: every message and every number, every time. */
-export function messageSettingsBody(draft) {
+/** What Save sends: every message and every number, every time, and the version the box
+ *  was read at, so a save made since in another tab refuses this one. */
+export function messageSettingsBody(draft, version) {
   return {
+    version,
     messages: MESSAGE_KINDS.map((kind) => {
       const line = tidyOwnLine(draft.lines[kind]);
       return { kind, on: draft.on[kind], ownLine: line === '' ? null : line };

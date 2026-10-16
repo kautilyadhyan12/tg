@@ -40,6 +40,9 @@ import {
   memberListNotDuplicatesRequestSchema,
   MEMBER_TIDY_PRESSES_PER_HOUR,
   memberListKeepListedRequestSchema,
+  MEMBER_LIST_DELETE_CHANGED_WORDS,
+  memberListDeletePreviewRequestSchema,
+  memberListDeleteSelectedRequestSchema,
   memberListRemovePreviewRequestSchema,
   memberListRemoveSelectedRequestSchema,
   memberListRemoveUnlistedRequestSchema,
@@ -82,6 +85,7 @@ import * as exporter from "./exportCsv.js";
 import * as notes from "./notes.js";
 import * as tags from "./tags.js";
 import * as removal from "./removeSelected.js";
+import { deleteSelected, previewDeleteSelected } from "./deleteSelected.js";
 import { keepListed } from "./tidy.js";
 import { SelectionChanged, selectAll } from "./selection.js";
 import * as groupMessages from "../messages/group.js";
@@ -1088,6 +1092,56 @@ export function registerMemberListRoutes(app: FastifyInstance, deps: MemberListR
       throw err;
     }
     return sendRemoval(req, reply, answer);
+  });
+
+  // ── Delete permanently, for the past members selected (5e-ii) ──
+
+  /** Delete permanently on the past members selected: 30 presses an hour each, 120 from one
+   *  address (the front desk, several staff). */
+  const deleteSelectedGate = gate(
+    createDualRateLimit({
+      name: "memberlist_delete_selected",
+      max: 30,
+      ipMax: 120,
+      windowMs: 60 * 60 * 1000,
+      identifier: (req) => req.authUser?.id ?? null,
+      redis: deps.redis,
+    }),
+  );
+
+  /** The box: the past members selected who would be deleted permanently. */
+  app.post("/v1/orgs/:gymId/member-list/selected/delete-preview", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListDeletePreviewRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const preview = await previewDeleteSelected(listDeps, requireUserId(req), params.gymId, body, readGate(req, reply));
+      if (preview === null) return;
+      return await reply.status(200).send({ preview });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
+  });
+
+  /** Delete permanently the past members the box showed, all or none. */
+  app.post("/v1/orgs/:gymId/member-list/selected/delete", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(memberListDeleteSelectedRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    try {
+      const answer = await deleteSelected(listDeps, requireUserId(req), params.gymId, body, deleteSelectedGate(req, reply));
+      if (answer.kind === "rate_limited") return;
+      if (answer.kind === "changed") {
+        return await reply.status(409).send({ error: "delete_changed", message: MEMBER_LIST_DELETE_CHANGED_WORDS, preview: answer.preview, requestId: req.id });
+      }
+      return await reply.status(200).send({ done: answer.done });
+    } catch (err) {
+      if (err instanceof SelectionChanged) return await sendSelectionChanged(err, req, reply);
+      throw err;
+    }
   });
 
   /** "Keep on list" for the people selected among those whose membership is over

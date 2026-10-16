@@ -208,7 +208,7 @@ export function memberTiles(report, words) {
       value: report.everLeft ? count(report.inPeriod.left) : null,
       line: report.everLeft ? null : nobodyRemoved(words),
       note: report.everLeft ? span : null,
-      how: `${words.peopleCap} removed from your ${words.person} list from ${from} to today, and ${words.people} whose membership ended or was cancelled in those days and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. Records deleted for good are not counted.`,
+      how: `${words.peopleCap} removed from your ${words.person} list from ${from} to today, and ${words.people} whose membership ended or was cancelled in those days and who have no new one. On your ${words.person} list, their status is Ended or Cancelled. Someone you put back, or gave a new membership later, counts as a ${words.person} the whole time. ${words.peopleCap} deleted permanently are not counted.`,
     },
     {
       key: 'churn',

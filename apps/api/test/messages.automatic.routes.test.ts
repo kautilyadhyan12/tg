@@ -6,13 +6,16 @@
 // twice. That is the first test below.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { GYM_MESSAGE_SETTING_KINDS, type GymInboxResponse, type GymMessageSettingsRequest, type GymMessageSettingsResponse } from "@app/shared";
+import { GYM_MESSAGE_SETTING_KINDS, SETTINGS_CHANGED_WORDS, type GymInboxResponse, type GymMessageSettingsRequest, type GymMessageSettingsResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { markDayDone, settingsStamp } from "../src/modules/orgs/messages/repo.js";
 import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
+
+/** A box's fields as these tests build them; `save` adds the version it read. */
+type SettingsBody = Omit<GymMessageSettingsRequest, "version">;
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -196,7 +199,7 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
   const got = async (gym: Gym): Promise<string[]> => (await sentTo(gym)).map((r) => `${r.user_id} ${r.kind}`).sort();
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
-  const START: GymMessageSettingsRequest = {
+  const START: SettingsBody = {
     messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind !== "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
@@ -209,13 +212,20 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
   };
   /** What the box is told of a gym that checks nobody in, sells nothing, takes no payment and has nothing to book. */
   const UNUSED = { checkIn: false, trialOnList: false, priceList: false, payments: false, billsOverdueDays: 0, bookings: false };
-  const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
+  const withKind = (kind: string, change: { on?: boolean; ownLine?: string | null }, over: Partial<SettingsBody> = {}): SettingsBody => ({
     ...START,
     ...over,
     messages: START.messages.map((m) => (m.kind === kind ? { ...m, ...change } : m)),
   });
-  const save = async (gym: Gym, body: unknown, who: Person = gym.owner) => await inject("PUT", settingsPath(gym), who.cookies, body);
-  const saved = async (gym: Gym, body: GymMessageSettingsRequest): Promise<GymMessageSettingsResponse> => {
+  /** The box as it stands now: a save names the version it read (item 20's passes, H2). */
+  const versionNow = async (gym: Gym): Promise<string> => {
+    const res = await inject("GET", settingsPath(gym), gym.owner.cookies);
+    return res.statusCode === 200 ? (JSON.parse(res.body) as GymMessageSettingsResponse).version : "";
+  };
+  const withVersion = async (gym: Gym, body: unknown): Promise<unknown> =>
+    typeof body === "object" && body !== null && !("version" in body) ? { ...body, version: await versionNow(gym) } : body;
+  const save = async (gym: Gym, body: unknown, who: Person = gym.owner) => await inject("PUT", settingsPath(gym), who.cookies, await withVersion(gym, body));
+  const saved = async (gym: Gym, body: SettingsBody): Promise<GymMessageSettingsResponse> => {
     const res = await save(gym, body);
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as GymMessageSettingsResponse;
@@ -588,12 +598,13 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
 
       // The starting values, read by the owner and by a manager who holds the tick.
       const start = JSON.parse((await inject("GET", settingsPath(gym), manager.cookies)).body) as GymMessageSettingsResponse;
-      expect(start).toEqual({ ...START, ...UNUSED });
+      // Never saved: its version is "" until the first save.
+      expect(start).toEqual({ ...START, ...UNUSED, version: "" });
       // Saved, it is this gym's and not next door's; saved again it is one audit note.
-      expect(await saved(gym, body)).toEqual({ ...body, ...UNUSED });
+      expect(await saved(gym, body)).toEqual({ ...body, ...UNUSED, version: expect.any(String) as unknown });
       expect((await save(gym, body, manager)).statusCode).toBe(200);
       const nextNow = JSON.parse((await inject("GET", settingsPath(next), next.owner.cookies)).body) as GymMessageSettingsResponse;
-      expect(nextNow).toEqual({ ...START, ...UNUSED });
+      expect(nextNow).toEqual({ ...START, ...UNUSED, version: "" });
       const notes = await sql<{ meta: unknown }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.message_settings_changed'`;
       expect(notes).toHaveLength(1);
       expect(JSON.stringify(notes)).not.toContain("Cake");
@@ -609,6 +620,27 @@ d("the automatic messages, the gym's settings and a member's switches (real Post
       const lapsed = await makeGym("Auto Lapsed Gym", false);
       expect((await inject("GET", settingsPath(lapsed), lapsed.owner.cookies)).statusCode).toBe(200);
       expect((await save(lapsed, body)).statusCode).toBe(409);
+    },
+    T,
+  );
+
+  it(
+    "a tab opened before another save never switches a message back on: refused with what to do, the newer settings kept (the data-integrity pass over item 20, H2)",
+    async () => {
+      clock = NOON;
+      const gym = await makeGym("Auto Two Tabs Gym");
+      const opened = await versionNow(gym);
+      // Tab A switches Birthday off.
+      expect((await save(gym, { ...withKind("birthday", { on: false }), version: opened })).statusCode).toBe(200);
+      // Tab B, opened before, changes only We miss you.
+      const stale = await save(gym, { ...START, missYouDays: 14, version: opened });
+      expect(stale.statusCode).toBe(409);
+      expect(JSON.parse(stale.body)).toMatchObject({ error: "message_settings_changed", message: SETTINGS_CHANGED_WORDS });
+      const now = JSON.parse((await inject("GET", settingsPath(gym), gym.owner.cookies)).body) as GymMessageSettingsResponse;
+      expect([now.messages.find((m) => m.kind === "birthday")?.on, now.missYouDays]).toEqual([false, 10]);
+      // Read again, the same change goes through, and Birthday stays off.
+      const again = await saved(gym, { ...withKind("birthday", { on: false }), missYouDays: 14 });
+      expect([again.messages.find((m) => m.kind === "birthday")?.on, again.missYouDays]).toEqual([false, 14]);
     },
     T,
   );

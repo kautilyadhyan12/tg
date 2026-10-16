@@ -676,6 +676,7 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   const needsCountry = noted();
   const unusualPhones = noted();
   const sharedEmails = noted();
+  const sharedNumbers = noted();
   const cellsCut = noted();
   const datesNotRead = noted();
   const cards = noted();
@@ -745,6 +746,8 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
   };
   // Each address's first two rows: enough to name another row for every one sharing it.
   const keptEmails = new Map<string, number[]>();
+  // The same for member numbers, case folded as the list compares them (5e-ii).
+  const keptNumbers = new Map<string, number[]>();
   let noContact = 0;
   let duplicates = 0;
   const counts = {
@@ -814,7 +817,12 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
       counts.withPhone++;
       if (draft.unusualPhone !== null) note(unusualPhones, draft, draft.unusualPhone.column, draft.unusualPhone.raw);
     }
-    if (draft.memberNumber !== null) counts.withMemberNumber++;
+    if (draft.memberNumber !== null) {
+      counts.withMemberNumber++;
+      const holders = keptNumbers.get(draft.memberNumber.toLowerCase());
+      if (holders === undefined) keptNumbers.set(draft.memberNumber.toLowerCase(), [draft.row]);
+      else if (holders.length < 2) holders.push(draft.row);
+    }
     if (draft.status !== null) {
       counts.withStatus++;
       chip(statuses, draft.status);
@@ -836,6 +844,12 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     if (holders === undefined || holders.length < 2) continue;
     note(sharedEmails, row, null, row.email, holders[0] === row.row ? (holders[1] ?? null) : (holders[0] ?? null));
   }
+  // One number on two people: both keep it, and staff are told which rows (5e-ii).
+  for (const row of keptRows) {
+    const holders = row.memberNumber === null ? undefined : keptNumbers.get(row.memberNumber.toLowerCase());
+    if (holders === undefined || holders.length < 2) continue;
+    note(sharedNumbers, row, mapping.memberNumber, row.memberNumber, holders[0] === row.row ? (holders[1] ?? null) : (holders[0] ?? null));
+  }
 
   const counted = [
     ["question_marks_in_names", questionMarks],
@@ -844,6 +858,7 @@ export function understandMemberGrid(grid: MemberFileGrid, options: UnderstandOp
     ["phones_need_country", needsCountry],
     ["phones_unusual", unusualPhones],
     ["shared_emails", sharedEmails],
+    ["shared_member_numbers", sharedNumbers],
     ["cells_cut", cellsCut],
     ["dates_not_read", datesNotRead],
     ["card_cells_dropped", cards],

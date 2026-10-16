@@ -10,6 +10,7 @@ import {
   gymMessageSettingsResponseSchema,
   ownLineBadWords,
   ownLineProblem,
+  SETTINGS_CHANGED_WORDS,
   tidyOwnLine,
   type GymMessageKind,
   type GymMessageNumbers,
@@ -22,7 +23,7 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { badWordsIn } from "../posts/badWords.js";
 import { gymMoney, priceListUse } from "./membershipsRepo.js";
 import { hasBookings } from "./remindersRepo.js";
-import { forgetDay } from "./repo.js";
+import { forgetDay, settingsStamp } from "./repo.js";
 import type { Limit, MessagesDeps } from "./service.js";
 import * as settingsRepo from "./settingsRepo.js";
 
@@ -42,6 +43,9 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
   const now = deps.now();
   const today = await settingsRepo.gymToday(deps.sql, gymId, now);
   if (today === null) throw notFound();
+  // The version first and the rows after it: a save between the two hands the page an old
+  // version with the new rows, which only ever refuses its next save, never lets a stale one through.
+  const version = await settingsStamp(deps.sql, gymId);
   const [rows, checkIn, list, money, bookings] = await Promise.all([
     settingsRepo.settingRows(deps.sql, gymId),
     settingsRepo.checkedInLately(deps.sql, gymId, today, GYM_MESSAGE_CHECK_IN_DAYS),
@@ -66,6 +70,7 @@ async function readSettings(deps: MessagesDeps, gymId: string): Promise<GymMessa
     bookings,
     reviewVisits: settings.numbers.reviewVisits,
     reviewLink: settings.reviewLink,
+    version,
   });
 }
 
@@ -98,6 +103,9 @@ export async function setMessageSettings(
   });
   await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
+    // Saved since the page read them (another tab, or another manager): refused, so this
+    // save never puts back what that one changed.
+    if ((await settingsStamp(tx, gymId)) !== body.version) throw new OrgsError(409, "message_settings_changed", SETTINGS_CHANGED_WORDS);
     const beforeRows = await settingsRepo.settingRows(tx, gymId);
     const before = new Map(beforeRows.map((row) => [row.kind, row]));
     const kept = gymMessageSettingsFrom(beforeRows).numbers;
