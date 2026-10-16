@@ -600,8 +600,9 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const doneHere = (key) => (words) => {
     setRefunding(null);
     setState({ busy: false, error: null, done: { key, words } });
-    if (onToday) void onReload();
-    else void loadOther(pick);
+    // Today's list says the refunds noted today, whichever day's sale they were for.
+    void onReload();
+    if (!onToday) void loadOther(pick);
   };
 
   const askVoid = (key) => {

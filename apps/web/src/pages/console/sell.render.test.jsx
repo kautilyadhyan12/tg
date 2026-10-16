@@ -867,7 +867,13 @@ describe('refund a sale (18p)', () => {
     expect(within(region).getByRole('heading', { name: '9 Oct 2026' })).toBeTruthy();
     const row = within(region).getAllByTestId('takings-row')[0];
     fireEvent.click(moreOf(row));
-    expect(within(row).getByRole('menuitem', { name: /^Refund sale/ })).toBeTruthy();
+    fireEvent.click(within(row).getByRole('menuitem', { name: /^Refund sale/ }));
+    fireEvent.change(within(row).getByLabelText('Why it was refunded'), { target: { value: 'returned' } });
+    svc.refundSale.mockResolvedValue({ receiptNumber: 50 });
+    const asked = svc.get.mock.calls.length;
+    fireEvent.click(within(row).getByRole('button', { name: 'Note refund' }));
+    // A refund of an earlier day's sale is noted today: both lists are read again.
+    await waitFor(() => expect(svc.get.mock.calls.slice(asked).map((c) => c[1] ?? null).sort()).toEqual(['2026-10-09', null]));
     fireEvent.click(within(region).getByRole('button', { name: 'Back to today' }));
     expect(await screen.findByRole('region', { name: "Today's takings" })).toBeTruthy();
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');

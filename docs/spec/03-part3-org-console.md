@@ -3660,7 +3660,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   says it is at the press. The same press again is the same sale even after its buyer's
   record was joined to another.
 - **Not built**: a sale of several different products at once; a refund of a product sale
-  on a later day; receipts (18g); discounts on memberships (18b-ii-b); tax on memberships
+  on a later day (built by 18p, below); receipts (18g); discounts on memberships (18b-ii-b); tax on memberships
   (18b-iii). Product sales reach Reports' money figures with 21b-ii (§16.5).
 
 **As built, 18b-ii-a (2026-10-13; `rulings/2026-10-13-18b-ii-a.md`).** Discounts and promo
@@ -3846,6 +3846,29 @@ payment, a refund or a sale recorded by mistake is **voided**, as gym software d
 - **Left as it is**: a membership payment voided leaves Sell's list of today's takings, as
   before; it is shown, crossed out, on the person's page. A payment taken by a connected company
   (18d) is given back through that company, not voided here.
+
+**As built, 18p (2026-10-16; `rulings/2026-10-15-20e-ii-b-ii-a.md`, `rulings/2026-10-16-18p.md`).**
+**Refund sale**, as Square and Mindbody do it: money given back for a product sale, on its own
+day or any later one.
+- **Finding the sale**: Sell's list has "Show another day" (a calendar, no day after today) and
+  "Back to today" (`GET …/register?day=`); a person's "Bought at the desk" lists the same sales.
+- **The ⋯ on a sale** holds Refund sale ("You gave some or all of the money back.") while some of
+  it is left to give back, and Void sale (its own day only, and only while no refund stands).
+- **The box** opens inside the sale: the amount (all that is left, or part; never more), how it
+  went back (starting at how it was paid), why (Brought back · Charged too much · Faulty or
+  damaged · Something else), and, where the product's stock is counted, how many went back on
+  the shelf (None to what is not back yet). The app moves no money. The same press twice is one
+  refund; two staff at one instant never give back more than the sale took (gym's row lock).
+- **The sale stays**, tagged Part refunded or Refunded; each refund is a line under it (its own
+  receipt number, how, day, why, the shelf, who) with View receipt and a ⋯ holding Void refund
+  (Noted by mistake · Wrong amount · Something else), which takes back what it put on the shelf.
+  What was done is said under the sale. `gym_sale_refunds` (migration `0127`).
+- **Money**: the day's refunds are said beside Sell's total of the day they were noted, as a
+  membership's; Reports' Collected and its Refunded line take them off in the month the money
+  went back; lifetime value and Money by product do not. Its receipt reads "Refund for receipt
+  #n" with the product; the sale's receipt lists its refunds.
+- **Refer a friend**: a friend's sale refunded in full no longer stands for the member's gift (a
+  gift not yet used is taken back); the refund voided gives it again.
 
 ### 14.4 Pay by the gym's own link
 
