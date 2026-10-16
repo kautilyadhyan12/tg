@@ -320,15 +320,17 @@ export const METHOD_NEEDED = 'Pick how they paid.';
 
 /** What the server is sent for a choice. `requestKey` is made once a form. A paid one
  *  says how it was paid: the server records the payment with the membership. */
-export function giveBody(requestKey, type, value, discount = null, summary = null) {
+export function giveBody(requestKey, type, value, discount = null, summary = null, memberGift = null) {
   const paid = type.priceMinor === 0 ? false : value.paid;
   const body = { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
   // The screen says the price and what the first bill comes to, tax in (18b-iii): the
   // server gives nothing where either is no longer so.
   const shown = { ...body, priceMinor: type.priceMinor, ...(summary === null ? {} : { totalMinor: summary.totalMinor }) };
+  // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
+  const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };
   // With a discount, what comes off too (18b-ii-b).
-  if (discount === null || summary === null || summary.offMinor === null) return shown;
-  return { ...shown, discountId: discount.id, discountMinor: summary.offMinor };
+  if (discount === null || summary === null || summary.offMinor === null) return gifted;
+  return { ...gifted, discountId: discount.id, discountMinor: summary.offMinor };
 }
 
 /** A price-list type with the tax its bills charge, as the Add form reads it (18b-iii). */

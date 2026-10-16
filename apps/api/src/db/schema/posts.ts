@@ -8,6 +8,7 @@
 // reactions, reports and a stop on their posting are (`DIRECT_DELETE_TABLES`).
 import { sql } from "drizzle-orm";
 import { bigint, boolean, check, date, foreignKey, index, integer, pgTable, primaryKey, smallint, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { exercises } from "./catalog.js";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gyms } from "./tenancy.js";
@@ -298,15 +299,19 @@ export const gymChallenges = pgTable(
     name: text("name").notNull(),
     details: text("details").notNull().default(""),
     prize: text("prize").notNull().default(""),
-    /** Which of the leaderboard's checked facts is counted. */
-    counts: text("counts").notNull(),
+    /** What it is about, from the list (`challengeSubjects.ts`; `0118`). */
+    subject: text("subject").notNull(),
+    /** The number the app counts for it; null where the staff count. */
+    measure: text("measure"),
+    /** 'app' · 'staff'. */
+    countedBy: text("counted_by").notNull(),
     /** Days on the gym's own calendar, both counted. */
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
     /** The number to reach; null where the most wins. */
     target: integer("target"),
     who: text("who").notNull(),
-    /** The gym's own count: its word for what is counted, and whether the lowest wins. */
+    /** Where the staff count: its word for what is counted, and whether the lowest wins. */
     unit: text("unit").notNull().default(""),
     lowestWins: boolean("lowest_wins").notNull().default(false),
     /** 'none' alone · 'staff' the staff put people in teams · 'members' people pick (`0086`). */
@@ -322,16 +327,17 @@ export const gymChallenges = pgTable(
     check("gym_challenges_name_check", sql`char_length(${t.name}) BETWEEN 1 AND 80`),
     check("gym_challenges_details_check", sql`char_length(${t.details}) <= 500`),
     check("gym_challenges_prize_check", sql`char_length(${t.prize}) <= 120`),
-    check("gym_challenges_counts_check", sql`${t.counts} IN ('gym_days','workout_days','own')`),
+    check("gym_challenges_subject_check", sql`${t.subject} ~ '^[a-z][a-z_]{0,39}$' AND (${t.measure} IS NULL OR ${t.measure} ~ '^[a-z][a-z_]{0,39}$')`),
+    check("gym_challenges_counted_by_check", sql`${t.countedBy} IN ('app','staff') AND (${t.countedBy} = 'staff') = (${t.measure} IS NULL)`),
     check("gym_challenges_who_check", sql`${t.who} IN ('everyone','joined')`),
     check("gym_challenges_days_check", sql`${t.endsOn} >= ${t.startsOn} AND ${t.endsOn} - ${t.startsOn} < 366`),
     check(
       "gym_challenges_target_check",
-      sql`${t.target} IS NULL OR ((${t.counts} = 'own' OR ${t.teams} <> 'none') AND ${t.target} BETWEEN 1 AND 1000000) OR (${t.counts} <> 'own' AND ${t.teams} = 'none' AND ${t.target} BETWEEN 1 AND ${t.endsOn} - ${t.startsOn} + 1)`,
+      sql`${t.target} IS NULL OR (${t.target} BETWEEN 1 AND 1000000 AND (${t.measure} IS DISTINCT FROM 'days' OR ${t.teams} <> 'none' OR ${t.target} <= ${t.endsOn} - ${t.startsOn} + 1))`,
     ),
     check("gym_challenges_teams_check", sql`${t.teams} IN ('none','staff','members')`),
-    check("gym_challenges_unit_check", sql`char_length(${t.unit}) <= 30 AND (${t.counts} = 'own') = (${t.unit} <> '')`),
-    check("gym_challenges_lowest_check", sql`NOT ${t.lowestWins} OR (${t.counts} = 'own' AND ${t.target} IS NULL)`),
+    check("gym_challenges_unit_check", sql`char_length(${t.unit}) <= 30 AND (${t.countedBy} = 'staff') = (${t.unit} <> '')`),
+    check("gym_challenges_lowest_check", sql`NOT ${t.lowestWins} OR (${t.countedBy} = 'staff' AND ${t.target} IS NULL)`),
     index("gym_challenges_ends_idx").on(t.gymId, t.endsOn),
   ],
 );
@@ -354,6 +360,22 @@ export const gymChallengePeople = pgTable(
     primaryKey({ name: "gym_challenge_people_pk", columns: [t.challengeId, t.userId] }),
     foreignKey({ name: "gym_challenge_people_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
     index("gym_challenge_people_user_idx").on(t.userId),
+  ],
+);
+
+/** The exercise a challenge is about, picked from the library (`0120_challenge_exercises.sql`;
+ *  spec Part 3 §15.10.2): one row a challenge about an exercise. The gym's own. */
+export const gymChallengeExercises = pgTable(
+  "gym_challenge_exercises",
+  {
+    gymId: uuid("gym_id").notNull(),
+    challengeId: uuid("challenge_id").notNull(),
+    exerciseId: uuid("exercise_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_challenge_exercises_pk", columns: [t.challengeId, t.exerciseId] }),
+    foreignKey({ name: "gym_challenge_exercises_exercise_fk", columns: [t.exerciseId], foreignColumns: [exercises.id] }),
+    foreignKey({ name: "gym_challenge_exercises_challenge_fk", columns: [t.gymId, t.challengeId], foreignColumns: [gymChallenges.gymId, gymChallenges.id] }).onDelete("cascade"),
   ],
 );
 

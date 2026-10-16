@@ -115,6 +115,15 @@ export function registerChallengeRoutes(app: FastifyInstance, deps: service.Chal
 
   // ── STAFF HOLDING `leaderboard.manage` ──
 
+  // What the form may pick: the list, and the library's exercises.
+  app.get("/v1/orgs/:gymId/challenges/subjects", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const subjects = await service.getSubjects(challengesDeps, requireUserId(req), params.gymId, gate(staffReadLimit)(req, reply));
+    if (subjects === null) return;
+    return reply.status(200).send(subjects);
+  });
+
   app.get("/v1/orgs/:gymId/challenges/staff", { preHandler: app.authenticate }, async (req, reply) => {
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;

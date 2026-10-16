@@ -31,6 +31,8 @@ import {
 } from "./memberships.js";
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
+import { friendGiftSchema } from "./friendGift.js";
+import { memberGiftSchema } from "./memberGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
@@ -700,6 +702,12 @@ export const heldMembershipsResponseSchema = z
     canBill: z.boolean(),
     /** The gym's discounts in use that are for memberships (18b-ii-b), for the Add form. */
     discounts: z.array(gymDiscountSchema),
+    /** Refer a friend's gift where this person is a friend a member invited and has not had
+     *  it (20e-ii-b-i): filled in on the Add form, with Remove. Null otherwise. */
+    friendGift: friendGiftSchema.nullable().default(null),
+    /** This person's own Refer a friend gift, for inviting a friend who joined and paid, where
+     *  it is waiting (20e-ii-b-ii-a): filled in on the Add form, with Remove. Null otherwise. */
+    memberGift: memberGiftSchema.nullable().default(null),
     /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
     taxIncluded: z.boolean(),
   })
@@ -728,10 +736,18 @@ export const giveHeldMembershipRequestSchema = z
      *  membership whose first bill now comes to anything else is not given. Sent with
      *  `priceMinor`. */
     totalMinor: z.number().int().min(0).max(99_999_999).optional(),
+    /** The person's own Refer a friend gift filled in (20e-ii-b-ii-a), and what the screen
+     *  showed it takes off the first bill: worked out again on the server. Sent with
+     *  `priceMinor`. */
+    memberGiftId: z.string().uuid().optional(),
+    memberGiftMinor: z.number().int().min(1).max(99_999_999).optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
     message: "discount_needs_price",
+  })
+  .refine((v) => (v.memberGiftId === undefined) === (v.memberGiftMinor === undefined) && (v.memberGiftId === undefined || v.priceMinor !== undefined), {
+    message: "member_gift_needs_price",
   })
   .refine((v) => v.totalMinor === undefined || v.priceMinor !== undefined, { message: "total_needs_price" });
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;

@@ -39,6 +39,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMemberListEntries: vi.fn(),
       getMemberListEntry: vi.fn(),
       addMemberListEntry: vi.fn(),
+      matchLead: vi.fn(() => Promise.resolve({ data: { lead: null } })),
+      getNextMemberNumber: vi.fn(),
       changeMemberListEntry: vi.fn(),
       takeOffMemberListEntry: vi.fn(),
       restoreMemberListEntry: vi.fn(),
@@ -151,6 +153,10 @@ beforeEach(() => {
   onClose = vi.fn();
   onChanged = vi.fn();
   orgService.getMemberList.mockResolvedValue({ data: { list: LIST } });
+  // Add member looks the person up in Leads (20e-ii-b-i): nobody, unless a test says so.
+  orgService.matchLead.mockResolvedValue({ data: { lead: null } });
+  // Add member fills in the gym's next member number (5e-i).
+  orgService.getNextMemberNumber.mockResolvedValue({ data: { memberNumber: '1' } });
   orgService.getMemberListEntries.mockResolvedValue(pageOf([ada, bea]));
   orgService.getMemberListEntry.mockImplementation((_gym, id) =>
     Promise.resolve(entryAnswer({ [ADA]: ada, [BEA]: bea, [ADA_OLD]: adaOld }[id])),
@@ -1173,6 +1179,82 @@ describe('Add member', () => {
     expect(await dialog().findByText('Member added.')).toBeTruthy();
     expect(dialog().getByText('bea@members.example')).toBeTruthy();
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  // The app numbers members itself (5e-i): the number filled in is the server's to give, so
+  // two desks shown the same one are never given it twice; a number staff type is theirs.
+  it('fills in the next member number and, left as it is, leaves it to the server to give', async () => {
+    orgService.getNextMemberNumber.mockResolvedValue({ data: { memberNumber: 'M0042' } });
+    orgService.addMemberListEntry.mockResolvedValue(written('added', person(BEA, 'Bea Hart', { memberNumber: 'M0043' })));
+    openBox(null);
+    const box = dialog().getByLabelText('Member number');
+    await waitFor(() => expect(box.value).toBe('M0042'));
+    expect(dialog().getByText('Your next member number. You can type a different one.')).toBeTruthy();
+    fireEvent.change(dialog().getByLabelText('Name'), { target: { value: 'Bea Hart' } });
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' }));
+    expect(orgService.getNextMemberNumber).toHaveBeenCalledWith(GYM);
+    // The number given is the one on their page, and why it is not the one shown.
+    expect(await dialog().findByText('M0043')).toBeTruthy();
+    expect(dialog().getByText('Member added. Their member number is M0043, as M0042 was given to someone else a moment ago.')).toBeTruthy();
+  });
+
+  it('given the number shown, says nothing more than that they were added', async () => {
+    orgService.getNextMemberNumber.mockResolvedValue({ data: { memberNumber: 'M0042' } });
+    orgService.addMemberListEntry.mockResolvedValue(written('added', person(BEA, 'Bea Hart', { memberNumber: 'M0042' })));
+    openBox(null);
+    await waitFor(() => expect(dialog().getByLabelText('Member number').value).toBe('M0042'));
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    expect(await dialog().findByText('Member added.')).toBeTruthy();
+  });
+
+  it('an emptied number box says the person is still given the next number', async () => {
+    openBox(null);
+    const box = dialog().getByLabelText('Member number');
+    await waitFor(() => expect(box.value).toBe('1'));
+    fireEvent.change(box, { target: { value: '' } });
+    expect(dialog().getByText('Left empty, they are given your next member number.')).toBeTruthy();
+    expect(dialog().queryByText('Your next member number. You can type a different one.')).toBeNull();
+  });
+
+  it('sends a member number staff changed, as they typed it', async () => {
+    orgService.addMemberListEntry.mockResolvedValue(written('added', person(BEA, 'Bea Hart', { memberNumber: 'M0100' })));
+    openBox(null);
+    const box = dialog().getByLabelText('Member number');
+    await waitFor(() => expect(box.value).toBe('1'));
+    fireEvent.change(box, { target: { value: 'M0100' } });
+    expect(dialog().queryByText('Your next member number. You can type a different one.')).toBeNull();
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { email: 'bea@members.example', memberNumber: 'M0100' }));
+  });
+
+  it('a number somebody holds is refused with their name, and Open that record opens them', async () => {
+    const message = 'Member number 7 belongs to Ada Lovelace. Use another number, or open their record.';
+    orgService.addMemberListEntry.mockRejectedValueOnce(refusal(409, { error: 'member_number_taken', message, entryId: ADA }));
+    openBox(null);
+    await waitFor(() => expect(dialog().getByLabelText('Member number').value).toBe('1'));
+    fireEvent.change(dialog().getByLabelText('Member number'), { target: { value: '7' } });
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    expect(await dialog().findByText(message)).toBeTruthy();
+    fireEvent.click(dialog().getByRole('button', { name: 'Open that record' }));
+    await waitFor(() => expect(orgService.getMemberListEntry).toHaveBeenCalledWith(GYM, ADA));
+  });
+
+  it('with no number to offer, the box is empty and nothing is sent for it', async () => {
+    orgService.getNextMemberNumber.mockRejectedValue(new Error('offline'));
+    orgService.addMemberListEntry.mockResolvedValue(written('added', bea));
+    openBox(null);
+    fireEvent.change(dialog().getByLabelText('Email'), { target: { value: 'bea@members.example' } });
+    await waitFor(() => expect(orgService.getNextMemberNumber).toHaveBeenCalled());
+    expect(dialog().getByLabelText('Member number').value).toBe('');
+    // Nothing was offered, so the box does not promise a number (round one re-check, Low-B).
+    expect(dialog().queryByText('Left empty, they are given your next member number.')).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: 'Add member' }));
+    await waitFor(() => expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { email: 'bea@members.example' }));
   });
 
   it('shows the person already on the list rather than a second copy', async () => {

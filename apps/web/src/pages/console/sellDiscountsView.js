@@ -10,6 +10,8 @@ import {
   formatMinor,
   isVisibleText,
   membershipDiscount,
+  MEMBER_GIFT_SALE_NAME,
+  memberGiftOff,
   minorToPriceText,
   percentToBp,
   priceToMinor,
@@ -59,7 +61,7 @@ export function oldMoneySaleLine(page, use = 'product') {
   // Only the ones that would otherwise be in use here: an expired or used-up one, or one
   // for the other kind of sale, is not missed.
   const forThis = (d) => (use === 'product' ? d.forProducts : d.forMemberships);
-  const old = page.discounts.filter((d) => forThis(d) && discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
+  const old = offeredDiscounts(page).filter((d) => forThis(d) && discountInOldMoney(d, page.currency) && discountStatus(terms(d), page.today) === 'active');
   if (old.length === 0) return null;
   const names = old.length === 1 ? old[0].name : old.length === 2 ? `${old[0].name} and ${old[1].name}` : `${old[0].name} and ${String(old.length - 1)} more`;
   return `${names} cannot be used until ${old.length === 1 ? 'its amount is' : 'their amounts are'} saved again in ${page.currency}. ${
@@ -173,16 +175,22 @@ const typeTarget = (type) => ({ name: type.name, currency: type.currency, on: { 
 const fitsTarget = (discount, target, today) => discountFits(terms(discount), { today, currency: target.currency, ...target.on });
 
 /** The discounts that can be used on this product today. */
+/** The discounts staff may pick here: Refer a friend's friend's gift only where it is this
+ *  person's own (`page.friendGiftId`), filled in for them (20e-ii-b-i). */
+export function offeredDiscounts(page) {
+  return page.discounts.filter((d) => d.referralGift !== true || d.id === page.friendGiftId);
+}
+
 export function discountsFor(page, product) {
   if (product === null || product === undefined) return [];
-  return page.discounts.filter((discount) => fitsTarget(discount, productTarget(product), page.today).ok);
+  return offeredDiscounts(page).filter((discount) => fitsTarget(discount, productTarget(product), page.today).ok);
 }
 
 /** The discounts that can be used on this membership type today, and that take something
  *  off its price and leave something to pay. */
 export function discountsForType(page, type) {
   if (type === null || type === undefined) return [];
-  return page.discounts.filter((discount) => fitsTarget(discount, typeTarget(type), page.today).ok && membershipDiscount(discount, type).ok);
+  return offeredDiscounts(page).filter((discount) => fitsTarget(discount, typeTarget(type), page.today).ok && membershipDiscount(discount, type).ok);
 }
 
 /** Why a discount cannot be used on this product today, said before anything is sold. */
@@ -234,7 +242,7 @@ function applyCode(page, text, why, pickFirst) {
   const typed = text.trim();
   if (typed === '') return { discount: null, note: 'Type the promo code, then press Apply.' };
   const code = promoCodeFrom(typed);
-  const found = code === null ? undefined : page.discounts.find((discount) => discount.code === code);
+  const found = code === null ? undefined : offeredDiscounts(page).find((discount) => discount.code === code);
   if (found === undefined) return { discount: null, note: `There is no promo code ${typed.toUpperCase()}. Check the spelling with the customer.` };
   if (why === null) return { discount: null, note: pickFirst };
   const reason = why(found);
@@ -265,11 +273,11 @@ const taxLabel = (tax) => `${tax.name} ${bpToTaxRateText(tax.bp)}%`;
  *  comes to: the server gives nothing where either is no longer so. `shows` is whether
  *  there is anything to show beyond the price itself. Null where the discount cannot be
  *  used on this type. */
-export function membershipSummary(type, discount, taxIncluded = false) {
+export function membershipSummary(type, discount, taxIncluded = false, memberGift = null) {
   if (type === null || type === undefined) return null;
   const money = (minor) => formatMinor(minor, type.currency);
   if (type.priceMinor === 0) {
-    return { totalMinor: 0, offMinor: null, total: 'Free', lines: [{ label: 'Total', value: 'Free', strong: true }], later: null, shows: false };
+    return { totalMinor: 0, offMinor: null, giftOffMinor: 0, total: 'Free', lines: [{ label: 'Total', value: 'Free', strong: true }], later: null, shows: false };
   }
   let costs = { offMinor: null, payments: 'every', heldPriceMinor: type.priceMinor, firstBillMinor: type.priceMinor };
   if (discount !== null && discount !== undefined) {
@@ -277,22 +285,29 @@ export function membershipSummary(type, discount, taxIncluded = false) {
     if (!made.ok) return null;
     costs = made;
   }
+  // The person's own Refer a friend gift (20e-ii-b-ii-a) comes off the first bill, after any
+  // discount, where it fits: 0 where it does not, and it waits for their next payment.
+  const giftOffMinor = memberGift === null || memberGift === undefined ? 0 : memberGiftOff(memberGift, costs.firstBillMinor, type.currency);
   const tax = typeTax(type, taxIncluded);
-  const first = billAmounts(costs.firstBillMinor, tax);
+  const first = billAmounts(costs.firstBillMinor - giftOffMinor, tax);
   const next = billAmounts(costs.payments === 'first' ? type.priceMinor : costs.heldPriceMinor, tax);
   if (!first.ok || !next.ok) return null;
   const onTop = tax !== null && !tax.included;
   const lines = [];
-  if (costs.offMinor !== null || onTop) lines.push({ label: 'Price', value: money(type.priceMinor) });
+  if (costs.offMinor !== null || giftOffMinor > 0 || onTop) lines.push({ label: 'Price', value: money(type.priceMinor) });
   if (costs.offMinor !== null) lines.push({ label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` });
+  if (giftOffMinor > 0) lines.push({ label: MEMBER_GIFT_SALE_NAME, value: `-${money(giftOffMinor)}` });
   if (onTop) lines.push({ label: taxLabel(tax), value: money(first.taxMinor) });
   lines.push({ label: 'Total', value: money(first.totalMinor), strong: true });
   if (tax !== null && tax.included) lines.push({ label: `Includes ${taxLabel(tax)}`, value: money(first.taxMinor) });
   let later = null;
-  if (type.kind === 'recurring' && costs.offMinor !== null) {
-    later = costs.payments === 'first' ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.` : `Every payment is ${money(next.totalMinor)} while the membership lasts.`;
+  if (type.kind === 'recurring' && (costs.offMinor !== null || giftOffMinor > 0)) {
+    later =
+      costs.payments === 'first' || giftOffMinor > 0
+        ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.`
+        : `Every payment is ${money(next.totalMinor)} while the membership lasts.`;
   }
-  return { totalMinor: first.totalMinor, offMinor: costs.offMinor, total: money(first.totalMinor), lines, later, shows: costs.offMinor !== null || tax !== null };
+  return { totalMinor: first.totalMinor, offMinor: costs.offMinor, giftOffMinor, total: money(first.totalMinor), lines, later, shows: costs.offMinor !== null || giftOffMinor > 0 || tax !== null };
 }
 
 /** A held membership's tax, said on a person's page (18b-iii); null where it has none. */

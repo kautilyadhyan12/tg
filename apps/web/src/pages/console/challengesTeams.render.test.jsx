@@ -7,9 +7,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { offeredSubjects } from '@app/shared';
 import { closureDateLabel } from './hoursView';
+import { sentChallenge } from '../../components/gym/__fixtures__/sentChallenge';
 
-const svc = { list: vi.fn(), board: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), setScores: vi.fn(), setTeamPeople: vi.fn() };
+const svc = { list: vi.fn(), subjects: vi.fn(), board: vi.fn(), add: vi.fn(), change: vi.fn(), setCancelled: vi.fn(), setScores: vi.fn(), setTeamPeople: vi.fn() };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/challengesApi', () => ({ staffChallengesService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -34,7 +36,7 @@ const ORG = {
 const RED = '00000000-0000-4000-8000-0000000000a1';
 const BLUE = '00000000-0000-4000-8000-0000000000b1';
 const team = (id, name, people = 0, value = null, place = null) => ({ id, name, people, value, place });
-const challenge = (id, name, over = {}) => ({
+const challenge = (id, name, over = {}) => sentChallenge({
   id,
   name,
   details: '',
@@ -99,6 +101,7 @@ beforeEach(() => {
   orgApi.getMine.mockReset();
   resetConsoleOrgs();
   svc.list.mockResolvedValue(listOf());
+  svc.subjects.mockResolvedValue({ subjects: offeredSubjects('member'), exercises: [{ slug: 'squat', name: 'Squats', word: 'squats', held: false, appCounts: false }] });
 });
 afterEach(() => cleanup());
 
@@ -232,7 +235,7 @@ describe('teams on a challenge card', () => {
     const a = cardOf('October Week');
     expect(within(a.getByTestId('challenge-teams')).getByText('Teams · you put people in them')).toBeTruthy();
     expect(texts(a.getByRole('list', { name: 'Teams: October Week' }))).toEqual(['1stBlue Team5 people14 gym days', '2ndRed Team4 people11 gym days', 'Green TeamNobody yet0 gym days']);
-    expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Gym days', 'Counted by the app', 'The team with the most gym days wins', "A team's number is its people's added together", 'Everyone in the app', '143 people']);
+    expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Gym visits', 'Checked in at the front desk', 'The team with the most gym days wins', "A team's number is its people's added together", 'Everyone in the app', '143 people']);
     // The first three people are not drawn for a challenge in teams.
     expect(a.queryByRole('list', { name: 'In the lead: October Week' })).toBeNull();
     const b = cardOf('Pick Week');
@@ -518,10 +521,11 @@ describe('round one', () => {
     expect(joined()).toBe('Only people who joinYour members see it and tap Join.');
     pick('Individual or teams', 'Teams: your members pick their own');
     expect(joined()).toBe('Only people who joinYour members see it and join by picking a team.');
-    pick('Who counts it', 'Your staff');
+    await screen.findByRole('radiogroup', { name: 'What is the challenge about' });
+    pick('What is the challenge about', 'Something else');
     type('What your staff count', 'seconds');
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio')[2].textContent.replace(/\s+/g, ' ').trim()).toBe(
-      'Lowest seconds winsFor a fastest time. The team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.',
+      "Fastest time winsFor a time, such as a 500 m row. Your staff enter each member's time in seconds, and the team with the lowest total comes 1st. A team gets its place once everyone in it has a number, so give each team the same number of people.",
     );
   });
 

@@ -1,7 +1,9 @@
 // A member's Challenges, in words (spec Part 3 §15.6; ROADMAP 19d-i). Every sentence a
 // member reads, written out here from what the screen should say.
 import { describe, expect, it } from 'vitest';
+import { sentChallenge } from './__fixtures__/sentChallenge';
 import {
+  aboutLine,
   boardNote,
   challengeChip,
   challengeDates,
@@ -13,8 +15,8 @@ import {
   markLabel,
   noChallenges,
   notCountingNote,
-  oneOf,
   placeLine,
+  printed,
   progress,
   resultOf,
   whatCounts,
@@ -22,11 +24,13 @@ import {
 } from './challengesView';
 
 const TODAY = '2026-10-07'; // a Wednesday
+/** A kind's words, as the server sends them. */
+const words = (counts, unit = '') => sentChallenge({ counts, unit }).words;
 
 const me = (over = {}) => ({ value: 0, place: null, hidden: null, toNextPlace: null, nextPlace: null, reached: false, days: [], ...over });
 const row = (name, place, value, over = {}) => ({ userId: `u-${name}`, name, initials: name.slice(0, 1), place, value, reached: false, isMe: false, ...over });
 const board = (over = {}) => ({ status: 'shown', ranked: 24, top: [], leaders: 1, reached: null, ...over });
-const challenge = (over = {}) => ({
+const challenge = (over = {}) => sentChallenge({
   id: 'c1',
   name: 'October Challenge',
   details: '',
@@ -44,42 +48,6 @@ const challenge = (over = {}) => ({
   board: board(),
   me: me(),
   ...over,
-});
-
-describe("one of the gym's own word", () => {
-  // Words gyms count by, from real challenge boards: what is one of each?
-  it.each([
-    ['push-ups', 'push-up'],
-    ['Push-Ups', 'Push-Up'],
-    ['reps', 'rep'],
-    ['seconds', 'second'],
-    ['minutes', 'minute'],
-    ['kilometres', 'kilometre'],
-    ['laps', 'lap'],
-    ['lunges', 'lunge'],
-    ['burpees', 'burpee'],
-    ['boxes', 'box'],
-    ['crunches', 'crunch'],
-    ['passes', 'pass'],
-    ['presses', 'press'],
-    // Left as typed: not a plain plural, or not a plural at all.
-    ['press', 'press'],
-    ['calories', 'calorie'],
-    ['abs', 'abs'],
-    ['series', 'series'],
-    ['kg lifted', 'kg lifted'],
-    ['5 km time', '5 km time'],
-    ['km', 'km'],
-    ['bonus', 'bonus'],
-    ['tennis', 'tennis'],
-    ['kg', 'kg'],
-    ['公里', '公里'],
-    ['x2s', 'x2s'],
-  ])('%s → %s', (typed, one) => {
-    expect(oneOf(typed)).toBe(one);
-    expect(countText(1, 'own', typed)).toBe(`1 ${one}`);
-    expect(countText(2, 'own', typed)).toBe(`2 ${typed}`);
-  });
 });
 
 describe('the mark beside the name', () => {
@@ -263,10 +231,10 @@ describe('the days as flames', () => {
   });
 
   it('names each flame for a screen reader', () => {
-    expect(markLabel({ day: '2026-10-05', state: 'yes' }, 'gym_days')).toBe('Mon 5 Oct: gym day');
-    expect(markLabel({ day: '2026-10-06', state: 'no' }, 'workout_days')).toBe('Tue 6 Oct: no workout day');
-    expect(markLabel({ day: '2026-10-07', state: 'open' }, 'gym_days')).toBe('Wed 7 Oct: today, not counted yet');
-    expect(markLabel({ day: '2026-10-08', state: 'ahead' }, 'gym_days')).toBe('Thu 8 Oct: still to come');
+    expect(markLabel({ day: '2026-10-05', state: 'yes' }, words('gym_days'))).toBe('Mon 5 Oct: gym day');
+    expect(markLabel({ day: '2026-10-06', state: 'no' }, words('workout_days'))).toBe('Tue 6 Oct: no workout day');
+    expect(markLabel({ day: '2026-10-07', state: 'open' }, words('gym_days'))).toBe('Wed 7 Oct: today, not counted yet');
+    expect(markLabel({ day: '2026-10-08', state: 'ahead' }, words('gym_days'))).toBe('Thu 8 Oct: still to come');
   });
 });
 
@@ -288,7 +256,7 @@ describe('joining and leaving', () => {
   });
 
   it('counts in words', () => {
-    expect([countText(1, 'gym_days'), countText(2, 'workout_days'), countText(1200, 'gym_days')]).toEqual(['1 gym day', '2 workout days', '1,200 gym days']);
+    expect([countText(1, words('gym_days')), countText(2, words('workout_days')), countText(1200, words('gym_days'))]).toEqual(['1 gym day', '2 workout days', '1,200 gym days']);
   });
 });
 
@@ -298,7 +266,7 @@ describe("the gym's own count, in the gym's own word", () => {
   it('says how it is won and what is counted', () => {
     expect(howToWin(own())).toBe('Most push-ups wins');
     expect(howToWin(own({ target: 50 }))).toBe('Reach 50 push-ups');
-    expect(howToWin(own({ unit: 'seconds', lowestWins: true }))).toBe('Lowest seconds wins');
+    expect(howToWin(own({ unit: 'seconds', lowestWins: true }))).toBe('Fastest time wins');
     expect(whatCounts(own(), 'Iron House')).toBe("The staff at Iron House count the push-ups and add each person's number. If yours is missing or wrong, ask at the front desk.");
   });
 
@@ -322,6 +290,71 @@ describe("the gym's own count, in the gym's own word", () => {
     expect(resultOf({ ...ended, me: me({ value: 0 }) }).mine).toBe('No number was added for you.');
     expect(joinNote(own({ who: 'joined', can: { join: true, leave: false } }))).toBe('Join, and the staff can add your number.');
     expect(leaveBox(own()).line).toBe('You come off its board. You can join again until it ends.');
-    expect(countText(40, 'own', 'push-ups')).toBe('40 push-ups');
+    expect(countText(40, words('own', 'push-ups'))).toBe('40 push-ups');
+    expect([countText(1, words('own', 'push-ups')), countText(1, words('own', 'kg lifted'))]).toEqual(['1 push-up', '1 kg lifted']);
+  });
+});
+
+describe('what it is about, and how it is counted (19d-iii-a-i)', () => {
+  it('says each kind a gym can make in one line', () => {
+    expect(aboutLine(challenge())).toBe('Gym visits · Checked in at the front desk');
+    expect(aboutLine(challenge({ counts: 'workout_days' }))).toBe('Workouts in the app · Counted by the app');
+    expect(aboutLine(challenge({ counts: 'own', unit: 'push-ups' }))).toBe('Push-ups · Counted by the staff at Iron House');
+  });
+
+  // An old copy of the app is never updated: a kind added after it was built must still read
+  // right, from the words the server sends with it, and never as a gym-days challenge.
+  const steps = challenge({
+    counts: undefined,
+    subject: 'steps',
+    measure: 'steps',
+    countedBy: 'app',
+    words: { about: 'Steps', one: 'step', many: 'steps', print: 'whole', how: 'app', howLine: 'Counted by your phone', explain: 'Every step your phone counted between the first and last day.', perDay: false },
+    target: null,
+    me: me({ value: 9400, place: 2, toNextPlace: 1, nextPlace: 1 }),
+  });
+
+  it('a kind this screen has never heard of reads in the words it was sent', () => {
+    expect(aboutLine(steps)).toBe('Steps · Counted by your phone');
+    expect(howToWin(steps)).toBe('Most steps wins');
+    expect(whatCounts(steps)).toBe('Every step your phone counted between the first and last day.');
+    expect(placeLine(steps)).toBe('2nd of 24 · 1 more step to reach 1st');
+    expect(progress(steps)).toMatchObject({ big: 9400, unit: 'steps' });
+    expect(howToWin({ ...steps, target: 10000 })).toBe('Reach 10,000 steps');
+    expect(resultOf({ ...steps, state: 'ended', me: me({ value: 0 }), board: board({ top: [row('Maya K.', 1, 12000)] }) })).toEqual({ headline: 'Winner: Maya K., with 12,000 steps.', mine: 'You had no steps in it.' });
+    expect(boardNote({ ...steps, board: board({ status: 'too_few', ranked: 0 }) })).toBe('The places show once 3 people have a step in this challenge.');
+    expect(joinNote({ ...steps, who: 'joined', can: { join: true, leave: false } })).toBe('Your steps since Mon 5 Oct count as soon as you join.');
+  });
+
+  // A distance kept in metres and a time kept in seconds, printed as the words say (§15.10.2).
+  const km = { about: 'Running', one: 'km', many: 'km', print: 'km', how: 'gps', howLine: 'Measured by GPS', explain: 'Runs your phone measured.', perDay: false };
+  const time = { about: 'Plank', one: 'second', many: 'seconds', print: 'time', how: 'camera', howLine: 'Counted by the camera', explain: 'Time held.', perDay: false };
+
+  it('prints a distance in km cut to a tenth, never rounded up past a target, and a time in minutes and seconds', () => {
+    expect([printed(12_480, km), printed(19_990, km), printed(20_000, km), printed(950, km), printed(1_234_560, km)]).toEqual(['12.4 km', '19.9 km', '20.0 km', '0.9 km', '1,234.5 km']);
+    expect([printed(45, time), printed(60, time), printed(125, time), printed(3_720, time), printed(3_725, time), printed(0, time)]).toEqual(['45 s', '1 min 00 s', '2 min 05 s', '1 h 02 min 00 s', '1 h 02 min 05 s', '0 s']);
+    // A distance still needed is rounded up: doing exactly that much gets there.
+    expect([printed(7_520, km, true), printed(360, km, true), printed(7_500, km, true)]).toEqual(['7.6 km', '0.4 km', '7.5 km']);
+    expect(printed(1_200, words('gym_days'))).toBe('1,200');
+  });
+
+  it('a distance or a time reads in its own units on the card, never as a whole number with a word after it', () => {
+    const run = challenge({ counts: undefined, subject: 'running', measure: 'metres', countedBy: 'app', words: km, target: 20_000, me: me({ value: 12_480, place: 2, toNextPlace: 360, nextPlace: 1 }) });
+    expect(howToWin(run)).toBe('Reach 20.0 km');
+    expect(progress(run)).toMatchObject({ big: 12_480, of: 20_000, unit: '', note: '7.6 km to go' });
+    expect(placeLine(run)).toBe('2nd of 24 · 0.4 km more to reach 1st');
+    expect(resultOf({ ...run, state: 'ended', target: null, board: board({ top: [row('Maya K.', 1, 21_090)] }) }).headline).toBe('Winner: Maya K., with 21.0 km.');
+    expect(resultOf({ ...run, state: 'ended', board: board({ reached: 0 }) })).toEqual({ headline: 'Nobody reached 20.0 km.', mine: 'You got to 12.4 km of 20.0 km.' });
+    const plank = challenge({ counts: undefined, subject: 'exercise', measure: 'best_hold', countedBy: 'app', words: time, me: me({ value: 125, place: 1 }) });
+    expect(progress(plank)).toMatchObject({ big: 125, unit: '' });
+    expect(countText(125, time)).toBe('2 min 05 s');
+    const race = challenge({ counts: undefined, subject: 'exercise', measure: 'best_time', countedBy: 'app', words: time, lowestWins: true, me: me({ value: 1_450, place: 2, toNextPlace: 5, nextPlace: 1 }) });
+    expect(placeLine(race)).toBe('2nd of 24 · 5 s faster to reach 1st');
+  });
+
+  it('draws no days for a kind that is not one a day, and says no front desk where none counts it', () => {
+    expect(dayMarks(steps, TODAY)).toBeNull();
+    expect(notCountingNote(steps, { checkingIn: false, gymName: 'Iron House' })).toBeNull();
+    expect(JSON.stringify([howToWin(steps), placeLine(steps), leaveBox(steps).line])).not.toMatch(/gym day|workout day|front desk/u);
   });
 });

@@ -37,7 +37,7 @@ export default function DatePick({
   floating = false,
 }) {
   const [open, setOpen] = useState(false);
-  const [month, setMonth] = useState(() => openingMonth(value, yearSelect ? '' : min, today));
+  const [month, setMonth] = useState(() => openingMonth(value, yearSelect ? '' : min, today, max));
   const wrap = useRef(null);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export default function DatePick({
 
   const show = () => {
     if (disabled) return;
-    setMonth(openingMonth(value, yearSelect ? '' : min, today));
+    setMonth(openingMonth(value, yearSelect ? '' : min, today, max));
     setOpen(!open);
   };
   const canBack = !min || shiftMonth(month, -1) >= monthOf(min);

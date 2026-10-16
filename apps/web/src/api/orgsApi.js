@@ -43,6 +43,7 @@ import {
   createOrgResponseSchema,
   declineInvitationResponseSchema,
   joinLeadResponseSchema,
+  leadMatchResponseSchema,
   leadFileAddResponseSchema,
   leadFileCheckResponseSchema,
   leadResponseSchema,
@@ -71,6 +72,7 @@ import {
   memberListEntryDeletedSchema,
   memberListEntryResponseSchema,
   memberListEntryWrittenSchema,
+  memberListNextNumberSchema,
   memberListReviewPageResponseSchema,
   memberListDuplicatesPageResponseSchema,
   memberListNotDuplicatesResponseSchema,
@@ -735,6 +737,14 @@ export const orgService = {
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}`),
     ),
 
+  /** GET …/member-list/next-number — the member number Add member fills in (5e-i). */
+  getNextMemberNumber: (gymId) =>
+    readThrough(
+      memberListNextNumberSchema,
+      'the next member number',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/next-number`),
+    ),
+
   /** POST …/member-list/entries — add one person by hand. */
   addMemberListEntry: (gymId, body) =>
     readThrough(
@@ -977,6 +987,14 @@ export const orgService = {
       leadsResponseSchema,
       'your leads',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads${query ? `?${query}` : ''}`),
+    ),
+
+  /** GET …/leads/match — Add member: the lead with the email or phone being typed (20e-ii-b-i). */
+  matchLead: (gymId, query) =>
+    readThrough(
+      leadMatchResponseSchema,
+      'your leads',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/leads/match?${new URLSearchParams(query).toString()}`),
     ),
 
   getLead: (gymId, leadId) =>

@@ -4502,7 +4502,9 @@ can work out for it, each with its id, its words, the word after a number, how t
 number is printed, how it is counted (`desk` · `app` · `camera` · `gps`), which ways to
 win it allows (most · target · fewest), and whether one a day is the most, so that a
 target cannot pass the challenge's days. A subject with no measure can only be counted
-by staff.
+by staff. The staff may count any subject on the list, in their own word ("always possible",
+above): "Gym visits · Counted by the staff at {gym}" (19d-iii-a-i; the form offers it from
+19d-iii-a-ii only where it offers the subject).
 
 | Subject (`id`) | What the app can count (measure) | Counted how | Job |
 |---|---|---|---|
@@ -4518,7 +4520,10 @@ holding `leaderboard.manage`). Running is not on the list until the phone app re
 runs. For an exercise the reply marks which ones the camera can count today (those with
 a live definition: squat, chair squat and jump squat of the 58, counted on Folder B's
 local database on 2026-10-09), and of any other the form says "The camera can't count
-{Plank} yet, so your staff count it". Nothing is offered that the app cannot do, and
+{Plank} yet, so your staff count it". An exercise is marked only once the list also has
+a measure for an exercise (19d-iii-b): until then the reply marks none, and the form says
+of every one that the camera can't count it yet (19d-iii-a-ii, `appCountsExercise`).
+Nothing is offered that the app cannot do, and
 nothing a gym has is taken away: every challenge made before is one of the first, second
 or last row.
 
@@ -4603,9 +4608,12 @@ running.
 - **Only people who join** is the one choice for anything else (running; later steps or
   cycling). The Join box says what the gym's members will see and what they never will
   ("your running distance from 1 to 30 Nov; never where you ran").
-- **Never counted by the app**, whatever a gym asks: weight, body measurements, meals,
-  anything about nutrition, water. Members are promised a gym never sees them
-  (`OrgVisibilitySheet`), and the health rules of CLAUDE.md §4 stand.
+- **Never counted by the app**, whatever a gym asks: weight, body measurements, water.
+  Food only as 19d-iii-e (Kd, 2026-10-15, `rulings/2026-10-15-19d-iii-a-i.md`, amending
+  this line's "meals, anything about nutrition"): for members who join and say yes to
+  sharing it; never for under-18s; never "who ate the least wins". Otherwise members are
+  promised a gym never sees them (`OrgVisibilitySheet`), and the health rules of CLAUDE.md
+  §4 stand.
 - A member in Safe mode is offered no exercise or running challenge the app counts until
   their clearance is confirmed, and their card says so (RULINGS 2026-09-07).
 
@@ -5208,6 +5216,91 @@ where it came from ("Referred by"). Migration `0117`.
   account is deleted reads "Invited by a member who has since deleted their account".
 - **Privacy**: a link is the member's own (deleted at Day 14, exported); the lead's
   `referred_by` is the gym's record, `ON DELETE set null`.
+
+**Built in 20e-ii-b-i (2026-10-15; `rulings/2026-10-15-20e-ii-b-i.md`): the friend's gift
+given, and Add member finds the person in Leads.** Migration `0119`. The member's gift is
+20e-ii-b-ii.
+- **Add member looks in Leads** while staff type (`GET /v1/orgs/{gym}/leads/match`,
+  `members.confirm`): a lead not yet joined with the email or phone typed (cleaned by the
+  list's own rules, so "07700 900123" finds "+44 7700 900123"; case does not matter; a Gmail
+  address with its dots or a "+tag" is another address). With the same name: "Tara Shah is in
+  Leads, invited by Maya Rao. Adding them marks them Joined." With another name: "Tara in
+  Leads has this email or phone…" and a tick, "This is Tara: mark them Joined in Leads"
+  (`joinRule.ts`'s test: a shared contact with another name is not proof), in a coloured box
+  with an icon so it is seen (Kd at the click-through). Saved, the lead
+  shown (`leadId`) is Joined as the new record in Add member's own transaction, while it
+  still shares the email or phone; a lead the screen did not show is never changed (a person
+  added before the lookup answered is added as before). The box says "Tara Shah was in Leads
+  and is now marked Joined."
+- **The friend's gift** (the offer's discount, marked `gym_discounts.referral_gift`) is
+  offered only to a record a lead of THIS business joined after coming by a member's link,
+  who held no membership here before the invite, and who has not had it on a membership or a
+  desk sale that stands: once. It is filled in, under "Friend's gift filled in", with what
+  it is, who invited them and **Remove** (then **Put it back**), on Add member's membership,
+  a person's Add membership, and Sell when the person picked is that friend (a products
+  gift); the Price, Discount and Total lines show it. It is in nobody else's Discount list
+  and no promo code finds it. The server asks the same rule inside the write, under the
+  record's lock, and refuses anybody else (`friend_gift_not_theirs`, "Refer a friend's gift
+  is only for a friend a member invited, and only once."); a walk-in never has it.
+- **The lead says what became of it**, on its own page, once joined: "Friend's gift given on
+  Gold Monthly, 15 October 2026." · "Tara has not had the friend's gift yet (20% off the first
+  payment of a membership). It was not used when Priya Desk added Tara's Gold Monthly on 15
+  October 2026. It will be filled in again when Tara's next membership is added." (who, from the
+  gym's own record of the membership being given; nobody is sent a message, Kd) · "Friend's gift (20% off the first
+  payment of a membership): filled in when Tara's membership is added." · "No friend's gift: Tara had a membership here before they
+  were invited." · "No friend's gift: Refer a friend has no friend's gift that can be used
+  today." (`friendGiftState`, `friendGiftLine`).
+- **A voided payment** leaves the membership's discount as it was: the gift was given on the
+  membership, and voiding a payment records it wrongly taken, not the membership undone.
+
+**Built in 20e-ii-b-ii-a (2026-10-15; `rulings/2026-10-15-20e-ii-b-ii-a.md`): the member's
+gift, money off.** Migration `0121`. Free days, the owner's second choice, is 20e-ii-b-ii-b.
+- **Given** (`referrals/memberGiftRepo.ts`, `gym_referral_member_gifts`) inside the write that
+  records a payment that stands for a friend `friendGiftRows` names: a membership payment
+  (Record payment, or Add membership paid) or a sale at the desk to that record. A free trial
+  is no payment. Only to the member whose link it was, while they are still a member with a
+  live account, the offer is on and has a member's gift, and never to the friend themselves.
+  Once a friend (a unique index; two servers at one instant give one), and only for the friend's
+  first payment that stands: a later one gives nothing, whatever changed since (round one). Two
+  records of one friend joined carry the gift to the kept record. The gift is kept as the
+  offer was then.
+- **Told** in the member's inbox, once a friend (kind `referral_gift`, never one of the day's
+  automatic messages, never switched off): "A friend you invited has joined Iron Gym and made
+  their first payment. You get £10.00 off your next payment: it comes off by itself." The
+  friend is not named. A member in the app with no record on Members is told "…your next
+  payment at Iron Gym." instead, and the lead says the gift waits until staff add them to the
+  list, with **Find Ned Fox in the app** (Members, In the app).
+- **Where it comes off**, only on the record the member's own account holds today, at this
+  business: the earliest open bill with nothing paid on it of a membership in use, at once;
+  else the next bill the hourly run opens; else it is filled in, with Remove, on Add
+  membership (off the first bill, after any discount) and at Sell (in a discount's place).
+  The bill is opened again at its own price less the gift, with its own tax rate, and says
+  "Refer a friend gift for inviting Tara Shah: £10.00 off", so staff see why at a glance (Kd
+  at the click-through); a sale keeps it as its discount line, "Refer a friend gift"
+  (`gym_sales.member_gift`), which Sell's list says the same way, and the member's own
+  receipt says without the friend's name. It comes off only where something is left to pay, as every
+  discount here: a gift as large as the price waits for a payment it is smaller than, and the
+  screen says "It can't be used on Protein tub, so it is kept for their next payment." A bill
+  paid ahead before it opens is opened at its full price; the gift waits for the next. Until
+  used it waits on the person's page: "Refer a friend gift, £10.00 off, for inviting Tara
+  Shah. It comes off their next bill by itself, or is filled in when you add a membership or
+  sell to them."
+- **Taken back**: the friend's payment voided (today, Undo payment or Undo sale) or refunded
+  in full while the gift is not used: it stands instead on another of the friend's payments
+  that does, where there is one, else it is taken back, and nobody is sent a message. One
+  already taken off stays. A refund taken back gives it again, with no second message. A bill
+  the gift came off, cancelled by staff or with its membership, or a sale it came off voided:
+  the gift waits again where one of the friend's payments still stands, and is taken back where
+  none does (round one).
+- **The lead says** (`memberGiftLine`): "Maya Rao's gift for inviting Tara (£10.00 off) came
+  off their Gold Monthly bill due 1 November 2026." · "…came off their Protein tub at Sell on
+  20 October 2026." · "…comes off their next bill, or is filled in when they next add a
+  membership or buy at Sell." · "…was taken back: Tara's payment of 15 October 2026 was
+  voided before the gift was used." (or "was refunded in full").
+- **Cost** (`apps/api/.cost/measure-member-gift.ts`, rolled back): the friend rule on every
+  payment, 4.5 to 6.6 ms at 10,000 leads; one person's waiting gift 4.7 to 5.0 ms; the hourly
+  run taking 200 waiting gifts off 200 bills at once 166 to 284 ms (written in one statement
+  each), 7 to 9 ms with nothing waiting.
 
 ### 16.4 At risk
 
