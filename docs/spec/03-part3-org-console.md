@@ -3539,7 +3539,7 @@ with the payment that settles the bill of the first unpaid period.
   reads Overdue once the gym's **grace period** has passed after its due date: 0 to 60
   days, starting at 0, set in the Bills box on Memberships (as Gymdesk lets a gym set
   when a manual payment turns overdue).
-- **Undo last payment** takes back the newest payment on a membership, one at a time;
+- **Void payment** (named Undo last payment until 18o, below) takes back the newest payment on a membership, one at a time;
   its row is kept, marked. A period counted paid before bills were kept, or on the word
   of the gym's own list, has no payment behind it and is taken back as it always was.
 - **Who**: `billing.members` (owner and manager by default; "Record members' payments"
@@ -3554,7 +3554,7 @@ list's Payment reads the bills.
   under its payment; Record payment and Cancel this bill sit inside the bill they act on,
   which is always drawn however old it is; what acts on the whole membership (Freeze,
   Cancel membership) is in one bar under a line.
-- **Cancel this bill** (the trade's "void") is beside Record payment and acts on the same
+- **Cancel this bill** (the trade's "void"; named **Void bill** since 18o, below) is beside Record payment and acts on the same
   bill: the one a payment would be taken for next, and only while nothing is paid on it
   (a part-paid bill has its payment taken back first, or the rest recorded). Bills are
   cancelled in the order they are paid in. A reason is picked from a list (Billed by
@@ -3577,8 +3577,8 @@ list's Payment reads the bills.
   money has gone back, the membership's line reads "Refunded · next payment due …" and
   the Members list reads "Free": never "Paid". Asked again of a bill refunded in full,
   the server says "All of that payment has already been refunded."
-- **Undo refund** takes back one refund noted by mistake; its row is kept, marked. While a
-  refund stands on a bill, **Undo last payment** is not offered for that bill's payments:
+- **Void refund** (Undo refund until 18o) takes back one refund noted by mistake; its row is kept, marked. While a
+  refund stands on a bill, **Void payment** is not offered for that bill's payments:
   the refund is taken back first, so a refund only ever stands on a settled bill.
 - **The Members list's Payment** (§18.2) is "Payment due" wherever a bill of the person's
   is still open and has fallen due, whichever membership it is for: one that is over
@@ -3638,7 +3638,7 @@ who may record payments (`billing.members`) or change prices (`memberships.manag
   New sale; the form is gone until it is pressed, so a second press cannot sell again, and
   the new form has no product picked (Kd's click-through, RULINGS 2026-10-12). Today's list
   draws its newest 10 rows, with Show all.
-- **Undo sale**: the same day only, by whoever may sell. The row is kept, marked, counted
+- **Void sale** (Undo sale until 18o): the same day only, by whoever may sell. The row is kept, marked, counted
   in nothing, and what it took from the stock count goes back.
 - **A membership** was sold from the same box (moved to the member's own page on 2026-10-14, 18b-ii-b, below) by giving it as paid (§14.2): the notebook's
   own bill and payment, starting today, to a person on the list. No `gym_sales` row.
@@ -3810,6 +3810,42 @@ record deleted for good keeps its money.
   records have Gold Monthly. Cancel it on one of them first, then merge."
 - **A gym's whole list deleted** (Stage 4 item 14) takes every payment, those kept from records
   deleted earlier too (`deleteListForGym`): the gym is warned first, and downloading them is 18n.
+
+**As built, 18o (2026-10-15; `rulings/2026-10-15-18m.md`, `rulings/2026-10-15-18o.md`).** A
+payment, a refund or a sale recorded by mistake is **voided**, as gym software does.
+- **The buttons**: Void payment and Void refund on a person's page, Void sale on Sell's list of
+  today. Who may, and which one may, are as before; only the name and the reason are new.
+- **A person's Memberships box, one everyday button a line** (Kd's click-through: *"too many
+  buttons stack together void refund cancel all looking like same meaning"*): a payment line has
+  View receipt and a ⋯ whose list offers Note a refund ("You gave some or all of it back.") and,
+  on the one payment that can be, Void payment ("It was recorded by mistake. The bill is owed
+  again."); a refund line has View receipt and a ⋯ with Void refund ("It was noted by mistake.
+  It will no longer count."; its box says "The payment counts in full again." only where no other
+  refund stands on that payment, else "The other refund on this payment still counts."); the bill a payment is taken for has Record payment and a
+  ⋯ with **Void bill** ("Nothing is owed for these days."), the same step that was Cancel this
+  bill, its tag and line now "Voided 20 October 2026 by Sam Owner · Not charging for this one".
+  Freeze and Cancel membership stay in the bar under the bills: "Cancel" is only ever a
+  membership ending. The bill holding the payment that can be voided is always drawn.
+- **After Void payment** the box says who owes what again and what to press next, from the
+  server's answer: "Payment voided. Maya Patel owes ₹2,360.00 for 15 Oct – 14 Nov 2026 again.
+  If they paid, record the right amount. If they owe nothing, void the bill." (the last sentence
+  only where Void bill is offered).
+- **A reason is picked, never typed** (migration `0126`, `void_reason`, a CHECK on each table):
+  a payment: Recorded by mistake · Wrong amount · Wrong person · Something else; a refund:
+  Noted by mistake · Wrong amount · Something else; a sale: Recorded by mistake · Wrong product
+  or quantity · Brought back · Something else. Nothing is sent until one is picked.
+- **What was voided stays where it was**, crossed out, tagged Voided, with one line: "Voided 15
+  October 2026 by Priya Desk · Wrong amount" (the gym's own day; the reason is left out for one
+  voided before 18o, the name for staff who have since left the app). A voided payment keeps its
+  voided refunds under it; it offers only View receipt. On Sell and a person's Purchases a
+  voided sale reads the same. It counts in nothing: takings, reports and what is owed read only
+  what stands, as before.
+- **Its receipt** keeps its number and reads "Voided. This payment no longer counts." (a refund, a
+  sale: the same in their words). The audit log keeps its older names (`org.member_payment_undone`,
+  `org.member_refund_undone`, `org.sale_undone`), with the reason added; no screen reads them.
+- **Left as it is**: a membership payment voided leaves Sell's list of today's takings, as
+  before; it is shown, crossed out, on the person's page. A payment taken by a connected company
+  (18d) is given back through that company, not voided here.
 
 ### 14.4 Pay by the gym's own link
 
@@ -5301,6 +5337,52 @@ gift, money off.** Migration `0121`. Free days, the owner's second choice, is 20
   payment, 4.5 to 6.6 ms at 10,000 leads; one person's waiting gift 4.7 to 5.0 ms; the hourly
   run taking 200 waiting gifts off 200 bills at once 166 to 284 ms (written in one statement
   each), 7 to 9 ms with nothing waiting.
+
+**Built in 20e-ii-b-ii-b (2026-10-16; `rulings/2026-10-16-20e-ii-b-ii-b.md`): the member's
+gift as free days, and what money off comes off.** Migration `0123`.
+- **Four choices** for the member's gift in Settings → Refer a friend (Kd: "money off" alone
+  was vague): No gift · money off **their next membership payment** (their next bill by itself,
+  else filled in at Add membership) · money off **products bought at the desk** (filled in at
+  Sell) · **free days on their membership**, 1 to 90, with money off their next membership
+  payment for a member who has no membership then (a percentage or an amount, both required).
+  Each gift is kept as the offer was when it was given (`gift_on`, `days`). A gift off products
+  is never filled in at Add membership, nor one off a membership at Sell, and the server refuses
+  either (`member_gift_not_theirs`). The member's words say which: "£10.00 off your next
+  membership payment" · "…off your next purchase at the desk" · "14 free days on your
+  membership", and then "If you have no membership then, you get £10.00 off your next
+  membership payment instead."
+- **Where the days go** (`addGiftDays`, `giftDaysTarget`, pure, in `heldMemberships.ts`): on the
+  record the inviting member's own account holds at this business, the paid membership in use
+  (active or frozen, not free, not over) whose next date, its renewal else its last day, comes
+  first; a frozen one after those. They are added at the end of the period the member is in, or
+  of what they have paid where that is further on: that period and every later one start that
+  many days later, and nothing already begun moves, so what is owed today, and since when, is
+  unchanged (Kd's example: paid to 14 November, 14 days on 3 November, the next bill 29
+  November and every one after on the 29th; a freeze already moves the billing day the same
+  way). A membership that ends ends later; a class pack's last day moves and its classes do
+  not. Kept on the membership as `gift_days` before period `gift_from`; a second gift before
+  those days begin joins them, and one after folds them into `frozen_days`. Where earlier days
+  and what is paid no longer meet (paid on past where the days wait, or owed for a period from
+  before them) no place moves nothing paid or owed, and the money is given instead. With no
+  membership that can take them, or no record on the list, the money is given, as 20e-ii-b-ii-a
+  gives it. The days are written with the gift, under the gym's lock and the member's record's,
+  once a friend.
+- **Told**: "A friend you invited has joined Iron Gym and made their first payment. You get 14
+  free days, added to your Gold Monthly: it now renews on 29 November 2026." ("…it now ends on…";
+  while frozen, no date: it moves when unfrozen). The friend is not named.
+- **Seen**: under the membership on the person's page, "Refer a friend gift for inviting Tara
+  Shah: 14 days added", its dates already holding them; on the friend's lead, "Maya Rao's gift for
+  inviting Tara (14 free days) was added to their Gold Monthly on 3 November 2026."
+- **Taken back** (Kd: what happens when the friend's payment is voided): the friend's payment
+  voided or refunded in full while the member has reached none of the days, and no other payment
+  of the friend's stands: the days are taken off and the renewal is where it was, with no
+  message, and the lead says "…(14 free days) was taken back: Tara's payment of … was voided."
+  Once the member is in them, they stay, as money already taken off a bill stays.
+- **Square** (ROADMAP 18d, Kd 2026-10-16): when a payment company charges a saved card, any
+  change to a membership's dates, a freeze or free days, moves its charge date in the same step.
+- **Cost**: not a list of people. One gift reads and writes the inviting member's own record
+  (at most 500 memberships, `IN_USE_READ`) inside the friend's payment, under the gym's lock;
+  the person's page reads the days of the memberships it already shows, in one statement.
 
 ### 16.4 At risk
 

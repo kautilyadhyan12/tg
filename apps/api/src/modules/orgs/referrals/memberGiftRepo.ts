@@ -7,21 +7,30 @@
 // Members before); only to the member whose link it was, while they are still a member and
 // the offer is on; and once a friend (a unique index). It is taken off a bill or a sale only
 // of the record that member's own account holds today. Every statement names its gym.
+//
+// Free days (20e-ii-b-ii-b) are added, as the gift is given, to a membership of that same
+// record (`addGiftDaysTo`): such a gift is used at once. A member with no membership that can
+// take them is given the money off instead.
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import {
   DISCOUNT_KINDS,
   GYM_MESSAGE_KEPT_DAYS,
   GYM_REFERRAL_GIFT_MESSAGE_KIND,
+  giftDaysWords,
+  memberGiftDaysMessage,
   memberGiftMessage,
+  memberGiftOnSchema,
   memberGiftOff,
   memberGiftSchema,
   memberGiftWords,
   type LeadMemberGift,
   type MemberGift,
+  type MemberGiftOn,
   type MemberGiftTerms,
 } from "@app/shared";
 import { billOf } from "../memberships/billsSql.js";
+import { addGiftDaysTo, takeGiftDaysBack } from "../memberships/heldRepo.js";
 import { insertMessages } from "../messages/repo.js";
 import { insertAudit, insertAudits } from "../repo.js";
 import { friendGiftRows } from "./friendGiftRepo.js";
@@ -76,14 +85,25 @@ export async function giveMemberGift(tx: TransactionSql, input: { gymId: string;
   const gift = offer.member;
   const paymentId = "paymentId" in input.by ? input.by.paymentId : null;
   const saleId = "saleId" in input.by ? input.by.saleId : null;
+  // Free days, where the offer gives them, go on a membership of the member's own record on
+  // the list; with none that can take them the money off is given instead.
+  const days =
+    gift.days !== null && inviter.entry_id !== null && inviter.listed
+      ? await addGiftDaysTo(tx, { gymId: input.gymId, entryId: inviter.entry_id, days: gift.days, today: input.today, now: input.now })
+      : null;
   const [made] = await tx<{ id: string }[]>`
     INSERT INTO gym_referral_member_gifts
-      (gym_id, friend_entry_id, lead_id, member_user_id, kind, percent_bp, amount_minor, currency, given_at, given_on, by_payment_id, by_sale_id)
+      (gym_id, friend_entry_id, lead_id, member_user_id, kind, percent_bp, amount_minor, currency, given_at, given_on, by_payment_id, by_sale_id,
+       gift_on, days, days_from, used_membership_id, used_at)
     VALUES (${input.gymId}, ${input.friendEntryId}, ${friend.leadId}, ${friend.referredBy}, ${gift.kind}, ${gift.percentBp}, ${gift.amountMinor},
-            ${gift.currency}, ${input.now}, ${input.today}::date, ${paymentId}, ${saleId})
+            ${gift.currency}, ${input.now}, ${input.today}::date, ${paymentId}, ${saleId},
+            ${gift.on}, ${days === null ? null : gift.days}::int, ${days?.from ?? null}::int, ${days?.membershipId ?? null}::uuid,
+            ${days === null ? null : input.now}::timestamptz)
     ON CONFLICT (gym_id, friend_entry_id) WHERE taken_back_at IS NULL DO NOTHING
     RETURNING id`;
-  if (made === undefined) return;
+  // The gym's lock is held and the row was read above as not there: a second gift for this
+  // friend now is a fault, and throwing undoes the days just added.
+  if (made === undefined) throw new Error("a Refer a friend gift was given twice for one friend under the gym's lock");
   // One message a friend: a gift taken back and given again is not told twice.
   await insertMessages(
     tx,
@@ -93,7 +113,10 @@ export async function giveMemberGift(tx: TransactionSql, input: { gymId: string;
         userId: friend.referredBy,
         kind: GYM_REFERRAL_GIFT_MESSAGE_KIND,
         occasion: `friend:${input.friendEntryId}`,
-        body: memberGiftMessage(gift, inviter.gym_name, inviter.listed),
+        body:
+          days === null || gift.days === null
+            ? memberGiftMessage(gift, inviter.gym_name, inviter.listed, gift.on)
+            : memberGiftDaysMessage(gift.days, inviter.gym_name, days.typeName, days.next),
         link: null,
         gymDay: input.today,
       },
@@ -107,9 +130,14 @@ export async function giveMemberGift(tx: TransactionSql, input: { gymId: string;
     action: "org.referral_member_gift_given",
     targetType: "gym_referral_member_gift",
     targetId: made.id,
-    meta: { friendEntryId: input.friendEntryId, ...(paymentId === null ? {} : { paymentId }), ...(saleId === null ? {} : { saleId }) },
+    meta: {
+      friendEntryId: input.friendEntryId,
+      ...(paymentId === null ? {} : { paymentId }),
+      ...(saleId === null ? {} : { saleId }),
+      ...(days === null ? {} : { membershipId: days.membershipId, days: String(gift.days) }),
+    },
   });
-  await giftsOntoOpenBills(tx, input.gymId, input.now, made.id);
+  if (days === null && gift.on === "membership") await giftsOntoOpenBills(tx, input.gymId, input.now, made.id);
 }
 
 interface RawOpenBill extends RawTerms {
@@ -138,7 +166,7 @@ export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now:
     JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
     JOIN gym_held_memberships h ON h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen')
     JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open'
-    WHERE g.gym_id = ${gymId} AND g.used_at IS NULL AND g.taken_back_at IS NULL
+    WHERE g.gym_id = ${gymId} AND g.used_at IS NULL AND g.taken_back_at IS NULL AND g.gift_on = 'membership' AND g.days IS NULL
       AND (${onlyGiftId}::uuid IS NULL OR g.id = ${onlyGiftId}::uuid)
       AND NOT EXISTS (SELECT 1 FROM gym_member_payments p WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL)
       AND NOT EXISTS (SELECT 1 FROM gym_referral_member_gifts x WHERE x.used_bill_id = b.id)
@@ -216,45 +244,66 @@ export async function markUsed(
 
 interface RawWaiting extends RawTerms {
   id: string;
+  gift_on: string;
   friend_name: string | null;
 }
 
-/** The gift waiting for this record (the oldest), as Add membership and Sell fill it in; null
- *  for none. Only a current record its own member's live account holds. */
-export async function waitingGiftFor(sql: SqlOrTx, gymId: string, entryId: string, lock = false): Promise<MemberGift | null> {
+/** The gift waiting for this record (the oldest), as Add membership (`on` a membership) and
+ *  Sell (`on` products) fill it in, and the person's page says (either); null for none. Only
+ *  a current record its own member's live account holds. */
+export async function waitingGiftFor(sql: SqlOrTx, gymId: string, entryId: string, on: MemberGiftOn | null, lock = false): Promise<MemberGift | null> {
   const rows = await sql<RawWaiting[]>`
-    SELECT g.id, g.kind, g.percent_bp, g.amount_minor, g.currency, NULLIF(btrim(f.full_name), '') AS friend_name
+    SELECT g.id, g.kind, g.percent_bp, g.amount_minor, g.currency, g.gift_on, NULLIF(btrim(f.full_name), '') AS friend_name
     FROM gym_referral_member_gifts g
     JOIN gym_members m ON m.gym_id = g.gym_id AND m.user_id = g.member_user_id AND m.removed_at IS NULL AND m.entry_id = ${entryId}
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
     JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
     LEFT JOIN gym_member_list_entries f ON f.gym_id = g.gym_id AND f.id = g.friend_entry_id
     WHERE g.gym_id = ${gymId} AND g.used_at IS NULL AND g.taken_back_at IS NULL
+      AND (${on}::text IS NULL OR g.gift_on = ${on}::text)
     ORDER BY g.given_at, g.id
     LIMIT 1
     ${lock ? sql`FOR UPDATE OF g` : sql``}`;
   const r = rows[0];
   if (r === undefined) return null;
   const t = terms(r);
-  return memberGiftSchema.parse({ id: r.id, ...t, words: memberGiftWords(t), friendName: r.friend_name });
+  return memberGiftSchema.parse({ id: r.id, ...t, on: memberGiftOnSchema.parse(r.gift_on), words: memberGiftWords(t), friendName: r.friend_name });
 }
 
-/** The waiting gift `giftId`, held for the write that uses it, where it is this record's:
- *  null where it is not, or is no longer waiting. */
-export async function lockedWaitingGift(tx: TransactionSql, gymId: string, entryId: string, giftId: string): Promise<MemberGift | null> {
-  const gift = await waitingGiftFor(tx, gymId, entryId, true);
+/** The waiting gift `giftId` for what `on` says, held for the write that uses it, where it is
+ *  this record's: null where it is not, is for the other, or is no longer waiting. */
+export async function lockedWaitingGift(tx: TransactionSql, gymId: string, entryId: string, giftId: string, on: MemberGiftOn): Promise<MemberGift | null> {
+  const gift = await waitingGiftFor(tx, gymId, entryId, on, true);
   return gift !== null && gift.id === giftId ? gift : null;
+}
+
+/** Free days on each membership named, oldest first, with the friend each was for inviting
+ *  (by the gym's list; null where that record is gone): the person's page shows why its dates
+ *  moved. Days taken back are not listed. */
+export async function giftDaysOn(sql: SqlOrTx, gymId: string, membershipIds: readonly string[]): Promise<Map<string, { days: number; friendName: string | null }[]>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ used_membership_id: string; days: number; friend_name: string | null }[]>`
+    SELECT g.used_membership_id, g.days, NULLIF(btrim(f.full_name), '') AS friend_name
+    FROM gym_referral_member_gifts g
+    LEFT JOIN gym_member_list_entries f ON f.gym_id = g.gym_id AND f.id = g.friend_entry_id
+    WHERE g.gym_id = ${gymId} AND g.used_membership_id = ANY(${[...membershipIds]}::uuid[]) AND g.days IS NOT NULL AND g.taken_back_at IS NULL
+    ORDER BY g.given_at, g.id`;
+  const out = new Map<string, { days: number; friendName: string | null }[]>();
+  for (const r of rows) out.set(r.used_membership_id, [...(out.get(r.used_membership_id) ?? []), { days: r.days, friendName: r.friend_name }]);
+  return out;
 }
 
 /** The friend's payment or sale no longer stands (voided, or refunded in full). The gift it
  *  gave now stands on another of the friend's payments or sales that does, where there is
  *  one; else, where the gift is not used yet, it is taken back. One already taken off a bill
- *  or a sale stays. Inside that write's own transaction, under the gym's lock. */
+ *  or a sale stays. Free days are taken back while the member has reached none of them
+ *  (`takeGiftDaysBack`); once they are in them, they stay. Inside that write's own
+ *  transaction, under the gym's lock. */
 export async function friendPaymentGone(tx: TransactionSql, input: { gymId: string; by: GiftBy; why: "voided" | "refunded"; today: string; now: Date }): Promise<void> {
   const paymentId = "paymentId" in input.by ? input.by.paymentId : null;
   const saleId = "saleId" in input.by ? input.by.saleId : null;
-  const [gift] = await tx<{ id: string; friend_entry_id: string | null; used: boolean }[]>`
-    SELECT id, friend_entry_id, used_at IS NOT NULL AS used FROM gym_referral_member_gifts
+  const [gift] = await tx<{ id: string; friend_entry_id: string | null; used: boolean; days: number | null; days_from: number | null; used_membership_id: string | null }[]>`
+    SELECT id, friend_entry_id, used_at IS NOT NULL AS used, days, days_from, used_membership_id FROM gym_referral_member_gifts
     WHERE gym_id = ${input.gymId} AND taken_back_at IS NULL
       AND (by_payment_id = ${paymentId}::uuid OR by_sale_id = ${saleId}::uuid)
     FOR UPDATE`;
@@ -266,10 +315,22 @@ export async function friendPaymentGone(tx: TransactionSql, input: { gymId: stri
       WHERE gym_id = ${input.gymId} AND id = ${gift.id}`;
     return;
   }
-  if (gift.used) return;
+  if (gift.used) {
+    if (gift.days === null || gift.days_from === null || gift.used_membership_id === null) return;
+    const back = await takeGiftDaysBack(tx, {
+      gymId: input.gymId,
+      membershipId: gift.used_membership_id,
+      days: gift.days,
+      from: gift.days_from,
+      today: input.today,
+      now: input.now,
+    });
+    if (!back) return;
+  }
   const taken = await tx<{ id: string }[]>`
-    UPDATE gym_referral_member_gifts SET taken_back_at = ${input.now}, taken_back_on = ${input.today}::date, taken_back_why = ${input.why}
-    WHERE gym_id = ${input.gymId} AND id = ${gift.id} AND used_at IS NULL AND taken_back_at IS NULL
+    UPDATE gym_referral_member_gifts
+    SET taken_back_at = ${input.now}, taken_back_on = ${input.today}::date, taken_back_why = ${input.why}, used_at = NULL, used_membership_id = NULL
+    WHERE gym_id = ${input.gymId} AND id = ${gift.id} AND (used_at IS NULL OR days IS NOT NULL) AND taken_back_at IS NULL
     RETURNING id`;
   if (taken.length === 0) return;
   await insertAudit(tx, {
@@ -383,6 +444,10 @@ export async function giftsOnBills(
 }
 
 interface RawLeadGift extends RawTerms {
+  gift_on: string;
+  days: number | null;
+  days_type: string | null;
+  given_on: string;
   used_bill_type: string | null;
   used_bill_due: string | null;
   used_sale_item: string | null;
@@ -401,10 +466,14 @@ const whySchema = z.enum(["voided", "refunded"]);
 /** What became of the member's gift for the friend a lead joined, for the lead's page: the
  *  newest gift for that friend; null where none was given. With the member's name, by the
  *  gym's list where that record is theirs, else their app name; null where their account is
- *  gone. */
-export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId: string): Promise<{ gift: LeadMemberGift; memberName: string | null } | null> {
+ *  gone. `on`: what a waiting gift of money comes off. */
+export async function leadMemberGift(
+  sql: SqlOrTx,
+  gymId: string,
+  friendEntryId: string,
+): Promise<{ gift: LeadMemberGift; memberName: string | null; on: MemberGiftOn } | null> {
   const rows = await sql<RawLeadGift[]>`
-    SELECT g.kind, g.percent_bp, g.amount_minor, g.currency,
+    SELECT g.kind, g.percent_bp, g.amount_minor, g.currency, g.gift_on, g.days, dt.name AS days_type, g.given_on::text AS given_on,
            g.used_at IS NOT NULL AS used, t.name AS used_bill_type, b.due_on::text AS used_bill_due,
            s.item_name AS used_sale_item, s.sold_on::text AS used_sale_day,
            g.taken_back_why,
@@ -417,6 +486,8 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
     LEFT JOIN gym_member_bills b ON b.gym_id = g.gym_id AND b.id = g.used_bill_id
     LEFT JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    LEFT JOIN gym_held_memberships dh ON dh.gym_id = g.gym_id AND dh.id = g.used_membership_id
+    LEFT JOIN gym_membership_types dt ON dt.gym_id = dh.gym_id AND dt.id = dh.membership_type_id
     LEFT JOIN gym_sales s ON s.gym_id = g.gym_id AND s.id = g.used_sale_id
     LEFT JOIN gym_member_payments gp ON gp.gym_id = g.gym_id AND gp.id = g.by_payment_id
     LEFT JOIN gym_sales gs ON gs.gym_id = g.gym_id AND gs.id = g.by_sale_id
@@ -428,10 +499,15 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
     LIMIT 1`;
   const r = rows[0];
   if (r === undefined) return null;
-  const words = memberGiftWords(terms(r));
+  const on = memberGiftOnSchema.parse(r.gift_on);
+  const words = r.days === null ? memberGiftWords(terms(r)) : giftDaysWords(r.days);
   let gift: LeadMemberGift;
   if (r.taken_back_why !== null) {
     gift = { state: "taken_back", words, why: whySchema.parse(r.taken_back_why), day: r.taken_back_payment_day ?? "" };
+  } else if (r.days !== null) {
+    // The membership they went on has since been deleted for good with its record: nothing to say.
+    if (r.days_type === null) return null;
+    gift = { state: "days_added", words, what: r.days_type, day: r.given_on };
   } else if (r.used && r.used_bill_type !== null && r.used_bill_due !== null) {
     gift = { state: "used", words, on: { kind: "bill", what: r.used_bill_type, dueOn: r.used_bill_due } };
   } else if (r.used && r.used_sale_item !== null && r.used_sale_day !== null) {
@@ -455,5 +531,5 @@ export async function leadMemberGift(sql: SqlOrTx, gymId: string, friendEntryId:
   } else {
     gift = { state: "waiting", words };
   }
-  return { gift, memberName: r.member_name };
+  return { gift, memberName: r.member_name, on };
 }

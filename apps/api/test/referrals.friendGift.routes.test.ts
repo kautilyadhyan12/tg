@@ -180,7 +180,8 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
   const invited = async (code: string, fullName: string, email: string, phone?: string): Promise<string> => {
     const res = await post(`/v1/public/invites/${code}/enquiries`, { fullName, email, ...(phone === undefined ? {} : { phone }), robotToken: "ok-token" });
     expect(res.statusCode, res.body).toBe(202);
-    const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_leads WHERE email = ${email}::citext AND referred_at IS NOT NULL`;
+    // This file's businesses' lead alone: another test file may invite the same address at once.
+    const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_leads WHERE gym_id IN (SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'fgift-t-%@example.com')) AND email = ${email}::citext AND referred_at IS NOT NULL`;
     if (row === undefined) throw new Error(`no invited lead for ${email}`);
     return row.id;
   };

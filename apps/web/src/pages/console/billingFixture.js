@@ -62,9 +62,10 @@ export function billingFor(n, given, m, priceMinor, today, by = 'Sam Owner') {
         state: memberBillState(f, today, 0),
         refundedMinor: 0,
         cancelled: null,
+        voidedPayments: [],
         payments:
           f.status === 'paid'
-            ? [{ id: paymentId(n, f.periodIndex), amountMinor: f.amountMinor, method: 'cash', paidOn: f.dueOn, by, refunds: [], refundableMinor: f.amountMinor, receiptNumber: n * 100 + f.periodIndex + 1 }]
+            ? [{ id: paymentId(n, f.periodIndex), amountMinor: f.amountMinor, method: 'cash', paidOn: f.dueOn, by, refunds: [], voidedRefunds: [], refundableMinor: f.amountMinor, receiptNumber: n * 100 + f.periodIndex + 1 }]
             : [],
       })),
     billsNotShown: 0,

@@ -40,6 +40,8 @@ import {
   recordMemberPaymentRequestSchema,
   cancelMemberBillRequestSchema,
   noteMemberRefundRequestSchema,
+  voidMemberPaymentRequestSchema,
+  voidMemberRefundRequestSchema,
   saveGymMembershipTypeRequestSchema,
   updateGymMembershipTypeRequestSchema,
 } from "@app/shared";
@@ -293,10 +295,12 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     return reply.status(200).send(list);
   });
 
-  app.post(`${heldUrl}/:membershipId/payments/:paymentId/undo`, paymentGuarded, async (req, reply) => {
+  app.post(`${heldUrl}/:membershipId/payments/:paymentId/void`, paymentGuarded, async (req, reply) => {
     const params = parseOr400(memberPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const list = await held.undoMemberPayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.paymentId);
+    const body = parseOr400(voidMemberPaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.voidMemberPayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.paymentId, body);
     return reply.status(200).send(list);
   });
 
@@ -320,10 +324,12 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     return reply.status(200).send(list);
   });
 
-  app.post(`${heldUrl}/:membershipId/payments/:paymentId/refunds/:refundId/undo`, paymentGuarded, async (req, reply) => {
+  app.post(`${heldUrl}/:membershipId/payments/:paymentId/refunds/:refundId/void`, paymentGuarded, async (req, reply) => {
     const params = parseOr400(memberRefundParamsSchema, req.params, req, reply);
     if (params === null) return;
-    const list = await held.undoMemberRefund(
+    const body = parseOr400(voidMemberRefundRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.voidMemberRefund(
       heldDeps,
       requireUserId(req),
       params.gymId,
@@ -331,6 +337,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.membershipId,
       params.paymentId,
       params.refundId,
+      body,
     );
     return reply.status(200).send(list);
   });

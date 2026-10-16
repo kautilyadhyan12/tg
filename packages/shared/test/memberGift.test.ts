@@ -6,6 +6,8 @@ import {
   friendGiftResponseSchema,
   leadMemberGiftSchema,
   memberGiftBillLine,
+  memberGiftDaysLine,
+  memberGiftDaysMessage,
   memberGiftLine,
   memberGiftMessage,
   memberGiftNote,
@@ -61,14 +63,31 @@ describe("the words", () => {
 
   it("tells the member without naming the friend", () => {
     expect(memberGiftMessage(gbp(1000), " Iron Gym ")).toBe(
-      "A friend you invited has joined Iron Gym and made their first payment. You get £10.00 off your next payment: it comes off by itself.",
+      "A friend you invited has joined Iron Gym and made their first payment. You get £10.00 off your next membership payment: it comes off by itself.",
+    );
+    expect(memberGiftMessage(gbp(1000), "Iron Gym", true, "products")).toBe(
+      "A friend you invited has joined Iron Gym and made their first payment. You get £10.00 off your next purchase at the desk: it comes off by itself.",
     );
   });
 
   it("tells a member with no record on the list it comes off at the gym, not by itself (round one, H3)", () => {
     expect(memberGiftMessage(gbp(1000), "Iron Gym", false)).toBe(
-      "A friend you invited has joined Iron Gym and made their first payment. You get £10.00 off your next payment at Iron Gym.",
+      "A friend you invited has joined Iron Gym and made their first payment. You get £10.00 off your next membership payment at Iron Gym.",
     );
+  });
+
+  it("free days: the membership and its new date, none while it is frozen; one day is a day", () => {
+    expect(memberGiftDaysMessage(14, "Iron Gym ", "Gold Monthly", { renews: true, day: "2026-11-29" })).toBe(
+      "A friend you invited has joined Iron Gym and made their first payment. You get 14 free days, added to your Gold Monthly: it now renews on 29 November 2026.",
+    );
+    expect(memberGiftDaysMessage(1, "Iron Gym", "10-class pack", { renews: false, day: "2026-12-16" })).toBe(
+      "A friend you invited has joined Iron Gym and made their first payment. You get 1 free day, added to your 10-class pack: it now ends on 16 December 2026.",
+    );
+    expect(memberGiftDaysMessage(14, "Iron Gym", "Gold Monthly", null)).toBe(
+      "A friend you invited has joined Iron Gym and made their first payment. You get 14 free days, added to your Gold Monthly.",
+    );
+    expect(memberGiftDaysLine(14, "Tara Shah")).toBe("Refer a friend gift for inviting Tara Shah: 14 days added");
+    expect(memberGiftDaysLine(1, null)).toBe("Refer a friend gift: 1 day added");
   });
 
   it("the lead's line, in every state", () => {
@@ -80,7 +99,19 @@ describe("the words", () => {
       "Maya Rao's gift for inviting Tara (£10.00 off) came off their Protein tub at Sell on 20 October 2026.",
     );
     expect(memberGiftLine({ state: "waiting", words }, "Maya Rao", "Tara")).toBe(
-      "Maya Rao's gift for inviting Tara (£10.00 off) comes off their next bill, or is filled in when they next add a membership or buy at Sell.",
+      "Maya Rao's gift for inviting Tara (£10.00 off) comes off their next bill, or is filled in when they next add a membership.",
+    );
+    expect(memberGiftLine({ state: "waiting", words }, "Maya Rao", "Tara", "products")).toBe(
+      "Maya Rao's gift for inviting Tara (£10.00 off) is filled in when they next buy at Sell.",
+    );
+    expect(memberGiftLine({ state: "days_added", words: "14 free days", what: "Gold Monthly", day: "2026-11-03" }, "Maya Rao", "Tara")).toBe(
+      "Maya Rao's gift for inviting Tara (14 free days) was added to their Gold Monthly on 3 November 2026.",
+    );
+    expect(memberGiftLine({ state: "taken_back", words: "14 free days", why: "voided", day: "2026-11-03" }, "Maya Rao", "Tara")).toBe(
+      "Maya Rao's gift for inviting Tara (14 free days) was taken back: Tara's payment of 3 November 2026 was voided.",
+    );
+    expect(memberGiftLine({ state: "waiting_past", words }, "Maya Rao", "Tara", "products")).toBe(
+      "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is a past member. It is filled in at Sell if they come back.",
     );
     expect(memberGiftLine({ state: "waiting_no_record", words }, "Maya Rao", "Tara")).toBe(
       "Maya Rao's gift for inviting Tara (£10.00 off) is waiting: Maya Rao is in the app but not on your Members list, so there is no bill to take it off. Add them to your list and it comes off their next bill.",
@@ -103,11 +134,14 @@ describe("the words", () => {
   });
 
   it("the person's page and the desk", () => {
-    const gift: MemberGift = { id: "00000000-0000-4000-8000-000000000001", ...gbp(1000), words: "£10.00 off", friendName: "Tara Shah" };
+    const gift: MemberGift = { id: "00000000-0000-4000-8000-000000000001", ...gbp(1000), on: "membership", words: "£10.00 off", friendName: "Tara Shah" };
     expect(memberGiftNote(gift)).toBe("Refer a friend: for inviting Tara Shah, who joined.");
     expect(memberGiftNote({ ...gift, friendName: null })).toBe("Refer a friend: for inviting a friend who joined.");
     expect(memberGiftWaitingLine(gift)).toBe(
-      "Refer a friend gift, £10.00 off, for inviting Tara Shah. It comes off their next bill by itself, or is filled in when you add a membership or sell to them.",
+      "Refer a friend gift, £10.00 off a membership, for inviting Tara Shah. It comes off their next bill by itself, or is filled in when you add a membership.",
+    );
+    expect(memberGiftWaitingLine({ ...gift, on: "products" })).toBe(
+      "Refer a friend gift, £10.00 off products, for inviting Tara Shah. It is filled in when you sell to them at Sell.",
     );
   });
 });

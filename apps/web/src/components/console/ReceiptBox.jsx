@@ -12,7 +12,7 @@ import SentencePlace from './SentencePlace';
 
 // ONE RECEIPT, OPENED UNDER THE ROW WHOSE BUTTON WAS PRESSED (spec Part 3 §14.3; ROADMAP
 // 18g-i). It is read from the server each time it opens, so it says what the gym's notebook
-// says now: a payment taken back since reads Cancelled. Print prints the receipt alone, laid
+// says now: a payment voided since reads Voided. Print prints the receipt alone, laid
 // out as a page of its own (`receiptPrintHtml`).
 // A gym with no postal address is asked for it here, by whoever may add it.
 

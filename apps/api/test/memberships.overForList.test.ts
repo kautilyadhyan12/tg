@@ -93,6 +93,9 @@ function make(person: number, type: number, status: HeldMembership["status"]): M
     free,
     startsOn,
     frozenDays: pick([0, 0, 0, 1, 3, 14, 45]),
+    // Refer a friend's free days, before the first period, the second or a later one.
+    giftDays: pick([0, 0, 0, 1, 14, 90]),
+    giftFrom: pick([0, 1, 1, 2, 3]),
     status,
     frozenOn: status === "frozen" ? addDays(startsOn, pick([0, 10])) : null,
     // Before it started, on the day, and long after; and some of the days the list is read on.
@@ -143,7 +146,7 @@ function everybody(): { people: number; made: Made[] } {
   }
   // The same last day, 30 September 2026: a membership is named before a pack, though
   // the pack started later.
-  const ended = { free: false, frozenDays: 0, status: "ended", frozenOn: null, cancelledOn: null, paidPeriods: 1, paidFloor: 0, renews: false } as const;
+  const ended = { free: false, frozenDays: 0, giftDays: 0, giftFrom: 0, status: "ended", frozenOn: null, cancelledOn: null, paidPeriods: 1, paidFloor: 0, renews: false } as const;
   const noPack = { packClasses: null, packDays: null, classesLeft: null };
   for (; person < 56; person += 1) {
     made.push({
@@ -276,6 +279,8 @@ d("the stored row the Members list reads for somebody whose memberships are over
       pack_days: m.packDays,
       starts_on: m.startsOn,
       frozen_days: m.frozenDays,
+      gift_days: m.giftDays,
+      gift_from: m.giftFrom,
       status: m.status,
       frozen_on: m.frozenOn,
       cancelled_on: m.cancelledOn,
@@ -377,6 +382,8 @@ d("the stored row the Members list reads for somebody whose memberships are over
           free: false,
           startsOn: "2026-10-01",
           frozenDays: 0,
+          giftDays: 0,
+          giftFrom: 0,
           status: "active",
           frozenOn: null,
           cancelledOn: null,

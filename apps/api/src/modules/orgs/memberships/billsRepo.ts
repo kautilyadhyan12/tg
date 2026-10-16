@@ -23,7 +23,9 @@ import {
   type HeldMembership,
   type MemberPaymentByHand,
   type MemberPaymentMethod,
+  type PaymentVoidReason,
   type RefundReason,
+  type RefundVoidReason,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
@@ -177,12 +179,12 @@ export async function recordPayment(
   });
 }
 
-/** Takes back the newest payment on a membership: recorded by mistake. Its row is kept,
- *  marked; the bill is owed again, and where it had settled the newest paid period the
- *  count of paid periods goes back by one. */
-export async function undoPayment(
+/** Voids the newest payment on a membership (18o): recorded by mistake. Its row is kept,
+ *  marked with who, when and why; the bill is owed again, and where it had settled the
+ *  newest paid period the count of paid periods goes back by one. */
+export async function voidPayment(
   sql: Sql,
-  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; today: string; actorUserId: string; now: Date },
+  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; reason: PaymentVoidReason; today: string; actorUserId: string; now: Date },
 ): Promise<BillWriteOutcome> {
   return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
     const entry = await lockedEntry(tx, input.gymId, input.entryId);
@@ -210,7 +212,7 @@ export async function undoPayment(
     const paidPeriods = count.paidPeriods;
 
     await tx`
-      UPDATE gym_member_payments SET undone_at = ${input.now}, undone_by = ${input.actorUserId}
+      UPDATE gym_member_payments SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND undone_at IS NULL`;
     if (target.reopens) await setBillStatus(tx, input.gymId, payment.bill_id, "open", input.now);
     if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
@@ -230,6 +232,7 @@ export async function undoPayment(
         period: String(payment.period_index),
         amountMinor: String(payment.amount_minor),
         currency: payment.currency,
+        reason: input.reason,
       },
     });
     return { kind: "ok" };
@@ -238,7 +241,7 @@ export async function undoPayment(
 
 /** Takes back a mark that has no payment behind it: one made before bills were kept, or
  *  staff's word for a person taken from the gym's own list. `paidPeriods` is the count
- *  to go back to. A period with a recorded payment is taken back through `undoPayment`. */
+ *  to go back to. A period with a recorded payment is voided through `voidPayment`. */
 export async function undoMark(
   sql: Sql,
   input: { gymId: string; entryId: string; membershipId: string; paidPeriods: number; today: string; actorUserId: string; now: Date },
@@ -442,11 +445,11 @@ export async function noteRefund(
   });
 }
 
-/** Takes back a refund noted by mistake: its row is kept, marked, and a bill that read
- *  Refunded reads Paid again. Nothing else moves. */
-export async function undoRefund(
+/** Voids a refund noted by mistake (18o): its row is kept, marked with who, when and why,
+ *  and a bill that read Refunded reads Paid again. Nothing else moves. */
+export async function voidRefund(
   sql: Sql,
-  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; refundId: string; today: string; actorUserId: string; now: Date },
+  input: { gymId: string; entryId: string; membershipId: string; paymentId: string; refundId: string; reason: RefundVoidReason; today: string; actorUserId: string; now: Date },
 ): Promise<BillWriteOutcome> {
   return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
     const entry = await lockedEntry(tx, input.gymId, input.entryId);
@@ -464,7 +467,7 @@ export async function undoRefund(
     if (refund.undone) return { kind: "ok" };
 
     await tx`
-      UPDATE gym_member_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}
+      UPDATE gym_member_refunds SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.refundId} AND undone_at IS NULL`;
     // Less than everything paid is now given back: the bill is Paid, not Refunded.
     await tx`
@@ -486,6 +489,7 @@ export async function undoRefund(
         paymentId: input.paymentId,
         amountMinor: String(refund.amount_minor),
         currency: refund.currency,
+        reason: input.reason,
       },
     });
     return { kind: "ok" };
@@ -526,7 +530,7 @@ type Owing = ListHeldColumns & {
  *  of them is owed one today is `billsToOpen`'s to say. */
 const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => sql<Owing[]>`
   SELECT h.id, t.name AS type_name, h.kind, h.term_count, h.term_unit, h.pack_classes, h.pack_days,
-         (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
+         (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
          h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
          h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,

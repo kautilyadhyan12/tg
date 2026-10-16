@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, Search } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
-import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
+import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import PlaceLink from '../../components/console/PlaceLink';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canRemoveMembers, orgWords, viewerPrivileges } from './consoleView';
@@ -36,7 +36,9 @@ import {
   takingsNotes,
   takingsRows,
   takingsWords,
-  undoSaleQuestion,
+  SALE_VOID_CHOICES,
+  saleVoidedWords,
+  voidSaleQuestion,
 } from './sellView';
 
 // SELL (spec Part 3 §14.3; ROADMAP 18b-i, 18b-ii-a): the desk's register. Staff pick what
@@ -301,7 +303,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     return (
       <SaleRecorded
         words={state.done}
-        note="It is in today's list below. To take it back, press Undo sale on its row."
+        note="It is in today's list below. If it was a mistake, press Void sale on its row."
         onNew={() => setState({ busy: false, error: null, done: null })}
         below={number !== null && state.receiptOpen ? <ReceiptBox gymId={gymId} gym={org} number={number} onClose={() => setState((was) => ({ ...was, receiptOpen: false }))} /> : null}
       >
@@ -555,6 +557,8 @@ function MembershipFinder({ gymId, locked, addMemberTo, onOpen }) {
 function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage }) {
   const rows = takingsRows(page, org.timezone, org.clockFormat);
   const [asking, setAsking] = useState(null);
+  /** The Void sale box's reason, and whether Void sale was pressed with none picked. */
+  const [voidReason, setVoidReason] = useState({ reason: '', tried: false });
   /** The row whose receipt is open under it, by its key. */
   const [receiptFor, setReceiptFor] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
@@ -562,13 +566,22 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [all, setAll] = useState(false);
   const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
 
-  const undo = async (sale) => {
+  const askVoid = (key) => {
+    setVoidReason({ reason: '', tried: false });
+    setAsking(key);
+  };
+
+  const voidSale = async (sale) => {
+    if (voidReason.reason === '') {
+      setVoidReason((v) => ({ ...v, tried: true }));
+      return;
+    }
     setState({ busy: true, error: null, done: null });
     try {
-      onPage(await registerService.undoSale(gymId, sale.id));
-      setState({ busy: false, error: null, done: `Sale undone: ${String(sale.quantity)} × ${sale.itemName}. It no longer counts in today's total.` });
+      onPage(await registerService.voidSale(gymId, sale.id, { reason: voidReason.reason }));
+      setState({ busy: false, error: null, done: saleVoidedWords(sale) });
     } catch (err) {
-      setState({ busy: false, error: errorText(err, "We couldn't undo that sale. Try again."), done: null });
+      setState({ busy: false, error: errorText(err, "We couldn't void that sale. Try again."), done: null });
     }
     setAsking(null);
   };
@@ -600,9 +613,10 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                 <div className="flex flex-col min-w-0">
                   <p className="c-s15 c-w6 c-t1 m-0">
                     <span style={row.undone ? { textDecoration: 'line-through' } : undefined}>{`${row.title} · ${row.amount}`}</span>
-                    {row.undone ? <span className="c-tag c-tag-plain ml-2">Undone</span> : null}
+                    {row.undone ? <span className="c-tag c-tag-plain ml-2">Voided</span> : null}
                   </p>
                   <p className="c-s14 c-t2 m-0">{row.facts}</p>
+                  {row.voided !== null ? <p className="c-s13 c-t3 m-0">{row.voided}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2 flex-shrink-0">
                   {row.person !== null && canOpenPeople ? (
@@ -620,14 +634,48 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                     {RECEIPT_BUTTON}
                   </button>
                   {row.canUndo && asking !== row.key ? (
-                    <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy} onClick={() => setAsking(row.key)} aria-label={`Undo sale of ${row.title}`}>
-                      Undo sale
+                    <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy} onClick={() => askVoid(row.key)} aria-label={`Void sale of ${row.title}`}>
+                      Void sale
                     </button>
                   ) : null}
                 </div>
               </div>
               {asking === row.key && row.sale !== null ? (
-                <ConfirmInline newLook question={undoSaleQuestion(row.sale)} confirmLabel="Undo sale" cancelLabel="Keep it" busy={state.busy} onConfirm={() => void undo(row.sale)} onCancel={() => setAsking(null)} />
+                <form
+                  noValidate
+                  className="flex flex-col gap-3"
+                  data-testid="void-sale"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!state.busy) void voidSale(row.sale);
+                  }}
+                >
+                  <p className="c-s14 c-t1 m-0">{voidSaleQuestion(row.sale)}</p>
+                  <label className="c-field">
+                    <span className="c-label">Why are you voiding it?</span>
+                    <select className="c-sel" value={voidReason.reason} onChange={(e) => setVoidReason({ reason: e.target.value, tried: false })}>
+                      <option value="">Choose one</option>
+                      {SALE_VOID_CHOICES.map((reason) => (
+                        <option key={reason.value} value={reason.value}>
+                          {reason.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {voidReason.tried ? (
+                    <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+                      Pick why you are voiding it.
+                    </span>
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="submit" disabled={state.busy} className="c-btn c-btn-sm c-btn-danger">
+                      Void sale
+                    </button>
+                    <button type="button" onClick={() => setAsking(null)} disabled={state.busy} className="c-btn c-btn-sm c-btn-s">
+                      Keep it
+                    </button>
+                  </div>
+                </form>
               ) : null}
               {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
             </li>
@@ -643,7 +691,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
       ) : null}
       {hasPayments ? (
         <p className="px-4 py-3 c-s13 c-t3 m-0" style={LINE}>
-          To undo or refund a membership payment, open the member&apos;s page.
+          To void or refund a membership payment, open the member&apos;s page.
         </p>
       ) : null}
     </section>

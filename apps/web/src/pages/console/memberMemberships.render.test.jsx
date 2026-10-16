@@ -409,7 +409,7 @@ describe('what the box draws', () => {
     expect(within(row).getByText('Frozen')).toBeTruthy();
     expect(within(row).getByText('£49.99 every month')).toBeTruthy();
     expect(within(row).getByText('Started 4 October 2026 · Frozen since 10 October 2026')).toBeTruthy();
-    expect(within(row).getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund', 'Record payment early', 'Unfreeze', 'Cancel membership', 'Undo last payment']);
+    expect(within(row).getAllByRole('button').map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual(['View receipt', 'More for the payment of £49.99', 'Record payment early', 'Unfreeze', 'Cancel membership']);
 
     // The cancelled one is behind one line: what was paid for it can be refunded, and nothing else.
     fireEvent.click(box().getByRole('button', { name: 'Show 5 earlier memberships' }));
@@ -417,7 +417,7 @@ describe('what the box draws', () => {
     const rows = screen.getAllByTestId('held-membership');
     expect(rows).toHaveLength(2);
     expect(within(rows[1]).getByText('Started 1 June 2026 · Cancelled 1 July 2026')).toBeTruthy();
-    expect(within(rows[1]).getAllByRole('button').map((x) => x.textContent)).toEqual(['View receipt', 'Note a refund']);
+    expect(within(rows[1]).getAllByRole('button').map((x) => x.textContent || x.getAttribute('aria-label'))).toEqual(['View receipt', 'More for the payment of £49.99']);
   });
 
   // 23a-ii: the ones that are over are folded away, so with nothing in use the box says
@@ -448,7 +448,7 @@ describe('what the box draws', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, '2026-10-04', true)], true));
     const view = render(draw(ADA, 'Ada Lovelace'));
     expect(await (await boxSoon()).findByTestId('held-past-note')).toBeTruthy();
-    expect(box().getAllByRole('button').map((b) => b.textContent)).toEqual(['View receipt', 'Note a refund']);
+    expect(box().getAllByRole('button').map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual(['View receipt', 'More for the payment of £49.99']);
     // Not in use, so not "Active".
     expect(box().getByText('Not in use')).toBeTruthy();
     expect(box().queryByText('Active')).toBeNull();
@@ -592,13 +592,13 @@ describe('adding a membership', () => {
   });
 
   it("a member's own Refer a friend gift waits on their page, is filled in on Add membership off the first payment, and Remove keeps it (20e-ii-b-ii-a)", async () => {
-    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', words: '£10.00 off', friendName: 'Tara Shah' };
+    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', on: 'membership', words: '£10.00 off', friendName: 'Tara Shah' };
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift }));
     orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, false)]));
     render(draw(ADA, 'Ada Lovelace'));
     const box = await boxSoon();
     expect((await box.findByTestId('member-gift-waiting')).textContent).toBe(
-      'Refer a friend gift, £10.00 off, for inviting Tara Shah. It comes off their next bill by itself, or is filled in when you add a membership or sell to them.',
+      'Refer a friend gift, £10.00 off a membership, for inviting Tara Shah. It comes off their next bill by itself, or is filled in when you add a membership.',
     );
     fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
     const form = within(screen.getByTestId('held-add'));
@@ -623,8 +623,46 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2].discountId).toBeUndefined();
   });
 
+  it("a member's gift off products waits on their page for Sell, beside one off a membership, and Add membership fills in only that one (20e-ii-b-ii-b)", async () => {
+    const atSell = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', on: 'products', words: '£10.00 off', friendName: 'Tara Shah' };
+    const offMembership = { ...atSell, id: '88888888-8888-4888-8888-888888888888', on: 'membership', amountMinor: 500, words: '£5.00 off', friendName: 'Leo Grant' };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGiftAtSell: atSell }));
+    render(draw(ADA, 'Ada Lovelace'));
+    let box = await boxSoon();
+    expect((await box.findAllByTestId('member-gift-waiting')).map((x) => x.textContent)).toEqual([
+      'Refer a friend gift, £10.00 off products, for inviting Tara Shah. It is filled in when you sell to them at Sell.',
+    ]);
+    fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
+    let form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(form.queryByTestId('member-gift')).toBeNull();
+    cleanup();
+
+    // Both waiting (the offer changed between two friends): both said, round one L3.
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift: offMembership, memberGiftAtSell: atSell }));
+    render(draw(ADA, 'Ada Lovelace'));
+    box = await boxSoon();
+    expect((await box.findAllByTestId('member-gift-waiting')).map((x) => x.textContent)).toEqual([
+      'Refer a friend gift, £5.00 off a membership, for inviting Leo Grant. It comes off their next bill by itself, or is filled in when you add a membership.',
+      'Refer a friend gift, £10.00 off products, for inviting Tara Shah. It is filled in when you sell to them at Sell.',
+    ]);
+    fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
+    form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(within(form.getByTestId('member-gift')).getByText('£5.00 off. Refer a friend: for inviting Leo Grant, who joined.')).toBeTruthy();
+  });
+
+  it("Refer a friend's free days are said under the membership they moved, with whom they were for (20e-ii-b-ii-b)", async () => {
+    const gold = { ...held(1, GOLD, TODAY, true), freeDays: [{ days: 14, friendName: 'Tara Shah' }, { days: 1, friendName: null }] };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace'));
+    const box = await boxSoon();
+    const lines = (await box.findAllByTestId('held-free-days')).map((x) => x.textContent);
+    expect(lines).toEqual(['Refer a friend gift for inviting Tara Shah: 14 days added', 'Refer a friend gift: 1 day added']);
+  });
+
   it("a member's gift larger than the price is not filled in, and says it is kept", async () => {
-    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 6000, currency: 'GBP', words: '£60.00 off', friendName: null };
+    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 6000, currency: 'GBP', on: 'membership', words: '£60.00 off', friendName: null };
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift }));
     render(draw(ADA, 'Ada Lovelace'));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
@@ -811,7 +849,7 @@ describe('changing a membership', () => {
     expect(box().getByText("Started 4 October 2026 · Ends 3 November 2026, won't renew")).toBeTruthy();
   });
 
-  it('Freeze, Unfreeze and Undo last payment each send their own step', async () => {
+  it('Freeze, Unfreeze and Void payment each send their own step', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
@@ -828,14 +866,16 @@ describe('changing a membership', () => {
     fireEvent.click(within(screen.getByTestId('held-ask-unfreeze')).getByRole('button', { name: 'Unfreeze' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'unfreeze', undefined));
 
-    // The payment taken back is named: its amount and its day.
-    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Undo last payment' }));
-    const ask = within(screen.getByTestId('held-ask-undo'));
-    expect(ask.getByText("Take back the £49.99 recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
-    fireEvent.click(ask.getByRole('button', { name: 'Take it back' }));
+    // The payment voided is named: its amount and its day; why is picked.
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'More for the payment of £49.99' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Void payment/ }));
+    const ask = within(screen.getByTestId('held-void-payment'));
+    expect(ask.getByText("Void the £49.99 payment recorded on 4 October 2026 for Ada Lovelace's Gold Monthly?")).toBeTruthy();
+    fireEvent.change(ask.getByLabelText('Why are you voiding it?'), { target: { value: 'mistake' } });
+    fireEvent.click(ask.getByRole('button', { name: 'Void payment' }));
     const paymentId = gold.billing.bills[0].payments[0].id;
-    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/undo`));
-    expect(await (await boxSoon()).findByText('The last payment for Gold Monthly was taken back.')).toBeTruthy();
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/void`, { reason: 'mistake' }));
+    expect(await (await boxSoon()).findByText('Payment voided.')).toBeTruthy();
   });
 
   it('a membership somebody else changed first is said so, and read again', async () => {

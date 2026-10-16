@@ -8,7 +8,6 @@ import { createMemoryRedis } from "../src/redis.js";
 // The Part 4 §3.3 seed documents, as fixtures.
 const FREE_DOC = {
   exercises: { mode: "tier", tier: "T1" },
-  coach: { window: "month", limit: 5 },
   meal_scan: { window: "month", limit: 3 },
   route_gen: { window: "month", limit: 2 },
   history_days: 90,
@@ -18,7 +17,6 @@ const FREE_DOC = {
 };
 const PRO_DOC = {
   exercises: { mode: "all" },
-  coach: { window: "day", limit: 30 },
   meal_scan: { window: "day", limit: 8 },
   route_gen: { window: "day", limit: 5 },
   history_days: -1,
@@ -31,7 +29,7 @@ describe("entitlements merge (Part 4 §4.1 + GAP-1)", () => {
   it("no candidates → the free document, source 'free'", () => {
     const r = mergeEntitlements(FREE_DOC, []);
     expect(r.source).toBe("free");
-    expect(r.entitlements.coach).toEqual({ window: "month", limit: 5 });
+    expect(r.entitlements.route_gen).toEqual({ window: "month", limit: 2 });
     expect(r.entitlements.history_days).toBe(90);
   });
 
@@ -40,7 +38,7 @@ describe("entitlements merge (Part 4 §4.1 + GAP-1)", () => {
       { rank: 10, entitlements: PRO_DOC, memberEntitlements: null },
     ]);
     expect(r.source).toBe("own_subscription");
-    expect(r.entitlements.coach).toEqual({ window: "day", limit: 30 });
+    expect(r.entitlements.route_gen).toEqual({ window: "day", limit: 5 });
     expect(r.entitlements.history_days).toBe(-1);
     expect(r.entitlements.exercises).toEqual({ mode: "all" });
     expect(r.entitlements.share_watermark).toBe(false);
@@ -55,24 +53,24 @@ describe("entitlements merge (Part 4 §4.1 + GAP-1)", () => {
   });
 
   it("equal-rank tie merges per-key: max limit, OR booleans, all>tier, no-watermark wins", () => {
-    const gymDoc = { ...PRO_DOC, coach: { window: "day", limit: 10 }, share_watermark: true };
+    const gymDoc = { ...PRO_DOC, route_gen: { window: "day", limit: 3 }, share_watermark: true };
     const r = mergeEntitlements(FREE_DOC, [
       { rank: 10, entitlements: PRO_DOC, memberEntitlements: null },
       { rank: 10, entitlements: null, memberEntitlements: gymDoc },
     ]);
     expect(r.source).toBe("own_subscription"); // own wins the label on ties
-    expect(r.entitlements.coach.limit).toBe(30);
+    expect(r.entitlements.route_gen.limit).toBe(5);
     expect(r.entitlements.share_watermark).toBe(false);
     expect(r.entitlements.exercises).toEqual({ mode: "all" });
   });
 
   it("equal-rank tie across DIFFERENT windows: the day-window block wins (GAP-1)", () => {
-    const monthDoc = { ...PRO_DOC, coach: { window: "month", limit: 100 } };
+    const monthDoc = { ...PRO_DOC, route_gen: { window: "month", limit: 100 } };
     const r = mergeEntitlements(FREE_DOC, [
       { rank: 10, entitlements: PRO_DOC, memberEntitlements: null },
       { rank: 10, entitlements: monthDoc, memberEntitlements: null },
     ]);
-    expect(r.entitlements.coach).toEqual({ window: "day", limit: 30 });
+    expect(r.entitlements.route_gen).toEqual({ window: "day", limit: 5 });
   });
 
   it("higher rank beats lower rank outright", () => {
@@ -80,7 +78,7 @@ describe("entitlements merge (Part 4 §4.1 + GAP-1)", () => {
       { rank: 10, entitlements: PRO_DOC, memberEntitlements: null },
       { rank: 0, entitlements: FREE_DOC, memberEntitlements: null },
     ]);
-    expect(r.entitlements.coach.limit).toBe(30);
+    expect(r.entitlements.route_gen.limit).toBe(5);
   });
 
   it("sparse candidate docs fall back to free values per key (R6.5 defaults)", () => {
@@ -88,16 +86,24 @@ describe("entitlements merge (Part 4 §4.1 + GAP-1)", () => {
       { rank: 10, entitlements: { history_days: -1 }, memberEntitlements: null },
     ]);
     expect(r.entitlements.history_days).toBe(-1);
-    expect(r.entitlements.coach).toEqual({ window: "month", limit: 5 }); // default = free
+    expect(r.entitlements.route_gen).toEqual({ window: "month", limit: 2 }); // default = free
     expect(r.entitlements.share_watermark).toBe(true);
+  });
+
+  it("a stored plan still holding the deleted chat coach's limit parses, and the limit is not handed on (ROADMAP 9b)", () => {
+    const r = mergeEntitlements({ ...FREE_DOC, coach: { window: "month", limit: 5 } }, [
+      { rank: 10, entitlements: { ...PRO_DOC, coach: { window: "day", limit: 30 } }, memberEntitlements: null },
+    ]);
+    expect(r.entitlements.route_gen).toEqual({ window: "day", limit: 5 });
+    expect(Object.keys(r.entitlements)).not.toContain("coach");
   });
 });
 
 describe("quota key/reset math (v1 §7.2/§9.3, UTC)", () => {
   const now = new Date("2026-07-11T18:30:00Z");
   it("day and month buckets", () => {
-    expect(quotaKey("coach", "u1", "day", now)).toBe("quota:coach:u1:20260711");
-    expect(quotaKey("coach", "u1", "month", now)).toBe("quota:coach:u1:202607");
+    expect(quotaKey("meal_scan", "u1", "day", now)).toBe("quota:meal_scan:u1:20260711");
+    expect(quotaKey("meal_scan", "u1", "month", now)).toBe("quota:meal_scan:u1:202607");
   });
   it("resets at next UTC midnight / first of next month", () => {
     expect(resetsAt("day", now)).toBe("2026-07-12T00:00:00.000Z");

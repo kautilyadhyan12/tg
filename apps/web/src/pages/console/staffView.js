@@ -227,7 +227,7 @@ function privilegeCopy(orgType) {
       // Spec Part 3 §14.2 (18a-i): owner and manager by default.
       value: 'billing.members',
       label: "Record members' payments",
-      hint: `See a ${words.person}'s bills on their page, record what they paid and undo a payment recorded by mistake.`,
+      hint: `See a ${words.person}'s bills on their page, record what they paid and void a payment recorded by mistake.`,
     },
     {
       // Spec Part 3 §16.5 (21a-i): owner and manager by default.

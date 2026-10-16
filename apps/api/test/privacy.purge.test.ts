@@ -134,7 +134,7 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   async function makeUser(
     email: string,
     deletedDaysAgo: number | null,
-  ): Promise<{ userId: string; mealCorrectionId: string; coachMessageId: string }> {
+  ): Promise<{ userId: string; mealCorrectionId: string }> {
     const deletedAt = deletedDaysAgo === null ? null : new Date(Date.now() - deletedDaysAgo * DAY_MS);
     const status = deletedDaysAgo === null ? "active" : "deleted";
     const rows = await sql<{ id: string }[]>`
@@ -235,13 +235,6 @@ d("DPDP Day-14 purge (real Postgres)", () => {
       RETURNING id`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)
               VALUES (${userId}, 'Fixture katori', 'katori', 175)`;
-    const th = await sql<{ id: string }[]>`
-      INSERT INTO coach_threads (user_id, title) VALUES (${userId}, 'Fixture thread')
-      RETURNING id`;
-    const threadId = th[0]?.id ?? "";
-    const msg = await sql<{ id: string }[]>`
-      INSERT INTO coach_messages (thread_id, role, content)
-      VALUES (${threadId}, 'user', 'fixture question') RETURNING id`;
     await sql`INSERT INTO runs (id, user_id, started_at, duration_s, distance_m)
               VALUES (gen_random_uuid(), ${userId}, now(), 1800, 5000)`;
     await sql`INSERT INTO saved_routes (user_id, name, polyline, distance_m)
@@ -260,7 +253,6 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     return {
       userId,
       mealCorrectionId: corr[0]?.id ?? "",
-      coachMessageId: msg[0]?.id ?? "",
     };
   }
 
@@ -268,8 +260,8 @@ d("DPDP Day-14 purge (real Postgres)", () => {
   // asserted by owner regardless of whether the row is deleted directly or
   // by cascade. workout_sets is cascade-collected (F6) but keeps a
   // denormalised user_id, so it is checkable here too; the two truly
-  // ownerless tables (meal_log_corrections, coach_messages) are checked by
-  // seeded id in the test.
+  // ownerless table (meal_log_corrections) is checked by seeded id in the
+  // test.
   const USER_ID_TABLES = [...DIRECT_DELETE_TABLES, "workout_sets"] as const;
 
   /** Rows still held for this user in each user-keyed table. */
@@ -413,13 +405,11 @@ d("DPDP Day-14 purge (real Postgres)", () => {
     const blockedBy = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_post_blocks WHERE blocked_user_id = ${u.userId}`;
     expect(blockedBy[0]?.n).toBe(0);
 
-    // The two cascade-collected tables carry no user_id, so they are checked
-    // by the exact row id seeded for this user.
+    // meal_log_corrections carries no user_id, so it is checked by the exact
+    // row id seeded for this user.
     const corr = await sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM meal_log_corrections WHERE id = ${u.mealCorrectionId}`;
-    const msg = await sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM coach_messages WHERE id = ${u.coachMessageId}`;
-    expect({ corrections: corr[0]?.n, messages: msg[0]?.n }).toEqual({ corrections: 0, messages: 0 });
+    expect({ corrections: corr[0]?.n }).toEqual({ corrections: 0 });
 
     // Guard: the assertion above must cover the whole compliance list.
     expect(PII_TABLES.length).toBe(DIRECT_DELETE_TABLES.length + CASCADE_COLLECTED_TABLES.length);
@@ -493,9 +483,9 @@ d("DPDP Day-14 purge (real Postgres)", () => {
 
     const left = await directCounts(bystander.userId);
     for (const t of DIRECT_DELETE_TABLES) expect({ t, n: left[t] }).toEqual({ t, n: 1 });
-    const msg = await sql<{ n: number }[]>`
-      SELECT count(*)::int AS n FROM coach_messages WHERE id = ${bystander.coachMessageId}`;
-    expect(msg[0]?.n).toBe(1);
+    const corr = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM meal_log_corrections WHERE id = ${bystander.mealCorrectionId}`;
+    expect(corr[0]?.n).toBe(1);
     const still = (
       await sql<{ email: string | null }[]>`SELECT email FROM users WHERE id = ${bystander.userId}`
     )[0];

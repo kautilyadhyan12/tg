@@ -7,6 +7,7 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import { canManageStaff } from './staffView';
 import { LeadBars, MembersTrend, MonthBars, StayBar } from './ReportCharts';
 import { DayLine, HourGrid } from './ReportAttendanceCharts';
 import {
@@ -617,6 +618,21 @@ function MoneyReport({ org, orgSlug, period }) {
   );
 }
 
+/** Staff activity is kept beside the Staff tab; Reports opens it for the owner (4d). */
+function StaffActivityLine({ orgSlug }) {
+  return (
+    <section className="flex flex-col gap-4" aria-label="Staff activity">
+      <h2 className="c-h2">Staff activity</h2>
+      <section className="c-card p-4 md:p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <p className="c-s15 c-t2 m-0">Which worker did what in the console, and when.</p>
+        <Link to={`/console/${orgSlug}/members?view=activity`} className="c-btn c-btn-s self-start md:self-auto">
+          Open staff activity
+        </Link>
+      </section>
+    </section>
+  );
+}
+
 export default function Reports() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
@@ -713,6 +729,8 @@ export default function Reports() {
       ) : (
         <ConsoleLoading label="Loading your reports…" newLook />
       )}
+      {/* The owner's way to Staff activity, whether or not the figures could be read. */}
+      {canManageStaff(viewerPrivileges(org)) ? <StaffActivityLine orgSlug={orgSlug} /> : null}
     </div>
   );
 }

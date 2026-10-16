@@ -69,12 +69,11 @@ export async function selectDueUsers(
  *  it, and the only intra-list links are ON DELETE CASCADE parent→child. The
  *  order below simply mirrors the spec sentence so the two read alike.
  *
- *  meal_log_corrections and coach_messages are absent BY DESIGN — they carry
- *  no user_id and are collected by cascade from meal_logs / coach_threads. */
+ *  meal_log_corrections is absent BY DESIGN — it carries no user_id and is
+ *  collected by cascade from meal_logs. */
 export async function deleteUserOwnedRows(tx: TransactionSql, userId: string): Promise<void> {
   await tx`DELETE FROM meal_logs WHERE user_id = ${userId}`; // +corrections, CASCADE
   await tx`DELETE FROM user_dishware WHERE user_id = ${userId}`;
-  await tx`DELETE FROM coach_threads WHERE user_id = ${userId}`; // +messages, CASCADE
   await tx`DELETE FROM runs WHERE user_id = ${userId}`;
   await tx`DELETE FROM saved_routes WHERE user_id = ${userId}`;
   await tx`DELETE FROM run_schedules WHERE user_id = ${userId}`;

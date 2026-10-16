@@ -1,25 +1,22 @@
-// P2.7e — end-to-end coach + running stages against real Postgres: rows persist,
-// coach messages read back IN ORDER despite tied timestamps (GAP-I), the
+// P2.7e — end-to-end running stages against real Postgres: rows persist, the
 // polyline round-trips as its JSON string, and every stage is idempotent.
 // DATABASE_URL-gated; fixture prefix p27e-, cleaned before + after.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { insertUser, transformUser } from "../tools/migrate-mongo/collections/users.js";
-import { insertCoach, transformCoach } from "../tools/migrate-mongo/collections/coach.js";
 import { insertRoute, insertRun, transformRoute, transformRun } from "../tools/migrate-mongo/collections/running.js";
 import { uuidv5 } from "../tools/migrate-mongo/uuid5.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 
-d("migration coach + running stages: persistence + ordering + idempotency (real Postgres)", () => {
+d("migration running stages: persistence + ordering + idempotency (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 2 });
   const userMongoId = "p27e-user-aaaa1111bbbb2222";
   const userId = uuidv5(userMongoId);
 
   const clean = async (): Promise<void> => {
     await sql`DELETE FROM runs WHERE user_id = ${userId}`; // FK RESTRICT — before user
-    await sql`DELETE FROM coach_threads WHERE user_id = ${userId}`; // cascades coach_messages
     await sql`DELETE FROM users WHERE legacy_mongo_id LIKE 'p27e-%'`; // cascades saved_routes
   };
 
@@ -33,32 +30,6 @@ d("migration coach + running stages: persistence + ordering + idempotency (real 
     await clean();
     await sql.end({ timeout: 5 });
   }, 30_000);
-
-  it("coach thread + tied-timestamp messages read back IN ORDER, idempotently", async () => {
-    const TS = "2026-05-19T08:34:03.042Z"; // both messages share it
-    const data = transformCoach({
-      _id: "p27e-conv-cccc3333dddd4444",
-      user_id: userMongoId,
-      title: "How do I squat?",
-      updated_at: TS,
-      messages: [
-        { role: "user", content: "How do I squat?", timestamp: TS },
-        { role: "assistant", content: "Keep your back neutral.", timestamp: TS },
-      ],
-    });
-    expect(data).not.toBeNull();
-    if (data === null) return;
-
-    expect(await insertCoach(sql, data)).toEqual({ threadInserted: 1, messagesInserted: 2 });
-    expect(await insertCoach(sql, data)).toEqual({ threadInserted: 0, messagesInserted: 0 }); // idempotent
-
-    // read in time order with no id tiebreaker — this is exactly what
-    // GAP-I's monotonic created_at must satisfy (T3 advisory 2).
-    const msgs = await sql<{ role: string; content: string }[]>`
-      SELECT role, content FROM coach_messages WHERE thread_id = ${data.thread.id} ORDER BY created_at ASC`;
-    expect(msgs.map((m) => m.content)).toEqual(["How do I squat?", "Keep your back neutral."]);
-    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
-  }, 60_000);
 
   it("run persists with the JSON polyline and is idempotent", async () => {
     const path = [[26.71547, 94.17095], [26.71600, 94.17100]];

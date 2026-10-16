@@ -696,12 +696,13 @@ d("online classes, and staff taking a person off a class (real Postgres, two api
     expect(await Promise.all([ben, wyn].map((p) => statusOf(cls, p)))).toEqual(["booked", "booked"]);
     expect(await Promise.all([ann, ben, wyn, zoe].map((p) => classesLeft(packs.get(p.userId))))).toEqual([9, 9, 9, 10]);
 
-    // One audit row a removal that happened, naming the booking and nobody's name.
+    // One audit row a removal that happened, naming the booking and whose record it was by
+    // its id, never by name (Staff activity, 4d, reads the name: a booking goes with its class).
     const audits = await sql<{ target_id: string; meta: Record<string, string> }[]>`
       SELECT target_id, meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.class_booking_removed' ORDER BY at, id`;
     expect(audits.map((a) => a.meta)).toEqual([
-      { was: "booked", packGivenBack: "true" },
-      { was: "waitlisted", packGivenBack: "false" },
+      { was: "booked", packGivenBack: "true", entryId: ann.entryId },
+      { was: "waitlisted", packGivenBack: "false", entryId: zoe.entryId },
     ]);
     expect(audits[0]?.target_id).toBe(annsPlace);
 

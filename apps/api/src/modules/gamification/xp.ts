@@ -70,8 +70,8 @@ import { dayDiff } from "./streak.js";
 
 /** badges.py:202-211. Only workout / form / streak / badge XP is ever actually
  *  AWARDED by the old backend (grep-verified across backend-ml/app/routers:
- *  workouts.py + gamification.py). `meal_logged`, `coach_message`,
- *  `photo_analyzed` and `challenge_completed` are ported for completeness but
+ *  workouts.py + gamification.py). `meal_logged`, `photo_analyzed` and
+ *  `challenge_completed` are ported for completeness but
  *  WIRED TO NOTHING — the old app never awarded them (the same dead-constant
  *  class as the calendar `xp_earned`), and inventing that accrual would add a
  *  feature the spec is silent on (R0.2). */
@@ -82,7 +82,6 @@ export const XP_REWARDS = {
   streak_day: 10, //            per consecutive-day continuation (:206; :247)
   meal_logged: 5, //            UNWIRED — old backend never awarded it
   challenge_completed: 200, //  UNWIRED — no challenge-completion path exists
-  coach_message: 2, //          UNWIRED
   photo_analyzed: 15, //        UNWIRED
 } as const;
 

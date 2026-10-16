@@ -286,7 +286,7 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       // A sale taken back gives its use back, once; then the limit holds again.
       const taken = rows.find((r) => r.discount_id === firstThree.id);
       if (taken === undefined) throw new Error("no sale with the limited discount");
-      const undo = await Promise.all([0, 1, 2].map(() => post(`${base(gymId)}/sales/${taken.id}/undo`, {}, owner.cookies)));
+      const undo = await Promise.all([0, 1, 2].map(() => post(`${base(gymId)}/sales/${taken.id}/void`, { reason: "mistake" }, owner.cookies)));
       expect(undo.map((r) => r.statusCode)).toEqual([200, 200, 200]);
       expect(await usesOf(firstThree.id)).toBe(2);
       const two = await Promise.all([sell(gymId, owner.cookies, sale(water.id, 194, { discountId: firstThree.id })), sell(gymId, desk.cookies, sale(water.id, 194, { discountId: firstThree.id }))]);
@@ -410,7 +410,7 @@ d("the register: discounts and promo codes (real Postgres)", () => {
       // A sale taken back is in no sum, its discount's with it.
       const last = (await salesOf(gymId)).at(-1);
       if (last === undefined) throw new Error("no sale");
-      expect((await post(`${base(gymId)}/sales/${last.id}/undo`, {}, owner.cookies)).statusCode).toBe(200);
+      expect((await post(`${base(gymId)}/sales/${last.id}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       expect((await read(gymId, owner.cookies)).totals).toMatchObject({ count: 2, totalMinor: 260, discountMinor: 140 });
       expect(await usesOf(towels.id)).toBe(1);
 

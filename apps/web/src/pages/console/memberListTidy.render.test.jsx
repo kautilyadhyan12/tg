@@ -323,7 +323,7 @@ describe('tidying up members whose membership is over', () => {
     const held = within(screen.getByTestId('over-owing'));
     expect(
       held.getByText(
-        '1 more member has a membership that is over and still owes a payment, so is not counted above. Record the payment or cancel the bill on their page first.',
+        '1 more member has a membership that is over and still owes a payment, so is not counted above. Record the payment or void the bill on their page first.',
       ),
     ).toBeTruthy();
     fireEvent.click(held.getByRole('button', { name: 'Show this member' }));
@@ -336,7 +336,7 @@ describe('tidying up members whose membership is over', () => {
     expect(screen.queryByTestId('over-owing-show')).toBeNull();
     // The line now says where they are, and no longer that they are not counted above.
     expect(screen.getByTestId('over-owing').textContent).toBe(
-      'The list below shows the 1 member whose membership is over and who still owes a payment. Record the payment or cancel the bill on their page first.',
+      'The list below shows the 1 member whose membership is over and who still owes a payment. Record the payment or void the bill on their page first.',
     );
     // The sign's own list is still one press away.
     fireEvent.click(sign().getByRole('button', { name: 'Review them' }));

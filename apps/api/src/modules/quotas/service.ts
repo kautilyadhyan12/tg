@@ -2,8 +2,8 @@
 // from plan entitlements; Redis atomic counters; fail-open/closed per
 // feature (keep your philosophy verbatim)"). Ported doctrine (quotas.py:7-11):
 //   · cheap features fail OPEN when Redis is down — availability wins,
-//     worst case a few dollars (the chat coach was one; deleted 2026-10-15,
-//     its `coach` limit kept in the plans until ROADMAP 9b);
+//     worst case a few dollars (the chat coach was the one; deleted
+//     2026-10-15, so none does today);
 //   · expensive features (meal_scan vision, route_gen ORS) fail CLOSED —
 //     an unmetered hour of these is the actual bankruptcy scenario.
 // Increment-before-run (quotas.py:43-46): one atomic Redis op counts the use
@@ -20,7 +20,6 @@ import { getEntitlements } from "../entitlements/service.js";
 
 // quotas.py:8-11 policy, verbatim.
 const FAIL_OPEN: Record<MeteredFeatureName, boolean> = {
-  coach: true,
   meal_scan: false,
   route_gen: false,
 };

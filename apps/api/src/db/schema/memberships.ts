@@ -151,6 +151,9 @@ export const gymHeldMemberships = pgTable(
     packDays: integer("pack_days"),
     startsOn: date("starts_on").notNull(),
     frozenDays: integer("frozen_days").notNull().default(0),
+    /** Refer a friend's free days (20e-ii-b-ii-b), added to period `giftFrom` and after. */
+    giftDays: integer("gift_days").notNull().default(0),
+    giftFrom: integer("gift_from").notNull().default(0),
     status: text("status").notNull().default("active"),
     frozenOn: date("frozen_on"),
     cancelledOn: date("cancelled_on"),
@@ -204,6 +207,7 @@ export const gymHeldMemberships = pgTable(
       END`,
     ),
     check("gym_held_memberships_frozen_days_check", sql`${t.frozenDays} BETWEEN 0 AND 36500`),
+    check("gym_held_memberships_gift_days_check", sql`${t.giftDays} BETWEEN 0 AND 36500 AND ${t.giftFrom} >= 0`),
     check("gym_held_memberships_frozen_check", sql`(${t.status} = 'frozen') = (${t.frozenOn} IS NOT NULL)`),
     check("gym_held_memberships_cancelled_check", sql`(${t.status} = 'cancelled') = (${t.cancelledOn} IS NOT NULL)`),
     check(
@@ -326,11 +330,17 @@ export const gymMemberPayments = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Why staff voided it, picked from a list (0126; 18o); null for one voided before. */
+    voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_member_payments_void_reason_check",
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','wrong_person','other'))`,
+    ),
     unique("gym_member_payments_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_payments_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_payments_request_uq").on(t.gymId, t.requestKey),
@@ -371,11 +381,17 @@ export const gymMemberRefunds = pgTable(
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    /** Why staff voided it, picked from a list (0126; 18o); null for one voided before. */
+    voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
     createdAt: createdAt(),
   },
   (t) => [
+    check(
+      "gym_member_refunds_void_reason_check",
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other'))`,
+    ),
     unique("gym_member_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
     unique("gym_member_refunds_request_uq").on(t.gymId, t.requestKey),

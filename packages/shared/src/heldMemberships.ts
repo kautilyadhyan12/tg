@@ -15,6 +15,11 @@
 //                  (moving the start instead loses days at a month's end). One taken
 //                  from the gym's list (`linkHeldMembership`) also counts here the
 //                  days its list's day sits past the type's own term;
+//   `giftDays`     free days given by Refer a friend (20e-ii-b-ii-b), added to period
+//   `giftFrom`     `giftFrom` and every one after it: the end of the period the member
+//                  is in, or of what they have paid, moves later, and nothing before it
+//                  moves. Once a later gift finds that period begun, they are folded
+//                  into `frozenDays` (`addGiftDays`);
 //   `paidPeriods`  how many periods are marked paid. A repeating membership is paid
 //                  up to the start of that period; any other kind has one period;
 //   `paidFloor`    the count it was given with for the periods before it was given:
@@ -32,7 +37,7 @@ import {
 import { confirmPtSessionsField } from "./ptSessionsEnding.js";
 import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
 import { friendGiftSchema } from "./friendGift.js";
-import { memberGiftSchema } from "./memberGift.js";
+import { GIFT_DAYS_MAX, memberGiftSchema } from "./memberGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
@@ -155,6 +160,9 @@ export interface HeldMembership {
   free: boolean;
   startsOn: string;
   frozenDays: number;
+  /** Refer a friend's free days, added to period `giftFrom` and every later one. */
+  giftDays: number;
+  giftFrom: number;
   status: HeldMembershipStatus;
   frozenOn: string | null;
   cancelledOn: string | null;
@@ -176,25 +184,28 @@ function term(m: HeldMembership): { count: number; unit: MembershipTermUnit } {
 /** The first day of period `index` (0 is the first). */
 export function periodStart(m: HeldMembership, index: number): string {
   const t = term(m);
-  return addDays(addTerms(m.startsOn, t.count, t.unit, index), m.frozenDays);
+  return addDays(addTerms(m.startsOn, t.count, t.unit, index), m.frozenDays + (index >= m.giftFrom ? m.giftDays : 0));
 }
 
 /** Which period `day` falls in: 0 for the first, and 0 for a day before it starts. */
 export function periodIndex(m: HeldMembership, day: string): number {
-  // The day as it would be had it never been frozen: periods are counted from the start.
-  const at = addDays(day, -m.frozenDays);
-  if (at <= m.startsOn) return 0;
+  // The day as it would be had it never been frozen nor given days, so the first guess is
+  // never too high: periods are counted from the start.
+  const at = addDays(day, -m.frozenDays - m.giftDays);
   const t = term(m);
-  const a = parts(m.startsOn);
-  const d = parts(at);
-  if (a === null || d === null) throw new Error("not a day");
-  // A first guess that is never too high, then forward to the period holding the day.
-  let index: number;
-  if (t.unit === "day" || t.unit === "week") {
-    index = Math.floor(daysBetween(m.startsOn, at) / ((t.unit === "week" ? 7 : 1) * t.count));
-  } else {
-    const months = (d[0] - a[0]) * 12 + (d[1] - a[1]) - 1;
-    index = Math.max(0, Math.floor(months / ((t.unit === "year" ? 12 : 1) * t.count)));
+  // A first guess that is never too high, then forward to the period holding the day. A day
+  // before the start is in none yet, and reads as the first.
+  let index = 0;
+  if (at > m.startsOn) {
+    const a = parts(m.startsOn);
+    const d = parts(at);
+    if (a === null || d === null) throw new Error("not a day");
+    if (t.unit === "day" || t.unit === "week") {
+      index = Math.floor(daysBetween(m.startsOn, at) / ((t.unit === "week" ? 7 : 1) * t.count));
+    } else {
+      const months = (d[0] - a[0]) * 12 + (d[1] - a[1]) - 1;
+      index = Math.max(0, Math.floor(months / ((t.unit === "year" ? 12 : 1) * t.count)));
+    }
   }
   while (periodStart(m, index + 1) <= day) index += 1;
   return index;
@@ -453,6 +464,8 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     free: type.priceMinor === 0,
     startsOn,
     frozenDays: 0,
+    giftDays: 0,
+    giftFrom: 0,
     status: "active",
     frozenOn: null,
     cancelledOn: null,
@@ -529,6 +542,8 @@ export function linkHeldMembership(
     free,
     startsOn: today,
     frozenDays: 0,
+    giftDays: 0,
+    giftFrom: 0,
     status: "active",
     frozenOn: null,
     cancelledOn: null,
@@ -595,6 +610,74 @@ export function shownRenewal(view: Pick<HeldMembershipView, "renewsOn" | "paymen
   return until !== null && view.renewsOn !== null && until > view.renewsOn ? until : view.renewsOn;
 }
 
+// ── Refer a friend's free days (§16.3; ROADMAP 20e-ii-b-ii-b) ────────────────
+
+
+/** The day a membership's dates are read on: a frozen one's stand still at its freeze. */
+const asOfDay = (m: HeldMembership, today: string): string => (m.status === "frozen" && m.frozenOn !== null ? m.frozenOn : today);
+
+/** FREE DAYS ADDED to a membership the person pays for and still has: at the end of the
+ *  period they are in now, or of what they have paid where that is further on, so the next
+ *  renewal (or the last day) moves later by `days` and nothing already begun moves. Days
+ *  given earlier whose period has not begun take these with them. Days given earlier whose
+ *  period has begun are folded into `frozenDays`, which moves only periods already over and
+ *  paid for. `from` is the period the days go before. Null where none can be given: a free
+ *  one, one that is over, or one whose earlier free days and what is paid no longer meet
+ *  (paid on past where those days wait, or still owed for a period from before them), where
+ *  one place for both would move a period paid for or owed. */
+export function addGiftDays(stored: HeldMembership, days: number, today: string): { membership: HeldMembership; from: number } | null {
+  if (!Number.isInteger(days) || days < 1 || days > GIFT_DAYS_MAX) return null;
+  const m = settle(stored, today);
+  if (m.free || m.status === "ended" || m.status === "cancelled") return null;
+  const now = periodIndex(m, asOfDay(m, today));
+  const from = m.kind === "recurring" ? Math.max(now + 1, m.paidPeriods) : 1;
+  if (m.giftDays > 0 && m.giftFrom > now) {
+    // Earlier days not begun take these only where both belong: what is paid may have moved
+    // since, either way (round one, H1).
+    return m.giftFrom === from ? { membership: { ...m, giftDays: m.giftDays + days }, from } : null;
+  }
+  if (m.giftDays > 0 && m.paidPeriods < m.giftFrom) return null;
+  return { membership: { ...m, frozenDays: m.frozenDays + m.giftDays, giftDays: days, giftFrom: from }, from };
+}
+
+/** FREE DAYS TAKEN BACK (the friend's payment voided or refunded in full): only while the
+ *  person has not reached the first of them, and only where they still go before `from`.
+ *  Once they are in them, or the membership is over, they stay: null. */
+export function takeBackGiftDays(stored: HeldMembership, days: number, from: number, today: string): HeldMembership | null {
+  const m = settle(stored, today);
+  if (m.status === "ended" || m.status === "cancelled") return null;
+  if (m.giftFrom !== from || m.giftDays < days) return null;
+  if (asOfDay(m, today) >= addDays(periodStart(m, from), -m.giftDays)) return null;
+  return { ...m, giftDays: m.giftDays - days };
+}
+
+/** The day a membership given free days next renews on, or ends on, as the member is told;
+ *  null while it is frozen, whose dates move when it is unfrozen. */
+export function giftDaysNextDay(m: HeldMembership, from: number): { renews: boolean; day: string } | null {
+  if (m.status === "frozen") return null;
+  if (m.kind === "recurring" && m.renews) return { renews: true, day: periodStart(m, from) };
+  const last = lastDay(m);
+  return last === null ? null : { renews: false, day: last };
+}
+
+/** Which of a person's memberships free days go on: of those that can take them, the one
+ *  whose next date (its renewal, else its last day) comes first; a frozen one after those;
+ *  then the one that started first. Null where none can. */
+export function giftDaysTarget<T extends { id: string; membership: HeldMembership }>(rows: readonly T[], today: string): T | null {
+  const next = (m: HeldMembership): string => {
+    const facts = heldMembershipFacts(m, today);
+    return facts.renewsOn ?? facts.endsOn ?? "9999-12-31";
+  };
+  const can = rows.filter((r) => addGiftDays(r.membership, 1, today) !== null);
+  can.sort(
+    (a, b) =>
+      (next(a.membership) < next(b.membership) ? -1 : next(a.membership) > next(b.membership) ? 1 : 0) ||
+      (a.membership.startsOn < b.membership.startsOn ? -1 : a.membership.startsOn > b.membership.startsOn ? 1 : 0) ||
+      (a.id < b.id ? -1 : 1),
+  );
+  return can[0] ?? null;
+}
+
 // ── The wire ────────────────────────────────────────────────────────────────
 
 const daySchema = z.string().regex(DAY);
@@ -636,6 +719,11 @@ export const heldMembershipSchema = z
       .object({ name: z.string(), offMinor: z.number().int().min(1), payments: z.enum(MEMBERSHIP_PAYMENTS) })
       .strict()
       .nullable(),
+    /** Refer a friend's free days added to it (20e-ii-b-ii-b), and the friend each was for
+     *  inviting (by the gym's list; null where that record is gone). Its dates already hold them. */
+    freeDays: z
+      .array(z.object({ days: z.number().int().min(1).max(GIFT_DAYS_MAX), friendName: z.string().min(1).nullable() }).strict())
+      .default([]),
     /** The tax rate it was sold with, as the rate is now (18b-iii): every bill opened from
      *  here on charges it. Null for no tax. */
     tax: heldTaxSchema.nullable(),
@@ -708,6 +796,9 @@ export const heldMembershipsResponseSchema = z
     /** This person's own Refer a friend gift, for inviting a friend who joined and paid, where
      *  it is waiting (20e-ii-b-ii-a): filled in on the Add form, with Remove. Null otherwise. */
     memberGift: memberGiftSchema.nullable().default(null),
+    /** Their gift off products waiting at Sell, said beside the one above (20e-ii-b-ii-b,
+     *  round one L3): Add membership never fills it in. Null otherwise. */
+    memberGiftAtSell: memberGiftSchema.nullable().default(null),
     /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
     taxIncluded: z.boolean(),
   })

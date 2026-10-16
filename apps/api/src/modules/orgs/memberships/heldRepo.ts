@@ -26,6 +26,12 @@ import {
   HELD_EARLIER_PAGE,
   HELD_LIVE_MAX,
   MEMBERSHIP_PAYMENTS,
+  addDays,
+  addGiftDays,
+  periodStart,
+  giftDaysNextDay,
+  giftDaysTarget,
+  takeBackGiftDays,
   billsAtCancel,
   billsToOpen,
   countAfterGap,
@@ -69,9 +75,13 @@ import {
   refundsFor,
   setBillStatus,
   voidBills,
+  voidedPaymentsFor,
+  voidedRefundsFor,
   type BillRow,
   type PaymentRow,
   type RefundRow,
+  type VoidedPaymentRow,
+  type VoidedRefundRow,
 } from "./billsSql.js";
 import type { HasBookings, MembershipEndConfirmed } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
@@ -108,6 +118,8 @@ const rawSchema = z.object({
   pack_days: z.number().int().nullable(),
   starts_on: z.string(),
   frozen_days: z.number().int(),
+  gift_days: z.number().int(),
+  gift_from: z.number().int(),
   status: heldMembershipStatusSchema,
   frozen_on: z.string().nullable(),
   cancelled_on: z.string().nullable(),
@@ -149,6 +161,8 @@ function shape(row: unknown): HeldRow {
       free: r.price_minor === 0,
       startsOn: r.starts_on,
       frozenDays: r.frozen_days,
+      giftDays: r.gift_days,
+      giftFrom: r.gift_from,
       status: r.status,
       frozenOn: r.frozen_on,
       cancelledOn: r.cancelled_on,
@@ -213,7 +227,7 @@ export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: stri
 const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.id, h.membership_type_id, t.name AS type_name, h.kind, h.price_minor, h.currency,
   h.term_count, h.term_unit, h.pack_classes, h.pack_days,
-  h.starts_on::text AS starts_on, h.frozen_days, h.status,
+  h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
   h.discount_name, h.discount_minor, h.discount_payments,
@@ -253,6 +267,9 @@ export interface HeldList {
   bills: BillRow[];
   payments: PaymentRow[];
   refunds: RefundRow[];
+  /** The payments and refunds staff voided (18o): shown struck through, counted in nothing. */
+  voidedPayments: VoidedPaymentRow[];
+  voidedRefunds: VoidedRefundRow[];
   overdueAfterDays: number;
   /** Whether the gym's prices hold its tax (18b-iii), for the Add form's total. */
   taxIncluded: boolean;
@@ -322,6 +339,8 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       bills: await billsFor(tx, gymId, ids),
       payments: await paymentsFor(tx, gymId, ids),
       refunds: await refundsFor(tx, gymId, ids),
+      voidedPayments: await voidedPaymentsFor(tx, gymId, ids),
+      voidedRefunds: await voidedRefundsFor(tx, gymId, ids),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
     };
@@ -403,6 +422,87 @@ export async function settle(tx: TransactionSql, gymId: string, entryId: string,
     await writeCountsAfterGap(tx, { gymId, moves, today, now });
   }
   return rows.length - ended.length;
+}
+
+/** The open bill for the period free days lengthen (or shorten again) says the days it is
+ *  for as they now are, so "Take payment … for 20 October to 28 November" agrees with the
+ *  renewal beside it (round one, L2). A paid bill keeps what it was paid for. */
+async function openBillTo(tx: TransactionSql, gymId: string, membershipId: string, m: HeldMembership, from: number, now: Date): Promise<void> {
+  if (from < 1) return;
+  await tx`
+    UPDATE gym_member_bills SET covers_to = ${addDays(periodStart(m, from), -1)}::date, updated_at = ${now}
+    WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND period_index = ${from - 1}
+      AND status = 'open' AND covers_to IS NOT NULL AND covers_from <= ${addDays(periodStart(m, from), -1)}::date`;
+}
+
+/** REFER A FRIEND'S FREE DAYS ADDED (20e-ii-b-ii-b) to the one membership of this record
+ *  that takes them (`giftDaysTarget`): the gym's lock and the record's, the clock's changes
+ *  written first, then that one row. Null where none can take them (the money is given
+ *  instead). `next`: its new renewal or last day, for the member's message. */
+export async function addGiftDaysTo(
+  tx: TransactionSql,
+  input: { gymId: string; entryId: string; days: number; today: string; now: Date },
+): Promise<{ membershipId: string; typeName: string; from: number; next: { renews: boolean; day: string } | null } | null> {
+  await lockGym(tx, input.gymId);
+  await lockEntries(tx, input.gymId, [input.entryId]);
+  await settle(tx, input.gymId, input.entryId, input.today, input.now);
+  const rows = (await held(tx, input.gymId, input.entryId, IN_USE, IN_USE_READ)).map(shape);
+  const target = giftDaysTarget(rows, input.today);
+  const added = target === null ? null : addGiftDays(target.membership, input.days, input.today);
+  if (target === null || added === null) return null;
+  const m = added.membership;
+  const done = await tx<{ id: string }[]>`
+    UPDATE gym_held_memberships
+    SET frozen_days = ${m.frozenDays}, gift_days = ${m.giftDays}, gift_from = ${m.giftFrom}, updated_at = ${input.now}
+    WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${target.id}
+    RETURNING id`;
+  if (done.length !== 1) throw new Error("free days were not added to the membership that was read under the gym's lock");
+  await openBillTo(tx, input.gymId, target.id, m, added.from, input.now);
+  await insertAudit(tx, {
+    actorUserId: null,
+    gymId: input.gymId,
+    action: "org.held_membership_gift_days_added",
+    targetType: "gym_held_membership",
+    targetId: target.id,
+    meta: { entryId: input.entryId, type: target.typeName, on: input.today, days: String(input.days), from: String(added.from) },
+  });
+  return { membershipId: target.id, typeName: target.typeName, from: added.from, next: giftDaysNextDay(m, added.from) };
+}
+
+/** Free days given to `membershipId` before its period `from` TAKEN BACK, while its member
+ *  has reached none of them (`takeBackGiftDays`); false where they stay. Under the gym's
+ *  lock, which the caller holds. */
+export async function takeGiftDaysBack(
+  tx: TransactionSql,
+  input: { gymId: string; membershipId: string; days: number; from: number; today: string; now: Date },
+): Promise<boolean> {
+  await lockGym(tx, input.gymId);
+  const [found] = await tx<{ entry_id: string; past: boolean }[]>`
+    SELECT h.entry_id, e.former_at IS NOT NULL AS past
+    FROM gym_held_memberships h
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    WHERE h.gym_id = ${input.gymId} AND h.id = ${input.membershipId}`;
+  if (found === undefined) return false;
+  await lockEntries(tx, input.gymId, [found.entry_id]);
+  // A past member's record is never settled by somebody else's write, as every payment write
+  // leaves it (round one, L1).
+  if (!found.past) await settle(tx, input.gymId, found.entry_id, input.today, input.now);
+  const row = await lockedHeld(tx, input.gymId, found.entry_id, input.membershipId);
+  const back = row === null ? null : takeBackGiftDays(row.membership, input.days, input.from, input.today);
+  if (row === null || back === null) return false;
+  await tx`
+    UPDATE gym_held_memberships SET gift_days = ${back.giftDays}, updated_at = ${input.now}
+    WHERE gym_id = ${input.gymId} AND id = ${input.membershipId}`;
+  await openBillTo(tx, input.gymId, input.membershipId, back, input.from, input.now);
+  await insertAudit(tx, {
+    actorUserId: null,
+    gymId: input.gymId,
+    action: "org.held_membership_gift_days_taken_back",
+    targetType: "gym_held_membership",
+    targetId: input.membershipId,
+    meta: { entryId: found.entry_id, type: row.typeName, on: input.today, days: String(input.days) },
+  });
+  return true;
 }
 
 /** A membership whose count `countAfterGap` says to move, and the count to move it to. */
@@ -530,7 +630,7 @@ export async function giveHeld(
     // record's, still waiting, read under its lock, and taking off what the screen showed.
     let gift: { id: string; offMinor: number } | null = null;
     if (input.memberGift !== null) {
-      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id);
+      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "membership");
       if (found === null || type.priceMinor === 0) return { kind: "member_gift_not_theirs" };
       const off = memberGiftOff(found, firstListed, type.currency);
       if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
@@ -943,6 +1043,8 @@ export interface ListHeldColumns {
   free: boolean;
   starts_on: string;
   frozen_days: number;
+  gift_days: number;
+  gift_from: number;
   status: string;
   frozen_on: string | null;
   cancelled_on: string | null;
@@ -958,7 +1060,7 @@ type Nullable<T> = { [K in keyof T]: T[K] | null };
 
 const LIST_COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.id, t.name AS type_name, h.kind, h.term_count, h.term_unit, h.pack_classes, h.pack_days,
-  (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.status,
+  (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list`;
 
@@ -984,6 +1086,8 @@ function listHeld(row: ListHeldColumns): ListHeld {
       free: row.free,
       startsOn: row.starts_on,
       frozenDays: row.frozen_days,
+      giftDays: row.gift_days,
+      giftFrom: row.gift_from,
       status: oneOf(heldMembershipStatusSchema.options, row.status, "status"),
       frozenOn: row.frozen_on,
       cancelledOn: row.cancelled_on,
@@ -1060,9 +1164,10 @@ export async function inUseForMoney(
 }
 
 /** A stored membership's last day, for a row aliased `h`, as the rule works it out
- *  (`lastDay` in `@app/shared`): the start, so many terms on, plus the days frozen, less
- *  one. A repeating one counts the periods it is paid for; any other kind has one. Postgres
- *  adds months and years as the rule does (31 Jan and a month is 28 Feb).
+ *  (`lastDay` in `@app/shared`): the start, so many terms on, plus the days frozen and the
+ *  free days that go before that period, less one. A repeating one counts the periods it is
+ *  paid for; any other kind has one. Postgres adds months and years as the rule does (31
+ *  Jan and a month is 28 Feb).
  *  `memberships.overForList.test.ts` and `membershipWords.again.routes.test.ts` hold the
  *  two together. */
 export const LAST_DAY = (sql: Sql | TransactionSql) => sql`
@@ -1072,7 +1177,8 @@ export const LAST_DAY = (sql: Sql | TransactionSql) => sql`
       weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
       days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
                      WHEN h.term_unit = 'day' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END
-    ))::date + h.frozen_days - 1)`;
+    ))::date + h.frozen_days
+      + CASE WHEN (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) >= h.gift_from THEN h.gift_days ELSE 0 END - 1)`;
 
 /** For each pack named: the gym's day of the last class or personal training session
  *  charged to it; a pack with none recorded is not in the answer. A plain read. */
@@ -1195,7 +1301,7 @@ export async function overForList(
 /** The LEFT JOIN's membership: null where the record has none stored over, and every
  *  column of it where it has. */
 function wholeRow(row: Nullable<ListHeldColumns>): ListHeld | null {
-  const { id, type_name, kind, free, starts_on, frozen_days, status, paid_periods, paid_floor, renews, from_list } = row;
+  const { id, type_name, kind, free, starts_on, frozen_days, gift_days, gift_from, status, paid_periods, paid_floor, renews, from_list } = row;
   if (id === null) return null;
   if (
     type_name === null ||
@@ -1203,6 +1309,8 @@ function wholeRow(row: Nullable<ListHeldColumns>): ListHeld | null {
     free === null ||
     starts_on === null ||
     frozen_days === null ||
+    gift_days === null ||
+    gift_from === null ||
     status === null ||
     paid_periods === null ||
     paid_floor === null ||
@@ -1218,6 +1326,8 @@ function wholeRow(row: Nullable<ListHeldColumns>): ListHeld | null {
     free,
     starts_on,
     frozen_days,
+    gift_days,
+    gift_from,
     status,
     paid_periods,
     paid_floor,
