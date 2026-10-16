@@ -257,7 +257,7 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
             Add a visit for {adding.name} on {dayLabel(day)}?
           </p>
           <p className="text-sm mt-1" style={muted}>
-            {adding.name} — a visit is added for {dayLabel(day)}. It counts as a gym day on the leaderboard, unless they already have a visit that day.
+            {adding.name} — a visit is added for {dayLabel(day)}. It counts on the leaderboard, unless they already have a visit that day.
           </p>
           <p className="text-sm mt-1" style={muted}>
             In their app, they see who added it and today&apos;s date. Nobody else&apos;s visits change.
@@ -464,7 +464,7 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
                       Remove {name}&apos;s {time} check-in?
                     </p>
                     <p className="text-sm mt-1" style={muted}>
-                      {name} — this visit is removed. It no longer counts as a visit today, on the leaderboard or for their streak,
+                      {name} — this visit is removed. It no longer counts today, on the leaderboard or for their streak,
                       unless they have another visit today.
                     </p>
                     <p className="text-sm mt-1" style={muted}>

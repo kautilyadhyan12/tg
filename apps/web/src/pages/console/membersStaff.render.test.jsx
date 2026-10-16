@@ -1440,7 +1440,7 @@ describe('Remove from staff names the personal training sessions booked with a t
     expect(part.getAllByRole('listitem')).toHaveLength(5);
     expect(part.getByText('Nobody can be booked with them after this. 2 sessions go back to their packs. A session that has already started stays as it is.')).toBeTruthy();
     expect(part.queryByText(/free again/)).toBeNull();
-    expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
+    expect(part.getByText("The app doesn't tell anybody yet. Let them know yourself.")).toBeTruthy();
     // It is a question, not an error: no sentence of the server's is shown.
     expect(screen.queryByText('People are booked with this trainer for personal training.')).toBeNull();
 

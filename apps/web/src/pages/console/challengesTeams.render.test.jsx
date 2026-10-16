@@ -134,8 +134,8 @@ describe('teams on the Add challenge form', () => {
     expect(teams().getByText(/2 to 8 teams\. A team's number is its people's numbers added together\. After you save, open the challenge and press Put people in teams\./)).toBeTruthy();
     // How it is won now speaks of teams.
     expect(within(form().getByRole('radiogroup', { name: 'How it is won' })).getAllByRole('radio').map((r) => r.textContent.replace(/\s+/g, ' ').trim())).toEqual([
-      "Most gym days winsThe team with the most gym days when it ends comes 1st. A team's number is its people's numbers added together.",
-      'Reach a targetYou set a target for a whole team, such as 60 gym days. Every team that reaches it wins.',
+      "Most visits winsThe team with the most visits when it ends comes 1st. A team's number is its people's numbers added together.",
+      'Reach a targetYou set a target for a whole team, such as 60 visits. Every team that reaches it wins.',
     ]);
 
     // Saved with a box empty: said, and nothing sent.
@@ -161,8 +161,8 @@ describe('teams on the Add challenge form', () => {
 
     // A team's target may be more than the challenge's seven days.
     pick('How it is won', 'Reach a target');
-    expect(form().getByTestId('target-unit').textContent).toBe('gym days, for a whole team');
-    type('Target, in gym days, for a whole team', '60');
+    expect(form().getByTestId('target-unit').textContent).toBe('visits, for a whole team');
+    type('Target, in visits, for a whole team', '60');
     expect(form().getByText("A team's number is its people's numbers added together. Every team that reaches this wins.")).toBeTruthy();
     fireEvent.click(form().getByRole('button', { name: 'Add challenge' }));
     await waitFor(() => expect(svc.add).toHaveBeenCalledTimes(1));
@@ -234,8 +234,8 @@ describe('teams on a challenge card', () => {
     await waitFor(() => expect(cards()).toHaveLength(3));
     const a = cardOf('October Week');
     expect(within(a.getByTestId('challenge-teams')).getByText('Teams · you put people in them')).toBeTruthy();
-    expect(texts(a.getByRole('list', { name: 'Teams: October Week' }))).toEqual(['1stBlue Team5 people14 gym days', '2ndRed Team4 people11 gym days', 'Green TeamNobody yet0 gym days']);
-    expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Gym visits', 'Checked in at the front desk', 'The team with the most gym days wins', "A team's number is its people's added together", 'Everyone in the app', '143 people']);
+    expect(texts(a.getByRole('list', { name: 'Teams: October Week' }))).toEqual(['1stBlue Team5 people14 visits', '2ndRed Team4 people11 visits', 'Green TeamNobody yet0 visits']);
+    expect(within(a.getByTestId('challenge-facts')).getAllByRole('definition').map((d) => d.textContent)).toEqual(['Visits', 'Checked in at the front desk', 'The team with the most visits wins', "A team's number is its people's added together", 'Everyone in the app', '143 people']);
     // The first three people are not drawn for a challenge in teams.
     expect(a.queryByRole('list', { name: 'In the lead: October Week' })).toBeNull();
     const b = cardOf('Pick Week');
@@ -288,10 +288,10 @@ describe('putting people in teams', () => {
     fireEvent.click(cardOf('October Week').getByRole('button', { name: 'See the board: October Week' }));
     const board = within(await screen.findByTestId('challenge-board'));
     expect(board.getAllByTestId('challenge-row').map((li) => li.textContent.replace(/\s+/g, ' ').trim())).toEqual([
-      '—Asha RaoRed Team3 gym days',
-      '—Bilal KhanNothing counted yetNo team0 gym days',
-      '—Chen WuNothing counted yetBlue Team0 gym days',
-      '—Dev ShahNothing counted yetNo team0 gym days',
+      '—Asha RaoRed Team3 visits',
+      '—Bilal KhanNothing counted yetNo team0 visits',
+      '—Chen WuNothing counted yetBlue Team0 visits',
+      '—Dev ShahNothing counted yetNo team0 visits',
     ]);
     expect(board.queryByRole('combobox')).toBeNull();
     expect(board.queryByRole('button', { name: 'Save teams' })).toBeNull();
@@ -490,7 +490,7 @@ describe('round one', () => {
     open();
     fireEvent.click(await screen.findByRole('button', { name: 'Past challenges (1)' }));
     const page = cardOf('Last Week');
-    await waitFor(() => expect(texts(page.getByRole('list', { name: 'Teams: Last Week' }))).toEqual(['1stRed Team14 people231 gym days', '2ndBlue Team9 people180 gym days']));
+    await waitFor(() => expect(texts(page.getByRole('list', { name: 'Teams: Last Week' }))).toEqual(['1stRed Team14 people231 visits', '2ndBlue Team9 people180 visits']));
     expect(svc.board).toHaveBeenCalledWith('g1', 'p', 1);
     expect(within(page.getByTestId('challenge-teams')).getByText("A team's number leaves out people your members can't see: staff, under-18s and anyone who chose Hide me.")).toBeTruthy();
   });

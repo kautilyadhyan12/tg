@@ -34,7 +34,7 @@ export const CHALLENGE_ID_PATTERN = /^[a-z][a-z_]{0,39}$/u;
 /** A number the APP works out for a subject. */
 export interface ChallengeMeasure {
   id: string;
-  /** The word after a number: "1 gym day", "3 gym days". */
+  /** The word after a number: "1 visit", "3 visits". */
   one: string;
   many: string;
   print: ChallengePrint;
@@ -71,7 +71,7 @@ const SAME = "It is the same count as the Leaderboard.";
 export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
   {
     id: "gym_visits",
-    title: "Gym visits",
+    title: "Visits",
     hint: (person) => `Days a ${person} is checked in, at your front desk or by your staff.`,
     pickExercise: false,
     staffWord: "visits",
@@ -79,13 +79,13 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
     measures: [
       {
         id: "days",
-        one: "gym day",
-        many: "gym days",
+        one: "visit",
+        many: "visits",
         print: "whole",
         how: "desk",
         wins: ["most", "target"],
         perDay: true,
-        explain: (gym) => `A gym day is a day you're checked in at ${gym}: a scan at the front desk, or a check-in by staff. Two visits on one day are one. ${SAME}`,
+        explain: (gym) => `A visit is a day you're checked in at ${gym}: a scan at the front desk, or a check-in by staff. Two check-ins on one day are one visit. ${SAME}`,
       },
     ],
   },
@@ -105,7 +105,7 @@ export const CHALLENGE_SUBJECTS: readonly ChallengeSubject[] = [
         how: "app",
         wins: ["most", "target"],
         perDay: true,
-        explain: () => `A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. ${SAME}`,
+        explain: () => `A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. ${SAME}`,
       },
     ],
   },
@@ -183,7 +183,7 @@ const HOW_LINE: Record<Exclude<ChallengeCountedHow, "staff">, string> = {
 /** The words a challenge is sent with, so that a screen prints them and never looks its
  *  subject up. */
 export interface ChallengeWords {
-  /** What it is about: "Gym visits", or the gym's own word: "Push-ups". */
+  /** What it is about: "Visits", or the gym's own word: "Push-ups". */
   about: string;
   /** The word after a number. */
   one: string;

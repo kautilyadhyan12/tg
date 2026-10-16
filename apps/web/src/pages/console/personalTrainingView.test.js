@@ -26,11 +26,13 @@ import {
   freeTimeLabel,
   hoursDraft,
   hoursFormProblem,
+  hoursRepeat,
   hoursRequest,
   noTimesNote,
   peopleHeading,
   personRow,
   pickTrainer,
+  ptIntroManager,
   pickerIsEmpty,
   removeRange,
   sessionClash,
@@ -316,12 +318,37 @@ describe('picking the person', () => {
     // A pack's own two choices are as they were.
     expect(cancelBox(session({ cancel: 'late' }), view).choices.map((c) => c.key)).toEqual(['late', 'back']);
   });
+  // 5f-ii: every kind of business's own word for its staff and its people, and a whole
+  // sentence for a kind this build has never heard of.
+  it.each([
+    ['gym', 'a trainer', 'trainer', 'members'],
+    ['studio', 'a coach', 'coach', 'clients'],
+    ['crossfit_box', 'a coach', 'coach', 'members'],
+    ['yoga_studio', 'a trainer', 'trainer', 'members'],
+    ['pilates_studio', 'an instructor', 'instructor', 'clients'],
+    ['personal_trainer', 'a coach', 'coach', 'clients'],
+    ['clinic', 'a clinician', 'clinician', 'clients'],
+    [undefined, 'a trainer', 'trainer', 'members'],
+  ])('the page and its steps say a %s business’s own words', (orgType, a, one, people) => {
+    expect(ptIntroManager(orgType)).toBe(`One-to-one sessions with ${a}. Set when each ${one} is available, then book ${people} into their available times.`);
+    expect(hoursRepeat(orgType)).toBe(`These hours repeat every week. A class ${a} coaches is taken off their available times by itself.`);
+    expect(peopleHeading({ gymHasTypes: true, people: [maya] }, '', orgType)).toBe(`Your ${people}, people with personal training first`);
+    const steps = setupSteps(
+      { canManage: true, gymHasTypes: true, trainers: [], setup: { typeIncludesPt: false, somebodyHoldsIt: false, listHasPeople: false, sessionBooked: false } },
+      { orgSlug: 'x', privileges: null, orgType },
+    );
+    const said = steps.rows.flatMap((r) => [r.title, r.line]);
+    expect(said[0]).toBe(`Add ${a} and set their hours`);
+    expect(said.at(-1)).toBe(`Press one of ${a}'s available times below, and pick the person.`);
+    for (const line of said) expect(line).not.toMatch(/undefined|\ba [aeiou]/u);
+  });
+
   it('the list says what it is showing', () => {
     expect(peopleHeading({ gymHasTypes: true, people: [maya] }, '')).toBe('Your members, people with personal training first');
     expect(peopleHeading({ gymHasTypes: false, people: [maya] }, '  ')).toBe('Your members');
     expect(peopleHeading({ gymHasTypes: true, people: [] }, '')).toBe('Your member list is empty. Add people on Members first.');
     // The page is named as this kind of organisation's menu names it.
-    expect(peopleHeading({ gymHasTypes: true, people: [] }, '', 'studio')).toBe('Your member list is empty. Add people on Clients first.');
+    expect(peopleHeading({ gymHasTypes: true, people: [] }, '', 'studio')).toBe('Your client list is empty. Add people on Clients first.');
     // Its button is offered for an empty list alone, never for a search that found nobody.
     expect(pickerIsEmpty({ people: [] }, '  ')).toBe(true);
     expect(pickerIsEmpty({ people: [] }, 'zzz')).toBe(false);
@@ -465,6 +492,7 @@ describe("a trainer's time off", () => {
     const fine = { kind: 'days', fromDate: '2026-10-09', toDate: '2026-10-09', from: '', to: '' };
     expect(timeOffFormProblem(fine, TODAY, 49)).toBeNull();
     expect(timeOffFormProblem(fine, TODAY, 50)).toBe('A trainer can have up to 50 times off coming. Remove one first.');
+    expect(timeOffFormProblem(fine, TODAY, 50, 'pilates_studio')).toBe('An instructor can have up to 50 times off coming. Remove one first.');
   });
 
   it('the box before a removal names whose time off and which, and says nothing booked changes', () => {

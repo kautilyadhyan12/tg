@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Loader2, Plus, Search, X } from 'lucide-react';
-import { orgWords } from '@app/shared';
+import { aCoach, orgWords } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import DatePick from '../../components/console/DatePick';
@@ -16,12 +16,10 @@ import { canManageStaff } from './staffView';
 import { calendarTo, canOpenPlace, placeFor } from './consolePlaces';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
 import {
-  HOURS_REPEAT,
   HOURS_REPEAT_OWN,
   NEXT_WEEK,
   NOT_TOLD,
   PREVIOUS_WEEK,
-  PT_INTRO_MANAGER,
   PT_INTRO_OWN,
   PT_TITLE,
   SESSION_LENGTH_HINT,
@@ -47,11 +45,13 @@ import {
   dayTabs,
   hoursBrief,
   pickDay,
+  hoursRepeat,
   hoursRequest,
   noTimesNote,
   peopleHeading,
   personRow,
   pickTrainer,
+  ptIntroManager,
   pickerIsEmpty,
   removeRange,
   sessionClash,
@@ -86,7 +86,7 @@ import {
 // Drawn from `console.css` (spec Part 3 §17).
 
 /** One trainer's hours, as a form. Everything in it waits for Save. */
-function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
+function HoursForm({ trainer, clockFormat, orgType, saving, error, onSave, onClose }) {
   const [draft, setDraft] = useState(() => hoursDraft(trainer));
   const problem = hoursFormProblem(draft);
   return (
@@ -130,7 +130,7 @@ function HoursForm({ trainer, clockFormat, saving, error, onSave, onClose }) {
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <span className="c-label">Hours they are available each week, on {`the gym's`} clock</span>
+          <span className="c-label">Hours they are available each week, on {`your ${orgWords(orgType).it}'s`} clock</span>
           <span className="c-s13 c-t3">A split day? Add a second set of hours, for example a morning and an evening.</span>
         </div>
         {WEEKDAYS.map((day) => {
@@ -260,7 +260,7 @@ function InTimeOffList({ label, found, kind, clockFormat, today }) {
 
 /** One trainer's time off: what is coming, each with Remove, and a form that adds one.
  *  Sessions and classes already in a new one are named before it is added. */
-function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, calendarFor, onChanged, onStale, onClose }) {
+function TimeOffPanel({ gymId, trainer, clockFormat, orgType, today, locked, canBook, calendarFor, onChanged, onStale, onClose }) {
   const [draft, setDraft] = useState(timeOffDraft);
   const [asked, setAsked] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -270,7 +270,7 @@ function TimeOffPanel({ gymId, trainer, clockFormat, today, locked, canBook, cal
   // One key until it is added: pressing twice, or again after a lost answer, adds once.
   const requestKey = useRef(crypto.randomUUID());
   const coming = Array.isArray(trainer.timeOff) ? trainer.timeOff : [];
-  const problem = timeOffFormProblem(draft, today, coming.length);
+  const problem = timeOffFormProblem(draft, today, coming.length, orgType);
   const untouched = draft.fromDate === '' && draft.toDate === '' && draft.from === '' && draft.to === '';
   const limits = timeOffDayLimits(today, draft.fromDate);
   // A change to the form takes the box away: it was about other days.
@@ -523,7 +523,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, orgType, membersT
             if (live) setFound({ query, data: res.data, failed: null });
           },
           (err) => {
-            if (live) setFound({ query, data: null, failed: errorText(err, "We couldn't read your member list.") });
+            if (live) setFound({ query, data: null, failed: errorText(err, "We couldn't load the list of people.") });
           },
         );
       },
@@ -583,7 +583,7 @@ function BookBox({ gymId, trainer, slot, minutes, clockFormat, orgType, membersT
               />
             </span>
           </label>
-          {results === null ? <p className="c-s14 c-t3 m-0">Loading your members…</p> : null}
+          {results === null ? <p className="c-s14 c-t3 m-0">{`Loading your ${orgWords(orgType).people}…`}</p> : null}
           {results !== null && results.failed !== null ? <p className="c-s14 c-t2 m-0">{results.failed}</p> : null}
           {results !== null && results.data !== null ? (
             <>
@@ -822,7 +822,7 @@ export default function PersonalTraining() {
         setListFailed(null);
       },
       (err) => {
-        if (live) setListFailed(errorText(err, "We couldn't load your trainers."));
+        if (live) setListFailed(errorText(err, "We couldn't load personal training."));
       },
     );
     return () => {
@@ -939,6 +939,7 @@ export default function PersonalTraining() {
         gymId={gymId}
         trainer={timeOffTrainer}
         clockFormat={org.clockFormat}
+        orgType={org.orgType}
         today={today}
         locked={consoleIsReadOnly(org)}
         canBook={list.canBook}
@@ -1021,6 +1022,7 @@ export default function PersonalTraining() {
         key={editingTrainer.userId}
         trainer={editingTrainer}
         clockFormat={clockFormat}
+        orgType={org.orgType}
         saving={saving}
         error={saveError}
         onSave={(body) => void saveHours(body)}
@@ -1039,7 +1041,7 @@ export default function PersonalTraining() {
           {org.name}
           {list?.timezone ? ` · ${list.timezone} time` : ''}
         </p>
-        {list !== null ? <p className="c-s15 c-t2 m-0">{list.canManage ? PT_INTRO_MANAGER : PT_INTRO_OWN}</p> : null}
+        {list !== null ? <p className="c-s15 c-t2 m-0">{list.canManage ? ptIntroManager(org.orgType) : PT_INTRO_OWN}</p> : null}
         {list !== null ? <BookingRulesLine org={org} orgSlug={orgSlug} privileges={privileges} of="pt" freeCancelMinutes={list.freeCancelMinutes} /> : null}
       </header>
 
@@ -1049,7 +1051,7 @@ export default function PersonalTraining() {
         </section>
       ) : null}
 
-      {list === null && listFailed === null ? <ConsoleLoading label="Loading your trainers…" newLook /> : null}
+      {list === null && listFailed === null ? <ConsoleLoading label={`Loading your ${orgWords(org.orgType).coaches}…`} newLook /> : null}
       {listFailed !== null ? <ConsoleFailed message={listFailed} onRetry={() => setListKey((n) => n + 1)} newLook /> : null}
 
       {steps.show ? (
@@ -1105,14 +1107,14 @@ export default function PersonalTraining() {
       ) : null}
 
       {list !== null && list.canManage ? (
-        <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label="Trainers">
+        <section className="c-card p-5 md:p-6 flex flex-col gap-4" aria-label={orgWords(org.orgType).coachesCap}>
           <div className="flex flex-col gap-1">
-            <h2 className="c-h2">Trainers</h2>
-            {groups.setUp.length > 0 ? <p className="c-s14 c-t2 m-0">{HOURS_REPEAT}</p> : null}
+            <h2 className="c-h2">{orgWords(org.orgType).coachesCap}</h2>
+            {groups.setUp.length > 0 ? <p className="c-s14 c-t2 m-0">{hoursRepeat(org.orgType)}</p> : null}
           </div>
           {groups.setUp.length === 0 ? (
             <p className="c-s15 c-t1 c-w6 m-0" data-testid="pt-no-trainers">
-              No trainers yet.
+              {`No ${orgWords(org.orgType).coaches} yet.`}
             </p>
           ) : (
             <ul className="m-0 p-0 list-none flex flex-col">
@@ -1175,7 +1177,7 @@ export default function PersonalTraining() {
           {!readOnly && groups.others.length > 0 && editingTrainer === null && timeOffPanel === null ? (
             <div className="flex flex-col gap-2 pt-3" style={{ borderTop: '1px solid var(--line)' }}>
               <label className="c-label" htmlFor="pt-add-trainer">
-                Add a trainer
+                {`Add ${aCoach(org.orgType)}`}
               </label>
               <div className="flex flex-wrap items-center gap-2">
                 <select id="pt-add-trainer" value={adding} onChange={(e) => setAdding(e.target.value)} className="c-input" style={{ maxWidth: 320 }}>

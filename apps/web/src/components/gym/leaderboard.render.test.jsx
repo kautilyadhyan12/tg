@@ -63,7 +63,7 @@ describe('the members’ board', () => {
     const places = within(list).getAllByRole('listitem').map((li) => li.textContent);
     expect(places.map((t) => t.match(/^(\d+\w\w)/)?.[1])).toEqual(['1st', '2nd', '3rd', '3rd']);
     expect(screen.getByText(/Mon 5 Oct – Sun 11 Oct · Iron House's time · Updated 10:42 am/)).toBeTruthy();
-    expect(screen.getByText('1 more gym day to reach 2nd')).toBeTruthy();
+    expect(screen.getByText('1 more visit to reach 2nd')).toBeTruthy();
   });
 
   it('asks again every minute while open', async () => {
@@ -114,7 +114,7 @@ describe('the members’ board', () => {
   it('says why there is no board instead of drawing an empty one, and draws no row of your own', async () => {
     svc.board.mockResolvedValue(shown({ status: 'no_checkins', rows: [], ranked: 0 }));
     render(<Leaderboard gym={GYM} />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Gym days' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Visits' }));
     expect(await screen.findByText(/hasn't checked anyone in at the front desk in the last 30 days/)).toBeTruthy();
     expect(screen.queryByRole('list', { name: /people on the board/ })).toBeNull();
     expect(screen.queryByText(/What counted/)).toBeNull();
@@ -202,7 +202,7 @@ describe('the members’ board', () => {
     await waitFor(() =>
       expect(within(within(dialog).getByTestId('person-stats')).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
         '1Post',
-        '1stGym days3 gym days this week',
+        '1stVisits3 visits this week',
         '3rdWorkout days1 workout day this week',
         '2ndStreak4 weeks',
       ]),
@@ -293,7 +293,7 @@ describe('the members’ board', () => {
     ]);
   });
 
-  it('a gym that checks nobody in opens on Workout days, and Gym days says where the board is', async () => {
+  it('a gym that checks nobody in opens on Workout days, and Visits says where the board is', async () => {
     svc.board.mockImplementation((_gym, board) =>
       Promise.resolve(board === 'gym_days' ? shown({ status: 'no_checkins', rows: [], ranked: 0 }) : shown({ board: 'workout_days' })),
     );
@@ -301,10 +301,10 @@ describe('the members’ board', () => {
     expect(await screen.findByText('Chen W.')).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Workout days' }).getAttribute('aria-selected')).toBe('true');
     expect(svc.board).toHaveBeenLastCalledWith('g1', 'workout_days', 'this_week');
-    // The member's own tap on Gym days stays there, and says why.
-    fireEvent.click(screen.getByRole('tab', { name: 'Gym days' }));
-    expect(await screen.findByText(/so Gym days and Streak aren't showing\. Workout days doesn't need the front desk — see that tab\./)).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Gym days' }).getAttribute('aria-selected')).toBe('true');
+    // The member's own tap on Visits stays there, and says why.
+    fireEvent.click(screen.getByRole('tab', { name: 'Visits' }));
+    expect(await screen.findByText(/so Visits and Streak aren't showing\. Workout days doesn't need the front desk — see that tab\./)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Visits' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('the Streak has no period and shows weeks', async () => {

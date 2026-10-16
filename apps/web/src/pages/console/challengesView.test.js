@@ -131,7 +131,7 @@ describe('the form', () => {
     });
   });
 
-  it('a kind the form does not offer keeps its kind when changed, and is never called gym days', () => {
+  it('a kind the form does not offer keeps its kind when changed, and is never called visits', () => {
     const steps = challenge({
       counts: undefined,
       subject: 'steps',
@@ -142,7 +142,7 @@ describe('the form', () => {
     const kept = draftOf(steps);
     expect(fieldsOf(kept)).toMatchObject({ subject: 'steps', measure: 'steps', countedBy: 'app' });
     const said = JSON.stringify([draftSummary(kept, { today: TODAY, inApp: 4 }, WORDS), targetHint(kept), startHint({ ...kept, startsOn: '2026-10-01' }, TODAY)]);
-    expect(said).not.toMatch(/gym day|Gym visits|Gym days/u);
+    expect(said).not.toMatch(/visit|Visits|Visits/u);
   });
 
   it('a first day moves a last day that is before it, and leaves a later one', () => {
@@ -163,8 +163,8 @@ describe('the form', () => {
     ['no last day', { endsOn: '' }, 'Pick its last day.'],
     ['a last day before the first', { endsOn: '2026-10-07' }, 'The last day must not be before the first day.'],
     ['367 days', { endsOn: '2027-10-09' }, 'A challenge can run for 366 days at most.'],
-    ['a target with nothing typed', { win: 'target', target: '' }, 'Type how many gym days to reach, as a whole number.'],
-    ['a target of words', { win: 'target', target: 'twelve' }, 'Type how many gym days to reach, as a whole number.'],
+    ['a target with nothing typed', { win: 'target', target: '' }, 'Type how many visits to reach, as a whole number.'],
+    ['a target of words', { win: 'target', target: 'twelve' }, 'Type how many visits to reach, as a whole number.'],
     ['a target of nothing', { win: 'target', target: '0', counts: 'workout_days' }, 'Type how many workout days to reach, as a whole number.'],
     ['a target of every day', { win: 'target', target: '24' }, null],
     [
@@ -236,19 +236,19 @@ describe('the form', () => {
   });
 
   it('says the most that can be reached, and that a start in the past already counts', () => {
-    expect(targetHint(draft())).toBe('One gym day a day is the most anybody can get, and this challenge is 24 days long: 24 is the highest number that can be reached.');
+    expect(targetHint(draft())).toBe('One visit a day is the most anybody can get, and this challenge is 24 days long: 24 is the highest number that can be reached.');
     expect(targetHint(draft({ endsOn: '', counts: 'workout_days' }))).toBe('One workout day a day is the most anybody can get.');
-    expect(startHint(draft({ startsOn: '2026-10-01' }), TODAY)).toBe('Gym days since Thu 1 Oct already count.');
+    expect(startHint(draft({ startsOn: '2026-10-01' }), TODAY)).toBe('Visits since Thu 1 Oct already count.');
     expect(startHint(draft({ startsOn: '2026-10-01', counts: 'workout_days' }), TODAY)).toBe('Workout days since Thu 1 Oct already count.');
     expect([startHint(draft({ startsOn: TODAY }), TODAY), startHint(draft({ startsOn: '' }), TODAY)]).toEqual([null, null]);
   });
 
   it('warns before a gym-days challenge at a gym that checks nobody in', () => {
     expect(notCheckingInNote(draft(), { checkingIn: false }, WORDS)).toBe(
-      'Nobody has been checked in at your front desk in the last 30 days. Gym days only come from check-ins, so every member would stay at 0. Check people in at the front desk, or pick Workouts in the app.',
+      'Nobody has been checked in at your front desk in the last 30 days. Visits only come from check-ins, so every member would stay at 0. Check people in at the front desk, or pick Workouts in the app.',
     );
     expect([notCheckingInNote(draft(), { checkingIn: true }, WORDS), notCheckingInNote(draft({ counts: 'workout_days' }), { checkingIn: false }, WORDS)]).toEqual([null, null]);
-    // Gym visits the staff count need no check-ins.
+    // Visits the staff count need no check-ins.
     expect(notCheckingInNote(draft({ measure: null, countedBy: 'staff', unit: 'visits' }), { checkingIn: false }, WORDS)).toBeNull();
   });
 
@@ -297,8 +297,8 @@ describe("the gym's own count", () => {
 
   it('the card says what is counted, how it is won and who is in it, each in a few words', () => {
     expect(cardFacts(challenge({ target: 12 }), 143, WORDS)).toEqual([
-      { label: 'About', value: 'Gym visits', note: 'Checked in at the front desk' },
-      { label: 'How it is won', value: 'Reach 12 gym days', note: 'Everyone who gets there wins' },
+      { label: 'About', value: 'Visits', note: 'Checked in at the front desk' },
+      { label: 'How it is won', value: 'Reach 12 visits', note: 'Everyone who gets there wins' },
       { label: 'Who is in it', value: 'Everyone in the app', note: '143 people' },
     ]);
     expect(cardFacts(challenge({ counts: 'own', unit: 'seconds', lowestWins: true, who: 'joined', joinedCount: 6 }), 143, WORDS)).toEqual([
@@ -376,11 +376,11 @@ describe('a challenge on the page', () => {
     expect(datesLine(challenge(), TODAY)).toBe('Mon 5 Oct – Sun 11 Oct · 7 days');
     expect(datesLine(challenge({ startsOn: TODAY, endsOn: TODAY }), TODAY)).toBe('Wed 7 Oct · 1 day');
     expect(datesLine(challenge({ startsOn: '2026-12-21', endsOn: '2027-01-03' }), TODAY)).toBe('Mon 21 Dec – Sun 3 Jan 2027 · 14 days');
-    expect(rowSummary(challenge(), 143, WORDS)).toBe('Most gym days wins · Everyone in the app · 143 people');
+    expect(rowSummary(challenge(), 143, WORDS)).toBe('Most visits wins · Everyone in the app · 143 people');
     expect(rowSummary(challenge({ counts: 'workout_days', target: 12, who: 'joined', joinedCount: 0 }), 143, WORDS)).toBe('Reach 12 workout days · Members who join · nobody has joined yet');
-    expect(rowSummary(challenge({ who: 'joined', joinedCount: 1 }), 143, WORDS)).toBe('Most gym days wins · Members who join · 1 person has joined');
-    expect(rowSummary(challenge({ who: 'joined', joinedCount: 24 }), 143, WORDS)).toBe('Most gym days wins · Members who join · 24 people have joined');
-    expect(rowSummary(challenge({ teams: 'staff' }), 1, WORDS)).toBe('The team with the most gym days wins · Everyone in the app · 1 person');
+    expect(rowSummary(challenge({ who: 'joined', joinedCount: 1 }), 143, WORDS)).toBe('Most visits wins · Members who join · 1 person has joined');
+    expect(rowSummary(challenge({ who: 'joined', joinedCount: 24 }), 143, WORDS)).toBe('Most visits wins · Members who join · 24 people have joined');
+    expect(rowSummary(challenge({ teams: 'staff' }), 1, WORDS)).toBe('The team with the most visits wins · Everyone in the app · 1 person');
   });
 
   it('says how far through its days it is', () => {
@@ -391,13 +391,13 @@ describe('a challenge on the page', () => {
   });
 
   it('says how many have a number, and why there are no first three', () => {
-    expect(withNumberLine(challenge({ withNumber: 12 }))).toBe('12 people have a gym day');
+    expect(withNumberLine(challenge({ withNumber: 12 }))).toBe('12 people have a visit');
     expect(withNumberLine(challenge({ withNumber: 1, counts: 'workout_days' }))).toBe('1 person has a workout day');
     expect(withNumberLine(challenge({ withNumber: 0, counts: 'own', unit: 'push-ups' }))).toBe('Nobody has a number yet');
     expect([withNumberLine(challenge({ withNumber: null })), withNumberLine(challenge())]).toEqual([null, null]);
     const top = [{ userId: 'a', name: 'Asha Rao', initials: 'AR', place: 1, value: 3 }];
     expect(leadersLine(challenge({ withNumber: 5, top }), WORDS)).toBe('In the lead');
-    expect(leadersLine(challenge({ withNumber: 2, top: [] }), WORDS)).toBe('Members see no places until 3 people they can see have a gym day.');
+    expect(leadersLine(challenge({ withNumber: 2, top: [] }), WORDS)).toBe('Members see no places until 3 people they can see have a visit.');
     expect([leadersLine(challenge({ withNumber: 0, top: [] }), WORDS), leadersLine(challenge({ withNumber: null, top: [] }), WORDS)]).toEqual([null, null]);
   });
 
@@ -413,7 +413,7 @@ describe('a challenge on the page', () => {
       lines: [
         'Your members see it marked Cancelled for 7 days, then it leaves their list. Its board stops showing straight away.',
         "24 people have joined. The app doesn't tell them yet, so let them know yourself. They are still in it if you un-cancel.",
-        "Nobody is emailed, and nobody's gym days or workouts are touched. You can un-cancel it until Sun 11 Oct.",
+        "Nobody is emailed, and nobody's visits or workouts are touched. You can un-cancel it until Sun 11 Oct.",
       ],
       yes: 'Cancel challenge',
       no: 'Keep it',
@@ -430,12 +430,12 @@ describe('its board', () => {
     // People who joined and have nothing yet are listed and are not hidden: nobody is said to be.
     expect(boardLines(board({ total: 6, ranked: 4, hidden: 0 }), challenge({ who: 'joined' }), WORDS)).toEqual(['Members see 4 people on its board.']);
     expect(boardLines(board(), challenge(), WORDS)).toEqual(['Members see 4 people on its board.']);
-    expect(boardLines(board({ memberStatus: 'too_few', ranked: 0, total: 2 }), challenge(), WORDS)).toEqual(['Members see no places yet: fewer than 3 people they can see have a gym day in it.']);
+    expect(boardLines(board({ memberStatus: 'too_few', ranked: 0, total: 2 }), challenge(), WORDS)).toEqual(['Members see no places yet: fewer than 3 people they can see have a visit in it.']);
   });
 
   it('says how many have reached the target', () => {
-    expect(boardLines(board({ reached: 0 }), challenge({ target: 12 }), WORDS)[1]).toBe('Nobody has reached 12 gym days yet.');
-    expect(boardLines(board({ reached: 1 }), challenge({ target: 12 }), WORDS)[1]).toBe('1 person has reached 12 gym days.');
+    expect(boardLines(board({ reached: 0 }), challenge({ target: 12 }), WORDS)[1]).toBe('Nobody has reached 12 visits yet.');
+    expect(boardLines(board({ reached: 1 }), challenge({ target: 12 }), WORDS)[1]).toBe('1 person has reached 12 visits.');
     expect(boardLines(board({ reached: 6 }), challenge({ counts: 'own', unit: 'push-ups', target: 100 }), WORDS)[1]).toBe('6 people have reached 100 push-ups.');
   });
 
@@ -448,7 +448,7 @@ describe('its board', () => {
   });
 
   it('with nobody on it, says so in the words that fit', () => {
-    expect(emptyBoard(board({ memberStatus: 'too_few', total: 0 }), challenge())).toBe('Nobody has a gym day in it yet.');
+    expect(emptyBoard(board({ memberStatus: 'too_few', total: 0 }), challenge())).toBe('Nobody has a visit in it yet.');
     expect(emptyBoard(board({ memberStatus: 'too_few', total: 0 }), challenge({ counts: 'workout_days' }))).toBe('Nobody has a workout day in it yet.');
     expect(emptyBoard(board({ memberStatus: 'too_few', total: 0 }), challenge({ who: 'joined' }))).toBe('Nobody has joined yet.');
   });
@@ -486,9 +486,9 @@ describe('its board', () => {
 // terms options are stupid same for team". Written out from what the page should say.
 describe('every number with its word, and every choice in plain words', () => {
   it('a number is never bare: it carries the word of what it counts', () => {
-    expect(amountOf(challenge(), 4)).toBe('4 gym days');
-    expect(amountOf(challenge(), 1)).toBe('1 gym day');
-    expect(amountOf(challenge(), 0)).toBe('0 gym days');
+    expect(amountOf(challenge(), 4)).toBe('4 visits');
+    expect(amountOf(challenge(), 1)).toBe('1 visit');
+    expect(amountOf(challenge(), 0)).toBe('0 visits');
     expect(amountOf(challenge({ counts: 'workout_days' }), 1234)).toBe('1,234 workout days');
     expect(amountOf(challenge({ counts: 'own', unit: ' push-ups ' }), 55)).toBe('55 push-ups');
     // One of the staff's own: said as one where the word is a plain plural.
@@ -498,17 +498,17 @@ describe('every number with its word, and every choice in plain words', () => {
   });
 
   it.each([
-    ['the most gym days', {}, 'Most gym days wins'],
+    ['the most visits', {}, 'Most visits wins'],
     ['the most workout days', { counts: 'workout_days' }, 'Most workout days wins'],
-    ['a target', { target: 12 }, 'Reach 12 gym days'],
-    ['a target of one', { target: 1 }, 'Reach 1 gym day'],
+    ['a target', { target: 12 }, 'Reach 12 visits'],
+    ['a target of one', { target: 1 }, 'Reach 1 visit'],
     ["the most of the staff's own", { counts: 'own', unit: 'push-ups' }, 'Most push-ups wins'],
     ['the lowest, a fastest time', { counts: 'own', unit: 'seconds', lowestWins: true }, 'Fastest time wins'],
     ['the lowest of a word that is not counted', { counts: 'own', unit: '5 km time', lowestWins: true }, 'Fastest time wins'],
     ['a target of one, in the staff\'s own word', { counts: 'own', unit: 'push-ups', target: 1 }, 'Reach 1 push-up'],
     ["a target of the staff's own", { counts: 'own', unit: 'push-ups', target: 100 }, 'Reach 100 push-ups'],
-    ['teams, the most', { teams: 'staff' }, 'The team with the most gym days wins'],
-    ['teams, a target', { teams: 'members', target: 60 }, 'Reach 60 gym days as a team'],
+    ['teams, the most', { teams: 'staff' }, 'The team with the most visits wins'],
+    ['teams, a target', { teams: 'members', target: 60 }, 'Reach 60 visits as a team'],
     ['teams, the lowest', { teams: 'staff', counts: 'own', unit: 'seconds', lowestWins: true }, 'The fastest team wins'],
   ])('how it is won says what wins, as the member reads it: %s', (_what, over, line) => {
     const staffs = challenge(over);
@@ -520,21 +520,21 @@ describe('every number with its word, and every choice in plain words', () => {
 
   it('the three facts: what, then one thing worth knowing; a count of people says people', () => {
     expect(cardFacts(challenge(), 143, WORDS)).toEqual([
-      { label: 'About', value: 'Gym visits', note: 'Checked in at the front desk' },
-      { label: 'How it is won', value: 'Most gym days wins', note: 'Equal numbers share a place' },
+      { label: 'About', value: 'Visits', note: 'Checked in at the front desk' },
+      { label: 'How it is won', value: 'Most visits wins', note: 'Equal numbers share a place' },
       { label: 'Who is in it', value: 'Everyone in the app', note: '143 people' },
     ]);
     expect(cardFacts(challenge(), 1, WORDS)[2]).toEqual({ label: 'Who is in it', value: 'Everyone in the app', note: '1 person' });
     expect(cardFacts(challenge({ who: 'joined', joinedCount: 1 }), 143, WORDS)[2].note).toBe('1 person has joined');
-    expect(cardFacts(challenge({ teams: 'staff' }), 143, WORDS)[1]).toEqual({ label: 'How it is won', value: 'The team with the most gym days wins', note: "A team's number is its people's added together" });
-    expect(cardFacts(challenge({ teams: 'members', target: 60 }), 143, WORDS)[1]).toEqual({ label: 'How it is won', value: 'Reach 60 gym days as a team', note: 'Every team that gets there wins' });
+    expect(cardFacts(challenge({ teams: 'staff' }), 143, WORDS)[1]).toEqual({ label: 'How it is won', value: 'The team with the most visits wins', note: "A team's number is its people's added together" });
+    expect(cardFacts(challenge({ teams: 'members', target: 60 }), 143, WORDS)[1]).toEqual({ label: 'How it is won', value: 'Reach 60 visits as a team', note: 'Every team that gets there wins' });
     expect(cardFacts(challenge({ counts: 'own', unit: 'push-ups' }), 143, WORDS)[0]).toEqual({ label: 'About', value: 'Push-ups', note: 'Counted by your staff' });
   });
 
   it('who is leading, on a row of the list, with the number\'s word', () => {
     const top = (value) => [{ userId: 'a', name: 'Maya Okafor', initials: 'MO', place: 1, value }, { userId: 'b', name: 'Omar Haddad', initials: 'OH', place: 2, value: 1 }];
-    expect(rowLeader(challenge({ top: top(4) }))).toBe('Maya Okafor · 4 gym days');
-    expect(rowLeader(challenge({ top: top(1) }))).toBe('Maya Okafor · 1 gym day');
+    expect(rowLeader(challenge({ top: top(4) }))).toBe('Maya Okafor · 4 visits');
+    expect(rowLeader(challenge({ top: top(1) }))).toBe('Maya Okafor · 1 visit');
     expect(rowLeader(challenge({ counts: 'own', unit: 'push-ups', top: top(55) }))).toBe('Maya Okafor · 55 push-ups');
     expect([rowLeader(challenge({ top: [] })), rowLeader(challenge())]).toEqual([null, null]);
     const teamList = [
@@ -543,17 +543,17 @@ describe('every number with its word, and every choice in plain words', () => {
       { id: 't3', name: 'Green Team', people: 0, value: null, place: null },
     ];
     const teamed = challenge({ teams: 'staff', teamList });
-    expect(rowLeader(teamed)).toBe('Red Team · 6 gym days');
+    expect(rowLeader(teamed)).toBe('Red Team · 6 visits');
     expect(teamLines(teamed).map((team) => [team.placeText, team.name, team.people, team.number])).toEqual([
-      ['1st', 'Red Team', '2 people', '6 gym days'],
-      ['2nd', 'Blue Team', '2 people', '4 gym days'],
+      ['1st', 'Red Team', '2 people', '6 visits'],
+      ['2nd', 'Blue Team', '2 people', '4 visits'],
       [null, 'Green Team', 'Nobody yet', null],
     ]);
   });
 
   it('what it is about: the four things the server offers, each with its one line', () => {
     expect(aboutChoices(OFFERED)).toEqual([
-      { id: 'gym_visits', title: 'Gym visits', sub: 'Days a member is checked in, at your front desk or by your staff.' },
+      { id: 'gym_visits', title: 'Visits', sub: 'Days a member is checked in, at your front desk or by your staff.' },
       { id: 'workouts', title: 'Workouts in the app', sub: 'Days a member finishes a workout in the app.' },
       { id: 'exercise', title: 'An exercise', sub: "One exercise from the app's library, such as squats." },
       { id: 'own', title: 'Something else', sub: "Anything the app doesn't track: a rowing time, a tug of war. You name it." },
@@ -567,7 +567,7 @@ describe('every number with its word, and every choice in plain words', () => {
   });
 
   it('who counts it: two choices where the app can count it, The app switched off with its reason where it cannot, one line where only the staff can', () => {
-    const app = { id: 'app', title: 'The app', sub: "It counts gym days by itself. Your staff don't enter any numbers." };
+    const app = { id: 'app', title: 'The app', sub: "It counts visits by itself. Your staff don't enter any numbers." };
     const staff = { id: 'staff', title: 'Your staff', sub: "Your staff enter each member's number." };
     expect(countedByChoices(draft(), OFFERED, WORDS)).toEqual({ line: null, choices: [app, staff] });
     expect(countedByChoices(draft({ counts: 'workout_days' }), OFFERED, WORDS).choices[0].sub).toBe("It counts workout days by itself. Your staff don't enter any numbers.");
@@ -607,7 +607,7 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(withExercise({ ...squats, unit: 'reps' }, 'chair_squat', OFFERED).unit).toBe('reps');
     // About something else, no exercise is sent.
     expect(fieldsOf(withSubject(squats, 'workouts', OFFERED))).toMatchObject({ subject: 'workouts', measure: 'days', countedBy: 'app', exercises: [], unit: '' });
-    // Gym visits the staff count: in their word, and back to the app.
+    // Visits the staff count: in their word, and back to the app.
     const visits = withCountedBy(draft(), 'staff', OFFERED);
     expect(visits).toMatchObject({ subject: 'gym_visits', measure: null, countedBy: 'staff', unit: 'visits' });
     expect(withCountedBy({ ...visits, win: 'lowest' }, 'app', OFFERED)).toMatchObject({ measure: 'days', countedBy: 'app', unit: '', win: 'most' });
@@ -626,8 +626,8 @@ describe('every number with its word, and every choice in plain words', () => {
 
   it('how it is won, as the form offers it: each choice names what is counted', () => {
     expect(winChoices(draft())).toEqual([
-      { id: 'most', title: 'Most gym days wins', sub: 'The person with the most gym days when it ends comes 1st.' },
-      { id: 'target', title: 'Reach a target', sub: 'You set the target, such as 12 gym days. Everyone who reaches it wins.' },
+      { id: 'most', title: 'Most visits wins', sub: 'The person with the most visits when it ends comes 1st.' },
+      { id: 'target', title: 'Reach a target', sub: 'You set the target, such as 12 visits. Everyone who reaches it wins.' },
     ]);
     expect(winChoices(draft({ counts: 'workout_days', teams: 'staff' }))).toEqual([
       { id: 'most', title: 'Most workout days wins', sub: "The team with the most workout days when it ends comes 1st. A team's number is its people's numbers added together." },
@@ -668,7 +668,7 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(withWin(own, 'lowest', OFFERED).unit).toBe('seconds');
     expect(withWin({ ...own, unit: 'push-ups' }, 'lowest', OFFERED).unit).toBe('push-ups');
     expect(withWin(withWin(own, 'lowest', OFFERED), 'most', OFFERED).unit).toBe('seconds');
-    // Gym visits the staff count: visits, then seconds, then visits again.
+    // Visits the staff count: visits, then seconds, then visits again.
     const visits = withCountedBy(draft(), 'staff', OFFERED);
     expect(withWin(withWin(visits, 'lowest', OFFERED), 'most', OFFERED).unit).toBe('visits');
     // Another exercise while the fastest time wins: still seconds.
@@ -710,11 +710,11 @@ describe('every number with its word, and every choice in plain words', () => {
   });
 
   it('the target box says what its number is a number of', () => {
-    expect(targetUnit(draft())).toBe('gym days');
+    expect(targetUnit(draft())).toBe('visits');
     expect(targetUnit(draft({ counts: 'workout_days' }))).toBe('workout days');
     expect(targetUnit(draft({ counts: 'own', unit: ' push-ups ' }))).toBe('push-ups');
     expect(targetUnit(draft({ counts: 'own', unit: '' }))).toBe('');
-    expect(targetUnit(draft({ teams: 'staff' }))).toBe('gym days, for a whole team');
+    expect(targetUnit(draft({ teams: 'staff' }))).toBe('visits, for a whole team');
   });
 
   it('the form says the challenge back in the same words as it is filled in', () => {
@@ -723,8 +723,8 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(said({})).toEqual({
       Name: 'October Challenge',
       When: 'Thu 8 Oct – Sat 31 Oct · 24 days',
-      About: 'Gym visits · checked in at the front desk',
-      'How it is won': 'Most gym days wins',
+      About: 'Visits · checked in at the front desk',
+      'How it is won': 'Most visits wins',
       'Who is in it': 'Everyone in the app · 4 people',
       Teams: 'Individual, no teams',
       Prize: 'None',
@@ -739,7 +739,7 @@ describe('every number with its word, and every choice in plain words', () => {
     expect(said({ counts: 'own', unit: '', win: 'most', teams: 'staff' })['How it is won']).toBe('The team with the highest number wins');
     expect(said({ counts: 'own', unit: '', win: 'target', target: '100' })['How it is won']).toBe('Reach 100');
     expect(said({ win: 'target', target: '' })['How it is won']).toBe('Reach a target');
-    expect(said({ win: 'target', target: '60', teams: 'members', teamList: [{ id: null, name: 'Red' }, { id: null, name: ' Blue ' }] })).toMatchObject({ 'How it is won': 'Reach 60 gym days as a team', Teams: 'Red, Blue · your members pick their own' });
+    expect(said({ win: 'target', target: '60', teams: 'members', teamList: [{ id: null, name: 'Red' }, { id: null, name: ' Blue ' }] })).toMatchObject({ 'How it is won': 'Reach 60 visits as a team', Teams: 'Red, Blue · your members pick their own' });
     expect(said({ teams: 'staff', teamList: [{ id: null, name: 'Red' }, { id: null, name: '' }] }).Teams).toBe('Red · you put people in them');
     expect(Object.fromEntries(draftSummary(draft(), { today: TODAY, inApp: 1 }, WORDS).map((line) => [line.label, line.value]))['Who is in it']).toBe('Everyone in the app · 1 person');
     // What is missing is marked as missing.

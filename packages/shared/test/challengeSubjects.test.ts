@@ -78,13 +78,13 @@ describe("what a gym may ask a challenge to be about, and who counts it", () => 
 describe("the words a challenge is sent with", () => {
   it("gym visits: the front desk counts them, one a day", () => {
     expect(challengeWords({ subject: "gym_visits", measure: "days", countedBy: "app", unit: "" }, "Iron Gym")).toEqual({
-      about: "Gym visits",
-      one: "gym day",
-      many: "gym days",
+      about: "Visits",
+      one: "visit",
+      many: "visits",
       print: "whole",
       how: "desk",
       howLine: "Checked in at the front desk",
-      explain: "A gym day is a day you're checked in at Iron Gym: a scan at the front desk, or a check-in by staff. Two visits on one day are one. It is the same count as the Leaderboard.",
+      explain: "A visit is a day you're checked in at Iron Gym: a scan at the front desk, or a check-in by staff. Two check-ins on one day are one visit. It is the same count as the Leaderboard.",
       perDay: true,
     });
   });
@@ -97,7 +97,7 @@ describe("the words a challenge is sent with", () => {
       print: "whole",
       how: "app",
       howLine: "Counted by the app",
-      explain: "A workout day is a day you finish a workout in the app, at the gym or at home. Two on one day are one. It is the same count as the Leaderboard.",
+      explain: "A workout day is a day you finish a workout in the app, wherever you are. Two on one day are one. It is the same count as the Leaderboard.",
       perDay: true,
     });
   });
@@ -131,8 +131,8 @@ describe("the words a challenge is sent with", () => {
       explain: "This challenge isn't being counted yet. Ask the staff at Iron Gym about it.",
       perDay: false,
     });
-    expect(challengeWords({ subject: "gym_visits", measure: "reps", countedBy: "app", unit: "" }, "Iron Gym")).toMatchObject({ about: "Gym visits", howLine: "Not counted yet", perDay: false });
-    expect(JSON.stringify(words)).not.toMatch(/gym day|workout day|Checked in|Counted by/u);
+    expect(challengeWords({ subject: "gym_visits", measure: "reps", countedBy: "app", unit: "" }, "Iron Gym")).toMatchObject({ about: "Visits", howLine: "Not counted yet", perDay: false });
+    expect(JSON.stringify(words)).not.toMatch(/visit|workout day|Checked in|Counted by/u);
   });
 
   it("a measure is one a day exactly when its id is days, as the database's target check reads it", () => {
@@ -213,7 +213,7 @@ describe("a challenge about an exercise", () => {
   it("what the form is offered: the four subjects in order, in the gym's word, and the app counts no exercise yet", () => {
     const offered = offeredSubjects("client");
     expect(offered.map((s) => [s.id, s.title, s.pickExercise, s.staffWord, s.appCounts.map((m) => m.measure)])).toEqual([
-      ["gym_visits", "Gym visits", false, "visits", ["days"]],
+      ["gym_visits", "Visits", false, "visits", ["days"]],
       ["workouts", "Workouts in the app", false, "workouts", ["days"]],
       ["exercise", "An exercise", true, "", []],
       ["own", "Something else", false, "", []],

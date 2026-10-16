@@ -60,7 +60,7 @@ const wordsOf = (c) => (c.words !== undefined ? c.words.many : isOwn(c) ? (c.uni
 const capital = (text) => (text === '' ? text : text.charAt(0).toUpperCase() + text.slice(1));
 const lower = (text) => (text === '' ? text : text.charAt(0).toLowerCase() + text.slice(1));
 
-/** A number with its word, as members read it: "4 gym days", "1 gym day", "55 push-ups". */
+/** A number with its word, as members read it: "4 visits", "1 visit", "55 push-ups". */
 export const amountOf = (challenge, n) => countText(n, challenge.words);
 
 // ── WHAT IT IS ABOUT, AND WHO COUNTS IT (spec Part 3 §15.10.6) ──
@@ -401,10 +401,10 @@ export function startHint(draft, today) {
   return `${capital(draftWords(draft).many)} since ${dayLabel(draft.startsOn)} already count.`;
 }
 
-/** A gym that checks nobody in gets no gym days: said under the choice, before it is saved. */
+/** A gym that checks nobody in gets no visits: said under the choice, before it is saved. */
 export function notCheckingInNote(draft, list, words) {
   if (draft.subject !== 'gym_visits' || draft.countedBy !== 'app' || list.checkingIn) return null;
-  return `Nobody has been checked in at your front desk in the last 30 days. Gym days only come from check-ins, so every ${words.person} would stay at 0. Check people in at the front desk, or pick Workouts in the app.`;
+  return `Nobody has been checked in at your front desk in the last 30 days. Visits only come from check-ins, so every ${words.person} would stay at 0. Check people in at the front desk, or pick Workouts in the app.`;
 }
 
 /** The tag beside a challenge's name. */
@@ -428,7 +428,7 @@ export function datesLine(challenge, today) {
   return `${first} – ${dayLabel(challenge.endsOn)}${year(challenge.endsOn)} · ${count(days)} days`;
 }
 
-/** How a challenge is won, in the line its members read: "Most gym days wins". */
+/** How a challenge is won, in the line its members read: "Most visits wins". */
 export function wonLine(challenge) {
   return winLine({ words: challenge.words, target: challenge.target, lowestWins: challenge.lowestWins === true, teamed: hasTeams(challenge) });
 }
@@ -459,7 +459,7 @@ export function daysBar(challenge, today) {
   return { percent: Math.round((day / days) * 100), text: `Day ${count(day)} of ${count(days)}` };
 }
 
-/** What somebody "has" once something of theirs counts: "a gym day"; "a number" where the staff count. */
+/** What somebody "has" once something of theirs counts: "a visit"; "a number" where the staff count. */
 const aThing = (challenge) => (staffCount(challenge) ? 'a number' : `a ${challenge.words.one}`);
 
 /** How many people have a number so far, in the challenge's own words; null where the
@@ -566,7 +566,7 @@ export function cancelBox(challenge, words) {
   if (challenge.who === 'joined' && challenge.joinedCount > 0) {
     lines.push(`${peopleCount(challenge.joinedCount)} ${challenge.joinedCount === 1 ? 'has' : 'have'} joined. The app doesn't tell them yet, so let them know yourself. They are still in it if you un-cancel.`);
   }
-  lines.push(`Nobody is emailed, and nobody's gym days or workouts are touched. You can un-cancel it until ${dayLabel(challenge.endsOn)}.`);
+  lines.push(`Nobody is emailed, and nobody's visits or workouts are touched. You can un-cancel it until ${dayLabel(challenge.endsOn)}.`);
   return { title: `Cancel ${challenge.name}?`, lines, yes: 'Cancel challenge', no: 'Keep it' };
 }
 
@@ -748,7 +748,7 @@ export const TEAMS_BUTTON = 'Put people in teams';
 
 // ── THE LIST'S ROWS, AND THE FORM'S SUMMARY ──
 
-/** A row's one line of what a challenge is: "Most gym days wins · Everyone in the app · 143 people". */
+/** A row's one line of what a challenge is: "Most visits wins · Everyone in the app · 143 people". */
 export function rowSummary(challenge, inApp, words) {
   const [, won, who] = cardFacts(challenge, inApp, words);
   return `${won.value} · ${who.value} · ${who.note.charAt(0).toLowerCase()}${who.note.slice(1)}`;

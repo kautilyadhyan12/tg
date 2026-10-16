@@ -9,10 +9,12 @@ import {
   PT_TIME_OFF_DAYS_MAX,
   PT_TIME_OFF_MAX,
   PT_TIME_OFF_OVER_ERROR,
+  aCoach,
   orgWords,
   ptHoursProblem,
   ptTimeOffOverSchema,
   ptTimeOffProblem,
+  ptWords,
 } from '@app/shared';
 import { WEEKDAYS, addDays, clockLabel, clockToMinutes, minutesToClock } from './hoursView';
 import { dayLabel } from '../../components/gym/leaderboardView';
@@ -21,11 +23,14 @@ import { placeFor } from './consolePlaces';
 export const PT_TITLE = 'Personal training';
 
 /** What the page is for, in one line under its name. */
-export const PT_INTRO_MANAGER = 'One-to-one sessions with a trainer. Set when each trainer is available, then book members into their available times.';
+export function ptIntroManager(orgType) {
+  const words = orgWords(orgType);
+  return `One-to-one sessions with ${aCoach(orgType)}. Set when each ${words.coach} is available, then book ${words.people} into their available times.`;
+}
 export const PT_INTRO_OWN = 'One-to-one sessions. Set when you are available; the sessions booked with you appear below.';
 
 /** Said once beside the hours: they are set once, and the timetable is already counted. */
-export const HOURS_REPEAT = 'These hours repeat every week. A class a trainer coaches is taken off their available times by itself.';
+export const hoursRepeat = (orgType) => `These hours repeat every week. A class ${aCoach(orgType)} coaches is taken off their available times by itself.`;
 export const HOURS_REPEAT_OWN = 'These hours repeat every week. A class you coach is taken off your available times by itself.';
 
 /** EVERY STEP TO A FIRST SESSION, each with a tick once it is done and a button that opens
@@ -55,11 +60,11 @@ export function setupSteps(list, { orgSlug, privileges, orgType } = {}) {
     {
       key: 'trainer',
       done: trainerGroups(list.trainers).setUp.some((t) => t.offers === true && Array.isArray(t.hours) && t.hours.length > 0),
-      title: 'Add a trainer and set their hours',
+      title: `Add ${aCoach(orgType)} and set their hours`,
       line:
         inviteTo === null
-          ? 'Pick somebody on your staff under Add a trainer, and set the hours they are available. The owner can invite somebody who is not on your staff yet.'
-          : 'Pick somebody on your staff under Add a trainer, and set the hours they are available. Invite anybody who is not on your staff yet.',
+          ? `Pick somebody on your staff under Add ${aCoach(orgType)}, and set the hours they are available. The owner can invite somebody who is not on your staff yet.`
+          : `Pick somebody on your staff under Add ${aCoach(orgType)}, and set the hours they are available. Invite anybody who is not on your staff yet.`,
       // Inviting changes the gym, so a gym with no live plan gets it greyed.
       action: inviteTo === null ? null : { label: 'Invite staff', to: inviteTo, changes: true },
     },
@@ -96,7 +101,7 @@ export function setupSteps(list, { orgSlug, privileges, orgType } = {}) {
       key: 'book',
       done: setup.sessionBooked === true,
       title: 'Book a session',
-      line: "Press one of a trainer's available times below, and pick the person.",
+      line: `Press one of ${aCoach(orgType)}'s available times below, and pick the person.`,
       action: null,
     },
   ];
@@ -478,9 +483,9 @@ function draftSpan(draft) {
 }
 
 /** What is wrong with the form in one sentence, or null when it can be added. */
-export function timeOffFormProblem(draft, today, coming = 0) {
+export function timeOffFormProblem(draft, today, coming = 0, orgType = undefined) {
   const whole = draft.kind === 'days';
-  if (coming >= PT_TIME_OFF_MAX) return `A trainer can have up to ${String(PT_TIME_OFF_MAX)} times off coming. Remove one first.`;
+  if (coming >= PT_TIME_OFF_MAX) return ptWords(orgType).time_off_too_many;
   if (draft.fromDate === '' || (whole && draft.toDate === '')) return whole ? 'Pick the first and the last day.' : 'Pick the day.';
   const span = draftSpan(draft);
   if (!whole && (span.fromMinute === null || span.toMinute === null)) return 'Pick a start and an end time.';
@@ -694,9 +699,10 @@ export function personRow(person, gymHasTypes) {
  *  by the name this kind of organisation's menu gives it; the box puts a button to it under
  *  the line (`pickerIsEmpty`). */
 export function peopleHeading(people, typed, orgType) {
-  if (typed.trim() !== '') return people.people.length === 0 ? 'Nobody on your member list matches.' : 'Matching people';
-  if (people.people.length === 0) return `Your member list is empty. Add people on ${orgWords(orgType).peopleCap} first.`;
-  return people.gymHasTypes ? 'Your members, people with personal training first' : 'Your members';
+  const words = orgWords(orgType);
+  if (typed.trim() !== '') return people.people.length === 0 ? `Nobody on your ${words.person} list matches.` : 'Matching people';
+  if (people.people.length === 0) return `Your ${words.person} list is empty. Add people on ${words.peopleCap} first.`;
+  return people.gymHasTypes ? `Your ${words.people}, people with personal training first` : `Your ${words.people}`;
 }
 
 /** The picker has nobody to list at all, with nothing typed. */

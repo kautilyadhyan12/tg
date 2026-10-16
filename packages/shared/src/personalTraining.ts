@@ -12,6 +12,7 @@ import { bookingPeriod } from "./classBookings.js";
 import { hasNoNul } from "./visibleText.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import { membershipLimitPeriodSchema, type MembershipLimitPeriod } from "./memberships.js";
+import { aCoach, orgWords } from "./orgWords.js";
 
 /** A session is as long as the gym says (RULINGS 2026-10-06; PushPress and TeamUp take any
  *  length): from 10 minutes to 4 hours, on a five-minute mark. */
@@ -402,41 +403,50 @@ export function ptTimeOffOnDay(o: PtTimeOffSpan, day: string): { fromMinute: num
   return { fromMinute: o.fromMinute, toMinute: o.toMinute };
 }
 
-/** What staff read when the server says no. */
-export const PT_WORDS = {
-  trainer_not_offering: "This trainer isn't taking personal training sessions.",
-  not_a_time: "That isn't one of this trainer's times. Pick a time from the list.",
-  time_passed: "That time has already passed.",
-  too_far: "Sessions can be booked up to 8 weeks ahead.",
-  not_open_yet: "Booking for that time isn't open yet.",
-  time_taken: "This trainer already has a session at that time.",
-  trainer_in_class: "This trainer is coaching a class at that time.",
-  trainer_off: "This trainer has time off at that time.",
-  person_busy: "This person already has a personal training session at that time.",
-  no_membership: "This person has no membership in use on that day.",
-  not_covered: "None of this person's memberships includes personal training.",
-  pack_used: "This person's pack has no sessions left.",
-  limit_week: "This person has used all the personal training sessions their membership includes for that week.",
-  limit_month: "This person has used all the personal training sessions their membership includes for that month.",
-  started: "This session has already started, so it can't be cancelled.",
-  late_cancel: "It's too late to cancel for free.",
-  kept_used: "This session was already cancelled as a late cancel. The session stays used.",
-  not_kept: "This session was already cancelled, and not as a late cancel. No session was used.",
-  not_started: "This session hasn't started yet. Mark it once it has.",
-  mark_cancelled: "This session was cancelled, so it can't be marked.",
-  request_reused: "That didn't go through. Try again.",
-  appointment_not_found: "That session was not found.",
-  person_not_found: "That person isn't on your member list.",
-  trainer_not_found: "That person isn't on your staff.",
-  hours_range: "Each set of hours must end after it starts.",
-  hours_too_many: `A day can have up to ${String(PT_RANGES_PER_DAY)} sets of hours.`,
-  hours_overlap: "Two sets of hours on the same day overlap.",
-  time_off_no_hours: "Set this trainer's hours first.",
-  time_off_not_a_time: "The clocks change on that day, and one of those times doesn't exist. Pick a different start or end time.",
-  time_off_ended: "That time has already passed.",
-  time_off_too_far: "Time off can start up to a year ahead.",
-  time_off_too_many: `A trainer can have up to ${String(PT_TIME_OFF_MAX)} times off coming. Remove one first.`,
-} as const;
+/** What staff read when the server says no, in the business's own word for its trainers
+ *  (a Pilates studio's instructors, 5f-ii). */
+export function ptWords(orgType: unknown) {
+  const { coach, person } = orgWords(orgType);
+  return {
+    trainer_not_offering: `This ${coach} isn't taking personal training sessions.`,
+    not_a_time: `That isn't one of this ${coach}'s times. Pick a time from the list.`,
+    time_passed: "That time has already passed.",
+    too_far: "Sessions can be booked up to 8 weeks ahead.",
+    not_open_yet: "Booking for that time isn't open yet.",
+    time_taken: `This ${coach} already has a session at that time.`,
+    trainer_in_class: `This ${coach} has a class at that time.`,
+    trainer_off: `This ${coach} has time off at that time.`,
+    person_busy: "This person already has a personal training session at that time.",
+    no_membership: "This person has no membership in use on that day.",
+    not_covered: "None of this person's memberships includes personal training.",
+    pack_used: "This person's pack has no sessions left.",
+    limit_week: "This person has used all the personal training sessions their membership includes for that week.",
+    limit_month: "This person has used all the personal training sessions their membership includes for that month.",
+    started: "This session has already started, so it can't be cancelled.",
+    late_cancel: "It's too late to cancel for free.",
+    kept_used: "This session was already cancelled as a late cancel. The session stays used.",
+    not_kept: "This session was already cancelled, and not as a late cancel. No session was used.",
+    not_started: "This session hasn't started yet. Mark it once it has.",
+    mark_cancelled: "This session was cancelled, so it can't be marked.",
+    request_reused: "That didn't go through. Try again.",
+    appointment_not_found: "That session was not found.",
+    person_not_found: `That person isn't on your ${person} list.`,
+    trainer_not_found: "That person isn't on your staff.",
+    hours_range: "Each set of hours must end after it starts.",
+    hours_too_many: `A day can have up to ${String(PT_RANGES_PER_DAY)} sets of hours.`,
+    hours_overlap: "Two sets of hours on the same day overlap.",
+    time_off_no_hours: `Set this ${coach}'s hours first.`,
+    time_off_not_a_time: "The clocks change on that day, and one of those times doesn't exist. Pick a different start or end time.",
+    time_off_ended: "That time has already passed.",
+    time_off_too_far: "Time off can start up to a year ahead.",
+    time_off_too_many: `${capital(aCoach(orgType))} can have up to ${String(PT_TIME_OFF_MAX)} times off coming. Remove one first.`,
+  } as const;
+}
+
+const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** A gym's words: for the refusals that name no trainer, whichever the business. */
+export const PT_WORDS = ptWords("gym");
 
 export const PT_LATE_CANCEL_ERROR = "late_cancel";
 export const PT_KEPT_USED_ERROR = "kept_used";
@@ -671,7 +681,7 @@ export type PtAppointmentResponse = z.infer<typeof ptAppointmentResponseSchema>;
  *  `mark`, worked out again under the gym's lock; the sessions and classes then stay as
  *  they are, for staff to move. */
 export const PT_TIME_OFF_OVER_ERROR = "time_off_over_bookings";
-export const PT_TIME_OFF_OVER_MESSAGE = "This trainer has sessions or classes in that time.";
+export const ptTimeOffOverMessage = (orgType: unknown): string => `This ${orgWords(orgType).coach} has sessions or classes in that time.`;
 /** How many of each the 409 names; each `count` is whole. */
 export const PT_TIME_OFF_OVER_SHOWN = 100;
 
@@ -723,22 +733,27 @@ export type AddPtTimeOffRequest = z.infer<typeof addPtTimeOffRequestSchema>;
 
 /** What a member reads when the server says no to their own booking. Why a trainer's time
  *  has gone (a class, time off, somebody else's session) is the gym's to know, not theirs. */
-export const PT_MEMBER_WORDS: Record<PtBookRefusal, string> = {
-  trainer_not_offering: "This trainer isn't taking personal training sessions right now.",
-  not_a_time: "That time is no longer available. Pick another time.",
-  time_passed: "That time has already passed.",
-  too_far: "Booking for that day isn't open yet.",
-  not_open_yet: "Booking for that time isn't open yet.",
-  time_taken: "That time has just been booked. Pick another time.",
-  trainer_in_class: "That time is no longer available. Pick another time.",
-  trainer_off: "That time is no longer available. Pick another time.",
-  person_busy: "You already have a personal training session at that time.",
-  no_membership: "You have no membership in use on that day. Ask at the front desk.",
-  not_covered: "Your membership doesn't include personal training. Ask at the front desk.",
-  pack_used: "Your pack has no sessions left. Ask at the front desk for another.",
-  limit_week: "You've used all the personal training sessions your membership includes for that week.",
-  limit_month: "You've used all the personal training sessions your membership includes for that month.",
-};
+export function ptMemberWords(orgType: unknown): Record<PtBookRefusal, string> {
+  return {
+    trainer_not_offering: `This ${orgWords(orgType).coach} isn't taking personal training sessions right now.`,
+    not_a_time: "That time is no longer available. Pick another time.",
+    time_passed: "That time has already passed.",
+    too_far: "Booking for that day isn't open yet.",
+    not_open_yet: "Booking for that time isn't open yet.",
+    time_taken: "That time has just been booked. Pick another time.",
+    trainer_in_class: "That time is no longer available. Pick another time.",
+    trainer_off: "That time is no longer available. Pick another time.",
+    person_busy: "You already have a personal training session at that time.",
+    no_membership: "You have no membership in use on that day. Ask at the front desk.",
+    not_covered: "Your membership doesn't include personal training. Ask at the front desk.",
+    pack_used: "Your pack has no sessions left. Ask at the front desk for another.",
+    limit_week: "You've used all the personal training sessions your membership includes for that week.",
+    limit_month: "You've used all the personal training sessions your membership includes for that month.",
+  };
+}
+
+/** A gym's words: for the refusals that name no trainer, whichever the business. */
+export const PT_MEMBER_WORDS = ptMemberWords("gym");
 
 /** A member of the app with no record on the gym's list: a session hangs on the record. */
 export const PT_NOT_ON_LIST_ERROR = "not_on_list";

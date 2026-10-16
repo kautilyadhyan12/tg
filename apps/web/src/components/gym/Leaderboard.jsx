@@ -94,7 +94,7 @@ function CountedSheet({ gymId, boardId, period, onClose }) {
           {boardId === 'gym_days' ? (
             <>
               {data.days.length === 0 ? (
-                <p className="text-sm" style={{ color: MUTED }}>No gym days in this period yet.</p>
+                <p className="text-sm" style={{ color: MUTED }}>No visits in this period yet.</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {data.days.map((d) => (

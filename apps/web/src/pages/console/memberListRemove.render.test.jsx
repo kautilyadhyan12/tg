@@ -385,7 +385,7 @@ describe('Remove names the personal training sessions it cancels', () => {
     fireEvent.click(part.getByRole('button', { name: 'See all' }));
     expect(part.getAllByRole('listitem')).toHaveLength(4);
     expect(part.getByText("Those times are free again. 1 session goes back to its pack. A session that has already started stays as it is.")).toBeTruthy();
-    expect(part.getByText("The app doesn't tell them or the trainer yet. Let them know yourself.")).toBeTruthy();
+    expect(part.getByText("The app doesn't tell anybody yet. Let them know yourself.")).toBeTruthy();
     // Nobody not ticked is named, and nothing has been pressed.
     expect(part.queryByText(/Ada Lovelace/)).toBeNull();
     expect(orgService.removeSelected).not.toHaveBeenCalled();

@@ -472,7 +472,7 @@ export function groupLabelText(member) {
 export const ORG_TYPE_CHOICES = [
   { value: 'gym', label: 'Gym', hint: 'A gym or fitness centre with members' },
   { value: 'studio', label: 'Boutique studio', hint: 'Small group classes with clients' },
-  { value: 'crossfit_box', label: 'CrossFit box', hint: 'Coached classes with athletes' },
+  { value: 'crossfit_box', label: 'CrossFit box', hint: 'Coached classes with members' },
   { value: 'yoga_studio', label: 'Yoga studio', hint: 'Yoga classes with members' },
   { value: 'pilates_studio', label: 'Pilates studio', hint: 'Mat and reformer classes with clients' },
 ];
