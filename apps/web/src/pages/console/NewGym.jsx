@@ -20,8 +20,8 @@ import {
 // Part 3 §4.0's onboarding wizard, reduced to the steps that have a server
 // behind them — and the reduction is stated rather than quietly performed.
 //
-// "Create your organisation" (Kd 2026-09-07): the type is gym, studio or
-// personal trainer, and the words on the screen follow it (`orgWords`). The
+// "Create your organisation": the type is one of the five kinds of business
+// (Kd, 2026-10-16), and the words on the screen follow it (`orgWords`). The
 // file keeps its name; the route is still `/console/new`.
 //
 // BUILT:   step 1 (org type · name · city · country · timezone). Create opens the

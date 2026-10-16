@@ -38,6 +38,9 @@ export interface OrgWords {
   readonly itToMembers: string;
   /** The same word starting a sentence: *"Your trainer is closed today."*. */
   readonly itToMembersCap: string;
+  /** More than one, for a member's list of places: *"My boxes"*. */
+  readonly itToMembersPlural: string;
+  readonly itToMembersPluralCap: string;
   /** One of the people: *"They stay a client of your studio."* */
   readonly person: string;
   /** Starting a sentence or heading: *"Client"*. */
@@ -51,7 +54,7 @@ export interface OrgWords {
   readonly coach: string;
   /** The role as a label on a button or a badge: *"Coach"*. */
   readonly coachCap: string;
-  /** The third role, more than one: "trainers", "teachers". */
+  /** The third role, more than one: "trainers", "instructors". */
   readonly coaches: string;
   /** What the create screen calls the name box. */
   readonly nameLabel: string;
@@ -64,6 +67,8 @@ const GYM: OrgWords = {
   itCap: "Gym",
   itToMembers: "gym",
   itToMembersCap: "Gym",
+  itToMembersPlural: "gyms",
+  itToMembersPluralCap: "Gyms",
   person: "member",
   personCap: "Member",
   people: "members",
@@ -80,6 +85,8 @@ const STUDIO: OrgWords = {
   itCap: "Studio",
   itToMembers: "studio",
   itToMembersCap: "Studio",
+  itToMembersPlural: "studios",
+  itToMembersPluralCap: "Studios",
   person: "client",
   personCap: "Client",
   people: "clients",
@@ -99,6 +106,8 @@ const CROSSFIT_BOX: OrgWords = {
   itCap: "Box",
   itToMembers: "box",
   itToMembersCap: "Box",
+  itToMembersPlural: "boxes",
+  itToMembersPluralCap: "Boxes",
   person: "athlete",
   personCap: "Athlete",
   people: "athletes",
@@ -115,6 +124,8 @@ const YOGA_STUDIO: OrgWords = {
   itCap: "Studio",
   itToMembers: "studio",
   itToMembersCap: "Studio",
+  itToMembersPlural: "studios",
+  itToMembersPluralCap: "Studios",
   person: "member",
   personCap: "Member",
   people: "members",
@@ -131,6 +142,8 @@ const PILATES_STUDIO: OrgWords = {
   itCap: "Studio",
   itToMembers: "studio",
   itToMembersCap: "Studio",
+  itToMembersPlural: "studios",
+  itToMembersPluralCap: "Studios",
   person: "client",
   personCap: "Client",
   people: "clients",
@@ -149,6 +162,8 @@ const PERSONAL_TRAINER: OrgWords = {
   itCap: "Business",
   itToMembers: "trainer",
   itToMembersCap: "Trainer",
+  itToMembersPlural: "trainers",
+  itToMembersPluralCap: "Trainers",
   person: "client",
   personCap: "Client",
   people: "clients",
@@ -170,6 +185,8 @@ const CLINIC: OrgWords = {
   itCap: "Clinic",
   itToMembers: "clinic",
   itToMembersCap: "Clinic",
+  itToMembersPlural: "clinics",
+  itToMembersPluralCap: "Clinics",
   person: "client",
   personCap: "Client",
   people: "clients",

@@ -1851,6 +1851,8 @@ d("orgs routes (real Postgres)", () => {
       { cookies: owner.cookies },
     );
     expect(refused.statusCode).toBe(400);
+    // Refused for its kind of business, not for anything else in the body.
+    expect((JSON.parse(refused.body) as { message: string }).message).toMatch(/^orgType:/);
     const stranger = await makeUser("pt-stranger");
     expect((await get(`/v1/orgs/${pt.org.id}/members`, { cookies: stranger.cookies })).statusCode).toBe(404);
   });

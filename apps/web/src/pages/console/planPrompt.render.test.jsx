@@ -507,6 +507,7 @@ describe('a gym the moment it is created', () => {
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
     expect(screen.getByRole('button', { name: /start your 10-day free trial/i })).toBeTruthy();
     expect(screen.queryByText(/Iron House is ready/i)).toBeNull();
+    expect(screen.queryByText('K7QM2X')).toBeNull();
     // With the same two exits and no way past.
     const modal = screen.getByTestId('plan-modal');
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
@@ -534,7 +535,27 @@ describe('a gym the moment it is created', () => {
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
-  it('shows no code while the console has not been told the gym exists, nor when that read fails', async () => {
+  it('shows the code on Overview once the trial has started', async () => {
+    // The control for the prompt above: it lets the owner through, then the code is there.
+    orgService.createOrg.mockResolvedValue({
+      data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
+    });
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockResolvedValue({
+      data: {
+        outcome: 'started',
+        subscription: { status: 'trialing', trialEndsAt: daysFromNow(30), seatCap: 300 },
+      },
+    });
+    renderNewGym();
+    await createGym();
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
+    await waitFor(() => expect(screen.queryByTestId('plan-modal')).toBeNull());
+    expect(within(await screen.findByTestId('join-code-card')).getByText('K7QM2X')).toBeTruthy();
+  });
+
+  it('shows no code while the console has not been told the gym exists, and a way to try again when that read fails', async () => {
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
@@ -552,7 +573,7 @@ describe('a gym the moment it is created', () => {
     renderNewGym();
     await createGym();
     await waitFor(() => expect(orgService.getMine).toHaveBeenCalled());
-    await waitFor(() => expect(screen.queryByLabelText('Gym name')).toBeNull());
+    expect(await screen.findByRole('button', { name: /try again/i })).toBeTruthy();
     expect(screen.queryByText('K7QM2X')).toBeNull();
   });
 });

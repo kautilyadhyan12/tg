@@ -95,6 +95,7 @@ describe("orgWords", () => {
       const words = orgWords(type);
       expect(words.it, type).toBe(it);
       expect(words.itToMembers, type).toBe(it);
+      expect(words.itToMembersPlural, type).toBe(type === "crossfit_box" ? "boxes" : "studios");
       expect(words.people, type).toBe(people);
       expect(words.peopleCap, type).toBe(people.charAt(0).toUpperCase() + people.slice(1));
       expect(words.coachCap, type).toBe(coachCap);
