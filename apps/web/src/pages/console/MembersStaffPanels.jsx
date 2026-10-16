@@ -565,7 +565,7 @@ function RemoveSection({ person, words, off, error, onRemove }) {
 /** One person who runs the gym, opened: who they are, their role, what they can do, and
  *  Remove from staff. A change that is refused is said in its own part of the panel,
  *  under the button that was pressed (`error.at`). */
-export function StaffPersonPanel({ person, roles, orgType, words, readOnly, busy, error, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove }) {
+export function StaffPersonPanel({ person, roles, orgType, words, readOnly, busy, error, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onSeeActivity = null }) {
   const off = busy || readOnly;
   return (
     <Panel label={person.displayName} title={person.displayName} sub={person.email ? <span className="c-s14 c-t2 break-words">{person.email}</span> : null} onClose={onClose}>
@@ -580,6 +580,12 @@ export function StaffPersonPanel({ person, roles, orgType, words, readOnly, busy
             : 'Uses the console only, which is free. Not in the member app here.'}
         </p>
         <p className="c-s14 c-t2 m-0">On the staff since {formatJoinedAt(person.since)}</p>
+        {/* What they did, on Staff activity, already showing them alone (4d). */}
+        {onSeeActivity !== null ? (
+          <button type="button" onClick={onSeeActivity} className="c-btn c-btn-s c-btn-sm self-start">
+            See activity
+          </button>
+        ) : null}
         {/* The panel covers the page, so it says itself why its controls are grey. */}
         {readOnly ? <p className="c-s14 c-t2 m-0">{readOnlyNote(orgType)}</p> : null}
       </div>
