@@ -1297,6 +1297,8 @@ export async function applyRazorpaySubscription(deps: BillingDeps, subscriptionI
 
 /** Razorpay's statuses in which a subscription never took a mandate or a payment. */
 const RAZORPAY_NEVER_TAKEN: ReadonlySet<string> = new Set(["created", "cancelled", "expired", "completed"]);
+/** A mandate given, or its debits failing: live at Razorpay, paid only once `paid_count` says so. */
+const RAZORPAY_UNPAID_MANDATE: ReadonlySet<string> = new Set(["authenticated", "pending", "halted"]);
 
 /** Write a subscription just fetched from Razorpay onto its gym through the one rule. The
  *  gym is the one on OUR checkout row for this subscription, never the subscription's notes.
@@ -1374,6 +1376,13 @@ async function applyRazorpay(
         return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate");
       }
     }
+    return "unchanged";
+  }
+  // An at-once window is charged as it is paid, so Razorpay keeps it `created` until then
+  // (its "Subscription States"). Should it ever answer a mandate given, or a first debit failed,
+  // with nothing taken, that is not a payment either: the gym's free trial stays, and is checked
+  // (2d), until Razorpay counts one.
+  if (placed === null && sizeCheckout === null && sub.start_at === null && sub.paid_count === 0 && RAZORPAY_UNPAID_MANDATE.has(sub.status)) {
     return "unchanged";
   }
 
