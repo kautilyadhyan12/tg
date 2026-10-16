@@ -3862,7 +3862,7 @@ day or any later one.
 - **The sale stays**, tagged Part refunded or Refunded; each refund is a line under it (its own
   receipt number, how, day, why, the shelf, who) with View receipt and a ⋯ holding Void refund
   (Noted by mistake · Wrong amount · Something else), which takes back what it put on the shelf.
-  What was done is said under the sale. `gym_sale_refunds` (migration `0127`).
+  What was done is said under the sale. `gym_sale_refunds` (migration `0128`).
 - **Money**: the day's refunds are said beside Sell's total of the day they were noted, as a
   membership's; Reports' Collected and its Refunded line take them off in the month the money
   went back; lifetime value and Money by product do not. Its receipt reads "Refund for receipt

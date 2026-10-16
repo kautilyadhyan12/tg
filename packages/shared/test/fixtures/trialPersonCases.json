@@ -1,0 +1,31 @@
+{
+  "sources": [
+    "support.google.com/mail/answer/7436150: dots don't matter in Gmail; they do change a work or school address",
+    "learn.microsoft.com, Plus addressing in Exchange Online: sean+newsletter@contoso.com reaches sean@contoso.com",
+    "gmass.co, domains gmail.com, googlemail.com and google.com: one mailbox, both domains"
+  ],
+  "same": [
+    ["Google: dotted Gmail", "johnsmith@gmail.com", "john.smith@gmail.com"],
+    ["Google: many dots", "johnsmith@gmail.com", "jo.hn.sm.ith@gmail.com"],
+    ["Google: a dot after every letter", "johnsmith@gmail.com", "j.o.h.n.s.m.i.t.h@gmail.com"],
+    ["Gmail +tag", "happyhippo@gmail.com", "happyhippo+parakeet@gmail.com"],
+    ["googlemail is gmail", "kd.gym@googlemail.com", "kdgym@gmail.com"],
+    ["Microsoft: +tag on a company domain", "sean@contoso.com", "sean+newsletter@contoso.com"],
+    ["Outlook +tag", "priya.nair@outlook.com", "priya.nair+trial2@outlook.com"],
+    ["iCloud +tag", "arjun@icloud.com", "arjun+gym@icloud.com"],
+    ["capitals and spaces", "Rahul.Sharma+Gym@GMail.com ", "rahulsharma@gmail.com"],
+    ["dots and a tag together", "f.i.t.n.e.s.s+2@gmail.com", "fitness@gmail.com"]
+  ],
+  "different": [
+    ["Google: dots change a work address", "j.smith@yourdomain.com", "jsmith@yourdomain.com"],
+    ["dots on Rediffmail", "rahul.sharma@rediffmail.com", "rahulsharma@rediffmail.com"],
+    ["dots on Yahoo India", "anita.k@yahoo.co.in", "anitak@yahoo.co.in"],
+    ["dots on Outlook", "priya.nair@outlook.com", "priyanair@outlook.com"],
+    ["a digit is a letter", "johnsmith@gmail.com", "john.43.smith@gmail.com"],
+    ["same name, two providers", "kdgym@gmail.com", "kdgym@outlook.com"],
+    ["a Gmail look-alike domain", "kdgym@gmail.com", "kdgym@gmail.co"],
+    ["a subdomain is not Gmail", "kd.gym@mail.gmail.com", "kdgym@gmail.com"],
+    ["a hyphen is not a tag", "anita-k@yahoo.com", "anita@yahoo.com"],
+    ["the tag alone is not a name", "+gym@gmail.com", "+other@gmail.com"]
+  ]
+}

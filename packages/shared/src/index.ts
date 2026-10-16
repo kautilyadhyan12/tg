@@ -80,3 +80,4 @@ export * from "./gymMessageSettings.js";
 export * from "./gymContact.js";
 export * from "./phoneApp.js";
 export * from "./goals.js";
+export * from "./trialPerson.js";

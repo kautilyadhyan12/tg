@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0127_sale_refunds.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -271,7 +271,7 @@ export const gymSales = pgTable(
 );
 
 /** One refund noted against a product sale (18p): the gym gave money back itself, and this is
- *  its note. Mirrors `0127_sale_refunds.sql`; one voided keeps its row. */
+ *  its note. Mirrors `0128_sale_refunds.sql`; one voided keeps its row. */
 export const gymSaleRefunds = pgTable(
   "gym_sale_refunds",
   {

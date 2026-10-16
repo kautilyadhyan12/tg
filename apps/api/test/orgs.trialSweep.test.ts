@@ -34,6 +34,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { getCandidates } from "../src/modules/entitlements/repo.js";
 import { expireLapsedGymTrials } from "../src/modules/orgs/trialSweep.js";
+import { confirmOwnerOf } from "./confirmOwner.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -231,6 +232,7 @@ d("gym trial expiry sweep (real Postgres)", () => {
     const trialOwner = await makeUser();
     const org = await makeOrg(trialOwner.cookies);
 
+    await confirmOwnerOf(sql, org.org.id);
     const started = await post(`/v1/orgs/${org.org.id}/trial`, {}, trialOwner.cookies);
     expect(started.statusCode).toBe(200);
     expect(await readStatus(org.org.id)).toBe("trialing");
@@ -259,6 +261,7 @@ d("gym trial expiry sweep (real Postgres)", () => {
     const trialOwner = await makeUser();
     const org = await makeOrg(trialOwner.cookies);
 
+    await confirmOwnerOf(sql, org.org.id);
     expect((await post(`/v1/orgs/${org.org.id}/trial`, {}, trialOwner.cookies)).statusCode).toBe(
       200,
     );

@@ -499,7 +499,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // holds no typed word: the product's name as it was sold.
   "gym_sales",
   // gym_sale_refunds.recorded_by and undone_by — which member of staff noted a refund of a
-  // sale and who voided it (`0127`), on gym_sales' footing. A reason is one of a fixed list.
+  // sale and who voided it (`0128`), on gym_sales' footing. A reason is one of a fixed list.
   "gym_sale_refunds",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.

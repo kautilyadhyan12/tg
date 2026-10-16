@@ -7,7 +7,7 @@ import BringMembersInCard from '../../components/console/BringMembersInCard';
 import JoinCodeCard from '../../components/console/JoinCodeCard';
 import PlanModal from '../../components/console/PlanModal';
 import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStates';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { consoleOrgsSnapshot, refreshConsoleOrgs, subscribeConsoleOrgs } from './consoleOrgs';
 import { useConsoleSignOut } from './consoleSignOut';
 import { useConsoleOrgs } from './useConsoleOrg';
@@ -131,6 +131,8 @@ export default function NewGym() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  // A throwaway address cannot open a gym (2b): the way on is another address.
+  const [throwaway, setThrowaway] = useState(false);
   const [created, setCreated] = useState(null);
 
   /** THE BRAND-NEW GYM AS THE SERVER DESCRIBES IT, for the unskippable prompt
@@ -174,6 +176,7 @@ export default function NewGym() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+    setThrowaway(false);
     try {
       // The body is `.strict()` server-side, so only the wizard's own fields go
       // up. `currencyDisplay` is deliberately absent — a gym that could declare
@@ -207,6 +210,7 @@ export default function NewGym() {
       // yet…" is authored for this reader and is more use than anything a
       // client-side rewrite would produce.
       setError(errorText(err, `We couldn't create your ${words.it}. Please try again.`));
+      setThrowaway(errorCode(err) === 'email_throwaway');
     } finally {
       setSubmitting(false);
     }
@@ -467,6 +471,17 @@ export default function NewGym() {
         </ConsoleCard>
 
         {error !== null ? <ConsoleFailed message={error} /> : null}
+        {throwaway ? (
+          <button
+            type="button"
+            onClick={signOut}
+            disabled={signingOut}
+            className="self-start rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            {signingOut ? 'Signing out…' : 'Sign in with another email'}
+          </button>
+        ) : null}
 
         <div className="flex items-center gap-3">
           <button
