@@ -41,7 +41,7 @@ export const gymStaffInvites = pgTable(
     index("gym_staff_invites_email_idx").on(t.email).where(sql`${t.state} IN ('pending','declined') AND ${t.clearedAt} IS NULL`),
     index("gym_staff_invites_gym_idx").on(t.gymId, t.createdAt),
     index("gym_staff_invites_created_idx").on(t.createdAt),
-    // `owner` is a co-owner's invitation (4b-i, `0128`): no role name, and the only one with "Manage staff".
+    // `owner` is a co-owner's invitation (4b-i, `0129`): no role name, and the only one with "Manage staff".
     check("gym_staff_invites_role_check", sql`${t.role} IN ('manager','trainer','owner') AND (${t.role} <> 'owner' OR ${t.roleName} IS NULL)`),
     check("gym_staff_invites_role_name_check", sql`${t.roleName} IS NULL OR length(${t.roleName}) BETWEEN 1 AND 40`),
     check("gym_staff_invites_privileges_check", sql`(${t.role} = 'owner' OR NOT ('staff.manage' = ANY (${t.privileges}))) AND cardinality(${t.privileges}) <= 20`),
@@ -126,7 +126,7 @@ export const gymStaffInviteSends = pgTable(
 );
 
 /** A request to one of the gym's staff to be a co-owner (ROADMAP 4b-i; mirrors
- *  `0128_co_owner_requests.sql`). Asked by the gym's owner; accepting makes the person's
+ *  `0129_co_owner_requests.sql`). Asked by the gym's owner; accepting makes the person's
  *  staff row an owner's row. One waiting a person a gym. */
 export const gymCoOwnerRequests = pgTable(
   "gym_co_owner_requests",

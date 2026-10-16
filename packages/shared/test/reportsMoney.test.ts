@@ -338,6 +338,36 @@ describe("products sold at the desk (21b-ii)", () => {
     expect(withSales).toEqual({ state: "ok", minor: 100000, months: ["2026-07", "2026-08", "2026-09"], leavers: 10 });
   });
 
+  it("a sale's refund comes off Collected in the month it went back, and never off lifetime value (18p)", () => {
+    const quarter = [money("gold", "2026-07", 300000), money("gold", "2026-08", 310000, 10000), money("gold", "2026-09", 400000)];
+    const r = figures({
+      period: "3m",
+      months: quarter,
+      anySale: true,
+      firstSoldOn: "2026-07-01",
+      sales: [sale("2026-08", 9000), { month: "2026-09", soldMinor: 0, periodSoldMinor: 0, refundedMinor: 2500, periodRefundedMinor: 2500 }],
+    });
+    expect(r.months).toEqual([
+      { month: "2026-08", paidMinor: 310000, soldMinor: 9000, refundedMinor: 10000, netMinor: 309000 },
+      { month: "2026-09", paidMinor: 400000, soldMinor: 0, refundedMinor: 2500, netMinor: 397500 },
+      { month: "2026-10", paidMinor: 0, soldMinor: 0, refundedMinor: 0, netMinor: 0 },
+    ]);
+    expect(r.inPeriod).toEqual({ paidMinor: 1010000, soldMinor: 9000, refundedMinor: 12500, netMinor: 1006500 });
+    expect(r.lifetimeValue).toEqual(figures({ months: quarter }).lifetimeValue);
+  });
+
+  it("a year earlier, a sale's refund is set beside the sales' own history", () => {
+    const then = { ...THEN, saleRefundedMinor: 300 };
+    const both = { firstPaidOn: "2025-01-10", firstSoldOn: "2025-06-01", months: PAID_NOW, sales: SOLD_NOW };
+    expect(figures({ period: "3m", anySale: true, yearEarlier: then, ...both }).yearEarlier).toEqual({ state: "ok", ...SPAN, paidMinor: 10000, soldMinor: 2500, refundedMinor: 800, netMinor: 11700 });
+    // Only a refund of an earlier sale now, sales records new: no figure, as for a sale now (round one, L5).
+    const refundOnly = { ...both, firstSoldOn: "2025-09-01", sales: [{ month: "2026-09", soldMinor: 0, periodSoldMinor: 0, refundedMinor: 400, periodRefundedMinor: 400 }] };
+    expect(figures({ period: "3m", anySale: true, yearEarlier: then, ...refundOnly }).yearEarlier).toEqual({ state: "no_sales_history", ...SPAN, since: "2025-09-01" });
+    // Sales began inside the span with none now: they, and their refunds, are left out of both sides.
+    const salesNew = { ...both, firstSoldOn: "2025-09-01", sales: [] };
+    expect(figures({ period: "3m", anySale: true, yearEarlier: then, ...salesNew }).yearEarlier).toEqual({ state: "ok", ...SPAN, paidMinor: 10000, soldMinor: 0, refundedMinor: 500, netMinor: 9500 });
+  });
+
   it("products: the most money first, then the most sold, then by name; none sold is not listed", () => {
     const r = figures({
       anySale: true,

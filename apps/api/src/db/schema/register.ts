@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -267,5 +267,53 @@ export const gymSales = pgTable(
     index("gym_sales_entry_idx")
       .on(t.gymId, t.entryId, t.seq)
       .where(sql`${t.entryId} IS NOT NULL`),
+  ],
+);
+
+/** One refund noted against a product sale (18p): the gym gave money back itself, and this is
+ *  its note. Mirrors `0128_sale_refunds.sql`; one voided keeps its row. */
+export const gymSaleRefunds = pgTable(
+  "gym_sale_refunds",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    saleId: uuid("sale_id").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    method: text("method").notNull(),
+    reason: text("reason").notNull(),
+    /** How many of what was sold went back on the shelf with it. */
+    restocked: integer("restocked").notNull().default(0),
+    requestKey: uuid("request_key").notNull(),
+    refundedOn: date("refunded_on").notNull(),
+    recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
+    voidReason: text("void_reason"),
+    receiptNumber: integer("receipt_number").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("gym_sale_refunds_receipt_uq").on(t.gymId, t.receiptNumber),
+    unique("gym_sale_refunds_request_uq").on(t.gymId, t.requestKey),
+    check("gym_sale_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
+    check("gym_sale_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
+    check("gym_sale_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check("gym_sale_refunds_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer')`),
+    check("gym_sale_refunds_reason_check", sql`${t.reason} IN ('returned','charged_too_much','faulty','other')`),
+    check("gym_sale_refunds_restocked_check", sql`${t.restocked} BETWEEN 0 AND 99`),
+    check(
+      "gym_sale_refunds_void_reason_check",
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','other'))`,
+    ),
+    foreignKey({
+      name: "gym_sale_refunds_sale_fk",
+      columns: [t.gymId, t.saleId],
+      foreignColumns: [gymSales.gymId, gymSales.id],
+    }).onDelete("cascade"),
+    index("gym_sale_refunds_sale_idx").on(t.gymId, t.saleId),
+    index("gym_sale_refunds_day_idx").on(t.gymId, t.refundedOn),
   ],
 );

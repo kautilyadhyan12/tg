@@ -188,7 +188,7 @@ export function discountRefusalWords(name: string, reason: DiscountRefusal, use:
 // ── The wire ────────────────────────────────────────────────────────────────
 
 /** A day that exists: "2026-02-31" has the shape of one and is not. */
-function isRealDay(text: string): boolean {
+export function isRealDay(text: string): boolean {
   const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
   if (parts === null) return false;
   const made = new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])));

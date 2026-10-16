@@ -63,6 +63,8 @@ export const saleReceiptSchema = z
     item: z.object({ name: z.string(), quantity: z.number().int().min(1).max(99), unitPriceMinor: minorSchema }).strict(),
     amounts: receiptAmountsSchema,
     method: memberPaymentByHandSchema,
+    /** The refunds that stand against it, oldest first (18p). */
+    refunds: z.array(z.object({ number: receiptNumberSchema, on: daySchema, amountMinor: minorSchema }).strict()).default([]),
   })
   .strict();
 
@@ -90,7 +92,7 @@ export const refundReceiptSchema = z
   .object({
     ...receiptCommon,
     kind: z.literal("refund"),
-    /** The payment the money was given back for. */
+    /** The payment, or the sale (18p), the money was given back for. */
     forReceipt: receiptNumberSchema,
     item: z.object({ name: z.string(), covers: z.object({ from: daySchema, to: daySchema }).strict().nullable() }).strict(),
     refundedMinor: minorSchema,

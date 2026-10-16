@@ -7,10 +7,15 @@ import { placeFor } from './consolePlaces';
 import { canSell, purchaseLine } from './sellView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import ReceiptBox from '../../components/console/ReceiptBox';
+import MoreMenu from '../../components/console/MoreMenu';
+import { consoleIsReadOnly } from './billingView';
+import { SaleRefundBox, SaleRefundLines } from './SaleRefunds';
+import { SALE_MENU_WORDS } from './saleRefundView';
 
 // WHAT ONE PERSON BOUGHT AT THE DESK, on their page (spec Part 3 §14.3; ROADMAP 18b-i),
 // for staff who may record a sale. A sale made on the Sell page for this person is read
-// from the same rows here, and the button opens Sell with them already picked.
+// from the same rows here, and the button opens Sell with them already picked. A sale is
+// refunded here as on Sell (18p): its ⋯ holds Refund sale, and its refunds are under it.
 
 export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
   const privileges = viewerPrivileges(gym);
@@ -18,8 +23,13 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
   const [state, setState] = useState({ entryId: null, found: null, error: null });
   /** The sale whose receipt is open under its row. */
   const [receiptFor, setReceiptFor] = useState(null);
+  /** The sale whose Refund sale box is open, and what was last done, said under its sale. */
+  const [refunding, setRefunding] = useState(null);
+  const [done, setDone] = useState(null);
+  const [reads, setReads] = useState(0);
   // A person's page is also drawn where there is no address to go to: no link there.
   const routed = useInRouterContext();
+  const acts = may && !consoleIsReadOnly(gym);
 
   useEffect(() => {
     if (!may) return undefined;
@@ -31,7 +41,13 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
     return () => {
       live = false;
     };
-  }, [gymId, entryId, may]);
+  }, [gymId, entryId, may, reads]);
+  /** A refund noted or voided: said under its sale, and the list read again. */
+  const doneHere = (saleId) => (words) => {
+    setRefunding(null);
+    setDone({ saleId, words });
+    setReads((n) => n + 1);
+  };
 
   if (!may || state.entryId !== entryId) return null;
   const sellTo = placeFor(gym?.slug, privileges, 'sell');
@@ -54,8 +70,9 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
               <li key={sale.id} className="py-2 flex flex-col gap-2" data-testid="purchase-row">
                 <div className="flex justify-between gap-3">
                   <span className="flex flex-col min-w-0">
-                    <span className="c-s14 c-w6 c-t1" style={line.undone ? { textDecoration: 'line-through' } : undefined}>
-                      {line.title}
+                    <span className="c-s14 c-w6 c-t1">
+                      <span style={line.undone ? { textDecoration: 'line-through' } : undefined}>{line.title}</span>
+                      {line.refundTag !== null ? <span className="c-tag c-tag-warn ml-2">{line.refundTag}</span> : null}
                     </span>
                     <span className="c-s13 c-t3">{line.facts}</span>
                     {line.voided !== null ? <span className="c-s13 c-t3">{line.voided}</span> : null}
@@ -64,18 +81,30 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
                     <span className="c-s14 c-t1 c-num" style={line.undone ? { textDecoration: 'line-through' } : undefined}>
                       {line.amount}
                     </span>
-                    <button
-                      type="button"
-                      className="c-btn c-btn-link c-btn-sm"
-                      aria-expanded={receiptFor === sale.id}
-                      aria-label={receiptButtonLabel(line.receiptNumber, line.title)}
-                      onClick={() => setReceiptFor((was) => (was === sale.id ? null : sale.id))}
-                    >
-                      {RECEIPT_BUTTON}
-                    </button>
+                    <span className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="c-btn c-btn-link c-btn-sm"
+                        aria-expanded={receiptFor === sale.id}
+                        aria-label={receiptButtonLabel(line.receiptNumber, line.title)}
+                        onClick={() => setReceiptFor((was) => (was === sale.id ? null : sale.id))}
+                      >
+                        {RECEIPT_BUTTON}
+                      </button>
+                      {acts && sale.canRefund ? (
+                        <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${line.title}`} items={[{ ...SALE_MENU_WORDS.refund, onPick: () => setRefunding(sale.id) }]} />
+                      ) : null}
+                    </span>
                   </span>
                 </div>
+                {done !== null && done.saleId === sale.id ? (
+                  <p className="c-s14 c-t1 c-w6 m-0" role="status">
+                    {done.words}
+                  </p>
+                ) : null}
                 {receiptFor === sale.id ? <ReceiptBox gymId={gymId} gym={gym} number={line.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                {refunding === sale.id ? <SaleRefundBox gymId={gymId} sale={sale} who={who} onDone={doneHere(sale.id)} onClose={() => setRefunding(null)} /> : null}
+                <SaleRefundLines gymId={gymId} gym={gym} sale={sale} canAct={acts} onDone={doneHere(sale.id)} />
               </li>
             );
           })}
