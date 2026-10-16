@@ -18,6 +18,21 @@ const accessClaimsSchema = z.object({
   fid: z.string().uuid().optional(),
 });
 
+/** GAP-2 (DECISIONS 2026-07-11, closes Part IV #6): cross-site prod (Vercel ↔
+ *  Hetzner) needs sameSite 'none' + secure; dev/test localhost is same-site.
+ *  The session cookies (`auth/routes.ts`) and the browser's free-trial mark (orgs
+ *  routes, Stage 3 item 2c) are both set with these. httpOnly: no page script reads them. */
+export function cookieOptions(config: Pick<AppConfig, "NODE_ENV">, maxAgeSeconds: number, path: string) {
+  const prod = config.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: prod,
+    sameSite: prod ? ("none" as const) : ("lax" as const),
+    path,
+    maxAge: maxAgeSeconds,
+  };
+}
+
 // Cookie names live here so plugin.ts and routes.ts can't drift (T3 2026-07-11).
 export const ACCESS_COOKIE = "accessToken";
 export const REFRESH_COOKIE = "refreshToken";

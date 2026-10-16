@@ -138,6 +138,16 @@ describe('planPromptFor', () => {
     expect(planPromptFor(gym({ ownerTrialUsed: true }))).toBe('subscribe');
   });
 
+  it('offers the PLANS in a browser that already started a free trial, and the trial when it did not (2c)', () => {
+    expect(planPromptFor(gym({ ownerTrialUsed: false, deviceTrialUsed: true }))).toBe('subscribe');
+    expect(planPromptFor(gym({ ownerTrialUsed: false, deviceTrialUsed: false }))).toBe('trial');
+    // An older api sends no answer about the browser: that takes nothing away.
+    expect(planPromptFor(gym({ ownerTrialUsed: false, deviceTrialUsed: null }))).toBe('trial');
+    expect(planPromptFor(gym({ ownerTrialUsed: true, deviceTrialUsed: false }))).toBe('subscribe');
+    // The browser's answer never draws a prompt the owner's own answer could not.
+    expect(planPromptFor(gym({ ownerTrialUsed: null, deviceTrialUsed: true }))).toBeNull();
+  });
+
   it('draws NOTHING for a gym that is already on a plan', () => {
     // And it decides that on the STATUS. Both rows below carry a trial end date
     // in the past; both are live plans, and a prompt over either would lock a

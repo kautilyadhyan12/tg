@@ -395,7 +395,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [x] **One free trial per person, however the email is spelled** — merged 2026-10-16 (PR #293).
-   - 2c. [ ] One device, one trial, whatever the email: a browser mark on the web, the stores on the phone.
+   - 2c. [x] **One device, one free trial: the browser mark** (the stores' half is Stage 5 item 21) — merged 2026-10-17 (PR #302).
    - 2d. [x] **The trial belongs to the gym** — merged 2026-10-16 (PR #297).
    - 2d-ii. [x] **A gym that pays during its free trial is checked until the money is taken** — merged 2026-10-16 (PR #301).
    - 2e. [ ] Allow now, look later: the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist), with the gyms 2d puts on it, which Kd removes from his admin page once it is built (Kd, 2026-10-16), and the second-trial code for a real owner of two gyms; the ended-trial box gets a "Contact us" line (an email address until the website is online; Kd, 2026-10-16).

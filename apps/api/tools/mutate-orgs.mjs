@@ -2151,8 +2151,8 @@ const MUTANTS = [
     target: 'service',
     why: "THE WAY OUT IS GATED ON BEING OUT: the trial door itself refuses a gym with no plan, so the one action left to a lapsed gym is the one it cannot take. That is :22215 §4's brick wall built by hand — the console says subscribe, and subscribing is refused because the gym has not subscribed",
     expect: 'READS and the pay path keep working',
-    from: '  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");\n\n  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });',
-    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "billing.manage");\n\n  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId });',
+    from: '  const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");\n\n  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId, deviceHash });',
+    to: '  const { org } = await requireWritablePrivilege(deps, gymId, userId, "billing.manage");\n\n  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId, deviceHash });',
   },
 
   // ── THE HELD REQUEST (Kd 2026-08-29, :24141 §1) ──────────────────────────
