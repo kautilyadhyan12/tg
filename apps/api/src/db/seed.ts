@@ -28,7 +28,6 @@ import {
 // Part 4 §3.3 canonical entitlements JSON — every key present, defaults explicit.
 const proEntitlements = {
   exercises: { mode: "all" },
-  coach: { window: "day", limit: 30 },
   // 20/day — Kd, DECISIONS :17366 §1.
   meal_scan: { window: "day", limit: 20 },
   route_gen: { window: "day", limit: 2 },
@@ -54,7 +53,6 @@ const gymMemberEntitlements = {
 
 const freeEntitlements = {
   exercises: { mode: "tier", tier: "T1" },
-  coach: { window: "month", limit: 5 },
   // One meal photo a day without a subscription (Kd, RULINGS 2026-09-22: "PER
   // DAY 1 MEAL"; was 2).
   meal_scan: { window: "day", limit: 1 },

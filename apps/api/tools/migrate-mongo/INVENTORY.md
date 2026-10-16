@@ -87,6 +87,7 @@ portion_source='legacy', nutrition_sources={legacy_model}, calc_version=0`.
 `fiber_g`,`meal_type`,`notes`,`quantity`→ no target (**RULING** drop vs fold).
 
 ## 5. `coach_conversations` (11) → `coach_threads` + `coach_messages`
+**Not copied since ROADMAP 9b**: the coach and these two tables were deleted. Kept as the record of what was there.
 Real keys: `_id,user_id,title,messages,created_at,updated_at`. `messages[]` =
 `{role,content,timestamp}`.
 Thread: `_id`→`legacy_mongo_id`, `title`→`title`, `updated_at`→`last_message_at`.

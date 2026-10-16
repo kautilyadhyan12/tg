@@ -8,7 +8,6 @@ import { uuidv5 } from "./uuid5.js";
 import { transformWorkout } from "./collections/workouts.js";
 import { transformMeal } from "./collections/meals.js";
 import { transformBody } from "./collections/body.js";
-import { transformCoach } from "./collections/coach.js";
 import { transformRun, transformRoute } from "./collections/running.js";
 
 export interface CountGate {
@@ -122,28 +121,17 @@ export async function verifyNutrition(mongo: MongoReader, sql: Sql): Promise<Nut
   return { meals, body, ok: meals.ok && body.ok };
 }
 
-// ── P2.7e coach + running gates ─────────────────────────────────────────────
+// ── P2.7e running gates ─────────────────────────────────────────────────────
 
-export interface CoachRunningVerification {
-  threads: CountGate;
-  messages: CountGate;
+export interface RunningVerification {
   runs: CountGate;
   routes: CountGate;
   ok: boolean;
 }
 
-/** Threads/runs/routes carry legacy_mongo_id; coach_messages does not, so its
- *  migrated rows are counted via membership in migrated threads. Expected is
- *  re-derived through the tested transforms (verifies the write path). */
-export async function verifyCoachRunning(mongo: MongoReader, sql: Sql): Promise<CoachRunningVerification> {
-  let expectedThreads = 0;
-  let expectedMessages = 0;
-  await mongo.each("coach_conversations", (doc) => {
-    const d = transformCoach(doc);
-    if (d === null) return;
-    expectedThreads += 1;
-    expectedMessages += d.messages.length;
-  });
+/** Runs and routes carry legacy_mongo_id. Expected is re-derived through the
+ *  tested transforms (verifies the write path). */
+export async function verifyRunning(mongo: MongoReader, sql: Sql): Promise<RunningVerification> {
   let expectedRuns = 0;
   await mongo.each("running_sessions", (doc) => {
     if (transformRun(doc) !== null) expectedRuns += 1;
@@ -153,18 +141,12 @@ export async function verifyCoachRunning(mongo: MongoReader, sql: Sql): Promise<
     if (transformRoute(doc) !== null) expectedRoutes += 1;
   });
 
-  const [t] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM coach_threads WHERE legacy_mongo_id IS NOT NULL`;
-  const [msg] = await sql<{ n: number }[]>`
-    SELECT count(*)::int AS n FROM coach_messages
-    WHERE thread_id IN (SELECT id FROM coach_threads WHERE legacy_mongo_id IS NOT NULL)`;
   const [r] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM runs WHERE legacy_mongo_id IS NOT NULL`;
   const [sr] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM saved_routes WHERE legacy_mongo_id IS NOT NULL`;
 
-  const threads: CountGate = { collection: "coach_threads", mongo: expectedThreads, pg: t?.n ?? 0, ok: (t?.n ?? 0) === expectedThreads };
-  const messages: CountGate = { collection: "coach_messages", mongo: expectedMessages, pg: msg?.n ?? 0, ok: (msg?.n ?? 0) === expectedMessages };
   const runs: CountGate = { collection: "runs", mongo: expectedRuns, pg: r?.n ?? 0, ok: (r?.n ?? 0) === expectedRuns };
   const routes: CountGate = { collection: "saved_routes", mongo: expectedRoutes, pg: sr?.n ?? 0, ok: (sr?.n ?? 0) === expectedRoutes };
-  return { threads, messages, runs, routes, ok: threads.ok && messages.ok && runs.ok && routes.ok };
+  return { runs, routes, ok: runs.ok && routes.ok };
 }
 
 // ── P2.7f deep parity gate (§7:911-914) ─────────────────────────────────────
@@ -207,7 +189,7 @@ export interface ParityVerification {
   ok: boolean;
 }
 
-/** Per-user parity across workouts/sets/meals/coach_messages/runs + a sampled
+/** Per-user parity across workouts/sets/meals/runs + a sampled
  *  UUIDv5 cross-ref (a migrated workout's PG user_id equals uuidv5 of the source
  *  workout's user_id). idBySlug is needed for the sets unroll count. */
 export async function verifyParity(
@@ -229,11 +211,6 @@ export async function verifyParity(
     const row = transformMeal(doc);
     if (row !== null) bump(mMeals, row.userId);
   });
-  const mMsgs = new Map<string, number>();
-  await mongo.each("coach_conversations", (doc) => {
-    const d = transformCoach(doc);
-    if (d !== null) bump(mMsgs, d.thread.userId, d.messages.length);
-  });
   const mRuns = new Map<string, number>();
   await mongo.each("running_sessions", (doc) => {
     const row = transformRun(doc);
@@ -253,10 +230,6 @@ export async function verifyParity(
     SELECT user_id, count(*)::int AS n FROM workout_sets WHERE user_id = ANY(${migratedIds}) GROUP BY user_id`);
   const pMeals = toMap(await sql<{ user_id: string; n: number }[]>`
     SELECT user_id, count(*)::int AS n FROM meal_logs WHERE legacy_mongo_id IS NOT NULL GROUP BY user_id`);
-  const pMsgs = toMap(await sql<{ user_id: string; n: number }[]>`
-    SELECT t.user_id, count(*)::int AS n FROM coach_messages m
-    JOIN coach_threads t ON t.id = m.thread_id
-    WHERE t.legacy_mongo_id IS NOT NULL GROUP BY t.user_id`);
   const pRuns = toMap(await sql<{ user_id: string; n: number }[]>`
     SELECT user_id, count(*)::int AS n FROM runs WHERE legacy_mongo_id IS NOT NULL GROUP BY user_id`);
 
@@ -264,7 +237,6 @@ export async function verifyParity(
     ...comparePerUser("workouts", mWorkouts, pWorkouts),
     ...comparePerUser("workout_sets", mSets, pSets),
     ...comparePerUser("meals", mMeals, pMeals),
-    ...comparePerUser("coach_messages", mMsgs, pMsgs),
     ...comparePerUser("runs", mRuns, pRuns),
   ];
 

@@ -4,7 +4,7 @@
 // which the XP recompute reads for badge XP (DECISIONS 2026-07-24 — XP storage
 // added; the P2.3 GAP-1 "XP not ported" deferral is discharged). Variety
 // re-keyed to families F1–F12 (GAP-4). Values cited to badges.py lines.
-// Meal/coach/photo criteria are seeded but their stats evaluate to 0 until
+// Meal/photo criteria are seeded but their stats evaluate to 0 until
 // those modules land (P2.5/P2.6) — data, not code.
 import { z } from "zod";
 import { TIER_XP, type BadgeTier } from "./xp.js";
@@ -53,7 +53,6 @@ export const ACHIEVEMENTS: readonly AchievementSeed[] = [
   { code: "variety_all", nameKey: "achievement.variety_all", icon: "🌈", tier: "gold", criteria: { stat: "families_tried", gte: 12 } },
   { code: "first_meal", nameKey: "achievement.first_meal", icon: "🍎", tier: "bronze", criteria: { stat: "total_meals", gte: 1 } },
   { code: "macro_master", nameKey: "achievement.macro_master", icon: "🥩", tier: "gold", criteria: { stat: "protein_target_streak", gte: 7 } },
-  { code: "first_chat", nameKey: "achievement.first_chat", icon: "💬", tier: "bronze", criteria: { stat: "coach_messages", gte: 1 } },
   { code: "photo_meal", nameKey: "achievement.photo_meal", icon: "📸", tier: "bronze", criteria: { stat: "photo_meals_logged", gte: 1 } },
 ];
 
