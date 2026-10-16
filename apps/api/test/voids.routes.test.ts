@@ -477,7 +477,7 @@ d("void a payment, a refund or a sale (real Postgres)", () => {
       expect(after.sales.find((s) => s.id === towelSale.id)).toMatchObject({ undone: false, voided: null });
       expect(after.totals.totalMinor).toBe(before.totals.totalMinor - 500);
 
-      // One voided before 0125: who and when, and no reason.
+      // One voided before 0126: who and when, and no reason.
       await sql`UPDATE gym_sales SET undone_at = ${clock}, undone_by = ${owner.userId} WHERE id = ${towelSale.id}`;
       expect((await sellPage(gymId, owner.cookies)).sales.find((s) => s.id === towelSale.id)?.voided).toEqual({ reason: null, on: "2026-10-15", by: "Sam Owner" });
     },

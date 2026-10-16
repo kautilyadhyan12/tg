@@ -5,7 +5,6 @@ export * from "./money.js";
 export * from "./catalog.js";
 export * from "./training.js";
 export * from "./trust.js";
-export * from "./coach.js";
 export * from "./game.js";
 export * from "./geo.js";
 export * from "./metering.js";

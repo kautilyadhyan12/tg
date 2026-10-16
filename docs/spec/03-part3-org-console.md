@@ -3830,7 +3830,7 @@ payment, a refund or a sale recorded by mistake is **voided**, as gym software d
   server's answer: "Payment voided. Maya Patel owes ₹2,360.00 for 15 Oct – 14 Nov 2026 again.
   If they paid, record the right amount. If they owe nothing, void the bill." (the last sentence
   only where Void bill is offered).
-- **A reason is picked, never typed** (migration `0125`, `void_reason`, a CHECK on each table):
+- **A reason is picked, never typed** (migration `0126`, `void_reason`, a CHECK on each table):
   a payment: Recorded by mistake · Wrong amount · Wrong person · Something else; a refund:
   Noted by mistake · Wrong amount · Something else; a sale: Recorded by mistake · Wrong product
   or quantity · Brought back · Something else. Nothing is sent until one is picked.

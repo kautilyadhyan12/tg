@@ -1,6 +1,6 @@
 // The AI chat coach is deleted (Kd, 2026-10-15; ROADMAP Stage 1 item 9). Its
-// addresses answer "not found" to everybody, and a person's old coach chats are
-// still theirs: in their data download, and removed with their account.
+// addresses answer "not found" to everybody. Its old chats went with its tables
+// (ROADMAP 9b), and a person's data download and account removal work as before.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { dpdpExportSchema } from "@app/shared";
@@ -43,14 +43,10 @@ d("the deleted chat coach (real Postgres)", () => {
     return { userId: row[0]?.id ?? "", cookies: Object.fromEntries(login.cookies.map((c) => [c.name, c.value])) };
   };
 
-  /** A chat from before the coach was deleted, as its tables still hold it. */
-  const oldChat = async (userId: string, words: string): Promise<{ threadId: string; messageId: string }> => {
-    const th = await sql<{ id: string }[]>`
-      INSERT INTO coach_threads (user_id, title) VALUES (${userId}, 'Old thread') RETURNING id`;
-    const threadId = th[0]?.id ?? "";
-    const msg = await sql<{ id: string }[]>`
-      INSERT INTO coach_messages (thread_id, role, content) VALUES (${threadId}, 'user', ${words}) RETURNING id`;
-    return { threadId, messageId: msg[0]?.id ?? "" };
+  const weighIn = async (userId: string, kg: number): Promise<string> => {
+    const row = await sql<{ id: string }[]>`
+      INSERT INTO body_measurements (user_id, measured_at, weight_kg) VALUES (${userId}, now(), ${kg}) RETURNING id`;
+    return row[0]?.id ?? "";
   };
 
   beforeAll(async () => {
@@ -70,42 +66,43 @@ d("the deleted chat coach (real Postgres)", () => {
 
   afterAll(async () => {
     if (app !== undefined) await app.close();
-    await sql`DELETE FROM coach_threads WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'coach-deleted-%@example.com')`;
+    await sql`DELETE FROM body_measurements WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'coach-deleted-%@example.com')`;
     await sql`DELETE FROM users WHERE email LIKE 'coach-deleted-%@example.com'`;
     await sql.end({ timeout: 5 });
   });
 
-  it("keeps a person's old coach chats in their data download, and removes them with their account", { timeout: 60_000 }, async () => {
+  it("with the chat tables gone, a person's data download and account removal still work, and take nobody else's data", { timeout: 60_000 }, async () => {
     const me = await signIn(`coach-deleted-mine-${String(Date.now())}@example.com`);
     const them = await signIn(`coach-deleted-theirs-${String(Date.now())}@example.com`);
-    const mine = await oldChat(me.userId, "my old question about squats");
-    const theirs = await oldChat(them.userId, "somebody else's old question");
+    const mine = await weighIn(me.userId, 71.5);
+    const theirs = await weighIn(them.userId, 64.25);
 
     const download = await inject({ method: "GET", url: "/v1/users/me/export", cookies: me.cookies });
     expect(download.statusCode).toBe(200);
-    // The message's own words: the thread's title does not hold them, so only coach_messages can.
     const file = dpdpExportSchema.parse(JSON.parse(download.body));
-    expect(file.data["coach_messages"]?.map((m) => [m.thread_id, m.content])).toEqual([[mine.threadId, "my old question about squats"]]);
-    expect(file.data["coach_threads"]?.length).toBe(1);
-    expect(download.body).not.toContain("somebody else's old question");
+    expect(file.data["body_measurements"]?.map((m) => m.id)).toEqual([mine]);
+    expect(Object.keys(file.data).filter((t) => t.startsWith("coach"))).toEqual([]);
+    expect(download.body).not.toContain(theirs);
 
-    // The account is deleted and its two weeks have passed: the removal takes the chats.
+    // The account is deleted and its two weeks have passed.
     await sql`UPDATE users SET status = 'deleted', deleted_at = ${new Date(Date.now() - (DPDP_RETENTION_DAYS + 1) * DAY_MS)}
               WHERE id = ${me.userId}`;
     const cutoff = new Date(Date.now() - DPDP_RETENTION_DAYS * DAY_MS);
     expect(await sql.begin((tx) => purgeUser(tx, me.userId, cutoff))).toBe("purged");
-    const left = await sql<{ threads: number; messages: number }[]>`
-      SELECT (SELECT count(*)::int FROM coach_threads WHERE id = ${mine.threadId}) AS threads,
-             (SELECT count(*)::int FROM coach_messages WHERE id = ${mine.messageId}) AS messages`;
-    expect(left[0]).toEqual({ threads: 0, messages: 0 });
-    // Somebody else's chats are untouched.
-    const kept = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM coach_messages WHERE id = ${theirs.messageId}`;
-    expect(kept[0]?.n).toBe(1);
+    const left = await sql<{ id: string }[]>`SELECT id FROM body_measurements WHERE id IN (${mine}, ${theirs})`;
+    expect(left.map((r) => r.id)).toEqual([theirs]);
+  });
+
+  // 0125's plan and badge statements are tested on rows that hold them, in db.migration.test.ts.
+  it("the chat tables are gone from the database", { timeout: 60_000 }, async () => {
+    const tables = await sql<{ t: string }[]>`
+      SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('coach_threads', 'coach_messages', 'kb_chunks')`;
+    expect(tables).toEqual([]);
   });
 
   it("answers 'not found' at every coach address, signed in or not", { timeout: 60_000 }, async () => {
     const me = await signIn(`coach-deleted-routes-${String(Date.now())}@example.com`);
-    const { threadId } = await oldChat(me.userId, "a thread the coach can no longer show");
+    const threadId = "00000000-0000-4000-8000-000000000009";
     const addresses: { method: "GET" | "POST" | "DELETE"; url: string; body?: unknown }[] = [
       { method: "POST", url: "/v1/coach/chat", body: { message: "hi" } },
       { method: "GET", url: "/v1/coach/threads" },
@@ -118,8 +115,5 @@ d("the deleted chat coach (real Postgres)", () => {
         expect({ at: `${a.method} ${a.url}`, status: res.statusCode }).toEqual({ at: `${a.method} ${a.url}`, status: 404 });
       }
     }
-    // The DELETE above did nothing: the thread is still there for the download.
-    const still = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM coach_threads WHERE id = ${threadId}`;
-    expect(still[0]?.n).toBe(1);
   });
 });

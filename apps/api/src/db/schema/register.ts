@@ -206,7 +206,7 @@ export const gymSales = pgTable(
     stockCounted: boolean("stock_counted").notNull().default(false),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
     undoneBy: uuid("undone_by").references(() => users.id, { onDelete: "set null" }),
-    /** Why staff voided it, picked from a list (0125; 18o); null for one voided before. */
+    /** Why staff voided it, picked from a list (0126; 18o); null for one voided before. */
     voidReason: text("void_reason"),
     discountId: uuid("discount_id"),
     discountName: text("discount_name"),

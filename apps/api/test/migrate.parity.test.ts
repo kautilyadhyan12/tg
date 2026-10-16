@@ -34,7 +34,7 @@ describe("comparePerUser", () => {
   });
 
   it("stamps the entity name so mixed mismatches are attributable", () => {
-    const out = comparePerUser("coach_messages", new Map([["u1", 1]]), new Map([["u1", 2]]));
-    expect(out[0]?.entity).toBe("coach_messages");
+    const out = comparePerUser("runs", new Map([["u1", 1]]), new Map([["u1", 2]]));
+    expect(out[0]?.entity).toBe("runs");
   });
 });
