@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, bpToTaxRateText, orgWords } from '@app/shared';
+import { MEMBERSHIP_DESCRIPTION_MAX, MEMBERSHIP_NAME_MAX, aCoach, bpToTaxRateText, orgWords } from '@app/shared';
 import { Loader2, Plus } from 'lucide-react';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -93,7 +93,7 @@ function Part({ title, children }) {
 
 /** `inRow`: the form is inside a row of a list, under that list's own heading.
  *  `error`: why the server refused the last save, said beside the button that sent it. */
-function TypeForm({ gymId, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
+function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, draft, setDraft, problems, refused, busy, forWord, error, inRow, onSave, onCancel }) {
   const [addingRate, setAddingRate] = useState(false);
   const editing = draft.id !== null;
   const title = editing ? 'Change membership type' : (forWord?.heading ?? 'Add a membership type');
@@ -366,8 +366,8 @@ function TypeForm({ gymId, currency, options, taxRates, onRateAdded, draft, setD
                 <span>Includes personal training</span>
                 <span className="c-s14 c-t2">
                   {choice === 'pack'
-                    ? 'Each session booked with a trainer uses one from the pack.'
-                    : 'Sessions with a trainer can be booked on this membership.'}
+                    ? `Each session booked with ${aCoach(orgType)} uses one from the pack.`
+                    : `Sessions with ${aCoach(orgType)} can be booked on this membership.`}
                 </span>
               </span>
             </label>
@@ -707,6 +707,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   const form = formOpen ? (
     <TypeForm
       gymId={gymId}
+      orgType={org.orgType}
       currency={draftCurrency}
       options={classOptions(list, editing)}
       taxRates={list?.taxRates ?? []}

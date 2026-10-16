@@ -259,7 +259,7 @@ d("a challenge about an exercise, and the list the form reads (real Postgres)", 
       expect(res.statusCode, res.body).toBe(200);
       const body = JSON.parse(res.body) as ChallengeSubjectsResponse;
       expect(body.subjects.map((s) => [s.id, s.title, s.pickExercise, s.appCounts.map((m) => m.measure)])).toEqual([
-        ["gym_visits", "Gym visits", false, ["days"]],
+        ["gym_visits", "Visits", false, ["days"]],
         ["workouts", "Workouts in the app", false, ["days"]],
         ["exercise", "An exercise", true, []],
         ["own", "Something else", false, []],

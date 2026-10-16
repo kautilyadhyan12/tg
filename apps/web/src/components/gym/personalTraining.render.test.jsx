@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { memberPtResponseSchema } from '@app/shared';
+import { emptyText } from './personalTrainingView';
 
 const svc = { view: vi.fn(), book: vi.fn(), cancel: vi.fn() };
 vi.mock('../../api/memberPtApi', () => ({ memberPtService: svc }));
@@ -82,6 +83,15 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('a member’s page with nobody taking sessions (5f-ii)', () => {
+  it('names the staff in the business’s own word', () => {
+    const view = { trainers: [], from: '2026-10-09', lastDay: '2026-10-30' };
+    expect(emptyText(view, 'Core', 'pilates_studio')).toBe('Core has no instructors taking personal training sessions yet.');
+    expect(emptyText(view, 'Steel City', 'crossfit_box')).toBe('Steel City has no coaches taking personal training sessions yet.');
+    expect(emptyText(view, 'Iron House', 'gym')).toBe('Iron House has no trainers taking personal training sessions yet.');
+  });
 });
 
 describe('a member’s personal training', () => {
@@ -413,11 +423,11 @@ describe('a member’s personal training', () => {
     expect(screen.getAllByRole('button', { name: /^Cancel session/ })).toHaveLength(1);
   });
 
-  it('a session that has started has no Cancel; a trainer with no name reads "a trainer"', async () => {
+  it('a session that has started has no Cancel; a trainer with no name reads "a member of staff"', async () => {
     serve(view({ sessions: [session(S1, { cancel: null, trainerName: null, packCharged: false })] }));
     render(<PersonalTraining gym={GYM} />);
     const mine = await screen.findByRole('list', { name: 'Your sessions' });
-    expect(mine.textContent).toContain('with a trainer');
+    expect(mine.textContent).toContain('with a member of staff');
     expect(mine.textContent).not.toContain('pack');
     expect(within(mine).queryByRole('button')).toBeNull();
   });

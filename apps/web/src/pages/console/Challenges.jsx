@@ -1231,7 +1231,7 @@ export default function Challenges() {
               <p className="c-s15 c-t2">
                 {readOnly
                   ? 'Nothing to show yet.'
-                  : `A challenge is a contest with a start and an end, such as "Most gym days in October" or "Most push-ups in a minute". The app counts check-ins and workouts for you, and your staff can count anything else. Press Add challenge to set one up.`}
+                  : `A challenge is a contest with a start and an end, such as "Most visits in October" or "Most push-ups in a minute". The app counts check-ins and workouts for you, and your staff can count anything else. Press Add challenge to set one up.`}
               </p>
             </section>
           ) : null}

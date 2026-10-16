@@ -73,7 +73,7 @@ describe('each board’s switch says whether members see it, and why not', () =>
       false,
     ],
     ['Workout days needs no check-in', 'workout_days', { checkingIn: false, memberStatus: 'no_checkins' }, true, 'Members see this board when 3 or more people are on it.', false],
-    ['too few this period', 'gym_days', { memberStatus: 'too_few' }, true, 'Not showing to members yet: fewer than 3 people have a gym day in this period.', false],
+    ['too few this period', 'gym_days', { memberStatus: 'too_few' }, true, 'Not showing to members yet: fewer than 3 people have a visit in this period.', false],
     ['another board, not read', 'streak', {}, true, 'Members see this board when 3 or more people are on it.', false],
   ])('%s', (_name, id, over, on, line, showing) => {
     expect(boardSwitch(id, board(over), words)).toMatchObject({ on, line, showing });
@@ -95,9 +95,9 @@ describe('each board’s switch says whether members see it, and why not', () =>
 
 describe('the lines above and under the table', () => {
   it('how many people, and how many members do not see', () => {
-    expect(countLine(board(), words)).toBe('9 people have a gym day · 5 are hidden from members');
-    expect(countLine(board({ total: 1, ranked: 1 }), words)).toBe('1 person has a gym day');
-    expect(countLine(board({ total: 2, ranked: 1 }), words)).toBe('2 people have a gym day · 1 is hidden from members');
+    expect(countLine(board(), words)).toBe('9 people have a visit · 5 are hidden from members');
+    expect(countLine(board({ total: 1, ranked: 1 }), words)).toBe('1 person has a visit');
+    expect(countLine(board({ total: 2, ranked: 1 }), words)).toBe('2 people have a visit · 1 is hidden from members');
     expect(countLine(board({ board: 'streak', total: 1200, ranked: 1200 }), words)).toBe('1,200 people have a streak');
     expect(countLine(board({ total: 0, ranked: 0 }), words)).toBeNull();
   });
@@ -257,7 +257,7 @@ describe('fixing a visit: the boxes', () => {
     expect(box.button).toBe('Remove visit');
     expect(box.changes).toEqual([
       'Chen Wu — the 12:00 pm visit on Tue 6 Oct is removed.',
-      'Their Gym days, this week, go from 2 to 1. Their streak is worked out again without that day.',
+      'Their visits, this week, go from 2 to 1. Their streak is worked out again without that day.',
     ]);
     expect(box.keeps).toEqual([
       'In their app, Chen Wu still sees it under "Didn\'t count", with who removed it and today\'s date.',
@@ -269,7 +269,7 @@ describe('fixing a visit: the boxes', () => {
     const day = COUNTED.days[1];
     expect(removeVisitBox('Chen Wu', day.visits[0], day, COUNTED).changes).toEqual([
       'Chen Wu — the 6:00 pm visit on Mon 5 Oct is removed.',
-      'They have another visit that day, so their Gym days, this week, stay at 2.',
+      'They have another visit that day, so their visits, this week, stay at 2.',
     ]);
     expect(removeVisitBox('Chen Wu', day.visits[1], day, COUNTED).changes[0]).toBe('Chen Wu — the visit added for Mon 5 Oct is removed.');
   });
@@ -288,7 +288,7 @@ describe('fixing a visit: the boxes', () => {
     expect(inside.title).toBe('Add a visit for Chen Wu');
     expect(inside.changes).toEqual([
       'Chen Wu — a visit is added for Wed 7 Oct.',
-      'Their Gym days, this week, go from 2 to 3. Their streak is worked out again with that day.',
+      'Their visits, this week, go from 2 to 3. Their streak is worked out again with that day.',
     ]);
     expect(inside.keeps).toEqual(["In their app, Chen Wu sees who added it and today's date.", "Nobody else's visits change."]);
     expect(inside.done).toBe('Visit added for Chen Wu on Wed 7 Oct.');
@@ -298,7 +298,7 @@ describe('fixing a visit: the boxes', () => {
     );
     // All time has no start: every earlier day is inside it.
     expect(addVisitBox('Chen Wu', '2026-09-30', { ...COUNTED, period: 'all_time', from: null }).changes[1]).toMatch(
-      /^Their Gym days, all time, go from 2 to 3\./,
+      /^Their visits, all time, go from 2 to 3\./,
     );
   });
 });

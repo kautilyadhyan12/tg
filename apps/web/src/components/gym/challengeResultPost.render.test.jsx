@@ -60,13 +60,13 @@ describe('what a result post says', () => {
   it('the most wins: the winner, the first three with their numbers, how it was won and its days', () => {
     expect(said(ended({ board: board({ top: TOP }), prize: 'A month free' }))).toEqual({
       challengeId: 'c1',
-      headline: 'Winner: Asha R., with 5 gym days.',
+      headline: 'Winner: Asha R., with 5 visits.',
       mine: null,
-      facts: 'Most gym days wins · Thu 1 Oct – Tue 6 Oct',
+      facts: 'Most visits wins · Thu 1 Oct – Tue 6 Oct',
       rows: [
-        { key: 'u-Asha R.', place: 1, placeText: '1st', name: 'Asha R.', mine: null, sub: null, number: '5 gym days', reached: false, label: '1st: Asha R., 5 gym days' },
-        { key: 'u-Vera V.', place: 2, placeText: '2nd', name: 'Vera V.', mine: null, sub: null, number: '4 gym days', reached: false, label: '2nd: Vera V., 4 gym days' },
-        { key: 'u-Bilal K.', place: 3, placeText: '3rd', name: 'Bilal K.', mine: null, sub: null, number: '2 gym days', reached: false, label: '3rd: Bilal K., 2 gym days' },
+        { key: 'u-Asha R.', place: 1, placeText: '1st', name: 'Asha R.', mine: null, sub: null, number: '5 visits', reached: false, label: '1st: Asha R., 5 visits' },
+        { key: 'u-Vera V.', place: 2, placeText: '2nd', name: 'Vera V.', mine: null, sub: null, number: '4 visits', reached: false, label: '2nd: Vera V., 4 visits' },
+        { key: 'u-Bilal K.', place: 3, placeText: '3rd', name: 'Bilal K.', mine: null, sub: null, number: '2 visits', reached: false, label: '3rd: Bilal K., 2 visits' },
       ],
       rowsLabel: 'Top three',
       prize: 'Prize: A month free',
@@ -77,15 +77,15 @@ describe('what a result post says', () => {
   it('the reader is "You" in the rows, and is told how they did', () => {
     const mine = said(ended({ board: board({ top: [TOP[0], row('Vera V.', 2, 4, { isMe: true }), TOP[2]] }), me: me({ value: 4, place: 2 }) }));
     expect(mine.rows.map((r) => r.name)).toEqual(['Asha R.', 'You', 'Bilal K.']);
-    expect(mine.mine).toBe('You finished 2nd, with 4 gym days.');
+    expect(mine.mine).toBe('You finished 2nd, with 4 visits.');
     const won = said(ended({ board: board({ top: [row('Vera V.', 1, 5, { isMe: true })] }), me: me({ value: 5, place: 1 }) }));
-    expect(won.headline).toBe('You won, with 5 gym days.');
+    expect(won.headline).toBe('You won, with 5 visits.');
   });
 
   it.each([
-    ['joint winners', { board: board({ top: [row('Asha R.', 1, 5), row('Vera V.', 1, 5), row('Bilal K.', 3, 2)], leaders: 2 }) }, 'Joint winners: Asha R. and Vera V., with 5 gym days each.'],
-    ['a number to reach', { target: 4, board: board({ top: TOP, reached: 2 }) }, '2 people reached 4 gym days.'],
-    ['a number nobody reached', { target: 6, board: board({ top: TOP, reached: 0 }) }, 'Nobody reached 6 gym days.'],
+    ['joint winners', { board: board({ top: [row('Asha R.', 1, 5), row('Vera V.', 1, 5), row('Bilal K.', 3, 2)], leaders: 2 }) }, 'Joint winners: Asha R. and Vera V., with 5 visits each.'],
+    ['a number to reach', { target: 4, board: board({ top: TOP, reached: 2 }) }, '2 people reached 4 visits.'],
+    ['a number nobody reached', { target: 6, board: board({ top: TOP, reached: 0 }) }, 'Nobody reached 6 visits.'],
     ['too few people', { board: board({ status: 'too_few', ranked: 0, leaders: 0 }) }, 'It finished with fewer than 3 people in it, so there are no places.'],
     ['the lowest wins, in the gym’s own word', { counts: 'own', unit: 'seconds', lowestWins: true, board: board({ top: [row('Asha R.', 1, 58)] }) }, 'Winner: Asha R., with 58 seconds.'],
   ])('%s', (_what, over, headline) => {
@@ -108,14 +108,14 @@ describe('what a result post says', () => {
   it('in teams: the winning team, every team with its people and number, the reader’s own marked', () => {
     const teamBoard = { status: 'shown', rows: [team('Red Team', 2, 9), team('Blue Team', 1, 14, { isMine: true })], mine: null };
     const teams = said(ended({ teams: 'staff', teamBoard, me: me({ value: 3 }) }));
-    expect(teams.headline).toBe('Winner: Blue Team, with 14 gym days.');
-    expect(teams.mine).toBe('Your team, Blue Team, won. You had 3 gym days.');
+    expect(teams.headline).toBe('Winner: Blue Team, with 14 visits.');
+    expect(teams.mine).toBe('Your team, Blue Team, won. You had 3 visits.');
     expect(teams.rowsLabel).toBe('Teams');
     expect(teams.rows.map((r) => [r.placeText, r.name, r.mine, r.sub, r.number])).toEqual([
-      ['1st', 'Blue Team', 'Your team', '3 people', '14 gym days'],
-      ['2nd', 'Red Team', null, '3 people', '9 gym days'],
+      ['1st', 'Blue Team', 'Your team', '3 people', '14 visits'],
+      ['2nd', 'Red Team', null, '3 people', '9 visits'],
     ]);
-    expect(teams.facts).toBe('The team with the most gym days wins · Thu 1 Oct – Tue 6 Oct');
+    expect(teams.facts).toBe('The team with the most visits wins · Thu 1 Oct – Tue 6 Oct');
     // While members see no numbers, no team is listed with one.
     expect(said(ended({ teams: 'staff', teamBoard: { ...teamBoard, status: 'too_few' } })).rows).toEqual([]);
   });
@@ -166,11 +166,11 @@ describe('the post, drawn', () => {
     expect(within(first).getByText('Iron House')).toBeTruthy();
     expect(within(first).getByText('October Six has ended.')).toBeTruthy();
     const box = within(first).getByTestId('challenge-result');
-    expect(within(box).getByText('Winner: Asha R., with 5 gym days.')).toBeTruthy();
-    expect(within(box).getByText('You finished 9th, with 1 gym day.')).toBeTruthy();
+    expect(within(box).getByText('Winner: Asha R., with 5 visits.')).toBeTruthy();
+    expect(within(box).getByText('You finished 9th, with 1 visit.')).toBeTruthy();
     expect(within(box).getByRole('list', { name: 'Top three' })).toBeTruthy();
-    expect(within(box).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['1st: Asha R., 5 gym days', '2nd: Vera V., 4 gym days', '3rd: Bilal K., 2 gym days']);
-    expect(within(box).getByText('Most gym days wins · Thu 1 Oct – Tue 6 Oct')).toBeTruthy();
+    expect(within(box).getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['1st: Asha R., 5 visits', '2nd: Vera V., 4 visits', '3rd: Bilal K., 2 visits']);
+    expect(within(box).getByText('Most visits wins · Thu 1 Oct – Tue 6 Oct')).toBeTruthy();
     expect(within(box).getByText('Prize: A month free')).toBeTruthy();
     fireEvent.click(within(box).getByRole('button', { name: 'See the challenge' }));
     expect(onChallenge).toHaveBeenCalledWith('c1');
@@ -183,7 +183,7 @@ describe('the post, drawn', () => {
     svc.list.mockResolvedValue(feed([gone]));
     render(<Updates gym={GYM} onChallenge={vi.fn()} />);
     const box = await screen.findByTestId('challenge-result');
-    expect(within(box).getByText('Winner: Asha R., with 5 gym days.')).toBeTruthy();
+    expect(within(box).getByText('Winner: Asha R., with 5 visits.')).toBeTruthy();
     expect(within(box).queryByRole('button', { name: 'See the challenge' })).toBeNull();
     cleanup();
     svc.list.mockResolvedValue(feed([post('r', 'October Six has ended.', { challengeResult: result(ended({ board: board({ top: TOP }) })) })]));

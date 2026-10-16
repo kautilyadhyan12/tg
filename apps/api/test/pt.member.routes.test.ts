@@ -743,6 +743,10 @@ d("a member's own personal training (real Postgres, two api instances)", { timeo
     await inject("PUT", `/v1/orgs/${gym.id}/pt/trainers/${none.userId}`, gym.owner.cookies, { offers: true, sessionMinutes: 60, hours: [] });
     expect((await read(gym, maya)).trainers).toEqual([]);
     expect(said(await book(gym, maya, off))).toEqual([409, "trainer_not_offering", PT_MEMBER_WORDS.trainer_not_offering]);
+    // A Pilates studio's member reads its own word for its staff (5f-ii), from the gym's row.
+    await sql`UPDATE gyms SET org_type = 'pilates_studio' WHERE id = ${gym.id}`;
+    expect(said(await book(gym, maya, off))).toEqual([409, "trainer_not_offering", "This instructor isn't taking personal training sessions right now."]);
+    await sql`UPDATE gyms SET org_type = 'gym' WHERE id = ${gym.id}`;
   });
 
   it("a request that does not parse is a 400 that changes nothing", async () => {

@@ -51,7 +51,7 @@ export const confirmPtSessionsQuerySchema = z.object({ confirmPtSessions: confir
 export const PT_SESSIONS_ENDING_ERROR = "pt_sessions_ending";
 export const PT_SESSIONS_ENDING_MESSAGE = "This person has personal training sessions booked. Check them, then confirm.";
 /** The same 409, for a trainer removed from the staff: the sessions booked with them. */
-export const PT_TRAINER_SESSIONS_ENDING_MESSAGE = "People are booked with this trainer for personal training. Check the sessions, then confirm.";
+export const PT_TRAINER_SESSIONS_ENDING_MESSAGE = "People are booked for personal training with this member of staff. Check the sessions, then confirm.";
 
 export const ptSessionsEndingRefusalSchema = z.object({
   error: z.literal(PT_SESSIONS_ENDING_ERROR),

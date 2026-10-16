@@ -325,6 +325,23 @@ describe('the page for whoever runs the timetable', () => {
     expect(hrefOf('Open Clients')).toBe('/console/iron-house/members');
   });
 
+  // 5f-ii: a Pilates studio's instructors and a CrossFit box's coaches, on every line of the page.
+  it.each([
+    ['pilates_studio', 'an instructor', 'instructor', 'Instructors', 'clients'],
+    ['crossfit_box', 'a coach', 'coach', 'Coaches', 'members'],
+  ])('a %s names its staff in its own word on every line', async (orgType, a, one, heading, people) => {
+    ORG = { ...ORG, orgType };
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ setup: NOT_DONE, trainers: [ana, owner] }) });
+    open();
+    expect(await screen.findByText(`One-to-one sessions with ${a}. Set when each ${one} is available, then book ${people} into their available times.`)).toBeTruthy();
+    expect(stepText('trainer')).toContain(`1. Add ${a} and set their hours · Not done yet`);
+    expect(stepText('book')).toContain(`Press one of ${a}'s available times below`);
+    expect(screen.getByRole('heading', { name: heading })).toBeTruthy();
+    expect(screen.getByTestId('pt-no-trainers').textContent).toBe(`No ${heading.toLowerCase()} yet.`);
+    expect(screen.getByLabelText(`Add ${a}`)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/\btrainers?\b|\bgym\b/iu);
+  });
+
   it('a class the trainer coaches is listed on its day as time that is not free, on the clock the gym reads', async () => {
     ORG = { ...ORG, clockFormat: '12h' };
     const data = week();

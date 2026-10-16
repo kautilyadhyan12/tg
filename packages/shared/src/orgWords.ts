@@ -56,6 +56,8 @@ export interface OrgWords {
   readonly coachCap: string;
   /** The third role, more than one: "trainers", "instructors". */
   readonly coaches: string;
+  /** The same, as a heading: *"Instructors"*. */
+  readonly coachesCap: string;
   /** What the create screen calls the name box. */
   readonly nameLabel: string;
   /** An example name, shown greyed in that box. */
@@ -75,6 +77,7 @@ const GYM: OrgWords = {
   peopleCap: "Members",
   coach: "trainer",
   coaches: "trainers",
+  coachesCap: "Trainers",
   coachCap: "Trainer",
   nameLabel: "Gym name",
   placeholder: "Iron House",
@@ -93,13 +96,15 @@ const STUDIO: OrgWords = {
   peopleCap: "Clients",
   coach: "coach",
   coaches: "coaches",
+  coachesCap: "Coaches",
   coachCap: "Coach",
   nameLabel: "Studio name",
   placeholder: "Flow Studio",
 };
 
-/** Kd's five kinds of business (2026-10-16, ROADMAP 5f): a CrossFit box's athletes and
- *  coaches, a Pilates studio's clients and instructors. A yoga studio has members and
+/** Kd's five kinds of business (2026-10-16, ROADMAP 5f): a CrossFit box's members and
+ *  coaches (members, as Wodify calls them: Kd, 5f-ii), a Pilates studio's clients and
+ *  instructors. A yoga studio has members and
  *  trainers, as a gym does (Kd: "it is not a school"). */
 const CROSSFIT_BOX: OrgWords = {
   it: "box",
@@ -108,12 +113,13 @@ const CROSSFIT_BOX: OrgWords = {
   itToMembersCap: "Box",
   itToMembersPlural: "boxes",
   itToMembersPluralCap: "Boxes",
-  person: "athlete",
-  personCap: "Athlete",
-  people: "athletes",
-  peopleCap: "Athletes",
+  person: "member",
+  personCap: "Member",
+  people: "members",
+  peopleCap: "Members",
   coach: "coach",
   coaches: "coaches",
+  coachesCap: "Coaches",
   coachCap: "Coach",
   nameLabel: "Box name",
   placeholder: "Steel City CrossFit",
@@ -132,6 +138,7 @@ const YOGA_STUDIO: OrgWords = {
   peopleCap: "Members",
   coach: "trainer",
   coaches: "trainers",
+  coachesCap: "Trainers",
   coachCap: "Trainer",
   nameLabel: "Studio name",
   placeholder: "Lotus Yoga",
@@ -150,6 +157,7 @@ const PILATES_STUDIO: OrgWords = {
   peopleCap: "Clients",
   coach: "instructor",
   coaches: "instructors",
+  coachesCap: "Instructors",
   coachCap: "Instructor",
   nameLabel: "Studio name",
   placeholder: "Core Pilates",
@@ -170,6 +178,7 @@ const PERSONAL_TRAINER: OrgWords = {
   peopleCap: "Clients",
   coach: "coach",
   coaches: "coaches",
+  coachesCap: "Coaches",
   coachCap: "Coach",
   nameLabel: "Your business name",
   placeholder: "Coach Priya",
@@ -193,6 +202,7 @@ const CLINIC: OrgWords = {
   peopleCap: "Clients",
   coach: "clinician",
   coaches: "clinicians",
+  coachesCap: "Clinicians",
   coachCap: "Clinician",
   nameLabel: "Clinic name",
   placeholder: "Green Lane Practice",
@@ -222,6 +232,12 @@ function known(orgType: unknown): orgType is OrgType {
  *  screen mid-load must draw a sentence rather than throw. */
 export function orgWords(orgType: unknown): OrgWords {
   return known(orgType) ? BY_TYPE[orgType] : GYM;
+}
+
+/** "a trainer", "an instructor": one of the staff role, inside a sentence. */
+export function aCoach(orgType: unknown): string {
+  const { coach } = orgWords(orgType);
+  return /^[aeiou]/.test(coach) ? `an ${coach}` : `a ${coach}`;
 }
 
 /** WHAT TO SAY WHEN THERE IS NO ORGANISATION TO NAME — the front door, the join

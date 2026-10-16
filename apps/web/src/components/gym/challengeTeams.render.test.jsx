@@ -64,11 +64,11 @@ afterEach(() => cleanup());
 
 describe('teams, in words', () => {
   it('says how a challenge in teams is won', () => {
-    expect(howToWin(challenge('a', 'A'))).toBe('The team with the most gym days wins');
-    expect(howToWin(challenge('a', 'A', { target: 60 }))).toBe('Reach 60 gym days as a team');
+    expect(howToWin(challenge('a', 'A'))).toBe('The team with the most visits wins');
+    expect(howToWin(challenge('a', 'A', { target: 60 }))).toBe('Reach 60 visits as a team');
     expect(howToWin(challenge('a', 'A', { counts: 'own', unit: 'seconds', lowestWins: true }))).toBe('The fastest team wins');
     // A challenge people are in alone reads as it did.
-    expect(howToWin(challenge('a', 'A', { teams: 'none', teamBoard: null }))).toBe('Most gym days wins');
+    expect(howToWin(challenge('a', 'A', { teams: 'none', teamBoard: null }))).toBe('Most visits wins');
   });
 
   it('says who makes the teams', () => {
@@ -79,11 +79,11 @@ describe('teams, in words', () => {
 
   it('lists the placed teams first, then the rest in the gym order, each with its people and number', () => {
     expect(teamRows(challenge('a', 'A')).map((t) => [t.name, t.place, t.people, t.number, t.isMine])).toEqual([
-      ['Blue Team', 1, '5 people', '14 gym days', true],
-      ['Red Team', 2, '4 people', '11 gym days', false],
-      ['Green Team', null, 'Nobody yet', '0 gym days', false],
+      ['Blue Team', 1, '5 people', '14 visits', true],
+      ['Red Team', 2, '4 people', '11 visits', false],
+      ['Green Team', null, 'Nobody yet', '0 visits', false],
     ]);
-    expect(teamRows(challenge('a', 'A'))[0].label).toBe('Blue Team, your team: 1st, 5 people, 14 gym days');
+    expect(teamRows(challenge('a', 'A'))[0].label).toBe('Blue Team, your team: 1st, 5 people, 14 visits');
     // While no team has a number to show, none is printed, not even a 0.
     const hidden = teamRows(challenge('a', 'A', { teamBoard: teamBoard({ status: 'too_few', rows: [team(RED, 'Red Team', 1, 0, null), team(BLUE, 'Blue Team', 1, 0, null)] }) }));
     expect(hidden.map((t) => [t.name, t.place, t.people, t.number])).toEqual([
@@ -112,16 +112,16 @@ describe('teams, in words', () => {
     expect(myTeam(challenge('a', 'A'))).toEqual({
       name: 'Blue Team',
       people: [
-        { userId: 'u2', name: 'Chen W.', initials: 'C', isMe: false, number: '6 gym days' },
-        { userId: 'me', name: 'You', initials: 'You', isMe: true, number: '5 gym days' },
-        { userId: 'u3', name: 'Tom B.', initials: 'T', isMe: false, number: '3 gym days' },
+        { userId: 'u2', name: 'Chen W.', initials: 'C', isMe: false, number: '6 visits' },
+        { userId: 'me', name: 'You', initials: 'You', isMe: true, number: '5 visits' },
+        { userId: 'u3', name: 'Tom B.', initials: 'T', isMe: false, number: '3 visits' },
       ],
       more: null,
-      note: 'Teammates show here once they have a gym day.',
+      note: 'Teammates show here once they have a visit.',
     });
     // A big team: the leading ones are named and the rest with a number counted.
     const big = challenge('a', 'A', { teamBoard: teamBoard({ rows: [team(BLUE, 'Blue Team', 25, 90, 1, { isMine: true })], mine: { ...teamBoard().mine, more: 14 } }) });
-    expect([myTeam(big).more, myTeam(big).note]).toEqual(['and 14 more with a gym day', 'Teammates show here once they have a gym day.']);
+    expect([myTeam(big).more, myTeam(big).note]).toEqual(['and 14 more with a visit', 'Teammates show here once they have a visit.']);
     const full = challenge('a', 'A', { teamBoard: teamBoard({ rows: [team(BLUE, 'Blue Team', 17, 90, 1, { isMine: true })], mine: { ...teamBoard().mine, more: 14 } }) });
     expect(myTeam(full).note).toBeNull();
     const all = challenge('a', 'A', { teamBoard: teamBoard({ rows: [team(BLUE, 'Blue Team', 3, 14, 1, { isMine: true })] }) });
@@ -144,15 +144,15 @@ describe('teams, in words', () => {
 
   it('says how a challenge in teams finished, and how the member own team did', () => {
     const ended = (over = {}) => challenge('a', 'A', { state: 'ended', ...over });
-    expect(resultOf(ended())).toEqual({ headline: 'Winner: Blue Team, with 14 gym days.', mine: 'Your team, Blue Team, won. You had 5 gym days.' });
+    expect(resultOf(ended())).toEqual({ headline: 'Winner: Blue Team, with 14 visits.', mine: 'Your team, Blue Team, won. You had 5 visits.' });
     const second = teamBoard({ rows: [team(RED, 'Red Team', 4, 20, 1), team(BLUE, 'Blue Team', 5, 14, 2, { isMine: true })] });
-    expect(resultOf(ended({ teamBoard: second }))).toEqual({ headline: 'Winner: Red Team, with 20 gym days.', mine: 'Your team, Blue Team, finished 2nd, with 14 gym days. You had 5 gym days.' });
+    expect(resultOf(ended({ teamBoard: second }))).toEqual({ headline: 'Winner: Red Team, with 20 visits.', mine: 'Your team, Blue Team, finished 2nd, with 14 visits. You had 5 visits.' });
     const level = teamBoard({ rows: [team(RED, 'Red Team', 4, 14, 1), team(BLUE, 'Blue Team', 5, 14, 1, { isMine: true }), team(GREEN, 'Green Team', 2, 3, 3)] });
-    expect(resultOf(ended({ teamBoard: level }))).toEqual({ headline: 'Joint winners: Red Team and Blue Team, with 14 gym days each.', mine: 'Your team, Blue Team, was joint first. You had 5 gym days.' });
+    expect(resultOf(ended({ teamBoard: level }))).toEqual({ headline: 'Joint winners: Red Team and Blue Team, with 14 visits each.', mine: 'Your team, Blue Team, was joint first. You had 5 visits.' });
     const reached = teamBoard({ rows: [team(RED, 'Red Team', 4, 61, 1, { reached: true }), team(BLUE, 'Blue Team', 5, 40, 2, { isMine: true })] });
-    expect(resultOf(ended({ target: 60, teamBoard: reached }))).toEqual({ headline: '1 team reached 60 gym days: Red Team.', mine: 'Your team, Blue Team, got to 40 of 60. You had 5 gym days.' });
+    expect(resultOf(ended({ target: 60, teamBoard: reached }))).toEqual({ headline: '1 team reached 60 visits: Red Team.', mine: 'Your team, Blue Team, got to 40 of 60. You had 5 visits.' });
     const none = teamBoard({ rows: [team(RED, 'Red Team', 4, 12, 1), team(BLUE, 'Blue Team', 5, 9, 2)], mine: null });
-    expect(resultOf(ended({ target: 60, teamBoard: none, me: null }))).toEqual({ headline: 'No team reached 60 gym days.', mine: null });
+    expect(resultOf(ended({ target: 60, teamBoard: none, me: null }))).toEqual({ headline: 'No team reached 60 visits.', mine: null });
     expect(resultOf(ended({ teamBoard: teamBoard({ status: 'too_few', ...noTeam }) }))).toEqual({ headline: 'It finished with fewer than 3 people in it, so there are no places.', mine: null });
     expect(resultOf(ended({ teamBoard: teamBoard({ rows: [team(RED, 'Red Team', 0, 0, null), team(BLUE, 'Blue Team', 0, 0, null)], mine: null }), me: me() }))).toEqual({ headline: 'No team had a number.', mine: null });
     // The reader's team at nothing at all: it had no number, and that is what is said.
@@ -188,11 +188,11 @@ describe("a member's challenge in teams", () => {
     svc.list.mockResolvedValue(listOf([challenge('a', 'Team Week', { target: 60 })]));
     render(<Challenges gym={GYM} />);
     const card = cardOf(await screen.findByText('Team Week').then((el) => el.textContent));
-    expect(card.getByText('Reach 60 gym days as a team')).toBeTruthy();
+    expect(card.getByText('Reach 60 visits as a team')).toBeTruthy();
     expect(card.getByText('In teams. The staff at Iron House put people in teams.')).toBeTruthy();
-    expect(texts(card.getByRole('list', { name: 'Teams' }))).toEqual(['1stBlue TeamYour team5 people14 gym days', '2ndRed Team4 people11 gym days', '—Green TeamNobody yet0 gym days']);
-    expect(texts(card.getByRole('list', { name: 'People in Blue Team' }))).toEqual(['CChen W.6 gym days', 'YouYou5 gym days', 'TTom B.3 gym days']);
-    expect(card.getByText('Teammates show here once they have a gym day.')).toBeTruthy();
+    expect(texts(card.getByRole('list', { name: 'Teams' }))).toEqual(['1stBlue TeamYour team5 people14 visits', '2ndRed Team4 people11 visits', '—Green TeamNobody yet0 visits']);
+    expect(texts(card.getByRole('list', { name: 'People in Blue Team' }))).toEqual(['CChen W.6 visits', 'YouYou5 visits', 'TTom B.3 visits']);
+    expect(card.getByText('Teammates show here once they have a visit.')).toBeTruthy();
     // The number to reach is the team's: the member's own number has no bar and no "to go".
     const mine = within(card.getByLabelText('Your number in this challenge'));
     expect(mine.queryByRole('progressbar')).toBeNull();
@@ -233,7 +233,7 @@ describe("a member's challenge in teams", () => {
     await waitFor(() => expect(svc.pickTeam).toHaveBeenCalledTimes(1));
     expect(svc.pickTeam.mock.calls[0]).toEqual(['g1', 'a', RED]);
     // The card is the server's answer: in Red, and nothing more to press on a team.
-    await waitFor(() => expect(texts(card().getByRole('list', { name: 'Teams' }))).toEqual(['1stBlue Team5 people14 gym days', '2ndRed TeamYour team5 people11 gym days']));
+    await waitFor(() => expect(texts(card().getByRole('list', { name: 'Teams' }))).toEqual(['1stBlue Team5 people14 visits', '2ndRed TeamYour team5 people11 visits']));
     expect(card().queryByRole('button', { name: /^(Join|Move to) / })).toBeNull();
     expect(card().getByRole('button', { name: 'Leave Pick Week' })).toBeTruthy();
   });
@@ -273,9 +273,9 @@ describe("a member's challenge in teams", () => {
     await screen.findByText('Small Week');
     const card = cardOf('Small Week');
     expect(texts(card.getByRole('list', { name: 'Teams' }))).toEqual(['—Red Team1 person', '—Blue TeamYour team1 person']);
-    expect(texts(card.getByRole('list', { name: 'People in Blue Team' }))).toEqual(['YouYou2 gym days']);
-    expect(card.getByText("The teams' numbers show once 3 people have a gym day in this challenge.")).toBeTruthy();
-    // A teammate with gym days is not listed yet for that reason, not for want of a gym day.
+    expect(texts(card.getByRole('list', { name: 'People in Blue Team' }))).toEqual(['YouYou2 visits']);
+    expect(card.getByText("The teams' numbers show once 3 people have a visit in this challenge.")).toBeTruthy();
+    // A teammate with visits is not listed yet for that reason, not for want of a visit.
     expect(card.queryByText(/Teammates show here/)).toBeNull();
   });
 
@@ -295,8 +295,8 @@ describe("a member's challenge in teams", () => {
     render(<Challenges gym={GYM} />);
     await screen.findByText('Last Week');
     const result = within(cardOf('Last Week').getByLabelText('How it finished'));
-    expect(result.getByText('Winner: Blue Team, with 14 gym days.')).toBeTruthy();
-    expect(result.getByText('Your team, Blue Team, won. You had 5 gym days.')).toBeTruthy();
+    expect(result.getByText('Winner: Blue Team, with 14 visits.')).toBeTruthy();
+    expect(result.getByText('Your team, Blue Team, won. You had 5 visits.')).toBeTruthy();
   });
 
   it('where the lowest wins, a team waiting for a number has no place and says how many it waits for', async () => {

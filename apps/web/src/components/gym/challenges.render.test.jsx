@@ -73,25 +73,25 @@ describe("a member's Challenges", () => {
     );
     render(<Challenges gym={GYM} />);
     const card = cardOf(await screen.findByText('October Five').then((el) => el.textContent));
-    expect(card.getByText('Reach 5 gym days')).toBeTruthy();
+    expect(card.getByText('Reach 5 visits')).toBeTruthy();
     expect(card.getByText('5 days left')).toBeTruthy();
     expect(card.getByText('Mon 5 Oct – Sun 11 Oct')).toBeTruthy();
     // What it is about and how it is counted, in the words the server sent (19d-iii-a-i).
-    expect(card.getByText('Gym visits · Checked in at the front desk')).toBeTruthy();
+    expect(card.getByText('Visits · Checked in at the front desk')).toBeTruthy();
     expect(card.getByText('A shaker for everyone who gets there')).toBeTruthy();
     expect(card.getByText('Everyone at Iron House is in')).toBeTruthy();
     expect(card.getByText('Any five days this week.')).toBeTruthy();
 
     const mine = within(card.getByLabelText('Your number in this challenge'));
     expect(mine.getByText('3')).toBeTruthy();
-    expect(mine.getByText('of 5 gym days')).toBeTruthy();
+    expect(mine.getByText('of 5 visits')).toBeTruthy();
     const bar = mine.getByRole('progressbar');
     expect([bar.getAttribute('aria-valuenow'), bar.getAttribute('aria-valuemax')]).toEqual(['3', '5']);
     expect(mine.getByText('2 to go')).toBeTruthy();
-    expect(mine.getByText('3rd of 24 · 1 more gym day to reach 2nd')).toBeTruthy();
+    expect(mine.getByText('3rd of 24 · 1 more visit to reach 2nd')).toBeTruthy();
     // A flame a day: three counted, today among them, four still to come.
-    expect(mine.getByLabelText('Mon 5 Oct: gym day')).toBeTruthy();
-    expect(mine.getByLabelText('Wed 7 Oct: gym day')).toBeTruthy();
+    expect(mine.getByLabelText('Mon 5 Oct: visit')).toBeTruthy();
+    expect(mine.getByLabelText('Wed 7 Oct: visit')).toBeTruthy();
     expect(mine.getByLabelText('Sun 11 Oct: still to come')).toBeTruthy();
 
     const top = within(card.getByRole('list', { name: 'Top three' }));
@@ -100,7 +100,7 @@ describe("a member's Challenges", () => {
     expect(card.queryByRole('button', { name: /Join|Leave/ })).toBeNull();
     // What is counted is one tap away, in plain words.
     fireEvent.click(card.getByRole('button', { name: 'What October Five counts' }));
-    expect(card.getByText(/A gym day is a day you're checked in at Iron House/)).toBeTruthy();
+    expect(card.getByText(/A visit is a day you're checked in at Iron House/)).toBeTruthy();
   });
 
   it('at the target the card says Done, and a hidden member is told only they see their line', async () => {
@@ -113,7 +113,7 @@ describe("a member's Challenges", () => {
     render(<Challenges gym={GYM} />);
     const done = cardOf(await screen.findByText('Target met').then((el) => el.textContent));
     expect(done.getByText('Done')).toBeTruthy();
-    expect(done.getByText('Done. You reached 3 gym days.')).toBeTruthy();
+    expect(done.getByText('Done. You reached 3 visits.')).toBeTruthy();
     const hidden = cardOf('Hidden');
     expect(hidden.getByText('Hide me is on. Only you see this row.')).toBeTruthy();
     // No place is said of somebody nobody else sees.
@@ -130,20 +130,20 @@ describe("a member's Challenges", () => {
     const card = () => cardOf('Joiners');
     await screen.findByText('Joiners');
     expect(card().getByText('12 people have joined')).toBeTruthy();
-    expect(card().getByText('Your gym days since Mon 5 Oct count as soon as you join.')).toBeTruthy();
+    expect(card().getByText('Your visits since Mon 5 Oct count as soon as you join.')).toBeTruthy();
     // Not in it: no number of theirs is drawn.
     expect(card().queryByLabelText('Your number in this challenge')).toBeNull();
 
     fireEvent.click(card().getByRole('button', { name: 'Join Joiners' }));
     await waitFor(() => expect(svc.join).toHaveBeenCalledWith('g1', 'c1'));
     await waitFor(() => expect(card().getByText('13 people have joined')).toBeTruthy());
-    expect(card().getByText('4th of 24 · 1 more gym day to reach 3rd')).toBeTruthy();
+    expect(card().getByText('4th of 24 · 1 more visit to reach 3rd')).toBeTruthy();
     expect(card().queryByRole('button', { name: 'Join Joiners' })).toBeNull();
 
     // Leave is behind a box that says what happens; Stay in changes nothing.
     fireEvent.click(card().getByRole('button', { name: 'Leave Joiners' }));
     const box = within(card().getByRole('group', { name: 'Leave Joiners?' }));
-    expect(box.getByText('You come off its board. Your gym days stay yours, and you can join again until it ends.')).toBeTruthy();
+    expect(box.getByText('You come off its board. Your visits stay yours, and you can join again until it ends.')).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Stay in' }));
     expect(svc.leave).not.toHaveBeenCalled();
     fireEvent.click(card().getByRole('button', { name: 'Leave Joiners' }));
@@ -204,8 +204,8 @@ describe("a member's Challenges", () => {
     const card = cardOf(await screen.findByText('Last week').then((el) => el.textContent));
     expect(card.getByText('Ended')).toBeTruthy();
     const result = within(card.getByLabelText('How it finished'));
-    expect(result.getByText('Winner: Maya K., with 5 gym days.')).toBeTruthy();
-    expect(result.getByText('You finished 9th, with 2 gym days.')).toBeTruthy();
+    expect(result.getByText('Winner: Maya K., with 5 visits.')).toBeTruthy();
+    expect(result.getByText('You finished 9th, with 2 visits.')).toBeTruthy();
     expect(card.getByText('9th of 24')).toBeTruthy();
   });
 
@@ -213,8 +213,8 @@ describe("a member's Challenges", () => {
     svc.list.mockResolvedValue(listOf([challenge('c1', 'Quiet', { board: { status: 'too_few', ranked: 0, top: [], leaders: 0, reached: null } })], { checkingIn: false }));
     render(<Challenges gym={GYM} />);
     const card = cardOf(await screen.findByText('Quiet').then((el) => el.textContent));
-    expect(card.getByText('The places show once 3 people have a gym day in this challenge.')).toBeTruthy();
-    expect(card.getByText("Iron House hasn't checked anyone in at the front desk in the last 30 days, so no gym days are being counted.")).toBeTruthy();
+    expect(card.getByText('The places show once 3 people have a visit in this challenge.')).toBeTruthy();
+    expect(card.getByText("Iron House hasn't checked anyone in at the front desk in the last 30 days, so no visits are being counted.")).toBeTruthy();
     expect(card.queryByRole('button', { name: /whole board/ })).toBeNull();
   });
 
@@ -234,12 +234,12 @@ describe("a member's Challenges", () => {
     await waitFor(() => expect(svc.board).toHaveBeenCalledWith('g1', 'c1'));
     const rows = within(await sheet.findByRole('list', { name: 'The board' })).getAllByRole('button');
     expect(rows.map((b) => b.getAttribute('aria-label'))).toEqual([
-      '1st: Maya K., 5 gym days, reached the target',
-      '2nd: Tom B., 4 gym days',
-      '3rd: Priya S., 3 gym days',
-      '4th: You, 2 gym days',
+      '1st: Maya K., 5 visits, reached the target',
+      '2nd: Tom B., 4 visits',
+      '3rd: Priya S., 3 visits',
+      '4th: You, 2 visits',
     ]);
-    expect(sheet.getByText(/Reach 5 gym days · 24 on the board · Updated 12:00 pm/)).toBeTruthy();
+    expect(sheet.getByText(/Reach 5 visits · 24 on the board · Updated 12:00 pm/)).toBeTruthy();
     // Their own row opens nothing; somebody else's opens that person.
     expect(rows[3].disabled).toBe(true);
     fireEvent.click(rows[1]);
