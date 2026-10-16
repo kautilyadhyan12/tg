@@ -176,13 +176,14 @@ export function seatIsFree(member) {
 export function staffTag(member, words) {
   const staff = member?.staff;
   if (!staff || typeof staff !== 'object') return null;
-  if (staff.role === 'owner') return 'Owner';
+  if (staff.role === 'owner') return staff.coOwner === true ? 'Co-owner' : 'Owner';
   return `Staff · ${staffRoleText(staff.role, staff.roleName, words)}`;
 }
 
-/** A role in words: "Owner", "Manager", "Trainer" ("Coach" at a studio), or the gym's own. */
-export function staffRoleText(role, roleName, words) {
-  if (role === 'owner') return 'Owner';
+/** A role in words: "Owner", "Co-owner" (4b-i), "Manager", "Trainer" ("Coach" at a studio),
+ *  or the gym's own. */
+export function staffRoleText(role, roleName, words, coOwner = false) {
+  if (role === 'owner') return coOwner === true ? 'Co-owner' : 'Owner';
   return roleName || (role === 'manager' ? 'Manager' : words.coachCap);
 }
 
@@ -190,17 +191,41 @@ export function staffRoleText(role, roleName, words) {
  *  (and for a row from a server that does not say: then Remove stays as it was). Staff
  *  and member are separate: the owner chooses whether they lose the console too; an
  *  owner always stays the owner. Only someone who manages staff is offered it. */
-export function staffRemoveView(member, words) {
+export function staffRemoveView(member, words, viewer = { isOwner: false, userId: null }) {
   const staff = member?.staff;
   if (!staff || typeof staff !== 'object') return null;
   const name = member.displayName;
-  if (staff.role === 'owner') {
+  const isSelf = viewer.userId !== null && viewer.userId === member.userId;
+  // An owner's row (4b-i): the owner's place is theirs alone to give up, a co-owner's the
+  // owner's or their own. The server refuses anybody else (`owner_row_locked`).
+  if (staff.role === 'owner' && !viewer.isOwner && !isSelf) {
+    return { isOwner: true, locked: true, staffLine: `Only the owner can remove ${name} from the app.`, tickLabel: null, keepLine: null, goLine: null };
+  }
+  if (staff.role === 'owner' && staff.coOwner !== true) {
     return {
       isOwner: true,
       staffLine: `${name} owns this ${words.it}. They stay the owner and keep the console.`,
       tickLabel: null,
       keepLine: null,
       goLine: null,
+    };
+  }
+  if (staff.role === 'owner' && isSelf) {
+    return {
+      isOwner: false,
+      staffLine: `You're a co-owner of this ${words.it}.`,
+      tickLabel: 'Also leave the staff',
+      keepLine: 'You stay a co-owner and can still open the console.',
+      goLine: "You stop being a co-owner and can't open the console any more.",
+    };
+  }
+  if (staff.role === 'owner') {
+    return {
+      isOwner: false,
+      staffLine: `${name} is a co-owner of this ${words.it}.`,
+      tickLabel: `Also remove ${name} from staff`,
+      keepLine: 'They stay a co-owner and can still open the console. You can change this on the Staff tab.',
+      goLine: "They stop being a co-owner and can't open the console any more.",
     };
   }
   const role = staff.roleName || (staff.role === 'manager' ? 'manager' : words.coach);
@@ -387,7 +412,8 @@ export function orgTypeLabel(orgType) {
  *  looked up. **The org type is passed in and never guessed**: a missing one
  *  yields the gym's word, which is what every console said before this card and
  *  is right for the type that is not a variation of anything. */
-export function roleLabel(role, orgType) {
+export function roleLabel(role, orgType, coOwner = false) {
+  if (role === 'owner' && coOwner === true) return 'Co-owner';
   if (role === 'trainer') return orgWords(orgType).coachCap;
   return Object.hasOwn(ROLE_WORDS, role ?? '') ? ROLE_WORDS[role] : (role ?? '');
 }

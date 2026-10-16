@@ -7,6 +7,7 @@ import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/c
 import ScrollJump from '../../components/console/ScrollJump';
 import { orgService, errorText } from '../../api/orgsApi';
 import { useConsoleOrg } from './useConsoleOrg';
+import { useAuth } from '../../context/AuthContext';
 import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
 import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
@@ -94,14 +95,14 @@ function RosterRow({ member, words, onOpen, picked = null, onTick }) {
  *  them on the list, or Remove (One Remove, RULINGS 2026-09-27: someone on the list moves
  *  to past members AND leaves the app in the same step). A side panel on a computer, the
  *  whole screen on a phone, as a lead's panel is. */
-function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord, onOpenStaff }) {
+function RosterSheet({ member, words, seesList, canRemove, managesStaff, viewer, readOnly, busy, onClose, onRemove, onPutOnList, onOpenRecord, onOpenStaff }) {
   const [asking, setAsking] = useState(false);
   const [alsoStaff, setAlsoStaff] = useState(false);
   const off = offListView(member.offList);
   const free = seatIsFree(member);
   // Staff and the owner are removed here too since 4a-ii, by the owner alone.
-  const staff = staffRemoveView(member, words);
-  const mayRemove = canRemove && (staff === null ? !free : managesStaff);
+  const staff = staffRemoveView(member, words, viewer);
+  const mayRemove = canRemove && (staff === null ? !free : managesStaff && staff.locked !== true);
   // Remove moves a record to past members only when the server named the record that is
   // certainly theirs (`recordId`); a gym with no list, someone on no list, and a family's
   // shared email the list can't place lose their app access and nothing else (round one
@@ -158,6 +159,7 @@ function RosterSheet({ member, words, seesList, canRemove, managesStaff, readOnl
           {/* The name on the gym's own list, beside the name they gave the app. The email on
               the list is the link; names are never compared (RULINGS 2026-09-28). */}
           {member.onList ? <span className="c-s14 c-t2">On your list as {member.onList.name}</span> : null}
+          {canRemove && managesStaff && staff?.locked === true ? <p className="c-s14 c-t2">{staff.staffLine}</p> : null}
           {off ? (
             <div className="flex flex-col gap-1">
               <span className="c-s14 c-w6 flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
@@ -281,6 +283,7 @@ function AlreadyInApp({ items, words, onOpen }) {
 export default function Members() {
   const { orgSlug } = useParams();
   const { loading: orgLoading, error: orgError, org, notFound, reload } = useConsoleOrg(orgSlug);
+  const { user } = useAuth();
 
   // Starts in `loading` (the org has to resolve first) and the retry handler
   // re-enters it, so the effect below never sets state synchronously.
@@ -865,6 +868,7 @@ export default function Members() {
           seesList={canSeeList}
           canRemove={canRemove}
           managesStaff={managesStaff}
+          viewer={{ isOwner: org.staffRole === 'owner' && org.coOwner !== true, userId: user?.id ?? null }}
           readOnly={readOnly}
           busy={removingId === openMember.userId}
           onClose={() => setOpenUserId(null)}

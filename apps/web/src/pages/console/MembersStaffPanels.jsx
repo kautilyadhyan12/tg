@@ -7,6 +7,7 @@ import { formatJoinedAt, staffRoleText } from './consoleView';
 import {
   carriedNote,
   carriedPrivileges,
+  coOwnerView,
   effectivePrivileges,
   heldPrivileges,
   inviteTicks,
@@ -114,7 +115,7 @@ function TickList({ choices, ticked, disabled, onToggle, testId }) {
  *  Trainer is the starting role because it is the smaller grant. `readOnly` (a gym with no
  *  plan) reaches every field and Send; Cancel stays pressable. A refusal is said here,
  *  beside the button, with the typing kept. */
-export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error, onSend, onMakeRole, onDeleteRole, onClose }) {
+export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = false, readOnly, busy, error, onSend, onMakeRole, onDeleteRole, onClose }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('trainer');
   const [ticks, setTicks] = useState(() => roleTicks('trainer'));
@@ -130,7 +131,12 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
     if (rolesSaved > 0) rolesRow.current?.scrollIntoView?.({ block: 'nearest' });
   }, [rolesSaved]);
 
-  const builtIn = staffRoleChoices(orgType);
+  // Co-owner is the owner's alone to offer (4b-i): they can do everything but add, change or
+  // remove co-owners, so there is nothing to tick.
+  const builtIn = canInviteCoOwner
+    ? [...staffRoleChoices(orgType), { value: 'owner', label: 'Co-owner', hint: 'Can do everything you can, except add, change or remove co-owners.' }]
+    : staffRoleChoices(orgType);
+  const coOwner = role === 'owner';
   const own = roles.find((r) => r.id === role) ?? null;
   // A role of the gym's own is a trainer's underneath: every box but Manage staff.
   const base = own === null ? role : 'trainer';
@@ -180,6 +186,10 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
       return;
     }
     setFieldError(null);
+    if (coOwner) {
+      onSend({ email: value, role: 'owner' });
+      return;
+    }
     onSend({
       email: value,
       role: base,
@@ -341,12 +351,20 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
         </div>
       ) : null}
 
-      <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
-        <legend className="c-label p-0">What they can do</legend>
-        <TickList choices={privilegeChoices(base, orgType)} ticked={ticks} disabled={off} onToggle={toggle} testId="invite-ticks" />
-      </fieldset>
+      {coOwner ? null : (
+        <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
+          <legend className="c-label p-0">What they can do</legend>
+          <TickList choices={privilegeChoices(base, orgType)} ticked={ticks} disabled={off} onToggle={toggle} testId="invite-ticks" />
+        </fieldset>
+      )}
 
-      {newRole === null ? (
+      {coOwner ? (
+        <p className="c-s14 c-t2 m-0">
+          We&apos;ll email them an invitation. They become a co-owner only when they sign in with this address and press
+          Accept. If they&apos;re already on your staff, they&apos;re asked on their Overview instead. You stay the owner, and
+          only you can add or remove co-owners.
+        </p>
+      ) : newRole === null ? (
         <p className="c-s14 c-t2 m-0">
           We&apos;ll email them an invitation. They sign in with this address and press Accept, and they can open your{' '}
           {words.it}&apos;s console. If they&apos;re already a {words.person} of your {words.it}, they get these permissions
@@ -360,19 +378,19 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
 /** A person's role, and a button for each other role they can be given: manager, trainer
  *  and the gym's own roles (`roleTargets`). A change asks first, because it replaces their
  *  ticks with the new role's: the question is the target's own. */
-function RoleSection({ person, roles, orgType, words, off, error, onRetry, onChange }) {
+function RoleSection({ person, roles, orgType, words, viewerIsOwner, off, error, onRetry, onChange }) {
   const [asking, setAsking] = useState(null);
-  const targets = roleTargets(person, roles, orgType);
+  const targets = roleTargets(person, roles, orgType, viewerIsOwner);
   // A role that went from the list while its question was open has no question any more.
   const target = asking === null ? null : (targets.find((t) => t.key === asking) ?? null);
   const question = useInView(target !== null);
-  if (person.role === 'owner') return null;
+  if (person.role === 'owner' && targets.length === 0) return null;
   return (
     <section className="flex flex-col gap-3 pt-5 border-t" style={LINE} data-testid="staff-role">
       <h3 className="c-h3">Role</h3>
       {target === null ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="c-s15 c-t1">{staffRoleText(person.role, person.roleName ?? null, words)}</span>
+          <span className="c-s15 c-t1">{staffRoleText(person.role, person.roleName ?? null, words, person.coOwner)}</span>
           <div className="flex flex-wrap gap-2">
             {targets.map((t) => (
               <button key={t.key} type="button" onClick={() => setAsking(t.key)} disabled={off} className="c-btn c-btn-s c-btn-sm">
@@ -418,7 +436,7 @@ function RoleSection({ person, roles, orgType, words, off, error, onRetry, onCha
  *  An edit not yet saved belongs to the set it was made over: when the server's set for
  *  this person changes (a save, a role change), the edit is dropped and the boxes are the
  *  server's again. The owner's row is drawn and cannot be changed. */
-function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) {
+function PermissionsSection({ person, orgType, viewerIsOwner = false, busy, readOnly, error, onSave }) {
   const current = effectivePrivileges(person);
   // Who they are to the gym and what they hold, as one word: an edit, and what was said of
   // the last save, each belong to one of these.
@@ -472,8 +490,9 @@ function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) 
       {extraNote !== null ? <p className="c-s14 c-t2 m-0">{extraNote}</p> : null}
       {ownerRow ? (
         <p className="c-s14 c-t2 m-0">
-          {isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can&apos;t be changed here: a gym has to
-          keep somebody who can manage its staff.
+          {person.coOwner === true
+            ? `A co-owner can do everything here, except add, change or remove co-owners.${isSelf || viewerIsOwner ? '' : ' Only the owner can change this.'}`
+            : `${isSelf ? 'This is what you can do.' : 'This is what the owner can do.'} It can't be changed here: a ${orgType === 'studio' ? 'studio' : 'gym'} has to keep somebody who can manage its staff.`}
         </p>
       ) : (
         <>
@@ -508,22 +527,28 @@ function PermissionsSection({ person, orgType, busy, readOnly, error, onSave }) 
 
 /** Remove from staff, and, ticked, from the app in the same step. The owner cannot be
  *  removed: a gym is never left with nobody in charge. */
-function RemoveSection({ person, words, off, error, onRemove }) {
+function RemoveSection({ person, words, viewerIsOwner, off, error, onRemove }) {
   const [asking, setAsking] = useState(false);
   const [alsoApp, setAlsoApp] = useState(false);
   const question = useInView(asking);
   const name = person.displayName;
+  // A co-owner taking themselves off the staff (round one, L6).
+  const leaving = person.role === 'owner' && person.coOwner === true && person.isYou === true && !viewerIsOwner;
   return (
     <section className="flex flex-col gap-3 pt-5 border-t" style={LINE} data-testid="staff-remove">
-      {person.role === 'owner' ? (
+      {person.role === 'owner' && person.coOwner !== true ? (
         <p className="c-s14 c-t2 m-0">The owner runs the {words.it} and can&apos;t be removed from staff.</p>
+      ) : person.role === 'owner' && !viewerIsOwner && person.isYou !== true ? (
+        <p className="c-s14 c-t2 m-0">Only the owner can change or remove a co-owner.</p>
       ) : !asking ? (
         <button type="button" onClick={() => setAsking(true)} disabled={off} className="c-btn c-btn-s self-start">
-          Remove from staff
+          {leaving ? 'Leave the staff' : 'Remove from staff'}
         </button>
       ) : (
         <div ref={question} className="flex flex-col gap-3">
-          <p className="c-s14 c-t1 m-0">Remove {name} from staff? They can&apos;t open the console any more.</p>
+          <p className="c-s14 c-t1 m-0">
+            {leaving ? "Leave the staff? You stop being a co-owner and can't open the console any more." : `Remove ${name} from staff? They can't open the console any more.`}
+          </p>
           {person.isMember ? (
             <div className="flex items-start gap-2">
               <Tick state={alsoApp ? 'on' : 'off'} label={`Also remove ${name} from the app`} onClick={() => setAlsoApp((on) => !on)} />
@@ -565,13 +590,75 @@ function RemoveSection({ person, words, off, error, onRemove }) {
 /** One person who runs the gym, opened: who they are, their role, what they can do, and
  *  Remove from staff. A change that is refused is said in its own part of the panel,
  *  under the button that was pressed (`error.at`). */
-export function StaffPersonPanel({ person, roles, orgType, words, readOnly, busy, error, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onSeeActivity = null }) {
+/** Make co-owner (ROADMAP 4b-i): the owner asks this person, who answers on their own
+ *  Overview. Asks first, naming who changes and what stays; once sent, says it is waiting
+ *  and when it ends, with Cancel request. What happened is said here, in one sentence. */
+function CoOwnerSection({ person, gymName, view, off, note, error, onAsk, onCancel }) {
+  const [asking, setAsking] = useState(false);
+  const question = useInView(asking);
+  const name = person.displayName;
+  return (
+    <section className="flex flex-col gap-3 pt-5 border-t" style={LINE} data-testid="staff-co-owner">
+      <h3 className="c-h3">Co-owner</h3>
+      {view.kind === 'waiting' ? (
+        <div className="flex flex-col gap-3">
+          <p className="c-s14 c-t1 m-0">
+            You asked {name} to be a co-owner. Waiting for them to accept. The request ends on {formatJoinedAt(view.until)}.
+          </p>
+          <button type="button" onClick={onCancel} disabled={off} className="c-btn c-btn-s c-btn-sm self-start">
+            Cancel request
+          </button>
+        </div>
+      ) : !asking ? (
+        <div className="flex flex-col gap-3">
+          <p className="c-s14 c-t2 m-0">A co-owner can do everything you can, except add, change or remove co-owners.</p>
+          <button type="button" onClick={() => setAsking(true)} disabled={off} className="c-btn c-btn-soft c-btn-sm self-start">
+            Make co-owner
+          </button>
+        </div>
+      ) : (
+        <div ref={question} className="flex flex-col gap-3">
+          <p className="c-s14 c-t1 m-0">
+            Ask {name} to be a co-owner of {gymName}? We&apos;ll email them, and they become a co-owner when they press Accept.
+            They&apos;ll be able to manage staff, billing and settings. You stay the owner, and only you can add or remove co-owners.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setAsking(false);
+                onAsk();
+              }}
+              disabled={off}
+              className="c-btn c-btn-sm c-btn-p"
+            >
+              Send request
+            </button>
+            <button type="button" onClick={() => setAsking(false)} className="c-btn c-btn-sm c-btn-s">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {note !== null ? (
+        <p className="c-s14 c-w5 m-0 flex items-start gap-2" style={{ color: 'var(--good)' }} role="status">
+          <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          {note}
+        </p>
+      ) : null}
+      <Refusal error={error} />
+    </section>
+  );
+}
+
+export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, readOnly, busy, error, coOwnerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onSeeActivity = null }) {
+  const coOwner = coOwnerView(person, viewerIsOwner);
   const off = busy || readOnly;
   return (
     <Panel label={person.displayName} title={person.displayName} sub={person.email ? <span className="c-s14 c-t2 break-words">{person.email}</span> : null} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <span className="flex flex-wrap gap-1.5">
-          <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words)}</span>
+          <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words, person.coOwner)}</span>
           {person.isMember ? <span className="c-tag c-tag-good">Uses the app</span> : null}
         </span>
         <p className="c-s14 c-t2 m-0" data-testid="staff-place-line">
@@ -589,9 +676,21 @@ export function StaffPersonPanel({ person, roles, orgType, words, readOnly, busy
         {/* The panel covers the page, so it says itself why its controls are grey. */}
         {readOnly ? <p className="c-s14 c-t2 m-0">{readOnlyNote(orgType)}</p> : null}
       </div>
-      <RoleSection person={person} roles={roles} orgType={orgType} words={words} off={off} error={error?.at === 'role' ? error : null} onRetry={onRetry} onChange={onChangeRole} />
-      <PermissionsSection person={person} orgType={orgType} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} onSave={onSavePrivileges} />
-      <RemoveSection person={person} words={words} off={off} error={error?.at === 'remove' ? error : null} onRemove={onRemove} />
+      {coOwner !== null && coOwner.kind !== 'locked' ? (
+        <CoOwnerSection
+          person={person}
+          gymName={gymName}
+          view={coOwner}
+          off={off}
+          note={coOwnerNote}
+          error={error?.at === 'co-owner' ? error : null}
+          onAsk={onAskCoOwner}
+          onCancel={onCancelCoOwner}
+        />
+      ) : null}
+      <RoleSection person={person} roles={roles} orgType={orgType} words={words} viewerIsOwner={viewerIsOwner} off={off} error={error?.at === 'role' ? error : null} onRetry={onRetry} onChange={onChangeRole} />
+      <PermissionsSection person={person} orgType={orgType} viewerIsOwner={viewerIsOwner} busy={busy} readOnly={readOnly} error={error?.at === 'ticks' ? error : null} onSave={onSavePrivileges} />
+      <RemoveSection person={person} words={words} viewerIsOwner={viewerIsOwner} off={off} error={error?.at === 'remove' ? error : null} onRemove={onRemove} />
     </Panel>
   );
 }

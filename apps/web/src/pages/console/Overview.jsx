@@ -8,6 +8,8 @@ import OverviewNumbers from '../../components/console/OverviewNumbers';
 import StartHereCard from '../../components/console/StartHereCard';
 import LastSevenDays from '../../components/console/LastSevenDays';
 import TrialCard from '../../components/console/TrialCard';
+import CoOwnerRequest from '../../components/console/CoOwnerRequest';
+import { refreshConsoleOrgsAfterChange } from './consoleOrgs';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { codesRetired, orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { useAuth } from '../../context/AuthContext';
@@ -379,6 +381,10 @@ export default function Overview() {
         </p>
       </div>
 
+      {/* The owner asked this person to be a co-owner (4b-i): their answer, first. Accepting
+          changes what they may do, so the console's own read of the gym is taken again. */}
+      <CoOwnerRequest gymId={org.id} gymName={org.name} onAccepted={refreshConsoleOrgsAfterChange} />
+
       {/* START HERE, first on the page (ROADMAP 23b): what to set up and where. */}
       {list.show === 'list' ? (
         <StartHereCard
@@ -578,7 +584,7 @@ export default function Overview() {
         </div>
         <Fact label="Currency" value={org.currencyDisplay} />
         <Fact label="Timezone" value={org.timezone} />
-        <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType)} />
+        <Fact label="Your role" value={roleLabel(org.staffRole, org.orgType, org.coOwner)} />
       </ConsoleCard>
 
       {/* The hidden Start here list, brought back by whoever may hide it. */}

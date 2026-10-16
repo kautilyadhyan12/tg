@@ -3,6 +3,7 @@
 // step 3); the repo enforces tenancy in every WHERE and the routes stay thin.
 import type { Sql } from "postgres";
 import {
+  CO_OWNER_WORDS,
   GYM_COME_BACK_WAIT_DAYS,
   GYM_CONTACT_WORDS,
   GYM_POSTAL_ADDRESS_MAX_CHARS,
@@ -22,6 +23,7 @@ import {
   orgWords,
 } from "@app/shared";
 import * as billingRepo from "../billing/repo.js";
+import * as coOwnerRepo from "./coOwners/repo.js";
 import { onlinePaymentFor, type OnlinePayments } from "../billing/online.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
@@ -543,6 +545,7 @@ export async function listMyOrgs(deps: OrgsDeps, userId: string): Promise<MyOrgs
       return {
       ...toOrgSummary(r),
       staffRole: r.staffRole,
+      coOwner: r.coOwner,
       // WHAT THIS CALLER MAY DO HERE, so the console can stop deciding on the
       // role NAME (T3 round 1 C/H-1). Run through the SAME `privilegesFor` that
       // `requirePrivilege` uses, so the answer a screen draws and the answer the
@@ -2024,6 +2027,8 @@ export async function removeOrgMember(
       throw new OrgsError(404, "member_not_found", `That person isn't a ${orgWords(org.orgType).person} of this ${orgWords(org.orgType).it}.`);
     case "staff_owner_only":
       throw new OrgsError(403, "staff_owner_only", "Only the owner can remove staff from the app.");
+    case "owner_row_locked":
+      throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
     case "owner_stays_owner":
       throw new OrgsError(
         409,
@@ -2060,6 +2065,7 @@ export function toOrgStaff(row: repo.StaffRow, viewerUserId: string): OrgStaff {
     isYou: row.userId === viewerUserId,
     isMember: row.isMember,
     roleName: row.roleName,
+    coOwner: row.coOwner,
   };
 }
 
@@ -2070,6 +2076,8 @@ export async function listOrgStaff(
 ): Promise<OrgStaffResponse> {
   await requirePrivilege(deps, gymId, userId, "staff.manage");
   const rows = await repo.listStaff(deps.sql, gymId);
+  // Who the owner has asked to be a co-owner and has not answered (4b-i).
+  const asked = await coOwnerRepo.waitingRequests(deps.sql, gymId, deps.now?.() ?? new Date());
   // Whose current list record is certainly theirs: removing them from the app moves it
   // to past members, and the Staff tab's box says so (4a-ii round one, L5).
   const members = rows.filter((r) => r.isMember).map((r) => r.userId);
@@ -2084,7 +2092,10 @@ export async function listOrgStaff(
   // carries an email, so a field that reached the row without reaching the
   // schema is dropped here rather than served.
   return orgStaffResponseSchema.parse({
-    staff: rows.map((r) => ({ ...toOrgStaff(r, userId), movesRecord: onList.has(r.userId) })),
+    staff: rows.map((r) => {
+      const until = asked.get(r.userId);
+      return { ...toOrgStaff(r, userId), movesRecord: onList.has(r.userId), coOwnerRequest: until === undefined ? null : { expiresAt: until.toISOString() } };
+    }),
   });
 }
 
@@ -2201,6 +2212,8 @@ export async function updateOrgStaffRole(
         "owner_role_locked",
         `The ${orgWords(org.orgType).it}'s owner keeps the owner role. Handing a ${orgWords(org.orgType).it} over to somebody else isn't something the app can do yet.`,
       );
+    case "owner_row_locked":
+      throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
     default:
       return assertNever(outcome);
   }
@@ -2327,8 +2340,10 @@ export async function updateOrgStaffPrivileges(
       throw new OrgsError(
         409,
         "last_owner_locked",
-        `A ${orgWords(org.orgType).it}'s last owner has to keep both staff management and billing, so somebody there can always hand out the keys and pay.`,
+        `The ${orgWords(org.orgType).it}'s owner always keeps staff management and billing, so somebody there can always hand out the keys and pay.`,
       );
+    case "owner_row_locked":
+      throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
     default:
       return assertNever(outcome);
   }
@@ -2373,11 +2388,9 @@ export async function removeOrgStaff(
     case "not_staff":
       throw new OrgsError(404, "not_staff", `That person doesn't run this ${orgWords(org.orgType).it}.`);
     case "last_owner":
-      throw new OrgsError(
-        409,
-        "last_owner",
-        `A ${orgWords(org.orgType).it} can't be left with nobody in charge, so its last owner can't be removed.`,
-      );
+      throw new OrgsError(409, "last_owner", `The ${orgWords(org.orgType).it}'s owner can't be removed from staff.`);
+    case "owner_row_locked":
+      throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
     default:
       return assertNever(outcome);
   }

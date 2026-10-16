@@ -385,12 +385,12 @@ d("staff invited by email (real Postgres)", () => {
   );
 
   it(
-    "a bad address or a role of owner is a 400, and nothing is written",
+    "a bad address or a role the app does not have is a 400, and nothing is written (a co-owner invitation is coOwners.routes.test.ts)",
     async () => {
       const gym = await makeGym("Validation Gym");
       for (const body of [
         { email: "not-an-address", role: "trainer" },
-        { email: addr("v-1"), role: "owner" },
+        { email: addr("v-1"), role: "boss" },
         { email: addr("v-1") },
         { email: addr("v-1"), role: "trainer", extra: true },
       ]) {
@@ -1092,9 +1092,9 @@ d("staff invited by email (real Postgres)", () => {
       const roster = await get(`/v1/orgs/${gym.id}/members`, gym.owner.cookies);
       const rows = new Map(orgMemberPageSchema.parse(JSON.parse(roster.body)).items.map((m) => [m.userId, m.staff]));
       expect([rows.get(tom.userId), rows.get(manager.userId), rows.get(gym.owner.userId), rows.get(plain.userId)]).toEqual([
-        { role: "trainer", roleName: null },
-        { role: "manager", roleName: null },
-        { role: "owner", roleName: null },
+        { role: "trainer", roleName: null, coOwner: false },
+        { role: "manager", roleName: null, coOwner: false },
+        { role: "owner", roleName: null, coOwner: false },
         null,
       ]);
       // A manager reads the member list without anybody's staff role (round one, L4).

@@ -45,7 +45,8 @@ const onDay = (s: Said, key: string): string => {
 };
 const people = (n: number | null, words: OrgWords): string => (n === null ? `some ${words.people}` : n === 1 ? `1 ${words.person}` : `${String(n)} ${words.people}`);
 const plural = (n: number | null, one: string, many: string): string => (n === null ? many : n === 1 ? `1 ${one}` : `${String(n)} ${many}`);
-const ROLE_WORDS: Readonly<Record<string, string>> = { owner: "Owner", manager: "Manager", trainer: "Trainer" };
+// `owner` on an invitation or a role change is a co-owner's (4b-i): the gym's own owner is never invited.
+const ROLE_WORDS: Readonly<Record<string, string>> = { owner: "Co-owner", manager: "Manager", trainer: "Trainer" };
 const roleOf = (s: Said, nameKey: string, roleKey: string): string | null => text(s, nameKey) ?? (ROLE_WORDS[text(s, roleKey) ?? ""] ?? null);
 const asRole = (s: Said, nameKey: string, roleKey: string): string => {
   const role = roleOf(s, nameKey, roleKey);
@@ -100,6 +101,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return to === null ? `Changed ${whose(s, "role")}` : `Changed ${whose(s, "role")} to ${to}`;
   },
   "org.staff_privileges_changed": (s) => `Changed what ${person(s)} can do`,
+  "org.co_owner_requested": (s) => `Asked ${person(s)} to be a co-owner`,
+  "org.co_owner_request_cancelled": (s) => `Cancelled the request to ${person(s)} to be a co-owner`,
+  "org.co_owner_accepted": () => "Became a co-owner",
+  "org.co_owner_request_declined": () => "Said no to being a co-owner",
   "org.staff_invited": (s) => `Invited ${thing(s, "somebody")} to the staff${asRole(s, "roleName", "role")}`,
   "org.staff_invite_cancelled": (s) => `Cancelled the staff invitation to ${thing(s, "somebody")}`,
   "org.staff_invite_resent": (s) => `Sent the staff invitation to ${thing(s, "somebody")} again`,

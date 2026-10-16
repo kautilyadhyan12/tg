@@ -9,7 +9,7 @@ type SqlOrTx = Sql | TransactionSql;
 export const STAFF_INVITES_LISTED = 100;
 
 export type StaffInviteState = "pending" | "accepted" | "declined" | "cancelled";
-export type InviteRole = "manager" | "trainer";
+export type InviteRole = "manager" | "trainer" | "owner";
 
 export interface StaffInviteRow {
   id: string;
@@ -36,7 +36,7 @@ interface RawInvite {
 }
 
 const toRole = (role: string, id: string): InviteRole => {
-  if (role === "manager" || role === "trainer") return role;
+  if (role === "manager" || role === "trainer" || role === "owner") return role;
   throw new Error(`staff invitation ${id} holds a role that no longer parses`);
 };
 
@@ -340,6 +340,14 @@ export async function lockInviteFor(
     FOR UPDATE`;
   const row = rows[0];
   return row === undefined ? null : toInvite(row);
+}
+
+/** Was this invitation sent by the gym's own owner, as it is now? A co-owner's opens only then. */
+export async function sentByOwner(tx: TransactionSql, gymId: string, inviteId: string): Promise<boolean> {
+  const rows = await tx`
+    SELECT 1 FROM gym_staff_invites i JOIN gyms g ON g.id = i.gym_id
+    WHERE i.gym_id = ${gymId} AND i.id = ${inviteId} AND i.invited_by = g.owner_user_id`;
+  return rows.length > 0;
 }
 
 /** This person's staff row here: the console lets them in by it (the caller's account
