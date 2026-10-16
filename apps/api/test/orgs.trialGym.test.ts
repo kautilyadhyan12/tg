@@ -47,7 +47,8 @@ const nextEmail = () => `${TAG}.${run}.${String(seq++)}@gmail.com`;
 d("the trial belongs to the gym (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
-  const settings = inviteSettings(loadConfig(baseEnv));
+  // The address key only; a run with no database still reads this line.
+  const settings = inviteSettings(loadConfig({ ...baseEnv, DATABASE_URL: "postgres://unused@localhost:5432/unused" }));
   if (settings === null) throw new Error("invitations are off in the test config");
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
