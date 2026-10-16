@@ -96,8 +96,15 @@ function memberBody(gift, currency) {
   return days === null || backup === null || backup === undefined ? undefined : { ...backup, on: 'membership', days };
 }
 
+/** What Save sends: the offer as typed, and the version it was read at, so a save made
+ *  since in another tab refuses this one instead of being undone by it. */
 export function referralBody(draft, settings) {
-  return { on: draft.on, member: memberBody(draft.member, settings.currency) ?? null, friend: friendBody(draft.friend, settings.currency) ?? null };
+  return {
+    on: draft.on,
+    member: memberBody(draft.member, settings.currency) ?? null,
+    friend: friendBody(draft.friend, settings.currency) ?? null,
+    version: settings.version,
+  };
 }
 
 export function referralChanged(draft, settings) {

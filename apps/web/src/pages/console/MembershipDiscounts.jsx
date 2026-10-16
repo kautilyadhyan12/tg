@@ -60,6 +60,7 @@ export default function MembershipDiscounts({ org, readOnly, typesKey, onTaxChan
       lockedNote={readOnlyNote(org.orgType)}
       use="memberships"
       otherTo={placeFor(org.slug, viewerPrivileges(org), 'sell')}
+      referralTo={placeFor(org.slug, viewerPrivileges(org), 'referrals')}
       onPage={(page) => setState({ gymId, page, error: null })}
       />
     </>

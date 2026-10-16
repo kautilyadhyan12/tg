@@ -73,7 +73,7 @@ export default function MemberListMessage({ gymId, selection, picked, onSelectio
     setBusy(true);
     setError(null);
     try {
-      const res = await orgService.sendGroupMessage(gymId, { selection, body: tidied, sendCount: preview.sendCount, key: key.current });
+      const res = await orgService.sendGroupMessage(gymId, { selection, body: tidied, sendCount: preview.sendCount, sendDigest: preview.sendDigest, key: key.current });
       setDone(res.data.done);
     } catch (err) {
       const fresh = selectionChanged(err);

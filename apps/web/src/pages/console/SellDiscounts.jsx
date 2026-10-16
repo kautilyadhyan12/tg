@@ -9,6 +9,7 @@ import PlaceLink from '../../components/console/PlaceLink';
 import { Refusal } from './MemberListTags';
 import {
   NO_MANAGING_DISCOUNTS,
+  REFERRAL_GIFT_OWNER_LINE,
   TOO_MANY_DISCOUNTS,
   discountBody,
   discountProblems,
@@ -240,7 +241,8 @@ function DiscountForm({ page, draft, setDraft, busy, error, membershipsTo, onSav
   );
 }
 
-export default function SellDiscounts({ gymId, page, locked, lockedNote, use = 'products', membershipsTo = null, otherTo = null, onPage }) {
+// `referralTo`: Settings → Refer a friend, for whoever may set the offer; null for anybody else.
+export default function SellDiscounts({ gymId, page, locked, lockedNote, use = 'products', membershipsTo = null, otherTo = null, referralTo = null, onPage }) {
   const here = (d) => (use === 'products' ? d.forProducts : d.forMemberships);
   const shown = page.discounts.filter(here);
   const shownArchived = page.archivedDiscounts.filter(here);
@@ -355,20 +357,29 @@ export default function SellDiscounts({ gymId, page, locked, lockedNote, use = '
                       {discountInOldMoney(discount, page.currency) ? <p className="c-s14 c-t1 m-0">{oldMoneyLine(discount, page.currency)}</p> : null}
                     </div>
                     {canManage ? (
-                      <div className="flex flex-wrap gap-2 flex-shrink-0">
-                        <button
-                          type="button"
-                          className="c-btn c-btn-s c-btn-sm"
-                          disabled={locked || state.busy || draft !== null}
-                          onClick={() => {
-                            setDraft(draftFromDiscount(discount));
-                            setAsking(null);
-                            setState(clear);
-                          }}
-                          aria-label={`Change ${discount.name}`}
-                        >
-                          Change
-                        </button>
+                      <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                        {discount.referralGift === true ? (
+                          // Every invite link promises this gift: it is changed with the offer.
+                          referralTo !== null ? (
+                            <PlaceLink to={referralTo}>Change in Refer a friend</PlaceLink>
+                          ) : (
+                            <span className="c-s14 c-t3">{REFERRAL_GIFT_OWNER_LINE}</span>
+                          )
+                        ) : (
+                          <button
+                            type="button"
+                            className="c-btn c-btn-s c-btn-sm"
+                            disabled={locked || state.busy || draft !== null}
+                            onClick={() => {
+                              setDraft(draftFromDiscount(discount));
+                              setAsking(null);
+                              setState(clear);
+                            }}
+                            aria-label={`Change ${discount.name}`}
+                          >
+                            Change
+                          </button>
+                        )}
                         <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={locked || state.busy || draft !== null} onClick={() => setAsking(discount.id)} aria-label={`Archive ${discount.name}`}>
                           Archive
                         </button>
