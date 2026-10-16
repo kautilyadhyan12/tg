@@ -657,6 +657,11 @@ export const startOrgTrialResponseSchema = z.discriminatedUnion("outcome", [
 ]);
 export type StartOrgTrialResponse = z.infer<typeof startOrgTrialResponseSchema>;
 
+/** The browser mark (Stage 3 item 2c: one device, one trial): the cookie a browser gets when
+ *  it starts a free trial, 32 random bytes as hex. Anything else in that cookie is no mark. */
+export const TRIAL_DEVICE_COOKIE = "trial_mark";
+export const trialDeviceMarkSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
 /** ONE PLAN A GYM COULD BUY, as the subscribe prompt draws it — Kd's ruling of
  *  2026-08-28 (:22697): a second gym's owner, whose one trial is spent, is shown
  *  *"the real plans at their real prices"*.
@@ -1157,6 +1162,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  gym that already had one and never paid (Stage 3 item 2d): the subscribe prompt says why.
    *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
   trialEndedFirstPeople: z.boolean().nullable().default(null),
+  /** The browser this list was read in already started a free trial, under any account
+   *  (Stage 3 item 2c: one device, one trial). Told to whoever can pay, as `ownerTrialUsed`
+   *  is; false when the request carries no mark; null means "we could not ask". */
+  deviceTrialUsed: z.boolean().nullable().default(null),
   /** IS THIS GYM'S CONSOLE READ-ONLY RIGHT NOW — Part 3 §4.2's *"the console
    *  stays read-only 14 days, then archived"*, and Kd's ruling of 2026-08-29
    *  that it stops **every member of staff**, not only whoever can pay.

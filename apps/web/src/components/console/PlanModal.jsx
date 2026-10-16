@@ -127,6 +127,8 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
    *  button that can only ever refuse, behind a prompt they cannot close** —
    *  :5807 1a's second half, somebody blocked from finishing something. */
   const [trialSpent, setTrialSpent] = useState(false);
+  // The door said this browser already started a free trial (2c), so the line says so.
+  const [deviceSpent, setDeviceSpent] = useState(false);
   // An account from the old password sign-up whose address was never confirmed (2b): the
   // trial waits for the code sign-in, which confirms it. Only the owner can do that, so
   // anybody else is told who can, with no button that cannot help them.
@@ -288,6 +290,12 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       applyStartedTrial(gymId, res.data?.subscription ?? null);
       refreshConsoleOrgsAfterChange();
     } catch (err) {
+      // One device, one trial (2c): the subscribe face's own line says why, so no red copy of it.
+      if (errorCode(err) === 'trial_used_on_device') {
+        setTrialSpent(true);
+        setDeviceSpent(true);
+        return;
+      }
       if (errorCode(err) === 'trial_already_used') setTrialSpent(true);
       if (errorCode(err) === 'email_not_confirmed') setNeedsCode(true);
       if (errorCode(err) === 'owner_email_not_confirmed') setWaitsForOwner(true);
@@ -376,7 +384,9 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
             <p className="text-sm mt-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
               {org?.trialEndedFirstPeople === true
                 ? `Your free trial has ended because most of your first ${words.people} came from another ${words.it} that already had one. Choose a plan to keep going.`
-                : `You've already used your one free trial, so this ${words.it} needs a plan to start.`}
+                : org?.ownerTrialUsed !== true && (deviceSpent || org?.deviceTrialUsed === true)
+                  ? `A free trial has already been used on this computer, so this ${words.it} needs a plan to start.`
+                  : `You've already used your one free trial, so this ${words.it} needs a plan to start.`}
             </p>
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
               Until it has one, nobody can be checked in at your front desk.

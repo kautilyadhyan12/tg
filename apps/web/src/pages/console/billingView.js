@@ -912,7 +912,9 @@ export function planPromptFor(org) {
   if (hasLivePlan(org)) return null;
   // A paid plan owed money: the card pays it, and a new plan would charge twice.
   if (org?.paymentOverdue === true) return 'overdue';
-  if (org?.ownerTrialUsed === false) return 'trial';
+  // One device, one trial (2c): a browser that started a free trial is offered none. A null
+  // `deviceTrialUsed` (an older api) is no answer, so it takes nothing away.
+  if (org?.ownerTrialUsed === false) return org?.deviceTrialUsed === true ? 'subscribe' : 'trial';
   if (org?.ownerTrialUsed === true) return 'subscribe';
   return null;
 }

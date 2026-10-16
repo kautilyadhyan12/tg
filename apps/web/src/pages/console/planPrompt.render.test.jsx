@@ -414,6 +414,28 @@ describe('the forced trial prompt', () => {
     expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
   });
 
+  it('turns into the PLANS, saying "this computer" once, when the door says this browser had a trial (2c)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(ORG));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'trial_used_on_device',
+          message: 'A free trial has already been used on this computer, so this gym needs a plan to start.',
+        },
+      },
+    });
+    renderConsole(Overview);
+
+    fireEvent.click(await screen.findByRole('button', { name: /start your 10-day free trial/i }));
+
+    expect(await screen.findByTestId('plan-list')).toBeTruthy();
+    expect(
+      screen.getAllByText('A free trial has already been used on this computer, so this gym needs a plan to start.'),
+    ).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
+  });
+
   it('an owner whose email is not confirmed is told so, and the button signs in with a code', async () => {
     orgService.getMine.mockResolvedValue(mineIs(ORG));
     orgService.startTrial.mockRejectedValue({
@@ -619,6 +641,27 @@ describe('the forced subscribe prompt', () => {
     ).toBeTruthy();
     expect(screen.queryByText(/already used your one free trial/i)).toBeNull();
     expect(screen.getByText('$35 a month')).toBeTruthy();
+  });
+
+  it('says "this computer" when the browser already started a free trial and the owner never had one (2c)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...ORG, ownerTrialUsed: false, deviceTrialUsed: true }));
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    expect(
+      screen.getByText('A free trial has already been used on this computer, so this gym needs a plan to start.'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/already used your one free trial/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
+  });
+
+  it('an owner who had their own trial is told so, in this browser too (2c)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...spent, deviceTrialUsed: true }));
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    expect(screen.getByText(/already used your one free trial/i)).toBeTruthy();
+    expect(screen.queryByText(/on this computer/i)).toBeNull();
   });
 
   it('promises no payment it cannot take', async () => {
