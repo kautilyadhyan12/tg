@@ -1,8 +1,9 @@
 // P2.4 — the canonical entitlements JSON (Part 4 §3.3): "the only shape the
 // quota middleware and repos read; every key has a default so old plan rows
 // survive new features". Defaults are the FREE values from the §3.3 seed
-// notes (coach 5/month, meal 3/month, routes 2/month, history 90, starter
-// program, watermark on, T1 exercises, no global boards).
+// notes (meal 3/month, routes 2/month, history 90, starter program,
+// watermark on, T1 exercises, no global boards). The chat coach's limit went
+// with the coach (ROADMAP 9b); a stored plan still holding it parses clean.
 import { z } from "zod";
 
 export const meteredWindowSchema = z.enum(["day", "month"]);
@@ -23,7 +24,6 @@ export type ExercisesEntitlement = z.infer<typeof exercisesEntitlementSchema>;
  *  behavior for those keys, never a crash (R6.5). */
 export const entitlementsSchema = z.object({
   exercises: exercisesEntitlementSchema.default({ mode: "tier", tier: "T1" }),
-  coach: meteredFeatureSchema.default({ window: "month", limit: 5 }),
   meal_scan: meteredFeatureSchema.default({ window: "month", limit: 3 }),
   route_gen: meteredFeatureSchema.default({ window: "month", limit: 2 }),
   history_days: z.number().int().default(90), // -1 = unlimited
@@ -33,7 +33,7 @@ export const entitlementsSchema = z.object({
 });
 export type Entitlements = z.infer<typeof entitlementsSchema>;
 
-export const METERED_FEATURES = ["coach", "meal_scan", "route_gen"] as const;
+export const METERED_FEATURES = ["meal_scan", "route_gen"] as const;
 export type MeteredFeatureName = (typeof METERED_FEATURES)[number];
 
 /** GET /v1/entitlements/me (DECISIONS P2.4 GAP-3). */

@@ -7,7 +7,6 @@ import { ownPlanExtras } from "../src/modules/entitlements/service.js";
 /** The seed's gym-member block (`db/seed.ts`). */
 const GYM: Entitlements = entitlementsSchema.parse({
   exercises: { mode: "all" },
-  coach: { window: "day", limit: 30 },
   meal_scan: { window: "day", limit: 7 },
   route_gen: { window: "day", limit: 2 },
   history_days: -1,
@@ -20,7 +19,6 @@ const PRO: Entitlements = { ...GYM, meal_scan: { window: "day", limit: 20 } };
 /** The seed's free block. */
 const FREE: Entitlements = entitlementsSchema.parse({
   exercises: { mode: "tier", tier: "T1" },
-  coach: { window: "month", limit: 5 },
   meal_scan: { window: "day", limit: 1 },
   route_gen: { window: "month", limit: 2 },
   history_days: 90,
@@ -39,8 +37,8 @@ describe("ownPlanExtras", () => {
     expect(ownPlanExtras(FREE, GYM)).toEqual([]);
   });
 
-  it("the chat coach is never named, however much more the own plan gives", () => {
-    expect(ownPlanExtras({ ...GYM, coach: { window: "day", limit: 999 } }, GYM)).toEqual([]);
+  it("a plan row still holding the deleted chat coach's limit adds nothing for it", () => {
+    expect(ownPlanExtras(entitlementsSchema.parse({ ...GYM, coach: { window: "day", limit: 999 } }), GYM)).toEqual([]);
   });
 
   const better: [string, Partial<Entitlements>, OwnPlanExtra["feature"], Partial<Entitlements>][] = [

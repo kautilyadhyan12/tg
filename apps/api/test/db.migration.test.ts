@@ -39,7 +39,6 @@ d("0001_init on a real database", () => {
       "exercises", "exercise_definitions", "definition_bundles",
       "workouts", "workout_sets", "workout_templates",
       "meal_logs", "user_dishware", "meal_log_corrections", "body_measurements",
-      "coach_threads", "coach_messages", "kb_chunks",
       "streaks", "achievements", "user_achievements", "challenges",
       "challenge_participants", "leaderboard_snapshots",
       "runs", "saved_routes", "run_schedules", "geo_cache",

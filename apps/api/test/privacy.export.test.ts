@@ -18,7 +18,7 @@ import {
   CONSENT_PROOF_RETENTION_YEARS,
 } from "../src/retention.js";
 import { getTableColumns } from "drizzle-orm";
-import { coachMessages, coachThreads } from "../src/db/schema/coach.js";
+import { bodyMeasurements } from "../src/db/schema/trust.js";
 import { workouts } from "../src/db/schema/training.js";
 import {
   INTERNAL_COLUMNS_BY_TABLE,
@@ -70,7 +70,6 @@ d("DPDP data export (real Postgres)", () => {
       await sql`DELETE FROM workout_sets WHERE user_id = ANY(${madeUsers})`;
       await sql`DELETE FROM workouts WHERE user_id = ANY(${madeUsers})`;
       await sql`DELETE FROM meal_logs WHERE user_id = ANY(${madeUsers})`;
-      await sql`DELETE FROM coach_threads WHERE user_id = ANY(${madeUsers})`;
       // Drive the REAL list, never a copy of it (T3 F4). The literal that used
       // to sit here silently missed `user_xp` when that table was added, and
       // only the FK cascade from the `users` delete below covered it — i.e. it
@@ -173,8 +172,10 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${wId}, ${userId}, ${exerciseId}, now(), 0, 60000, '1.0.0', 1)`;
     await sql`INSERT INTO workout_templates (user_id, name, items)
               VALUES (${userId}, ${`Template ${label}`}, ${sql.json([])})`;
-    await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg)
-              VALUES (${userId}, now(), 71.50)`;
+    // legacy_mongo_id is set on a NON-users table on purpose: the strip must
+    // apply everywhere, which is the contradiction T3 F5 found.
+    await sql`INSERT INTO body_measurements (user_id, measured_at, weight_kg, legacy_mongo_id)
+              VALUES (${userId}, now(), 71.50, ${`legacy-${label}-${uniq()}`})`;
     const meal = await sql<{ id: string }[]>`
       INSERT INTO meal_logs (user_id, taken_at, items, kcal_point, kcal_low, kcal_high,
                              portion_source, nutrition_sources, calc_version)
@@ -185,16 +186,6 @@ d("DPDP data export (real Postgres)", () => {
               VALUES (${meal[0]?.id ?? ""}, ${`grams-${label}`}, ${sql.json({ g: 100 })}, ${sql.json({ g: 120 })})`;
     await sql`INSERT INTO user_dishware (user_id, label, container_class, volume_ml)
               VALUES (${userId}, ${`Katori ${label}`}, 'katori', 175)`;
-    // legacy_mongo_id is set on a NON-users table on purpose: the strip must
-    // apply everywhere, which is the contradiction T3 F5 found.
-    const th = await sql<{ id: string }[]>`
-      INSERT INTO coach_threads (user_id, title, legacy_mongo_id)
-      VALUES (${userId}, ${`Thread ${label}`}, ${`legacy-${label}-${uniq()}`})
-      RETURNING id`;
-    // ...and the coach metering columns T3 F6 found riding along.
-    await sql`INSERT INTO coach_messages (thread_id, role, content, model, tokens_in, tokens_out, cost_micro, currency)
-              VALUES (${th[0]?.id ?? ""}, 'user', ${`question from ${label}`},
-                      'internal-model-marker', 900, 120, 4200, 'USD')`;
     // runs.id and workouts.id are client-generated (no DB default) — the only
     // two such tables in the export list.
     await sql`INSERT INTO runs (id, user_id, started_at, duration_s, distance_m)
@@ -326,12 +317,9 @@ d("DPDP data export (real Postgres)", () => {
     // rate-limit test. Each value below is seeded by the fixture, so a green
     // here means the strip ran — not that the column was never there.
     expect(serialized).not.toContain("legacy-"); // legacy_mongo_id, ALL tables
-    expect(serialized).not.toContain("internal-model-marker"); // coach metering
-    expect(serialized).not.toContain("cost_micro");
-    expect(serialized).not.toContain("tokens_in");
     expect(serialized).not.toContain("anticheat-marker"); // workouts.quality_flags
-    // ...and the user's own message content is UNTOUCHED by the strip.
-    expect(serialized).toContain("question from creds");
+    // ...and the user's own words are UNTOUCHED by the strip.
+    expect(serialized).toContain("Katori creds");
   });
 
   it("contains NO row belonging to another user", { timeout: 60_000 }, async () => {
@@ -511,11 +499,10 @@ describe("DPDP export list (no database)", () => {
     const columnsOf = (t: Parameters<typeof getTableColumns>[0]): string[] =>
       Object.values(getTableColumns(t)).map((c) => c.name);
     const byTable: Record<string, string[]> = {
-      coach_messages: columnsOf(coachMessages),
       workouts: columnsOf(workouts),
       // carries legacy_mongo_id, so the everywhere-list has a real table to
       // be checked against (the guard caught its absence immediately).
-      coach_threads: columnsOf(coachThreads),
+      body_measurements: columnsOf(bodyMeasurements),
     };
     for (const [table, cols] of Object.entries(INTERNAL_COLUMNS_BY_TABLE)) {
       const real = byTable[table] ?? [];

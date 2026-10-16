@@ -52,7 +52,6 @@ const addr = (local: string) => `inotme-t-${local}@${DOMAIN}`;
  *  (`db/seed.ts`): the one difference is the meal scans. */
 const MEMBER_DOC = {
   exercises: { mode: "all" },
-  coach: { window: "day", limit: 30 },
   meal_scan: { window: "day", limit: 7 },
   route_gen: { window: "day", limit: 2 },
   history_days: -1,

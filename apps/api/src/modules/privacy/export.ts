@@ -38,12 +38,6 @@ export const INTERNAL_COLUMNS_EVERYWHERE = ["legacy_mongo_id"] as const;
 // guard is a test that checks these names against the real drizzle schema —
 // DB-free, and in the UNGATED describe so CI actually runs it.
 export const INTERNAL_COLUMNS_BY_TABLE: Partial<Record<ExportedTable, readonly string[]>> = {
-  // T3 F6. `api_cost_events` is excluded from the export on the recorded
-  // ground that metering is not user content — and the identical metering
-  // rode along on every coach message: our provider, our model choice, and
-  // our per-request cost. The message itself (role, content, thread, time) IS
-  // the user's and stays. Kd may reverse this; it is flagged in DECISIONS.
-  coach_messages: ["model", "tokens_in", "tokens_out", "cost_micro", "currency"],
   // T3 F7. v1 §14.1 / CLAUDE.md P4.y put server-side plausibility results on
   // this column as SILENT metadata ("flag unverified, never a user-facing
   // rejection"; "anti-cheat flags are silent metadata"). Today it only holds

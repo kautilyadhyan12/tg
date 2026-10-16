@@ -24,15 +24,14 @@ type Source = EntitlementsMe["source"];
  *  numeric max across day-vs-month windows is meaningless). */
 function mergeEqualRank(a: Entitlements, b: Entitlements): Entitlements {
   const metered = (
-    x: Entitlements["coach"],
-    y: Entitlements["coach"],
-  ): Entitlements["coach"] => {
+    x: Entitlements["meal_scan"],
+    y: Entitlements["meal_scan"],
+  ): Entitlements["meal_scan"] => {
     if (x.window === y.window) return { window: x.window, limit: Math.max(x.limit, y.limit) };
     return x.window === "day" ? x : y; // day-window plans are the generous tier
   };
   return {
     exercises: a.exercises.mode === "all" || b.exercises.mode === "all" ? { mode: "all" } : a.exercises,
-    coach: metered(a.coach, b.coach),
     meal_scan: metered(a.meal_scan, b.meal_scan),
     route_gen: metered(a.route_gen, b.route_gen),
     history_days:
@@ -81,7 +80,7 @@ export async function getEntitlements(
   if (hit !== null) {
     // Cache is external input (R2.3): a corrupt/old-format/manually-poked
     // value must NOT throw out of the resolver (T3 P2.4 — that would 500
-    // /me, the history gate, and the coach fail-open path). Any parse or
+    // /me, the history gate, and every metered route). Any parse or
     // schema failure is treated as a miss → DB re-resolve + re-cache below.
     let raw: unknown = null;
     try {
@@ -105,10 +104,8 @@ const meterBeats = (own: Entitlements["meal_scan"], gym: Entitlements["meal_scan
   own.window === gym.window ? own.limit > gym.limit : own.window === "day" && own.limit > 0;
 
 /** What a person's own plan gives beyond a gym's member plan — each feature where the
- *  own one is better, in the terms `mergeEqualRank` uses to call one better. The chat
- *  coach is left out: it was deleted (2026-10-15; its limit stays in the plans until
- *  ROADMAP 9b), so naming it would be a feature nobody can use. Pure; exported for its
- *  table test. */
+ *  own one is better, in the terms `mergeEqualRank` uses to call one better. Pure;
+ *  exported for its table test. */
 export function ownPlanExtras(own: Entitlements, gym: Entitlements): OwnPlanExtra[] {
   const extras: OwnPlanExtra[] = [];
   if (meterBeats(own.meal_scan, gym.meal_scan)) extras.push({ feature: "meal_scan", own: own.meal_scan, gym: gym.meal_scan });
