@@ -115,15 +115,16 @@ type Decided =
 type Sent = { kind: "sent"; count: number } | { kind: "none" } | { kind: "held" };
 
 /** Everyone at the gym who may both pay for its plan and download its list, the two things
- *  the email offers: the owner, and staff given both ticks. */
-async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<{ userId: string; email: string }[]> {
-  const out: { userId: string; email: string }[] = [];
+ *  the email offers: the owner, and staff given both ticks. Those who may also record
+ *  payments are told to download them too (18n). */
+async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<{ userId: string; email: string; payments: boolean }[]> {
+  const out: { userId: string; email: string; payments: boolean }[] = [];
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
     if (
       (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) &&
       (await holdsPrivilege(deps, gymId, staff.userId, "members.confirm"))
     ) {
-      out.push(staff);
+      out.push({ ...staff, payments: await holdsPrivilege(deps, gymId, staff.userId, "billing.members") });
     }
   }
   return out;
@@ -183,7 +184,7 @@ async function send(
   if (await repo.toldElsewhereTonight(deps.sql, gymId, to.map((staff) => staff.userId), now)) return { kind: "held" };
   const membersLink = `${deps.mail.webOrigin}/console/${encodeURIComponent(gym.slug)}/members`;
   let sent = 0;
-  for (const { email: address } of to) {
+  for (const { email: address, payments } of to) {
     try {
       await deps.mail.transport.send(
         goneForGoodEmail({
@@ -195,6 +196,7 @@ async function send(
           countedFrom: decided.countedFrom,
           deletesAt: decided.deletesAt,
           membersLink,
+          payments,
         }),
       );
       sent += 1;

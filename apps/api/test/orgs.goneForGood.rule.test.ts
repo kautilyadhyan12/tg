@@ -108,6 +108,7 @@ describe("a gym gone for good: the email", () => {
     countedFrom: at("2026-01-10T00:00:00Z"),
     deletesAt: at("2026-07-09T20:00:00Z"), // 10 Jul in Kolkata
     membersLink: "https://app.example/console/iron-house/members",
+    payments: false,
   };
 
   it("names the day in the gym's own zone, what goes, what stays, how to keep it, and where to download", () => {
@@ -118,6 +119,13 @@ describe("a gym gone for good: the email", () => {
     expect(mail.text).toContain("To keep everything, sign in to your gym console before 10 Jul 2026.");
     expect(mail.text).toContain("To keep a copy of your list, sign in and press Download member list:\nhttps://app.example/console/iron-house/members");
     expect(mail.html).toContain('<a href="https://app.example/console/iron-house/members">');
+  });
+
+  it("a reader who may record payments is told to download them too, before the same day", () => {
+    const mail = goneForGoodEmail({ ...base, notice: "month", payments: true });
+    expect(mail.text).toContain("To keep a copy of your list and your payments, sign in and press Download member list, then Download payments:\nhttps://app.example/console/iron-house/members");
+    expect(mail.html).toContain("then Download payments:<br><a href=");
+    expect(goneForGoodEmail({ ...base, notice: "month" }).text).not.toContain("Download payments");
   });
 
   it("the week email says it is the last reminder", () => {

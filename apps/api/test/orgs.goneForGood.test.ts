@@ -418,6 +418,9 @@ d("a gym gone for good (real Postgres)", () => {
           (${g.gymId}, ${payOnly}, 'manager', ${["billing.manage", "members.read"]})`;
       await run(rec, [g.gymId], plus(addMonths(T0, 6), -30));
       expect(rec.sent.map((m) => m.to).sort()).toEqual([bothEmail, g.ownerEmail].sort());
+      // The owner may record payments and is told to download them; the manager may not, and is not.
+      const said = Object.fromEntries(rec.sent.map((m) => [m.to, m.text.includes("then Download payments:")]));
+      expect(said).toEqual({ [g.ownerEmail]: true, [bothEmail]: false });
     },
     TIMEOUT,
   );
