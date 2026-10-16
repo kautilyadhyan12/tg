@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { attendanceReportFrom, membersReportFrom, moneyReportFrom } from '@app/shared';
 
-const svc = { members: vi.fn(), attendance: vi.fn(), money: vi.fn() };
+const svc = { members: vi.fn(), attendance: vi.fn(), money: vi.fn(), paymentsSummary: vi.fn(), downloadPayments: vi.fn() };
 const orgApi = { getMine: vi.fn() };
 vi.mock('../../api/reportsApi', () => ({ reportsService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -176,6 +176,17 @@ describe('the money figures', () => {
       ['Gold Monthly', '2', '£99.98', '£0.00', '£300.00'],
       ['One month', '0', '–', '£45.00', '£45.00'],
     ]);
+  });
+
+  it('Download payments sits under the Money heading and opens its box there, on the days the page shows', async () => {
+    svc.paymentsSummary.mockResolvedValue({ from: '2025-10-21', to: TODAY, lines: 3, totals: [{ currency: 'GBP', paidMinor: 6000, soldMinor: 0, refundedMinor: 1500, netMinor: 4500 }] });
+    open();
+    await screen.findByTestId('tile-recurring');
+    fireEvent.click(moneyPart().getByRole('button', { name: 'Download payments' }));
+    const box = within(moneyPart().getByRole('region', { name: 'Download payments' }));
+    expect(await box.findByText('3 transactions · Memberships £60.00 · Refunded -£15.00 · Collected £45.00')).toBeTruthy();
+    const { period } = await svc.money.mock.results[0].value;
+    expect(svc.paymentsSummary).toHaveBeenCalledWith('g1', { from: period.from, to: period.to });
   });
 
   it('the people who owe are one press away, on Members already showing them', async () => {

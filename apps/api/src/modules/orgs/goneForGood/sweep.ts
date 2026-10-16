@@ -28,11 +28,13 @@
 //
 // The worker runs it nightly (`worker.ts`); `nextStep` is the rule, pure, table-tested.
 import type { Sql } from "postgres";
+import { PAYMENTS_DOWNLOAD_PRIVILEGES } from "@app/shared";
 import type { EmailTransport } from "../../../email/resend.js";
 import { deleteLeadsForGym } from "../leads/repo.js";
 import { deleteListForGym } from "../memberList/repo.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { holdsPrivilege } from "../service.js";
+import { firstDay } from "../paymentsDownload/repo.js";
 import { deleteStaffInvitesForGym } from "../staffInvites/repo.js";
 import { goneForGoodEmail } from "./emails.js";
 import * as repo from "./repo.js";
@@ -115,15 +117,19 @@ type Decided =
 type Sent = { kind: "sent"; count: number } | { kind: "none" } | { kind: "held" };
 
 /** Everyone at the gym who may both pay for its plan and download its list, the two things
- *  the email offers: the owner, and staff given both ticks. */
-async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<{ userId: string; email: string }[]> {
-  const out: { userId: string; email: string }[] = [];
+ *  the email offers: the owner, and staff given both ticks. Those who may also download
+ *  payments are told to, when the gym has any: the plan box shows no button for none (18n). */
+async function recipients(deps: GoneForGoodDeps, gymId: string): Promise<{ userId: string; email: string; payments: boolean }[]> {
+  const out: { userId: string; email: string; payments: boolean }[] = [];
+  const anyPayments = (await firstDay(deps.sql, gymId)) !== null;
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
     if (
       (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) &&
       (await holdsPrivilege(deps, gymId, staff.userId, "members.confirm"))
     ) {
-      out.push(staff);
+      let payments = anyPayments;
+      for (const p of PAYMENTS_DOWNLOAD_PRIVILEGES) payments = payments && (await holdsPrivilege(deps, gymId, staff.userId, p));
+      out.push({ ...staff, payments });
     }
   }
   return out;
@@ -183,7 +189,7 @@ async function send(
   if (await repo.toldElsewhereTonight(deps.sql, gymId, to.map((staff) => staff.userId), now)) return { kind: "held" };
   const membersLink = `${deps.mail.webOrigin}/console/${encodeURIComponent(gym.slug)}/members`;
   let sent = 0;
-  for (const { email: address } of to) {
+  for (const { email: address, payments } of to) {
     try {
       await deps.mail.transport.send(
         goneForGoodEmail({
@@ -195,6 +201,7 @@ async function send(
           countedFrom: decided.countedFrom,
           deletesAt: decided.deletesAt,
           membersLink,
+          payments,
         }),
       );
       sent += 1;

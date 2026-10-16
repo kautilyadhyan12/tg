@@ -82,3 +82,4 @@ export * from "./phoneApp.js";
 export * from "./goals.js";
 export * from "./trialPerson.js";
 export * from "./coOwners.js";
+export * from "./paymentsDownload.js";
