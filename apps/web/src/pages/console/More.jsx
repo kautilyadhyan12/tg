@@ -30,7 +30,7 @@ export default function More() {
 
   const menu = consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType);
   const name = user?.displayName || user?.email || '';
-  const about = org ? [roleLabel(org.staffRole, org.orgType), org.name].filter(Boolean).join(' · ') : '';
+  const about = org ? [roleLabel(org.staffRole, org.orgType, org.coOwner), org.name].filter(Boolean).join(' · ') : '';
 
   return (
     <div className="c-page c-narrow">

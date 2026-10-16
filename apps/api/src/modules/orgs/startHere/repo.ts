@@ -40,7 +40,7 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
         EXISTS (
           SELECT 1 FROM gym_staff s
           JOIN users u ON u.id = s.user_id
-          WHERE s.gym_id = g.id AND s.role <> 'owner' AND u.status = 'active'
+          WHERE s.gym_id = g.id AND s.user_id <> g.owner_user_id AND u.status = 'active'
         )
         OR EXISTS (
           SELECT 1 FROM gym_staff_invites i

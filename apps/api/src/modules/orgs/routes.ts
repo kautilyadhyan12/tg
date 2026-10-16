@@ -65,6 +65,8 @@ import { registerRegisterRoutes } from "./register/routes.js";
 import { registerReceiptRoutes } from "./receipts/routes.js";
 import { registerPaymentsDownloadRoutes } from "./paymentsDownload/routes.js";
 import { registerWeekRoutes } from "./week/routes.js";
+import { registerCoOwnerRoutes } from "./coOwners/routes.js";
+import type { CoOwnerEmailSender } from "./coOwners/email.js";
 import * as service from "./service.js";
 import { PT_SESSIONS_ENDING_ERROR, confirmPtSessionsQuerySchema } from "@app/shared";
 import { PtSessionsEndAsk } from "./pt/changes.js";
@@ -115,6 +117,9 @@ export function registerOrgRoutes(
     photos: PhotoStore;
     /** Where members are told to write for help; null until one is set. */
     supportEmail: string | null;
+    /** The co-owner request's email, and the console's origin for its link (4b-i). */
+    coOwnerEmail: CoOwnerEmailSender;
+    webOrigin: string;
     joinCodes: boolean;
     memberTap: boolean;
   },
@@ -188,7 +193,9 @@ export function registerOrgRoutes(
   registerWaiverRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
-  registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+  registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, coOwnerEmail: deps.coOwnerEmail, webOrigin: deps.webOrigin });
+  // Co-owners: the owner asks one of the staff, who accepts or declines (ROADMAP 4b-i).
+  registerCoOwnerRoutes(app, { sql: deps.sql, redis: deps.redis, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, webOrigin: deps.webOrigin, now: overrides.now ?? (() => new Date()) });
 
   // Overview's "Start here" list: what the gym has set up (ROADMAP 23b).
   registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });

@@ -24,6 +24,7 @@ import {
   type UsersEmailSender,
 } from "./modules/users/email.js";
 import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
+import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwnerEmailSender } from "./modules/orgs/coOwners/email.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
@@ -59,6 +60,8 @@ import { sentryOptions } from "./sentry.js";
 export interface BuildAppOverrides {
   emailSender?: EmailSender;
   usersEmailSender?: UsersEmailSender;
+  /** The co-owner request's email (ROADMAP 4b-i). */
+  coOwnerEmailSender?: CoOwnerEmailSender;
   /** Tests inject the in-memory adapter (with its `down` switch) to drive
    *  fail-open/fail-closed paths deterministically (P2.4). */
   redis?: RedisLike;
@@ -333,6 +336,10 @@ export async function buildApp(
       // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
       photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
       supportEmail: config.SUPPORT_EMAIL ?? null,
+      coOwnerEmail:
+        overrides.coOwnerEmailSender ??
+        (transport !== null ? createResendCoOwnerEmailSender(transport, app.log) : createDevCoOwnerEmailSender(app.log, config)),
+      webOrigin: config.WEB_ORIGIN,
       joinCodes: config.JOIN_CODES,
       memberTap: config.MEMBER_TAP,
     },

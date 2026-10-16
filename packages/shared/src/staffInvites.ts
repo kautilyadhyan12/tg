@@ -3,7 +3,7 @@
 // that address and taps Accept, and the console opens with that role and no membership.
 import { z } from "zod";
 import { authEmailSchema } from "./auth.js";
-import { ORG_PRIVILEGES, orgPrivilegeSchema, orgRoleSchema, orgStaffSchema, orgTypeSchema, staffAssignableRoleSchema } from "./orgs.js";
+import { ORG_PRIVILEGES, orgPrivilegeSchema, orgRoleSchema, orgStaffSchema, orgTypeSchema } from "./orgs.js";
 import { orgWords } from "./orgWords.js";
 
 /** An invitation nobody accepts stops working after this many days. */
@@ -25,10 +25,15 @@ export const STAFF_ROLE_NAME_MAX = 40;
 /** The Resend tag naming a staff invitation's send row. */
 export const STAFF_INVITE_SEND_TAG = "staff_invite_send";
 
+/** The roles an invitation may be for: `owner` is a co-owner (ROADMAP 4b-i), sent by the
+ *  gym's own owner alone, with the owner's ticks. */
+export const staffInviteRoleSchema = z.enum(["manager", "trainer", "owner"]);
+export type StaffInviteRole = z.infer<typeof staffInviteRoleSchema>;
+
 export const createStaffInviteRequestSchema = z
   .object({
     email: authEmailSchema,
-    role: staffAssignableRoleSchema,
+    role: staffInviteRoleSchema,
     /** What they may do, ticked on the form (Kd, 2026-10-01); the role's starting ticks
      *  when left out. "Manage staff" stays the owner's and is refused. */
     privileges: z.array(orgPrivilegeSchema).max(ORG_PRIVILEGES.length).optional(),
@@ -83,7 +88,7 @@ export const staffInviteSchema = z
   .object({
     id: z.string().uuid(),
     email: z.string(),
-    role: staffAssignableRoleSchema,
+    role: staffInviteRoleSchema,
     /** What Accept gives them. */
     privileges: z.array(z.string()),
     /** The gym's own role it is for, or null. */
@@ -114,6 +119,9 @@ export type StaffInvitesResponse = z.infer<typeof staffInvitesResponseSchema>;
 export const createStaffInviteResponseSchema = z.discriminatedUnion("outcome", [
   z.object({ outcome: z.literal("invited"), invite: staffInviteSchema }).strict(),
   z.object({ outcome: z.literal("added"), staff: orgStaffSchema }).strict(),
+  /** A co-owner invitation to somebody already on the staff: they are asked on their
+   *  Overview instead (4b-i), and `emailed` says whether its email went. */
+  z.object({ outcome: z.literal("asked"), staff: orgStaffSchema, emailed: z.boolean() }).strict(),
 ]);
 export type CreateStaffInviteResponse = z.infer<typeof createStaffInviteResponseSchema>;
 
@@ -161,7 +169,7 @@ export const RESERVED_STAFF_ROLE_NAMES = ["owner", "manager", "trainer", "coach"
 export const myStaffInvitationSchema = z
   .object({
     id: z.string().uuid(),
-    role: staffAssignableRoleSchema,
+    role: staffInviteRoleSchema,
     /** What they will be able to do. */
     privileges: z.array(z.string()),
     /** The gym's own role it is for ("Front desk"), or null. */
@@ -215,7 +223,8 @@ export const declineStaffInvitationResponseSchema = z.object({ state: z.literal(
 export type DeclineStaffInvitationResponse = z.infer<typeof declineStaffInvitationResponseSchema>;
 
 /** The role in the words of the gym's kind: "manager", or "trainer" ("coach" at a studio). */
-export function staffRoleWord(role: "manager" | "trainer", orgType: unknown): string {
+export function staffRoleWord(role: "manager" | "trainer" | "owner", orgType: unknown): string {
+  if (role === "owner") return "co-owner";
   return role === "manager" ? "manager" : orgWords(orgType).coach;
 }
 
@@ -226,6 +235,7 @@ export function withArticle(word: string): string {
 
 /** The sentences a refusal is answered with. None says whether an address has an account. */
 export const STAFF_INVITE_WORDS = {
+  co_owner_own_role: "A co-owner can do everything here, so they don't need a role of your own. Choose Co-owner on its own.",
   owner_only_privilege: "Managing staff stays with the owner. You can give them any of the other permissions.",
   role_name_taken: (name: string): string => `You already have a role called ${name}.`,
   role_name_reserved: (name: string): string => `${name} is already one of the app's roles. Choose another name.`,

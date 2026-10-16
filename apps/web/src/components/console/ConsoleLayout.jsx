@@ -77,7 +77,7 @@ export default function ConsoleLayout({ children }) {
   const reviewDot = (page) => (page.key === 'members' && toReview > 0 ? <ReviewDot count={toReview} words={words} /> : null);
   const moreOn = menu ? moreIsCurrent(menu, pathname) : false;
   const name = user?.displayName || user?.email || '';
-  const role = org ? roleLabel(org.staffRole, org.orgType) : '';
+  const role = org ? roleLabel(org.staffRole, org.orgType, org.coOwner) : '';
   const signOutWords = signingOut ? 'Signing out…' : 'Sign out';
 
   return (
