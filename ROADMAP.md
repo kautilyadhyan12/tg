@@ -336,7 +336,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 20f. **Messages to a chosen group** (Kd, RULINGS 2026-10-08; spec §16.8), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 20f-i. [x] **Send message, from the Members list** — merged 2026-10-10 (PR #216).
      - 20f-ii. [x] **Sent messages** — merged 2026-10-10 (PR #217).
-   - 20g. [ ] **The two extra passes' fixes** over Messages and Refer a friend (5 High, 4 Low; `handoff/2026-10-16-item20-passes.md`). Before anybody switches Refer a friend on.
+   - 20g. [x] **The two extra passes' fixes** — merged 2026-10-16 (PR #294).
 21. **Reports** (RULINGS 2026-09-22; spec Part 3 §16.5) — it takes in item 12's reports. Opus xhigh (a rule that thresholds, other people's data).
    - 21a. **Members and attendance**, split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
      - 21a-i. [x] **The Reports page, with the members figures** — merged 2026-10-10 (PR #211).
