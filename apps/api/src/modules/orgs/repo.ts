@@ -594,6 +594,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            EXISTS (
              SELECT 1 FROM subscriptions fs
              WHERE fs.owner_type = 'gym' AND fs.owner_id = g.id AND fs.trial_check = 'ended'
+           ) AND NOT EXISTS (
+             SELECT 1 FROM subscriptions ps
+             WHERE ps.owner_type = 'gym' AND ps.owner_id = g.id AND ps.paid_at IS NOT NULL
            ) AS trial_ended_first_people,
            ch.preset AS cheer_preset,
            ch.created_at AS cheer_sent_at,
@@ -2125,13 +2128,14 @@ export async function startGymTrial(
 /** THE TRIAL BELONGS TO THE GYM (Stage 3 item 2d): looks at the gym's first people and ends
  *  its free trial, or puts it on Kd's look list, by `decideTrialCheck`. The caller holds the
  *  gym's lock, so two people joining at once are counted one after the other. It does
- *  nothing unless the gym is on our own free trial and has not been checked: a gym that paid
- *  is never touched, and once decided, the answer stands. */
+ *  nothing unless the gym is on our own free trial: a gym that paid is never touched. An
+ *  "ended" stands; a "look" is asked again on each join, so a second gym the owner was never
+ *  at still ends the trial whichever of the two filled up first. */
 export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): Promise<TrialCheck> {
-  const subs = await tx<{ id: string; created_at: Date }[]>`
-    SELECT id, created_at FROM subscriptions
+  const subs = await tx<{ id: string; created_at: Date; trial_check: string | null }[]>`
+    SELECT id, created_at, trial_check FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId}
-      AND status = 'trialing' AND provider = 'none' AND trial_check IS NULL`;
+      AND status = 'trialing' AND provider = 'none' AND (trial_check IS NULL OR trial_check = 'look')`;
   const sub = subs[0];
   if (sub === undefined) return { kind: "none" };
 
@@ -2176,6 +2180,10 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
               SELECT 1 FROM gym_staff s CROSS JOIN me
               WHERE s.gym_id = e.gym_id AND s.user_id = me.owner_user_id
             ) OR EXISTS (
+              SELECT 1 FROM audit_log a CROSS JOIN me
+              WHERE a.gym_id = e.gym_id AND a.action = 'org.staff_removed'
+                AND a.target_id = me.owner_user_id::text
+            ) OR EXISTS (
               SELECT 1 FROM gym_members om CROSS JOIN me
               WHERE om.gym_id = e.gym_id AND om.user_id = me.owner_user_id AND om.joined_at < e.trial_ended
             )) AS owner_was_there
@@ -2184,6 +2192,7 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
     rows.map((r) => ({ gymId: r.gym_id, came: r.came, ownerWasThere: r.owner_was_there })),
   );
   if (check.kind === "none") return check;
+  if (check.kind === "look" && sub.trial_check === "look") return check;
 
   if (check.kind === "ended") {
     await tx`

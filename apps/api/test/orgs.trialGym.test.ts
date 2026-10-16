@@ -138,15 +138,18 @@ d("the trial belongs to the gym (real Postgres)", () => {
   };
   /** The old gym: its free trial began `daysAgo` days ago and ended; `paid` puts it on a plan
    *  paid through Paddle afterwards, the trigger stamping `paid_at`. */
-  const oldGym = async (opts: { daysAgo?: number; paid?: boolean } = {}): Promise<string> => {
-    const days = opts.daysAgo ?? 30;
-    const gymId = await trialGym(await makeUser());
+  const endedTrial = async (gymId: string, days: number) => {
     await sql`
       UPDATE subscriptions
       SET created_at = now() - ${days} * INTERVAL '1 day',
           trial_ends_at = now() - ${days - 10} * INTERVAL '1 day',
           status = 'expired', ended_at = now() - ${days - 10} * INTERVAL '1 day'
       WHERE owner_type = 'gym' AND owner_id = ${gymId}`;
+  };
+  const oldGym = async (opts: { daysAgo?: number; paid?: boolean } = {}): Promise<string> => {
+    const days = opts.daysAgo ?? 30;
+    const gymId = await trialGym(await makeUser());
+    await endedTrial(gymId, days);
     if (opts.paid === true) {
       await sql`
         INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, current_period_end)
@@ -314,13 +317,14 @@ d("the trial belongs to the gym (real Postgres)", () => {
       await joinsThroughDoor(gym, owner, await oldGym());
       expect(await trialOf(gym)).toMatchObject({ status: "trialing", trial_check: null });
 
-      // Eleven who were in the new gym first, and only then in the other one.
+      // The owner and ten others who were in the new gym first, and only then in the other one:
+      // eleven of the first 20 are in it, none of them before they were here.
       const other = await oldGym();
       const owner2 = await makeUser();
       const gym2 = await trialGym(owner2);
-      const eleven = await people(11);
-      await earlierInNewGym(gym2, eleven.slice(0, 10));
-      await inGym(other, eleven.slice(0, 10), 0);
+      const ten2 = await people(10);
+      await earlierInNewGym(gym2, ten2);
+      await inGym(other, [owner2.userId, ...ten2], 0);
       await joinsThroughDoor(gym2, owner2);
       expect(await trialOf(gym2)).toMatchObject({ status: "trialing", trial_check: null });
 
@@ -381,6 +385,54 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
+    "a trainer the old gym took off its staff while it trialled was there all the same: look, not ended",
+    async () => {
+      const oldOwner = await makeUser();
+      const old = await trialGym(oldOwner);
+      const trainer = await makeUser();
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${old}, ${trainer.userId}, 'trainer')`;
+      const removed = await api().inject({
+        method: "DELETE",
+        url: `/v1/orgs/${old}/staff/${trainer.userId}`,
+        remoteAddress: nextIp(),
+        cookies: oldOwner.cookies,
+      });
+      expect(removed.statusCode, removed.body).toBe(200);
+      expect(await sql`SELECT 1 FROM gym_staff WHERE gym_id = ${old} AND user_id = ${trainer.userId}`).toHaveLength(0);
+      await endedTrial(old, 30);
+
+      const followers = await people(10);
+      await inGym(old, followers, 40);
+      const gym = await trialGym(trainer);
+      await earlierInNewGym(gym, followers);
+      expect(await joinsThroughDoor(gym, trainer, old)).toBe(true);
+      expect(await trialOf(gym)).toEqual({ status: "trialing", trial_check: "look", trial_check_gym_id: old });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a look is asked again: a second gym the owner was never at ends the trial when it fills up later",
+    async () => {
+      // The owner was staff at A, never at B; ten people were in both.
+      const a = await oldGym();
+      const b = await oldGym();
+      const owner = await makeUser();
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${a}, ${owner.userId}, 'trainer')`;
+      const both = await people(10);
+      await inGym(a, both, 40);
+      await inGym(b, both, 40);
+      const gym = await trialGym(owner);
+      await earlierInNewGym(gym, both);
+      await joinsThroughDoor(gym, owner, a); // A 11, B 10
+      expect(await trialOf(gym)).toEqual({ status: "trialing", trial_check: "look", trial_check_gym_id: a });
+      expect(await joinsThroughDoor(gym, owner, b)).toBe(false); // B 11
+      expect(await trialOf(gym)).toEqual({ status: "expired", trial_check: "ended", trial_check_gym_id: b });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "two people accepting at the same instant are counted one after the other: the trial ends once",
     async () => {
       const old = await oldGym();
@@ -411,6 +463,15 @@ d("the trial belongs to the gym (real Postgres)", () => {
       await earlierInNewGym(gym, ten);
       await joinsThroughDoor(gym, owner, old);
       expect((await onScreen(owner, gym))?.trialEndedFirstPeople).toBe(true);
+      // It subscribes and pays; later its paid plan ends. What ended then was not the trial.
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, current_period_end)
+        SELECT 'gym', ${gym}, plan_id, 'active', 'paddle', ${`sub_${TAG}_${run}_${String(seq++)}`}, now() + INTERVAL '20 days'
+        FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym} LIMIT 1`;
+      await sql`UPDATE subscriptions SET status = 'expired', ended_at = now() WHERE owner_type = 'gym' AND owner_id = ${gym} AND provider = 'paddle'`;
+      const afterPaid = await onScreen(owner, gym);
+      expect(afterPaid?.subscription).toBeNull();
+      expect(afterPaid?.trialEndedFirstPeople).toBe(false);
 
       const trainer = await makeUser();
       await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym}, ${trainer.userId}, 'trainer', ARRAY[]::text[])`;
