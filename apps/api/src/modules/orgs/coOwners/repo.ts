@@ -16,7 +16,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // tests drive the Staff tab, the Overview and Accept over the same cases.
 
 /** The gym's own owner. */
-export async function gymOwnerId(sql: Sql, gymId: string): Promise<string | null> {
+export async function gymOwnerId(sql: Sql | TransactionSql, gymId: string): Promise<string | null> {
   const rows = await sql<{ owner_user_id: string }[]>`SELECT owner_user_id FROM gyms WHERE id = ${gymId}`;
   return rows[0]?.owner_user_id ?? null;
 }
@@ -57,6 +57,7 @@ async function endStale(tx: TransactionSql, gymId: string, userId: string, now: 
 export type SendOutcome =
   | {
       kind: "sent";
+      requestId: string;
       expiresAt: Date;
       /** For the email: the address of the person asked (null for an account with none). */
       email: string | null;
@@ -110,8 +111,23 @@ export async function sendRequest(
       targetId: input.userId,
       meta: { requestId: made[0]?.id ?? null },
     });
-    return { kind: "sent", expiresAt, email: target.email, gymName: gym.name, gymSlug: gym.slug, ownerName: gym.owner_name };
+    const requestId = made[0]?.id;
+    if (requestId === undefined) throw new Error("the co-owner request was not written");
+    return { kind: "sent", requestId, expiresAt, email: target.email, gymName: gym.name, gymSlug: gym.slug, ownerName: gym.owner_name };
   });
+}
+
+/** Claim this request's email: false when the same person was emailed by a request of this
+ *  gym's in the last day, so Send and Cancel pressed over and over send one email. */
+export async function claimEmail(sql: Sql, input: { gymId: string; userId: string; requestId: string; now: Date }): Promise<boolean> {
+  const dayAgo = new Date(input.now.getTime() - DAY_MS);
+  const rows = await sql`
+    UPDATE gym_co_owner_requests r SET emailed_at = ${input.now}
+    WHERE r.id = ${input.requestId} AND r.gym_id = ${input.gymId}
+      AND NOT EXISTS (SELECT 1 FROM gym_co_owner_requests o
+                      WHERE o.gym_id = r.gym_id AND o.user_id = ${input.userId} AND o.emailed_at > ${dayAgo})
+    RETURNING r.id`;
+  return rows.length > 0;
 }
 
 export type CancelOutcome = { kind: "cancelled" } | { kind: "owner_only" } | { kind: "no_request" };
@@ -180,6 +196,10 @@ export async function answerRequest(
       WHERE r.id = ${input.requestId} AND r.gym_id = ${input.gymId} AND r.user_id = ${input.userId}`;
     const request = rows[0];
     if (request === undefined) return { kind: "not_found" };
+    if (request.state === "accepted" && input.accept) {
+      const still = await tx`SELECT 1 FROM gym_staff WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND role = 'owner'`;
+      return still.length > 0 ? { kind: "accepted" } : { kind: "request_gone" };
+    }
     if (request.state !== "pending") return { kind: "request_gone" };
     if (request.expires_at.getTime() <= input.now.getTime()) {
       await endStale(tx, input.gymId, input.userId, input.now);

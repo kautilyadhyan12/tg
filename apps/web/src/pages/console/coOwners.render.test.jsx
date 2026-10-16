@@ -39,7 +39,7 @@ const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Members = (await import('./Members')).default;
 const CoOwnerRequest = (await import('../../components/console/CoOwnerRequest')).default;
-const { roleLabel } = await import('./consoleView');
+const { roleLabel, staffRemoveView } = await import('./consoleView');
 
 const ORG = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -241,6 +241,50 @@ describe('Invite staff offers Co-owner to the owner alone', () => {
     fireEvent.click(form.getByRole('radio', { name: 'Co-owner' }));
     fireEvent.click(form.getByRole('button', { name: 'Send invitation' }));
     expect(await screen.findByText('Rita Sen is already on your staff, so we asked them to be a co-owner. They accept it on the Overview when they open the console.')).toBeTruthy();
+  });
+});
+
+describe('round one on the screen', () => {
+  const COOWNER_INVITE = { id: '55555555-5555-4555-8555-555555555555', email: 'pat@example.com', role: 'owner', privileges: [], roleName: null, invitedAt: '2026-10-16T09:00:00.000Z', expiresAt: '2026-10-23T09:00:00.000Z', state: 'declined', declinedAt: '2026-10-16T10:00:00.000Z', emailStatus: 'sent', emailReason: null, lastSentAt: '2026-10-16T09:00:00.000Z', resendsLeft: 3, sendAgainFrom: null };
+
+  it('H1: a co-owner sees the owner\'s co-owner invitation with no Send again or Cancel', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: staffAs('u3', [OWNER, CORA, RITA]) } });
+    orgService.getStaffInvites.mockResolvedValue({ data: { invites: [COOWNER_INVITE] } });
+    drawStaff();
+    const row = within(await screen.findByTestId(`staff-invite-${COOWNER_INVITE.id}`));
+    expect(row.getByText('Only the owner can send this again or cancel it.')).toBeTruthy();
+    expect(row.queryByRole('button')).toBeNull();
+  });
+
+  it('H1: the owner sees Send again on it, labelled Co-owner', async () => {
+    orgService.getStaffInvites.mockResolvedValue({ data: { invites: [COOWNER_INVITE] } });
+    drawStaff();
+    const row = within(await screen.findByTestId(`staff-invite-${COOWNER_INVITE.id}`));
+    expect(row.getByRole('button', { name: 'Send again' })).toBeTruthy();
+    expect(row.getByText(/^Co-owner · /)).toBeTruthy();
+  });
+
+  it('L6: a co-owner\'s own panel offers Leave the staff, and asks first', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: staffAs('u3', [OWNER, CORA, RITA]) } });
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    fireEvent.click(panel.getByRole('button', { name: 'Leave the staff' }));
+    expect(panel.getByText("Leave the staff? You stop being a co-owner and can't open the console any more.")).toBeTruthy();
+  });
+});
+
+describe('H2: the Members box for an owner\'s place in the app', () => {
+  const words = { it: 'gym', person: 'member', people: 'members', coach: 'trainer', coachCap: 'Trainer' };
+  const row = (userId, staff) => ({ userId, displayName: 'Dan Roy', staff });
+
+  it('is locked for a co-owner reading another owner\'s row, and open for the owner and for themselves', () => {
+    const coOwnerReading = { isOwner: false, userId: 'u3' };
+    expect(staffRemoveView(row('u1', { role: 'owner', roleName: null, coOwner: false }), words, coOwnerReading)).toMatchObject({ locked: true, staffLine: 'Only the owner can remove Dan Roy from the app.' });
+    expect(staffRemoveView(row('u4', { role: 'owner', roleName: null, coOwner: true }), words, coOwnerReading)).toMatchObject({ locked: true });
+    expect(staffRemoveView(row('u3', { role: 'owner', roleName: null, coOwner: true }), words, coOwnerReading).locked).toBeUndefined();
+    // L2: the owner may take a co-owner off the staff in the same step.
+    expect(staffRemoveView(row('u4', { role: 'owner', roleName: null, coOwner: true }), words, { isOwner: true, userId: 'u1' })).toMatchObject({ isOwner: false, tickLabel: 'Also remove Dan Roy from staff' });
+    expect(staffRemoveView(row('u1', { role: 'owner', roleName: null, coOwner: false }), words, { isOwner: true, userId: 'u1' })).toMatchObject({ isOwner: true, tickLabel: null });
   });
 });
 

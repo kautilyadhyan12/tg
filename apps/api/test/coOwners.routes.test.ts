@@ -11,6 +11,8 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { CoOwnerRequestLetter } from "../src/modules/orgs/coOwners/email.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
+import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
 import {
   CO_OWNER_REQUEST_DAYS,
   ROLE_PRIVILEGES,
@@ -69,6 +71,7 @@ d("co-owners (real Postgres)", () => {
     await sql`DELETE FROM gym_co_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invite_sends WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine()})`;
@@ -297,6 +300,140 @@ d("co-owners (real Postgres)", () => {
     }, TEST_TIMEOUT_MS);
   });
 
+  // ── Round one: the older doors `staff.manage` now opens to co-owners ─────────────────
+  describe("round one: no other door gives or takes owner powers", () => {
+    const member = async (gym: Gym, who: User) =>
+      sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${gym.id}, ${who.userId}, now()) ON CONFLICT DO NOTHING`;
+    const inviteCoOwner = async (gym: Gym, email: string) => {
+      const res = await send("POST", `/v1/orgs/${gym.id}/staff/invites`, gym.owner, { email, role: "owner" });
+      expect(res.statusCode, res.body).toBe(201);
+      return (JSON.parse(res.body) as { invite: { id: string } }).invite.id;
+    };
+    const liveMembership = async (gym: Gym, who: User) =>
+      (await sql`SELECT 1 FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${who.userId} AND removed_at IS NULL`).length;
+
+    it("H1, L1: a co-owner cannot send the owner's co-owner invitation again, declined or ended, nor cancel it", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeStaff(gym, "Cora");
+      await makeCoOwner(gym, cora);
+      const friendAddress = addr(`friend-${String(++count)}`);
+      const inviteId = await inviteCoOwner(gym, friendAddress);
+      const friend = await signIn(friendAddress, "Fred Friend");
+      expect((await send("POST", `/v1/orgs/staff-invitations/${inviteId}/decline`, friend)).statusCode).toBe(200);
+
+      const resend = await send("POST", `/v1/orgs/${gym.id}/staff/invites/${inviteId}/resend`, cora);
+      expect(resend.statusCode).toBe(403);
+      expect(errorOf(resend)).toBe("owner_only");
+      // Its 7 days ran out: still not the co-owner's to open again.
+      await sql`UPDATE gym_staff_invites SET created_at = now() - interval '9 days', expires_at = now() - interval '2 days' WHERE id = ${inviteId}`;
+      expect((await send("POST", `/v1/orgs/${gym.id}/staff/invites/${inviteId}/resend`, cora)).statusCode).toBe(403);
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/staff/invites/${inviteId}`, cora)).statusCode).toBe(403);
+      // The friend cannot accept what nobody opened again, and holds nothing.
+      expect((await send("POST", `/v1/orgs/staff-invitations/${inviteId}/accept`, friend)).statusCode).not.toBe(200);
+      expect(await roleOf(gym, friend)).toBeNull();
+      // The owner can take it off the list.
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/staff/invites/${inviteId}`, gym.owner)).statusCode).toBe(200);
+    }, TEST_TIMEOUT_MS);
+
+    it("H2, L2: on Members a co-owner cannot remove the owner's or another co-owner's place; the owner, or they themselves, can", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeStaff(gym, "Cora");
+      const cole = await makeStaff(gym, "Cole");
+      await makeCoOwner(gym, cora);
+      await makeCoOwner(gym, cole);
+      for (const who of [gym.owner, cora, cole]) await member(gym, who);
+      const remove = (target: User, actor: User, alsoStaff = false) =>
+        send("DELETE", `/v1/orgs/${gym.id}/members/${target.userId}${alsoStaff ? "?alsoStaff=true" : ""}`, actor);
+
+      expect(errorOf(await remove(gym.owner, cora))).toBe("owner_row_locked");
+      expect(errorOf(await remove(cole, cora))).toBe("owner_row_locked");
+      expect(await liveMembership(gym, gym.owner)).toBe(1);
+      expect(await liveMembership(gym, cole)).toBe(1);
+
+      // The owner removes a co-owner from the app and the staff in one step.
+      const both = await remove(cole, gym.owner, true);
+      expect(both.statusCode, both.body).toBe(200);
+      expect(await roleOf(gym, cole)).toBeNull();
+      // A co-owner gives up their own place in the app.
+      expect((await remove(cora, cora)).statusCode).toBe(200);
+      expect((await roleOf(gym, cora))?.role).toBe("owner");
+      // The owner never leaves the staff by this door.
+      expect(errorOf(await remove(gym.owner, gym.owner, true))).toBe("owner_stays_owner");
+    }, TEST_TIMEOUT_MS);
+
+    it("L6: a co-owner can leave the staff", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeStaff(gym, "Cora");
+      await makeCoOwner(gym, cora);
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/staff/${cora.userId}`, cora)).statusCode).toBe(200);
+      expect(await roleOf(gym, cora)).toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("L3: a second Accept, after a lost reply, answers accepted", async () => {
+      const gym = await makeGym("Kd");
+      const asha = await makeStaff(gym, "Asha");
+      expect((await ask(gym, asha)).statusCode).toBe(201);
+      const id = await requestIdFor(gym, asha);
+      expect((await answer(gym, id, asha)).statusCode).toBe(200);
+      const again = await answer(gym, id, asha);
+      expect(again.statusCode, again.body).toBe(200);
+      expect(JSON.parse(again.body)).toEqual({ status: "accepted" });
+    }, TEST_TIMEOUT_MS);
+
+    it("L4: an address that bounced is not emailed, and one person gets one email a day however often they are asked", async () => {
+      const gym = await makeGym("Kd");
+      const asha = await makeStaff(gym, "Asha");
+      const before = letters.length;
+      expect(sendCoOwnerRequestResponseSchema.parse(JSON.parse((await ask(gym, asha)).body)).emailed).toBe(true);
+      expect((await cancel(gym, asha)).statusCode).toBe(200);
+      expect(sendCoOwnerRequestResponseSchema.parse(JSON.parse((await ask(gym, asha)).body)).emailed).toBe(false);
+      expect(letters.slice(before).filter((l) => l.to === asha.email).length).toBe(1);
+
+      const ben = await makeStaff(gym, "Ben");
+      const settings = inviteSettings(loadConfig(baseEnv));
+      if (settings === null) throw new Error("invitations are off in the test config");
+      await sql`INSERT INTO email_suppressions (gym_id, email_hmac, reason) VALUES (NULL, ${emailHmac(settings.hmacKey, ben.email)}, 'bounced')`;
+      try {
+        expect(sendCoOwnerRequestResponseSchema.parse(JSON.parse((await ask(gym, ben)).body)).emailed).toBe(false);
+        expect(letters.slice(before).some((l) => l.to === ben.email)).toBe(false);
+      } finally {
+        await sql`DELETE FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ${emailHmac(settings.hmacKey, ben.email)}`;
+      }
+    }, TEST_TIMEOUT_MS);
+
+    it("L5: Start here counts a co-owner as staff", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeStaff(gym, "Cora");
+      await makeCoOwner(gym, cora);
+      const res = await send("GET", `/v1/orgs/${gym.id}/start-here`, gym.owner);
+      expect(res.statusCode, res.body).toBe(200);
+      const steps = (JSON.parse(res.body) as { startHere: { steps: { step: string; done: boolean }[] } }).startHere.steps;
+      expect(steps.find((s) => s.step === "staff")?.done).toBe(true);
+    }, TEST_TIMEOUT_MS);
+
+    it("test gaps 1 and 2: a request or an invitation from somebody no longer the gym's owner opens for nobody", async () => {
+      const gym = await makeGym("Kd");
+      const asha = await makeStaff(gym, "Asha");
+      const next = await makeStaff(gym, "Nell");
+      expect((await ask(gym, asha)).statusCode).toBe(201);
+      const requestId = (await sql<{ id: string }[]>`SELECT id FROM gym_co_owner_requests WHERE gym_id = ${gym.id} AND user_id = ${asha.userId} AND state = 'pending'`)[0]?.id ?? "";
+      const friendAddress = addr(`moved-${String(++count)}`);
+      const inviteId = await inviteCoOwner(gym, friendAddress);
+      const friend = await signIn(friendAddress, "Fay Friend");
+      // The gym's owner changes (4b-ii will do this through a hand-over).
+      await sql`UPDATE gyms SET owner_user_id = ${next.userId} WHERE id = ${gym.id}`;
+      try {
+        expect(await mineAt(gym, asha)).toBeNull();
+        expect((await answer(gym, requestId, asha)).statusCode).toBe(409);
+        expect((await send("POST", `/v1/orgs/staff-invitations/${inviteId}/accept`, friend)).statusCode).toBe(404);
+        expect((await roleOf(gym, asha))?.role).toBe("manager");
+        expect(await roleOf(gym, friend)).toBeNull();
+      } finally {
+        await sql`UPDATE gyms SET owner_user_id = ${gym.owner.userId} WHERE id = ${gym.id}`;
+      }
+    }, TEST_TIMEOUT_MS);
+  });
+
   // ── Invite staff as a co-owner (Kd at the click-through) ───────────────────────────
   describe("Invite staff offers Co-owner, and it never skips Accept", () => {
     const inviteAs = (gym: Gym, email: string, who: User = gym.owner, extra: Record<string, unknown> = {}) =>
@@ -512,7 +649,8 @@ d("co-owners (real Postgres)", () => {
     expect(sends.map((r) => r.statusCode).sort()).toEqual([201, 409]);
     const requestId = await requestIdFor(gym, asha);
     const accepts = await Promise.all([answer(gym, requestId, asha), answer(gym, requestId, asha)]);
-    expect(accepts.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    // The second answers accepted too (round one, L3); only one acceptance happened.
+    expect(accepts.map((r) => r.statusCode)).toEqual([200, 200]);
     const accepted = await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.co_owner_accepted'`;
     expect(accepted.length).toBe(1);
 

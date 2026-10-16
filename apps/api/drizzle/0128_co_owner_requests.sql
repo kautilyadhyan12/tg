@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS "gym_co_owner_requests" (
 	"expires_at" timestamp with time zone NOT NULL,
 	"state" text DEFAULT 'pending' NOT NULL,
 	"answered_at" timestamp with time zone,
+	-- When its email went: one person is emailed at most once a day by these requests.
+	"emailed_at" timestamp with time zone,
 	CONSTRAINT "gym_co_owner_requests_state_check" CHECK ("state" IN ('pending','accepted','declined','cancelled','expired')),
 	CONSTRAINT "gym_co_owner_requests_answered_check" CHECK (("state" = 'pending') = ("answered_at" IS NULL)),
 	CONSTRAINT "gym_co_owner_requests_expires_check" CHECK ("expires_at" > "created_at")

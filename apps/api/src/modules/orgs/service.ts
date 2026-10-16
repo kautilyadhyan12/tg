@@ -2026,6 +2026,8 @@ export async function removeOrgMember(
       throw new OrgsError(404, "member_not_found", `That person isn't a ${orgWords(org.orgType).person} of this ${orgWords(org.orgType).it}.`);
     case "staff_owner_only":
       throw new OrgsError(403, "staff_owner_only", "Only the owner can remove staff from the app.");
+    case "owner_row_locked":
+      throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
     case "owner_stays_owner":
       throw new OrgsError(
         409,

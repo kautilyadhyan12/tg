@@ -532,19 +532,23 @@ function RemoveSection({ person, words, viewerIsOwner, off, error, onRemove }) {
   const [alsoApp, setAlsoApp] = useState(false);
   const question = useInView(asking);
   const name = person.displayName;
+  // A co-owner taking themselves off the staff (round one, L6).
+  const leaving = person.role === 'owner' && person.coOwner === true && person.isYou === true && !viewerIsOwner;
   return (
     <section className="flex flex-col gap-3 pt-5 border-t" style={LINE} data-testid="staff-remove">
       {person.role === 'owner' && person.coOwner !== true ? (
         <p className="c-s14 c-t2 m-0">The owner runs the {words.it} and can&apos;t be removed from staff.</p>
-      ) : person.role === 'owner' && !viewerIsOwner ? (
+      ) : person.role === 'owner' && !viewerIsOwner && person.isYou !== true ? (
         <p className="c-s14 c-t2 m-0">Only the owner can change or remove a co-owner.</p>
       ) : !asking ? (
         <button type="button" onClick={() => setAsking(true)} disabled={off} className="c-btn c-btn-s self-start">
-          Remove from staff
+          {leaving ? 'Leave the staff' : 'Remove from staff'}
         </button>
       ) : (
         <div ref={question} className="flex flex-col gap-3">
-          <p className="c-s14 c-t1 m-0">Remove {name} from staff? They can&apos;t open the console any more.</p>
+          <p className="c-s14 c-t1 m-0">
+            {leaving ? "Leave the staff? You stop being a co-owner and can't open the console any more." : `Remove ${name} from staff? They can't open the console any more.`}
+          </p>
           {person.isMember ? (
             <div className="flex items-start gap-2">
               <Tick state={alsoApp ? 'on' : 'off'} label={`Also remove ${name} from the app`} onClick={() => setAlsoApp((on) => !on)} />

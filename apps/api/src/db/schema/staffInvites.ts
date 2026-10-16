@@ -145,6 +145,8 @@ export const gymCoOwnerRequests = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     state: text("state").notNull().default("pending"),
     answeredAt: timestamp("answered_at", { withTimezone: true }),
+    /** When its email went: one person is emailed at most once a day by these requests. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("gym_co_owner_requests_pending_uq").on(t.gymId, t.userId).where(sql`${t.state} = 'pending'`),

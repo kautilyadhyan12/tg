@@ -45,7 +45,7 @@ function RowNote({ note, onRetry }) {
 /** The invitations waiting, ended or declined: each address, its role, where it stands and
  *  whether its email went, with Send again and Cancel invitation (Remove, for one that
  *  ended or was declined). Both of those ask first. Nothing is drawn when there are none. */
-function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, onCancel, onResend }) {
+function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, note, onRetry, onCancel, onResend }) {
   const [asking, setAsking] = useState(null);
   if (invites.loading) return null;
   if (invites.error !== null) return <ConsoleFailed message={invites.error} newLook />;
@@ -76,7 +76,9 @@ function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, o
                   <SentencePlace kind={view.emailPlace} gym={gym} />
                   {view.sendAgainNote !== null ? <span className="c-s13 c-t2">{view.sendAgainNote}</span> : null}
                 </div>
-                {asking === invite.id ? (
+                {invite.role === 'owner' && !viewerIsOwner ? (
+                  <span className="c-s13 c-t2 md:max-w-[240px]">Only the owner can send this again or cancel it.</span>
+                ) : asking === invite.id ? (
                   <div className="md:max-w-[320px]">
                     <ConfirmInline
                       newLook
@@ -477,7 +479,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
               ))}
             </ul>
           </section>
-          <InvitedList invites={invites} gym={gym} orgType={orgType} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
+          <InvitedList invites={invites} gym={gym} orgType={orgType} viewerIsOwner={viewerIsOwner} busyId={busyId} readOnly={readOnly} note={rowNote} onRetry={retry} onCancel={cancelInvite} onResend={resendInvite} />
         </>
       ) : null}
 

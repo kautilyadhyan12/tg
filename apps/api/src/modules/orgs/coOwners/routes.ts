@@ -35,7 +35,7 @@ function callerId(req: FastifyRequest): string {
 }
 
 export function registerCoOwnerRoutes(app: FastifyInstance, deps: Omit<service.CoOwnerDeps, "log"> & { redis: RedisLike }): void {
-  const coOwnerDeps: service.CoOwnerDeps = { sql: deps.sql, email: deps.email, webOrigin: deps.webOrigin, now: deps.now, log: app.log };
+  const coOwnerDeps: service.CoOwnerDeps = { sql: deps.sql, email: deps.email, addressKey: deps.addressKey, webOrigin: deps.webOrigin, now: deps.now, log: app.log };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   // Each request is an email: a few an hour is an owner's whole need. A gym's staff can
   // share one wi-fi address, so the address allowance is wide.

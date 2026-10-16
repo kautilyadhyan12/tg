@@ -228,6 +228,7 @@ export async function cancelStaffInvite(
     await orgRepo.lockOrgRow(tx, gymId);
     const invite = await repo.lockOpenInvite(tx, gymId, inviteId);
     if (invite === null) return false;
+    if (invite.role === "owner" && (await coOwnerRepo.gymOwnerId(tx, gymId)) !== userId) throw new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
     if (invite.state === "pending") await repo.answerInvite(tx, { gymId, inviteId, state: "cancelled", by: userId, at });
     else await repo.clearInvite(tx, gymId, inviteId, at);
     await orgRepo.insertAudit(tx, {
@@ -263,6 +264,8 @@ export async function resendStaffInvite(
     await orgRepo.lockOrgRow(tx, gymId);
     const invite = await repo.lockOpenInvite(tx, gymId, inviteId);
     if (invite === null) throw new OrgsError(404, "invite_not_found", STAFF_INVITE_WORDS.invite_not_found);
+    // A co-owner's invitation is the owner's offer: only the owner opens it again (round one, H1).
+    if (invite.role === "owner" && (await coOwnerRepo.gymOwnerId(tx, gymId)) !== userId) throw new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
     // Made staff another way since (appointed from the member list): the invitation would
     // promise a role Accept does not give. It leaves the owner's list, and is refused.
     const staff = await repo.staffNameAt(tx, gymId, invite.email);

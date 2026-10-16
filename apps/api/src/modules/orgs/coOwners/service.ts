@@ -16,12 +16,17 @@ import {
 import type { Sql } from "postgres";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
 import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
+import { emailHmac } from "../invites/address.js";
+import { suppressionsFor } from "../invites/repo.js";
 import type { CoOwnerEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 
 export interface CoOwnerDeps {
   sql: Sql;
   email: CoOwnerEmailSender;
+  /** The invitations' address key, to find an address that bounced, complained or
+   *  unsubscribed; null when invitations are off (then no address is known to be). */
+  addressKey: Buffer | null;
   webOrigin: string;
   now: () => Date;
   log: { warn: (obj: object, msg: string) => void };
@@ -47,10 +52,12 @@ export async function sendCoOwnerRequest(deps: CoOwnerDeps, actorUserId: string,
   // The request is saved before the email goes: an email that fails leaves it waiting on
   // their Overview, and the owner is told it was not emailed.
   let emailed = false;
-  if (outcome.email !== null) {
+  const address = outcome.email;
+  const suppressed = address !== null && deps.addressKey !== null && (await suppressionsFor(deps.sql, gymId, [emailHmac(deps.addressKey, address)])).size > 0;
+  if (address !== null && !suppressed && (await repo.claimEmail(deps.sql, { gymId, userId, requestId: outcome.requestId, now: deps.now() }))) {
     try {
       await deps.email.sendCoOwnerRequest({
-        to: outcome.email,
+        to: address,
         ownerName: cleanGymText(outcome.ownerName, GYM_TEXT_IN_EMAIL_CHARS),
         gymName: gymNameForEmail(outcome.gymName),
         days: CO_OWNER_REQUEST_DAYS,

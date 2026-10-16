@@ -191,20 +191,32 @@ export function staffRoleText(role, roleName, words, coOwner = false) {
  *  (and for a row from a server that does not say: then Remove stays as it was). Staff
  *  and member are separate: the owner chooses whether they lose the console too; an
  *  owner always stays the owner. Only someone who manages staff is offered it. */
-export function staffRemoveView(member, words) {
+export function staffRemoveView(member, words, viewer = { isOwner: false, userId: null }) {
   const staff = member?.staff;
   if (!staff || typeof staff !== 'object') return null;
   const name = member.displayName;
-  if (staff.role === 'owner') {
+  const isSelf = viewer.userId !== null && viewer.userId === member.userId;
+  // An owner's row (4b-i): the owner's place is theirs alone to give up, a co-owner's the
+  // owner's or their own. The server refuses anybody else (`owner_row_locked`).
+  if (staff.role === 'owner' && !viewer.isOwner && !isSelf) {
+    return { isOwner: true, locked: true, staffLine: `Only the owner can remove ${name} from the app.`, tickLabel: null, keepLine: null, goLine: null };
+  }
+  if (staff.role === 'owner' && staff.coOwner !== true) {
     return {
       isOwner: true,
-      staffLine:
-        staff.coOwner === true
-          ? `${name} is a co-owner of this ${words.it}. They stay a co-owner and keep the console.`
-          : `${name} owns this ${words.it}. They stay the owner and keep the console.`,
+      staffLine: `${name} owns this ${words.it}. They stay the owner and keep the console.`,
       tickLabel: null,
       keepLine: null,
       goLine: null,
+    };
+  }
+  if (staff.role === 'owner') {
+    return {
+      isOwner: false,
+      staffLine: `${name} is a co-owner of this ${words.it}.`,
+      tickLabel: `Also remove ${name} from staff`,
+      keepLine: 'They stay a co-owner and can still open the console. You can change this on the Staff tab.',
+      goLine: "They stop being a co-owner and can't open the console any more.",
     };
   }
   const role = staff.roleName || (staff.role === 'manager' ? 'manager' : words.coach);

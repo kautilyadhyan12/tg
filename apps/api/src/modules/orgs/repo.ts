@@ -2692,8 +2692,10 @@ export type RemoveMemberOutcome =
   | { kind: "never_member" }
   /** They are staff, and the caller may not manage staff: the owner's call alone. */
   | { kind: "staff_owner_only" }
-  /** "Also remove from staff" for an owner: an owner leaves through a hand-over (4b). */
-  | { kind: "owner_stays_owner" };
+  /** "Also remove from staff" for the owner: the owner leaves through a hand-over (4b-ii). */
+  | { kind: "owner_stays_owner" }
+  /** An owner's row the caller may not touch: only the owner removes a co-owner (4b-i). */
+  | { kind: "owner_row_locked" };
 
 /** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
  *  retained)".
@@ -2762,7 +2764,13 @@ export async function removeMember(
     const staff = staffRows[0];
     if (staff !== undefined) {
       if (!input.actorManagesStaff) return { kind: "staff_owner_only" };
-      if (input.alsoStaff && (staff.owns || staff.role === "owner")) return { kind: "owner_stays_owner" };
+      // An owner's row (4b-i): the owner's place in the app is theirs alone to give up, and a
+      // co-owner's is the owner's or their own, never another co-owner's.
+      if (staff.role === "owner") {
+        const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId, selfMay: true });
+        if (refusal !== null && !(refusal === "main_owner" && input.userId === input.actorUserId)) return { kind: "owner_row_locked" };
+      }
+      if (input.alsoStaff && staff.owns) return { kind: "owner_stays_owner" };
     }
     // Their staff row goes in the same transaction as the membership, once it is certain
     // they were a member here: this route never touches somebody who is staff only.
@@ -3624,12 +3632,14 @@ export type UpdateStaffOutcome =
  *  Written once and asked by all three doors (role, ticks, remove), in their transaction. */
 async function ownerRowRefusal(
   tx: TransactionSql,
-  input: { gymId: string; targetUserId: string; actorUserId: string },
+  input: { gymId: string; targetUserId: string; actorUserId: string; selfMay?: boolean },
 ): Promise<"main_owner" | "owner_row_locked" | null> {
   const rows = await tx<{ owner_user_id: string }[]>`SELECT owner_user_id FROM gyms WHERE id = ${input.gymId}`;
   const owner = rows[0]?.owner_user_id;
   if (owner === undefined || owner === input.targetUserId) return "main_owner";
-  return owner === input.actorUserId ? null : "owner_row_locked";
+  if (owner === input.actorUserId) return null;
+  // `selfMay`: the two remove doors let a co-owner leave (round one, L6).
+  return input.selfMay === true && input.targetUserId === input.actorUserId ? null : "owner_row_locked";
 }
 
 /** Change somebody between manager and trainer, or to one of the gym's own roles
@@ -3935,9 +3945,9 @@ export async function removeStaff(
     // forbidden shape (:14493 Low-2) — and, exactly as there, ONE TEST DRIVES
     // BOTH DOORS so the copies cannot drift (:14013's precedent). Edit one, edit
     // the other, or a gym can lock itself out through whichever you left behind.
-    // The owner is never removed; a co-owner, by the owner alone (4b-i).
+    // The owner is never removed; a co-owner, by the owner or by themselves (4b-i).
     if (role === "owner") {
-      const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId });
+      const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId, selfMay: true });
       if (refusal === "main_owner") return { kind: "last_owner" };
       if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
     }
