@@ -94,17 +94,21 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     WHERE f.gym_id = ${gymId} AND f.refunded_on BETWEEN ${from}::date AND ${to}::date`;
 }
 
-/** One page of lines in date order, then receipt order, after the line `after`. */
+/** One page of lines in date order, then receipt order, after the line `after`, none with a
+ *  receipt past `upTo`: a line recorded while the file is written stays out of it, as it is
+ *  out of its Totals. */
 export async function linesPage(
   sql: Sql,
   gymId: string,
   from: string,
   to: string,
+  upTo: number,
   after: { on: string; receipt: number } | null,
 ): Promise<LineRow[]> {
   const rows = await sql`
     SELECT * FROM (${lines(sql, gymId, from, to)}) x
-    WHERE ${after === null ? sql`true` : sql`(x.day, x.receipt) > (${after.on}::text, ${after.receipt}::int)`}
+    WHERE x.receipt <= ${upTo}::int
+      AND ${after === null ? sql`true` : sql`(x.day, x.receipt) > (${after.on}::text, ${after.receipt}::int)`}
     ORDER BY x.day, x.receipt
     LIMIT ${DOWNLOAD_PAGE}`;
   return rows.map((raw) => {
@@ -141,13 +145,15 @@ const totalsSchema = z.object({
   paid: z.coerce.number().int(),
   sold: z.coerce.number().int(),
   refunded: z.coerce.number().int(),
+  last: z.number().int(),
 });
 
 /** Every line on the days, and each currency's totals as Reports' Collected counts them:
- *  what stands, less the refunds that stand on a payment or sale that stands. */
-export async function totals(sql: Sql, gymId: string, from: string, to: string): Promise<{ lines: number; totals: PaymentsTotals[] }> {
+ *  what stands, less the refunds that stand on a payment or sale that stands. `lastReceipt`
+ *  is the highest receipt counted (0 for none): the file's pages stop there. */
+export async function totals(sql: Sql, gymId: string, from: string, to: string): Promise<{ lines: number; lastReceipt: number; totals: PaymentsTotals[] }> {
   const rows = await sql`
-    SELECT x.currency, count(*) AS lines,
+    SELECT x.currency, count(*) AS lines, max(x.receipt) AS last,
            COALESCE(sum(x.amount_minor) FILTER (WHERE x.kind = 'payment' AND NOT x.voided), 0) AS paid,
            COALESCE(sum(x.amount_minor) FILTER (WHERE x.kind = 'sale' AND NOT x.voided), 0) AS sold,
            COALESCE(sum(x.amount_minor) FILTER (WHERE x.kind IN ('refund', 'sale_refund') AND NOT x.voided), 0) AS refunded
@@ -157,6 +163,7 @@ export async function totals(sql: Sql, gymId: string, from: string, to: string):
   const parsed = rows.map((raw) => totalsSchema.parse(raw));
   return {
     lines: parsed.reduce((n, r) => n + r.lines, 0),
+    lastReceipt: parsed.reduce((n, r) => Math.max(n, r.last), 0),
     totals: parsed.map((r) => ({ currency: r.currency, paidMinor: r.paid, soldMinor: r.sold, refundedMinor: r.refunded, netMinor: r.paid + r.sold - r.refunded })),
   };
 }

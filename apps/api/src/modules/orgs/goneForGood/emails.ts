@@ -33,7 +33,7 @@ export interface GoneForGoodWords {
   countedFrom: Date;
   deletesAt: Date;
   /** The console's member list. With no plan, the plan box there has Download member list,
-   *  and Download payments for staff who may record payments (18n). */
+   *  and Download payments for those who may download them (18n). */
   membersLink: string;
   /** This reader may download the gym's payments too. */
   payments: boolean;

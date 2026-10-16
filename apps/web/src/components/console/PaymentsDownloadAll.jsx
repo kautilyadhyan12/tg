@@ -1,9 +1,10 @@
 // Download payments, inside the plan box a gym with no plan cannot skip (ROADMAP 18n), under
 // Download member list. A gym that stops paying keeps the right to a copy of its own
 // payments: the emails before its list is deleted say to sign in and press this. Every day
-// the gym has, in the Excel file Reports downloads. Shown only to staff who may record
-// payments, and only when there is something to download.
+// the gym has, in the Excel file Reports downloads. Shown only to whoever may download it
+// (the owner, and staff given Reports and payments), and only when there is something to download.
 import { useEffect, useState } from 'react';
+import { mayDownloadPayments } from '@app/shared';
 import { Download, Loader2 } from 'lucide-react';
 import { reportsService } from '../../api/reportsApi';
 import { blobError, errorText } from '../../api/orgsApi';
@@ -13,7 +14,7 @@ import { DOWNLOAD_FAILED } from '../../pages/console/paymentsDownloadView';
 
 export default function PaymentsDownloadAll({ org }) {
   const gymId = org?.id ?? null;
-  const mayRead = viewerPrivileges(org).includes('billing.members');
+  const mayRead = mayDownloadPayments(viewerPrivileges(org));
   const [lines, setLines] = useState(0);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);

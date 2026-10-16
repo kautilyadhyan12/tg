@@ -116,7 +116,7 @@ describe("the box's line", () => {
 describe('the plan box', () => {
   const OWNER = { id: 'g1', orgType: 'gym', staffRole: 'owner' };
 
-  it('downloads every day for staff who may record payments, and says so', async () => {
+  it('downloads every day for whoever may download payments, and says so', async () => {
     render(<PaymentsDownloadAll org={OWNER} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Download payments' }));
     await waitFor(() => expect(svc.downloadPayments).toHaveBeenCalledWith('g1'));
@@ -124,17 +124,19 @@ describe('the plan box', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Your payments were downloaded.');
   });
 
-  it('is not there with nothing to download, for staff who may not see payments, or when the count fails', async () => {
+  it('is not there with nothing to download, for staff without both Reports and payments, or when the count fails', async () => {
     svc.paymentsSummary.mockResolvedValueOnce(summaryOf(0));
     render(<PaymentsDownloadAll org={OWNER} />);
     await waitFor(() => expect(svc.paymentsSummary).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('button')).toBeNull();
     cleanup();
 
-    render(<PaymentsDownloadAll org={{ id: 'g1', orgType: 'gym', staffRole: 'trainer', privileges: ['members.read', 'members.confirm'] }} />);
-    expect(screen.queryByRole('button')).toBeNull();
-    expect(svc.paymentsSummary).toHaveBeenCalledTimes(1);
-    cleanup();
+    for (const privileges of [['members.read', 'members.confirm'], ['members.read', 'billing.members'], ['members.read', 'reports.read']]) {
+      render(<PaymentsDownloadAll org={{ id: 'g1', orgType: 'gym', staffRole: 'trainer', privileges }} />);
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(svc.paymentsSummary).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
 
     svc.paymentsSummary.mockRejectedValueOnce(new Error('network'));
     render(<PaymentsDownloadAll org={OWNER} />);

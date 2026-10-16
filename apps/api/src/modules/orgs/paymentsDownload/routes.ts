@@ -1,8 +1,8 @@
 // Download payments' routes (spec Part 3 §14.3; ROADMAP 18n): authenticate, the asker's own
 // ceiling, Zod-parse, who may, the limit, then the read.
 //
-//   GET  /v1/orgs/:gymId/payments-download        what the file will hold (`billing.members`)
-//   POST /v1/orgs/:gymId/payments-download.xlsx   the file itself (`billing.members`)
+//   GET  /v1/orgs/:gymId/payments-download        what the file will hold (`mayDownloadPayments`)
+//   POST /v1/orgs/:gymId/payments-download.xlsx   the file itself (`mayDownloadPayments`)
 import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   coversWords,
   dayWords,
+  mayDownloadPayments,
   paymentLine,
   paymentsDownloadQuerySchema,
   paymentsFileName,
@@ -173,5 +174,18 @@ describe("the words for days and the file's name", () => {
     expect(paymentsFileName("2026-10-01", "2026-10-31", false)).toBe("Payments 1 Oct 2026 – 31 Oct 2026.xlsx");
     expect(paymentsFileName("2026-10-15", "2026-10-15", false)).toBe("Payments 15 Oct 2026.xlsx");
     expect(paymentsFileName("2025-03-02", "2026-10-16", true)).toBe("All payments to 16 Oct 2026.xlsx");
+  });
+});
+
+describe("who may download the file", () => {
+  it.each([
+    ["the owner's ticks", ["members.read", "reports.read", "billing.members", "staff.manage"], true],
+    ["Reports and payments", ["reports.read", "billing.members"], true],
+    ["payments without Reports, the front desk", ["members.read", "billing.members"], false],
+    ["Reports without payments", ["members.read", "reports.read"], false],
+    ["the gym's own plan, not its payments", ["billing.manage", "reports.read"], false],
+    ["nothing", [], false],
+  ])("%s", (_, privileges, may) => {
+    expect(mayDownloadPayments(privileges)).toBe(may);
   });
 });

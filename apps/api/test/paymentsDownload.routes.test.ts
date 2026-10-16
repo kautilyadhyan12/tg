@@ -5,8 +5,8 @@
 // payments in another gym's file, or in the hands of staff who may not see payments. That
 // is the first test: two gyms side by side, each with its own Maya-and-Zoe; next door asking
 // for this gym's file or its totals is told it was not found and sent nothing of it; staff
-// without the payments tick are refused; and the gym's own file holds its own lines only,
-// read back from the real .xlsx.
+// without both the Reports and payments ticks are refused; and the gym's own file holds its
+// own lines only, read back from the real .xlsx.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import readXlsxFile from "read-excel-file/node";
@@ -24,6 +24,8 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
+import { DOWNLOAD_PAGE } from "../src/modules/orgs/paymentsDownload/repo.js";
+import * as downloadService from "../src/modules/orgs/paymentsDownload/service.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -243,12 +245,14 @@ d("download payments (real Postgres)", () => {
       const pricer = await makeUser("worst-pricer");
       const reader = await makeUser("worst-reader");
       const desk = await makeUser("worst-desk");
+      const books = await makeUser("worst-books");
       const gymId = await makeGym(owner, "Pd Worst Gym");
       const theirGym = await makeGym(nextDoor, "Pd Next Door");
       await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES
         (${gymId}, ${pricer.userId}, 'manager', ${["members.read", "memberships.manage", "members.confirm"]}),
         (${gymId}, ${reader.userId}, 'trainer', ${["members.read", "reports.read"]}),
-        (${gymId}, ${desk.userId}, 'trainer', ${["members.read", "billing.members"]})`;
+        (${gymId}, ${desk.userId}, 'trainer', ${["members.read", "billing.members"]}),
+        (${gymId}, ${books.userId}, 'trainer', ${["members.read", "reports.read", "billing.members"]})`;
 
       // Maya pays for Gold Monthly, $50.00 plus 8.25% sales tax, and $10.00 is given back.
       const tax = await addRate(gymId, owner.cookies, "Sales tax", 825);
@@ -275,11 +279,12 @@ d("download payments (real Postgres)", () => {
         expect(res.statusCode).toBe(404);
         for (const word of ours) expect(res.body).not.toContain(word);
       }
-      // Staff without the payments tick, the list's own downloader and the reports reader too: refused.
-      for (const who of [pricer, reader]) {
+      // Staff without both ticks: the list's own downloader, the reports reader, and the front
+      // desk who records payments without Reports. Refused.
+      for (const who of [pricer, reader, desk]) {
         for (const res of [await post(fileUrl(gymId), {}, who.cookies), await get(summaryUrl(gymId), who.cookies)]) {
           expect(res.statusCode).toBe(403);
-          expect(JSON.parse(res.body)).toMatchObject({ message: "Your role doesn't allow you to see payments." });
+          expect(JSON.parse(res.body)).toMatchObject({ message: "Your role doesn't allow you to download payments." });
           for (const word of ours) expect(res.body).not.toContain(word);
         }
       }
@@ -289,8 +294,8 @@ d("download payments (real Postgres)", () => {
       // None of those refusals left a note that a file was taken.
       expect((await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.payments_downloaded'`).length).toBe(0);
 
-      // The gym's own file, by staff who may record payments: its four lines and nobody of next door's.
-      const { sheets, disposition } = await download(gymId, desk.cookies);
+      // The gym's own file, by staff given Reports and payments: its four lines and nobody of next door's.
+      const { sheets, disposition } = await download(gymId, books.cookies);
       expect(disposition).toBe("All payments to 15 Oct 2026.xlsx");
       expect(JSON.stringify(sheets)).not.toMatch(new RegExp(theirs.join("|")));
       expect(sheetOf(sheets, "Payments")).toEqual([
@@ -305,9 +310,9 @@ d("download payments (real Postgres)", () => {
         ["Days", "15 Oct 2026"],
         ["Transactions", 4],
         [null, null],
-        ["Membership payments", 54.13],
+        ["Memberships", 54.13],
         ["Product sales", 5],
-        ["Refunds", -10],
+        ["Refunded", -10],
         ["Collected", 49.13],
         [null, null],
         ["Voided transactions are listed and count 0. Collected is the same as Collected on Reports for these days.", null],
@@ -323,7 +328,7 @@ d("download payments (real Postgres)", () => {
       // The note says who took which days and how many lines, never a name.
       const notes = await sql<{ actor: string; meta: Record<string, string> }[]>`
         SELECT actor_user_id AS actor, meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.payments_downloaded'`;
-      expect(notes).toEqual([{ actor: desk.userId, meta: { from: "2026-10-15", to: "2026-10-15", everyDay: "yes", lines: "4" } }]);
+      expect(notes).toEqual([{ actor: books.userId, meta: { from: "2026-10-15", to: "2026-10-15", everyDay: "yes", lines: "4" } }]);
     },
     T,
   );
@@ -396,6 +401,136 @@ d("download payments (real Postgres)", () => {
 
       // Every day: the gym's first line to today.
       expect(await summary(gymId, owner.cookies)).toMatchObject({ from: "2026-10-14", to: "2026-10-15", lines: 4 });
+    },
+    T,
+  );
+
+  it(
+    "a voided membership payment, and a voided refund on it, are listed as voided and count 0; the totals stay Reports' own",
+    async () => {
+      const owner = await makeUser("void-owner");
+      const gymId = await makeGym(owner, "Pd Void Gym");
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const leo = await addPerson(gymId, owner.cookies, "Leo Void");
+      await give(gymId, leo, owner.cookies, gold, 5000, 5000);
+      await refundPayment(gymId, leo, owner.cookies, 1000);
+      const membership = (await held(gymId, leo, owner.cookies)).memberships[0];
+      const payment = membership?.billing?.bills[0]?.payments[0];
+      const refund = payment?.refunds[0];
+      if (membership === undefined || payment === undefined || refund === undefined) throw new Error("no payment to void");
+      // The refund is taken back first, then the payment, as the app lets staff.
+      const paymentUrl = `${heldUrl(gymId, leo)}/${membership.id}/payments/${payment.id}`;
+      const refundVoided = await post(`${paymentUrl}/refunds/${refund.id}/void`, { reason: "mistake" }, owner.cookies);
+      expect(refundVoided.statusCode, refundVoided.body).toBe(200);
+      const voided = await post(`${paymentUrl}/void`, { reason: "wrong_person" }, owner.cookies);
+      expect(voided.statusCode, voided.body).toBe(200);
+      const water = await addProduct(gymId, owner.cookies, "Water", 250);
+      await sold(gymId, owner.cookies, water.id, 250);
+
+      const { sheets } = await download(gymId, owner.cookies);
+      expect(sheetOf(sheets, "Payments").slice(1).map((r) => [r[1], r[2], r[8], r[10], r[11]])).toEqual([
+        [1, "Membership payment", 50, 0, "Voided · Wrong person"],
+        [2, "Membership refund", -10, 0, "Voided · Noted by mistake"],
+        [3, "Product sale", 2.5, 2.5, null],
+      ]);
+      const res = await get(`/v1/orgs/${gymId}/reports/money?period=4w`, owner.cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      const report = moneyReportResponseSchema.parse(JSON.parse(res.body)).report;
+      if (report.state !== "ok") throw new Error("no money report");
+      const s = await summary(gymId, owner.cookies, `?from=${report.period.from}&to=${report.period.to}`);
+      expect(s.totals).toEqual([{ currency: "USD", paidMinor: 0, soldMinor: 250, refundedMinor: 0, netMinor: 250 }]);
+      expect(report.inPeriod).toMatchObject({ paidMinor: 0, soldMinor: 250, refundedMinor: 0, netMinor: 250 });
+    },
+    T,
+  );
+
+  it(
+    "a second currency gets a Currency column and a Totals column of its own, and Totals says which Collected is on Reports",
+    async () => {
+      const owner = await makeUser("mixed-owner");
+      const gymId = await makeGym(owner, "Pd Mixed Gym");
+      const water = await addProduct(gymId, owner.cookies, "Water", 250);
+      clock = YESTERDAY;
+      let euro: string;
+      try {
+        euro = await sold(gymId, owner.cookies, water.id, 250);
+      } finally {
+        clock = NOON;
+      }
+      await sql`UPDATE gym_sales SET currency = 'EUR' WHERE gym_id = ${gymId} AND id = ${euro}`;
+      await sold(gymId, owner.cookies, water.id, 250);
+
+      const both = await download(gymId, owner.cookies, { from: "2026-10-14", to: "2026-10-15" });
+      const rows = sheetOf(both.sheets, "Payments");
+      expect(rows[0]).toEqual(["Date", "Receipt", "Type", "Person", "Details", "Refund of receipt", "Reason for refund", "Payment method", "Amount", "Tax", "Amount counted", "Status", "Recorded by", "Currency"]);
+      expect(rows.slice(1).map((r) => [r[1], r[8], r[13]])).toEqual([
+        [1, 2.5, "EUR"],
+        [2, 2.5, "USD"],
+      ]);
+      const totals = sheetOf(both.sheets, "Totals");
+      expect(totals[0]).toEqual(["Totals", "EUR", "USD"]);
+      expect(totals.at(-1)?.[0]).toBe("Voided transactions are listed and count 0. Collected in USD is the same as Collected on Reports for these days.");
+
+      // Only the other currency on the days: Reports shows none of it, and Totals does not say it does.
+      const euroOnly = await download(gymId, owner.cookies, { from: "2026-10-14", to: "2026-10-14" });
+      expect(sheetOf(euroOnly.sheets, "Payments")[0]?.[8]).toBe("Amount (EUR)");
+      expect(sheetOf(euroOnly.sheets, "Totals").at(-1)?.[0]).toBe("Voided transactions are listed and count 0.");
+    },
+    T,
+  );
+
+  it(
+    "a file longer than one page holds every line once, in date order, then receipt order",
+    async () => {
+      const owner = await makeUser("long-owner");
+      const gymId = await makeGym(owner, "Pd Long Gym");
+      const water = await addProduct(gymId, owner.cookies, "Water", 250);
+      const first = await sold(gymId, owner.cookies, water.id, 250);
+      // 520 more, numbered on as the app numbers them: odd receipts yesterday, even today, so
+      // receipt order and date order differ.
+      const more = DOWNLOAD_PAGE + 20;
+      await sql`
+        WITH g AS (UPDATE gyms SET receipts_issued = receipts_issued + ${more} WHERE id = ${gymId} RETURNING receipts_issued - ${more} AS base)
+        INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
+                               tax_bp, tax_included, currency, method, sold_on, recorded_by, receipt_number, for_member)
+        SELECT s.gym_id, gen_random_uuid(), s.product_id, s.entry_id, s.item_name, s.quantity, s.unit_price_minor, s.net_minor, s.tax_minor, s.total_minor,
+               s.tax_bp, s.tax_included, s.currency, s.method,
+               CASE WHEN (g.base + n) % 2 = 1 THEN DATE '2026-10-14' ELSE DATE '2026-10-15' END, s.recorded_by, g.base + n, s.for_member
+        FROM gym_sales s, g, generate_series(1, ${more}::int) n
+        WHERE s.gym_id = ${gymId} AND s.id = ${first}`;
+      const lines = more + 1;
+      const yesterday = Array.from({ length: lines }, (_, i) => i + 1).filter((r) => r !== 1 && r % 2 === 1);
+      const today = Array.from({ length: lines }, (_, i) => i + 1).filter((r) => r === 1 || r % 2 === 0);
+
+      const { sheets } = await download(gymId, owner.cookies);
+      const rows = sheetOf(sheets, "Payments").slice(1);
+      expect(rows).toHaveLength(lines);
+      expect(rows.map((r) => r[1])).toEqual([...yesterday, ...today]);
+      expect(rows.map((r) => r[0])).toEqual([...yesterday.map(() => "2026-10-14"), ...today.map(() => "2026-10-15")]);
+      expect(sheetOf(sheets, "Totals")[2]).toEqual(["Transactions", lines]);
+    },
+    T,
+  );
+
+  it(
+    "a sale recorded while the file is being written is in neither its Payments nor its Totals",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const gymId = await makeGym(owner, "Pd Race Gym");
+      const water = await addProduct(gymId, owner.cookies, "Water", 250);
+      await sold(gymId, owner.cookies, water.id, 250);
+      const deps = { sql, now: () => clock };
+      const days = await downloadService.requireReader(deps, owner.userId, gymId, {});
+      const file = await downloadService.file(deps, owner.userId, gymId, days);
+      // The desk sells another before a single page has been read.
+      await sold(gymId, owner.cookies, water.id, 250);
+      const chunks: Buffer[] = [];
+      for await (const chunk of file.chunks) chunks.push(chunk);
+      const sheets = (await readXlsxFile(Buffer.concat(chunks))) as Sheets;
+      expect(sheetOf(sheets, "Payments").slice(1).map((r) => r[1])).toEqual([1]);
+      expect(sheetOf(sheets, "Totals")[2]).toEqual(["Transactions", 1]);
+      // The next file has both.
+      expect(sheetOf((await download(gymId, owner.cookies)).sheets, "Payments").slice(1).map((r) => r[1])).toEqual([1, 2]);
     },
     T,
   );

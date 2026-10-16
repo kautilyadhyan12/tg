@@ -1,13 +1,14 @@
 // DOWNLOAD PAYMENTS (spec Part 3 §14.3; ROADMAP 18n). The file names people and what they
-// paid, so it is read only by staff of the gym who may record payments (`billing.members`,
-// as a receipt is). A stranger gets `requireStaff`'s 404. The audit row says who downloaded
-// which days and how many lines, never a name.
+// paid, so it is read only by the owner and staff the owner gives both Reports and payments
+// (`mayDownloadPayments`). A stranger gets `requireStaff`'s 404. The audit row says who
+// downloaded which days and how many lines, never a name.
 import type { Sql } from "postgres";
 import {
   PAYMENTS_DOWNLOAD_WORDS,
   PAYMENTS_FILE_HEADINGS,
   coversWords,
   dayWords,
+  mayDownloadPayments,
   paymentLine,
   paymentsDownloadSummarySchema,
   paymentsFileName,
@@ -34,11 +35,11 @@ export interface Days {
   currency: string;
 }
 
-/** Staff who may record payments, and the days asked: with none, the gym's first line to
- *  today. Asked before the limit, so a refused ask spends nothing. */
+/** Staff who may download, and the days asked: with none, the gym's first line to today.
+ *  Asked before the limit, so a refused ask spends nothing. */
 export async function requireReader(deps: PaymentsDownloadDeps, userId: string, gymId: string, query: PaymentsDownloadQuery): Promise<Days> {
   const { org, privileges } = await requireStaff(deps, gymId, userId);
-  if (!privileges.includes("billing.members")) throw new OrgsError(403, "forbidden", PAYMENTS_DOWNLOAD_WORDS.no_payments);
+  if (!mayDownloadPayments(privileges)) throw new OrgsError(403, "forbidden", PAYMENTS_DOWNLOAD_WORDS.no_payments);
   const currency = org.currencyDisplay;
   if (query.from !== undefined && query.to !== undefined) return { from: query.from, to: query.to, everyDay: false, currency };
   const today = dayInTz(deps.now(), org.timezone);
@@ -58,19 +59,29 @@ export async function summary(deps: PaymentsDownloadDeps, gymId: string, days: D
 const WIDTHS = [13, 10, 21, 26, 36, 11, 20, 18, 14, 12, 18, 30, 20];
 const MONEY_HEADINGS = new Set(["Amount", "Tax", "Amount counted"]);
 
-/** The Totals sheet: each currency's column, Reports' own lines. */
+/** What Totals says of Reports: Reports counts the gym's own currency only, so a file with
+ *  another currency names which Collected matches, and one without the gym's says nothing. */
+export function reportsSentence(gymCurrency: string, totals: readonly PaymentsTotals[]): string | null {
+  if (!totals.some((t) => t.currency === gymCurrency)) return null;
+  return totals.length === 1
+    ? "Collected is the same as Collected on Reports for these days."
+    : `Collected in ${gymCurrency} is the same as Collected on Reports for these days.`;
+}
+
+/** The Totals sheet: each currency's column, in Reports' and the Download box's own words. */
 function totalsSheet(days: Days, lines: number, totals: readonly PaymentsTotals[]): Sheet {
   const money = (pick: (t: PaymentsTotals) => number, bold = false): Cell[] => totals.map((t) => ({ kind: "money", minor: pick(t), bold }));
+  const reports = reportsSentence(days.currency, totals);
   const rows: Cell[][] = [
     [{ kind: "text", value: "Days" }, { kind: "text", value: days.from === days.to ? dayWords(days.from) : coversWords(days.from, days.to) }],
     [{ kind: "text", value: "Transactions" }, { kind: "int", value: lines }],
     [],
-    [{ kind: "text", value: "Membership payments" }, ...money((t) => t.paidMinor)],
+    [{ kind: "text", value: "Memberships" }, ...money((t) => t.paidMinor)],
     [{ kind: "text", value: "Product sales" }, ...money((t) => t.soldMinor)],
-    [{ kind: "text", value: "Refunds" }, ...money((t) => -t.refundedMinor)],
+    [{ kind: "text", value: "Refunded" }, ...money((t) => -t.refundedMinor)],
     [{ kind: "text", value: "Collected", bold: true }, ...money((t) => t.netMinor, true)],
     [],
-    [{ kind: "text", value: "Voided transactions are listed and count 0. Collected is the same as Collected on Reports for these days." }],
+    [{ kind: "text", value: reports === null ? "Voided transactions are listed and count 0." : `Voided transactions are listed and count 0. ${reports}` }],
   ];
   return { name: "Totals", widths: [24, ...totals.map(() => 18)], header: ["Totals", ...totals.map((t) => t.currency)], filter: false, rows: [rows] };
 }
@@ -80,9 +91,14 @@ export interface PaymentsFile {
   chunks: AsyncIterable<Buffer>;
 }
 
-/** The file for the days, after its audit row. */
+/** The file for the days, after its audit row. The row is written before the file goes, so a
+ *  file cut off half-way, which has still left the app, has its note too. The pages stop at
+ *  the last receipt Totals counted, so a line recorded while a large file is written is in
+ *  neither. A line voided or refunded in that second can still read so in Payments and not
+ *  in Totals: one snapshot would hold a pooled connection for as long as the asker reads,
+ *  which a slow reader could stretch across the pool. */
 export async function file(deps: PaymentsDownloadDeps, userId: string, gymId: string, days: Days): Promise<PaymentsFile> {
-  const { lines, totals } = await repo.totals(deps.sql, gymId, days.from, days.to);
+  const { lines, lastReceipt, totals } = await repo.totals(deps.sql, gymId, days.from, days.to);
   await deps.sql.begin(async (tx) => {
     await insertAudit(tx, {
       actorUserId: userId,
@@ -101,7 +117,7 @@ export async function file(deps: PaymentsDownloadDeps, userId: string, gymId: st
   async function* rows(): AsyncGenerator<Cell[][]> {
     let after: { on: string; receipt: number } | null = null;
     for (;;) {
-      const page = await repo.linesPage(deps.sql, gymId, days.from, days.to, after);
+      const page = await repo.linesPage(deps.sql, gymId, days.from, days.to, lastReceipt, after);
       if (page.length === 0) return;
       yield page.map((row): Cell[] => {
         const line = paymentLine(row);

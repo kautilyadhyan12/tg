@@ -16,6 +16,14 @@ import {
 } from "./memberBills.js";
 import { SALE_VOID_REASON_WORDS } from "./register.js";
 import { SALE_REFUND_REASON_WORDS } from "./saleRefunds.js";
+import type { OrgPrivilege } from "./orgs.js";
+
+/** Who may take the file (Kd, 2026-10-16: "owner and whoever owner allows"): the owner, and
+ *  staff the owner gives both Reports and payments, the people who see Money on Reports.
+ *  The route, the plan box and the emails before a gym is emptied all read this one list. */
+export const PAYMENTS_DOWNLOAD_PRIVILEGES: readonly OrgPrivilege[] = ["reports.read", "billing.members"];
+export const mayDownloadPayments = (privileges: readonly string[]): boolean =>
+  PAYMENTS_DOWNLOAD_PRIVILEGES.every((p) => privileges.includes(p));
 
 const daySchema = z.string().refine(isRealDay, "not_a_day");
 const minorSchema = z.number().int();
@@ -55,7 +63,7 @@ export const paymentsDownloadSummarySchema = z
 export type PaymentsDownloadSummary = z.infer<typeof paymentsDownloadSummarySchema>;
 
 export const PAYMENTS_DOWNLOAD_WORDS = {
-  no_payments: "Your role doesn't allow you to see payments.",
+  no_payments: "Your role doesn't allow you to download payments.",
   walk_in: "Walk-in",
   deleted: "A deleted member",
   no_name: "No name on their record",
