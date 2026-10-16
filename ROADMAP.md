@@ -184,7 +184,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 5e-ii. [x] **An import's numbers** — merged 2026-10-16 (PR #292).
    - 5f. [x] **Five kinds of business at sign-up** — merged 2026-10-16 (PR #300).
    - 5f-ii. [x] **Personal training and Gym days in each kind's words** — merged 2026-10-17 (PR #303).
-   - 5f-iii. [ ] **Every other gym sentence in each kind's words** (Kd, 2026-10-16, `rulings/2026-10-16-5f-ii.md`): what still says "the gym" to a studio or a box, in the console, the server's sentences and the member pages (import, booking, bills, waivers, messages). Web folder 1, after 5f-ii, before 18q.
+   - 5f-iii. [x] **Every other gym sentence in each kind's words** — merged 2026-10-17 (PR #304).
 6. [ ] Gym profile page for members; ~~gym announcements feed~~ (**item 19b since 2026-09-22**); gym greeting and branding on the member home.
 7. [ ] Member-to-coach / gym messaging. **2026-09-22: no private chat now** (RULINGS that day: reactions, no comments, no private chat — it needs far more safety work); a gym talks to its members on the shared page (item 19) and by the messages of Part 7.
 8. ~~Classes, schedules and booking (the largest gym item).~~ **Planned 2026-09-21 as item 17 (17b–17f).**
