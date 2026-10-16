@@ -272,11 +272,12 @@ export const orgService = {
    *  Two refusals arrive as 409s with their own sentences — the owner has
    *  already used their one trial, or their country has no price book yet — and
    *  the screen prints the server's words rather than inventing any. */
-  startTrial: (gymId) =>
+  startTrial: (gymId, code) =>
     readThrough(
       startOrgTrialResponseSchema,
       'your free trial',
-      authApi.post(`/v1/orgs/${gymId}/trial`, {}),
+      // `code`: a second-trial code from us (Stage 3 item 2e-i), as typed.
+      authApi.post(`/v1/orgs/${gymId}/trial`, code === undefined ? {} : { code }),
     ),
 
   /** GET /v1/orgs/:gymId/plans — what this gym could subscribe to, in this

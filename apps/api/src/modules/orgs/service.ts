@@ -19,12 +19,14 @@ import {
   currencyForCountry,
   normaliseIndianMobile,
   normaliseJoinCode,
+  normaliseSecondTrialCode,
   orgPrivilegeSchema,
   orgWords,
 } from "@app/shared";
 import * as billingRepo from "../billing/repo.js";
 import * as coOwnerRepo from "./coOwners/repo.js";
 import { onlinePaymentFor, type OnlinePayments } from "../billing/online.js";
+import { sha256Hex } from "../auth/tokens.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import { onAttendanceMarked } from "../gamification/service.js";
 import { getUserSyncContext } from "../users/service.js";
@@ -159,6 +161,8 @@ export interface OrgsDeps {
   randomBytes: (n: number) => Uint8Array;
   /** `JOIN_CODES` (ROADMAP 3c): off, a new gym gets no code. */
   joinCodes: boolean;
+  /** Where a gym that needs a plan writes to us (`SUPPORT_EMAIL`); null until one is set. */
+  supportEmail: string | null;
   /** The invitations' key, so removing a member can withdraw their invitation; null
    *  when invitations are switched off. */
   invites: InviteSettings | null;
@@ -1168,10 +1172,17 @@ export async function startOrgTrial(
   /** The SHA-256 of the browser's trial mark (2c). The route always sends one: a request with
    *  no mark is given a new one. */
   deviceHash: string | null,
+  /** A second-trial code as typed (2e-i), or undefined. Only its SHA-256 goes further. */
+  typedCode: string | undefined,
 ): Promise<StartOrgTrialResponse> {
   const { org } = await requirePrivilege(deps, gymId, userId, "billing.manage");
 
-  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId, deviceHash });
+  let code: { hash: string | null } | null = null;
+  if (typedCode !== undefined) {
+    const normal = normaliseSecondTrialCode(typedCode);
+    code = { hash: normal === null ? null : sha256Hex(normal) };
+  }
+  const outcome = await repo.startGymTrial(deps.sql, { gymId, actorUserId: userId, deviceHash, code });
 
   switch (outcome.kind) {
     case "started":
@@ -1210,8 +1221,7 @@ export async function startOrgTrial(
     case "trial_already_used":
       // Names the rule and the ONE fact that makes it feel fair rather than
       // arbitrary — it is per person, not per gym, so "make another gym" is
-      // visibly not the answer. No contact channel is named because there is
-      // none yet, and :19656's Low-3 is the precedent for not inventing one.
+      // visibly not the answer. The way to write to us is the plan box's own line (2e-i).
       throw new OrgsError(
         409,
         "trial_already_used",
@@ -1225,6 +1235,10 @@ export async function startOrgTrial(
         "trial_used_on_device",
         `A free trial has already been used on this computer, so this ${orgWords(org.orgType).it} needs a plan to start.`,
       );
+    case "trial_code_not_valid":
+      // One answer for a mistyped, used, out-of-date or somebody else's code: the screen
+      // beside it says how to ask for a new one.
+      throw new OrgsError(409, "trial_code_not_valid", "That code isn't valid. Check it and try again, or ask us for a new one.");
     case "email_not_confirmed":
       // Only an account from the old password sign-up can be here: the email code and
       // Google both confirm the address. The owner's screen offers the code sign-in;
@@ -1436,6 +1450,7 @@ export async function listOrgPlans(
       fits: p.seatCap === null || used <= p.seatCap,
     })),
     payOnline: onlinePaymentFor(org.currencyDisplay, deps.onlinePayments),
+    supportEmail: deps.supportEmail,
   });
 }
 
