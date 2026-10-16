@@ -62,7 +62,8 @@ export function registerCoOwnerRoutes(app: FastifyInstance, deps: Omit<service.C
     return reply.status(200).send(await service.myCoOwnerRequest(coOwnerDeps, callerId(req), params.gymId));
   });
 
-  for (const answer of ["accept", "decline"] as const) {
+  const answers: readonly ("accept" | "decline")[] = ["accept", "decline"];
+  for (const answer of answers) {
     app.post(`/v1/orgs/:gymId/co-owner-request/:requestId/${answer}`, { preHandler: [app.authenticate, answerLimit] }, async (req, reply) => {
       const params = parseOr400(coOwnerRequestParamsSchema, req.params, req, reply);
       if (params === null) return;

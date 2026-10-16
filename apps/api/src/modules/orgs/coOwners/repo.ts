@@ -15,6 +15,22 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Written out in each statement rather than shared, as the staff readers are (R3.8); the
 // tests drive the Staff tab, the Overview and Accept over the same cases.
 
+/** The gym's own owner. */
+export async function gymOwnerId(sql: Sql, gymId: string): Promise<string | null> {
+  const rows = await sql<{ owner_user_id: string }[]>`SELECT owner_user_id FROM gyms WHERE id = ${gymId}`;
+  return rows[0]?.owner_user_id ?? null;
+}
+
+/** Somebody on this gym's staff at this address (a live account), or null. */
+export async function staffAtAddress(sql: Sql, gymId: string, email: string): Promise<{ userId: string; role: string } | null> {
+  const rows = await sql<{ user_id: string; role: string }[]>`
+    SELECT s.user_id, s.role FROM gym_staff s JOIN users u ON u.id = s.user_id
+    WHERE s.gym_id = ${gymId} AND u.email = ${email} AND u.status = 'active'
+    LIMIT 1`;
+  const row = rows[0];
+  return row === undefined ? null : { userId: row.user_id, role: row.role };
+}
+
 /** The requests waiting at this gym, by the person asked: when each ends. */
 export async function waitingRequests(sql: Sql, gymId: string, now: Date): Promise<Map<string, Date>> {
   const rows = await sql<{ user_id: string; expires_at: Date }[]>`

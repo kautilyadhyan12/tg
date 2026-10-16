@@ -385,12 +385,12 @@ d("staff invited by email (real Postgres)", () => {
   );
 
   it(
-    "a bad address or a role of owner is a 400, and nothing is written",
+    "a bad address or a role the app does not have is a 400, and nothing is written (a co-owner invitation is coOwners.routes.test.ts)",
     async () => {
       const gym = await makeGym("Validation Gym");
       for (const body of [
         { email: "not-an-address", role: "trainer" },
-        { email: addr("v-1"), role: "owner" },
+        { email: addr("v-1"), role: "boss" },
         { email: addr("v-1") },
         { email: addr("v-1"), role: "trainer", extra: true },
       ]) {

@@ -310,12 +310,16 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
     setNotice(
       done.outcome === 'added'
         ? `${done.staff.displayName} is now ${withArticle(done.staff.roleName || (done.staff.role === 'manager' ? 'manager' : words.coach))} here.`
-        : `Invited ${done.invite.email}. We're sending the email now; the invitation works for 7 days.`,
+        : done.outcome === 'asked'
+          ? `${done.staff.displayName} is already on your staff, so we asked them to be a co-owner. They accept it on the Overview when they open the console.`
+          : done.invite.role === 'owner'
+            ? `Invited ${done.invite.email} to be a co-owner. We're sending the email now; the invitation works for 7 days.`
+            : `Invited ${done.invite.email}. We're sending the email now; the invitation works for 7 days.`,
     );
     onInviting(false);
     await read();
     setBusyId(null);
-    if (done.outcome === 'added') onChanged?.();
+    if (done.outcome !== 'invited') onChanged?.();
   };
 
   /** Save a role of the gym's own. Answers `{ role }`, or `{ error }` with the reason. */
@@ -522,6 +526,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       {ready && inviting ? (
         <StaffInvitePanel
           orgType={orgType}
+          canInviteCoOwner={viewerIsOwner}
           words={words}
           roles={roles}
           readOnly={readOnly}

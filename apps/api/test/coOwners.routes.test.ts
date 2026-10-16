@@ -67,6 +67,8 @@ d("co-owners (real Postgres)", () => {
   const mine = () => sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'coown-t-%')`;
   const cleanup = async () => {
     await sql`DELETE FROM gym_co_owner_requests WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_staff_invite_sends WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine()})`;
@@ -292,6 +294,78 @@ d("co-owners (real Postgres)", () => {
       expect((await roleOf(gym, cole))?.role).toBe("owner");
       expect((await roleOf(gym, owner))?.privileges).toEqual([...ROLE_PRIVILEGES.owner].sort());
       expect(await ownerOf(gym)).toBe(owner.userId);
+    }, TEST_TIMEOUT_MS);
+  });
+
+  // ── Invite staff as a co-owner (Kd at the click-through) ───────────────────────────
+  describe("Invite staff offers Co-owner, and it never skips Accept", () => {
+    const inviteAs = (gym: Gym, email: string, who: User = gym.owner, extra: Record<string, unknown> = {}) =>
+      send("POST", `/v1/orgs/${gym.id}/staff/invites`, who, { email, role: "owner", ...extra });
+    const invitesTo = (gym: Gym, email: string) =>
+      sql<{ id: string; role: string; privileges: string[]; state: string }[]>`
+        SELECT id, role, privileges, state FROM gym_staff_invites WHERE gym_id = ${gym.id} AND email = ${email}`;
+
+    it("only the owner can invite a co-owner: a manager and a co-owner are refused, and nothing is sent", async () => {
+      const gym = await makeGym("Kd");
+      const manny = await makeStaff(gym, "Manny");
+      const cora = await makeStaff(gym, "Cora");
+      await makeCoOwner(gym, cora);
+      const address = addr(`friend-${String(++count)}`);
+      expect((await inviteAs(gym, address, manny)).statusCode).toBe(403);
+      const byCoOwner = await inviteAs(gym, address, cora);
+      expect(byCoOwner.statusCode).toBe(403);
+      expect(errorOf(byCoOwner)).toBe("owner_only");
+      expect(await invitesTo(gym, address)).toEqual([]);
+    }, TEST_TIMEOUT_MS);
+
+    it("a new address gets an invitation with the owner's ticks; accepted by that address, they are a co-owner", async () => {
+      const gym = await makeGym("Kd");
+      const address = addr(`partner-${String(++count)}`);
+      const res = await inviteAs(gym, address, gym.owner, { privileges: ["members.read"] });
+      expect(res.statusCode, res.body).toBe(201);
+      expect((JSON.parse(res.body) as { outcome: string }).outcome).toBe("invited");
+      const [invite] = await invitesTo(gym, address);
+      expect(invite).toMatchObject({ role: "owner", privileges: [...ROLE_PRIVILEGES.owner].sort(), state: "pending" });
+
+      // Somebody else, signed in, cannot open it.
+      const stranger = await person("Stan");
+      expect((await send("POST", `/v1/orgs/staff-invitations/${invite?.id ?? ""}/accept`, stranger)).statusCode).toBe(404);
+      expect((await send("GET", `/v1/orgs/${gym.id}/members`, stranger)).statusCode).toBe(404);
+
+      const partner = await signIn(address, "Pat Partner");
+      const accepted = await send("POST", `/v1/orgs/staff-invitations/${invite?.id ?? ""}/accept`, partner);
+      expect(accepted.statusCode, accepted.body).toBe(200);
+      expect(await roleOf(gym, partner)).toEqual({ role: "owner", privileges: [...ROLE_PRIVILEGES.owner].sort() });
+      expect((await staffList(gym, gym.owner)).find((s) => s.userId === partner.userId)?.coOwner).toBe(true);
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+    }, TEST_TIMEOUT_MS);
+
+    it("somebody already in the app is invited, not made a co-owner at once", async () => {
+      const gym = await makeGym("Kd");
+      const member = await person("Mia");
+      await sql`INSERT INTO gym_members (gym_id, user_id, joined_at) VALUES (${gym.id}, ${member.userId}, now())`;
+      const res = await inviteAs(gym, member.email);
+      expect(res.statusCode, res.body).toBe(201);
+      expect((JSON.parse(res.body) as { outcome: string }).outcome).toBe("invited");
+      expect(await roleOf(gym, member)).toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("somebody already on the staff is asked on their Overview instead, and stays as they are until they accept", async () => {
+      const gym = await makeGym("Kd");
+      const rita = await makeStaff(gym, "Rita");
+      const res = await inviteAs(gym, rita.email);
+      expect(res.statusCode, res.body).toBe(201);
+      expect(JSON.parse(res.body)).toMatchObject({ outcome: "asked", emailed: true, staff: { userId: rita.userId, role: "manager" } });
+      expect((await roleOf(gym, rita))?.role).toBe("manager");
+      expect(await mineAt(gym, rita)).not.toBeNull();
+      expect(await invitesTo(gym, rita.email)).toEqual([]);
+    }, TEST_TIMEOUT_MS);
+
+    it("a co-owner invitation with a role of the gym's own is refused", async () => {
+      const gym = await makeGym("Kd");
+      const res = await inviteAs(gym, addr(`x-${String(++count)}`), gym.owner, { roleId: "33333333-3333-4333-8333-333333333333" });
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res)).toBe("co_owner_own_role");
     }, TEST_TIMEOUT_MS);
   });
 

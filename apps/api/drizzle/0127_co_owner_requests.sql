@@ -26,4 +26,11 @@ ALTER TABLE "gym_co_owner_requests" ADD CONSTRAINT "gym_co_owner_requests_gym_id
 ALTER TABLE "gym_co_owner_requests" ADD CONSTRAINT "gym_co_owner_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gym_co_owner_requests" ADD CONSTRAINT "gym_co_owner_requests_requested_by_users_id_fk" FOREIGN KEY ("requested_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "gym_co_owner_requests_pending_uq" ON "gym_co_owner_requests" USING btree ("gym_id","user_id") WHERE "state" = 'pending';--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "gym_co_owner_requests_user_idx" ON "gym_co_owner_requests" USING btree ("user_id") WHERE "state" = 'pending';
+CREATE INDEX IF NOT EXISTS "gym_co_owner_requests_user_idx" ON "gym_co_owner_requests" USING btree ("user_id") WHERE "state" = 'pending';--> statement-breakpoint
+-- Invite staff may invite a co-owner (Kd at 4b-i's click-through): the invitation's role is
+-- `owner`, with the owner's ticks and no role name of the gym's own. Only an owner's
+-- invitation may carry "Manage staff".
+ALTER TABLE "gym_staff_invites" DROP CONSTRAINT "gym_staff_invites_role_check";--> statement-breakpoint
+ALTER TABLE "gym_staff_invites" ADD CONSTRAINT "gym_staff_invites_role_check" CHECK ("role" IN ('manager','trainer','owner') AND ("role" <> 'owner' OR "role_name" IS NULL));--> statement-breakpoint
+ALTER TABLE "gym_staff_invites" DROP CONSTRAINT "gym_staff_invites_privileges_check";--> statement-breakpoint
+ALTER TABLE "gym_staff_invites" ADD CONSTRAINT "gym_staff_invites_privileges_check" CHECK (("role" = 'owner' OR NOT ('staff.manage' = ANY ("privileges"))) AND cardinality("privileges") <= 20);

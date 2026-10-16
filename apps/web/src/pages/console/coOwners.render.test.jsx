@@ -22,6 +22,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getStaff: vi.fn(),
       getStaffInvites: vi.fn(),
       getStaffRoles: vi.fn(),
+      inviteStaff: vi.fn(),
       updateStaffRole: vi.fn(),
       removeStaff: vi.fn(),
       askCoOwner: vi.fn(),
@@ -198,6 +199,48 @@ describe('Make co-owner', () => {
     drawStaff();
     expect(within(await screen.findByTestId('staff-tab-u3')).getByText('Co-owner')).toBeTruthy();
     expect(within(screen.getByTestId('staff-tab-u1')).getByText('Owner')).toBeTruthy();
+  });
+});
+
+describe('Invite staff offers Co-owner to the owner alone', () => {
+  const openInvite = async () => {
+    drawStaff();
+    fireEvent.click(await screen.findByRole('button', { name: 'Invite staff' }));
+    return within(await screen.findByRole('dialog', { name: 'Invite staff' }));
+  };
+
+  it('a co-owner inviting staff is offered no Co-owner', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { staff: staffAs('u3', [OWNER, CORA, RITA]) } });
+    const form = await openInvite();
+    expect(form.getByRole('radio', { name: 'Manager' })).toBeTruthy();
+    expect(form.queryByRole('radio', { name: 'Co-owner' })).toBeNull();
+  });
+
+  it('the owner picks Co-owner: no boxes to tick, it says Accept is still needed, and only the address and role are sent', async () => {
+    orgService.inviteStaff.mockResolvedValue({
+      data: {
+        outcome: 'invited',
+        invite: { id: '44444444-4444-4444-8444-444444444444', email: 'pat@example.com', role: 'owner', privileges: [], roleName: null, invitedAt: '2026-10-16T09:00:00.000Z', expiresAt: '2026-10-23T09:00:00.000Z', state: 'waiting', declinedAt: null, emailStatus: 'sending', emailReason: null, lastSentAt: '2026-10-16T09:00:00.000Z', resendsLeft: 3, sendAgainFrom: null },
+      },
+    });
+    const form = await openInvite();
+    fireEvent.change(form.getByLabelText('Their email address'), { target: { value: 'pat@example.com' } });
+    fireEvent.click(form.getByRole('radio', { name: 'Co-owner' }));
+    expect(form.queryByTestId('invite-ticks')).toBeNull();
+    expect(form.getByText('Can do everything you can, except add, change or remove co-owners.')).toBeTruthy();
+    expect(form.getByText(/They become a co-owner only when they sign in with this address and press Accept./)).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Send invitation' }));
+    await waitFor(() => expect(orgService.inviteStaff).toHaveBeenCalledWith(ORG.id, { email: 'pat@example.com', role: 'owner' }));
+    expect(await screen.findByText("Invited pat@example.com to be a co-owner. We're sending the email now; the invitation works for 7 days.")).toBeTruthy();
+  });
+
+  it('an address already on the staff is asked, and the page says so', async () => {
+    orgService.inviteStaff.mockResolvedValue({ data: { outcome: 'asked', staff: ASKED, emailed: true } });
+    const form = await openInvite();
+    fireEvent.change(form.getByLabelText('Their email address'), { target: { value: 'rita@example.com' } });
+    fireEvent.click(form.getByRole('radio', { name: 'Co-owner' }));
+    fireEvent.click(form.getByRole('button', { name: 'Send invitation' }));
+    expect(await screen.findByText('Rita Sen is already on your staff, so we asked them to be a co-owner. They accept it on the Overview when they open the console.')).toBeTruthy();
   });
 });
 

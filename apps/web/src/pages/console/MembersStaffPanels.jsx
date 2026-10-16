@@ -115,7 +115,7 @@ function TickList({ choices, ticked, disabled, onToggle, testId }) {
  *  Trainer is the starting role because it is the smaller grant. `readOnly` (a gym with no
  *  plan) reaches every field and Send; Cancel stays pressable. A refusal is said here,
  *  beside the button, with the typing kept. */
-export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error, onSend, onMakeRole, onDeleteRole, onClose }) {
+export function StaffInvitePanel({ orgType, words, roles, canInviteCoOwner = false, readOnly, busy, error, onSend, onMakeRole, onDeleteRole, onClose }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('trainer');
   const [ticks, setTicks] = useState(() => roleTicks('trainer'));
@@ -131,7 +131,12 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
     if (rolesSaved > 0) rolesRow.current?.scrollIntoView?.({ block: 'nearest' });
   }, [rolesSaved]);
 
-  const builtIn = staffRoleChoices(orgType);
+  // Co-owner is the owner's alone to offer (4b-i): they can do everything but add, change or
+  // remove co-owners, so there is nothing to tick.
+  const builtIn = canInviteCoOwner
+    ? [...staffRoleChoices(orgType), { value: 'owner', label: 'Co-owner', hint: 'Can do everything you can, except add, change or remove co-owners.' }]
+    : staffRoleChoices(orgType);
+  const coOwner = role === 'owner';
   const own = roles.find((r) => r.id === role) ?? null;
   // A role of the gym's own is a trainer's underneath: every box but Manage staff.
   const base = own === null ? role : 'trainer';
@@ -181,6 +186,10 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
       return;
     }
     setFieldError(null);
+    if (coOwner) {
+      onSend({ email: value, role: 'owner' });
+      return;
+    }
     onSend({
       email: value,
       role: base,
@@ -342,12 +351,20 @@ export function StaffInvitePanel({ orgType, words, roles, readOnly, busy, error,
         </div>
       ) : null}
 
-      <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
-        <legend className="c-label p-0">What they can do</legend>
-        <TickList choices={privilegeChoices(base, orgType)} ticked={ticks} disabled={off} onToggle={toggle} testId="invite-ticks" />
-      </fieldset>
+      {coOwner ? null : (
+        <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
+          <legend className="c-label p-0">What they can do</legend>
+          <TickList choices={privilegeChoices(base, orgType)} ticked={ticks} disabled={off} onToggle={toggle} testId="invite-ticks" />
+        </fieldset>
+      )}
 
-      {newRole === null ? (
+      {coOwner ? (
+        <p className="c-s14 c-t2 m-0">
+          We&apos;ll email them an invitation. They become a co-owner only when they sign in with this address and press
+          Accept. If they&apos;re already on your staff, they&apos;re asked on their Overview instead. You stay the owner, and
+          only you can add or remove co-owners.
+        </p>
+      ) : newRole === null ? (
         <p className="c-s14 c-t2 m-0">
           We&apos;ll email them an invitation. They sign in with this address and press Accept, and they can open your{' '}
           {words.it}&apos;s console. If they&apos;re already a {words.person} of your {words.it}, they get these permissions

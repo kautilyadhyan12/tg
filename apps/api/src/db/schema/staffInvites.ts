@@ -41,9 +41,10 @@ export const gymStaffInvites = pgTable(
     index("gym_staff_invites_email_idx").on(t.email).where(sql`${t.state} IN ('pending','declined') AND ${t.clearedAt} IS NULL`),
     index("gym_staff_invites_gym_idx").on(t.gymId, t.createdAt),
     index("gym_staff_invites_created_idx").on(t.createdAt),
-    check("gym_staff_invites_role_check", sql`${t.role} IN ('manager','trainer')`),
+    // `owner` is a co-owner's invitation (4b-i, `0127`): no role name, and the only one with "Manage staff".
+    check("gym_staff_invites_role_check", sql`${t.role} IN ('manager','trainer','owner') AND (${t.role} <> 'owner' OR ${t.roleName} IS NULL)`),
     check("gym_staff_invites_role_name_check", sql`${t.roleName} IS NULL OR length(${t.roleName}) BETWEEN 1 AND 40`),
-    check("gym_staff_invites_privileges_check", sql`NOT ('staff.manage' = ANY (${t.privileges})) AND cardinality(${t.privileges}) <= 20`),
+    check("gym_staff_invites_privileges_check", sql`(${t.role} = 'owner' OR NOT ('staff.manage' = ANY (${t.privileges}))) AND cardinality(${t.privileges}) <= 20`),
     check("gym_staff_invites_state_check", sql`${t.state} IN ('pending','accepted','declined','cancelled')`),
     check("gym_staff_invites_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
     check("gym_staff_invites_cleared_check", sql`${t.clearedAt} IS NULL OR ${t.state} IN ('pending','declined')`),

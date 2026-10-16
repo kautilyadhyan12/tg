@@ -192,7 +192,7 @@ export function registerOrgRoutes(
   registerWaiverRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
-  registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+  registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, coOwnerEmail: deps.coOwnerEmail, webOrigin: deps.webOrigin });
   // Co-owners: the owner asks one of the staff, who accepts or declines (ROADMAP 4b-i).
   registerCoOwnerRoutes(app, { sql: deps.sql, redis: deps.redis, email: deps.coOwnerEmail, webOrigin: deps.webOrigin, now: overrides.now ?? (() => new Date()) });
 

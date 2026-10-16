@@ -494,7 +494,8 @@ const BLOCKED_REASONS = ['bounced', 'refused', 'complained', 'unsubscribed'];
 /** One invitation's line on Members → Staff: who, as what, and where it stands, and
  *  whether Send again is offered (4a-ii) or, when it is not, why. */
 export function staffInviteView(invite, orgType, now = Date.now()) {
-  const role = invite.roleName || roleLabel(invite.role, orgType);
+  // An invitation for `owner` is a co-owner's (4b-i): the gym's own owner is never invited.
+  const role = invite.roleName || roleLabel(invite.role, orgType, invite.role === 'owner');
   const status =
     invite.state === 'declined'
       ? `Said no thanks${invite.declinedAt ? ` · ${formatJoinedAt(invite.declinedAt)}` : ''}`
