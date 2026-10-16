@@ -126,6 +126,25 @@ export function nextMemberNumber(numbers: readonly string[], kept: readonly stri
   return next.length > MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS ? null : next;
 }
 
+/** The gym's next `count` numbers, given one after another: what calling `nextMemberNumber`
+ *  again after each is given would answer, worked out once. Fewer where the run reaches a
+ *  number longer than a member number may be. */
+export function nextMemberNumbers(numbers: readonly string[], kept: readonly string[], count: number): string[] {
+  const first = nextMemberNumber(numbers, kept);
+  if (first === null || count <= 0) return [];
+  // The first is in the gym's sequence and above all of it, so each after it is one more,
+  // as wide as the first: the sequence only grows by them.
+  const parsed = parse(first);
+  if (parsed === null) return [first];
+  const out = [first];
+  for (let step = 1n; out.length < count; step++) {
+    const next = `${parsed.prefix}${(parsed.value + step).toString().padStart(parsed.digits.length, "0")}`;
+    if (next.length > MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS) break;
+    out.push(next);
+  }
+  return out;
+}
+
 /** The kept numbers once `number` has been given or has gone: its own sequence's kept
  *  number raised to it where it is higher (as wide as the wider of the two), every other
  *  sequence's left as it was. Null where nothing changes (`number` is in no sequence, or

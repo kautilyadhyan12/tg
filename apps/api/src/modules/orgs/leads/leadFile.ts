@@ -251,6 +251,7 @@ function passedOn(warning: MemberListWarning): LeadFileWarning | null {
     // Nothing the leads reader keeps: a shared email is "twice in the file", and no
     // date or own column is read.
     case "shared_emails":
+    case "shared_member_numbers":
     case "cells_cut":
     case "dates_not_read":
     case "extra_columns_left_out":
