@@ -21,6 +21,7 @@ import { reworkTimeOffInstants } from "./pt/repo.js";
 import { endTrainersSessions, endedAuditMeta, requireSessionsConfirmed } from "./pt/changes.js";
 import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
 import { comeBackTooSoon } from "./atRisk/repo.js";
+import { TRIAL_FIRST_PEOPLE, decideTrialCheck, type TrialCheck } from "./trialFirstPeople.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
   ATTENDANCE_SUMMARY_LIMIT,
@@ -114,6 +115,9 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
+  /** This gym's free trial was ended because most of its first people came from another gym
+   *  that never paid (2d); the service withholds it as it does `ownerTrialUsed`. */
+  trialEndedFirstPeople: boolean;
   /** The gym's postal address for its invitations; the service withholds it from a
    *  caller who is not staff. */
   postalAddress: string | null;
@@ -474,6 +478,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       billing_mobile: string | null;
       seats_used: number;
       owner_trial_used: boolean;
+      trial_ended_first_people: boolean;
       postal_address: string | null;
       contact_phone: string | null;
       contact_email: string | null;
@@ -582,6 +587,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
                    )
                )
            ) AS owner_trial_used,
+           EXISTS (
+             SELECT 1 FROM subscriptions fs
+             WHERE fs.owner_type = 'gym' AND fs.owner_id = g.id AND fs.trial_check = 'ended'
+           ) AS trial_ended_first_people,
            ch.preset AS cheer_preset,
            ch.created_at AS cheer_sent_at,
            nd.preset AS nudge_preset,
@@ -708,6 +717,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used,
+    trialEndedFirstPeople: r.trial_ended_first_people,
     postalAddress: r.postal_address,
     billingMobile: r.billing_mobile,
     contactPhone: r.contact_phone,
@@ -1474,6 +1484,8 @@ async function claimSeat(
   }
 
   if (input.codeId !== null) await tx`UPDATE gym_codes SET uses = uses + 1 WHERE id = ${input.codeId}`;
+  // A new person may be one of the gym's first: the trial belongs to the gym (2d).
+  await checkTrialFirstPeople(tx, input.org.id);
   return {
     kind: "joined",
     membership: { id: newRow.id, joinedAt: newRow.joined_at, groupLabel: input.codeLabel },
@@ -2103,6 +2115,94 @@ export async function startGymTrial(
 
     return { kind: "started", subscription };
   });
+}
+
+/** THE TRIAL BELONGS TO THE GYM (Stage 3 item 2d): looks at the gym's first people and ends
+ *  its free trial, or puts it on Kd's look list, by `decideTrialCheck`. The caller holds the
+ *  gym's lock, so two people joining at once are counted one after the other. It does
+ *  nothing unless the gym is on our own free trial and has not been checked: a gym that paid
+ *  is never touched, and once decided, the answer stands. */
+export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): Promise<TrialCheck> {
+  const subs = await tx<{ id: string; created_at: Date }[]>`
+    SELECT id, created_at FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId}
+      AND status = 'trialing' AND provider = 'none' AND trial_check IS NULL`;
+  const sub = subs[0];
+  if (sub === undefined) return { kind: "none" };
+
+  // The first people: the owner, always one (Kd: "the owner's own device counts as member
+  // one"; the device is 2c's), from the moment the gym was made; then the first others to
+  // join, removed ones included, each from their first join. Somebody "came from" another gym
+  // when they were in its app before that moment. That gym counts only when its free trial
+  // began before this one and it never paid.
+  const rows = await tx<{ gym_id: string; came: number; owner_was_there: boolean }[]>`
+    WITH me AS (
+      SELECT owner_user_id, created_at FROM gyms WHERE id = ${gymId}
+    ),
+    people AS (
+      SELECT owner_user_id AS user_id, created_at AS came_at FROM me
+      UNION ALL
+      (SELECT m.user_id, min(m.joined_at) AS came_at
+       FROM gym_members m CROSS JOIN me
+       WHERE m.gym_id = ${gymId} AND m.user_id <> me.owner_user_id
+       GROUP BY m.user_id
+       ORDER BY min(m.joined_at), m.user_id
+       LIMIT ${TRIAL_FIRST_PEOPLE - 1})
+    ),
+    came AS (
+      SELECT x.gym_id, count(DISTINCT p.user_id)::int AS came
+      FROM people p
+      JOIN gym_members x ON x.user_id = p.user_id AND x.gym_id <> ${gymId} AND x.joined_at < p.came_at
+      GROUP BY x.gym_id
+    ),
+    earlier AS (
+      SELECT c.gym_id, c.came, min(t.trial_ends_at) AS trial_ended
+      FROM came c
+      JOIN subscriptions t ON t.owner_type = 'gym' AND t.owner_id = c.gym_id
+       AND t.trial_ends_at IS NOT NULL AND t.created_at < ${sub.created_at}
+      WHERE NOT EXISTS (
+        SELECT 1 FROM subscriptions p
+        WHERE p.owner_type = 'gym' AND p.owner_id = c.gym_id AND p.paid_at IS NOT NULL
+      )
+      GROUP BY c.gym_id, c.came
+    )
+    SELECT e.gym_id, e.came,
+           (EXISTS (
+              SELECT 1 FROM gym_staff s CROSS JOIN me
+              WHERE s.gym_id = e.gym_id AND s.user_id = me.owner_user_id
+            ) OR EXISTS (
+              SELECT 1 FROM gym_members om CROSS JOIN me
+              WHERE om.gym_id = e.gym_id AND om.user_id = me.owner_user_id AND om.joined_at < e.trial_ended
+            )) AS owner_was_there
+    FROM earlier e`;
+  const check = decideTrialCheck(
+    rows.map((r) => ({ gymId: r.gym_id, came: r.came, ownerWasThere: r.owner_was_there })),
+  );
+  if (check.kind === "none") return check;
+
+  if (check.kind === "ended") {
+    await tx`
+      UPDATE subscriptions
+      SET status = 'expired', ended_at = now(), trial_ends_at = now(),
+          trial_check = 'ended', trial_check_gym_id = ${check.gymId}, trial_checked_at = now()
+      WHERE id = ${sub.id}`;
+  } else {
+    await tx`
+      UPDATE subscriptions
+      SET trial_check = 'look', trial_check_gym_id = ${check.gymId}, trial_checked_at = now()
+      WHERE id = ${sub.id}`;
+  }
+  // The other gym is not in the note: Staff activity reads these, and a gym is never told
+  // another gym's name. It is on the subscription, for Kd.
+  await insertAudit(tx, {
+    actorUserId: null,
+    gymId,
+    action: check.kind === "ended" ? "org.trial_ended_first_people" : "org.trial_look",
+    targetType: "subscription",
+    targetId: sub.id,
+    meta: {},
+  });
+  return check;
 }
 
 interface RawGymSubscription {
