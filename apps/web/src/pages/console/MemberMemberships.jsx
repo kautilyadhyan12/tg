@@ -903,8 +903,7 @@ export default function MemberMemberships({
     const discount = choice.type === null || free || !shown.canBill ? null : pickedDiscount(offers, choice.type, form.discountId);
     // The person's own Refer a friend gift (20e-ii-b-ii-a), filled in unless Removed: only one
     // off a membership (one off products is Sell's, 20e-ii-b-ii-b).
-    const memberGift =
-      shown.canBill && !free && shown.memberGift !== null && shown.memberGift !== undefined && shown.memberGift.on !== 'products' ? shown.memberGift : null;
+    const memberGift = shown.canBill && !free && shown.memberGift !== null && shown.memberGift !== undefined ? shown.memberGift : null;
     const giftFits = memberGift !== null && choice.type !== null && membershipSummary(choice.type, discount, shown.taxIncluded, memberGift)?.giftOffMinor > 0;
     const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
     const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed);
@@ -1007,6 +1006,7 @@ export default function MemberMemberships({
         ) : null}
       </div>
       {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
+      {shown.canBill && shown.memberGiftAtSell !== null && shown.memberGiftAtSell !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGiftAtSell} /> : null}
       {shown.past && shown.memberships.length > 0 ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-past-note">
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}

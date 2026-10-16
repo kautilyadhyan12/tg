@@ -630,9 +630,13 @@ export function addGiftDays(stored: HeldMembership, days: number, today: string)
   const m = settle(stored, today);
   if (m.free || m.status === "ended" || m.status === "cancelled") return null;
   const now = periodIndex(m, asOfDay(m, today));
-  if (m.giftDays > 0 && m.kind === "recurring" && (m.giftFrom > now ? m.paidPeriods > m.giftFrom : m.paidPeriods < m.giftFrom)) return null;
-  if (m.giftDays > 0 && m.giftFrom > now) return { membership: { ...m, giftDays: m.giftDays + days }, from: m.giftFrom };
   const from = m.kind === "recurring" ? Math.max(now + 1, m.paidPeriods) : 1;
+  if (m.giftDays > 0 && m.giftFrom > now) {
+    // Earlier days not begun take these only where both belong: what is paid may have moved
+    // since, either way (round one, H1).
+    return m.giftFrom === from ? { membership: { ...m, giftDays: m.giftDays + days }, from } : null;
+  }
+  if (m.giftDays > 0 && m.paidPeriods < m.giftFrom) return null;
   return { membership: { ...m, frozenDays: m.frozenDays + m.giftDays, giftDays: days, giftFrom: from }, from };
 }
 
@@ -792,6 +796,9 @@ export const heldMembershipsResponseSchema = z
     /** This person's own Refer a friend gift, for inviting a friend who joined and paid, where
      *  it is waiting (20e-ii-b-ii-a): filled in on the Add form, with Remove. Null otherwise. */
     memberGift: memberGiftSchema.nullable().default(null),
+    /** Their gift off products waiting at Sell, said beside the one above (20e-ii-b-ii-b,
+     *  round one L3): Add membership never fills it in. Null otherwise. */
+    memberGiftAtSell: memberGiftSchema.nullable().default(null),
     /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
     taxIncluded: z.boolean(),
   })

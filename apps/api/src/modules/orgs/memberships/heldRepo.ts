@@ -26,7 +26,9 @@ import {
   HELD_EARLIER_PAGE,
   HELD_LIVE_MAX,
   MEMBERSHIP_PAYMENTS,
+  addDays,
   addGiftDays,
+  periodStart,
   giftDaysNextDay,
   giftDaysTarget,
   takeBackGiftDays,
@@ -413,6 +415,17 @@ export async function settle(tx: TransactionSql, gymId: string, entryId: string,
   return rows.length - ended.length;
 }
 
+/** The open bill for the period free days lengthen (or shorten again) says the days it is
+ *  for as they now are, so "Take payment … for 20 October to 28 November" agrees with the
+ *  renewal beside it (round one, L2). A paid bill keeps what it was paid for. */
+async function openBillTo(tx: TransactionSql, gymId: string, membershipId: string, m: HeldMembership, from: number, now: Date): Promise<void> {
+  if (from < 1) return;
+  await tx`
+    UPDATE gym_member_bills SET covers_to = ${addDays(periodStart(m, from), -1)}::date, updated_at = ${now}
+    WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND period_index = ${from - 1}
+      AND status = 'open' AND covers_to IS NOT NULL AND covers_from <= ${addDays(periodStart(m, from), -1)}::date`;
+}
+
 /** REFER A FRIEND'S FREE DAYS ADDED (20e-ii-b-ii-b) to the one membership of this record
  *  that takes them (`giftDaysTarget`): the gym's lock and the record's, the clock's changes
  *  written first, then that one row. Null where none can take them (the money is given
@@ -435,6 +448,7 @@ export async function addGiftDaysTo(
     WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${target.id}
     RETURNING id`;
   if (done.length !== 1) throw new Error("free days were not added to the membership that was read under the gym's lock");
+  await openBillTo(tx, input.gymId, target.id, m, added.from, input.now);
   await insertAudit(tx, {
     actorUserId: null,
     gymId: input.gymId,
@@ -454,17 +468,23 @@ export async function takeGiftDaysBack(
   input: { gymId: string; membershipId: string; days: number; from: number; today: string; now: Date },
 ): Promise<boolean> {
   await lockGym(tx, input.gymId);
-  const [found] = await tx<{ entry_id: string }[]>`
-    SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${input.gymId} AND id = ${input.membershipId}`;
+  const [found] = await tx<{ entry_id: string; past: boolean }[]>`
+    SELECT h.entry_id, e.former_at IS NOT NULL AS past
+    FROM gym_held_memberships h
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    WHERE h.gym_id = ${input.gymId} AND h.id = ${input.membershipId}`;
   if (found === undefined) return false;
   await lockEntries(tx, input.gymId, [found.entry_id]);
-  await settle(tx, input.gymId, found.entry_id, input.today, input.now);
+  // A past member's record is never settled by somebody else's write, as every payment write
+  // leaves it (round one, L1).
+  if (!found.past) await settle(tx, input.gymId, found.entry_id, input.today, input.now);
   const row = await lockedHeld(tx, input.gymId, found.entry_id, input.membershipId);
   const back = row === null ? null : takeBackGiftDays(row.membership, input.days, input.from, input.today);
   if (row === null || back === null) return false;
   await tx`
     UPDATE gym_held_memberships SET gift_days = ${back.giftDays}, updated_at = ${input.now}
     WHERE gym_id = ${input.gymId} AND id = ${input.membershipId}`;
+  await openBillTo(tx, input.gymId, input.membershipId, back, input.from, input.now);
   await insertAudit(tx, {
     actorUserId: null,
     gymId: input.gymId,

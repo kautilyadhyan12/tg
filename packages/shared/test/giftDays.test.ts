@@ -18,6 +18,7 @@ import {
   moveHeldMembership,
   periodIndex,
   periodStart,
+  shownRenewal,
   takeBackGiftDays,
   type HeldMembership,
   type HeldMembershipTerms,
@@ -178,6 +179,14 @@ describe("free days move the next renewal or the last day, and nothing already b
     // the month already paid for.
     const first = plus(m, 14, "2026-11-03");
     expect(addGiftDays({ ...first, paidPeriods: 3 }, 7, "2026-11-05")).toBeNull();
+    // Days waiting at the end of two months paid, then the second month's payment undone: a
+    // second gift would sit a month past what is paid and its message name a false renewal
+    // (round one, H1). A second gift alone on that membership would go before period 1.
+    const ahead = addGiftDays({ ...m, paidPeriods: 2 }, 14, "2026-10-20");
+    expect(ahead?.from).toBe(2);
+    const undone = { ...(ahead?.membership ?? m), paidPeriods: 1 };
+    expect(addGiftDays(undone, 7, "2026-10-20")).toBeNull();
+    expect(addGiftDays(m, 7, "2026-10-20")?.from).toBe(1);
     // A payment of the months after those days undone: the month from before them is owed.
     const owed = { ...plus({ ...m, paidPeriods: 3 }, 14, "2026-11-03"), paidPeriods: 1 };
     expect(addGiftDays(owed, 7, "2027-02-01")).toBeNull();
@@ -285,6 +294,9 @@ describe("the sweep: nothing already begun moves, and everything after moves by 
       for (let p = added.from; p < added.from + 4; p += 1) expect(periodStart(after, p)).toBe(addDays(periodStart(m, p), days));
       expect(added.from).toBeGreaterThan(now);
       if (m.kind === "recurring") expect(added.from).toBeGreaterThanOrEqual(m.paidPeriods);
+      // The member is told the renewal the page then shows, never another day (round one, H1).
+      const told = giftDaysNextDay(after, added.from);
+      if (told !== null && told.renews) expect(told.day).toBe(shownRenewal(heldMembershipView(after, today)));
       // What is owed today, and since when, is what it was.
       expect(heldMembershipView(after, today).payment?.state).toBe(heldMembershipView(m, today).payment?.state);
       if (heldMembershipView(m, today).payment?.state === "due") expect(heldMembershipView(after, today).payment).toEqual(heldMembershipView(m, today).payment);

@@ -164,12 +164,12 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   if (list === null) throw notFound();
   // A member's own Refer a friend gift (20e-ii-b-ii-a): what it took off a bill, and the one
   // waiting, filled in on Add.
-  // One off a membership is the one Add membership fills in; else one off products is said.
-  const [gifts, memberGift, freeDays] = await Promise.all([
+  // One off a membership is the one Add membership fills in; one off products waits for Sell,
+  // and the page says both (round one, L3).
+  const [gifts, memberGift, memberGiftAtSell, freeDays] = await Promise.all([
     canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string; friendName: string | null }>(),
-    canBill && !list.past
-      ? waitingGiftFor(deps.sql, gymId, entryId, "membership").then(async (g) => g ?? (await waitingGiftFor(deps.sql, gymId, entryId, "products")))
-      : null,
+    canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "membership") : null,
+    canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "products") : null,
     // Refer a friend's free days on each (20e-ii-b-ii-b): why its dates moved.
     giftDaysOn(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)),
   ]);
@@ -238,6 +238,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
     friendGift: list.past ? null : friendGift,
     memberGift,
+    memberGiftAtSell,
   });
 }
 

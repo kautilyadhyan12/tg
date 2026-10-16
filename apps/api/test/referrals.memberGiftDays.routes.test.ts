@@ -379,11 +379,18 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
         const before = await firstOf(gymA.org.id, una.entryId);
         expect(before.view.payment).toEqual({ state: "due", since: today });
         if (before.view.renewsOn === null) throw new Error("no renewal");
-        await friendJoins(una.code, "Vik Rao", "vik.rao@example.com", true);
+        const coversTo = async () => (await firstOf(gymA.org.id, una.entryId)).billing?.bills[0]?.covers?.to ?? null;
+        expect(await coversTo()).toBe(addDays(before.view.renewsOn, -1));
+        const vik = await friendJoins(una.code, "Vik Rao", "vik.rao@example.com", true);
         const after = await firstOf(gymA.org.id, una.entryId);
         expect(after.view.payment).toEqual({ state: "due", since: today });
         expect(after.view.renewsOn).toBe(addDays(before.view.renewsOn, 14));
         expect(await billsOfEntry(gymA.org.id, una.entryId)).toMatchObject([{ period_index: 0, amount_minor: 5000, status: "open" }]);
+        // The bill she owes is for the days the month now runs to, as its renewal says (round one, L2).
+        expect(await coversTo()).toBe(addDays(before.view.renewsOn, 13));
+        // Vik's payment voided: the days go, and the bill's days with them.
+        await voidFriendPayment(vik.entryId);
+        expect(await coversTo()).toBe(addDays(before.view.renewsOn, -1));
       },
       TIMEOUT_MS,
     );
@@ -500,6 +507,23 @@ d("Refer a friend: the member's gift as free days (real Postgres)", () => {
         expect((await daysGifts(gymA.org.id)).filter((g) => g.friend_entry_id === friend.entryId)).toHaveLength(1);
         expect((await withDays(gymA.org.id)).filter((r) => r.entry_id === lia.entryId)).toMatchObject([{ gift_days: 14 }]);
         expect(await messagesOf(lia.person.id)).toHaveLength(1);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "voided after the member left the list: their record is not touched beyond the days (round one, L1)",
+      async () => {
+        const pam = await memberWithBill("pam", "Pam Ross", true);
+        const friend = await friendJoins(pam.code, "Cy Moore", "cy.moore@example.com", true);
+        const m = await firstOf(gymA.org.id, pam.entryId);
+        // Pam left the list; her membership's clock has since run on past what anybody was asked for.
+        await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id = ${pam.entryId}`;
+        await sql`UPDATE gym_held_memberships SET starts_on = starts_on - interval '3 months' WHERE id = ${m.id}`;
+        const [before] = await sql<{ paid_periods: number; status: string }[]>`SELECT paid_periods, status FROM gym_held_memberships WHERE id = ${m.id}`;
+        await voidFriendPayment(friend.entryId);
+        const [after] = await sql<{ paid_periods: number; status: string }[]>`SELECT paid_periods, status FROM gym_held_memberships WHERE id = ${m.id}`;
+        expect(after).toEqual(before);
       },
       TIMEOUT_MS,
     );

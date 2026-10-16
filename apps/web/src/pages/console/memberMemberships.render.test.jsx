@@ -623,18 +623,33 @@ describe('adding a membership', () => {
     expect(orgService.giveHeldMembership.mock.calls[0][2].discountId).toBeUndefined();
   });
 
-  it("a member's gift off products waits on their page for Sell, and Add membership does not fill it in (20e-ii-b-ii-b)", async () => {
-    const memberGift = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', on: 'products', words: '£10.00 off', friendName: 'Tara Shah' };
-    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift }));
+  it("a member's gift off products waits on their page for Sell, beside one off a membership, and Add membership fills in only that one (20e-ii-b-ii-b)", async () => {
+    const atSell = { id: '99999999-9999-4999-8999-999999999999', kind: 'amount', percentBp: null, amountMinor: 1000, currency: 'GBP', on: 'products', words: '£10.00 off', friendName: 'Tara Shah' };
+    const offMembership = { ...atSell, id: '88888888-8888-4888-8888-888888888888', on: 'membership', amountMinor: 500, words: '£5.00 off', friendName: 'Leo Grant' };
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGiftAtSell: atSell }));
     render(draw(ADA, 'Ada Lovelace'));
-    const box = await boxSoon();
-    expect((await box.findByTestId('member-gift-waiting')).textContent).toBe(
+    let box = await boxSoon();
+    expect((await box.findAllByTestId('member-gift-waiting')).map((x) => x.textContent)).toEqual([
       'Refer a friend gift, £10.00 off products, for inviting Tara Shah. It is filled in when you sell to them at Sell.',
-    );
+    ]);
     fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
-    const form = within(screen.getByTestId('held-add'));
+    let form = within(screen.getByTestId('held-add'));
     fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
     expect(form.queryByTestId('member-gift')).toBeNull();
+    cleanup();
+
+    // Both waiting (the offer changed between two friends): both said, round one L3.
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { memberGift: offMembership, memberGiftAtSell: atSell }));
+    render(draw(ADA, 'Ada Lovelace'));
+    box = await boxSoon();
+    expect((await box.findAllByTestId('member-gift-waiting')).map((x) => x.textContent)).toEqual([
+      'Refer a friend gift, £5.00 off a membership, for inviting Leo Grant. It comes off their next bill by itself, or is filled in when you add a membership.',
+      'Refer a friend gift, £10.00 off products, for inviting Tara Shah. It is filled in when you sell to them at Sell.',
+    ]);
+    fireEvent.click(await box.findByRole('button', { name: 'Add membership' }));
+    form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    expect(within(form.getByTestId('member-gift')).getByText('£5.00 off. Refer a friend: for inviting Leo Grant, who joined.')).toBeTruthy();
   });
 
   it("Refer a friend's free days are said under the membership they moved, with whom they were for (20e-ii-b-ii-b)", async () => {
