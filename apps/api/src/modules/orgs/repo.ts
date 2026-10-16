@@ -594,9 +594,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            EXISTS (
              SELECT 1 FROM subscriptions fs
              WHERE fs.owner_type = 'gym' AND fs.owner_id = g.id AND fs.trial_check = 'ended'
-               -- Only while it is the gym's last plan: a second-trial code may have followed (2e-i).
+               -- Until a free trial a second-trial code started has followed it (2e-i).
                AND NOT EXISTS (
-                 SELECT 1 FROM subscriptions ls
+                 SELECT 1 FROM subscriptions ls JOIN second_trial_codes c ON c.subscription_id = ls.id
                  WHERE ls.owner_type = 'gym' AND ls.owner_id = g.id AND ls.created_at > fs.created_at
                )
            ) AND NOT EXISTS (
@@ -2060,9 +2060,12 @@ export async function startGymTrial(
       used[0] === undefined ? null : "trial_already_used";
     // One device, one trial (Stage 3 item 2c): a browser that started a free trial starts no
     // other, under any account. Locked on the mark too, so two gyms pressed at once in one
-    // browser do not both read "never had one"; the person's lock is always taken first.
-    if (refused === null && input.deviceHash !== null) {
+    // browser do not both read "never had one"; the person's lock is always taken first. Taken
+    // for a code's trial as well, which is marked with this browser too.
+    if (input.deviceHash !== null) {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial-device:${input.deviceHash}`}))`;
+    }
+    if (refused === null && input.deviceHash !== null) {
       const onDevice = await tx<{ one: number }[]>`
         SELECT 1 AS one FROM subscriptions
         WHERE trial_device_hash = ${input.deviceHash} AND owner_type = 'gym'

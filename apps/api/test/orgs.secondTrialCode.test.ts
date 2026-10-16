@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { normaliseSecondTrialCode } from "@app/shared";
+import { normaliseSecondTrialCode, trialPersonKey } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { sha256Hex } from "../src/modules/auth/tokens.js";
@@ -299,11 +299,26 @@ d("the second-trial code (real Postgres)", () => {
     expect((await codeRow(code))?.used_at).toBeNull();
   });
 
-  it("the code is kept only as its hash, and the plans read carries where to write to us", async () => {
+  it("an owner whose address was never confirmed is asked to confirm it, and the code stays unspent", async () => {
     const { owner, second } = await ownerOfTwo();
+    await sql`DELETE FROM one_time_tokens WHERE user_id = ${owner.userId} AND purpose = 'verify_email'`;
     const code = await kdMakesCode(owner.email);
-    const raw = await sql`SELECT 1 FROM second_trial_codes WHERE code_hash = ${code} OR person_hash = ${owner.email}`;
-    expect(raw.length).toBe(0);
+    const res = await startTrial(owner, second, code);
+    expect(res.statusCode).toBe(409);
+    expect(body(res).error).toBe("email_not_confirmed");
+    expect(await trialsOf(second)).toEqual([]);
+    expect((await codeRow(code))?.used_at).toBeNull();
+  });
+
+  it("the code is kept only as hashes of the code and of the person, and the plans read carries where to write to us", async () => {
+    const { owner, second } = await ownerOfTwo();
+    const code = await kdMakesCode(`  ${owner.email.toUpperCase()} `);
+    const rows = await sql<{ person_hash: string; whole: string }[]>`
+      SELECT person_hash, c::text AS whole FROM second_trial_codes c WHERE code_hash = ${sha256Hex(code)}`;
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.person_hash).toBe(sha256Hex(trialPersonKey(owner.email)));
+    expect(rows[0]?.whole.toUpperCase()).not.toContain(code);
+    expect(rows[0]?.whole.toLowerCase()).not.toContain(owner.email.toLowerCase());
     const plans = await send("GET", `/v1/orgs/${second}/plans`, owner.cookies);
     expect(plans.statusCode).toBe(200);
     expect((JSON.parse(plans.body) as { supportEmail: string | null }).supportEmail).toBe(SUPPORT);

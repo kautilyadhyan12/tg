@@ -707,6 +707,28 @@ describe('the forced subscribe prompt', () => {
     expect(await screen.findByText("That code isn't valid. Check it and try again, or ask us for a new one.")).toBeTruthy();
     expect(screen.getByTestId('plan-modal')).toBeTruthy();
     expect(screen.getByText('$35 a month')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign in with an email code' })).toBeNull();
+  });
+
+  it('offers the email code sign-in under the code box when the owner must confirm their address first', async () => {
+    orgService.getMine.mockResolvedValue(mineIs(spent));
+    orgService.startTrial.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          error: 'email_not_confirmed',
+          message: 'Confirm your email address to start the free trial. Sign in with a code sent to your email to confirm it.',
+        },
+      },
+    });
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    fireEvent.change(screen.getByLabelText('Have a free trial code from us?'), { target: { value: 'ABCDE-FGHJK' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Use code' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with an email code' }));
+    await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
   it('promises no payment it cannot take', async () => {

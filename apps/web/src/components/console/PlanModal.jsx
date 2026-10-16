@@ -323,6 +323,8 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
       applyStartedTrial(gymId, res.data?.subscription ?? null);
       refreshConsoleOrgsAfterChange();
     } catch (err) {
+      // An owner whose address was never confirmed confirms it by the code sign-in first.
+      if (errorCode(err) === 'email_not_confirmed') setNeedsCode(true);
       setCodeError(errorText(err, "We couldn't check that code. Please try again."));
     } finally {
       setUsingCode(false);
@@ -588,6 +590,17 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                 <p className="text-sm" style={{ color: '#ef4444' }}>
                   {codeError}
                 </p>
+              ) : null}
+              {needsCode ? (
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  disabled={signingOut}
+                  className="w-full rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+                >
+                  {signingOut ? 'Signing out…' : 'Sign in with an email code'}
+                </button>
               ) : null}
             </form>
           </div>

@@ -699,6 +699,13 @@ d("the trial belongs to the gym (real Postgres)", () => {
       expect(await joinsThroughDoor(gym, owner, old)).toBe(false);
       expect(await trialOf(gym)).toMatchObject({ status: "expired", trial_check: "ended" });
 
+      // A later plan that never took a payment (a Razorpay window left unpaid) keeps the reason.
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, ended_at)
+        SELECT 'gym', ${gym}, plan_id, 'canceled', 'razorpay', now()
+        FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym} LIMIT 1`;
+      expect((await onScreen(owner, gym))?.trialEndedFirstPeople).toBe(true);
+
       // Kd has looked, and sends the owner a code.
       const code = makeSecondTrialCode();
       codesMade.push(sha256Hex(code));

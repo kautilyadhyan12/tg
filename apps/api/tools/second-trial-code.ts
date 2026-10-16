@@ -1,7 +1,7 @@
 // A second free trial for a real owner of two gyms (ROADMAP Stage 3 item 2e-i; RULINGS
 // 2026-09-08, layer 4). Kd runs it with the owner's email address and emails them the code it
 // prints. The code works once, only for that person (any spelling of the address), for 14
-// days; they type it in the plan box under "Have a code from us?".
+// days; they type it in the plan box under "Have a free trial code from us?".
 //
 //   corepack pnpm --filter api exec tsx tools/second-trial-code.ts owner@example.com
 //
@@ -36,7 +36,7 @@ try {
   console.log(
     saved.hasAccount
       ? "They have an account with this address."
-      : "Nobody has signed in with this address yet. The code works once they sign in with it.",
+      : "Nobody has a confirmed account with this address yet. The code works once they sign in with an email code.",
   );
 } finally {
   await sql.end();
