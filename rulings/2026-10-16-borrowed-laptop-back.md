@@ -1,0 +1,8 @@
+# Rulings · 2026-10-16 · the borrowed laptop goes back (Folder C, records only)
+
+## How work is done
+
+- 2026-10-16 · **The borrowed laptop goes back today, for good, and what is left of its three folders moves to web folders 1 and 2 on Kd's own laptop.** Kd: *"i have to give this laptop now and will not be getting it back, i need to bring things to my laptop for web1 and web2 folders … just need to make sure it should not clash"*.
+- 2026-10-16 · **Web folder 1 takes the money line, web folder 2 the free-trial rules and then 4b.** Asked which folder takes which, Kd chose the recommendation, *"Money to 1, trial+4b to 2"*: web folder 1, after its own 5e-ii, 18n (built) → 5f → the rest of the money line → the money passes → Stage 4 item 15 → R4, R7; web folder 2, after its own 20g, 2d (built) → 2c → 2e → 4b-ii → 4b-iii → R5, R9, R6. Reason given: web folder 1 already planned the money line, and 2c, 2e and 4b-ii all change the free trial, so one folder does them all. Written into ROADMAP Stage 2's header by this pull request.
+- 2026-10-16 · **The terminal's own, his to overrule:** each feature's two extra passes are placed where CLAUDE.md §6 puts them (after 2e, after 4b-iii) · the jobs that need one of Kd's accounts (18d, 18k, 18l; 19b-iii; Stage 4 items 1 and 4) go with the line they came from · CLAUDE.md §8 now says the web is built in web folders 1 and 2, not "a fifth folder".
+- 2026-10-16 · **The laptop is cleaned once the pendrive copy is checked.** Kd: *"Yes, clean it"*: GitHub and Claude signed out, the folders and the local database deleted, the five programs installed for it removed (Git and VS Code were his cousin's and stay).
