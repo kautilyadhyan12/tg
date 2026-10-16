@@ -62,7 +62,7 @@ describe('the box words', () => {
   ])('question %#', (p, said) => expect(deleteQuestion(p, words)).toBe(said));
 
   it('says why nothing can be deleted, who is kept, and what happened', () => {
-    expect(deleteNobodyLine(preview({ count: 2000, tooMany: true }), words)).toBe('You can delete up to 1,000 past members at a time. Tick fewer, then delete.');
+    expect(deleteNobodyLine(preview({ count: 2000, tooMany: true }), words)).toBe('You can delete up to 200 past members at a time. Tick fewer, then delete.');
     expect(deleteNobodyLine(preview(), words)).toBeNull();
     expect(deleteKeptLine(preview({ onList: 0 }), words)).toBeNull();
     expect(deleteKeptLine(preview({ onList: 4 }), { person: 'student', people: 'students' })).toBe("4 students you ticked are on your list, so they aren't deleted. Remove them first.");

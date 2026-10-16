@@ -8,6 +8,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import {
+  MEMBER_LIST_DELETE_MAX,
   memberListDeletedResponseSchema,
   memberListDeletePreviewResponseSchema,
   memberListEntryWrittenSchema,
@@ -228,6 +229,30 @@ d("member list: Delete permanently on the past members selected (real Postgres)"
       const twice = await press(gym, owner, ticked(one, two), body.preview.digest);
       expect(twice.statusCode).toBe(409);
       expect(await namesIn(gym)).toEqual(["Farah Past"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "more past members than one press may delete: the box says so, and the press deletes nobody",
+    async () => {
+      const owner = await makeUser("many-owner");
+      const gym = await makeGym(owner, "Delete Many Gym");
+      await sql`
+        INSERT INTO gym_member_list_entries (gym_id, full_name, email, identity_key, source, former_at)
+        SELECT ${gym}, 'Many ' || i, 'many' || i || '@members.example', encode(sha256(('dsel-many' || i)::bytea), 'hex'), 'upload', now()
+        FROM generate_series(1, ${MEMBER_LIST_DELETE_MAX + 1}) AS i`;
+      await sql`INSERT INTO gym_member_lists (gym_id, version) VALUES (${gym}, 1) ON CONFLICT (gym_id) DO NOTHING`;
+      const filter = { records: "former" as const };
+      const chose = await post(`${listUrl(gym)}/selection`, { filter }, owner.cookies);
+      const got = memberListSelectedAllSchema.parse((JSON.parse(chose.body) as { selection: unknown }).selection);
+      const selection: MemberListSelection = { kind: "all", filter, count: got.count, digest: got.digest };
+      const preview = await box(gym, owner, selection);
+      expect(preview).toMatchObject({ count: MEMBER_LIST_DELETE_MAX + 1, tooMany: true });
+      const res = await press(gym, owner, selection, preview.digest);
+      expect(res.statusCode, res.body).toBe(400);
+      expect((JSON.parse(res.body) as { error: string }).error).toBe("too_many_to_delete");
+      expect(await namesIn(gym)).toHaveLength(MEMBER_LIST_DELETE_MAX + 1);
     },
     TEST_TIMEOUT_MS,
   );

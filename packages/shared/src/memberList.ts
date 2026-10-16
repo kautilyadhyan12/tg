@@ -2117,7 +2117,7 @@ export type MemberListRemoveSelectedRequest = z.infer<typeof memberListRemoveSel
 // ── Delete permanently, for the past members selected (5e-ii; Kd's click-through) ──
 
 /** How many past members one press deletes permanently, at most. */
-export const MEMBER_LIST_DELETE_MAX = 1000;
+export const MEMBER_LIST_DELETE_MAX = 200;
 /** How many of their names the box shows. */
 export const MEMBER_LIST_DELETE_NAMES_SHOWN = 200;
 

@@ -1096,6 +1096,11 @@ export default function MemberListPanel({
           onSelectionChanged={removeMoved}
           onRemoved={removedSelected}
           onClose={() => setRemoveFor(null)}
+          onSeePast={() => {
+            setRemoveFor(null);
+            setTyped('');
+            change({ ...EMPTY_FILTERS, records: 'former' });
+          }}
         />
       ) : null}
 
