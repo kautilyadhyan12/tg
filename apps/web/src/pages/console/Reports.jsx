@@ -723,13 +723,14 @@ export default function Reports() {
           <MembersReport report={mine.report} org={org} orgSlug={orgSlug} />
           <AttendanceReport org={org} orgSlug={orgSlug} period={period} />
           <MoneyReport org={org} orgSlug={orgSlug} period={period} />
-          {canManageStaff(viewerPrivileges(org)) ? <StaffActivityLine orgSlug={orgSlug} /> : null}
         </>
       ) : mine.error !== null ? (
         <ConsoleFailed message={mine.error} onRetry={load} newLook />
       ) : (
         <ConsoleLoading label="Loading your reports…" newLook />
       )}
+      {/* The owner's way to Staff activity, whether or not the figures could be read. */}
+      {canManageStaff(viewerPrivileges(org)) ? <StaffActivityLine orgSlug={orgSlug} /> : null}
     </div>
   );
 }

@@ -52,6 +52,11 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'staffact-t-%@example.com'`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_member_notes WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_attendance WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_attendance_removed WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mine})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine})`;
@@ -67,11 +72,11 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
+  const inject = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown, remoteAddress: string = nextIp()) =>
     api().inject({
       method,
       url: path,
-      remoteAddress: nextIp(),
+      remoteAddress,
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
@@ -127,8 +132,8 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
   };
 
   const activityUrl = (gym: Gym, query = "") => `/v1/orgs/${gym.id}/staff-activity${query === "" ? "" : `?${query}`}`;
-  const read = async (gym: Gym, query = "", who: Person = gym.owner): Promise<StaffActivityResponse> => {
-    const res = await inject("GET", activityUrl(gym, query), who.cookies);
+  const read = async (gym: Gym, query = "", who: Person = gym.owner, address?: string): Promise<StaffActivityResponse> => {
+    const res = await inject("GET", activityUrl(gym, query), who.cookies, undefined, address);
     expect(res.statusCode, res.body).toBe(200);
     return staffActivityResponseSchema.parse(JSON.parse(res.body));
   };
@@ -283,11 +288,12 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
     async () => {
       const gym = await makeGym(`Busy Gym ${uniq()}`);
       const total = STAFF_ACTIVITY_PAGE * 2 + 20;
-      // Forty notes share each second, as one bulk action writes them.
+      // Forty notes share each moment, to the microsecond, as one bulk action's now() writes
+      // them; a cursor that lost its microseconds skipped the rest of that moment.
       await sql`
         INSERT INTO audit_log (actor_user_id, gym_id, action, target_type, target_id, meta, at)
         SELECT ${gym.owner.userId}, ${gym.id}, 'org.post_added', 'post', gen_random_uuid()::text, '{}'::jsonb,
-               '2026-05-01T10:00:00Z'::timestamptz + (n / 40) * interval '1 second'
+               '2026-05-01T10:00:00.123456Z'::timestamptz + (n / 40) * interval '1 second'
         FROM generate_series(1, ${total}) AS n`;
       const seen: string[] = [];
       let after: string | null = null;
@@ -309,10 +315,108 @@ d("Staff activity: who may read it, what it says and what it leaves out (real Po
   );
 
   it(
-    "a query it cannot read is refused with nothing read: a worker that is no id, half a date range, a range backwards, a stray field, a forged cursor",
+    "a visit added and then removed through the real routes names the person still on the list on both lines",
+    async () => {
+      const gym = await makeGym(`Visit Gym ${uniq()}`);
+      const desk = await onStaff(gym, "Dev Desk", "manager");
+      const entryId = await addPerson(gym, "Amit Rao");
+      const yesterday = (await sql<{ d: string }[]>`SELECT ((now() AT TIME ZONE 'Asia/Kolkata')::date - 1)::text AS d`)[0]?.d ?? "";
+      const added = await inject("POST", `/v1/orgs/${gym.id}/attendance/visits`, desk.cookies, { pick: { entryId }, day: yesterday });
+      expect(added.statusCode, added.body).toBe(200);
+      const visitId = (await sql<{ id: string }[]>`SELECT id FROM gym_attendance WHERE gym_id = ${gym.id} AND entry_id = ${entryId}`)[0]?.id ?? "";
+      const removed = await inject("DELETE", `/v1/orgs/${gym.id}/attendance/visits/${visitId}`, desk.cookies);
+      expect(removed.statusCode, removed.body).toBe(200);
+      const lines = (await read(gym, `worker=${desk.userId}`)).lines.map((l) => l.line);
+      expect(lines[0]).toMatch(/^Removed Amit Rao's visit on /);
+      expect(lines[1]).toMatch(/^Added a visit for Amit Rao on /);
+    },
+    T,
+  );
+
+  it(
+    "a class booking marked through the real route keeps its person's name after the booking goes with its class",
+    async () => {
+      const gym = await makeGym(`Class Gym ${uniq()}`);
+      const entryId = await addPerson(gym, "Meena Iyer");
+      const account = (await sql<{ id: string }[]>`INSERT INTO users (email, display_name) VALUES (${`staffact-t-m-${uniq()}@example.com`}, 'Meena I') RETURNING id`)[0]?.id ?? "";
+      await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gym.id}, ${account}, ${entryId})`;
+      const type =
+        (await sql<{ id: string }[]>`
+        INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym.id}, 'Spin', 45, 20, 'blue', false) RETURNING id`)[0]?.id ?? "";
+      const session =
+        (await sql<{ id: string }[]>`
+        INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+        VALUES (${gym.id}, ${type}, ((now() AT TIME ZONE 'Asia/Kolkata')::date - 1), 600, now() - interval '1 day', 45, 20, 'scheduled')
+        RETURNING id`)[0]?.id ?? "";
+      const booking =
+        (await sql<{ id: string }[]>`
+        INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, pack_charged, booked_at)
+        VALUES (${gym.id}, ${session}, ${account}, ${entryId}, gen_random_uuid(), 'booked', false, now() - interval '2 days')
+        RETURNING id`)[0]?.id ?? "";
+      const marked = await inject("POST", `/v1/orgs/${gym.id}/class-sessions/${session}/bookings/${booking}/mark`, gym.owner.cookies, { status: "attended" });
+      expect(marked.statusCode, marked.body).toBeLessThan(300);
+      // The class goes, and its bookings with it (classes/bookingsRepo.ts deleteBookingsOf).
+      await sql`DELETE FROM gym_class_bookings WHERE gym_id = ${gym.id} AND session_id = ${session}`;
+      expect((await read(gym)).lines[0]?.line).toBe("Marked Meena Iyer as attended in a class");
+    },
+    T,
+  );
+
+  it(
+    "a paid mark taken back reads as taken back, never as marked paid",
+    async () => {
+      const gym = await makeGym(`Mark Gym ${uniq()}`);
+      const entryId = await addPerson(gym, "Amit Rao");
+      // As `undoMark` (memberships/billsRepo.ts) writes it.
+      await write(gym, {
+        actor: gym.owner.userId,
+        action: "org.held_membership_paid",
+        targetType: "gym_held_membership",
+        targetId: randomUUID(),
+        meta: { entryId, type: "Gold", on: "2026-10-15", paidBefore: "2", paidAfter: "1" },
+      });
+      expect((await read(gym)).lines[0]?.line).toBe("Took back a paid mark on Amit Rao's Gold membership");
+    },
+    T,
+  );
+
+  it(
+    "two gyms' owners and a manager reading at ONE address each get their own answer",
+    async () => {
+      const address = "203.0.113.77";
+      const north = await makeGym(`North ${uniq()}`);
+      const south = await makeGym(`South ${uniq()}`);
+      const northDesk = await onStaff(north, "Neha North", "manager");
+      await addPerson(north, "Norah North Member", northDesk);
+      await addPerson(south, "Sami South Member");
+      for (let i = 0; i < 3; i++) {
+        expect(JSON.stringify(await read(north, "", north.owner, address))).toContain("Norah North Member");
+        const theirs = JSON.stringify(await read(south, "", south.owner, address));
+        expect(theirs).toContain("Sami South Member");
+        expect(theirs).not.toContain("Norah");
+        const refused = await inject("GET", activityUrl(north), northDesk.cookies, undefined, address);
+        expect(refused.statusCode).toBe(403);
+        expect(refused.body).not.toContain("Norah");
+      }
+    },
+    T,
+  );
+
+  it(
+    "a query it cannot read is refused with nothing read: a worker that is no id, half a date range, a range backwards, a stray field, forged cursors",
     async () => {
       const gym = await makeGym(`Strict Gym ${uniq()}`);
-      for (const query of ["worker=bob", "from=2026-03-01", "to=2026-03-01", "from=2026-03-02&to=2026-03-01", "from=2026-02-30&to=2026-03-01", "colour=red", "after=1%3B%20DROP"]) {
+      const forged = ["2026-01-01T00:00:00.000000Z_9999999999999999999", "2026-01-01T99:99:99.000000Z_1", "2026-13-45T00:00:00.000000Z_1", "2026-02-30T00:00:00.000000Z_1", "2026-01-01T00:00:00Z_1"];
+      for (const query of [
+        "worker=bob",
+        "from=2026-03-01",
+        "to=2026-03-01",
+        "from=2026-03-02&to=2026-03-01",
+        "from=2026-02-30&to=2026-03-01",
+        "colour=red",
+        "after=1%3B%20DROP",
+        ...forged.map((c) => `after=${encodeURIComponent(c)}`),
+      ]) {
         const res = await inject("GET", activityUrl(gym, query), gym.owner.cookies);
         expect(res.statusCode, query).toBe(400);
         expect(res.body).not.toContain("DROP");

@@ -15,7 +15,8 @@ import { WHEN_CHOICES, addDays, emptyWords, groupByDay, noStaffYet, whenRange, w
 export default function StaffActivity({ gymId, timezone, clockFormat, filters, onFilters, onInviteStaff, onBack = null }) {
   // The page read for one who-and-when (`key`); a different key is still loading.
   const [state, setState] = useState({ key: null, error: null, page: null, lines: [] });
-  const [more, setMore] = useState({ busy: false, error: null });
+  // Show more's own state, for the who and when it was pressed under.
+  const [moreState, setMore] = useState({ key: null, busy: false, error: null });
   const [attempt, setAttempt] = useState(0);
   // The gym's own today, for the days the time choices ask for; the server's answer says
   // its own for the headings.
@@ -41,14 +42,15 @@ export default function StaffActivity({ gymId, timezone, clockFormat, filters, o
     };
   }, [gymId, worker, from, to, waiting, key]);
 
+  const more = moreState.key === key ? moreState : { busy: false, error: null };
   const showMore = (after) => {
-    setMore({ busy: true, error: null });
+    setMore({ key, busy: true, error: null });
     staffActivityService.list(gymId, { worker, from, to, after }).then(
       (page) => {
         setState((was) => (was.key !== key ? was : { ...was, page, lines: [...was.lines, ...page.lines] }));
-        setMore({ busy: false, error: null });
+        setMore({ key, busy: false, error: null });
       },
-      (err) => setMore({ busy: false, error: errorText(err, "We couldn't load more. Try again.") }),
+      (err) => setMore({ key, busy: false, error: errorText(err, "We couldn't load more. Try again.") }),
     );
   };
   const loading = !waiting && state.key !== key;

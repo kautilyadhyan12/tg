@@ -59,8 +59,11 @@ function subjectOf(note: repo.NoteRow): { kind: repo.SubjectKind; id: string } |
       return { kind: "schedule", id };
     case "gym_class_session":
       return { kind: "session", id };
-    case "gym_class_booking":
-      return { kind: "booking", id };
+    case "gym_class_booking": {
+      // A booking goes with its class; since 4d its note names the person itself.
+      const userId = note.meta["userId"];
+      return byEntry ?? (typeof userId === "string" ? { kind: "user", id: userId } : { kind: "booking", id });
+    }
     case "gym_pt_appointment":
       return byEntry ?? { kind: "pt", id };
     case "gym_attendance":

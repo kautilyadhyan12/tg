@@ -56,6 +56,8 @@ const STATUS_WORDS: Readonly<Record<string, string>> = { attended: "attended", n
 /** Who it is about, when the note names a person; otherwise a few plain words. */
 const person = (s: Said): string => s.about ?? `a ${s.words.person} no longer on your list`;
 const thing = (s: Said, fallback: string): string => s.about ?? fallback;
+/** "Amit Rao's visit", or "the visit of a member no longer on your list". */
+const whose = (s: Said, noun: string): string => (s.about === null ? `the ${noun} of a ${s.words.person} no longer on your list` : `${s.about}'s ${noun}`);
 const lead = (s: Said): string => (s.about === null ? "a lead since deleted" : `the lead ${s.about}`);
 
 /** A name change and a price change, as gym software says them. */
@@ -95,7 +97,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.staff_removed": (s) => (text(s, "removedWith") === "account_deleted" ? "Left the staff by deleting their account" : `Removed ${person(s)} from the staff`),
   "org.staff_role_changed": (s) => {
     const to = roleOf(s, "toName", "to");
-    return to === null ? `Changed ${person(s)}'s role` : `Changed ${person(s)}'s role to ${to}`;
+    return to === null ? `Changed ${whose(s, "role")}` : `Changed ${whose(s, "role")} to ${to}`;
   },
   "org.staff_privileges_changed": (s) => `Changed what ${person(s)} can do`,
   "org.staff_invited": (s) => `Invited ${thing(s, "somebody")} to the staff${asRole(s, "roleName", "role")}`,
@@ -111,8 +113,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.start_here_shown": () => "Showed Start here again",
 
   // Joining
-  "org.member_joined": (s) => `Accepted ${person(s)}'s request to join`,
-  "org.join_rejected": (s) => `Turned down ${person(s)}'s request to join`,
+  "org.member_joined": (s) => `Accepted ${whose(s, "request to join")}`,
+  "org.join_rejected": (s) => `Turned down ${whose(s, "request to join")}`,
   "org.code_created": (s) => `Made the join code${quoted(s.about)}`,
   "org.code_updated": (s) => `Changed the join code${quoted(s.about)}`,
   "org.code_rotated": (s) => `Replaced the join code${quoted(s.about)} with a new one`,
@@ -134,8 +136,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   // The member list
   "org.member_list_confirmed": (s) => `Uploaded the ${s.words.person} list`,
   "org.member_list_entry_added": (s) => `Added ${person(s)} to the ${s.words.person} list`,
-  "org.member_list_entry_changed": (s) => `Changed ${person(s)}'s details`,
-  "org.member_list_review_checked": (s) => `Checked ${person(s)}'s details`,
+  "org.member_list_entry_changed": (s) => `Changed ${whose(s, "details")}`,
+  "org.member_list_review_checked": (s) => `Checked ${whose(s, "details")}`,
   "org.member_list_entry_restored": (s) => `Put ${person(s)} back on the ${s.words.person} list`,
   "org.member_list_entry_taken_off": (s) => `Took ${person(s)} off the ${s.words.person} list`,
   "org.member_list_entry_deleted": (s) => (s.about === null ? `Deleted a ${s.words.person} from the list` : `Deleted ${s.about} from the ${s.words.person} list`),
@@ -147,7 +149,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.member_list_exported": (s) => `Downloaded the ${s.words.person} list`,
   "org.member_list_invited": (s) => `Invited ${s.words.people} on the list to the app`,
   "org.member_list_entry_invited": (s) => `Invited ${person(s)} to the app`,
-  "org.member_list_invite_sent_again": (s) => `Sent ${person(s)}'s invitation to the app again`,
+  "org.member_list_invite_sent_again": (s) => `Sent ${whose(s, "invitation to the app")} again`,
   "org.member_note_added": (s) => `Added a note to ${person(s)}`,
   "org.member_note_deleted": (s) => `Deleted a note on ${person(s)}`,
   "org.member_tag_added": (s) => `Added a tag to ${person(s)}`,
@@ -169,15 +171,20 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.membership_word_linked": (s) => `Matched “${text(s, "word") ?? "a word"}” on the list to the membership${quoted(text(s, "type"))}`,
   "org.membership_word_unlinked": (s) => `Stopped matching “${text(s, "word") ?? "a word"}” on the list to a membership`,
   "org.held_membership_given": (s) => `Gave ${person(s)} the ${membershipOf(s)}`,
-  "org.held_membership_paid": (s) => `Marked ${person(s)}'s ${membershipOf(s)} as paid`,
-  "org.held_membership_frozen": (s) => `Froze ${person(s)}'s ${membershipOf(s)}`,
-  "org.held_membership_unfrozen": (s) => `Unfroze ${person(s)}'s ${membershipOf(s)}`,
-  "org.held_membership_cancelled": (s) => `Cancelled ${person(s)}'s ${membershipOf(s)}`,
+  // Since 18a-i staff only take a bare paid mark back (`undoMark`); the hourly run moves it on.
+  "org.held_membership_paid": (s) => {
+    const before = count(s, "paidBefore");
+    const after = count(s, "paidAfter");
+    return before !== null && after !== null && after < before ? `Took back a paid mark on ${whose(s, membershipOf(s))}` : `Marked ${whose(s, membershipOf(s))} as paid`;
+  },
+  "org.held_membership_frozen": (s) => `Froze ${whose(s, membershipOf(s))}`,
+  "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
+  "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
   "org.member_payment_recorded": (s) => `Recorded ${pay(s)} from ${person(s)}${methodWords(s)}`,
   "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");
-    return `Cancelled ${person(s)}'s bill${amount === null ? "" : ` of ${amount}`}`;
+    return `Cancelled ${whose(s, "bill")}${amount === null ? "" : ` of ${amount}`}`;
   },
   "org.member_refund_noted": (s) => {
     const amount = money(s, "amountMinor");
@@ -215,11 +222,11 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "billing.checkout_started": () => "Started paying for your plan",
   "billing.cancel_requested": () => "Asked to cancel your plan",
   "billing.cancel_withdrawn": () => "Kept your plan going instead of cancelling it",
-  "billing.size_change_scheduled": () => "Changed the size of your plan",
-  "billing.size_change_started": () => "Changed the size of your plan",
+  "billing.size_change_scheduled": () => "Chose a smaller plan from the next bill",
+  "billing.size_change_started": () => "Started changing the size of your plan",
   "billing.size_change_kept": () => "Kept the size of your plan as it was",
   "billing.size_checkout_started": () => "Started changing the size of your plan",
-  "billing.size_scheduled": () => "Changed the size of your plan",
+  "billing.size_scheduled": () => "Chose a smaller plan from the next bill",
 
   // Classes
   "org.class_type_created": (s) => `Added the class${quoted(text(s, "name"))}`,
@@ -241,13 +248,13 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.class_session_online_changed": (s) => `Changed whether one${quoted(s.about)} class is online`,
   "org.class_booking_marked": (s) => {
     const status = STATUS_WORDS[text(s, "status") ?? ""];
-    return status === undefined ? `Changed ${person(s)}'s class booking` : `Marked ${person(s)} as ${status} in a class`;
+    return status === undefined ? `Changed ${whose(s, "class booking")}` : `Marked ${person(s)} as ${status} in a class`;
   },
-  "org.class_booking_removed": (s) => `Removed ${person(s)}'s class booking`,
+  "org.class_booking_removed": (s) => `Removed ${whose(s, "class booking")}`,
   "org.booking_settings_changed": () => "Changed the booking rules",
 
   // Personal training
-  "org.trainer_hours_saved": (s) => `Changed ${person(s)}'s hours for personal training`,
+  "org.trainer_hours_saved": (s) => `Changed ${whose(s, "hours for personal training")}`,
   "org.trainer_time_off_added": (s) => {
     const from = dayWords(text(s, "from"));
     const to = dayWords(text(s, "to"));
@@ -255,10 +262,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   },
   "org.trainer_time_off_removed": (s) => `Removed time off for ${person(s)}`,
   "org.pt_booked": (s) => `Booked a personal training session for ${person(s)}${onDay(s, "on")}`,
-  "org.pt_cancelled": (s) => `Cancelled ${person(s)}'s personal training session`,
+  "org.pt_cancelled": (s) => `Cancelled ${whose(s, "personal training session")}`,
   "org.pt_marked": (s) => {
     const status = STATUS_WORDS[text(s, "status") ?? ""];
-    return status === undefined ? `Changed ${person(s)}'s personal training session` : `Marked ${person(s)}'s personal training session as ${status}`;
+    return status === undefined ? `Changed ${whose(s, "personal training session")}` : `Marked ${whose(s, "personal training session")} as ${status}`;
   },
 
   // Check-in and visits
@@ -267,9 +274,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.checkin_device_off": (s) => `Switched off the check-in device${quoted(s.about)}`,
   "org.checkin_rules_changed": () => "Changed who can check in",
   "attendance.visit_added": (s) => `Added a visit for ${person(s)}${onDay(s, "day")}`,
-  "attendance.visit_removed": (s) => `Removed ${person(s)}'s visit${onDay(s, "day")}`,
+  "attendance.visit_removed": (s) => `Removed ${whose(s, "visit")}${onDay(s, "day")}`,
   "org.waiver_signed": (s) =>
-    text(s, "signer") === "guardian" ? `Had ${person(s)}'s parent or guardian sign the waiver at the desk` : `Had ${person(s)} sign the waiver at the desk`,
+    text(s, "signer") === "guardian" ? `Had ${whose(s, "parent or guardian")} sign the waiver at the desk` : `Had ${person(s)} sign the waiver at the desk`,
   "org.waiver_saved": () => "Saved the waiver",
   "org.waiver_stopped": () => "Stopped asking for the waiver",
   "org.waiver_in_use_again": () => "Started asking for the waiver again",

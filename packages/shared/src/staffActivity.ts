@@ -10,8 +10,17 @@ export const STAFF_ACTIVITY_PAGE = 50;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const daySchema = z.string().regex(DAY).refine((day) => addDays(day, 0) === day);
 
-/** The next page starts after this line: the moment and the note's own number. */
-const cursorSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z_\d{1,19}$/).max(60);
+/** The next page starts after this line: the moment to the microsecond and the note's own
+ *  number, as the server wrote it. A moment that is no moment, or a number past the
+ *  database's, is refused here rather than by the database. */
+const cursorSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z_\d{1,18}$/)
+  .refine((cursor) => {
+    const at = cursor.slice(0, 19);
+    const ms = Date.parse(`${at}Z`);
+    return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 19) === at;
+  });
 
 export const staffActivityQuerySchema = z
   .object({

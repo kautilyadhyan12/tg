@@ -81,7 +81,7 @@ describe("Staff activity's sentences", () => {
     for (const [action, say] of Object.entries(STAFF_LINES)) {
       const line = say(said());
       expect(line, action).toMatch(/^[A-Z]/);
-      expect(line, action).not.toMatch(/undefined|null|NaN|\$\{|“”|\s{2}|\s$/);
+      expect(line, action).not.toMatch(/undefined|null|NaN|\$\{|“”|\s{2}|\s$|list's/);
     }
   });
 
@@ -111,6 +111,16 @@ describe("Staff activity's sentences", () => {
       ["org.group_message_sent", { meta: { people: "1" } }, "Sent a message to 1 member"],
       ["org.waiver_signed", { about: "Riya", meta: { via: "desk", signer: "guardian" } }, "Had Riya's parent or guardian sign the waiver at the desk"],
       ["org.referrals_changed", { meta: { on: "false", memberGift: "true", friendGift: "true" } }, "Switched off Refer a friend"],
+      // A bare paid mark taken back (`undoMark`), and one moved on.
+      ["org.held_membership_paid", { about: "Amit Rao", meta: { type: "Gold", paidBefore: "2", paidAfter: "1" } }, "Took back a paid mark on Amit Rao's Gold membership"],
+      ["org.held_membership_paid", { about: "Amit Rao", meta: { type: "Gold", paidBefore: "1", paidAfter: "2" } }, "Marked Amit Rao's Gold membership as paid"],
+      // A size change only started, or chosen for the next bill, is not a change made.
+      ["billing.size_change_started", {}, "Started changing the size of your plan"],
+      ["billing.size_change_scheduled", {}, "Chose a smaller plan from the next bill"],
+      ["billing.size_scheduled", {}, "Chose a smaller plan from the next bill"],
+      // Nobody named: no "a member no longer on your list's".
+      ["attendance.visit_removed", { meta: { day: "2026-10-15" } }, "Removed the visit of a member no longer on your list on 15 Oct 2026"],
+      ["org.member_list_entry_changed", {}, "Changed the details of a member no longer on your list"],
       ["org.referrals_changed", { meta: { on: "true", memberGift: "true", friendGift: "false" } }, "Changed Refer a friend"],
     ];
     for (const [action, over, line] of cases) expect(STAFF_LINES[action]?.(said(over)), action).toBe(line);

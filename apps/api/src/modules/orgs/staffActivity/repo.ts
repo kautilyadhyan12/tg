@@ -47,7 +47,11 @@ export async function readPage(sql: Sql, ask: PageAsk): Promise<NoteRow[]> {
       ${ask.worker === null ? sql`` : sql`AND a.actor_user_id = ${ask.worker}`}
       ${ask.from === null ? sql`` : sql`AND a.at >= (${ask.from}::date)::timestamp AT TIME ZONE ${ask.timezone}`}
       ${ask.to === null ? sql`` : sql`AND a.at < ((${ask.to}::date) + 1)::timestamp AT TIME ZONE ${ask.timezone}`}
-      ${ask.after === null ? sql`` : sql`AND (a.at, a.id) < (${ask.after.at}::timestamptz, ${ask.after.id}::bigint)`}
+      ${
+        // Sent as text: the driver would turn a timestamptz parameter into a JS Date and
+        // drop the microseconds, skipping the rest of a bulk action's notes.
+        ask.after === null ? sql`` : sql`AND (a.at, a.id) < (${ask.after.at}::text::timestamptz, ${ask.after.id}::text::bigint)`
+      }
     -- The index's own order (audit_log_gym_at_idx), so a page reads 51 notes, not the gym's all.
     ORDER BY a.at DESC NULLS LAST, a.id DESC
     LIMIT ${ask.limit}`;
@@ -158,7 +162,11 @@ export async function readNames(sql: Sql, gymId: string, ids: ReadonlyMap<Subjec
       JOIN gym_member_list_entries e ON e.id = p.entry_id AND e.gym_id = p.gym_id
       WHERE p.gym_id = ${gymId} AND p.id = ANY(${of("pt")}::uuid[])
     UNION ALL
-    SELECT 'visit:' || v.id, COALESCE(NULLIF(e.full_name, ''), u.display_name) FROM gym_attendance v
+    SELECT 'visit:' || v.id, COALESCE(NULLIF(e.full_name, ''), u.display_name)
+      FROM (SELECT id, gym_id, entry_id, user_id FROM gym_attendance
+            UNION ALL
+            -- A visit staff removed is kept here, with its person (checkin/repo.ts removeVisit).
+            SELECT id, gym_id, entry_id, user_id FROM gym_attendance_removed) v
       LEFT JOIN gym_member_list_entries e ON e.id = v.entry_id AND e.gym_id = v.gym_id
       LEFT JOIN users u ON u.id = v.user_id
       WHERE v.gym_id = ${gymId} AND v.id = ANY(${of("visit")}::uuid[])

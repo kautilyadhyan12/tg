@@ -98,6 +98,19 @@ describe('Staff activity tab', () => {
     expect(await screen.findByText('Set up the gym in the app', { exact: false })).toBeTruthy();
   });
 
+  it('a Show more that failed says so under the list, and a new Who or When starts clean', async () => {
+    svc.list
+      .mockResolvedValueOnce(answer({ lines: [line('2', today, 600, OWNER, 'Hid Start here')], next: 'cursor-1' }))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(answer({ lines: [line('3', today, 610, RAVI, 'Showed Start here again')], next: 'cursor-2' }));
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Show more' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Who'), { target: { value: RAVI.userId } });
+    await screen.findByText('Showed Start here again', { exact: false });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('a failed read says why and tries again', async () => {
     svc.list.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(answer({ lines: [line('1', today, 600, OWNER, 'Hid Start here')] }));
     render(<Harness />);
