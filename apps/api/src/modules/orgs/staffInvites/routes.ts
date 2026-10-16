@@ -25,6 +25,7 @@ import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import type { InviteSettings } from "../invites/settings.js";
 import { orgParamsSchema } from "../schemas.js";
+import type { CoOwnerEmailSender } from "../coOwners/email.js";
 import * as service from "./service.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -50,9 +51,15 @@ function callerOf(req: FastifyRequest): service.Caller {
 
 export function registerStaffInviteRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; now?: () => Date },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; coOwnerEmail: CoOwnerEmailSender; webOrigin: string; now?: () => Date },
 ): void {
-  const inviteDeps: service.StaffInviteDeps = { sql: deps.sql, invites: deps.invites, now: deps.now ?? (() => new Date()) };
+  const now = deps.now ?? (() => new Date());
+  const inviteDeps: service.StaffInviteDeps = {
+    sql: deps.sql,
+    invites: deps.invites,
+    now,
+    coOwners: { sql: deps.sql, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, webOrigin: deps.webOrigin, now, log: app.log },
+  };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   // Every invitation is an email: the gym's own caps (20 a day) are the real limit; this
   // stops a script. Owners of several gyms can share one office address.

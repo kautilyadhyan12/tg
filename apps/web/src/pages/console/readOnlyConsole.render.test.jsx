@@ -36,6 +36,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getNotMe: vi.fn(() => Promise.resolve({ data: { items: [] } })),
       getOverview: vi.fn(),
       getStartHere: vi.fn(),
+      getMyCoOwnerRequest: vi.fn(() => Promise.resolve({ data: { request: null } })),
       getAttendanceDay: vi.fn(),
       getStaff: vi.fn(),
       // Members → Staff reads its invitations (4a-i); the console's front page, the person's own.

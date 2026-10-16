@@ -469,6 +469,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_staff_roles.created_by — who made one of the gym's own staff roles (`0059`), on
   // the same footing.
   "gym_staff_roles",
+  // gym_co_owner_requests.user_id and requested_by — whom the owner asked to be a co-owner
+  // and the answer (`0129`): the gym's record of who holds its keys. The person asked goes
+  // with their account (`ON DELETE cascade`), the owner who asked is set null.
+  "gym_co_owner_requests",
   // gym_member_notes.author_user_id — which member of staff wrote a note on a person's
   // record (`0083`), on gym_leads' footing: the gym's record; `ON DELETE set null`. The
   // note goes with the record it is about.
