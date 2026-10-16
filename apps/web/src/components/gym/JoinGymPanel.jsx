@@ -298,7 +298,7 @@ export default function JoinGymPanel({ initialCode = '', onApplied, dashboardLin
       </div>
 
       {/* The server's own sentence, never reworded here — "That code doesn't
-          match any gym, studio or trainer", "That code has been paused. Ask the
+          match any gym or studio", "That code has been paused. Ask the
           studio for a current one." **The SERVER is where those sentences learn
           the org type** (roadmap 2b): it has the row, and this side has only a
           code that may belong to nobody. Rewriting them here is how the two

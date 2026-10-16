@@ -79,7 +79,7 @@ const drawPublicRoute = () =>
   );
 
 const TRAIN = 'Train';
-const MANAGE = 'Manage my gym, studio or clients';
+const MANAGE = 'Manage my gym or studio';
 const pressDoor = (label) => fireEvent.click(screen.getByText(label));
 
 const typeEmail = (value = 'kd@example.com') =>

@@ -20,7 +20,7 @@ import { useRobotCheck } from './useRobotCheck';
 // goes to the console.
 const DOORS = [
   { value: MEMBER_DOOR, label: 'Train' },
-  { value: GYM_DOOR,    label: 'Manage my gym, studio or clients' },
+  { value: GYM_DOOR,    label: 'Manage my gym or studio' },
 ];
 
 // Google OAuth on the NEW API (v1 §6.1). A full-page navigation to
@@ -300,7 +300,7 @@ export default function Login() {
             </h1>
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.40)' }}>
               {door === GYM_DOOR
-                ? 'Sign in to manage your gym, studio or clients'
+                ? 'Sign in to manage your gym or studio'
                 : 'Sign in or create your account — no password needed'}
             </p>
           </div>

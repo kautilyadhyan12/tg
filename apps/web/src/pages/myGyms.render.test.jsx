@@ -390,7 +390,7 @@ describe('the screen', () => {
   it('tells somebody with no gym where joining happens', async () => {
     api.getMine.mockResolvedValue({ data: { orgs: [], formerOrgs: [] } });
     drawScreen();
-    await waitFor(() => expect(screen.getByText(/haven't joined a gym, studio or trainer yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/haven't joined a gym or studio yet/i)).toBeTruthy());
     expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe('/settings');
     // Join codes are switched off (3c): the way in is an invitation to this address.
     expect(screen.getByText(/invites the email address it has for you, and the invitation shows up in Settings → Gym\./)).toBeTruthy();
@@ -403,7 +403,7 @@ describe('the screen', () => {
     api.getMine.mockRejectedValue(new Error('offline'));
     drawScreen();
     await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy());
-    expect(screen.queryByText(/haven't joined a gym, studio or trainer yet/i)).toBeNull();
+    expect(screen.queryByText(/haven't joined a gym or studio yet/i)).toBeNull();
   });
 
   /** ROADMAP 2b: the member's own screens speak the type of the place they

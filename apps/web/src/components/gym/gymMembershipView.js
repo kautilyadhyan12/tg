@@ -322,9 +322,7 @@ export function hasFreshCheer(orgs, now = Date.now()) {
  *  are headings above a list nobody has joined yet, where every screen said
  *  "gym" before this card and nothing has been learned that contradicts it.
  *
- *  Plural is the noun plus `s`, which is correct for gym, studio, trainer and
- *  clinic — every word `orgWords` can return. A word needing anything else has
- *  to be added here at the same time as it is added there. */
+ *  The plural is `orgWords`' own ("boxes", not "boxs"). */
 export function myOrgsWords(orgs) {
   const list = Array.isArray(orgs) ? orgs : [];
   const words = list.map((org) => orgWords(org?.orgType));
@@ -341,7 +339,7 @@ export function myOrgsWords(orgs) {
   return {
     one: one.itToMembers,
     oneCap: one.itToMembersCap,
-    plural: `${one.itToMembers}s`,
-    pluralCap: `${one.itToMembersCap}s`,
+    plural: one.itToMembersPlural,
+    pluralCap: one.itToMembersPluralCap,
   };
 }

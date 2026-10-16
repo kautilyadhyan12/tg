@@ -1,14 +1,11 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { normaliseIndianMobile } from '@app/shared';
 import Select from '../../components/common/Select';
-import BringMembersInCard from '../../components/console/BringMembersInCard';
-import JoinCodeCard from '../../components/console/JoinCodeCard';
-import PlanModal from '../../components/console/PlanModal';
 import { ConsoleCard, ConsoleFailed } from '../../components/console/ConsoleStates';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
-import { consoleOrgsSnapshot, refreshConsoleOrgs, subscribeConsoleOrgs } from './consoleOrgs';
+import { refreshConsoleOrgs } from './consoleOrgs';
 import { useConsoleSignOut } from './consoleSignOut';
 import { useConsoleOrgs } from './useConsoleOrg';
 import {
@@ -23,12 +20,13 @@ import {
 // Part 3 §4.0's onboarding wizard, reduced to the steps that have a server
 // behind them — and the reduction is stated rather than quietly performed.
 //
-// "Create your organisation" (Kd 2026-09-07): the type is gym, studio or
-// personal trainer, and the words on the screen follow it (`orgWords`). The
+// "Create your organisation": the type is one of the five kinds of business
+// (Kd, 2026-10-16), and the words on the screen follow it (`orgWords`). The
 // file keeps its name; the route is still `/console/new`.
 //
-// BUILT:   step 1 (org type · name · city · country · timezone) and step 4's
-//          code reveal, which is the same transaction server-side.
+// BUILT:   step 1 (org type · name · city · country · timezone). Create opens the
+//          new gym's Overview (Kd, 2026-10-16, ROADMAP 5f): its plan prompt and
+//          "Start here" are what came after.
 // NOT BUILT, each with its own owed line: step 2 (size, seat tier, 7-day
 //          trial), step 3 (logo upload), step 5 (invite your team), and step
 //          4's QR poster PDF. None of them has an endpoint — there is no
@@ -44,38 +42,6 @@ const inputStyle = {
   border: '1px solid rgba(255,255,255,0.10)',
   color: '#fff',
 };
-
-/** WHAT COVERS THE NEW GYM'S CODE UNTIL THE CONSOLE KNOWS WHAT THE GYM IS ON.
- *
- *  It says one true thing and offers nothing, because there is nothing honest to
- *  offer yet: the gym exists, and whether its owner may start a trial is a fact
- *  this screen has asked for and not yet been told. **It claims no outcome** —
- *  no "starting your trial", no "loading your plan" — since a failed read leaves
- *  it here indefinitely and a promise would then be false rather than merely
- *  slow.
- *
- *  Same shape and stacking as the prompt it stands in for, so a person sees one
- *  behaviour: the screen behind is covered, and nothing about the gym is
- *  actionable until the app can say something true about it. */
-function SettingUpCover() {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(10,9,8,0.94)' }}
-      data-testid="gym-setup-cover"
-    >
-      <div
-        className="w-full max-w-md rounded-2xl p-6 flex items-center gap-3"
-        style={{ background: '#121110', border: '1px solid rgba(255,255,255,0.08)' }}
-      >
-        <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'rgba(255,255,255,0.45)' }} />
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          Setting things up…
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function Field({ label, hint, children }) {
   return (
@@ -133,24 +99,6 @@ export default function NewGym() {
   const [error, setError] = useState(null);
   // A throwaway address cannot open a gym (2b): the way on is another address.
   const [throwaway, setThrowaway] = useState(false);
-  const [created, setCreated] = useState(null);
-
-  /** THE BRAND-NEW GYM AS THE SERVER DESCRIBES IT, for the unskippable prompt
-   *  that now covers the code screen.
-   *
-   *  **The create response is deliberately NOT used for this.** It carries the
-   *  org and the join code and nothing else — no `ownerTrialUsed`, no
-   *  privileges — and a prompt that cannot be closed must never be drawn on a
-   *  field that was never sent (the shared schema says so in as many words). So
-   *  it is read from the kept answer `refreshConsoleOrgs()` fetches on the line
-   *  after the gym is made, by id. Before that read lands there is no row and
-   *  the prompt draws nothing, which is the same safe direction. */
-  const snapshot = useSyncExternalStore(subscribeConsoleOrgs, consoleOrgsSnapshot);
-  const createdOrg =
-    created === null || snapshot.status !== 'ready'
-      ? null
-      : (snapshot.orgs ?? []).find((o) => o?.id === created.org.id) ?? null;
-
   // DOES THIS PERSON RUN ANYTHING YET? A new owner from the "Manage" door is
   // sent here by `ConsoleHome` because they run nothing (Kd 2026-09-07), and a
   // Cancel link back to that screen would bounce them straight back here. So
@@ -198,13 +146,10 @@ export default function NewGym() {
       // and "Your gyms" tells somebody who has just made their first gym that
       // they don't run one.
       //
-      // Not awaited: the code reveal is what this person asked for and it should
-      // not wait on a second request. The read is on its way long before they can
-      // read a join code and reach for the button — and if it has not landed, the
-      // gym screen shows its own spinner and then the gym, which is the truth
-      // rather than a denial.
+      // Not awaited: if the read has not landed, the gym's console shows its own
+      // spinner and then the gym, which is the truth rather than a denial.
       refreshConsoleOrgs();
-      setCreated(res.data);
+      navigate(`/console/${res.data.org.slug}`);
     } catch (err) {
       // The server's own sentence, verbatim: "We're not open in that country
       // yet…" is authored for this reader and is more use than anything a
@@ -215,86 +160,6 @@ export default function NewGym() {
       setSubmitting(false);
     }
   };
-
-  // ── Step 4/6: the gym exists, here is how people come in ───────────────
-  if (created !== null) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-5">
-        {/* THE PROMPT COVERS THIS SCREEN, AND KD FOUND THE DEFECT THAT MADE IT
-            NECESSARY — 2026-08-28, at the smoke: *"i cretaed gym but this one
-            shows then i click only after that pop shows this is wrong wtf"*.
-
-            **He is right, and it is his ruling rather than a preference.**
-            :22215 puts the prompt at the moment a gym is CREATED, and this
-            screen is that moment — it was handing out the JOIN CODE, under
-            "Give this code to your members", for a gym on no plan. That is the
-            exact state the ruling exists to remove, and the prompt arriving one
-            click LATER made the wrong thing the first thing a new owner sees.
-
-            **NOTHING IS REMOVED — the code screen stays and is simply behind
-            the prompt**, which is the honest order: start the trial, then hand
-            out the code. It reveals itself the moment the trial starts, because
-            the gym then has a plan and `planPromptFor` stops asking for one.
-
-            IT IS DRAWN HERE RATHER THAN BY THE SHELL because `/console/new` has
-            no gym in its address, so `ConsoleLayout`'s copy resolves no org and
-            correctly draws nothing there. This one is handed the gym that was
-            just created — read from the SHARED STORE by id, never from the
-            create response, because that response carries no `ownerTrialUsed`
-            and a prompt that cannot be closed must never be drawn on a guess.
-
-            **AND UNTIL THAT ROW ARRIVES THE SCREEN IS COVERED ANYWAY — T3 round
-            1, Low-4, which is Kd's own defect in miniature.** `refreshConsoleOrgs()`
-            publishes `loading`, so `createdOrg` is null for the whole round trip
-            and stays null for ever if that read FAILS — and this screen was
-            drawing the join code, with its live Copy button, in exactly that
-            window. Seconds on a slow connection, permanently on a dropped one.
-            **The silence is right for `ownerTrialUsed` and wrong for the COVER:
-            a gym created one second ago demonstrably has no plan**, so nothing
-            has to be known about it to justify hiding a code behind a neutral
-            sentence. */}
-        {createdOrg === null ? <SettingUpCover /> : null}
-        <PlanModal org={createdOrg} onSignOut={signOut} signingOut={signingOut} />
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#fff' }}>
-            {created.org.name} is ready
-          </h1>
-          <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Your {orgWords(created.org.orgType).it} is set up in {created.org.currencyDisplay}.
-          </p>
-        </div>
-
-        {/* No code while join codes are switched off (ROADMAP 3c): "Bring your members
-            in" stands in its place; the owner holds every privilege. With codes on, the
-            create response carries `{ code, label }` only — a code one second old cannot
-            be paused, expired or used up, so those facts are stated, not defaulted. */}
-        {created.joinCode === null ? (
-          <BringMembersInCard orgSlug={created.org.slug} orgType={created.org.orgType} />
-        ) : (
-          <JoinCodeCard
-            orgType={created.org.orgType}
-            code={{
-              code: created.joinCode.code,
-              label: created.joinCode.label,
-              paused: false,
-              expiresAt: null,
-              maxUses: null,
-              joined: 0,
-            }}
-          />
-        )}
-
-        <button
-          type="button"
-          onClick={() => navigate(`/console/${created.org.slug}`)}
-          className="rounded-xl px-4 py-3 text-sm font-semibold"
-          style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908' }}
-        >
-          Go to your console
-        </button>
-      </div>
-    );
-  }
 
   // ── Step 1 ──────────────────────────────────────────────────────────────
   return (

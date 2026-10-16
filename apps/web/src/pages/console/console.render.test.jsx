@@ -191,6 +191,7 @@ const drawNew = () =>
     <MemoryRouter initialEntries={['/console/new']}>
       <Routes>
         <Route path="/console/new" element={<NewGym />} />
+        <Route path="/console/:orgSlug" element={<p>The console of the new gym</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -479,39 +480,36 @@ describe('Create a gym', () => {
     expect(labels).toHaveLength(24);
   });
 
-  it('offers gym, studio and personal trainer, and does not offer clinic', () => {
+  it('offers the five kinds of business, and neither a clinic nor a personal trainer', () => {
     drawNew();
-    expect(screen.getByText('Gym')).toBeTruthy();
-    expect(screen.getByText('Studio')).toBeTruthy();
-    expect(screen.getByText('Personal trainer')).toBeTruthy();
+    for (const label of ['Gym', 'Boutique studio', 'CrossFit box', 'Yoga studio', 'Pilates studio']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByText('Personal trainer')).toBeNull();
     expect(screen.queryByText('Clinic')).toBeNull();
   });
 
-  it("uses a trainer's words once Personal trainer is picked, and sends that type up", async () => {
-    // Kd 2026-09-07: a trainer's CLIENTS join by code like members. The screen
-    // must not ask a trainer for a "gym name" or promise them "members".
+  it("uses a Pilates studio's words once Pilates studio is picked, and sends that type up", async () => {
+    // A Pilates studio's people are clients: the screen must not ask for a "gym
+    // name" or promise "members".
     drawNew();
     expect(screen.getByText(/bring your members in/i)).toBeTruthy();
-    fireEvent.click(screen.getByText('Personal trainer'));
+    fireEvent.click(screen.getByText('Pilates studio'));
     expect(screen.getByText(/bring your clients in/i)).toBeTruthy();
     expect(screen.queryByLabelText('Gym name')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Your business name'), { target: { value: 'Coach Priya' } });
+    fireEvent.change(screen.getByLabelText('Studio name'), { target: { value: 'Core Pilates' } });
     await chooseCountry('India');
     fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
     orgService.createOrg.mockResolvedValue({
       data: {
-        org: { ...ORG, name: 'Coach Priya', orgType: 'personal_trainer', currencyDisplay: 'INR' },
+        org: { ...ORG, name: 'Core Pilates', orgType: 'pilates_studio', currencyDisplay: 'INR' },
         joinCode: { code: 'K7QM2X', label: 'Front Desk' },
       },
     });
     fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
     await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
-    expect(orgService.createOrg.mock.calls[0][0].orgType).toBe('personal_trainer');
-    // The code screen speaks to a trainer too.
-    expect(await screen.findByText('K7QM2X')).toBeTruthy();
-    expect(screen.getByText(/Give this code to your clients/i)).toBeTruthy();
-    expect(screen.queryByText(/your members/i)).toBeNull();
+    expect(orgService.createOrg.mock.calls[0][0].orgType).toBe('pilates_studio');
   });
 
   it('prefills the timezone with the device’s own zone', async () => {
@@ -576,7 +574,9 @@ describe('Create a gym', () => {
     expect(orgService.createOrg.mock.calls[0][0]).toMatchObject({ country: 'IN', billingMobile: '+91 98765-43210' });
   });
 
-  it('shows the gym’s code and its currency once it exists', async () => {
+  /** Kd, 2026-10-16 (ROADMAP 5f): Create opens the new gym's console; its Overview
+   *  holds the plan prompt, the code and Start here that the old "is ready" screen showed. */
+  it('opens the new gym’s console as soon as it is made', async () => {
     orgService.createOrg.mockResolvedValue({
       data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } },
     });
@@ -586,24 +586,9 @@ describe('Create a gym', () => {
     fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
 
-    expect(await screen.findByText('K7QM2X')).toBeTruthy();
-    expect(screen.getByText(/set up in USD/)).toBeTruthy();
-    expect(screen.getByText(/Give this code to your members/i)).toBeTruthy();
-  });
-
-  it('shows "Bring your members in" where the code was, once join codes are switched off (3c)', async () => {
-    orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: null } });
-    drawNew();
-    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
-    await chooseCountry('United States');
-    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
-    fireEvent.click(screen.getByText('Create'));
-
-    const card = await screen.findByTestId('bring-members-in');
-    expect(within(card).getByText('Bring your members in')).toBeTruthy();
-    expect(within(card).getByRole('link', { name: 'Import members' }).getAttribute('href')).toBe('/console/iron-house/members?open=import');
-    expect(screen.queryByTestId('join-code-card')).toBeNull();
-    expect(screen.queryByText(/Give this code/i)).toBeNull();
+    expect(await screen.findByText('The console of the new gym')).toBeTruthy();
+    expect(screen.queryByText(/is ready/)).toBeNull();
+    expect(screen.queryByText('Go to your console')).toBeNull();
   });
 
   it("shows the server's own refusal rather than a rewrite of it", async () => {
@@ -664,12 +649,13 @@ describe('Create a gym', () => {
     expect(orgService.createOrg.mock.calls[0][0].trainsHere).toBe(false);
   });
 
-  it('sends a yes, and asks a personal trainer in their own words', async () => {
+  it('sends a yes, and asks a CrossFit box in its own words', async () => {
     orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
     drawNew();
-    fireEvent.click(screen.getByText('Personal trainer'));
-    const group = screen.getByRole('radiogroup', { name: 'Do you train with the app yourself too?' });
-    expect(within(group).getByRole('radio', { name: /^Yes, I train too/ }).textContent).toContain("one of your clients' places, like any client");
+    fireEvent.click(screen.getByText('CrossFit box'));
+    const group = screen.getByRole('radiogroup', { name: 'Do you train here too?' });
+    expect(within(group).getByRole('radio', { name: /^Yes, I train here too/ }).textContent).toContain("one of your athletes' places, like any athlete");
+    expect(within(group).getByRole('radio', { name: /^No, I only run it/ }).textContent).toContain('add yourself later from Athletes');
     fireEvent.click(screen.getByText('Gym'));
     fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
     await chooseCountry('United States');
@@ -2513,16 +2499,14 @@ describe('a gym you have just made', () => {
     await chooseCountry('United States');
     fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
-    expect(await screen.findByText('K7QM2X')).toBeTruthy();
   };
 
-  it('opens when its owner presses "Go to your console", instead of saying it is not theirs', async () => {
+  it('opens straight after Create, instead of saying it is not theirs', async () => {
     orgService.getMine.mockResolvedValueOnce({ data: { orgs: [] } });
     drawConsoleFrom('/console');
     expect(await screen.findByText('Create your organisation')).toBeTruthy();
 
     await createIronHouse();
-    fireEvent.click(screen.getByText('Go to your console'));
 
     // Scoped to the hero card: the code also appears in the panel below, and an
     // unscoped query would pass on either.

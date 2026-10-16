@@ -249,7 +249,7 @@ describe('setup\'s "Your gym" screen', () => {
     await heading('Your plan');
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
     await heading('Your gym');
-    expect(screen.getByText('Invited by a gym, studio or trainer?')).toBeTruthy();
+    expect(screen.getByText('Invited by a gym or studio?')).toBeTruthy();
     expect(await screen.findAllByText(/Iron House/)).not.toHaveLength(0);
     noCodeBox();
     expect(screen.queryByRole('button', { name: /ask to join/i })).toBeNull();

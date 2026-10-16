@@ -104,3 +104,13 @@ describe('what is drawn', () => {
     expect(startHereCount(v)).toBe('1 of 1 done');
   });
 });
+
+describe('in each kind of business’s own words', () => {
+  it('names the staff the way a gym, a yoga studio, a Pilates studio and a CrossFit box call them', () => {
+    const staffLine = (orgType) => view(answer(), orgType).rows.find((r) => r.step === 'staff').line;
+    expect(staffLine('gym')).toBe('Front desk, managers and trainers each sign in as themselves, and you choose what each of them can do.');
+    expect(staffLine('yoga_studio')).toBe('Front desk, managers and trainers each sign in as themselves, and you choose what each of them can do.');
+    expect(staffLine('pilates_studio')).toContain('managers and instructors each');
+    expect(staffLine('crossfit_box')).toContain('managers and coaches each');
+  });
+});
