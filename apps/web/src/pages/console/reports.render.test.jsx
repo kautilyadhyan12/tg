@@ -482,3 +482,28 @@ describe('the period', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull();
   });
 });
+
+// ── Staff activity (4d): the owner's line, whatever the figures do ─────────
+describe('the way to Staff activity', () => {
+  const OWNER = { ...ORG, privileges: [...ORG.privileges, 'staff.manage'] };
+  const line = () => screen.queryByRole('link', { name: 'Open staff activity' });
+
+  it('the owner has it, opening the list on Members & staff', async () => {
+    open(OWNER);
+    await screen.findByTestId('tile-active');
+    expect(line()?.getAttribute('href')).toBe('/console/iron-house/members?view=activity');
+  });
+
+  it('the owner keeps it when the figures cannot be read', async () => {
+    svc.members.mockRejectedValue({ response: { status: 500, data: {} } });
+    open(OWNER);
+    await screen.findByText("We couldn't load your reports.");
+    expect(line()).not.toBeNull();
+  });
+
+  it('a manager who reads reports has no line to a page that is the owner\'s', async () => {
+    open({ ...ORG, staffRole: 'manager' });
+    await screen.findByTestId('tile-active');
+    expect(line()).toBeNull();
+  });
+});

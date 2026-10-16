@@ -12,6 +12,7 @@ import MemberListPanel, { Tick } from './MemberListPanel';
 import MemberListPerson from './MemberListPerson';
 import MemberListRemove from './MemberListRemove';
 import MembersStaffTab from './MembersStaffTab';
+import StaffActivity from './StaffActivity';
 import { membersPageName } from './consoleMenu';
 import { MEMBER_REMOVE_TICKED_MAX, orgWords } from '@app/shared';
 import {
@@ -325,18 +326,26 @@ export default function Members() {
   // Removing staff or the owner from the app, and the Staff tab, are the owner's (4a-ii).
   const managesStaff = canManageStaff(viewerPrivileges(org));
   const view = searchParams.get('view');
-  const tab = view === 'staff' && managesStaff ? 'staff' : canSeeList && view !== 'app' ? 'list' : 'app';
+  const tab = (view === 'staff' || view === 'activity') && managesStaff ? view : canSeeList && view !== 'app' ? 'list' : 'app';
+  // Staff activity's who and when (4d), kept in the address with its tab.
+  const ACTIVITY_KEYS = ['worker', 'when', 'day'];
   // Only the tab changes: the rest of the address (the development build's `?look=light`) stays.
-  const showTab = (next) =>
+  const showTab = (next, activity = null) =>
     setSearchParams(
       (was) => {
         const params = new URLSearchParams(was);
-        if (next === 'app' || next === 'staff') params.set('view', next);
+        if (next === 'app' || next === 'staff' || next === 'activity') params.set('view', next);
         else params.delete('view');
+        for (const k of ACTIVITY_KEYS) {
+          const value = next === 'activity' ? (activity === null ? params.get(k) : (activity[k] ?? null)) : null;
+          if (value === null || value === '' || (k === 'when' && value === 'any')) params.delete(k);
+          else params.set(k, value);
+        }
         return params;
       },
       { replace: true },
     );
+  const activityFilters = { worker: searchParams.get('worker'), when: searchParams.get('when') ?? 'any', day: searchParams.get('day') };
   // Part 3 §4.2's read-only console, off the org row this screen already holds.
   const readOnly = consoleIsReadOnly(org);
   // A gym has members, a studio and a trainer have clients.
@@ -659,9 +668,9 @@ export default function Members() {
               key={key}
               type="button"
               role="tab"
-              aria-selected={tab === key}
+              aria-selected={tab === key || (key === 'staff' && tab === 'activity')}
               onClick={() => showTab(key)}
-              className={tab === key ? 'c-utab c-utab-on' : 'c-utab'}
+              className={tab === key || (key === 'staff' && tab === 'activity') ? 'c-utab c-utab-on' : 'c-utab'}
             >
               {label}
             </button>
@@ -709,6 +718,25 @@ export default function Members() {
           inviting={staffInviteFor === gymId}
           onInviting={(open) => setStaffInviteFor(open ? gymId : null)}
           onChanged={reloadRoster}
+          onSeeActivity={(userId) => showTab('activity', { worker: userId })}
+          onOpenActivity={() => showTab('activity', {})}
+        />
+      ) : null}
+
+      {/* Which worker did what and when (4d): the owner's, opened from the Staff tab. */}
+      {tab === 'activity' && gymId !== null ? (
+        <StaffActivity
+          key={`activity-${gymId}`}
+          gymId={gymId}
+          timezone={org.timezone}
+          clockFormat={org.clockFormat}
+          filters={activityFilters}
+          onFilters={(next) => showTab('activity', next)}
+          onBack={() => showTab('staff')}
+          onInviteStaff={() => {
+            setStaffInviteFor(gymId);
+            showTab('staff');
+          }}
         />
       ) : null}
 

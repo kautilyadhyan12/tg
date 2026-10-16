@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withArticle } from '@app/shared';
-import { Check, ChevronRight, UserPlus } from 'lucide-react';
+import { Check, ChevronRight, History, UserPlus } from 'lucide-react';
 import { orgService, errorCode, errorText, isRetryable } from '../../api/orgsApi';
 import { ConfirmInline, ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { PtSessionsEndDialog } from '../../components/console/PtSessionsEnding';
@@ -118,7 +118,7 @@ function InvitedList({ invites, gym, orgType, busyId, readOnly, note, onRetry, o
 
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
-export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged }) {
+export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null }) {
   const [staff, setStaff] = useState({ loading: true, error: null, list: [] });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
@@ -358,6 +358,14 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
         <p className="c-s14 c-t2 m-0" style={{ maxWidth: 640 }}>
           The people who run your {words.it}. {staffSeatsNote()} Those who also train here are on In the app too.
         </p>
+        <div className="flex flex-col gap-2 w-full md:w-auto md:flex-row flex-shrink-0">
+        {/* Which worker did what and when (4d): a list of its own, opened from here. */}
+        {onOpenActivity !== null ? (
+          <button type="button" onClick={onOpenActivity} className="c-btn c-btn-s c-btn-lg w-full md:w-auto flex-shrink-0">
+            <History aria-hidden="true" className="w-4 h-4" />
+            Staff activity
+          </button>
+        ) : null}
         {/* No way to add to a list that could not be read: who is already on it is unknown. */}
         {ready ? (
           <button
@@ -375,6 +383,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
             Invite staff
           </button>
         ) : null}
+        </div>
       </div>
 
       {notice !== null ? (
@@ -464,6 +473,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           onChangeRole={(target) => changeRole(open, target)}
           onSavePrivileges={(privileges) => savePrivileges(open, privileges)}
           onRemove={(options) => remove(open, options)}
+          onSeeActivity={onSeeActivity === null ? null : () => onSeeActivity(open.userId)}
         />
       ) : null}
       {ready && inviting ? (

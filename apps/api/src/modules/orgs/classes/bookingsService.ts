@@ -598,7 +598,7 @@ export async function markBooking(
       action: "org.class_booking_marked",
       targetType: "gym_class_booking",
       targetId: booking.id,
-      meta: { status: req.status, was: booking.status },
+      meta: { status: req.status, was: booking.status, ...booking.who },
     });
     return null;
   });
@@ -655,7 +655,7 @@ export async function removeBooking(
         action: "org.class_booking_removed",
         targetType: "gym_class_booking",
         targetId: booking.id,
-        meta: { was: booking.status, packGivenBack: String(decision.refundPack && booking.heldMembershipId !== null) },
+        meta: { was: booking.status, packGivenBack: String(decision.refundPack && booking.heldMembershipId !== null), ...booking.who },
       });
       if (decision.freesPlace) {
         await handOver(tx, gymId, { ...ctx, counts: { ...ctx.counts, booked: ctx.counts.booked - 1 } }, now);

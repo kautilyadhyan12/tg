@@ -836,11 +836,12 @@ d("check-in meets bookings (real Postgres, two api instances)", { timeout: T }, 
     ]);
     // A marked place is still a place: the class is as full as it was.
     expect((await seen(gym, cat, spin)).booked).toBe(2);
+    // Each note names whose booking it was (Staff activity, 4d): a booking goes with its class.
     expect(await audits(gym, anaBooking)).toEqual([
-      { status: "attended", was: "booked" },
-      { status: "no_show", was: "attended" },
+      { status: "attended", was: "booked", entryId: ana.entryId },
+      { status: "no_show", was: "attended", entryId: ana.entryId },
     ]);
-    expect(await audits(gym, benBooking)).toEqual([{ status: "attended", was: "booked" }]);
+    expect(await audits(gym, benBooking)).toEqual([{ status: "attended", was: "booked", entryId: ben.entryId }]);
 
     // A gym whose plan has lapsed changes nothing.
     await sql`UPDATE subscriptions SET status = 'expired' WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;

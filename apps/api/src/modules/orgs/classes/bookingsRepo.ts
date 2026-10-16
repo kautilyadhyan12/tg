@@ -658,6 +658,15 @@ export async function endBookings(
   }));
 }
 
+/** Whose booking it is, for the note staff's mark or removal leaves: the booking goes with
+ *  its class, so Staff activity (4d) reads the person from the note. */
+export type BookingWho = { entryId: string } | { userId: string } | Record<string, never>;
+function whoOf(r: { entry_id: string | null; user_id: string | null }): BookingWho {
+  if (r.entry_id !== null) return { entryId: r.entry_id };
+  if (r.user_id !== null) return { userId: r.user_id };
+  return {};
+}
+
 /** The bookings of classes that are being removed go with them. Only after `endBookings`
  *  has ended them and their packs have their classes back. */
 export async function deleteBookingsOf(tx: TransactionSql, gymId: string, sessionIds: readonly string[]): Promise<void> {
@@ -840,13 +849,18 @@ export async function bookingsNear(sql: SqlOrTx, gymId: string, userId: string, 
 }
 
 /** One booking of one class of this gym, held to the commit; null where there is none. */
-export async function bookingInClass(tx: TransactionSql, gymId: string, sessionId: string, bookingId: string): Promise<{ id: string; status: ClassBookingStatus } | null> {
-  const rows = await tx<{ id: string; status: string }[]>`
-    SELECT id, status FROM gym_class_bookings
+export async function bookingInClass(
+  tx: TransactionSql,
+  gymId: string,
+  sessionId: string,
+  bookingId: string,
+): Promise<{ id: string; status: ClassBookingStatus; who: BookingWho } | null> {
+  const rows = await tx<{ id: string; status: string; entry_id: string | null; user_id: string | null }[]>`
+    SELECT id, status, entry_id, user_id FROM gym_class_bookings
     WHERE gym_id = ${gymId} AND session_id = ${sessionId} AND id = ${bookingId}
     FOR UPDATE`;
   const r = rows[0];
-  return r === undefined ? null : { id: r.id, status: classBookingStatusSchema.parse(r.status) };
+  return r === undefined ? null : { id: r.id, status: classBookingStatusSchema.parse(r.status), who: whoOf(r) };
 }
 
 /** One booking of one class of this gym as a removal by staff reads it, held to the
@@ -856,15 +870,15 @@ export async function bookingToRemove(
   gymId: string,
   sessionId: string,
   bookingId: string,
-): Promise<{ id: string; status: ClassBookingStatus; heldMembershipId: string | null; packCharged: boolean } | null> {
-  const rows = await tx<{ id: string; status: string; held_membership_id: string | null; pack_charged: boolean }[]>`
-    SELECT id, status, held_membership_id, pack_charged FROM gym_class_bookings
+): Promise<{ id: string; status: ClassBookingStatus; heldMembershipId: string | null; packCharged: boolean; who: BookingWho } | null> {
+  const rows = await tx<{ id: string; status: string; held_membership_id: string | null; pack_charged: boolean; entry_id: string | null; user_id: string | null }[]>`
+    SELECT id, status, held_membership_id, pack_charged, entry_id, user_id FROM gym_class_bookings
     WHERE gym_id = ${gymId} AND session_id = ${sessionId} AND id = ${bookingId}
     FOR UPDATE`;
   const r = rows[0];
   return r === undefined
     ? null
-    : { id: r.id, status: classBookingStatusSchema.parse(r.status), heldMembershipId: r.held_membership_id, packCharged: r.pack_charged };
+    : { id: r.id, status: classBookingStatusSchema.parse(r.status), heldMembershipId: r.held_membership_id, packCharged: r.pack_charged, who: whoOf(r) };
 }
 
 /** These bookings marked came or no-show: only places that are held, so a place given

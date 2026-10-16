@@ -3621,60 +3621,60 @@ d("0001_init on a real database", () => {
 
 });
 
-d("0124 empties the chat coach's leftovers (real Postgres)", () => {
+d("0125 empties the chat coach's leftovers (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 2 });
 
   /** The plan and badge statements, taken out of the file and run on temporary copies
    *  of `plans`, `achievements` and `user_achievements` that still hold the coach's
-   *  limit and the first-chat badge, as a database from before 0124 does. Run twice:
+   *  limit and the first-chat badge, as a database from before 0125 does. Run twice:
    *  the second run changes nothing. Rolled back. */
-  it("0124 takes the coach limit off every plan and keeps the rest, and removes only the first-chat badge", async () => {
-    const migration = await readFile(new URL("../drizzle/0124_coach_tables_dropped.sql", import.meta.url), "utf8");
+  it("0125 takes the coach limit off every plan and keeps the rest, and removes only the first-chat badge", async () => {
+    const migration = await readFile(new URL("../drizzle/0125_coach_tables_dropped.sql", import.meta.url), "utf8");
     const chunks = migration.split("--> statement-breakpoint").map((s) => s.trim());
     const onCopy = (s: string) =>
-      s.replaceAll('"user_achievements"', '"ua_0124"').replaceAll('"achievements"', '"ach_0124"').replaceAll('"plans"', '"plans_0124"');
+      s.replaceAll('"user_achievements"', '"ua_0125"').replaceAll('"achievements"', '"ach_0125"').replaceAll('"plans"', '"plans_0125"');
     const data = chunks.filter((s) => !s.includes("DROP TABLE")).map((s) => onCopy(s.replace(/^(--[^\n]*\n)+/, "")));
-    if (data.length !== 4) throw new Error(`0124 no longer holds exactly four data statements (found ${String(data.length)})`);
+    if (data.length !== 4) throw new Error(`0125 no longer holds exactly four data statements (found ${String(data.length)})`);
     const drops = chunks.filter((s) => s.includes("DROP TABLE"));
     expect(drops.map((s) => /DROP TABLE "(\w+)"/.exec(s)?.[1])).toEqual(["coach_messages", "coach_threads", "kb_chunks"]);
 
     await sql
       .begin(async (tx) => {
-        await tx`CREATE TEMP TABLE plans_0124 ON COMMIT DROP AS SELECT code, entitlements, member_entitlements FROM plans`;
-        await tx`CREATE TEMP TABLE ach_0124 ON COMMIT DROP AS SELECT code FROM achievements`;
-        await tx`CREATE TEMP TABLE ua_0124 (user_id uuid NOT NULL, code text NOT NULL) ON COMMIT DROP`;
+        await tx`CREATE TEMP TABLE plans_0125 ON COMMIT DROP AS SELECT code, entitlements, member_entitlements FROM plans`;
+        await tx`CREATE TEMP TABLE ach_0125 ON COMMIT DROP AS SELECT code FROM achievements`;
+        await tx`CREATE TEMP TABLE ua_0125 (user_id uuid NOT NULL, code text NOT NULL) ON COMMIT DROP`;
         const before = await tx<{ code: string; e: unknown; m: unknown }[]>`
-          SELECT code, entitlements AS e, member_entitlements AS m FROM plans_0124 ORDER BY code`;
+          SELECT code, entitlements AS e, member_entitlements AS m FROM plans_0125 ORDER BY code`;
         expect(before.length).toBeGreaterThan(0);
-        await tx`UPDATE plans_0124 SET entitlements = entitlements || '{"coach":{"window":"month","limit":5}}'`;
-        await tx`UPDATE plans_0124 SET member_entitlements = member_entitlements || '{"coach":{"window":"day","limit":30}}'
+        await tx`UPDATE plans_0125 SET entitlements = entitlements || '{"coach":{"window":"month","limit":5}}'`;
+        await tx`UPDATE plans_0125 SET member_entitlements = member_entitlements || '{"coach":{"window":"day","limit":30}}'
                  WHERE member_entitlements IS NOT NULL`;
-        await tx`INSERT INTO ach_0124 (code) VALUES ('first_chat')`;
+        await tx`INSERT INTO ach_0125 (code) VALUES ('first_chat')`;
         const someone = randomUUID();
         const another = randomUUID();
-        await tx`INSERT INTO ua_0124 (user_id, code) VALUES
+        await tx`INSERT INTO ua_0125 (user_id, code) VALUES
                  (${someone}, 'first_chat'), (${someone}, 'first_workout'), (${another}, 'first_workout')`;
-        const badgesBefore = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM ach_0124`;
+        const badgesBefore = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM ach_0125`;
 
         for (let run = 1; run <= 2; run += 1) {
           for (const statement of data) await tx.unsafe(statement);
           const after = await tx<{ code: string; e: unknown; m: unknown }[]>`
-            SELECT code, entitlements AS e, member_entitlements AS m FROM plans_0124 ORDER BY code`;
+            SELECT code, entitlements AS e, member_entitlements AS m FROM plans_0125 ORDER BY code`;
           expect(after, `run ${String(run)}`).toEqual(before);
-          const badges = await tx<{ code: string }[]>`SELECT code FROM ach_0124 WHERE code = 'first_chat'`;
+          const badges = await tx<{ code: string }[]>`SELECT code FROM ach_0125 WHERE code = 'first_chat'`;
           expect(badges, `run ${String(run)}`).toEqual([]);
-          const left = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM ach_0124`;
+          const left = await tx<{ n: number }[]>`SELECT count(*)::int AS n FROM ach_0125`;
           expect(left[0]?.n, `run ${String(run)}`).toBe((badgesBefore[0]?.n ?? 0) - 1);
-          const earned = await tx<{ user_id: string; code: string }[]>`SELECT user_id, code FROM ua_0124 ORDER BY user_id, code`;
+          const earned = await tx<{ user_id: string; code: string }[]>`SELECT user_id, code FROM ua_0125 ORDER BY user_id, code`;
           expect(earned.map((r) => [r.user_id === someone ? "someone" : "another", r.code]).sort(), `run ${String(run)}`).toEqual([
             ["another", "first_workout"],
             ["someone", "first_workout"],
           ]);
         }
-        throw new Error("ROLLBACK-0124-FIXTURE");
+        throw new Error("ROLLBACK-0125-FIXTURE");
       })
       .catch((err: unknown) => {
-        if (err instanceof Error && err.message === "ROLLBACK-0124-FIXTURE") return;
+        if (err instanceof Error && err.message === "ROLLBACK-0125-FIXTURE") return;
         throw err;
       });
   });
