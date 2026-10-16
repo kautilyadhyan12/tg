@@ -326,7 +326,7 @@ describe('what a gym has not done yet is never a zero', () => {
     open();
     await screen.findByTestId('tile-no-shows');
     expect(tile('no-shows').textContent).toBe(
-      'No-showsNo place has been marked Came or No-show yet (8 booked). The app marks a class when people check in at the gym around it; staff can also mark each person on the Calendar.Open the calendar',
+      'No-showsNo place has been marked Came or No-show yet (8 booked). The app marks a class when people check in around it; staff can also mark each person on the Calendar.Open the calendar',
     );
     expect(within(tile('no-shows')).getByRole('link', { name: 'Open the calendar' }).getAttribute('href')).toBe('/console/iron-house/classes?view=week');
     expect(tableRows('Classes in the last 12 months')[1]).toEqual(['Spin', '2', '8 of 20', '40%', '–']);

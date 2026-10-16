@@ -325,7 +325,7 @@ describe('reading the timetable', () => {
     api.getClasses.mockResolvedValue(withSlot({ coachName: null }));
     drawScreen();
     await screen.findByText('Sunrise Yoga');
-    expect(screen.getByText("12 places · Coach not on this gym's staff")).toBeTruthy();
+    expect(screen.getByText("12 places · No longer on your staff")).toBeTruthy();
   });
 
   // The dates are the server's: the fixture's are not what "Mondays and

@@ -757,13 +757,13 @@ export const PT_MEMBER_WORDS = ptMemberWords("gym");
 
 /** A member of the app with no record on the gym's list: a session hangs on the record. */
 export const PT_NOT_ON_LIST_ERROR = "not_on_list";
-export const PT_NOT_ON_LIST_WORDS = "Your gym hasn't added you to its member list yet. Ask at the front desk.";
+export const PT_NOT_ON_LIST_WORDS = "You haven't been added to the list here yet. Ask at the front desk.";
 
 /** A record that two live app accounts hold (two records joined on the console, say) is
  *  not one person's: neither account reads, books or cancels a session on it in the app. */
 export const PT_RECORD_SHARED_ERROR = "record_shared";
 export const PT_RECORD_SHARED_WORDS =
-  "Two app accounts share your record at this gym, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.";
+  "Two app accounts share your record, so sessions can't be booked or shown in the app. Any session already booked is still on. Ask at the front desk.";
 
 /** Whose record the reader's sessions hang on: their `own`, `none` on the gym's list, or one
  *  `shared` with another app account. */

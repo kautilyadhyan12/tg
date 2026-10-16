@@ -6,7 +6,7 @@ import { readOnlyNote } from '../../pages/console/billingView';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import {
-  ACCESS_CHOICES,
+  accessChoices,
   KIND_CHOICES,
   LIMIT_PERIOD_CHOICES,
   PT_LIMIT_CHOICES,
@@ -294,7 +294,7 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
           {hasTerm ? (
             <Field id={id('access')} label="Classes">
               <select id={id('access')} value={draft.access} onChange={text('access')} className="c-input">
-                {ACCESS_CHOICES.map((a) => (
+                {accessChoices(orgType).map((a) => (
                   <option key={a.value} value={a.value}>
                     {a.label}
                   </option>
@@ -456,7 +456,7 @@ function RowNote({ error, done }) {
 
 /** `form`: this type's own form while it is being changed, or null. `box`: the box of
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
-function TypeRow({ type, taxLine = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
+function TypeRow({ type, orgType, taxLine = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
@@ -469,7 +469,7 @@ function TypeRow({ type, taxLine = null, readOnly, busy, formOpen, ties, form, b
           {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
-          <p className="c-s14 c-t2 m-0">{includesLine(type)}</p>
+          <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
         </div>
         {asking ? null : (
           <div className="flex flex-wrap gap-2 flex-shrink-0">
@@ -802,6 +802,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                   <TypeRow
                     key={type.id}
                     type={type}
+                    orgType={org.orgType}
                     taxLine={typeTaxLine(type, list)}
                     readOnly={readOnly}
                     busy={anyBusy}

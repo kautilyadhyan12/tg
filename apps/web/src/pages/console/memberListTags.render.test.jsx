@@ -152,7 +152,7 @@ describe('the Tags box for the people selected', () => {
       boxOf({ action: 'add', tag: { id: null, name: 'Morning class' }, selected: 1, change: [person(cara)], kept: [] }),
     );
     fireEvent.click(box.getByTestId('tags-new-use'));
-    expect(await box.findByText('“Morning class” is a new tag for your gym.')).toBeTruthy();
+    expect(await box.findByText('“Morning class” is a new tag.')).toBeTruthy();
     expect(orgService.previewTagSelected).toHaveBeenCalledWith(GYM, {
       action: 'add',
       selection: { kind: 'ticked', entryIds: [cara.entryId] },
@@ -343,9 +343,9 @@ describe('a tag as a filter', () => {
     const box = within(await screen.findByTestId('tags-manage'));
     fireEvent.click(box.getByRole('button', { name: 'Rename VIP' }));
     fireEvent.change(box.getByLabelText('New name'), { target: { value: 'knee REHAB' } });
-    orgService.renameGymTag.mockRejectedValue({ response: { status: 409, data: { error: 'tag_name_taken', message: 'Your gym already has a tag with that name. Pick another name.' } } });
+    orgService.renameGymTag.mockRejectedValue({ response: { status: 409, data: { error: 'tag_name_taken', message: 'You already have a tag with that name. Pick another name.' } } });
     fireEvent.click(box.getByRole('button', { name: 'Save name' }));
-    expect((await box.findByRole('alert')).textContent).toContain('Your gym already has a tag with that name.');
+    expect((await box.findByRole('alert')).textContent).toContain('You already have a tag with that name.');
     expect(box.getByLabelText('New name').value).toBe('knee REHAB');
   });
 });

@@ -324,7 +324,7 @@ export function myTeamNote(challenge, gymName) {
   if (mine !== null) {
     if (mine.counted) return null;
     const team = challenge.teamBoard.rows.find((row) => row.id === mine.teamId);
-    return `Your number isn't added to ${team?.name ?? 'your team'}'s, because you aren't shown on this gym's boards.`;
+    return `Your number isn't added to ${team?.name ?? 'your team'}'s, because you aren't shown on the boards.`;
   }
   if (challenge.can.pick) return challenge.me === null ? 'Pick a team to join the challenge.' : 'Pick your team.';
   if (challenge.me !== null && challenge.teams === 'staff') return `You're not in a team yet. The staff at ${gymName} put people in teams.`;

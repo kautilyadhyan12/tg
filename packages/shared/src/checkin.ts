@@ -141,12 +141,12 @@ export type ClaimCheckinDeviceResponse = z.infer<typeof claimCheckinDeviceRespon
 
 /** What the desk and the console are told when check-in says no. */
 export const CHECKIN_WORDS = {
-  device_not_recognised: "This device isn't set up to check people in. Ask the gym's owner for a new link in Settings → Check-in devices.",
+  device_not_recognised: "This device isn't set up to check people in. Ask the owner for a new link in Settings → Check-in devices.",
   link_not_valid: "This link has already been used or has run out. Ask for a new one in Settings → Check-in devices.",
   passes_off: "Passes aren't working right now. Staff can check you in.",
   checkin_unavailable: "Check-in isn't working right now. Please try again in a moment.",
   checkin_paused: "Check-in is unavailable. Please see a member of staff.",
-  too_many_devices: `A gym can have up to ${String(CHECKIN_DEVICES_MAX)} check-in devices.`,
+  too_many_devices: `You can have up to ${String(CHECKIN_DEVICES_MAX)} check-in devices.`,
   device_not_found: "That check-in device isn't here any more.",
   device_name_taken: "Another check-in device already has that name. Give this one a different name.",
   device_name_taken_since: "Another device now has this name. Switch that one off, or add this tablet as a new device.",

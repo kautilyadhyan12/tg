@@ -100,7 +100,7 @@ describe('the words of the Tags box', () => {
     });
     expect(add.heading).toBe('2 people will get the tag “VIP”');
     expect(add.button).toBe('Add tag to 2 people');
-    expect(add.newTag).toBe('“VIP” is a new tag for your gym.');
+    expect(add.newTag).toBe('“VIP” is a new tag.');
     expect(add.keptHeading).toBe("4 won't change");
     expect(add.kept.map((group) => [group.count, group.line])).toEqual([
       [1, 'Already have this tag.'],

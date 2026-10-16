@@ -10,7 +10,7 @@ export default function HideMeSwitch({ hidden, under18, onChange, busy, divided 
         <p className="text-xs" style={{ color: MUTED }}>
           {under18 && hidden
             ? "You're under 18, so you're hidden until you switch this off."
-            : 'Other members won’t see you on any gym’s board. You still see the board.'}
+            : 'Other people won’t see you on any board. You still see the board.'}
         </p>
       </div>
       <button

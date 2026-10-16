@@ -704,7 +704,7 @@ export function registerOrgRoutes(
     if (deps.joinCodes) return;
     await reply.status(410).send({
       error: "join_codes_retired",
-      message: "Join codes have been switched off. A gym now invites people by email.",
+      message: "Join codes have been switched off. People are now invited by email.",
       requestId: req.id,
     });
   };

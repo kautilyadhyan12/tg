@@ -237,7 +237,7 @@ export const memberTagsDoneResponseSchema = z.object({ done: memberTagsDoneSchem
 
 export const MEMBER_TAGS_WORDS = {
   tag_not_found: "That tag isn't there any more.",
-  tag_name_taken: "Your gym already has a tag with that name. Pick another name.",
+  tag_name_taken: "You already have a tag with that name. Pick another name.",
   tag_for_nobody: "Nobody you selected can get that tag any more, so it wasn't made. Check who is selected and try again.",
   tag_people_changed: "The people who have this tag changed while this box was open, so nothing was deleted. Check who it comes off, then press Delete tag again.",
 } as const;

@@ -2884,7 +2884,7 @@ describe("the gym's numbers", () => {
 // The server answers 410 `join_codes_retired` on the code and waiting-room routes.
 // The console then draws "Bring your members in" where the code was, and no queue.
 describe('join codes switched off', () => {
-  const retired = () => apiError(410, 'join_codes_retired', 'Join codes have been switched off. A gym now invites people by email.');
+  const retired = () => apiError(410, 'join_codes_retired', 'Join codes have been switched off. People are now invited by email.');
 
   beforeEach(() => {
     orgService.getCodes.mockRejectedValue(retired());

@@ -105,7 +105,7 @@ export const CLASS_ONLINE_WORDS: Record<ClassOnlineState, string> = {
   waiting: "Online class. You get the link once you have a place.",
   early: `Online class. The link shows here ${String(CLASS_ONLINE_LINK_BEFORE_MINUTES)} minutes before it starts.`,
   open: "Online class. Your link is ready.",
-  no_link: "Online class. Your gym hasn't added the link yet. Ask the front desk.",
+  no_link: "Online class. The link hasn't been added yet. Ask the front desk.",
   closed: "Online class.",
 };
 

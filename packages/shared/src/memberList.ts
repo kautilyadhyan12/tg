@@ -467,13 +467,13 @@ export function memberListReviewWords(problem: MemberListReviewProblem, field: s
     case "number_cut":
       return "The spreadsheet shortened this number and its last digits were lost, so it was left empty. Add the whole number.";
     case "no_country":
-      return "Left out because the gym had no country set. Add the number with its country code.";
+      return "Left out because no country was set in Settings. Add the number with its country code.";
     case "phone_unusual":
       return "This doesn't look like a normal number for its country. Check it before you invite them.";
     case "front_desk":
       return field === "email"
-        ? "The file had the gym's own email here, so it was left out. Add their own email."
-        : "The file had the gym's own phone number here, so it was left out. Add their own number.";
+        ? "The file had the front desk's email here, so it was left out. Add their own email."
+        : "The file had the front desk's phone number here, so it was left out. Add their own number.";
     case "cell_cut":
       return `The file's cell was longer than ${String(MEMBER_LIST_MAX_EXTRA_CHARS)} characters, so the end was cut. Check what is kept.`;
     case "not_a_date":
@@ -504,7 +504,7 @@ export function memberListReviewShortWords(problem: MemberListReviewProblem): st
     case "phone_unusual":
       return "looks unusual";
     case "front_desk":
-      return "the gym's own, left out";
+      return "the front desk's, left out";
     case "cell_cut":
       return "too long, cut";
     case "not_a_date":
@@ -747,7 +747,7 @@ export const memberListExtraDocumentSchema = z
   // document is only ever written from the catalogue; this is the one place that can
   // actually check it, and it did not (round one, Low-3).
   .refine((document) => Object.keys(document).length <= MEMBER_LIST_MAX_EXTRA_FIELDS, {
-    message: `a member record may hold at most ${String(MEMBER_LIST_MAX_EXTRA_FIELDS)} of the gym's own columns`,
+    message: `a member record may hold at most ${String(MEMBER_LIST_MAX_EXTRA_FIELDS)} extra columns`,
   });
 export type MemberListExtraDocument = z.infer<typeof memberListExtraDocumentSchema>;
 
@@ -932,7 +932,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "shortened_by_excel":
       return `${numberWords(warning.rows, "row has", "rows have")} a number the spreadsheet shortened, such as 9.19877E+11, so its last digits are gone. We never guess them back: set that column to Text in your spreadsheet and export again, or type the whole number in the app after you import.`;
     case "phones_need_country":
-      return `${numberWords(warning.rows, "phone number was", "phone numbers were")} left out because this gym has no country set. Set the gym's country, or write the numbers with their country code, and upload again — or add them in the app after you import.`;
+      return `${numberWords(warning.rows, "phone number was", "phone numbers were")} left out because no country is set in Settings. Set your country, or write the numbers with their country code, and upload again — or add them in the app after you import.`;
     case "phones_unusual":
       return `${numberWords(warning.rows, "phone number doesn't", "phone numbers don't")} look like a normal number for their country. They have been kept — check them before you invite anyone. Correct any that are wrong in your file and upload it again, or in the app after you import.`;
     case "shared_emails":
@@ -940,9 +940,9 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "shared_member_numbers":
       return `${numberWords(warning.rows, "person has", "people have")} the same member number as someone else in this file. They are all imported with it. Give each person their own number in your file and import it again, or change one in the app after you import.`;
     case "placeholders":
-      return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
+      return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the front desk's, not a person's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
-      return `This file has more than one sheet. Only the one with the members was read; these were ignored: ${warning.sheets.join(", ")}.`;
+      return `This file has more than one sheet. Only the one with the people on it was read; these were ignored: ${warning.sheets.join(", ")}.`;
     case "cells_cut":
       return `${numberWords(warning.rows, "cell was", "cells were")} longer than ${String(MEMBER_LIST_MAX_EXTRA_CHARS)} characters and were cut to fit. The rest of each one is not kept; if it matters, shorten the cell in your file and upload it again, or write it in the app after you import.`;
     case "dates_not_read":
@@ -950,9 +950,9 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "card_cells_dropped":
       return `${numberWords(warning.rows, "cell held a payment card number, which was removed", "cells held payment card numbers, which were removed")}. We never store card details, wherever they sit in a file; delete them from your own file too.`;
     case "extra_columns_left_out":
-      return `This file has more of the gym's own columns than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
+      return `This file has more columns of your own than we keep. The ${String(warning.columns)} furthest to the right were left out; move the ones you need further left and upload again.`;
     case "gym_fields_full":
-      return `Your gym already keeps ${String(MEMBER_LIST_MAX_EXTRA_FIELDS)} of its own columns, which is as many as we hold, so ${numberWords(warning.columns, "column in this file is", "columns in this file are")} not kept. Everything else in the file is kept as usual.`;
+      return `You already keep ${String(MEMBER_LIST_MAX_EXTRA_FIELDS)} columns of your own, which is as many as we hold, so ${numberWords(warning.columns, "column in this file is", "columns in this file are")} not kept. Everything else in the file is kept as usual.`;
   }
 }
 
@@ -1429,7 +1429,7 @@ export type MemberListUploadGone = z.infer<typeof memberListUploadGoneSchema>;
 
 export const MEMBER_LIST_UPLOAD_GONE_WORDS: Readonly<Record<MemberListUploadGone, string>> = {
   upload_expired: "This preview has expired, so nothing was changed. Upload the file again to see it fresh.",
-  upload_superseded: "A newer file has been uploaded for this gym, so this preview is out of date. Use the newest one.",
+  upload_superseded: "A newer file has been uploaded since, so this preview is out of date. Use the newest one.",
   upload_already_confirmed: "This file has already been applied to the list, so there is nothing left to confirm.",
 };
 

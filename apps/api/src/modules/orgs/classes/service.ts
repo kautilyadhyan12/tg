@@ -276,7 +276,7 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
       throw new OrgsError(
         400,
         "coach_not_staff",
-        "Pick a coach who is on this gym's staff, or leave it blank.",
+        "Pick somebody on your staff, or leave it blank.",
       );
     case "clashes":
       // 409 and not 400: the request is well formed and would have been fine a
@@ -293,7 +293,7 @@ function throwOnFailure(outcome: repo.ClassWriteOutcome): void {
       throw new OrgsError(
         409,
         "too_many_classes",
-        `This gym is at its limit of ${String(outcome.cap)}. Archive one you no longer run first.`,
+        `You're at the limit of ${String(outcome.cap)} classes. Archive one you no longer run first.`,
       );
     case "too_many_slots":
       throw new OrgsError(409, "too_many_classes", slotLimitText(outcome.cap));
@@ -476,7 +476,7 @@ function slotOutcome(
       throw new OrgsError(
         400,
         "coach_not_staff",
-        "Pick a coach who is on this gym's staff, or leave it blank.",
+        "Pick somebody on your staff, or leave it blank.",
       );
     case "clashes":
       throw new OrgsError(
@@ -690,7 +690,7 @@ async function writeDay(
       throw new OrgsError(
         400,
         "coach_not_staff",
-        "Pick a coach who is on this gym's staff, or leave it blank.",
+        "Pick somebody on your staff, or leave it blank.",
       );
     case "started":
       throw new OrgsError(

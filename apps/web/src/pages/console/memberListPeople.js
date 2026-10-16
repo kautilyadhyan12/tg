@@ -693,7 +693,7 @@ export function joinLink(origin, slug) {
 export function inviteShareText({ gymName, link, email = null }) {
   const address = email === null ? `the email address ${gymName} has for you` : `this email address, ${email}`;
   return (
-    `${gymName} has invited you to AI Home Gym, the app its members use.\n\n` +
+    `${gymName} has invited you to AI Home Gym, the app it uses.\n\n` +
     `To join ${gymName} in the app, open this link and sign in with ${address}:\n${link}\n\n` +
     `The invitation works only for someone who signs in with that address.`
   );
@@ -1005,7 +1005,7 @@ export function tagBoxWords(preview) {
     button: k === 0 ? null : add ? `Add tag to ${people(k)}` : `Take tag off ${people(k)}`,
     keptHeading: kept === 0 ? null : `${n(kept)} won't change`,
     kept: preview.kept.map((group) => ({ key: group.reason, count: group.count, people: group.people, line: lines[group.reason] })),
-    newTag: add && preview.tag.id === null ? `“${name}” is a new tag for your gym.` : null,
+    newTag: add && preview.tag.id === null ? `“${name}” is a new tag.` : null,
   };
 }
 

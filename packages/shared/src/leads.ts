@@ -151,9 +151,9 @@ export type UpdateLeadEmailSettingsRequest = z.infer<typeof updateLeadEmailSetti
 
 export const LEAD_EMAIL_SETTINGS_WORDS = {
   needs_postal_address: "Add your postal address first. The law asks for it at the foot of these emails.",
-  gym_name: "An email can't show your gym's name as it is written. Change it to the name in words first.",
+  gym_name: "An email can't show your business name as it is written. Change it to the name in words first.",
   sending_stopped:
-    "Emails from your gym through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
+    "Your emails through AI Home Gym are stopped, because too many bounced or one was marked as spam. Send follow-ups yourself from each lead's panel.",
   paused: "Emails through AI Home Gym are paused just now. Until they start again, your leads' follow-ups wait for you on the Leads page.",
   invites_off: "Emails through AI Home Gym aren't set up yet, so this can't be switched on.",
 } as const;
@@ -465,7 +465,7 @@ export const LEAD_WORDS = {
   needs_contact: "Add an email address or a phone number, so you can reach them.",
   needs_email: "Add their email address first. The tick is their yes to being emailed at it.",
   lead_exists: "This person is already one of your leads.",
-  leads_full: `You have ${LEADS_MAX_PER_GYM.toLocaleString("en")} leads, the most a gym can keep. Delete the ones you no longer need, then add this one.`,
+  leads_full: `You have ${LEADS_MAX_PER_GYM.toLocaleString("en")} leads, the most you can keep. Delete the ones you no longer need, then add this one.`,
   notes_card: "The notes look like they hold a payment card number. We never store card details, so nothing was saved.",
   join_choose: "Somebody on your list has the same email or phone. Choose the record that is this person, or add them as someone new.",
   join_stale: "Your list changed while you were choosing. Choose again.",

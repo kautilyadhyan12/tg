@@ -306,7 +306,7 @@ describe('email problems on the list (20c-v-b)', () => {
     api.getLeads.mockResolvedValue({ data: { ...PAGE.data, sendingStopped: true } });
     draw();
     await screen.findAllByTestId('lead-row');
-    expect(screen.getByTestId('leads-sending-stopped').textContent).toContain('Emails from your gym through AI Home Gym are stopped');
+    expect(screen.getByTestId('leads-sending-stopped').textContent).toContain('Your emails through AI Home Gym are stopped');
   });
 
   it('paused emails to people who asked on the page, and messages the page turned away, are said on Leads', async () => {

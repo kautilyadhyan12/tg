@@ -320,7 +320,7 @@ export async function createOrg(
 function billingMobileAt(country: string, typed: string | null | undefined): string | null {
   const given = typed === undefined || typed === null || typed.trim() === "" ? null : typed;
   if (given === null) return null;
-  if (country !== "IN") throw new OrgsError(400, "mobile_india_only", "A mobile number for payments is asked only of gyms in India.");
+  if (country !== "IN") throw new OrgsError(400, "mobile_india_only", "A mobile number for payments is asked for only in India.");
   const mobile = normaliseIndianMobile(given);
   if (mobile === null) throw new OrgsError(400, "mobile_invalid", "This isn't a mobile number. Type your 10-digit mobile number, for example 98765 43210.");
   return mobile;

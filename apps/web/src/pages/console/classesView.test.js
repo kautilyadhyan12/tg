@@ -205,7 +205,7 @@ describe('the places and the coach', () => {
   // id with no name is a coach who has gone.
   it('names the coach, and says so when the one who was picked is gone', () => {
     expect(coachLine({ coachUserId: 'x', coachName: 'Dana' })).toBe('Dana');
-    expect(coachLine({ coachUserId: 'x', coachName: null })).toBe("Coach not on this gym's staff");
+    expect(coachLine({ coachUserId: 'x', coachName: null })).toBe("No longer on your staff");
     expect(coachLine({ coachUserId: null, coachName: null })).toBe('');
     expect(coachLine(undefined)).toBe('');
   });

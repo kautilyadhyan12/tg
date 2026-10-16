@@ -71,7 +71,7 @@ export function markRow(booking, list) {
 
 /** Under "Booked", once the class has started: how the marks get there by themselves. */
 export const MARK_HELP =
-  'Anyone who checks in at the gym from 1 hour before the class is marked Came. 15 minutes after it ends, everyone else is marked No-show, if the gym was checking people in at that time. You can change any of them here.';
+  'Anyone who checks in from 1 hour before the class is marked Came. 15 minutes after it ends, everyone else is marked No-show, if check-in was in use at that time. You can change any of them here.';
 
 /** The same place, for an online class: nobody checks in at the gym for it. */
 export const MARK_HELP_ONLINE = 'This is an online class, so the app marks nobody by itself. Mark each person Came or No-show here.';

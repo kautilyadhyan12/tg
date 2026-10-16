@@ -18,6 +18,7 @@ import {
   priceToMinor,
   TAXED_PRICE_MINOR_MAX,
   bpToTaxRateText,
+  orgWords,
 } from '@app/shared';
 
 /** Whether this person may change the price list. The tick, never the job title: an
@@ -38,11 +39,24 @@ export const KIND_CHOICES = [
   { value: 'trial', label: 'Trial', hint: 'A short first membership, free or paid.' },
 ];
 
-export const ACCESS_CHOICES = [
-  { value: 'all_classes', label: 'Unlimited classes' },
-  { value: 'limited', label: 'A limit on classes' },
-  { value: 'gym_only', label: 'No classes, gym only' },
-];
+/** What a place without classes is called, in each kind's own words: a gym's floor is "gym",
+ *  a box's and a studio's is "open gym" and "open studio", as they call it themselves. A
+ *  kind with neither (an old personal trainer's or clinic's) is told plainly "no classes". */
+function openPlace(orgType) {
+  const { it } = orgWords(orgType);
+  if (it === 'gym') return { only: 'No classes, gym only', or: 'The gym or any class' };
+  if (it === 'box') return { only: 'No classes, open gym only', or: 'Open gym or any class' };
+  if (it === 'studio') return { only: 'No classes, open studio only', or: 'Open studio or any class' };
+  return { only: 'No classes', or: 'Any class' };
+}
+
+export function accessChoices(orgType) {
+  return [
+    { value: 'all_classes', label: 'Unlimited classes' },
+    { value: 'limited', label: 'A limit on classes' },
+    { value: 'gym_only', label: openPlace(orgType).only },
+  ];
+}
 
 export const LIMIT_PERIOD_CHOICES = [
   { value: 'week', label: 'a week' },
@@ -115,21 +129,21 @@ function hasPtLimit(type) {
 /** What it includes: "Unlimited classes", "8 classes a month · only Yoga", "No classes, gym
  *  only", each with "· Personal training" where the type includes it, or with its limit:
  *  "· 4 personal training sessions a month". */
-export function includesLine(type) {
+export function includesLine(type, orgType) {
   const limit = hasPtLimit(type) ? `${plural(type.ptLimit, 'session', 'sessions')} a ${type.ptPeriod}` : null;
   if (ptOnly(type)) return limit === null ? `${PT_WORDS} only` : `${PT_WORDS} only · ${limit}`;
-  const classes = classesLine(type);
+  const classes = classesLine(type, orgType);
   if (type.includesPt !== true) return classes;
   return limit === null ? `${classes} · ${PT_WORDS}` : `${classes} · ${plural(type.ptLimit, 'personal training session', 'personal training sessions')} a ${type.ptPeriod}`;
 }
 
-function classesLine(type) {
-  if (type.access === 'gym_only') return 'No classes, gym only';
+function classesLine(type, orgType) {
+  if (type.access === 'gym_only') return openPlace(orgType).only;
   const limited = type.access === 'limited';
   const amount = limited
     ? `${plural(type.bookingsLimit, 'class', 'classes')} a ${type.bookingsPeriod}`
     : isDayPass(type)
-      ? 'The gym or any class'
+      ? openPlace(orgType).or
       : type.kind === 'pack'
         ? 'Any class'
         : 'Unlimited classes';

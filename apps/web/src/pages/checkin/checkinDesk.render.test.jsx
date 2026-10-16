@@ -369,7 +369,7 @@ describe('every answer the scan gives', () => {
     checkinService.scan.mockResolvedValue(checkedIn('Arjun Shah', { status: null, payment: null, onList: false }));
     const { container } = mount();
     scan(PASS);
-    expect(await screen.findByText("Not on the gym's list")).toBeTruthy();
+    expect(await screen.findByText("Not on your list")).toBeTruthy();
     expect(container.querySelector('[data-tone="good"]')).not.toBeNull();
   });
 

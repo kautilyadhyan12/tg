@@ -248,7 +248,7 @@ describe('setup\'s "Your gym" screen', () => {
     draw('/onboarding');
     await heading('Your plan');
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    await heading('Your gym');
+    await heading('Your gym or studio');
     expect(screen.getByText('Invited by a gym or studio?')).toBeTruthy();
     expect(await screen.findAllByText(/Iron House/)).not.toHaveLength(0);
     noCodeBox();

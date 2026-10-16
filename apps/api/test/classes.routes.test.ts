@@ -493,7 +493,8 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
         );
         for (const res of [onAClass, onANewRepeat, onThisRepeat]) {
           expect(res.statusCode, `${who} was accepted by ${String(res.raw.req.url)}`).toBe(400);
-          expect(JSON.parse(res.body)).toMatchObject({ error: "coach_not_staff" });
+          // Said the same to a gym, a box and a studio (5f-iii): never "this gym's staff".
+          expect(JSON.parse(res.body)).toMatchObject({ error: "coach_not_staff", message: "Pick somebody on your staff, or leave it blank." });
         }
       }
 
@@ -1604,7 +1605,7 @@ d("the gym's timetable: who may set it, and what it answers (real Postgres)", ()
       expect(refusal.error).toBe("too_many_classes");
       // The sentence NAMES the number, so a gym is told what the limit is rather
       // than only that it hit one.
-      expect(refusal.message).toContain(String(CLASS_TYPES_MAX));
+      expect(refusal.message).toBe(`You're at the limit of ${String(CLASS_TYPES_MAX)} classes. Archive one you no longer run first.`);
       expect((await stateOf(org.org.id)).types).toBe(CLASS_TYPES_MAX);
 
       // ARCHIVING ONE MAKES ROOM — which is what the message tells them to do,

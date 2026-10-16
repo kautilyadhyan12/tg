@@ -286,7 +286,7 @@ export function classTiles(report) {
   } else if (noShows.state === 'nothing_marked') {
     noShowTile = {
       value: null,
-      line: `No place has been marked Came or No-show yet (${count(noShows.unmarked)} booked). The app marks a class when people check in at the gym around it; staff can also mark each person on the Calendar.`,
+      line: `No place has been marked Came or No-show yet (${count(noShows.unmarked)} booked). The app marks a class when people check in around it; staff can also mark each person on the Calendar.`,
       note: null,
       calendar: true,
     };

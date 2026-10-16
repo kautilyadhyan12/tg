@@ -186,7 +186,7 @@ describe('phone numbers left out because the gym has no country', () => {
 
   it('the owner gets Set your country under that note alone, and it asks before leaving the file', async () => {
     const notes = await openAs({ ...GYM, slug: 'iron-house', orgType: 'gym', staffRole: 'owner' });
-    expect(notes.getByText(/left out because this gym has no country set\. Set the gym's country, or write the numbers/)).toBeTruthy();
+    expect(notes.getByText(/left out because no country is set in Settings\. Set your country, or write the numbers/)).toBeTruthy();
     expect(notes.getAllByRole('button')).toHaveLength(1);
     fireEvent.click(notes.getByRole('button', { name: 'Set your country' }));
     expect(notes.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#country');

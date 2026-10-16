@@ -191,7 +191,7 @@ describe('Set up, in a gym that has set no price yet', () => {
     await open([], [name({ people: 4 }), name({ word: 'Silver', people: 2 })]);
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Gold' }));
     // Nothing to choose between: no question, the form at once.
-    expect(screen.queryByText('What is “Gold” at your gym?')).toBeNull();
+    expect(screen.queryByText('What is “Gold” here?')).toBeNull();
     const form = screen.getByRole('form', { name: 'Add “Gold” as a membership type' });
     expect(within(form).getByText('4 people on your member list have “Gold”. Add its price and how it is paid. Next you choose who gets it.')).toBeTruthy();
     expect(within(form).getByLabelText('Name').value).toBe('Gold');
@@ -245,7 +245,7 @@ describe('Set up, in a gym that already has membership types', () => {
   it('asks whether the name is one of them or a new one, with nothing chosen', async () => {
     await open([GOLD, DAY], [name()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Gold' }));
-    const ask = screen.getByRole('group', { name: 'What is “Gold” at your gym?' });
+    const ask = screen.getByRole('group', { name: 'What is “Gold” here?' });
     const existing = within(ask).getByLabelText('One of the memberships above');
     const fresh = within(ask).getByLabelText("A new membership. I'll add its price now.");
     expect(existing.checked || fresh.checked).toBe(false);
@@ -262,7 +262,7 @@ describe('Set up, in a gym that already has membership types', () => {
     fireEvent.click(within(ask).getByRole('button', { name: 'Continue' }));
     await waitFor(() => expect(orgService.previewMembershipLink).toHaveBeenCalledWith(GYM, { word: 'Gold', typeId: GOLD.id }));
     expect(await screen.findByRole('group', { name: BOX_GOLD })).toBeTruthy();
-    expect(screen.queryByRole('group', { name: 'What is “Gold” at your gym?' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'What is “Gold” here?' })).toBeNull();
     expect(orgService.linkMembershipWord).not.toHaveBeenCalled();
   });
 
@@ -270,7 +270,7 @@ describe('Set up, in a gym that already has membership types', () => {
     await open([GOLD], [name()]);
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Gold' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('group', { name: 'What is “Gold” at your gym?' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'What is “Gold” here?' })).toBeNull();
     expect(orgService.previewMembershipLink).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Set up Gold' }));
@@ -278,7 +278,7 @@ describe('Set up, in a gym that already has membership types', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     const form = screen.getByRole('form', { name: 'Add “Gold” as a membership type' });
     expect(within(form).getByLabelText('Name').value).toBe('Gold');
-    expect(screen.queryByRole('group', { name: 'What is “Gold” at your gym?' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'What is “Gold” here?' })).toBeNull();
   });
 
   it('the box that follows is for the type just added, wherever it lands among the others', async () => {

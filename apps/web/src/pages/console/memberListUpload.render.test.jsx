@@ -1328,7 +1328,7 @@ describe('phone numbers left out because the gym has no country', () => {
     const box = await reviewAs(OWNER_GYM, warning);
     expect(box.queryByRole('button', { name: 'Set your country' })).toBeNull();
     fireEvent.click(box.getByRole('button', { name: opens }));
-    expect(box.getByText(/left out because this gym has no country set\. Set the gym's country, or write the numbers/)).toBeTruthy();
+    expect(box.getByText(/left out because no country is set in Settings\. Set your country, or write the numbers/)).toBeTruthy();
     fireEvent.click(box.getByRole('button', { name: 'Set your country' }));
     expect(box.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
     fireEvent.click(box.getByRole('button', { name: 'Stay here' }));

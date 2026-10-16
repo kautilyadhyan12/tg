@@ -272,7 +272,7 @@ describe('Settings → Gym and /invitations', () => {
     draw('/invitations');
     expect(
       await screen.findByText(
-        'No invitation for alice@example.com. Your gym invites the email address it has for you — sign in with that one, or ask the front desk to add this one.',
+        'No invitation for alice@example.com. An invitation goes to the email address on your membership — sign in with that one, or ask the front desk to add this one.',
       ),
     ).toBeTruthy();
   });
