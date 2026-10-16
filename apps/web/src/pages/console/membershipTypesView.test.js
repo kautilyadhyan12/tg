@@ -133,8 +133,8 @@ describe('what each type says on the list', () => {
     ['studio', 'No classes, open studio only', 'Open studio or any class'],
     ['yoga_studio', 'No classes, open studio only', 'Open studio or any class'],
     ['pilates_studio', 'No classes, open studio only', 'Open studio or any class'],
-    ['personal_trainer', 'No classes', 'Any class'],
-    ['clinic', 'No classes', 'Any class'],
+    ['personal_trainer', 'No classes, open gym only', 'Open gym or any class'],
+    ['clinic', 'No classes, open gym only', 'Open gym or any class'],
     ['not_a_kind', 'No classes, gym only', 'The gym or any class'],
   ])('a %s reads its own words for no classes and a day pass', (orgType, only, dayPass) => {
     expect(accessChoices(orgType).map((a) => a.label)).toEqual(['Unlimited classes', 'A limit on classes', only]);

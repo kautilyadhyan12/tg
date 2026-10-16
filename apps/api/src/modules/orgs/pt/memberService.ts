@@ -18,7 +18,7 @@ import {
   PT_HORIZON_DAYS,
   PT_MEMBER_WORDS,
   PT_NOT_ON_LIST_ERROR,
-  PT_NOT_ON_LIST_WORDS,
+  ptNotOnListWords,
   PT_RECORD_SHARED_ERROR,
   PT_RECORD_SHARED_WORDS,
   PT_SESSION_MINUTES_MAX,
@@ -219,7 +219,7 @@ export async function memberBook(
       const me = await repo.memberRecord(tx, gymId, userId);
       if (me === null) return notFound();
       if (me.shared) return new OrgsError(409, PT_RECORD_SHARED_ERROR, PT_RECORD_SHARED_WORDS);
-      if (me.entryId === null) return new OrgsError(409, PT_NOT_ON_LIST_ERROR, PT_NOT_ON_LIST_WORDS);
+      if (me.entryId === null) return new OrgsError(409, PT_NOT_ON_LIST_ERROR, ptNotOnListWords(org.orgType));
       if (req.trainerId === userId) return new OrgsError(409, "not_a_time", PT_MEMBER_WORDS.not_a_time);
       const id = await bookUnderLock(tx, deps.now(), gymId, { ...req, entryId: me.entryId }, { userId, member: true });
       return typeof id === "string" ? { id, entryId: me.entryId } : id;

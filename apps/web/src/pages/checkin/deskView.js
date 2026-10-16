@@ -70,7 +70,7 @@ export function noticeLine(notice) {
     const word = notice.payment.trim();
     parts.push(/payment/i.test(word) ? word : `Payment: ${word}`);
   }
-  if (notice.onList === false) parts.push('Not on your list');
+  if (notice.onList === false) parts.push('Not on the list');
   return parts.length === 0 ? null : parts.join(' · ');
 }
 

@@ -757,7 +757,10 @@ export const PT_MEMBER_WORDS = ptMemberWords("gym");
 
 /** A member of the app with no record on the gym's list: a session hangs on the record. */
 export const PT_NOT_ON_LIST_ERROR = "not_on_list";
-export const PT_NOT_ON_LIST_WORDS = "You haven't been added to the list here yet. Ask at the front desk.";
+export function ptNotOnListWords(orgType: unknown): string {
+  return `You haven't been added to the ${orgWords(orgType).person} list here yet. Ask at the front desk.`;
+}
+export const PT_NOT_ON_LIST_WORDS = ptNotOnListWords("gym");
 
 /** A record that two live app accounts hold (two records joined on the console, say) is
  *  not one person's: neither account reads, books or cancels a session on it in the app. */

@@ -158,7 +158,7 @@ export function coachLine(holder) {
   const name = holder?.coachName;
   if (typeof name === 'string' && name !== '') return name;
   return typeof holder?.coachUserId === 'string' && holder.coachUserId !== ''
-    ? 'No longer on your staff'
+    ? 'Coach no longer on your staff'
     : '';
 }
 

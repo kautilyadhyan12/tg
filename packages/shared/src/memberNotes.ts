@@ -138,7 +138,7 @@ export const MEMBER_NOTES_WORDS = {
   note_not_saved: "We couldn't save that note. Please press Save note again.",
   too_many_notes: `This person already has ${String(MEMBER_NOTES_MAX_PER_PERSON)} notes or more, which is as many as we keep. Delete one you no longer need, then add this one.`,
   too_many_tags_person: `This person already has ${String(MEMBER_TAGS_MAX_PER_PERSON)} tags or more, which is as many as one person can have. Take one off, then add this one.`,
-  too_many_tags_gym: `Your gym already has ${String(MEMBER_TAGS_MAX_PER_GYM)} tags, which is as many as we keep. Pick one of them instead.`,
+  too_many_tags_gym: `You already have ${String(MEMBER_TAGS_MAX_PER_GYM)} tags, which is as many as we keep. Pick one of them instead.`,
 } as const;
 
 /** The line under the Notes box. */

@@ -272,7 +272,7 @@ describe('Settings → Gym and /invitations', () => {
     draw('/invitations');
     expect(
       await screen.findByText(
-        'No invitation for alice@example.com. An invitation goes to the email address on your membership — sign in with that one, or ask the front desk to add this one.',
+        'No invitation for alice@example.com. Invitations go to the email address the front desk has for you — sign in with that one, or ask them to add this one.',
       ),
     ).toBeTruthy();
   });
@@ -283,7 +283,7 @@ describe("the invitation email's link", () => {
     authService.getMe.mockRejectedValue(Object.assign(new Error('unauthorized'), { response: { status: 401 } }));
     rememberDoor(GYM_DOOR);
     draw('/join/iron-house');
-    expect(await screen.findByRole('heading', { name: 'Your gym invited you' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: "You're invited" })).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: /Sign in/ }));
     expect(await screen.findByText('SIGN IN PAGE')).toBeTruthy();
     expect(readDoor()).toBe(MEMBER_DOOR);

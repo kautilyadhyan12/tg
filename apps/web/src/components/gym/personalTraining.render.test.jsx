@@ -214,8 +214,13 @@ describe('a member’s personal training', () => {
     serve(view({ record: 'none', days: DAYS.map((localDate) => ({ localDate, pays: null, why: null, limit: null })) }));
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('group', { name: 'Sam Trainer' });
-    expect(screen.getByText("You haven't been added to the list here yet. Ask at the front desk.")).toBeTruthy();
+    expect(screen.getByText("You haven't been added to the member list here yet. Ask at the front desk.")).toBeTruthy();
     expect(screen.queryAllByRole('button', { name: /^Book/ })).toHaveLength(0);
+    // A Pilates studio's people are clients (5f-iii).
+    cleanup();
+    render(<PersonalTraining gym={{ ...GYM, orgType: 'pilates_studio' }} />);
+    await screen.findByRole('group', { name: 'Sam Trainer' });
+    expect(screen.getByText("You haven't been added to the client list here yet. Ask at the front desk.")).toBeTruthy();
   });
 
   it('two app accounts on one record: told so, no button, and no session of the record is drawn', async () => {

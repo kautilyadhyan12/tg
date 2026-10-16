@@ -40,14 +40,19 @@ export const KIND_CHOICES = [
 ];
 
 /** What a place without classes is called, in each kind's own words: a gym's floor is "gym",
- *  a box's and a studio's is "open gym" and "open studio", as they call it themselves. A
- *  kind with neither (an old personal trainer's or clinic's) is told plainly "no classes". */
+ *  a box's and a studio's is "open gym" and "open studio", as they call it themselves; an old
+ *  personal trainer's or clinic's is "open gym". The tick on Classes uses the same word. */
 function openPlace(orgType) {
   const { it } = orgWords(orgType);
   if (it === 'gym') return { only: 'No classes, gym only', or: 'The gym or any class', open: 'open gym' };
-  if (it === 'box') return { only: 'No classes, open gym only', or: 'Open gym or any class', open: 'open gym' };
   if (it === 'studio') return { only: 'No classes, open studio only', or: 'Open studio or any class', open: 'open studio' };
-  return { only: 'No classes', or: 'Any class', open: 'personal training' };
+  return { only: 'No classes, open gym only', or: 'Open gym or any class', open: 'open gym' };
+}
+
+/** The same place as a class's tick and tag on Classes: "Open gym", "Open studio". */
+export function openSessionName(orgType) {
+  const { open } = openPlace(orgType);
+  return open.charAt(0).toUpperCase() + open.slice(1);
 }
 
 /** The example under a membership's description: "All classes and open studio". */
