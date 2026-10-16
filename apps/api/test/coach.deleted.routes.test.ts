@@ -93,21 +93,11 @@ d("the deleted chat coach (real Postgres)", () => {
     expect(left.map((r) => r.id)).toEqual([theirs]);
   });
 
-  it("the chat tables, the plans' chat limit and the first-chat badge are gone from the database", { timeout: 60_000 }, async () => {
+  // 0123's plan and badge statements are tested on rows that hold them, in db.migration.test.ts.
+  it("the chat tables are gone from the database", { timeout: 60_000 }, async () => {
     const tables = await sql<{ t: string }[]>`
       SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('coach_threads', 'coach_messages', 'kb_chunks')`;
     expect(tables).toEqual([]);
-    const plans = await sql<{ code: string; n: number }[]>`
-      SELECT code, count(*)::int AS n FROM plans WHERE entitlements ? 'coach' OR member_entitlements ? 'coach' GROUP BY code`;
-    expect(plans).toEqual([]);
-    // The plans kept everything else: the free plan's other limits are as seeded.
-    const free = await sql<{ e: Record<string, unknown> }[]>`SELECT entitlements AS e FROM plans WHERE code = 'free'`;
-    expect(free[0]?.e["meal_scan"]).toEqual({ window: "day", limit: 1 });
-    expect(free[0]?.e["route_gen"]).toEqual({ window: "month", limit: 2 });
-    const badge = await sql<{ n: number }[]>`
-      SELECT (SELECT count(*)::int FROM achievements WHERE code = 'first_chat')
-           + (SELECT count(*)::int FROM user_achievements WHERE code = 'first_chat') AS n`;
-    expect(badge[0]?.n).toBe(0);
   });
 
   it("answers 'not found' at every coach address, signed in or not", { timeout: 60_000 }, async () => {

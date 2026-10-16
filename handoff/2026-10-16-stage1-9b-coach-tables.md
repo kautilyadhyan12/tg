@@ -7,3 +7,5 @@
 - **Next in Folder B:** nothing; the borrowed laptop goes back. What is left returns to Kd's own folders (ROADMAP Stage 2's header).
 
 **The ROADMAP line as first written:** 9b. **The coach's old tables emptied** (Kd, 2026-10-15, `rulings/2026-10-15-stage1-9-coach-deleted.md`): a migration drops `coach_threads`, `coach_messages` and `kb_chunks`, and with them their lines in the data download and the account removal, the plans' unused coach limit, and the "first chat" badge nobody can earn. Before launch. **Ordinary.**
+
+- **Round one** (`reviews/9b-2-findings.md`): no Critical or High; two Lows (an unwired `coach_message` XP value; an export comment still naming `coach_threads`) and two weak tests (the plan and badge checks passed on the seed's work, not 0123's): all fixed. 0123's four data statements now run, from the file, on temporary copies of `plans`, `achievements` and `user_achievements` holding the coach limit and the badge, twice, rolled back; broken on purpose two ways (the plan statement removing nothing; the badge delete taking `first_workout` too), red both times. Ordinary with no High: no re-check.

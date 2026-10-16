@@ -15,8 +15,9 @@ import { EXPORT_READERS, selectExportConsents, selectExportMemberPosts, selectEx
  *
  *  T3 F5: the users read omits `legacy_mongo_id` as "an internal migration id
  *  that means nothing to the user" — and then `SELECT *` shipped that same
- *  column from seven other tables (coach_threads, meal_logs, runs,
- *  saved_routes, run_schedules, body_measurements, workout_templates). The
+ *  column from other tables (meal_logs, runs, saved_routes, run_schedules,
+ *  body_measurements, workout_templates, and the coach's threads before ROADMAP
+ *  9b dropped them). The
  *  code contradicted its own recorded ruling. Applying the principle
  *  everywhere is the fix; dropping the principle was the alternative. */
 export const INTERNAL_COLUMNS_EVERYWHERE = ["legacy_mongo_id"] as const;
@@ -26,11 +27,12 @@ export const INTERNAL_COLUMNS_EVERYWHERE = ["legacy_mongo_id"] as const;
  *  review caught. */
 // KEYED BY ExportedTable, NOT `string` (T3 round 2, F1). The first version of
 // this map used a string key — the EXACT defect round 1's F3 raised against
-// EXPORT_READERS, re-created inside the fix for F5/F6/F7. Probed: renaming
-// the key to `coach_message` left `tsc` at exit 0 and shipped model,
+// EXPORT_READERS, re-created inside the fix for F5/F6/F7. Probed while the
+// coach's tables existed (ROADMAP 9b dropped them): renaming the key
+// `coach_messages` to `coach_message` left `tsc` at exit 0 and shipped model,
 // tokens_in, tokens_out, cost_micro and currency in every user's downloadable
-// file, seen only by a suite CI does not run. Typing the key means a rename
-// or typo is a BUILD failure (TS2561, "did you mean 'coach_messages'?").
+// file, seen only by a suite CI does not run. Typing the key made a rename
+// or typo a BUILD failure (TS2561, "did you mean 'coach_messages'?").
 // THE VALUES ARE THE OTHER HALF, and round 3 found the same defect there:
 // the column names are bare strings, so `cost_micros` for `cost_micro`
 // compiled clean, passed everything CI runs, and shipped our per-request
