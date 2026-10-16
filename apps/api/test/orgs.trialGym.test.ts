@@ -188,12 +188,14 @@ d("the trial belongs to the gym (real Postgres)", () => {
   };
   const accept = (person: Account, invitationId: string) =>
     send("POST", `/v1/orgs/invitations/${invitationId}/accept`, {}, person.cookies);
-  const joinsThroughDoor = async (gymId: string, owner: Account, from?: string): Promise<Account> => {
-    const { person, invitationId } = await invited(gymId, owner, from);
+  /** Joins, and says whether the gym's features were on once they were in. */
+  const joinsThroughDoor = async (gymId: string, owner: Account, from?: string): Promise<boolean | undefined> => {
+    const { invitationId, person } = await invited(gymId, owner, from);
     const res = await accept(person, invitationId);
     expect(res.statusCode, res.body).toBe(200);
-    expect((JSON.parse(res.body) as { outcome: string }).outcome).toBe("joined");
-    return person;
+    const body = JSON.parse(res.body) as { outcome: string; featuresOn?: boolean };
+    expect(body.outcome).toBe("joined");
+    return body.featuresOn;
   };
   const trialOf = async (gymId: string) =>
     (await sql<{ status: string; trial_check: string | null; trial_check_gym_id: string | null }[]>`
@@ -220,7 +222,7 @@ d("the trial belongs to the gym (real Postgres)", () => {
       await inGym(old, [trainer.userId], 40);
       const trainersGym = await trialGym(trainer);
       await earlierInNewGym(trainersGym, followers);
-      await joinsThroughDoor(trainersGym, trainer, old); // the 11th of the first 20 from the old gym
+      expect(await joinsThroughDoor(trainersGym, trainer, old)).toBe(true); // the 11th of the first 20 from the old gym
       expect(await trialOf(trainersGym)).toEqual({ status: "trialing", trial_check: "look", trial_check_gym_id: old });
       expect((await onScreen(trainer, trainersGym))?.trialEndedFirstPeople).toBe(false);
 
@@ -230,7 +232,8 @@ d("the trial belongs to the gym (real Postgres)", () => {
       const sameFollowers = await people(10);
       await inGym(old, sameFollowers, 40);
       await earlierInNewGym(cheatersGym, sameFollowers);
-      await joinsThroughDoor(cheatersGym, cheater, old);
+      // The person whose join ends it is told the truth: the gym's features are not on.
+      expect(await joinsThroughDoor(cheatersGym, cheater, old)).toBe(false);
       expect(await trialOf(cheatersGym)).toEqual({ status: "expired", trial_check: "ended", trial_check_gym_id: old });
       const seen = await onScreen(cheater, cheatersGym);
       expect(seen?.trialEndedFirstPeople).toBe(true);

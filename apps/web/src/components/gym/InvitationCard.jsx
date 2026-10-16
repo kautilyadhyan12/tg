@@ -39,7 +39,7 @@ export default function InvitationCard({ invitation, onAnswered }) {
     try {
       if (kind === 'join') {
         const res = await orgService.acceptInvitation(invitation.id, waiver === null ? null : { id: waiver.id, name: signedName });
-        setJoined(res.data.gym);
+        setJoined({ ...res.data.gym, featuresOn: res.data.featuresOn !== false });
         onAnswered?.({ kind: 'joined', invitationId: invitation.id });
       } else if (kind === 'not_me') {
         await orgService.notMeInvitation(invitation.id);
@@ -80,7 +80,9 @@ export default function InvitationCard({ invitation, onAnswered }) {
             You&apos;re in {joined.name}.
           </p>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
-            Your {words.itToMembers}&apos;s features are on.
+            {joined.featuresOn
+              ? `Your ${words.itToMembers}'s features are on.`
+              : `Your ${words.itToMembers}'s features aren't on right now.`}
           </p>
         </div>
       </div>
