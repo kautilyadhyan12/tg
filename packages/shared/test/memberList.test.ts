@@ -304,6 +304,7 @@ describe("the words a warning is shown with", () => {
     { code: "phones_need_country", rows: 1, where: [] },
     { code: "phones_unusual", rows: 4, where: [] },
     { code: "shared_emails", rows: 2, where: [] },
+    { code: "shared_member_numbers", rows: 2, where: [] },
     { code: "placeholders", rows: 300, values: ["frontdesk@example.com"], where: [] },
     { code: "other_sheets_ignored", sheets: ["Staff", "Classes"] },
     { code: "cells_cut", rows: 12, where: [] },

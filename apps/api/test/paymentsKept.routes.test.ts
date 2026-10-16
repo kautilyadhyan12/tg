@@ -515,4 +515,36 @@ d("payments kept when a record is deleted for good (real Postgres)", () => {
     },
     T,
   );
+
+  it(
+    "Delete permanently on the past members ticked keeps their money too (5e-ii): the ledger does not move, the membership stays unnamed",
+    async () => {
+      const owner = await makeUser("bulk-owner");
+      const gymId = await makeGym(owner, "Pk Bulk Gym");
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
+      const maya = await addPerson(gymId, owner.cookies, "Mia Paid", "pk-p-mia@example.com");
+      const stays = await addPerson(gymId, owner.cookies, "Raj Stays", "pk-p-raj@example.com");
+      await give(gymId, maya, owner.cookies, gold, 5000, true);
+      const ledgerBefore = await ledgerOf(gymId);
+      expect(ledgerBefore).toEqual(["payment 1 5000 true"]);
+      expect((await del(entryUrl(gymId, maya), owner.cookies)).statusCode).toBe(200);
+
+      const selection = { kind: "ticked", entryIds: [maya, stays] };
+      const box = await post(`${listUrl(gymId)}/selected/delete-preview`, { selection }, owner.cookies);
+      expect(box.statusCode, box.body).toBe(200);
+      const preview = (JSON.parse(box.body) as { preview: { count: number; onList: number; digest: string } }).preview;
+      expect(preview).toMatchObject({ count: 1, onList: 1 });
+      const done = await post(`${listUrl(gymId)}/selected/delete`, { selection, digest: preview.digest }, owner.cookies);
+      expect(done.statusCode, done.body).toBe(200);
+
+      expect(await sql`SELECT 1 FROM gym_member_list_entries WHERE id = ${maya}`).toHaveLength(0);
+      expect(await sql`SELECT 1 FROM gym_member_list_entries WHERE id = ${stays}`).toHaveLength(1);
+      expect(await ledgerOf(gymId)).toEqual(ledgerBefore);
+      const kept = await sql<{ entry_id: string | null; deleted: boolean }[]>`
+        SELECT entry_id, record_deleted_at IS NOT NULL AS deleted FROM gym_held_memberships WHERE gym_id = ${gymId}`;
+      expect(kept).toEqual([{ entry_id: null, deleted: true }]);
+      expect((await receipt(gymId, 1, owner.cookies)).receipt).toMatchObject({ personDeleted: true });
+    },
+    T,
+  );
 });

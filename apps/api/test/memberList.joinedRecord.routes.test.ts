@@ -269,7 +269,7 @@ d("member list: an app member follows their record (real Postgres)", () => {
       await sql`
         UPDATE gym_member_list_uploads
         SET rows = jsonb_set(rows, '{groups}', (
-          SELECT jsonb_object_agg(k, CASE WHEN k = 'gone' THEN v
+          SELECT jsonb_object_agg(k, CASE WHEN k IN ('gone', 'numbers') THEN v
                                           ELSE COALESCE((SELECT jsonb_agg(e - 'entryId') FROM jsonb_array_elements(v) AS e), '[]'::jsonb) END)
           FROM jsonb_each(rows -> 'groups') AS g(k, v)))
         WHERE id = ${preview.uploadId}`;

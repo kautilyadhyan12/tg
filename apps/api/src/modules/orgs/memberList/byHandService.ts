@@ -849,7 +849,8 @@ export async function deleteFormer(
     if (stored.formerAt === null) throw new OrgsError(409, "not_former", MEMBER_LIST_BY_HAND_WORDS.not_former);
     // Their number is never given to somebody new (5e-i).
     await repo.keepGoingMemberNumber(tx, gymId, stored.values.memberNumber);
-    await repo.deleteEntry(tx, gymId, entryId, deps.now());
+    // Past members only, whatever was checked above (5e-ii).
+    if (!(await repo.deleteEntry(tx, gymId, entryId, deps.now(), { onlyPast: true }))) throw notFound();
     const version = await repo.bumpListVersion(tx, gymId);
     await insertAudit(tx, {
       actorUserId: userId,

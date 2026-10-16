@@ -64,6 +64,9 @@ import {
   memberRemovedSelectedResponseSchema,
   memberRemovePreviewResponseSchema,
   memberRemoveRefusedSchema,
+  memberListDeletePreviewResponseSchema,
+  memberListDeletedResponseSchema,
+  memberListDeleteRefusedSchema,
   memberListLeaversChangedSchema,
   memberListLeaversResponseSchema,
   memberListMissingResponseSchema,
@@ -829,6 +832,23 @@ export const orgService = {
       memberRemovePreviewResponseSchema,
       'who would be removed',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/remove-preview`, { selection, ...(onlyOver ? { onlyOver: true } : {}) }),
+    ),
+
+  /** The Delete permanently box for the past members selected: who would be deleted. */
+  previewDeleteSelected: (gymId, selection) =>
+    readThrough(
+      memberListDeletePreviewResponseSchema,
+      'who would be deleted',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/delete-preview`, { selection }),
+    ),
+
+  /** Delete permanently the past members the box showed (`digest`). A 409 answers with the
+   *  box as it is now (`deleteRefused`), or a "Select all" that moved (`selectionChanged`). */
+  deleteSelected: (gymId, selection, digest) =>
+    readThrough(
+      memberListDeletedResponseSchema,
+      'the deletion',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/selected/delete`, { selection, digest }),
     ),
 
   /** "Keep on list" for the people selected among the members whose membership is over
@@ -2112,6 +2132,12 @@ export function groupMessagePeopleChanged(err) {
 export function leaversChanged(err) {
   const parsed = memberListLeaversChangedSchema.safeParse(err?.response?.data);
   return parsed.success ? { message: parsed.data.message, leavers: parsed.data.leavers } : null;
+}
+
+/** Delete permanently refused because the past members ticked changed: the box as it is now. */
+export function deleteRefused(err) {
+  const parsed = memberListDeleteRefusedSchema.safeParse(err?.response?.data);
+  return parsed.success ? { message: parsed.data.message, preview: parsed.data.preview } : null;
 }
 
 export function removeRefused(err) {
