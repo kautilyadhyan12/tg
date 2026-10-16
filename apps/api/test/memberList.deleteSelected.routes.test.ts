@@ -226,8 +226,10 @@ d("member list: Delete permanently on the past members selected (real Postgres)"
       // The same press, sent again with the new box, deletes Esha once.
       const again = await press(gym, owner, ticked(one, two), body.preview.digest);
       expect(memberListDeletedResponseSchema.parse(JSON.parse(again.body)).done.deleted).toBe(1);
+      // The same press again, its reply lost the first time: already deleted, nobody else.
       const twice = await press(gym, owner, ticked(one, two), body.preview.digest);
-      expect(twice.statusCode).toBe(409);
+      expect(twice.statusCode, twice.body).toBe(200);
+      expect(memberListDeletedResponseSchema.parse(JSON.parse(twice.body)).done).toMatchObject({ deleted: 0, alreadyDeleted: true });
       expect(await namesIn(gym)).toEqual(["Farah Past"]);
     },
     TEST_TIMEOUT_MS,

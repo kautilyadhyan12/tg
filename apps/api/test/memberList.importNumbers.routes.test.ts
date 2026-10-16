@@ -186,6 +186,8 @@ d("member list: an import's member numbers (real Postgres)", () => {
         given: 1,
         first: "3",
         last: "3",
+        continued: true,
+        notGiven: 0,
         moved: [{ fullName: "Asha Rao", from: "1", to: "4", toName: "Ravi Kumar" }],
         movedTotal: 1,
       });
@@ -244,6 +246,11 @@ d("member list: an import's member numbers (real Postgres)", () => {
       );
       expect(second.numbers.moved).toEqual([{ fullName: "Esha Roy", from: "B101", to: "B201", toName: "Gita Shah" }]);
       expect(second.numbers.given).toBe(0);
+      // Esha is leaving too: her row there shows the number she moves to (round one, Low-3).
+      const leaving = await get(`${listUrl(gym)}/uploads/${second.uploadId}/rows?group=gone`, owner.cookies);
+      expect(leaving.statusCode, leaving.body).toBe(200);
+      const gone = memberListRowsPageSchema.parse((JSON.parse(leaving.body) as { page: unknown }).page).people;
+      expect(gone.map((p) => [p.fullName, p.memberNumber])).toEqual([["Esha Roy", "B201"]]);
       await confirm(gym, owner, second.uploadId);
       expect(await numbersIn(gym)).toEqual({ "Dev Patel": "B200", "Esha Roy": "B201", "Farah Ali": "B102", "Gita Shah": "B101", "Hari Nair": "B100" });
       await noneShared(gym);
@@ -301,6 +308,23 @@ d("member list: an import's member numbers (real Postgres)", () => {
       await confirm(gym, owner, numberless.uploadId);
       expect((await numbersIn(gym))["Lina Das"]).toBe("M0045");
       await noneShared(gym);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym's first file with no numbers starts at 1, and Review says so (round one, High-1)",
+    async () => {
+      const owner = await makeUser("first-owner");
+      const gym = await makeGym(owner, "Import Numbers First Gym");
+      const preview = await stage(gym, owner, [
+        ["Name", "Email"],
+        ["Uma Rao", "uma@members.example"],
+        ["Vik Das", "vik@members.example"],
+      ]);
+      expect(preview.numbers).toEqual({ given: 2, first: "1", last: "2", continued: false, notGiven: 0, moved: [], movedTotal: 0 });
+      await confirm(gym, owner, preview.uploadId);
+      expect(await numbersIn(gym)).toEqual({ "Uma Rao": "1", "Vik Das": "2" });
     },
     TEST_TIMEOUT_MS,
   );

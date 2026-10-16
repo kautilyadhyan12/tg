@@ -938,7 +938,7 @@ export function memberListWarningWords(warning: MemberListWarning): string {
     case "shared_emails":
       return `${numberWords(warning.rows, "person shares", "people share")} an email address with someone else on the list, as a family often does. Everyone is kept, but only one person can join the app with each address — add the others' own email to invite them.`;
     case "shared_member_numbers":
-      return `${numberWords(warning.rows, "person has", "people have")} the same member number as someone else in this file. Both are imported with it. Give each person their own number in your file and import it again, or change one in the app after you import.`;
+      return `${numberWords(warning.rows, "person has", "people have")} the same member number as someone else in this file. They are all imported with it. Give each person their own number in your file and import it again, or change one in the app after you import.`;
     case "placeholders":
       return `The same contact details sit on more than ${String(MEMBER_LIST_PLACEHOLDER_ROWS)} rows, so they are the gym's own, not a member's: ${warning.values.join(", ")}. They were left out of ${numberWords(warning.rows, "row", "rows")}.`;
     case "other_sheets_ignored":
@@ -1181,12 +1181,16 @@ export const memberListImportNumbersSchema = z
     given: z.number().int().min(0),
     first: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
     last: z.string().max(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS).nullable(),
+    /** Whether that run continues the gym's own numbers; false where it starts at 1. */
+    continued: z.boolean().default(false),
+    /** How many of the file's people with no number get none: the next would be too long. */
+    notGiven: z.number().int().min(0).default(0),
     moved: z.array(memberListNumberMoveSchema).max(MEMBER_LIST_NUMBER_MOVES_SHOWN),
     movedTotal: z.number().int().min(0),
   })
   .strict();
 export type MemberListImportNumbers = z.infer<typeof memberListImportNumbersSchema>;
-export const MEMBER_LIST_NO_IMPORT_NUMBERS: MemberListImportNumbers = { given: 0, first: null, last: null, moved: [], movedTotal: 0 };
+export const MEMBER_LIST_NO_IMPORT_NUMBERS: MemberListImportNumbers = { given: 0, first: null, last: null, continued: false, notGiven: 0, moved: [], movedTotal: 0 };
 
 /** THE PREVIEW — what an upload WOULD do, and the only answer the upload route
  *  gives. Everything in it is a count, a column's own heading with three of its
@@ -2143,7 +2147,10 @@ export const memberListDeletePreviewResponseSchema = z.object({ preview: memberL
 export const memberListDeleteSelectedRequestSchema = z.object({ selection: memberListSelectionSchema, digest: sha256Schema }).strict();
 export type MemberListDeleteSelectedRequest = z.infer<typeof memberListDeleteSelectedRequestSchema>;
 
-export const memberListDeletedSchema = z.object({ deleted: z.number().int().min(0), version: z.number().int().min(0) }).strict();
+/** `alreadyDeleted`: nobody chosen was there any more, the same press sent again after it was done. */
+export const memberListDeletedSchema = z
+  .object({ deleted: z.number().int().min(0), alreadyDeleted: z.boolean().default(false), version: z.number().int().min(0) })
+  .strict();
 export type MemberListDeleted = z.infer<typeof memberListDeletedSchema>;
 export const memberListDeletedResponseSchema = z.object({ done: memberListDeletedSchema });
 

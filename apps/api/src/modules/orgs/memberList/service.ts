@@ -297,6 +297,7 @@ function withGymFieldsFull(understanding: MemberListUnderstanding, over: number)
  *  and two derived values for everybody in the file, and the people the file does not
  *  hold written out as they will be shown. */
 function groupsOf(reconciled: Reconciled): MemberListGroups {
+  const movedTo = new Map((reconciled.numbers?.moved ?? []).map((move) => [move.entryId, move.to]));
   const inFile = (people: readonly ReconciledPerson[]) =>
     people.map((person) => {
       // Everybody in these three groups came out of a row, so the index is there.
@@ -324,7 +325,8 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
       fullName: person.fullName,
       email: person.email,
       phone: person.phone,
-      memberNumber: person.memberNumber,
+      // A leaver whose number the file gives somebody else is shown with the one they move to.
+      memberNumber: person.entryId !== null && movedTo.has(person.entryId) ? (movedTo.get(person.entryId) ?? null) : person.memberNumber,
       status: person.status,
       wasStatus: person.wasStatus,
       entryId: person.entryId,
@@ -336,11 +338,13 @@ function groupsOf(reconciled: Reconciled): MemberListGroups {
 /** What the file does to member numbers, as Review shows it (5e-ii). */
 function numbersOf(reconciled: Reconciled): MemberListImportNumbers {
   const numbers = reconciled.numbers;
-  if (numbers === null) return { given: 0, first: null, last: null, moved: [], movedTotal: 0 };
+  if (numbers === null) return { given: 0, first: null, last: null, continued: false, notGiven: 0, moved: [], movedTotal: 0 };
   return {
     given: numbers.given,
     first: numbers.first,
     last: numbers.last,
+    continued: numbers.continued,
+    notGiven: numbers.notGiven,
     moved: numbers.moved.slice(0, MEMBER_LIST_NUMBER_MOVES_SHOWN).map((move) => ({ fullName: move.fullName, from: move.from, to: move.to, toName: move.toName })),
     movedTotal: numbers.moved.length,
   };

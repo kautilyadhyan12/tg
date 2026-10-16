@@ -276,6 +276,18 @@ export function numbersGivenTitle(numbers, words) {
   return `${count(numbers.given)} ${words.people} will get member numbers ${numbers.first} to ${numbers.last}`;
 }
 
+/** Where the run of numbers comes from: a gym's first numbers start at 1. */
+export function numbersGivenSub(numbers) {
+  return numbers?.continued ? 'Continued from your highest member number' : 'Starting from 1';
+}
+
+/** "3 members won't get a member number", or null where everyone without one gets one. */
+export function numbersNotGivenTitle(numbers, words) {
+  const n = numbers?.notGiven ?? 0;
+  if (n === 0) return null;
+  return `${of(n, `${words.person} won't`, `${words.people} won't`)} get a member number`;
+}
+
 /** "2 member numbers will change", or null where none moves. */
 export function numbersMovedTitle(numbers) {
   if (!numbers || numbers.movedTotal === 0) return null;

@@ -51,7 +51,9 @@ import {
   missingTitle,
   neverKeptLines,
   numberMoveLine,
+  numbersGivenSub,
   numbersGivenTitle,
+  numbersNotGivenTitle,
   numbersMovedTitle,
   pastedBytes,
   peopleWord,
@@ -1345,7 +1347,16 @@ export default function MemberListUpload({ gymId, gym = null, words, readOnly, o
               />
             ))}
             {numbersGivenTitle(preview.numbers, words) !== null ? (
-              <Line icon={Hash} tone="plain" title={numbersGivenTitle(preview.numbers, words)} sub="Continued from your highest member number" testId="numbers-given" />
+              <Line icon={Hash} tone="plain" title={numbersGivenTitle(preview.numbers, words)} sub={numbersGivenSub(preview.numbers)} testId="numbers-given" />
+            ) : null}
+            {numbersNotGivenTitle(preview.numbers, words) !== null ? (
+              <Line
+                icon={AlertTriangle}
+                tone="amber"
+                title={numbersNotGivenTitle(preview.numbers, words)}
+                sub="Your member numbers are too long to continue. Give them a number in your file."
+                testId="numbers-not-given"
+              />
             ) : null}
             {numbersMovedTitle(preview.numbers) !== null ? (
               <Line

@@ -19,6 +19,8 @@ interface Case {
   given?: [number, string | null, string | null];
   moved?: { entryId: string; from: string; to: string | null; toName: string; at: number | null }[];
   kept?: Record<string, string> | null;
+  /** [continued, notGiven] */
+  run?: [boolean, number];
 }
 
 const run = (input: Case["input"]) =>
@@ -50,6 +52,7 @@ const CASES: Case[] = [
     input: { rows: [row("New A"), row("Has", "10"), row("New B")], entries: [rec("x", "8")] },
     numbers: ["11", "10", "12"],
     given: [2, "11", "12"],
+    run: [true, 0],
     moved: [],
     kept: { "": "12" },
   },
@@ -128,6 +131,7 @@ const CASES: Case[] = [
     },
     numbers: ["9".repeat(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS), null],
     given: [0, null, null],
+    run: [true, 1],
     moved: [{ entryId: "a", from: "9".repeat(MEMBER_LIST_MAX_MEMBER_NUMBER_CHARS), to: null, toName: "File", at: null }],
   },
   {
@@ -142,6 +146,7 @@ const CASES: Case[] = [
     name: "a number with no digits at its end is kept as written and continues nothing",
     input: { rows: [row("Gold", "GOLD"), row("New")], entries: [rec("a", "Guest")] },
     numbers: ["GOLD", "1"],
+    run: [false, 0],
   },
 ];
 
@@ -152,6 +157,7 @@ describe("an import's member numbers: every class of case", () => {
     if (c.given !== undefined) expect([out.given, out.first, out.last]).toEqual(c.given);
     if (c.moved !== undefined) expect(out.moved.map(({ entryId, from, to, toName, at }) => ({ entryId, from, to, toName, at }))).toEqual(c.moved);
     if (c.kept !== undefined) expect(out.kept).toEqual(c.kept);
+    if (c.run !== undefined) expect([out.continued, out.notGiven]).toEqual(c.run);
     // Whatever the case: no number is held by two people unless the file gave it to both.
     const fileGave = new Set(c.input.rows.map((r) => (r.memberNumber ?? "").trim().toLowerCase()).filter((n) => n !== ""));
     const movedIds = new Set(out.moved.map((move) => move.entryId));

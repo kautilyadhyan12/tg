@@ -67,5 +67,6 @@ describe('the box words', () => {
     expect(deleteKeptLine(preview({ onList: 0 }), words)).toBeNull();
     expect(deleteKeptLine(preview({ onList: 4 }), { person: 'student', people: 'students' })).toBe("4 students you ticked are on your list, so they aren't deleted. Remove them first.");
     expect(deleteDoneLine({ deleted: 3 }, words)).toBe('3 past members deleted permanently.');
+    expect(deleteDoneLine({ deleted: 0, alreadyDeleted: true }, words)).toBe('These past members were already deleted.');
   });
 });

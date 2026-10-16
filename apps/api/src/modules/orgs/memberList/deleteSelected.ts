@@ -58,10 +58,16 @@ export async function deleteSelected(
     await repo.lockGym(tx, gymId);
     const records = await repo.recordsAmong(tx, gymId, ids);
     const preview = previewOf(gymId, records);
+    // Nobody chosen can be deleted now and some of them are no longer there: the same press,
+    // sent again after it was done (a reply lost on the way). Somebody put back since is still
+    // there, so that reads as changed instead.
+    if (records.every((record) => !record.past) && records.length < ids.length) {
+      return { kind: "deleted", done: { deleted: 0, alreadyDeleted: true, version: (await repo.listState(tx, gymId))?.version ?? 0 } };
+    }
     if (preview.digest !== input.digest) return { kind: "changed", preview };
     if (preview.tooMany) throw new OrgsError(400, "too_many_to_delete", `Delete up to ${MEMBER_LIST_DELETE_MAX.toLocaleString("en")} past members at a time.`);
     const past = records.filter((record) => record.past);
-    if (past.length === 0) return { kind: "deleted", done: { deleted: 0, version: (await repo.listState(tx, gymId))?.version ?? 0 } };
+    if (past.length === 0) return { kind: "deleted", done: { deleted: 0, alreadyDeleted: false, version: (await repo.listState(tx, gymId))?.version ?? 0 } };
 
     // Their numbers are never given to somebody new (5e-i), kept in one write.
     const before = await repo.memberNumbersKept(tx, gymId);
@@ -70,7 +76,7 @@ export async function deleteSelected(
     if (kept !== before) await repo.writeMemberNumbersKept(tx, gymId, kept);
 
     for (const record of past) {
-      if (!(await repo.deleteEntry(tx, gymId, record.id, at))) {
+      if (!(await repo.deleteEntry(tx, gymId, record.id, at, { onlyPast: true }))) {
         throw new Error(`a past member the box named was not deleted (${record.id})`);
       }
     }
@@ -81,6 +87,6 @@ export async function deleteSelected(
       gymId,
       rows: past.map((record) => ({ action: "org.member_list_entry_deleted", targetType: "member_list_entry", targetId: record.id, meta: { via: "selected" } })),
     });
-    return { kind: "deleted", done: { deleted: past.length, version } };
+    return { kind: "deleted", done: { deleted: past.length, alreadyDeleted: false, version } };
   });
 }

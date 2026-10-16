@@ -56,6 +56,11 @@ export interface ImportNumbers {
   given: number;
   first: string | null;
   last: string | null;
+  /** Whether that run continues numbers the gym has (or has had); false where it starts at 1. */
+  continued: boolean;
+  /** How many of the file's people with no number get none: the run reached a number longer
+   *  than a member number may be. */
+  notGiven: number;
   moved: MovedNumber[];
   /** The kept numbers after this import, or null where they do not change. */
   kept: Record<string, string> | null;
@@ -138,6 +143,8 @@ export function importNumbers(input: NumberingInput): ImportNumbers {
 
   for (const at of numberless) numbers[at] = take();
   const given = used;
+  const notGiven = numberless.length - given;
+  const continued = [...held, ...Object.values(kept)].some((number) => /[0-9]$/.test(number));
   const first = given > 0 ? (next[0] ?? null) : null;
   const last = given > 0 ? (next[given - 1] ?? null) : null;
 
@@ -155,5 +162,5 @@ export function importNumbers(input: NumberingInput): ImportNumbers {
   const highest = used > 0 ? next[used - 1] : undefined;
   if (highest !== undefined) keep(highest);
 
-  return { numbers, given, first, last, moved, kept: kept === input.kept ? null : { ...kept } };
+  return { numbers, given, first, last, continued, notGiven, moved, kept: kept === input.kept ? null : { ...kept } };
 }

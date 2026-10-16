@@ -2259,7 +2259,9 @@ async function letGoOfDeskSignatures(tx: TransactionSql, gymId: string, entryId:
  *  foreign key's ON DELETE SET NULL); the last test in
  *  `memberList.byHand.routes.test.ts` lists every table that points at a record. What
  *  it paid stays (`keepPaidMemberships`). */
-export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string, at: Date): Promise<boolean> {
+/** `onlyPast`: a person on the list is never deleted, whatever the caller checked (Delete
+ *  permanently); false for a merge, which deletes the record not kept. */
+export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: string, at: Date, opts: { onlyPast: boolean } = { onlyPast: false }): Promise<boolean> {
   // A visit that also names an app account stays that person's visit; the visits only
   // the record holds go with it (`gym_attendance_entry_fk`, ON DELETE CASCADE).
   await tx`
@@ -2273,7 +2275,7 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
   await keepPaidMemberships(tx, gymId, entryId, at);
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
-    WHERE gym_id = ${gymId} AND id = ${entryId}
+    WHERE gym_id = ${gymId} AND id = ${entryId} AND (${!opts.onlyPast} OR former_at IS NOT NULL)
     RETURNING id`;
   return rows.length === 1;
 }

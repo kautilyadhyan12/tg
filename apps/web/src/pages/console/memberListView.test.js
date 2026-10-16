@@ -8,7 +8,9 @@ import {
   addedHere,
   handEditWords,
   numberMoveLine,
+  numbersGivenSub,
   numbersGivenTitle,
+  numbersNotGivenTitle,
   numbersMovedTitle,
   marksBody,
   importedColumnCount,
@@ -432,6 +434,15 @@ describe("an import's member numbers on Review (5e-ii)", () => {
     expect(numbersGivenTitle({ ...none, given: 1, first: 'M0042', last: 'M0042' }, { person: 'student', people: 'students' })).toBe('1 student will get member number M0042');
     expect(numbersGivenTitle(none, words)).toBeNull();
     expect(numbersGivenTitle(undefined, words)).toBeNull();
+  });
+  it("says a gym's first numbers start at 1, and never that they continue (round one, High-1)", () => {
+    expect(numbersGivenSub({ ...none, given: 2, first: '1', last: '2', continued: false })).toBe('Starting from 1');
+    expect(numbersGivenSub({ ...none, given: 2, first: '1043', last: '1044', continued: true })).toBe('Continued from your highest member number');
+  });
+  it('says how many get no number when the numbers are too long (round one, Low-2)', () => {
+    expect(numbersNotGivenTitle({ ...none, notGiven: 3 }, words)).toBe("3 members won't get a member number");
+    expect(numbersNotGivenTitle({ ...none, notGiven: 1 }, words)).toBe("1 member won't get a member number");
+    expect(numbersNotGivenTitle(none, words)).toBeNull();
   });
   it('names each number that changes, from what to what, and who the file gives it to', () => {
     const move = { fullName: 'Asha Rao', from: '1042', to: '1085', toName: 'Ravi Kumar' };
