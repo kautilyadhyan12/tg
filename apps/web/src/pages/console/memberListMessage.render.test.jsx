@@ -80,7 +80,7 @@ const entry = (fullName) => {
 };
 const pageOf = (entries, total = entries.length) => ({ data: { page: memberListEntriesPageSchema.parse({ total, entries, cursor: null }) } });
 const person = (one) => ({ entryId: one.entryId, name: one.fullName });
-const boxOf = (over) => ({ data: { preview: gymGroupMessagePreviewSchema.parse({ sendCount: over.send.length, kept: [], leftToday: 3, ...over }) } });
+const boxOf = (over) => ({ data: { preview: gymGroupMessagePreviewSchema.parse({ sendCount: over.send.length, kept: [], leftToday: 3, sendDigest: 'box-1', ...over }) } });
 const doneOf = (done) => ({ data: gymGroupMessageDoneResponseSchema.parse({ done: { kept: [], leftToday: 2, ...done } }) });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
 
@@ -150,7 +150,8 @@ describe('Send message, for the people selected', () => {
     expect(orgService.sendGroupMessage).toHaveBeenCalledTimes(1);
     const [gym, sent] = orgService.sendGroupMessage.mock.calls[0];
     expect(gym).toBe(GYM);
-    expect(sent).toEqual({ selection: ticked, body: 'Closed on Monday.', sendCount: 1, key: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    // The box's people go back with it, so different people are never sent it.
+    expect(sent).toEqual({ selection: ticked, body: 'Closed on Monday.', sendCount: 1, sendDigest: 'box-1', key: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     fireEvent.click(box.getByRole('button', { name: 'Done' }));
     expect(screen.queryByTestId('message-box')).toBeNull();
   });
@@ -238,7 +239,7 @@ describe('Send message, for the people selected', () => {
     const box = await open(boxOf({ selected: 2, send: [person(ada), person(ben)] }));
     await box.findByTestId('message-send');
     type(box, 'The Saturday class is full.');
-    const now = gymGroupMessagePreviewSchema.parse({ selected: 2, sendCount: 1, send: [person(ada)], kept: [{ reason: 'switched_off', count: 1, people: [person(ben)] }], leftToday: 3 });
+    const now = gymGroupMessagePreviewSchema.parse({ selected: 2, sendCount: 1, send: [person(ada)], kept: [{ reason: 'switched_off', count: 1, people: [person(ben)] }], leftToday: 3, sendDigest: 'box-2' });
     orgService.sendGroupMessage.mockRejectedValueOnce(refusal(409, { error: 'group_message_people_changed', message: GYM_GROUP_MESSAGE_WORDS.people_changed, preview: now }));
     fireEvent.click(box.getByTestId('message-press'));
     expect((await box.findByRole('alert')).textContent).toBe(GYM_GROUP_MESSAGE_WORDS.people_changed);
@@ -248,7 +249,7 @@ describe('Send message, for the people selected', () => {
     orgService.sendGroupMessage.mockResolvedValueOnce(doneOf({ sent: 1, kept: [{ reason: 'switched_off', count: 1 }] }));
     fireEvent.click(box.getByTestId('message-press'));
     await box.findByTestId('message-done');
-    expect(orgService.sendGroupMessage.mock.calls.map((call) => call[1].sendCount)).toEqual([2, 1]);
+    expect(orgService.sendGroupMessage.mock.calls.map((call) => [call[1].sendCount, call[1].sendDigest])).toEqual([[2, 'box-1'], [1, 'box-2']]);
   });
 
   it('a press while one is being sent sends nothing more', async () => {

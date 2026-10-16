@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { GYM_MESSAGE_MILESTONE_CHOICES, GYM_MESSAGE_OWN_LINE_MAX } from '@app/shared';
 import { Loader2 } from 'lucide-react';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import { viewerPrivileges } from '../../pages/console/consoleView';
@@ -256,11 +256,14 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // The settings as they were read, sent back on Save.
+  const [version, setVersion] = useState('');
 
   const take = useCallback((data) => {
     const now = messageDraft(data);
     setKept(now);
     setDraft(now);
+    setVersion(data.version);
     setUse({
       checkIn: data.checkIn === true,
       trialOnList: data.trialOnList !== false,
@@ -312,11 +315,14 @@ export default function MessageSettingsPanel({ org, readOnly, startOpen = false 
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await orgService.updateMessageSettings(gymId, messageSettingsBody(draft));
+      const res = await orgService.updateMessageSettings(gymId, messageSettingsBody(draft, version));
       take(res.data);
       setSaved(true);
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save that. Please try again."));
+      // Saved since this box was read (another tab, or another manager): the box shows the
+      // settings as they now are, under the sentence that says so.
+      if (errorCode(err) === 'message_settings_changed') void load();
     } finally {
       setSaving(false);
     }

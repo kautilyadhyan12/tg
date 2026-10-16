@@ -17,6 +17,9 @@ import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
+/** A box's fields as these tests build them; `save` adds the version it read. */
+type SettingsBody = Omit<GymMessageSettingsRequest, "version">;
+
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 
@@ -206,7 +209,7 @@ d("the class reminder (real Postgres)", () => {
   };
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
-  const START: GymMessageSettingsRequest = {
+  const START: SettingsBody = {
     messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind !== "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
@@ -217,13 +220,20 @@ d("the class reminder (real Postgres)", () => {
     reviewVisits: 10,
     reviewLink: null,
   };
-  const reminder = (change: { on?: boolean; ownLine?: string | null }, over: Partial<GymMessageSettingsRequest> = {}): GymMessageSettingsRequest => ({
+  const reminder = (change: { on?: boolean; ownLine?: string | null }, over: Partial<SettingsBody> = {}): SettingsBody => ({
     ...START,
     ...over,
     messages: START.messages.map((m) => (m.kind === "class_reminder" ? { ...m, ...change } : m)),
   });
-  const save = async (gym: Gym, body: unknown, by: Person = gym.owner) => await inject("PUT", settingsPath(gym), by.cookies, body);
-  const saved = async (gym: Gym, body: GymMessageSettingsRequest): Promise<GymMessageSettingsResponse> => {
+  /** The box as it stands now: a save names the version it read (item 20's passes, H2). */
+  const versionNow = async (gym: Gym): Promise<string> => {
+    const res = await inject("GET", settingsPath(gym), gym.owner.cookies);
+    return res.statusCode === 200 ? (JSON.parse(res.body) as GymMessageSettingsResponse).version : "";
+  };
+  const withVersion = async (gym: Gym, body: unknown): Promise<unknown> =>
+    typeof body === "object" && body !== null && !("version" in body) ? { ...body, version: await versionNow(gym) } : body;
+  const save = async (gym: Gym, body: unknown, by: Person = gym.owner) => await inject("PUT", settingsPath(gym), by.cookies, await withVersion(gym, body));
+  const saved = async (gym: Gym, body: SettingsBody): Promise<GymMessageSettingsResponse> => {
     const res = await save(gym, body);
     expect(res.statusCode, res.body).toBe(200);
     return JSON.parse(res.body) as GymMessageSettingsResponse;
@@ -557,14 +567,14 @@ d("the class reminder (real Postgres)", () => {
       await book(gym, maya, yoga);
 
       // A number that is not on offer is refused, and nothing is kept.
-      for (const classReminderHours of [0, 4, 48, 2.5, "2"]) expect((await save(gym, reminder({}, { classReminderHours } as Partial<GymMessageSettingsRequest>))).statusCode, String(classReminderHours)).toBe(400);
+      for (const classReminderHours of [0, 4, 48, 2.5, "2"]) expect((await save(gym, reminder({}, { classReminderHours } as Partial<SettingsBody>))).statusCode, String(classReminderHours)).toBe(400);
       expect((await settings(gym)).classReminderHours).toBe(2);
 
       const kept = await saved(gym, reminder({ ownLine: "Bring a mat." }, { classReminderHours: 24 }));
       expect(kept.classReminderHours).toBe(24);
       expect(kept.messages.find((m) => m.kind === "class_reminder")?.ownLine).toBe("Bring a mat.");
       // A page loaded before this kind saves what it knows: the reminder keeps its own.
-      const olderBody: GymMessageSettingsRequest = {
+      const olderBody: SettingsBody = {
         messages: START.messages.filter((m) => m.kind !== "class_reminder"),
         missYouDays: 10,
         milestones: [50, 100],

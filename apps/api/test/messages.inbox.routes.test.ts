@@ -416,7 +416,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
   );
 
   it(
-    "the inbox's own limits at one address: a member past 600 reads in the hour is refused, the next member is not, and a stranger's 404 is not counted",
+    "the inbox's own limits at one address: a member past 600 reads in the hour is refused, the next member is not, a stranger's 404 is not counted, and another gym's members there are never shut out (the security pass over item 20, H2)",
     async () => {
       clock = NOON;
       const gym = await makeGym("Inbox Wifi Gym");
@@ -426,7 +426,7 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       expect((await run([gym])).sent).toBe(2);
       const ADDRESS = "10.88.249.249";
       const hers = `rl:orgs_inbox_read:id:${maya.userId}`;
-      const theAddress = `rl:orgs_inbox_read:ip:${ADDRESS}`;
+      const theAddress = `rl:orgs_inbox_read:ip:${gym.id}:${ADDRESS}`;
       const read = (who: Person) => inject("GET", path(gym.id), who.cookies, undefined, ADDRESS);
 
       // Each read is counted once for her and once for the address.
@@ -457,6 +457,12 @@ d("a gym's messages and the member's inbox (real Postgres)", () => {
       expect((await read(bo)).statusCode).toBe(200);
       await redis.setex(theAddress, 3600, "6000");
       expect((await read(bo)).statusCode).toBe(429);
+      // That is this gym's count there alone: a member of another gym at the same address reads theirs.
+      const other = await makeGym("Inbox Wifi Next Door");
+      const ola = await joins(other, "Ola Next");
+      expect((await run([other])).sent).toBe(1);
+      expect((await inject("GET", path(other.id), ola.cookies, undefined, ADDRESS)).statusCode).toBe(200);
+      expect(await redis.get(`rl:orgs_inbox_read:ip:${ADDRESS}`)).toBeNull();
     },
     T,
   );

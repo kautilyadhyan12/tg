@@ -153,10 +153,14 @@ d("the list of sent messages: whose it is, who may read it, and how long it is k
   };
   /** The real press, to the people ticked. */
   const send = async (gym: Gym, entryIds: string[], body: string, by: Person = gym.owner): Promise<void> => {
+    const selection = { kind: "ticked", entryIds };
+    const box = await inject("POST", `/v1/orgs/${gym.id}/member-list/selected/message-preview`, by.cookies, { selection });
+    expect(box.statusCode, box.body).toBe(200);
     const res = await inject("POST", `/v1/orgs/${gym.id}/member-list/selected/message`, by.cookies, {
-      selection: { kind: "ticked", entryIds },
+      selection,
       body,
       sendCount: entryIds.length,
+      sendDigest: (JSON.parse(box.body) as { preview: { sendDigest: string } }).preview.sendDigest,
       key: randomUUID(),
     });
     expect(res.statusCode, res.body).toBe(200);

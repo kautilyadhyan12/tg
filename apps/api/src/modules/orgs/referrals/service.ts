@@ -16,6 +16,7 @@ import {
   minorToPriceText,
   orgTypeSchema,
   REFERRAL_WORDS,
+  SETTINGS_CHANGED_WORDS,
   referralGiftLive,
   referralGiftProblem,
   greetingName,
@@ -110,6 +111,9 @@ function giftView(discounts: readonly DiscountRow[], id: string | null, today: s
 const memberWords = (gift: repo.MemberGift | null): { gift: string; instead: string | null } | null => (gift === null ? null : referralMemberGiftWords(gift));
 
 async function settingsView(sql: Sql, org: { id: string; name: string; country: string | null }, today: string): Promise<ReferralSettings> {
+  // The version first and the offer after it: a save between the two hands the page an old
+  // version with the new offer, which only ever refuses its next save, never lets a stale one through.
+  const version = await repo.settingsVersion(sql, org.id);
   const now = await repo.settingsFor(sql, org.id);
   const discounts = await referralDiscounts(sql, org.id, now.friendDiscountId === null ? [] : [now.friendDiscountId]);
   const friend = liveGift(discounts, now.friendDiscountId, today);
@@ -120,6 +124,7 @@ async function settingsView(sql: Sql, org: { id: string; name: string; country: 
     friend: giftView(discounts, now.friendDiscountId, today),
     currency: memberCurrencyForCountry(org.country),
     memberLines: referralOfferLines(org.name, member, friend?.words ?? null),
+    version,
   };
 }
 
@@ -253,6 +258,9 @@ export async function setReferralSettings(
   if (body.on && body.member === null && body.friend === null) throw new OrgsError(400, "no_gift", REFERRAL_WORDS.no_gift);
   await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
+    // Saved since the page read it (another tab, or another owner): refused, so this save
+    // never puts back what that one changed.
+    if ((await repo.settingsVersion(tx, gymId)) !== body.version) throw new OrgsError(409, "referral_settings_changed", SETTINGS_CHANGED_WORDS);
     const before = await repo.settingsFor(tx, gymId);
     const discounts = await referralDiscounts(tx, gymId, before.friendDiscountId === null ? [] : [before.friendDiscountId]);
     const ctx = { gymId, userId, at, currency: memberCurrencyForCountry(org.country) };

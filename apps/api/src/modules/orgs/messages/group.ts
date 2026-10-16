@@ -27,6 +27,7 @@ import {
   type GymSentMessagesPage,
   type GymSentMessagesQuery,
 } from "@app/shared";
+import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
@@ -77,9 +78,17 @@ export function groupMessagePlan(rows: readonly groupRepo.GroupStateRow[], selec
   return { send, kept };
 }
 
+/** Who exactly the box will send it to: the gym, and each record with the app account it
+ *  goes to, in order. */
+function sendDigestOf(gymId: string, send: readonly { entryId: string; userId: string }[]): string {
+  return createHash("sha256")
+    .update([gymId, "group-send", ...send.map((person) => `${person.entryId}:${person.userId}`).sort()].join("\n"), "utf8")
+    .digest("hex");
+}
+
 const leftOf = (sent: number): number => Math.max(0, GYM_GROUP_MESSAGES_A_DAY - sent);
 
-function previewOf(plan: GroupPlan, selected: number, sentToday: number): GymGroupMessagePreview {
+function previewOf(gymId: string, plan: GroupPlan, selected: number, sentToday: number): GymGroupMessagePreview {
   // The box names the first people of each group and counts the rest.
   return {
     selected,
@@ -87,6 +96,7 @@ function previewOf(plan: GroupPlan, selected: number, sentToday: number): GymGro
     send: plan.send.slice(0, GYM_GROUP_MESSAGE_BOX_NAMES_MAX).map(({ entryId, name }) => ({ entryId, name })),
     kept: plan.kept.map((group) => ({ ...group, people: group.people.slice(0, GYM_GROUP_MESSAGE_BOX_NAMES_MAX) })),
     leftToday: leftOf(sentToday),
+    sendDigest: sendDigestOf(gymId, plan.send),
   };
 }
 
@@ -106,11 +116,11 @@ export async function previewGroupMessage(
   const gym = await gymNow(deps.sql, gymId, deps.now());
   if (gym === null) throw gymNotFound();
   const [rows, sentToday] = await Promise.all([groupRepo.groupStateOf(deps.sql, gymId, ids), groupRepo.sentOnDay(deps.sql, gymId, gym.today)]);
-  return previewOf(groupMessagePlan(rows, ids.length), ids.length, sentToday);
+  return previewOf(gymId, groupMessagePlan(rows, ids.length), ids.length, sentToday);
 }
 
-/** The people who would get it are not the number the box's button named: nothing was
- *  sent, and this is the box as it now stands. */
+/** The people who would get it are not the ones the box named: nothing was sent, and this
+ *  is the box as it now stands. */
 export class GroupPeopleChanged extends Error {
   constructor(readonly preview: GymGroupMessagePreview) {
     super("group_message_people_changed");
@@ -119,7 +129,7 @@ export class GroupPeopleChanged extends Error {
 
 /** Send the message to the people selected. A "Select all" is resolved first, against its
  *  own digest (`selection_changed`); who is sent it is then worked out again with the gym
- *  held, and it goes only if that is as many people as the button named. The same box
+ *  held, and it goes only if those are exactly the people the box named. The same box
  *  pressed twice sends once. Null when the rate limit has answered. */
 export async function sendGroupMessage(
   deps: MemberListDeps,
@@ -152,7 +162,9 @@ export async function sendGroupMessage(
     }
     if (sentToday >= GYM_GROUP_MESSAGES_A_DAY) throw new OrgsError(409, "group_messages_day_full", GYM_GROUP_MESSAGE_WORDS.day_full);
     const plan = groupMessagePlan(await groupRepo.groupStateOf(tx, gymId, ids), ids.length);
-    if (plan.send.length !== request.sendCount) throw new GroupPeopleChanged(previewOf(plan, ids.length, sentToday));
+    if (plan.send.length !== request.sendCount || sendDigestOf(gymId, plan.send) !== request.sendDigest) {
+      throw new GroupPeopleChanged(previewOf(gymId, plan, ids.length, sentToday));
+    }
     const written = await groupRepo.insertGroupMessage(
       tx,
       { gymId, sentBy: userId, body, gymDay: gym.today, sendKey: request.key, userIds: plan.send.map((person) => person.userId) },

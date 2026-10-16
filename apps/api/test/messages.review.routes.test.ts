@@ -13,6 +13,9 @@ import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
+/** A box's fields as these tests build them; `save` adds the version it read. */
+type SettingsBody = Omit<GymMessageSettingsRequest, "version">;
+
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
 
@@ -177,14 +180,21 @@ d("ask for a review (real Postgres)", () => {
 
   const settingsPath = (gym: Gym) => `/v1/orgs/${gym.id}/message-settings`;
   /** Every other message off, so only a review can be sent. */
-  const ONLY_REVIEW: GymMessageSettingsRequest = {
+  const ONLY_REVIEW: SettingsBody = {
     messages: GYM_MESSAGE_SETTING_KINDS.map((kind) => ({ kind, on: kind === "review", ownLine: null })),
     missYouDays: 10,
     milestones: [50, 100],
     reviewVisits: 10,
     reviewLink: IRON_LINK,
   };
-  const save = async (gym: Gym, body: unknown, who: Person = gym.owner) => await inject("PUT", settingsPath(gym), who.cookies, body);
+  /** The box as it stands now: a save names the version it read (item 20's passes, H2). */
+  const versionNow = async (gym: Gym): Promise<string> => {
+    const res = await inject("GET", settingsPath(gym), gym.owner.cookies);
+    return res.statusCode === 200 ? (JSON.parse(res.body) as GymMessageSettingsResponse).version : "";
+  };
+  const withVersion = async (gym: Gym, body: unknown): Promise<unknown> =>
+    typeof body === "object" && body !== null && !("version" in body) ? { ...body, version: await versionNow(gym) } : body;
+  const save = async (gym: Gym, body: unknown, who: Person = gym.owner) => await inject("PUT", settingsPath(gym), who.cookies, await withVersion(gym, body));
   const saved = async (gym: Gym, body: unknown): Promise<GymMessageSettingsResponse> => {
     const res = await save(gym, body);
     expect(res.statusCode, res.body).toBe(200);

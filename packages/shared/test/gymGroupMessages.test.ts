@@ -139,9 +139,10 @@ describe("the other sentences", () => {
 
 describe("the shapes on the wire", () => {
   const selection = { kind: "ticked", entryIds: ["00000000-0000-4000-8000-000000000001"] };
-  const press = { selection, body: "Hello.", sendCount: 1, key: "00000000-0000-4000-8000-000000000002" };
-  it("a press needs its people, its number and its key, and nothing more", () => {
+  const press = { selection, body: "Hello.", sendCount: 1, sendDigest: "box", key: "00000000-0000-4000-8000-000000000002" };
+  it("a press needs its people, its number, who its box named and its key, and nothing more", () => {
     expect(gymGroupMessageSendRequestSchema.safeParse(press).success).toBe(true);
+    expect(gymGroupMessageSendRequestSchema.safeParse({ ...press, sendDigest: undefined }).success).toBe(false);
     expect(gymGroupMessageSendRequestSchema.safeParse({ ...press, sendCount: 0 }).success).toBe(false);
     expect(gymGroupMessageSendRequestSchema.safeParse({ ...press, key: "again" }).success).toBe(false);
     expect(gymGroupMessageSendRequestSchema.safeParse({ ...press, userIds: ["x"] }).success).toBe(false);

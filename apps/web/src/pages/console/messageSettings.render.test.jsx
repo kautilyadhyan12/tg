@@ -9,6 +9,7 @@ const updateMessageSettings = vi.fn();
 vi.mock('../../api/orgsApi', () => ({
   orgService: { getMessageSettings, updateMessageSettings },
   errorText: (err, fallback) => err?.response?.data?.message ?? fallback,
+  errorCode: (err) => err?.response?.data?.error ?? null,
 }));
 
 const MessageSettingsPanel = (await import('../../components/console/MessageSettingsPanel')).default;
@@ -29,6 +30,7 @@ const START = {
   payments: true,
   billsOverdueDays: 0,
   bookings: true,
+  version: 'v1',
 };
 const loaded = () => screen.findByText(/^(All 10 on|\d+ of 10 on|All switched off)$/);
 const withKind = (kind, change, over = {}) => ({ ...START, ...over, messages: START.messages.map((m) => (m.kind === kind ? { ...m, ...change } : m)) });
@@ -127,6 +129,8 @@ describe('Automatic messages', () => {
       classReminderHours: 2,
       reviewVisits: 10,
       reviewLink: null,
+      // The settings as the box read them: a save made since in another tab refuses this one.
+      version: 'v1',
     });
     expect(screen.getByText('8 of 10 on')).toBeTruthy();
     expect(within(box('Trial check-in')).getByLabelText('Day of the trial').value).toBe('3');
@@ -297,7 +301,7 @@ describe('the class reminder', () => {
     updateMessageSettings.mockResolvedValue({ data: { ...START, classReminderHours: 24 } });
     fireEvent.click(save());
     await screen.findByText('Saved. It holds from the next message sent.');
-    expect(updateMessageSettings).toHaveBeenCalledWith('g1', { messages: START.messages, ...NUMBERS, classReminderHours: 24 });
+    expect(updateMessageSettings).toHaveBeenCalledWith('g1', { messages: START.messages, ...NUMBERS, classReminderHours: 24, version: 'v1' });
     expect(within(box('Class reminder')).getByLabelText('Hours before it starts').value).toBe('24');
     // "Saved." is said where Save was pressed.
     expect(screen.getByTestId('message-settings-save').className).toContain('c-save-stuck');
@@ -406,7 +410,7 @@ describe('ask for a review', () => {
     expect(reviewBox().queryByRole('alert')).toBeNull();
     fireEvent.click(save());
     await screen.findByText('Saved. It holds from the next message sent.');
-    expect(updateMessageSettings).toHaveBeenCalledWith('g1', { messages: after.messages, ...NUMBERS, reviewVisits: 20, reviewLink: LINK });
+    expect(updateMessageSettings).toHaveBeenCalledWith('g1', { messages: after.messages, ...NUMBERS, reviewVisits: 20, reviewLink: LINK, version: 'v1' });
     expect(screen.getByText('All 10 on')).toBeTruthy();
     expect(link().value).toBe(LINK);
     expect(theSwitch('Ask for a review').getAttribute('aria-checked')).toBe('true');
@@ -414,6 +418,22 @@ describe('ask for a review', () => {
 });
 
 describe('the box\'s own rules', () => {
+  it('saved meanwhile in another tab: nothing is saved, it says so where Save is, and the box shows the settings as they now are (item 20\'s passes, H2)', async () => {
+    const changed = 'These settings were changed since you opened them. Nothing was saved: check them and save again.';
+    getMessageSettings.mockResolvedValueOnce({ data: START }).mockResolvedValueOnce({ data: { ...withKind('birthday', { on: false }), version: 'v2' } });
+    updateMessageSettings.mockRejectedValueOnce({ response: { status: 409, data: { error: 'message_settings_changed', message: changed } } });
+    draw();
+    await loaded();
+    fireEvent.change(within(box('We miss you')).getByLabelText('Days without a check-in'), { target: { value: '14' } });
+    fireEvent.click(save());
+    expect(await screen.findByText(changed)).toBeTruthy();
+    // Read again: Birthday as the other tab left it, We miss you as it is kept.
+    await screen.findByText('8 of 10 on');
+    expect(theSwitch('Birthday').getAttribute('aria-checked')).toBe('false');
+    expect(within(box('We miss you')).getByLabelText('Days without a check-in').value).toBe('10');
+    expect(getMessageSettings).toHaveBeenCalledTimes(2);
+  });
+
   it('reads what the server holds, and says whether anything changed', () => {
     const kept = view.messageDraft(withKind('birthday', { on: false, ownLine: 'Cake at the desk' }, { missYouDays: 21, milestones: [100, 10] }));
     expect(kept).toEqual({

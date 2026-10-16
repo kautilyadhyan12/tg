@@ -215,8 +215,13 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     expect(res.statusCode, res.body).toBe(200);
     return gymGroupMessagePreviewResponseSchema.parse(JSON.parse(res.body)).preview;
   };
-  const press = (gym: Gym, entryIds: string[], body: string, sendCount: number, by: Person = gym.owner, key: string = randomUUID(), ip?: string) =>
-    inject("POST", `${base(gym)}/selected/message`, by.cookies, { selection: ticked(entryIds), body, sendCount, key }, ip);
+  /** Who the box names now, as its fingerprint: a press sends it back (item 20's passes, L2). */
+  const digestNow = async (gym: Gym, selection: unknown): Promise<string> => {
+    const res = await inject("POST", `${base(gym)}/selected/message-preview`, gym.owner.cookies, { selection });
+    return res.statusCode === 200 ? gymGroupMessagePreviewResponseSchema.parse(JSON.parse(res.body)).preview.sendDigest : "none";
+  };
+  const press = async (gym: Gym, entryIds: string[], body: string, sendCount: number, by: Person = gym.owner, key: string = randomUUID(), ip?: string) =>
+    await inject("POST", `${base(gym)}/selected/message`, by.cookies, { selection: ticked(entryIds), body, sendCount, sendDigest: await digestNow(gym, ticked(entryIds)), key }, ip);
   const send = async (gym: Gym, entryIds: string[], body: string, sendCount: number, by: Person = gym.owner, key: string = randomUUID()) => {
     const res = await press(gym, entryIds, body, sendCount, by, key);
     expect(res.statusCode, res.body).toBe(200);
@@ -338,7 +343,7 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     const stranger = await signedIn("Sam Stranger");
     const trainer = await onStaff(iron, "Tia Trainer", "trainer");
     const body = { selection: ticked([maya.entryId, zed.entryId]) };
-    const sendBody = { ...body, body: "From somebody who may not.", sendCount: 2, key: randomUUID() };
+    const sendBody = { ...body, body: "From somebody who may not.", sendCount: 2, sendDigest: await digestNow(iron, body.selection), key: randomUUID() };
     for (const [who, status] of [
       [stranger, 404],
       [oak.owner, 404],
@@ -457,6 +462,30 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     expect((await inbox(gym, ada.person)).messages).toHaveLength(2);
   });
 
+  it("the box's people are the people sent: the same number of different people after the box, and nothing goes (the data-integrity pass over item 20, L2)", async () => {
+    clock = NOON;
+    const gym = await makeGym("Grpm Swapped Gym");
+    const abe = await member(gym, "Abe Box");
+    const cee = await record(gym, "Cee Later");
+    const box = await preview(gym, [abe.entryId, cee]);
+    expect([box.sendCount, box.send.map((p) => p.name), kept(box.kept)]).toEqual([1, ["Abe Box"], { not_in_app: 1 }]);
+    // Abe switches group messages off, and Cee joins the app: still one person, but not Abe.
+    expect((await setSwitch(gym, abe.person, false)).statusCode).toBe(200);
+    await inApp(gym, await signedIn("Cee Later"), cee);
+    const res = await inject("POST", `${base(gym)}/selected/message`, gym.owner.cookies, {
+      selection: ticked([abe.entryId, cee]),
+      body: "Saturday's class is full.",
+      sendCount: box.sendCount,
+      sendDigest: box.sendDigest,
+      key: randomUUID(),
+    });
+    expect(res.statusCode).toBe(409);
+    expect(errorOf(res)).toBe("group_message_people_changed");
+    const now = (JSON.parse(res.body) as { preview: GymGroupMessagePreview }).preview;
+    expect([now.sendCount, now.send.map((p) => p.name), kept(now.kept)]).toEqual([1, ["Cee Later"], { switched_off: 1 }]);
+    expect(await written(gym)).toEqual([]);
+  });
+
   it("the button's number is the number sent: when the people change after the box, nothing goes and the box is sent again", async () => {
     clock = NOON;
     const gym = await makeGym("Grpm Changed Gym");
@@ -498,12 +527,12 @@ d("a message to a chosen group: who gets it, who may send it, and how often (rea
     expect([box.selected, box.sendCount, kept(box.kept)]).toEqual([3, 2, { not_in_app: 1 }]);
     // Somebody is added to the list: the same Select all is now other people.
     await record(gym, "Di New");
-    const moved = await inject("POST", `${base(gym)}/selected/message`, gym.owner.cookies, { selection: all, body: "Hello all.", sendCount: 2, key: randomUUID() });
+    const moved = await inject("POST", `${base(gym)}/selected/message`, gym.owner.cookies, { selection: all, body: "Hello all.", sendCount: 2, sendDigest: box.sendDigest, key: randomUUID() });
     expect([moved.statusCode, errorOf(moved)]).toEqual([409, "selection_changed"]);
     expect(await written(gym)).toEqual([]);
     const again = await inject("POST", `${base(gym)}/selection`, gym.owner.cookies, { filter: {} });
     const fresh = { kind: "all" as const, filter: {}, ...(JSON.parse(again.body) as { selection: { count: number; digest: string } }).selection };
-    const ok = await inject("POST", `${base(gym)}/selected/message`, gym.owner.cookies, { selection: fresh, body: "Hello all.", sendCount: 2, key: randomUUID() });
+    const ok = await inject("POST", `${base(gym)}/selected/message`, gym.owner.cookies, { selection: fresh, body: "Hello all.", sendCount: 2, sendDigest: box.sendDigest, key: randomUUID() });
     expect(ok.statusCode, ok.body).toBe(200);
     expect(await written(gym)).toEqual(["Grpm All Gym: Ada All: Hello all.", "Grpm All Gym: Bo All: Hello all."]);
     expect((await inbox(gym, ada.person)).unread).toBe(1);

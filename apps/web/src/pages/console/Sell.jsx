@@ -929,6 +929,7 @@ export default function Sell() {
             lockedNote={readOnlyNote(org.orgType)}
             membershipsTo={placeFor(orgSlug, privileges, 'memberships')}
             otherTo={placeFor(orgSlug, privileges, 'memberships')}
+            referralTo={placeFor(orgSlug, privileges, 'referrals')}
             onPage={setPage}
           />
         </>

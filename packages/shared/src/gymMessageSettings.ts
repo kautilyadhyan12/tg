@@ -158,6 +158,13 @@ export const GYM_MESSAGE_DAYS_OF = {
   miss_you: "missYouDays",
 } as const satisfies Partial<Record<GymMessageKind, keyof GymMessageNumbers>>;
 
+/** A box's settings as they were read: the server's own stamp of the last save, "" for none.
+ *  Sent back on Save, so a save made since by somebody else refuses it. */
+export const settingsVersionSchema = z.string().max(64);
+
+/** Said when a save is refused because the settings were saved since the page read them. */
+export const SETTINGS_CHANGED_WORDS = "These settings were changed since you opened them. Nothing was saved: check them and save again.";
+
 export const gymMessageSettingSchema = z.object({ kind: gymMessageSettingKindSchema, on: z.boolean(), ownLine: ownLineSchema }).strict();
 export type GymMessageSetting = z.infer<typeof gymMessageSettingSchema>;
 
@@ -180,6 +187,9 @@ export const gymMessageSettingsRequestSchema = z
     reviewVisits: oneOf(GYM_MESSAGE_REVIEW_CHOICES).optional(),
     /** Null takes the link away. Left out, the link kept stays. */
     reviewLink: reviewLinkSchema.nullable().optional(),
+    /** The settings as the page read them (`version` of the read): saved since, the save is
+     *  refused, so a second tab never puts back what another save changed. */
+    version: settingsVersionSchema,
   })
   .strict();
 export type GymMessageSettingsRequest = z.infer<typeof gymMessageSettingsRequestSchema>;
@@ -212,6 +222,8 @@ export const gymMessageSettingsResponseSchema = z.object({
   bookings: z.boolean(),
   reviewVisits: z.number().int().min(1),
   reviewLink: reviewLinkSchema.nullable(),
+  /** When these were last saved, as the server keeps it; a save sends it back. */
+  version: settingsVersionSchema,
 });
 export type GymMessageSettingsResponse = z.infer<typeof gymMessageSettingsResponseSchema>;
 /** How far back `checkIn` looks. */

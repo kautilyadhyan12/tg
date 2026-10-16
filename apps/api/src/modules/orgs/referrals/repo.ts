@@ -58,6 +58,13 @@ const settingsRow = (r: DbSettings): SettingsRow => {
   };
 };
 
+/** The offer as it was read, to send back on a save: the row's own version, which every
+ *  write changes ("" while it has never been saved). */
+export async function settingsVersion(sql: SqlOrTx, gymId: string): Promise<string> {
+  const rows = await sql<{ v: string }[]>`SELECT xmin::text AS v FROM gym_referral_settings WHERE gym_id = ${gymId}`;
+  return rows[0]?.v ?? "";
+}
+
 /** The gym's offer, or off when it has never saved one. */
 export async function settingsFor(sql: SqlOrTx, gymId: string): Promise<SettingsRow> {
   const rows = await sql<DbSettings[]>`
@@ -191,7 +198,7 @@ export interface Inviter {
 /** The members who sent this gym's leads, by id: the name the gym's own list has for them
  *  where that record is theirs alone (no other live account holds it, and it is not a former
  *  member's; `pt/repo.memberRecord`'s rule), else the name they use in the app. Only people
- *  who sent this gym's leads are asked. */
+ *  who sent this gym's leads (or a friend whose deleted lead's invitation is kept) are asked. */
 export async function invitersFor(sql: SqlOrTx, gymId: string, userIds: readonly string[]): Promise<Map<string, Inviter>> {
   if (userIds.length === 0) return new Map();
   const rows = await sql<{ id: string; name: string | null; member: boolean }[]>`
@@ -212,6 +219,7 @@ export async function invitersFor(sql: SqlOrTx, gymId: string, userIds: readonly
       LIMIT 1
     ) listed ON true
     WHERE u.id = ANY(${[...new Set(userIds)]}::uuid[])
-      AND EXISTS (SELECT 1 FROM gym_leads l WHERE l.gym_id = ${gymId} AND l.referred_by = u.id)`;
+      AND (EXISTS (SELECT 1 FROM gym_leads l WHERE l.gym_id = ${gymId} AND l.referred_by = u.id)
+        OR EXISTS (SELECT 1 FROM gym_referral_kept_invites k WHERE k.gym_id = ${gymId} AND k.referred_by = u.id))`;
   return new Map(rows.map((r) => [r.id, { name: r.name, member: r.member && r.name !== null }]));
 }

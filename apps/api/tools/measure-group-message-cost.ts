@@ -129,14 +129,16 @@ try {
     return selection;
   };
 
+  const digests = new Map<string, string>();
   const box = async (gym: Gym): Promise<number> => {
     const preview = await previewGroupMessage(deps, gym.owner, gym.gymId, { selection: selectionOf(gym) }, pass);
     if (preview?.sendCount !== gym.people) throw new Error(`the box named ${String(preview?.sendCount)} of ${String(gym.people)}`);
+    digests.set(gym.gymId, preview.sendDigest);
     return JSON.stringify(preview).length;
   };
   const BODY = "We're closed on Monday for the holiday. Back on Tuesday at 6am. ".repeat(4).trim();
   const send = async (gym: Gym): Promise<void> => {
-    const done = await sendGroupMessage(deps, gym.owner, gym.gymId, { selection: selectionOf(gym), body: BODY, sendCount: gym.people, key: randomUUID() }, pass);
+    const done = await sendGroupMessage(deps, gym.owner, gym.gymId, { selection: selectionOf(gym), body: BODY, sendCount: gym.people, sendDigest: digests.get(gym.gymId) ?? "", key: randomUUID() }, pass);
     if (done?.sent !== gym.people) throw new Error(`sent ${String(done?.sent)} of ${String(gym.people)}`);
   };
   const inbox = async (gym: Gym): Promise<void> => {
@@ -180,6 +182,8 @@ try {
   console.log(`measure-group-message-cost: ${cpu?.model ?? "?"} at ${String(cpu?.speed ?? 0)} MHz · ${String(RUNS)} runs each`);
   console.log(`one gym of ${String(PEOPLE)} on its list and in the app beside ${String(OTHER_GYMS)} gyms of ${String(OTHER_PEOPLE)}; a message of ${String(BODY.length)} characters`);
   console.log(`  the big gym's box is ${String(await box(big))} characters`);
+  // Each gym's box once, so every press below sends back who its box named.
+  for (const gym of others) await box(gym);
   await measure("the big gym's box, everybody selected", () => box(big));
   await measure("the big gym's send to everybody", () => send(big), nextDay);
   await measure("a member's inbox after those sends", () => inbox(big));

@@ -57,6 +57,8 @@ export function registerReferralRoutes(app: FastifyInstance, deps: { sql: Sql; r
     ipMax: 6000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
+    // Counted a gym at a time, as the settings are: one gym's members never close another's.
+    ipScope: (req) => orgParamsSchema.safeParse(req.params).data?.gymId ?? null,
     redis: deps.redis,
   });
 

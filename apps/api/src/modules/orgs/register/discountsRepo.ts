@@ -214,7 +214,10 @@ export type DiscountWriteOutcome =
   /** A membership type it is limited to is not one on this gym's price list. */
   | { kind: "membership_type_not_found" }
   /** A fixed amount, and the gym's country has no money to put it in. */
-  | { kind: "no_currency" };
+  | { kind: "no_currency" }
+  /** Refer a friend's friend's gift: changed only in Settings → Refer a friend, by whoever
+   *  may set the offer, since every invite link promises it. */
+  | { kind: "referral_gift" };
 
 async function liveCount(tx: TransactionSql, gymId: string): Promise<number> {
   const [row] = await tx<{ n: number }[]>`
@@ -329,13 +332,17 @@ export async function createDiscountInTx(
 }
 
 /** Replace a discount's fields. No sale or membership already made is touched: each keeps
- *  the name and the amount it was made with. `uses` is left as it is. */
+ *  the name and the amount it was made with. `uses` is left as it is. Refer a friend's
+ *  friend's gift is refused: its terms are the offer's, set in Settings → Refer a friend. */
 export async function updateDiscount(
   sql: Sql,
   input: DiscountInput & { gymId: string; discountId: string; readAt: Date; actorUserId: string; now: Date },
 ): Promise<DiscountWriteOutcome> {
   return await sql.begin(async (tx): Promise<DiscountWriteOutcome> => {
     await lockOrgRow(tx, input.gymId);
+    const [gift] = await tx<{ referral_gift: boolean }[]>`
+      SELECT referral_gift FROM gym_discounts WHERE id = ${input.discountId} AND gym_id = ${input.gymId}`;
+    if (gift?.referral_gift === true) return { kind: "referral_gift" };
     return await updateDiscountInTx(tx, input);
   });
 }
