@@ -47,4 +47,7 @@ END
 $$;--> statement-breakpoint
 CREATE TRIGGER "subscriptions_trial_started_by_trg" BEFORE INSERT OR UPDATE ON "subscriptions"
   FOR EACH ROW EXECUTE FUNCTION "subscriptions_trial_started_by"();--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "subscriptions_trial_started_by_idx" ON "subscriptions" USING btree ("trial_started_by") WHERE "trial_ends_at" IS NOT NULL;
+CREATE INDEX IF NOT EXISTS "subscriptions_trial_started_by_idx" ON "subscriptions" USING btree ("trial_started_by") WHERE "trial_ends_at" IS NOT NULL;--> statement-breakpoint
+-- A gym's own subscriptions, looked up by the gym: "has this gym had a free trial" (4b-ii) and
+-- the hand-over's paid-plan check. Only the live ones had an index (`subs_one_live_uq`).
+CREATE INDEX IF NOT EXISTS "subscriptions_owner_idx" ON "subscriptions" USING btree ("owner_type","owner_id");

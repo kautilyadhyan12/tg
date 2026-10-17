@@ -160,6 +160,7 @@ export const subscriptions = pgTable(
     check("subscriptions_trial_check_check", sql`${t.trialCheck} IS NULL OR ${t.trialCheck} IN ('ended','look')`),
     check("subscriptions_trial_device_hash_check", sql`${t.trialDeviceHash} IS NULL OR ${t.trialDeviceHash} ~ '^[0-9a-f]{64}$'`),
     index("subscriptions_trial_device_idx").on(t.trialDeviceHash).where(sql`${t.trialDeviceHash} IS NOT NULL`),
+    index("subscriptions_owner_idx").on(t.ownerType, t.ownerId),
     index("subscriptions_trial_started_by_idx").on(t.trialStartedBy).where(sql`${t.trialEndsAt} IS NOT NULL`),
     check(
       "subscriptions_trial_check_pairing_check",

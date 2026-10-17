@@ -616,12 +616,13 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            -- proved account whose address is a spelling of the same mailbox, as the door;
            -- an unproved owner is only their own account.
            -- Since 4b-ii a trial is counted against whoever STARTED it (trial_started_by),
-           -- so a gym handed over moves no trial, and this gym's own trial always counts.
+           -- so a gym handed over moves no trial; this gym's own trial (gym_trial_used,
+           -- below) counts too, joined in toOrgRow: two lookups, each by its own index.
            EXISTS (
              SELECT 1 FROM subscriptions ts
              WHERE ts.owner_type = 'gym'
                AND ts.trial_ends_at IS NOT NULL
-               AND (ts.owner_id = g.id OR ts.trial_started_by IN (
+               AND ts.trial_started_by IN (
                  SELECT g.owner_user_id
                  UNION ALL
                  SELECT tu.id FROM users ou JOIN users tu ON tu.trial_person_key = ou.trial_person_key
@@ -634,7 +635,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
                      SELECT 1 FROM one_time_tokens tt
                      WHERE tt.user_id = tu.id AND tt.purpose = 'verify_email' AND tt.used_at IS NOT NULL
                    )
-               ))
+               )
            ) AS owner_trial_used,
            EXISTS (
              SELECT 1 FROM subscriptions gs
@@ -778,7 +779,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             fitted_members: r.sub_fitted_members,
           }),
     seatsUsed: r.seats_used,
-    ownerTrialUsed: r.owner_trial_used,
+    ownerTrialUsed: r.owner_trial_used || r.gym_trial_used,
     gymTrialUsed: r.gym_trial_used,
     trialEndedFirstPeople: r.trial_ended_first_people,
     postalAddress: r.postal_address,
@@ -2108,11 +2109,14 @@ export async function startGymTrial(
             WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
           )
       )
-      SELECT count(*)::int AS n, COALESCE(bool_or(s.trial_started_by IN (SELECT id FROM person)), false) AS theirs
-      FROM subscriptions s
-      WHERE s.owner_type = 'gym'
-        AND s.trial_ends_at IS NOT NULL
-        AND (s.owner_id = ${input.gymId} OR s.trial_started_by IN (SELECT id FROM person))`;
+      SELECT count(*)::int AS n, COALESCE(bool_or(x.theirs), false) AS theirs
+      FROM (
+        SELECT true AS theirs FROM subscriptions s
+        WHERE s.owner_type = 'gym' AND s.trial_ends_at IS NOT NULL AND s.trial_started_by IN (SELECT id FROM person)
+        UNION ALL
+        SELECT s.trial_started_by IN (SELECT id FROM person) FROM subscriptions s
+        WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId} AND s.trial_ends_at IS NOT NULL
+      ) x`;
     const usedHere = used[0] ?? { n: 0, theirs: false };
     let refused: "trial_already_used" | "trial_used_on_device" | null =
       usedHere.n === 0 ? null : "trial_already_used";
