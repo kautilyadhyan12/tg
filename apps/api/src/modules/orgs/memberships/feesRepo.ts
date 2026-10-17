@@ -183,66 +183,77 @@ export interface FeePaymentRow {
   voided: Voided<PaymentVoidReason> | null;
 }
 
-/** The fees of the memberships named that a person's page shows: every one but those taken
- *  off by themselves, newest first, with their payments, standing and voided. */
+/** How many settled fees (paid or waived) a membership's box shows, newest first; every
+ *  unpaid one is shown however many there are. */
+export const SETTLED_FEES_SHOWN = 50;
+
+/** The fees of the memberships named that a person's page shows, newest first: every
+ *  unpaid one and the newest settled ones (`SETTLED_FEES_SHOWN`), never those taken off by
+ *  themselves, with their payments, standing and voided. */
 export async function feesFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<{ fees: FeeRow[]; payments: FeePaymentRow[] }> {
   if (membershipIds.length === 0) return { fees: [], payments: [] };
   const ids = [...membershipIds];
-  const [fees, payments] = await Promise.all([
-    sql<
-      {
-        id: string;
-        held_membership_id: string;
-        fee: string;
-        fee_for: string;
-        covers_from: string;
-        amount_minor: number;
-        tax_minor: number;
-        tax_bp: number;
-        tax_name: string | null;
-        tax_included: boolean | null;
-        currency: string;
-        due_on: string;
-        status: string;
-        void_reason: string | null;
-        voided_on: string | null;
-        voided_by_name: string | null;
-      }[]
-    >`
+  const fees = await sql<
+    {
+      id: string;
+      held_membership_id: string;
+      fee: string;
+      fee_for: string;
+      covers_from: string;
+      amount_minor: number;
+      tax_minor: number;
+      tax_bp: number;
+      tax_name: string | null;
+      tax_included: boolean | null;
+      currency: string;
+      due_on: string;
+      status: string;
+      void_reason: string | null;
+      voided_on: string | null;
+      voided_by_name: string | null;
+    }[]
+  >`
+    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.covers_from, x.amount_minor, x.tax_minor, x.tax_bp,
+           x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name
+    FROM (
       SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from, b.amount_minor, b.tax_minor, b.tax_bp,
              b.tax_name, b.tax_included, b.currency, b.due_on::text AS due_on, b.status, b.void_reason, b.voided_on::text AS voided_on,
-             v.display_name AS voided_by_name
+             b.voided_by, b.created_at,
+             row_number() OVER (PARTITION BY b.held_membership_id, b.status = 'open' ORDER BY b.created_at DESC, b.id) AS n
       FROM gym_member_bills b
-      LEFT JOIN users v ON v.id = b.voided_by
       WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${ids}::uuid[]) AND b.fee IS NOT NULL
         AND (b.status <> 'void' OR b.void_reason = 'waived')
-      ORDER BY b.created_at DESC, b.id`,
-    sql<
-      {
-        id: string;
-        bill_id: string;
-        amount_minor: number;
-        method: string;
-        paid_on: string;
-        by: string | null;
-        receipt_number: number;
-        undone: boolean;
-        void_reason: string | null;
-        voided_on: string | null;
-        voided_by: string | null;
-      }[]
-    >`
-      SELECT p.id, p.bill_id, p.amount_minor, p.method, p.paid_on::text AS paid_on, u.display_name AS by, p.receipt_number,
-             p.undone_at IS NOT NULL AS undone, p.void_reason, (p.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on,
-             v.display_name AS voided_by
-      FROM gym_member_payments p
-      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
-      JOIN gyms g ON g.id = p.gym_id
-      LEFT JOIN users u ON u.id = p.recorded_by
-      LEFT JOIN users v ON v.id = p.undone_by
-      WHERE p.gym_id = ${gymId} AND b.held_membership_id = ANY(${ids}::uuid[]) AND b.fee IS NOT NULL
-      ORDER BY p.seq`,
-  ]);
+    ) x
+    LEFT JOIN users v ON v.id = x.voided_by
+    WHERE x.status = 'open' OR x.n <= ${SETTLED_FEES_SHOWN}
+    ORDER BY x.created_at DESC, x.id`;
+  const billIds = fees.map((r) => r.id);
+  type RawFeePayment = {
+    id: string;
+    bill_id: string;
+    amount_minor: number;
+    method: string;
+    paid_on: string;
+    by: string | null;
+    receipt_number: number;
+    undone: boolean;
+    void_reason: string | null;
+    voided_on: string | null;
+    voided_by: string | null;
+  };
+  const payments =
+    billIds.length === 0
+      ? []
+      : await sql<RawFeePayment[]>`
+        SELECT p.id, p.bill_id, p.amount_minor, p.method, p.paid_on::text AS paid_on, u.display_name AS by, p.receipt_number,
+               p.undone_at IS NOT NULL AS undone, p.void_reason, (p.undone_at AT TIME ZONE g.timezone)::date::text AS voided_on,
+               v.display_name AS voided_by
+        FROM gym_member_payments p
+        JOIN gyms g ON g.id = p.gym_id
+        LEFT JOIN users u ON u.id = p.recorded_by
+        LEFT JOIN users v ON v.id = p.undone_by
+        WHERE p.gym_id = ${gymId} AND p.bill_id = ANY(${billIds}::uuid[])
+        ORDER BY p.seq`;
   return {
     fees: fees.map((r) => ({
       id: r.id,

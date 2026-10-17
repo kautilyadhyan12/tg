@@ -268,6 +268,13 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect(res.statusCode, res.body).toBe(200);
     return (JSON.parse(res.body) as { result: string }).result;
   };
+  /** A check-in already in the database, stamped `at`: one whose mark never reached the booking. */
+  const visitAt = async (gym: Gym, who: Member, at: number): Promise<void> => {
+    await sql`
+      INSERT INTO gym_attendance (gym_id, user_id, entry_id, marked_by_user_id, day, method, hours_status, slot_key, marked_at)
+      VALUES (${gym.id}, ${who.userId}, ${who.entryId}, ${gym.owner.userId},
+              (${new Date(at)}::timestamptz AT TIME ZONE ${ZONE}::text)::date, 'staff', 'hours_unset', 'hours_unset', ${new Date(at)})`;
+  };
   const warned: object[] = [];
   const run = (at: number, gyms: readonly Gym[]) => markEndedClasses({ sql, log: { warn: (obj) => warned.push(obj) } }, new Date(at), gyms.map((g) => g.id));
 
@@ -293,6 +300,8 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     const desk = await makeDesk(iron);
     const asha = await member(iron, "Asha Rao");
     const bina = await member(iron, "Bina Shah");
+    // Chloe checked in and the mark never reached her booking: the run itself marks her came.
+    const chloe = await member(iron, "Chloe Park");
     // Asha holds a second gym's membership too, booked on its class at the same hour.
     const rival = await makeGym("Rival Fees");
     const ashaThere = await member(rival, "Asha Rao");
@@ -300,16 +309,20 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     const rivalSpin = await classAt(rival, T0 + 30 * MIN);
     await book(iron, asha, spin);
     await book(iron, bina, spin);
+    await book(iron, chloe, spin);
     await book(rival, ashaThere, rivalSpin);
+    await visitAt(iron, chloe, T0);
 
     // Asha shows her pass at Iron's desk before the class.
     expect(await scanPass(desk, asha)).toBe("checked_in");
     const end = T0 + 30 * MIN + LENGTH;
-    expect(await run(end + 15 * MIN, [iron, rival])).toEqual({ gyms: 2, attended: 0, noShows: 1, left: 1 });
+    expect(await run(end + 15 * MIN, [iron, rival])).toEqual({ gyms: 2, attended: 1, noShows: 1, left: 1 });
     expect(await statusOf(spin, asha)).toBe("attended");
+    expect(await statusOf(spin, chloe)).toBe("attended");
     expect(await statusOf(spin, bina)).toBe("no_show");
 
     expect(await feesOf(asha)).toEqual([]);
+    expect(await feesOf(chloe)).toEqual([]);
     expect(await feesOf(ashaThere)).toEqual([]);
     const binas = await feesOf(bina);
     expect(binas).toHaveLength(1);
@@ -319,6 +332,7 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect(await run(end + 2 * HOUR, [iron, rival])).toEqual({ gyms: 1, attended: 0, noShows: 0, left: 1 });
     expect(await feesOf(bina)).toHaveLength(1);
     expect(await feesOf(asha)).toEqual([]);
+    expect(await feesOf(chloe)).toEqual([]);
     expect(warned).toEqual([]);
   });
 
@@ -505,6 +519,22 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect((await inject("POST", `${feeUrl(gym, finn, fee.id)}/waive`, gym.owner.cookies, {})).statusCode).toBe(200);
     const audit = await sql<{ action: string }[]>`SELECT action FROM audit_log WHERE gym_id = ${gym.id} AND action LIKE 'org.member_fee%' ORDER BY at, id`;
     expect(audit.map((a) => a.action)).toEqual(["org.member_fees_opened", "org.member_fee_paid", "org.member_fee_payment_voided", "org.member_fee_waived"]);
+  });
+
+  it("a person's page shows every unpaid fee and the newest 50 settled ones", async () => {
+    clock = T0;
+    const gym = await makeGym("Many Fees");
+    const hana = await member(gym, "Hana Ito");
+    // 60 waived fees over the years, and 3 unpaid, the oldest of everything.
+    await sql`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, fee, fee_for, amount_minor, currency, due_on, covers_from, covers_to, status, void_reason, voided_on, created_at)
+      SELECT ${gym.id}, ${hana.heldId}, 'no_show', 'Spin', 800, 'GBP', d, d, d,
+             CASE WHEN i <= 3 THEN 'open' ELSE 'void' END, CASE WHEN i <= 3 THEN NULL ELSE 'waived' END, CASE WHEN i <= 3 THEN NULL ELSE d END,
+             now() - make_interval(days => 400 - i)
+      FROM generate_series(1, 63) i, LATERAL (SELECT (now() - make_interval(days => 400 - i))::date AS d) x`;
+    const shown = await feesOnPage(gym, hana);
+    expect(shown.filter((f) => f.state === "waived")).toHaveLength(50);
+    expect(shown.filter((f) => f.state !== "waived")).toHaveLength(3);
   });
 
   it("only staff who record payments change the fees; the rules page says what they are", async () => {
