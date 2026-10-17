@@ -169,13 +169,16 @@ const KIND_ORDER: readonly ClueKind[] = ["first_people", "address", "name_city"]
 
 /** Two gyms at the same address in the same town: the same city, or, where either has none,
  *  the same PIN or ZIP code. Every town has a "Shop 3, Station Road". */
-function sameTown(a: LookGym, b: LookGym): boolean {
-  const ca = cityKey(a.city);
-  const cb = cityKey(b.city);
-  if (ca !== null && cb !== null) return ca === cb;
-  const pa = postcodeOf(a.address);
-  return pa !== null && pa === postcodeOf(b.address);
+function sameTown(a: Town, b: Town): boolean {
+  if (a.city !== null && b.city !== null) return a.city === b.city;
+  return a.postcode !== null && a.postcode === b.postcode;
 }
+
+interface Town {
+  city: string | null;
+  postcode: string | null;
+}
+const townOf = (gym: LookGym): Town => ({ city: cityKey(gym.city), postcode: postcodeOf(gym.address) });
 
 /** Each trial gym's clues against the older gyms of other owners. The owner's own other gyms
  *  are left out: one free trial per person, and Kd's second-trial code, already cover them. */
@@ -184,7 +187,7 @@ export function trialClues(trials: readonly TrialGym[], others: readonly LookGym
   const trialCities = new Set(trials.map((t) => cityKey(t.city)));
   const trialAddresses = new Set(trials.map((t) => addressKey(t.address)));
   const byCity = new Map<string, { gym: LookGym; core: string[] }[]>();
-  const byAddress = new Map<string, LookGym[]>();
+  const byAddress = new Map<string, { gym: LookGym; town: Town }[]>();
   for (const gym of others) {
     const city = cityKey(gym.city);
     if (city !== null && trialCities.has(city)) {
@@ -195,7 +198,7 @@ export function trialClues(trials: readonly TrialGym[], others: readonly LookGym
     const address = addressKey(gym.address);
     if (address !== null && trialAddresses.has(address)) {
       const list = byAddress.get(address) ?? [];
-      list.push(gym);
+      list.push({ gym, town: townOf(gym) });
       byAddress.set(address, list);
     }
   }
@@ -208,8 +211,9 @@ export function trialClues(trials: readonly TrialGym[], others: readonly LookGym
     if (trial.firstPeopleGymId !== null) clues.push({ kind: "first_people", gymId: trial.firstPeopleGymId });
 
     const address = addressKey(trial.address);
-    for (const gym of address === null ? [] : byAddress.get(address) ?? []) {
-      if (older(gym) && sameTown(trial, gym)) clues.push({ kind: "address", gymId: gym.id });
+    const town = townOf(trial);
+    for (const other of address === null ? [] : byAddress.get(address) ?? []) {
+      if (older(other.gym) && sameTown(town, other.town)) clues.push({ kind: "address", gymId: other.gym.id });
     }
     const city = cityKey(trial.city);
     const core = nameCore(trial.name, trial.city);
