@@ -148,7 +148,7 @@ d("gym archive sweep (real Postgres)", () => {
 
   beforeAll(async () => {
     await cleanup();
-    app = await buildApp(loadConfig(baseEnv));
+    app = await buildApp(loadConfig(baseEnv), { orgs: { gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } } });
     sharedOwner = await makeUser();
   }, HOOK_TIMEOUT_MS);
 

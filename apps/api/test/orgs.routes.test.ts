@@ -622,7 +622,9 @@ d("orgs routes (real Postgres)", () => {
       ["DE", "USD"],
       ["ie", "USD"], // lower case is accepted; the poster/keyboard does not care
     ] as const) {
-      const created = await makeOrg(cookies, `Orgs Test Money ${country}`, { country });
+      // An owner per country: one account creates five gyms an hour at most (2g).
+      const owner = await makeUser(`currency-${country}`);
+      const created = await makeOrg(owner.cookies, `Orgs Test Money ${country}`, { country });
       expect(created.org.currencyDisplay).toBe(currency);
       // The value is what the DATABASE holds, not just what the reply says —
       // the column default is still INR and must never be what lands.

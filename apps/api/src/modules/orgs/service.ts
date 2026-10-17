@@ -168,6 +168,8 @@ export interface OrgsDeps {
   invites: InviteSettings | null;
   /** The clock a removal reads; tests move it. Production leaves it out. */
   now?: () => Date;
+  /** Gyms that never paid one owner may have; tests raise it. Production leaves it out. */
+  unpaidGymLimit?: number;
   /** REQUIRED, and the one caller that needs it is the attendance hook.
    *
    *  A streak that fails to recompute must not lose the attendance (the row IS
@@ -198,6 +200,9 @@ const FIRST_CODE_LABEL = "Front Desk";
  *  what the numbers need (32^6 codes) and bounds the loop so a genuinely broken
  *  constraint surfaces as a 503 instead of spinning. */
 const CREATE_ATTEMPTS = 5;
+
+/** Gyms that never paid one owner may have (Kd, 2026-10-17, 2g): a paid gym never counts. */
+export const UNPAID_GYMS_PER_OWNER = 10;
 
 function toOrgSummary(org: repo.OrgRow): OrgSummary {
   return {
@@ -275,6 +280,7 @@ export async function createOrg(
     try {
       const created = await repo.createOrgAttempt(deps.sql, {
         ownerUserId,
+        unpaidLimit: deps.unpaidGymLimit ?? UNPAID_GYMS_PER_OWNER,
         slug: slugCandidate(base, suffix),
         name: req.name,
         city: req.city ?? null,
@@ -307,6 +313,13 @@ export async function createOrg(
       });
     } catch (err) {
       if (err instanceof repo.OrgNameTakenError) continue;
+      if (err instanceof repo.UnpaidGymLimitError) {
+        throw new OrgsError(
+          403,
+          "unpaid_gym_limit",
+          `You already have ${String(deps.unpaidGymLimit ?? UNPAID_GYMS_PER_OWNER)} gyms or studios with no paid plan. Choose a plan for one of them to create another.`,
+        );
+      }
       throw err;
     }
   }

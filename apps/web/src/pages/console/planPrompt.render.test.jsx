@@ -557,6 +557,25 @@ describe('a gym the moment it is created', () => {
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
+  it('an owner with ten gyms on no plan is told why, and the button opens Your organisations', async () => {
+    orgService.createOrg.mockRejectedValue({
+      response: {
+        status: 403,
+        data: {
+          error: 'unpaid_gym_limit',
+          message: 'You already have 10 gyms or studios with no paid plan. Choose a plan for one of them to create another.',
+        },
+      },
+    });
+    renderNewGym();
+    await createGym();
+
+    expect(await screen.findByText(/You already have 10 gyms or studios with no paid plan/)).toBeTruthy();
+    expect(screen.queryByTestId('plan-modal')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Your organisations' }).getAttribute('href')).toBe('/console');
+    expect(screen.queryByRole('button', { name: 'Sign in with another email' })).toBeNull();
+  });
+
   it('shows the code on Overview once the trial has started', async () => {
     // The control for the prompt above: it lets the owner through, then the code is there.
     orgService.createOrg.mockResolvedValue({

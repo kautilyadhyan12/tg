@@ -185,7 +185,7 @@ d("check-in at the front desk (real Postgres)", () => {
       INSERT INTO plans (code, audience, name_key, price_minor, currency, interval, seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
-    app = await buildApp(loadConfig(baseEnv), { redis });
+    app = await buildApp(loadConfig(baseEnv), { redis, orgs: { gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } } });
     await api().ready();
     owner = await makeUser("owner", "Iron Owner");
     ironHouse = await makeGym(owner, "Iron House");

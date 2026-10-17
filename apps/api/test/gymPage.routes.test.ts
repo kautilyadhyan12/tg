@@ -179,6 +179,7 @@ d("a gym's own page and its enquiry form (real Postgres)", () => {
               100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(loadConfig(baseEnv), {
+      orgs: { gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
         sendPasswordResetEmail: () => Promise.resolve(),

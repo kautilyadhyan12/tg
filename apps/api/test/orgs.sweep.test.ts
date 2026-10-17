@@ -172,7 +172,7 @@ d("join-application sweep + nudge (real Postgres)", () => {
 
   beforeAll(async () => {
     await cleanup();
-    app = await buildApp(loadConfig(baseEnv));
+    app = await buildApp(loadConfig(baseEnv), { orgs: { gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } } });
     // **THE OWNER IS MADE ONCE, NOT PER TEST — and this is the real fix for the
     // three-suite run, not the timeout above.** Each test still gets its OWN
     // GYM and its own application, which is what its isolation actually rests
