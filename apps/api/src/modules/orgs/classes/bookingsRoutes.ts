@@ -109,12 +109,14 @@ export function registerClassBookingRoutes(app: FastifyInstance, deps: { sql: Sq
     const body = parseOr400(cancelClassBookingRequestSchema, req.body, req, reply);
     if (body === null) return;
     try {
-      const booking = await service.cancel(bookingDeps, requireUserId(req), params.gymId, params.sessionId, body.lateOk, gate(writeLimit)(req, reply));
+      const booking = await service.cancel(bookingDeps, requireUserId(req), params.gymId, params.sessionId, body, gate(writeLimit)(req, reply));
       if (booking === null) return;
       return await reply.status(200).send({ booking });
     } catch (err) {
       if (!(err instanceof service.LateCancel)) throw err;
-      return reply.status(409).send({ error: CLASS_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
+      return reply
+        .status(409)
+        .send({ error: CLASS_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, feeMinor: err.feeMinor, currency: err.currency, requestId: req.id });
     }
   });
 

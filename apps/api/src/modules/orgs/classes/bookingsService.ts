@@ -19,8 +19,11 @@ import {
   CLASS_LATE_CANCEL_ERROR,
   CLASS_MARK_WORDS,
   CLASS_REMOVE_WORDS,
+  classFeeFor,
+  memberCurrencyForCountry,
   classOnlineView,
   decideStaffRemove,
+  lateCancelFeeWords,
   MEMBER_CLASSES_MAX,
   addDays,
   bookingTime,
@@ -36,6 +39,7 @@ import {
   type BookingTime,
   type ClassBookRefusal,
   type BookingSettingsBody,
+  type ClassFees,
   type ClassBookingSettingsResponse,
   type ClassBookingView,
   type ClassBookingsEndingQuery,
@@ -53,6 +57,7 @@ import { OrgsError, holdsPrivilege, requirePrivilege, requireWritableGym, requir
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
+import { classFeesOf, openClassFees, removeClassFees } from "../memberships/feesRepo.js";
 import { handOver, handOverComing, handOverPlan, handsOverTo, pick, planHandOver, type HandOverPlan } from "./bookingChanges.js";
 import { handOverComingEvents } from "../events/places.js";
 import * as repo from "./bookingsRepo.js";
@@ -189,6 +194,14 @@ async function viewFrom(
   const wait = ask(true);
   const cancel = decideCancel({ time, cancelled: session.cancelled, mine: cancellable(ctx, time), packCharged: latest?.packCharged ?? false, lateOk: true });
   const startsAt = session.startsAt.getTime();
+  // What a late cancel and a no-show would cost them: on the membership their place is held
+  // on, or, with no place yet, the one a booking would use now.
+  const holds = latest !== null && latest.status !== "cancelled" && latest.status !== "waitlisted";
+  const fees = holds
+    ? feesOf(ctx.fees, latest.heldMembershipId, latest.packCharged)
+    : cover.ok
+      ? feesOf(ctx.fees, cover.membershipId, cover.chargePack)
+      : null;
   // Marked came (a check-in before the class does it) or no-show: the place is theirs
   // already, so there is nothing to book, wait for or claim.
   const marked = latest?.status === "attended" || latest?.status === "no_show";
@@ -224,7 +237,16 @@ async function viewFrom(
       why: member && wait.kind === "refuse" ? wait.reason : null,
     },
     online: online === null ? null : { state: online.state, opensAt: new Date(online.opensAtMs).toISOString(), link: online.link },
+    fees,
   };
+}
+
+/** The fees one place would cost, by the one rule; null where neither costs anything. */
+function feesOf(gym: ClassFees & { currency: string | null }, heldMembershipId: string | null, packCharged: boolean): ClassBookingView["fees"] {
+  if (gym.currency === null) return null;
+  const lateCancelMinor = classFeeFor({ fee: "late_cancel", heldMembershipId, packCharged, fees: gym });
+  const noShowMinor = classFeeFor({ fee: "no_show", heldMembershipId, packCharged, fees: gym });
+  return lateCancelMinor === 0 && noShowMinor === 0 ? null : { lateCancelMinor, noShowMinor, currency: gym.currency };
 }
 /** An online class as this person meets it now, by the one rule. The link is for
  *  somebody who is a member now: a place kept by somebody who has left the gym is nobody's
@@ -430,23 +452,30 @@ export async function book(
 }
 
 /** The 409 a cancel answers when it is past the free time and the person has not said yes
- *  to a late cancel: `packCharged` says whether their pack keeps the class. */
+ *  to a late cancel, or to the fee it costs: `packCharged` says whether their pack keeps the
+ *  class, `feeMinor` what the late cancel fee is (0 for none, 18h-i). */
 export class LateCancel extends Error {
   readonly packCharged: boolean;
-  constructor(packCharged: boolean) {
-    super(packCharged ? CLASS_BOOKING_WORDS.late_cancel_pack : CLASS_BOOKING_WORDS.late_cancel);
+  readonly feeMinor: number;
+  readonly currency: string;
+  constructor(packCharged: boolean, feeMinor: number, currency: string) {
+    super(feeMinor > 0 ? lateCancelFeeWords(feeMinor, currency) : packCharged ? CLASS_BOOKING_WORDS.late_cancel_pack : CLASS_BOOKING_WORDS.late_cancel);
     this.name = CLASS_LATE_CANCEL_ERROR;
     this.packCharged = packCharged;
+    this.feeMinor = feeMinor;
+    this.currency = currency;
   }
 }
 
-/** Cancel a booking, or leave the waitlist. A cancel sent again finds it done. */
+/** Cancel a booking, or leave the waitlist. A cancel sent again finds it done. A late
+ *  cancel that costs a fee goes through only where `feeMinor` is the fee it costs now, so
+ *  nobody pays a fee they were not shown (18h-i). */
 export async function cancel(
   deps: BookingsDeps,
   userId: string,
   gymId: string,
   sessionId: string,
-  lateOk: boolean,
+  req: { lateOk: boolean; feeMinor?: number | undefined },
   limit: Limit,
 ): Promise<ClassBookingView | null> {
   await requireMember(deps, gymId, userId);
@@ -460,15 +489,16 @@ export async function cancel(
       if (latest?.status === "cancelled" || latest?.status === "late_cancelled") return null;
       const now = deps.now();
       const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
+      const fee = classFeeFor({ fee: "late_cancel", heldMembershipId: latest?.heldMembershipId ?? null, packCharged: latest?.packCharged ?? false, fees: ctx.fees });
       const decision = decideCancel({
         time,
         cancelled: ctx.session.cancelled,
         mine: cancellable(ctx, time),
         packCharged: latest?.packCharged ?? false,
-        lateOk,
+        lateOk: req.lateOk && (fee === 0 || req.feeMinor === fee),
       });
       if (decision.kind === "refuse") {
-        if (decision.reason === "late_cancel") return new LateCancel(latest?.packCharged ?? false);
+        if (decision.reason === "late_cancel") return new LateCancel(latest?.packCharged ?? false, fee, ctx.fees.currency ?? "");
         // A class they came to or missed is over, as one that has started is.
         if (decision.reason === "class_started" || latest !== null) {
           return new OrgsError(409, "class_started", CLASS_BOOKING_WORDS.cancel_started);
@@ -484,6 +514,7 @@ export async function cancel(
         now,
       });
       if (decision.refundPack && latest.heldMembershipId !== null) await givePackClassBack(tx, gymId, latest.heldMembershipId, now);
+      if (decision.status === "late_cancelled") await openClassFees(tx, gymId, [latest.id], "late_cancel", now);
       if (decision.freesPlace) {
         await handOver(tx, gymId, { ...ctx, counts: { ...ctx.counts, booked: ctx.counts.booked - 1 } }, now);
       }
@@ -512,6 +543,8 @@ export async function getSessionBookings(
   if (!(await limit())) return null;
   if (session === null) throw classNotFound();
   const opens = await holdsPrivilege(deps, gymId, staffId, "members.confirm");
+  const currency = memberCurrencyForCountry(org.country);
+  const fees = await classFeesOf(deps.sql, gymId);
   const [booked, waitlisted, late, lateTotal] = await Promise.all([
     repo.staffList(deps.sql, gymId, sessionId, CLASS_BOOKING_HOLDS_PLACE, 1000),
     repo.staffList(deps.sql, gymId, sessionId, ["waitlisted"], 1000),
@@ -532,6 +565,10 @@ export async function getSessionBookings(
         // The way to a person's page, for staff who may open it.
         entryId: opens ? r.entryId : null,
         at: r.at.toISOString(),
+        // A person's fee, and what No-show adds for them, are money, as what they paid with is
+        // (18h-i): a coach is told the gym's price once for the class (`noShowFeeMayMinor`).
+        fee: manages ? r.fee : null,
+        noShowFeeMinor: manages && currency !== null ? classFeeFor({ fee: "no_show", heldMembershipId: r.heldMembershipId, packCharged: r.packCharged, fees }) || null : null,
       };
     });
   return classSessionBookingsResponseSchema.parse({
@@ -544,6 +581,8 @@ export async function getSessionBookings(
     waitlisted: shown(waitlisted),
     lateCancelled: shown(late),
     lateCancelledTotal: lateTotal,
+    currency,
+    noShowFeeMayMinor: !manages && currency !== null && fees.noShowMinor > 0 ? fees.noShowMinor : null,
     canMark: !session.cancelled && deps.now().getTime() >= session.startsAt.getTime(),
     canRemove: !session.cancelled && deps.now().getTime() < session.startsAt.getTime(),
     online: session.online,
@@ -592,6 +631,9 @@ export async function markBooking(
     if (decision.kind === "already") return null;
     if (decision.kind === "refuse") return new OrgsError(409, decision.reason, CLASS_MARK_WORDS[decision.reason]);
     await repo.markAs(tx, gymId, [booking.id], req.status, ["booked", "attended", "no_show"]);
+    // A no-show opens its fee; came takes an unpaid one off (18h-i).
+    if (req.status === "no_show") await openClassFees(tx, gymId, [booking.id], "no_show", deps.now());
+    else await removeClassFees(tx, gymId, [booking.id], deps.now());
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,
@@ -694,19 +736,29 @@ export async function getEndingBookings(
   });
 }
 
-/** The gym's four booking settings and personal training's two, for staff holding
- *  `schedule.manage`. */
+/** A fee charges people money, so changing one also needs the payments' own tick. */
+const BILLING = "billing.members";
+const NO_FEES = "Changing fees isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
+
+/** The settings as a reader is sent them, with the class fees in the gym's money. */
+async function rulesView(deps: Pick<BookingsDeps, "sql">, org: OrgRow, staffId: string, rules: repo.BookingRules): Promise<ClassBookingSettingsResponse> {
+  const [canChange, onBills] = await Promise.all([holdsPrivilege(deps, org.id, staffId, BILLING), repo.hasMembershipTypes(deps.sql, org.id)]);
+  return classBookingSettingsResponseSchema.parse({ settings: rules.settings, pt: rules.pt, fees: { ...rules.fees, currency: memberCurrencyForCountry(org.country) ?? org.currencyDisplay, canChange, onBills } });
+}
+
+/** The gym's four booking settings and personal training's two, and the class fees, for
+ *  staff holding `schedule.manage`. */
 export async function getBookingSettings(
   deps: Pick<BookingsDeps, "sql">,
   staffId: string,
   gymId: string,
   limit: Limit,
 ): Promise<ClassBookingSettingsResponse | null> {
-  await requirePrivilege(deps, gymId, staffId, "schedule.manage");
+  const { org } = await requirePrivilege(deps, gymId, staffId, "schedule.manage");
   if (!(await limit())) return null;
   const rules = await repo.readSettings(deps.sql, gymId);
   if (rules === null) throw notFound();
-  return classBookingSettingsResponseSchema.parse(rules);
+  return await rulesView(deps, org, staffId, rules);
 }
 
 /** The settings changed. They are read at each booking, so they hold for every class
@@ -721,20 +773,25 @@ export async function setBookingSettings(
   body: BookingSettingsBody,
   limit: Limit,
 ): Promise<(ClassBookingSettingsResponse & { movedIn: number }) | null> {
-  await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
+  const { org } = await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
   if (!(await limit())) return null;
-  const { pt, ...settings } = body;
+  const { pt, fees: asked, ...settings } = body;
+  const mayFees = await holdsPrivilege(deps, gymId, staffId, BILLING);
   let movedIn = 0;
-  const saved = await deps.sql.begin(async (tx) => {
+  const saved = await deps.sql.begin(async (tx): Promise<repo.BookingRules | OrgsError | null> => {
     await lockOrgRow(tx, gymId);
     const before = await repo.readSettings(tx, gymId);
     if (before === null) return null;
+    const fees = asked ?? before.fees;
     const keys = ["opensDays", "freeCancelMinutes", "handoverMinutes", "waitlistMax"] as const;
     const ptKeys = ["opensDays", "freeCancelMinutes"] as const;
+    const feeKeys = ["lateCancelMinor", "noShowMinor"] as const;
     const changed = keys.filter((k) => before.settings[k] !== settings[k]);
     const ptChanged = ptKeys.filter((k) => before.pt[k] !== pt[k]);
-    if (changed.length === 0 && ptChanged.length === 0) return before;
-    await repo.writeSettings(tx, gymId, { settings, pt });
+    const feesChanged = feeKeys.filter((k) => before.fees[k] !== fees[k]);
+    if (feesChanged.length > 0 && !mayFees) return new OrgsError(403, "forbidden", NO_FEES);
+    if (changed.length === 0 && ptChanged.length === 0 && feesChanged.length === 0) return before;
+    await repo.writeSettings(tx, gymId, { settings, pt, fees });
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,
@@ -744,6 +801,7 @@ export async function setBookingSettings(
       meta: Object.fromEntries<string>([
         ...changed.map((k): [string, string] => [k, `${String(before.settings[k])} -> ${String(settings[k])}`]),
         ...ptChanged.map((k): [string, string] => [`pt.${k}`, `${String(before.pt[k])} -> ${String(pt[k])}`]),
+        ...feesChanged.map((k): [string, string] => [`fees.${k}`, `${String(before.fees[k])} -> ${String(fees[k])}`]),
       ]),
     });
     if (settings.handoverMinutes < before.settings.handoverMinutes) {
@@ -751,8 +809,9 @@ export async function setBookingSettings(
       // An event's waitlist is handed over by the same setting (19c-ii).
       movedIn += await handOverComingEvents(tx, gymId, deps.now());
     }
-    return { settings, pt };
+    return { settings, pt, fees };
   });
   if (saved === null) throw notFound();
-  return { ...classBookingSettingsResponseSchema.parse(saved), movedIn };
+  if (saved instanceof OrgsError) throw saved;
+  return { ...(await rulesView(deps, org, staffId, saved)), movedIn };
 }

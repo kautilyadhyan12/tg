@@ -166,7 +166,7 @@ export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now:
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
     JOIN gym_member_list_entries e ON e.gym_id = m.gym_id AND e.id = m.entry_id AND e.former_at IS NULL
     JOIN gym_held_memberships h ON h.gym_id = e.gym_id AND h.entry_id = e.id AND h.status IN ('active','frozen')
-    JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open'
+    JOIN gym_member_bills b ON b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.status = 'open' AND b.period_index IS NOT NULL
     WHERE g.gym_id = ${gymId} AND g.used_at IS NULL AND g.taken_back_at IS NULL AND g.gift_on = 'membership' AND g.days IS NULL
       AND (${onlyGiftId}::uuid IS NULL OR g.id = ${onlyGiftId}::uuid)
       AND NOT EXISTS (SELECT 1 FROM gym_member_payments p WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL)
@@ -360,7 +360,7 @@ async function standingOther(
     SELECT p.id FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-    WHERE p.gym_id = ${gymId} AND h.entry_id = ${friendEntryId} AND p.undone_at IS NULL
+    WHERE p.gym_id = ${gymId} AND h.entry_id = ${friendEntryId} AND p.undone_at IS NULL AND b.period_index IS NOT NULL
       AND (${paymentId}::uuid IS NULL OR p.id <> ${paymentId}::uuid)
       AND p.amount_minor > COALESCE((SELECT sum(r.amount_minor) FROM gym_member_refunds r
                                      WHERE r.gym_id = p.gym_id AND r.payment_id = p.id AND r.undone_at IS NULL), 0)

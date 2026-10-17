@@ -46,7 +46,7 @@ async function openBillsDue(sql: SqlOrTx, gymId: string, today: string, days: nu
   const rows = await sql<{ id: string; held_membership_id: string; due_on: string }[]>`
     SELECT b.id, b.held_membership_id, b.due_on::text AS due_on
     FROM gym_member_bills b
-    WHERE b.gym_id = ${gymId} AND b.status = 'open'
+    WHERE b.gym_id = ${gymId} AND b.status = 'open' AND b.period_index IS NOT NULL
       AND b.due_on < ${today}::date AND b.due_on >= ${today}::date - ${days}::int`;
   return rows.map((row) => ({ id: row.id, membershipId: row.held_membership_id, dueOn: row.due_on, open: true }));
 }
@@ -59,7 +59,7 @@ async function paidInApp(sql: SqlOrTx, gymId: string, membershipIds: readonly st
     SELECT DISTINCT b.held_membership_id AS id
     FROM gym_member_bills b
     JOIN gym_member_payments p ON p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL
-    WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[])`;
+    WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND b.period_index IS NOT NULL`;
   return new Set(rows.map((row) => row.id));
 }
 

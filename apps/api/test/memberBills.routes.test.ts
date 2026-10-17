@@ -264,6 +264,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
         pay: { periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, leftMinor: 4999, dueOn: today, state: "due" },
         cancel: { billId: expect.any(String) as string },
         undo: null,
+        fees: [],
       });
       const payUrl = oneUrl(gymId, person, m.id, "payments");
 
@@ -1012,7 +1013,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
 
       // A free membership has nothing to pay: no bill, and nothing to record.
       const staff = (await given(gymId, person, owner.cookies, { typeId: free, startsOn: today, paid: true })).memberships.find((m) => m.typeId === free);
-      expect(staff?.billing).toEqual({ bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null });
+      expect(staff?.billing).toEqual({ bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [] });
       const none = await post(oneUrl(gymId, person, staff?.id ?? "", "payments"), { requestKey: nextKey(), periodIndex: 0, amountMinor: 100, method: "cash" }, owner.cookies);
       expect([none.statusCode, errorOf(none)]).toEqual([409, "held_membership_changed"]);
       // A day pass sold unpaid is owed once; paid, it takes nothing more.

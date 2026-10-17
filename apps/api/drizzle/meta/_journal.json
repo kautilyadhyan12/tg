@@ -951,7 +951,14 @@
       "idx": 135,
       "version": "7",
       "when": 1790726400136,
-      "tag": "0136_trial_passes",
+      "tag": "0136_class_fees",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1790726400137,
+      "tag": "0137_trial_passes",
       "breakpoints": true
     }
   ]

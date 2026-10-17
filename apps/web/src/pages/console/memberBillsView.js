@@ -8,6 +8,7 @@ import {
   BILL_CANCEL_REASONS,
   BILL_CANCEL_REASON_WORDS,
   BILL_OVERDUE_DAYS_MAX,
+  MEMBER_FEE_WORDS,
   MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
   PAYMENT_VOID_REASONS,
@@ -68,9 +69,11 @@ export function shortDay(day, withYear = true) {
   return `${String(d)} ${SHORT_MONTHS[m - 1]}${withYear ? ` ${String(y)}` : ''}`;
 }
 
-/** The days a bill is for, "1 Oct – 31 Oct 2026"; a bill for a whole membership says so. */
+/** The days a bill is for, "1 Oct – 31 Oct 2026"; a bill for a whole membership says so,
+ *  and a fee says its one day. */
 export function billDays(covers) {
   if (covers === null) return 'Whole membership';
+  if (covers.from === covers.to) return shortDay(covers.from);
   const sameYear = covers.from.slice(0, 4) === covers.to.slice(0, 4);
   return `${shortDay(covers.from, !sameYear)} – ${shortDay(covers.to)}`;
 }
@@ -169,6 +172,104 @@ const paymentLine = (p, currency) => ({
 });
 
 const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+
+// ── A late cancel or no-show fee (18h-i) ──
+
+const FEE_TAGS = { ...STATE_TAGS, waived: { tag: 'Waived', tone: 'plain' }, removed: { tag: 'Taken off', tone: 'plain' } };
+
+/** A fee paid, or taken off, after its booking stopped counting (18h-i, round one). */
+const NO_LONGER_OWED = 'No longer owed: they were marked Came, or the class was cancelled.';
+
+/** One fee as a box: what it is and what it was for, its amount and tag, when it is due,
+ *  who waived it, and its payment, a voided one struck through. */
+export function feeRow(fee, currency, today) {
+  const state = FEE_TAGS[fee.state] ?? STATE_TAGS.due;
+  let when = null;
+  if (fee.state === 'overdue') when = `Was due ${dayWords(fee.dueOn)}`;
+  else if (fee.state === 'due') when = fee.dueOn === today ? 'Due today' : `Due ${dayWords(fee.dueOn)}`;
+  return {
+    id: fee.id,
+    title: MEMBER_FEE_WORDS[fee.fee] ?? 'Fee',
+    about: `One-time fee · ${fee.forName}, ${dayWords(fee.on)}`,
+    amount: formatMinor(fee.amountMinor, currency),
+    tag: state.tag,
+    tone: state.tone,
+    tax: billTaxLine(fee, currency),
+    when,
+    waived:
+      fee.waived !== null
+        ? `Waived ${dayWords(fee.waived.on)}${fee.waived.by === null ? '' : ` by ${fee.waived.by}`}`
+        : fee.state === 'removed'
+          ? NO_LONGER_OWED
+          : fee.state === 'paid' && fee.stillOwed === false
+            ? `${NO_LONGER_OWED} If you gave the money back, void the payment.`
+            : null,
+    payments: [
+      ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: null })),
+      ...fee.voidedPayments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
+    ].sort((a, b) => a.receiptNumber - b.receiptNumber),
+    canPay: fee.can.pay,
+    canWaive: fee.can.waive,
+    voidPaymentId: fee.can.voidPaymentId,
+  };
+}
+
+/** A membership's fees that are still owed. */
+export function feesOwed(m) {
+  return (m.billing?.fees ?? []).filter((f) => f.state === 'due' || f.state === 'overdue');
+}
+
+/** The Record payment form of a fee: it is paid all at once, so only how is asked. */
+export function feePayDraft(fee, newKey) {
+  return { billId: fee.id, requestKey: newKey(), method: '' };
+}
+
+/** Why a fee's payment cannot be sent as it stands, or null; and the body it sends. */
+export function feePayBody(draft, fee) {
+  if (draft === null || fee === undefined || fee === null) return { problem: 'Open the form again.', body: null };
+  if (!MEMBER_PAYMENT_BY_HAND.includes(draft.method)) return { problem: 'Pick how they paid.', body: null };
+  return { problem: null, body: { requestKey: draft.requestKey, amountMinor: fee.amountMinor, method: draft.method } };
+}
+
+const feeName = (fee) => (MEMBER_FEE_WORDS[fee.fee] ?? 'fee').toLowerCase();
+
+/** Said once a fee's payment is recorded. */
+export function feePaidWords(fee, currency) {
+  return `${formatMinor(fee.amountMinor, currency)} recorded for the ${feeName(fee)}. Its receipt is under the fee.`;
+}
+
+/** The box Waive fee opens: whose fee, what stops being owed, and what stays. */
+export function waiveFeeWords(fee, currency, name) {
+  const amount = formatMinor(fee.amountMinor, currency);
+  return {
+    question: `Waive ${name}'s ${feeName(fee)} of ${amount}?`,
+    detail: `It is for ${fee.forName} on ${dayWords(fee.on)}. ${capital(name)} will owe nothing for it. The fee stays on this page, marked Waived, with who waived it. This can't be undone.`,
+    button: 'Waive fee',
+    done: `Fee waived. ${capital(name)} owes nothing for it.`,
+  };
+}
+
+/** The box Void payment opens on a fee. Where the booking no longer counts (marked came, or
+ *  the class did not run) the fee is taken off with it, and nothing is owed again. */
+export function voidFeePaymentWords(fee, currency, name) {
+  const amount = formatMinor(fee.amountMinor, currency);
+  if (fee.stillOwed === false) {
+    return {
+      question: `Void this ${amount} payment for ${name}'s ${feeName(fee)}?`,
+      detail: `${capital(name)} no longer owes this fee: they were marked Came, or the class was cancelled. Voiding the payment takes the fee off too, so nothing is owed. Do it if you gave the money back. The payment stays on this page, crossed out, with who voided it and why.`,
+      label: 'Why are you voiding it?',
+      button: 'Void payment',
+      done: `Payment voided. ${capital(name)} owes nothing for this fee.`,
+    };
+  }
+  return {
+    question: `Void this ${amount} payment for ${name}'s ${feeName(fee)}?`,
+    detail: `Only do this if it was recorded by mistake. The fee will be owed again. The payment stays on this page, crossed out, with who voided it and why.`,
+    label: 'Why are you voiding it?',
+    button: 'Void payment',
+    done: `Payment voided. ${capital(name)} owes the ${amount} ${feeName(fee)} again. If they paid, record it.`,
+  };
+}
 
 /** The bill staff can cancel now, or null: the server says which. */
 export function billToCancel(m) {

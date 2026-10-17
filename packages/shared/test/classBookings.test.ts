@@ -334,7 +334,21 @@ describe("the booking settings a save sends", () => {
 
   it("takes the four and personal training's two, and keeps each as its own", () => {
     expect(bookingSettingsBodySchema.parse({ ...classes, pt })).toEqual({ ...classes, pt });
-    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt })).toEqual({ settings: classes, pt });
+    // The class fees (18h-i): sent by a screen that shows them, always answered.
+    const fees = { lateCancelMinor: 500, noShowMinor: 0 };
+    expect(bookingSettingsBodySchema.parse({ ...classes, pt, fees })).toEqual({ ...classes, pt, fees });
+    const answered = { ...fees, currency: "GBP", canChange: true, onBills: true };
+    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered })).toEqual({ settings: classes, pt, fees: answered });
+    expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt })).toThrow();
+  });
+
+  it.each([
+    ["a fee under nothing", { lateCancelMinor: -1, noShowMinor: 0 }],
+    ["part of a penny", { lateCancelMinor: 1.5, noShowMinor: 0 }],
+    ["one of the two missing", { lateCancelMinor: 500 }],
+    ["a fee too big", { lateCancelMinor: 100_000_000, noShowMinor: 0 }],
+  ])("refuses fees with %s", (_name, fees) => {
+    expect(bookingSettingsBodySchema.safeParse({ ...classes, pt, fees }).success).toBe(false);
   });
 
   it.each([

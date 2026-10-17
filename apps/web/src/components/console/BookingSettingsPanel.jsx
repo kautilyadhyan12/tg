@@ -2,8 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
+import { placeFor } from '../../pages/console/consolePlaces';
+import PlaceLink from './PlaceLink';
 import {
   BOOKING_TIME_UNITS,
+  classFeesDraft,
+  classFeesFromDraft,
+  currencySign,
   bookingSettingsBody,
   bookingSettingsChanged,
   bookingSettingsDraft,
@@ -17,7 +22,8 @@ import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 // booking settings for classes, and personal training's own two (when a member can book
 // a session, and until when a cancel is free), each a starting value it can change
 // (RULINGS 2026-09-21, 2026-10-08). All six wait for one Save, as the gym's details do
-// above.
+// above, and so do the classes' late cancel and no-show fees (18h-i), which only staff who
+// record members' payments can change.
 
 const inputStyle = {
   background: '#0A0908',
@@ -63,6 +69,25 @@ function UnitPick({ value, onChange, disabled, label, one }) {
   );
 }
 
+/** An amount of money, behind its sign. */
+function MoneyBox({ value, onChange, disabled, label, sign }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span>{sign}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^0-9.,]/g, '').slice(0, 12))}
+        disabled={disabled}
+        className="rounded-xl px-3 py-3 text-base sm:text-sm w-28"
+        style={inputStyle}
+      />
+    </span>
+  );
+}
+
 function Part({ title, intro, children }) {
   return (
     <fieldset className="flex flex-col gap-5 m-0 p-0 border-0 min-w-0">
@@ -94,11 +119,14 @@ function Row({ title, hint, children }) {
 }
 
 // `startOpen`: the page was opened by a link to this box (the Classes and Personal training pages).
-export default function BookingSettingsPanel({ org, readOnly, startOpen = false }) {
+export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnly, startOpen = false }) {
   const gymId = org.id;
   const [settings, setSettings] = useState(null);
   const [pt, setPt] = useState(null);
   const [draft, setDraft] = useState(null);
+  // The class fees as saved, with their money and who may change them, and as typed.
+  const [fees, setFees] = useState(null);
+  const [feeDraft, setFeeDraft] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -114,6 +142,8 @@ export default function BookingSettingsPanel({ org, readOnly, startOpen = false 
           setSettings(res.data.settings);
           setPt(res.data.pt);
           setDraft(bookingSettingsDraft(res.data.settings, res.data.pt));
+          setFees(res.data.fees ?? null);
+          setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
         })
         .catch((err) => {
           if (isLive()) setLoadError(errorText(err, "We couldn't load your booking settings."));
@@ -135,8 +165,12 @@ export default function BookingSettingsPanel({ org, readOnly, startOpen = false 
   };
 
   const ready = settings !== null && pt !== null && draft !== null;
-  const changed = ready && bookingSettingsChanged(draft, settings, pt);
-  const problem = ready && changed ? bookingSettingsProblem(draft) : null;
+  // The class fees (18h-i), where the server sent them.
+  const hasFees = ready && fees !== null && feeDraft !== null;
+  const typedFees = hasFees ? classFeesFromDraft(feeDraft, fees.currency) : null;
+  const feesChanged = hasFees && fees.canChange && (typedFees === null || typedFees.lateCancelMinor !== fees.lateCancelMinor || typedFees.noShowMinor !== fees.noShowMinor);
+  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged);
+  const problem = !ready || !changed ? null : (bookingSettingsProblem(draft) ?? (hasFees && typedFees === null ? 'Type each fee as an amount, or 0 for no fee.' : null));
   const canSave = changed && problem === null && !saving && !readOnly;
   const off = readOnly || saving;
 
@@ -145,12 +179,23 @@ export default function BookingSettingsPanel({ org, readOnly, startOpen = false 
     setSaved(null);
     setSaveError(null);
   };
+  const editFees = (patch) => {
+    setFeeDraft({ ...feeDraft, ...patch });
+    setSaved(null);
+    setSaveError(null);
+  };
+  const feesOff = off || !fees?.canChange;
+  const sign = fees === null ? '' : currencySign(fees.currency);
+  const membershipsTo = placeFor(orgSlug, privileges, 'memberships');
 
   const save = async (event) => {
     event.preventDefault();
     if (!canSave) return;
-    const body = bookingSettingsBody(draft);
-    if (body === null) return;
+    const rules = bookingSettingsBody(draft);
+    const sendsFees = hasFees && fees.canChange;
+    if (rules === null || (sendsFees && typedFees === null)) return;
+    // The fees go only from staff who may change them; anybody else's save leaves them be.
+    const body = sendsFees ? { ...rules, fees: typedFees } : rules;
     setSaving(true);
     setSaveError(null);
     try {
@@ -158,6 +203,8 @@ export default function BookingSettingsPanel({ org, readOnly, startOpen = false 
       setSettings(res.data.settings);
       setPt(res.data.pt);
       setDraft(bookingSettingsDraft(res.data.settings, res.data.pt));
+      setFees(res.data.fees ?? null);
+      setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
       setSaved(bookingSettingsSavedLine(res.data.movedIn));
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save your booking settings."));
@@ -167,7 +214,7 @@ export default function BookingSettingsPanel({ org, readOnly, startOpen = false 
   };
 
   return (
-    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
@@ -210,6 +257,44 @@ export default function BookingSettingsPanel({ org, readOnly, startOpen = false 
               <NumberBox label="How many people a waitlist holds" value={draft.waitlistMax} onChange={(waitlistMax) => edit({ waitlistMax })} disabled={off} />
               <span>people for each class</span>
             </Row>
+
+            {hasFees ? (
+              <>
+                <Row
+                  title="Late cancel fee"
+                  hint="A one-time charge, never monthly: added once to the member's bill each time they cancel after free cancelling ends. They see the fee before they confirm. 0 means no fee. Members on a class pack never pay it: the class stays used on their pack."
+                >
+                  <MoneyBox label="Late cancel fee" sign={sign} value={feeDraft.lateText} onChange={(lateText) => editFees({ lateText })} disabled={feesOff} />
+                  <span>once, for each late cancel</span>
+                </Row>
+
+                <Row
+                  title="No-show fee"
+                  hint="A one-time charge, never monthly: added once to the member's bill each time they are marked No-show, by staff, or by itself 15 minutes after the class ends when you check people in and they never checked in. Marking them Came takes an unpaid fee off. 0 means no fee. Class pack members never pay it."
+                >
+                  <MoneyBox label="No-show fee" sign={sign} value={feeDraft.noShowText} onChange={(noShowText) => editFees({ noShowText })} disabled={feesOff} />
+                  <span>once, for each no-show</span>
+                </Row>
+
+                {fees.canChange ? null : (
+                  <p className="text-xs m-0" style={hintStyle} data-testid="fees-who">
+                    Only staff who record members' payments can change fees. Ask the owner.
+                  </p>
+                )}
+                {fees.onBills ? null : (
+                  <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="fees-need-membership">
+                    <span>A fee goes on the bills of the membership a member booked with, so fees start once you sell memberships here.</span>
+                    {membershipsTo === null ? (
+                      <span style={hintStyle}>The owner or a manager can add one on Memberships.</span>
+                    ) : (
+                      <PlaceLink to={membershipsTo} className="c-lk c-w6">
+                        Add a membership
+                      </PlaceLink>
+                    )}
+                  </p>
+                )}
+              </>
+            ) : null}
           </Part>
 
           <Part

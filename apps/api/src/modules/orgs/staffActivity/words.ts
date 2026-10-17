@@ -88,6 +88,8 @@ const methodWords = (s: Said): string => {
   const said = method === null ? undefined : (MEMBER_PAYMENT_METHOD_WORDS as Readonly<Record<string, string>>)[method];
   return said === undefined ? "" : ` (${said})`;
 };
+/** "late cancel fee", from a fee's note (18h-i). */
+const feeOf = (s: Said): string => (text(s, "fee") === "no_show" ? "no-show fee" : "late cancel fee");
 const membershipOf = (s: Said): string => {
   const type = text(s, "type");
   return type === null ? "membership" : `${type} membership`;
@@ -211,6 +213,12 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `Undid a refund${amount === null ? "" : ` of ${amount}`} to ${person(s)}`;
   },
   "org.bill_settings_changed": () => "Changed when an unpaid bill shows as Payment due",
+  "org.member_fee_paid": (s) => `Recorded ${pay(s)} from ${person(s)} for a ${feeOf(s)}${methodWords(s)}`,
+  "org.member_fee_waived": (s) => {
+    const amount = money(s, "amountMinor");
+    return `Waived ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}`;
+  },
+  "org.member_fee_payment_voided": (s) => `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
   "org.product_created": (s) => {
     const price = money(s, "priceMinor");
     return `Added the product${quoted(text(s, "name"))}${price === null ? "" : ` at ${price}`}`;
@@ -373,6 +381,8 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.trial_look",
   "org.member_list_deleted",
   "org.member_bills_opened",
+  "org.member_fees_opened",
+  "org.member_fees_removed",
   "org.held_membership_count_moved",
   "org.challenge_result_posted",
   "org.referral_member_gift_given",
