@@ -99,7 +99,7 @@ export default function NewGym() {
   const [error, setError] = useState(null);
   // A throwaway address cannot open a gym (2b): the way on is another address.
   const [throwaway, setThrowaway] = useState(false);
-  // Ten gyms with no paid plan (2g): the way on is a plan for one of them, from Your gyms.
+  // Ten gyms with no paid plan (2g): the way on is a plan for one of them, from Your organisations.
   const [atUnpaidLimit, setAtUnpaidLimit] = useState(false);
   // DOES THIS PERSON RUN ANYTHING YET? A new owner from the "Manage" door is
   // sent here by `ConsoleHome` because they run nothing (Kd 2026-09-07), and a
@@ -356,7 +356,7 @@ export default function NewGym() {
             className="self-start rounded-xl px-4 py-2 text-sm font-medium"
             style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
           >
-            Go to your gyms
+            Your organisations
           </Link>
         ) : null}
 

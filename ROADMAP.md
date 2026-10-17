@@ -193,7 +193,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 11. [ ] ~~Photo sharing to the gym (one-week life, reactions only, report-and-remove)~~ (**item 19b since 2026-09-22**), the photo/stats editor.
 12. [ ] ~~Reports section~~ (**item 21 since 2026-09-22**); billing section buttons; the seat cap re-counted (**by 4c's rule since 2026-09-21**); the two sweeps run in production configuration.
 13. ~~The invite card~~ — **moved to Stage 5 item 7** the same day it was planned (Kd, 2026-09-13); the emailed invitation (items 3 and 5) is the main path instead.
-14. [ ] Kd's admin panel — last.
+14. [ ] Kd's admin panel — last. It shows the "have a look" warnings (Stage 3 item 2e-ii), newest first, and lets Kd clear one (Kd, 2026-10-17).
 15. [ ] **Gym management features** (Kd, RULINGS 2026-09-19: *"it will be a management app but the management feature we will built later"*). What a gym runs its members with: plans, fees, start, renewal and expiry dates, payments and who has paid, reminders. The member list (items 3 and 5) is its first piece and already serves a gym with no other software; this line adds the rest. Not planned yet: a Fable planning chat first, which also settles with Kd where it sits in the order and how it meets Stage 3 item 3 (the gym marks a member paid) and Stage 2 items 8 and 9 (classes; the gym's own prices). The upload then learns those columns (spec Part 3 §9.11). **2026-09-21: the upload learns them NOW** — the file's membership type, dates and payment-status word are kept by 3a-v (Part 2 of the re-plan, spec §11); what is left of this line — plans as things a gym sells, taking payments, reminders — is planned in Parts 4, 5 and 7.
 
 16. **Check-in at the front desk** (RULINGS 2026-09-21, Part 3 of the re-plan; spec Part 3 §12). After 3a-v-b — a visit hangs on the durable member record. Every card Opus xhigh; the two extra passes run once over 16a–16c before any gym uses it.
@@ -400,10 +400,11 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 2d-ii. [x] **A gym that pays during its free trial is checked until the money is taken** — merged 2026-10-16 (PR #301).
    - 2e. **Allow now, look later** (split 2026-10-17 in two): the "have a look" list for weaker clues (an email to Kd until the admin panel; pause and remove already exist), with the gyms 2d puts on it, which Kd removes from his admin page once it is built (Kd, 2026-10-16), and the second-trial code for a real owner of two gyms; the ended-trial box gets a "Contact us" line (an email address until the website is online; Kd, 2026-10-16).
      - 2e-i. [x] **The second-trial code and "Write to us"** — merged 2026-10-17 (PR #305).
-     - 2e-ii. [ ] **The "have a look" email to Kd**: once a day, gyms on a free trial with a weaker clue (same city and a similar name, the same address) and the gyms 2d kept on its look list. Never blocks.
+     - 2e-ii. [ ] **The "have a look" warnings**: gyms on a free trial with a weaker clue (same city and a similar name, the same address) and the gyms 2d kept on its look list, kept for Kd's admin dashboard and printed by a command until it exists; never an email, never blocks (Kd, 2026-10-17).
    - 2f. **Paying during the trial** (Kd, RULINGS 2026-09-29 and 2026-09-30).
      - 2f-i. [x] **Paying in the trial means paying today** — merged 2026-09-30 (PR #140).
      - 2f-ii. ~~"Start my plan now" for a gym that kept its trial~~ **Struck 2026-09-30, never built** (RULINGS that day): paying in the trial always starts the plan now.
+   - 2g. [ ] **A limit on creating gyms**: five an hour per account and twenty per address; ten gyms that never paid per owner (Kd, 2026-10-17).
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18** (18c is this line; 18a, 18b and the Connect buttons are new).
 
 ## Stage 4 — Launch readiness

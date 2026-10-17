@@ -557,7 +557,7 @@ describe('a gym the moment it is created', () => {
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
   });
 
-  it('an owner with ten gyms on no plan is told why, and the button opens their gyms', async () => {
+  it('an owner with ten gyms on no plan is told why, and the button opens Your organisations', async () => {
     orgService.createOrg.mockRejectedValue({
       response: {
         status: 403,
@@ -572,7 +572,7 @@ describe('a gym the moment it is created', () => {
 
     expect(await screen.findByText(/You already have 10 gyms or studios with no paid plan/)).toBeTruthy();
     expect(screen.queryByTestId('plan-modal')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Go to your gyms' }).getAttribute('href')).toBe('/console');
+    expect(screen.getByRole('link', { name: 'Your organisations' }).getAttribute('href')).toBe('/console');
     expect(screen.queryByRole('button', { name: 'Sign in with another email' })).toBeNull();
   });
 
