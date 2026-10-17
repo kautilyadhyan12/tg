@@ -474,8 +474,8 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // with their account (`ON DELETE cascade`), the owner who asked is set null.
   "gym_co_owner_requests",
   // gym_owner_requests.user_id and requested_by — which co-owner the owner asked to take the
-  // gym over, and the answer (`0138`), on the same footing. `subscriptions.trial_started_by`
-  // (`0138`, set null) is on the `subscriptions` line below.
+  // gym over, and the answer (`0139`), on the same footing. `subscriptions.trial_started_by`
+  // (`0139`, set null) is on the `subscriptions` line below.
   "gym_owner_requests",
   // gym_member_notes.author_user_id — which member of staff wrote a note on a person's
   // record (`0083`), on gym_leads' footing: the gym's record; `ON DELETE set null`. The

@@ -5,7 +5,7 @@ import { memberPtService } from '../../api/memberPtApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
 import { weekText } from './classesView';
-import { emptyText, historyText, ptBookAsk, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptZoneNote, sessionText } from './personalTrainingView';
+import { emptyText, historyText, ptBookAsk, ptCancelAsk, ptCancelledText, ptDay, ptDays, ptFeeText, ptFeesText, ptZoneNote, sessionText } from './personalTrainingView';
 
 // A GYM'S PERSONAL TRAINING FOR ITS MEMBER (spec Part 3 §13.5; ROADMAP 17e-ii): the
 // trainers' available times on the day picked, each a button that asks first and then books it, and the
@@ -111,14 +111,19 @@ export default function PersonalTraining({ gym }) {
     setBusy(session.id);
     setSaid(null);
     try {
-      const now = await memberPtService.cancel(gym.id, session.id, lateOk);
+      // A late cancel says yes to the fee the box showed, so the server charges no other (18h-ii).
+      const now = lateOk ? await memberPtService.cancel(gym.id, session.id, true, session.fees?.lateCancelMinor ?? 0) : await memberPtService.cancel(gym.id, session.id, false);
       setAsking(null);
       setSaid({ text: ptCancelledText(now), bad: false });
       load();
     } catch (err) {
-      if (errorCode(err) === PT_LATE_CANCEL_ERROR && !lateOk) {
-        // The free time ran out while the box was open: ask again, as a late cancel.
-        setAsking({ ...session, cancel: 'late', packCharged: err.response?.data?.packCharged === true });
+      if (errorCode(err) === PT_LATE_CANCEL_ERROR) {
+        // The free time ran out while the box was open, or the fee changed: ask again, as a
+        // late cancel, with the fee the server says it costs now.
+        const data = err.response?.data ?? {};
+        const feeMinor = Number.isInteger(data.feeMinor) ? data.feeMinor : 0;
+        const fees = feeMinor > 0 && typeof data.currency === 'string' ? { lateCancelMinor: feeMinor, noShowMinor: session.fees?.noShowMinor ?? 0, currency: data.currency } : null;
+        setAsking({ ...session, cancel: 'late', packCharged: data.packCharged === true, fees });
       } else {
         setAsking(null);
         setSaid({ text: errorText(err, "That didn't go through. Try again."), bad: true });
@@ -167,6 +172,11 @@ export default function PersonalTraining({ gym }) {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white break-words">{sessionText(s)}</p>
                       {s.packCharged && <p className="text-xs mt-0.5" style={{ color: MUTED }}>1 session used from your pack</p>}
+                      {ptFeesText(s.fees) !== null && (
+                        <p className="text-xs mt-0.5" style={{ color: MUTED }} data-testid="pt-session-fees">
+                          {ptFeesText(s.fees)}
+                        </p>
+                      )}
                     </div>
                     {s.cancel !== null && (
                       <button
@@ -186,6 +196,11 @@ export default function PersonalTraining({ gym }) {
                   <li key={s.id} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)' }}>
                     <p className="text-sm break-words" style={{ color: MUTED }}>{sessionText(s)}</p>
                     <p className="text-xs mt-0.5" style={{ color: MUTED }}>{historyText(s)}</p>
+                    {ptFeeText(s) !== null && (
+                      <p className="text-xs mt-0.5" style={{ color: s.fee?.state === 'owed' ? ORANGE : MUTED }} data-testid="pt-session-fee">
+                        {ptFeeText(s)}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -241,6 +256,11 @@ export default function PersonalTraining({ gym }) {
                 <p className="text-sm" style={{ color: MUTED }}>{day.notOpen}</p>
               ) : (
                 <p className="text-xs" style={{ color: MUTED }}>{day.can ? 'Available times. Press one to book it.' : 'Available times.'}</p>
+              )}
+              {day.notOpen === null && day.fees !== null && (
+                <p className="text-xs" style={{ color: MUTED }} data-testid="pt-day-fees">
+                  {day.fees}
+                </p>
               )}
               {note !== null && <p className="text-xs" style={{ color: ORANGE }}>{note}</p>}
               {(day.notOpen === null ? day.trainers : []).map((t) => (

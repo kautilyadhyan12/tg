@@ -24,6 +24,8 @@ import {
   type PtSpan,
   type PtTime,
   type PtTimeOffSpan,
+  type ClassFees,
+  type PtFeeState,
 } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -49,15 +51,30 @@ export interface GymClock {
   opensDays: number;
   /** Whether the gym has any membership type on its price list. */
   hasTypes: boolean;
+  /** Personal training's late cancel and no-show fees (18h-ii). */
+  fees: ClassFees;
+  /** The gym's country, which names the money its memberships are sold in. */
+  country: string | null;
 }
 
 export async function gymClock(sql: SqlOrTx, gymId: string): Promise<GymClock | null> {
-  const rows = await sql<{ timezone: string; org_type: string; free: number; opens: number; has_types: boolean }[]>`
+  const rows = await sql<{ timezone: string; org_type: string; free: number; opens: number; has_types: boolean; late_fee: number; no_show_fee: number; country: string | null }[]>`
     SELECT g.timezone, g.org_type, g.pt_free_cancel_minutes AS free, g.pt_opens_days AS opens,
-           EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = g.id AND mt.archived_at IS NULL) AS has_types
+           EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = g.id AND mt.archived_at IS NULL) AS has_types,
+           g.pt_late_cancel_fee_minor AS late_fee, g.pt_no_show_fee_minor AS no_show_fee, g.country
     FROM gyms g WHERE g.id = ${gymId}`;
   const r = rows[0];
-  return r === undefined ? null : { timezone: r.timezone, orgType: r.org_type, freeCancelMinutes: r.free, opensDays: r.opens, hasTypes: r.has_types };
+  return r === undefined
+    ? null
+    : {
+        timezone: r.timezone,
+        orgType: r.org_type,
+        freeCancelMinutes: r.free,
+        opensDays: r.opens,
+        hasTypes: r.has_types,
+        fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee },
+        country: r.country,
+      };
 }
 
 export interface TrainerRow {
@@ -196,7 +213,32 @@ export interface AppointmentRow {
   membership: string | null;
   /** Its membership's type has a limit on sessions. */
   usesLimit: boolean;
+  /** Its late cancel or no-show fee that stands, or one waived (18h-ii). */
+  fee: PtFeeState | null;
 }
+
+/** A session's fee as a statement that joins `FEE_OF` reads it. */
+const rawFee = {
+  fee_kind: z.enum(["late_cancel", "no_show"]).nullable(),
+  fee_minor: z.number().int().nullable(),
+  fee_status: z.string().nullable(),
+  fee_waived: z.boolean().nullable(),
+};
+
+function feeState(r: { fee_kind: "late_cancel" | "no_show" | null; fee_minor: number | null; fee_status: string | null; fee_waived: boolean | null }): PtFeeState | null {
+  if (r.fee_kind === null || r.fee_minor === null || r.fee_status === null) return null;
+  return { kind: r.fee_kind, amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : "paid" };
+}
+
+/** The newest fee of the session `a` that stands, or one staff waived (18h-ii), as `f`. */
+const FEE_OF = (sql: SqlOrTx) => sql`
+  LEFT JOIN LATERAL (
+    SELECT x.fee, x.amount_minor, x.status, x.void_reason FROM gym_member_bills x
+    WHERE x.gym_id = a.gym_id AND x.pt_appointment_id = a.id AND (x.status <> 'void' OR x.void_reason = 'waived')
+    ORDER BY x.created_at DESC LIMIT 1
+  ) f ON true`;
+
+const FEE_COLUMNS = (sql: SqlOrTx) => sql`f.fee AS fee_kind, f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived`;
 
 const rawAppointment = z.object({
   id: z.string(),
@@ -212,6 +254,7 @@ const rawAppointment = z.object({
   person_name: z.string().nullable(),
   membership: z.string().nullable(),
   uses_limit: z.boolean(),
+  ...rawFee,
 });
 
 function toAppointment(row: unknown): AppointmentRow {
@@ -230,6 +273,7 @@ function toAppointment(row: unknown): AppointmentRow {
     personName: r.person_name,
     membership: r.membership,
     usesLimit: r.uses_limit,
+    fee: feeState(r),
   };
 }
 
@@ -245,11 +289,12 @@ const APPOINTMENT = (sql: SqlOrTx) => sql`
   (SELECT mt.name FROM gym_held_memberships h
    JOIN gym_membership_types mt ON mt.gym_id = h.gym_id AND mt.id = h.membership_type_id
    WHERE h.gym_id = a.gym_id AND h.id = a.held_membership_id) AS membership,
-  ${USES_LIMIT(sql)} AS uses_limit`;
+  ${USES_LIMIT(sql)} AS uses_limit, ${FEE_COLUMNS(sql)}`;
 
 const FROM = (sql: SqlOrTx) => sql`
   FROM gym_pt_appointments a
-  LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id`;
+  LEFT JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = a.entry_id
+  ${FEE_OF(sql)}`;
 
 /** One trainer's sessions that hold their time on these days of the gym's, the earliest first. */
 export async function appointmentsOf(sql: SqlOrTx, gymId: string, trainerId: string, fromDay: string, toDay: string): Promise<AppointmentRow[]> {
@@ -758,6 +803,9 @@ export interface OwnSessionRow {
   status: PtAppointmentStatus;
   packCharged: boolean;
   usesLimit: boolean;
+  /** The membership it was booked on, which a fee would go on (18h-ii). */
+  heldMembershipId: string | null;
+  fee: PtFeeState | null;
 }
 
 const rawOwnSession = z.object({
@@ -771,6 +819,8 @@ const rawOwnSession = z.object({
   status: ptAppointmentStatusSchema,
   pack_charged: z.boolean(),
   uses_limit: z.boolean(),
+  held_membership_id: z.string().nullable(),
+  ...rawFee,
 });
 
 function toOwnSession(row: unknown): OwnSessionRow {
@@ -786,14 +836,17 @@ function toOwnSession(row: unknown): OwnSessionRow {
     status: r.status,
     packCharged: r.pack_charged,
     usesLimit: r.uses_limit,
+    heldMembershipId: r.held_membership_id,
+    fee: feeState(r),
   };
 }
 
 const OWN_SESSION = (sql: SqlOrTx) => sql`
   a.id, u.display_name AS trainer_name, u.email AS trainer_email, a.local_date::text AS local_date, a.local_start_minute,
-  a.minutes, a.starts_at, a.status, a.pack_charged, ${USES_LIMIT(sql)} AS uses_limit
+  a.minutes, a.starts_at, a.status, a.pack_charged, ${USES_LIMIT(sql)} AS uses_limit, a.held_membership_id, ${FEE_COLUMNS(sql)}
   FROM gym_pt_appointments a
-  LEFT JOIN users u ON u.id = a.trainer_user_id`;
+  LEFT JOIN users u ON u.id = a.trainer_user_id
+  ${FEE_OF(sql)}`;
 
 /** The sessions booked for one record of this gym's list that are not over at `now`, the
  *  earliest first: the record's own, whoever booked them. */

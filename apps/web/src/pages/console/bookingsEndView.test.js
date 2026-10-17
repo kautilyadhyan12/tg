@@ -199,6 +199,15 @@ describe('the four booking settings', () => {
     );
     // With personal training's two not read, they are left out, never made up.
     expect(bookingSettingsSummary(START)).toBe('Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20');
+    // Each part says its own fees (18h-i, 18h-ii).
+    expect(
+      bookingSettingsSummary(START, PT, { lateCancelMinor: 500, noShowMinor: 0, currency: 'GBP' }, { lateCancelMinor: 1200, noShowMinor: 1500, currency: 'GBP' }),
+    ).toBe(
+      'Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20 · one-time fee for each late cancel £5.00. Personal training: opens 3 days before · free to cancel until 1 day before · one-time fee for each late cancel £12.00 · no-show £15.00.',
+    );
+    expect(bookingSettingsSummary(START, PT, null, { lateCancelMinor: 0, noShowMinor: 0, currency: 'GBP' })).toBe(
+      'Classes: opens 7 days before · free to cancel until 2 hours before · waitlist of 20. Personal training: opens 3 days before · free to cancel until 1 day before.',
+    );
   });
 });
 
@@ -209,5 +218,13 @@ describe('the booking rules line, in each kind of business’s own words', () =>
     expect(bookingRulesLine(rules, 'yoga_studio')).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
     expect(bookingRulesLine(rules, 'pilates_studio')).toBe('Clients can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
     expect(bookingRulesLine(rules, 'crossfit_box')).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
+  });
+  it("names the page's own fees after, where the gym sells memberships (18h-ii)", () => {
+    const rules = { opensDays: 7, freeCancelMinutes: 120 };
+    const fees = { lateCancelMinor: 1200, noShowMinor: 1500, currency: 'GBP', onBills: true };
+    expect(bookingRulesLine(rules, 'gym', fees)).toBe(
+      'Members can book up to 7 days ahead and cancel for free until 2 hours before it starts. One-time fee for each late cancel £12.00 · no-show £15.00.',
+    );
+    expect(bookingRulesLine(rules, 'gym', { ...fees, onBills: false })).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
   });
 });

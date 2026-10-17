@@ -338,8 +338,13 @@ describe("the booking settings a save sends", () => {
     const fees = { lateCancelMinor: 500, noShowMinor: 0 };
     expect(bookingSettingsBodySchema.parse({ ...classes, pt, fees })).toEqual({ ...classes, pt, fees });
     const answered = { ...fees, currency: "GBP", canChange: true, onBills: true };
-    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered })).toEqual({ settings: classes, pt, fees: answered });
+    // Personal training's own two (18h-ii): sent the same way, apart from the classes', always answered.
+    const ptFees = { lateCancelMinor: 1200, noShowMinor: 1500 };
+    expect(bookingSettingsBodySchema.parse({ ...classes, pt, fees, ptFees })).toEqual({ ...classes, pt, fees, ptFees });
+    expect(bookingSettingsBodySchema.parse({ ...classes, pt, ptFees })).toEqual({ ...classes, pt, ptFees });
+    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees })).toEqual({ settings: classes, pt, fees: answered, ptFees });
     expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt })).toThrow();
+    expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered })).toThrow();
   });
 
   it.each([
@@ -349,6 +354,7 @@ describe("the booking settings a save sends", () => {
     ["a fee too big", { lateCancelMinor: 100_000_000, noShowMinor: 0 }],
   ])("refuses fees with %s", (_name, fees) => {
     expect(bookingSettingsBodySchema.safeParse({ ...classes, pt, fees }).success).toBe(false);
+    expect(bookingSettingsBodySchema.safeParse({ ...classes, pt, ptFees: fees }).success).toBe(false);
   });
 
   it.each([

@@ -126,7 +126,7 @@ export const subscriptions = pgTable(
     /** The SHA-256 of the browser mark that started this free trial (2c, migration `0133`):
      *  one device, one trial. Never the mark itself. */
     trialDeviceHash: text("trial_device_hash"),
-    /** Who started this free trial: the gym's owner then (4b-ii, migration `0138`, by a trigger).
+    /** Who started this free trial: the gym's owner then (4b-ii, migration `0139`, by a trigger).
      *  A gym handed over stays counted against them. */
     trialStartedBy: uuid("trial_started_by"),
     createdAt: createdAt(),

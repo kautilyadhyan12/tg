@@ -25,6 +25,7 @@ import {
   PT_WEEK_DAYS,
   PT_WORDS,
   addDays,
+  memberCurrencyForCountry,
   memberPtResponseSchema,
   memberPtSessionSchema,
   pickPtCover,
@@ -45,7 +46,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { requireMember, type Line } from "../classes/bookingsService.js";
 import * as repo from "./repo.js";
-import { PtLateCancel, bookUnderLock, cancelUnderLock, heldWithUsed, type Limit, type PtDeps } from "./service.js";
+import { PtLateCancel, bookUnderLock, cancelUnderLock, heldWithUsed, ptFeesOfSession, type Limit, type PtDeps } from "./service.js";
 
 export interface MemberPtDeps extends PtDeps {
   /** This server's line of members' session writes (`createLine`). */
@@ -56,8 +57,17 @@ const DAY_MS = 24 * 60 * 60_000;
 const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
 const sessionNotFound = (): OrgsError => new OrgsError(404, "appointment_not_found", PT_WORDS.appointment_not_found);
 
-function ownView(row: repo.OwnSessionRow, now: Date, freeCancelMinutes: number): MemberPtSession {
+/** What a late cancel and a no-show would cost the reader, in the gym's money (18h-ii). */
+function feesInMoney(clock: repo.GymClock, session: { heldMembershipId: string | null; packCharged: boolean }) {
+  const fees = ptFeesOfSession(clock, session);
+  const currency = memberCurrencyForCountry(clock.country);
+  return fees === null || currency === null ? null : { ...fees, currency };
+}
+
+function ownView(row: repo.OwnSessionRow, now: Date, clock: repo.GymClock): MemberPtSession {
+  const { freeCancelMinutes } = clock;
   const time = ptTime(now.getTime(), row.startsAt.getTime(), freeCancelMinutes);
+  const currency = memberCurrencyForCountry(clock.country);
   return memberPtSessionSchema.parse({
     id: row.id,
     trainerName: row.trainerName === null ? null : fullName({ displayName: row.trainerName, email: row.trainerEmail, recordName: null }).name,
@@ -70,6 +80,8 @@ function ownView(row: repo.OwnSessionRow, now: Date, freeCancelMinutes: number):
     packCharged: row.packCharged,
     usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
+    fees: row.fee === null ? feesInMoney(clock, row) : null,
+    fee: row.fee === null || currency === null ? null : { ...row.fee, currency },
   });
 }
 
@@ -141,12 +153,12 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
     freeCancelMinutes: clock.freeCancelMinutes,
     record: entryId !== null ? "own" : me.shared ? "shared" : "none",
     days: days.map((localDate) => {
-      if (entryId === null) return { localDate, pays: null, why: null, limit: null };
+      if (entryId === null) return { localDate, pays: null, why: null, limit: null, fees: null };
       // The booking's own rule, with the sessions counted in this day's own week and month.
       const held = heldOn === null ? [] : heldOn(localDate, entryId);
       const cover = pickPtCover({ gymHasTypes: clock.hasTypes, day: localDate, held });
       const limit = ptAllowanceOf(cover, held);
-      if (!cover.ok) return { localDate, pays: null, why: cover.reason, limit };
+      if (!cover.ok) return { localDate, pays: null, why: cover.reason, limit, fees: null };
       const paying = held.find((h) => h.id === cover.membershipId);
       return {
         localDate,
@@ -156,6 +168,8 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
         },
         why: null,
         limit,
+        // What a session booked on this day would cost if cancelled late or missed.
+        fees: feesInMoney(clock, { heldMembershipId: cover.membershipId, packCharged: cover.chargePack }),
       };
     }),
     trainers: trainers.map((t, n) => {
@@ -180,15 +194,15 @@ export async function getMemberPt(deps: PtDeps, userId: string, gymId: string, q
         })),
       };
     }),
-    sessions: sessions.map((s) => ownView(s, now, clock.freeCancelMinutes)),
-    history: history.map((s) => ownView(s, now, clock.freeCancelMinutes)),
+    sessions: sessions.map((s) => ownView(s, now, clock)),
+    history: history.map((s) => ownView(s, now, clock)),
   });
 }
 
 async function ownSession(deps: PtDeps, gymId: string, entryId: string, id: string): Promise<MemberPtSession> {
   const [row, clock] = await Promise.all([repo.sessionOfEntry(deps.sql, gymId, entryId, id), repo.gymClock(deps.sql, gymId)]);
   if (row === null || clock === null) throw sessionNotFound();
-  return ownView(row, deps.now(), clock.freeCancelMinutes);
+  return ownView(row, deps.now(), clock);
 }
 
 /** Book a session for the reader's own record. The same `requestKey` again changes nothing. */
@@ -230,8 +244,8 @@ export async function memberBook(
 }
 
 /** Cancel one of the reader's own sessions. Past the free time it is refused (`PtLateCancel`)
- *  until the request says `lateOk`, and then the session stays used: a member never gives
- *  one back. */
+ *  until the request says `lateOk`, with the fee it costs (18h-ii), and then the session
+ *  stays used: a member never gives one back. */
 export async function memberCancel(
   deps: MemberPtDeps,
   userId: string,
@@ -249,7 +263,8 @@ export async function memberCancel(
       const me = await repo.memberRecord(tx, gymId, userId);
       if (me === null) return notFound();
       if (me.entryId === null) return sessionNotFound();
-      const refused = await cancelUnderLock(tx, deps.now(), gymId, sessionId, { lateOk: req.lateOk, giveBack: false }, { userId, member: true }, me.entryId);
+      const asked = { lateOk: req.lateOk, giveBack: false, ...(req.feeMinor === undefined ? {} : { feeMinor: req.feeMinor }) };
+      const refused = await cancelUnderLock(tx, deps.now(), gymId, sessionId, asked, { userId, member: true }, me.entryId);
       return refused ?? me.entryId;
     }),
   );

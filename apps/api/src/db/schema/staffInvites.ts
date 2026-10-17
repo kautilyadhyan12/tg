@@ -157,7 +157,7 @@ export const gymCoOwnerRequests = pgTable(
   ],
 );
 
-/** The owner hands the gym to a co-owner, who accepts (4b-ii, migration `0138`). One waiting a gym. */
+/** The owner hands the gym to a co-owner, who accepts (4b-ii, migration `0139`). One waiting a gym. */
 export const gymOwnerRequests = pgTable(
   "gym_owner_requests",
   {

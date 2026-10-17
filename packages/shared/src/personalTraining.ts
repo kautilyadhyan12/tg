@@ -8,7 +8,7 @@
 // time too: it comes off their free times, and a session cannot be booked over it.
 import { z } from "zod";
 import { CLASS_FILL_HORIZON_DAYS, classDaySchema } from "./classes.js";
-import { bookingPeriod } from "./classBookings.js";
+import { bookingPeriod, classFeesSchema } from "./classBookings.js";
 import { hasNoNul } from "./visibleText.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import { membershipLimitPeriodSchema, type MembershipLimitPeriod } from "./memberships.js";
@@ -537,6 +537,17 @@ export const savePtTrainerRequestSchema = z
   });
 export type SavePtTrainerRequest = z.infer<typeof savePtTrainerRequestSchema>;
 
+/** A session's fee as a list shows it (18h-ii): which fee it is (its own, never read from
+ *  the session's mark, which staff can change after it is paid), its amount, and owed, paid
+ *  or waived. */
+export const ptFeeStateSchema = z
+  .object({ kind: z.enum(["late_cancel", "no_show"]), amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "waived"]) })
+  .strict();
+export type PtFeeState = z.infer<typeof ptFeeStateSchema>;
+
+/** Fees in the gym's money, as a member reads them. */
+const ptFeesInMoneySchema = classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/) }).strict();
+
 export const ptAppointmentSchema = z
   .object({
     id: z.string().uuid(),
@@ -563,6 +574,13 @@ export const ptAppointmentSchema = z
     cancel: z.enum(["free", "late"]).nullable(),
     /** It has started and was not cancelled, so staff can mark it came or no-show. */
     canMark: z.boolean(),
+    /** What a late cancel and a no-show of it would add (`classFeeFor` with personal training's
+     *  own amounts, 18h-ii), in the week's `currency`; null where neither would, and once a fee
+     *  of it stands or was waived, since no mark then adds another. */
+    fees: classFeesSchema.nullable().default(null),
+    /** Its late cancel or no-show fee, owed, paid or waived, for staff who may open a
+     *  person's page; null for none, and for anybody else. */
+    fee: ptFeeStateSchema.nullable().default(null),
   })
   .strict();
 export type PtAppointment = z.infer<typeof ptAppointmentSchema>;
@@ -595,6 +613,9 @@ export const ptWeekResponseSchema = z
     /** Personal training's free-cancel time as this read found it: what a session's
      *  `cancel` on it was decided by. */
     freeCancelMinutes: z.number().int(),
+    /** The money a session's `fees` and `fee` are in (18h-ii); null where the gym sells
+     *  no memberships in a money the app knows. */
+    currency: z.string().regex(/^[A-Z]{3}$/).nullable().default(null),
     sessionMinutes: ptSessionMinutesSchema.nullable(),
     offers: z.boolean(),
     days: z.array(
@@ -664,7 +685,9 @@ export const ptPeopleResponseSchema = z
   .strict();
 export type PtPeopleResponse = z.infer<typeof ptPeopleResponseSchema>;
 
-export const cancelPtRequestSchema = z.object({ lateOk: z.boolean(), giveBack: z.boolean() }).strict();
+/** `feeMinor`: the late cancel fee the screen showed (18h-ii); a late cancel that costs one
+ *  goes through only with the fee it costs now, so nobody is charged a fee nobody read. */
+export const cancelPtRequestSchema = z.object({ lateOk: z.boolean(), giveBack: z.boolean(), feeMinor: z.number().int().min(0).optional() }).strict();
 export type CancelPtRequest = z.infer<typeof cancelPtRequestSchema>;
 
 /** Came or no-show, for a session that has started. */
@@ -818,6 +841,10 @@ export const memberPtSessionSchema = z
     usesLimit: z.boolean(),
     /** What a cancel now would be; null once it has started or is cancelled. */
     cancel: z.enum(["free", "late"]).nullable(),
+    /** What a late cancel and a no-show of it cost them (18h-ii); null where neither costs anything. */
+    fees: ptFeesInMoneySchema.nullable().default(null),
+    /** Its late cancel or no-show fee, owed, paid or waived, in `fees`' money; null for none. */
+    fee: ptFeeStateSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/) }).strict().nullable().default(null),
   })
   .strict();
 export type MemberPtSession = z.infer<typeof memberPtSessionSchema>;
@@ -850,6 +877,9 @@ export const memberPtResponseSchema = z
           /** The paying membership's limit on sessions, or the one that is used where
            *  `why` is a limit or a pack pays because of it; null otherwise. */
           limit: ptAllowanceSchema.nullable(),
+          /** What a late cancel and a no-show of a session booked on this day would cost
+           *  (18h-ii), by what pays; null where neither costs anything. */
+          fees: ptFeesInMoneySchema.nullable().default(null),
         })
         .strict(),
     ),
@@ -896,7 +926,7 @@ export type MemberBookPtRequest = z.infer<typeof memberBookPtRequestSchema>;
 
 /** `lateOk`: the member has read that it is a late cancel and the session stays used. A
  *  member never gives a late session back; that is staff's to do. */
-export const memberCancelPtRequestSchema = z.object({ lateOk: z.boolean() }).strict();
+export const memberCancelPtRequestSchema = z.object({ lateOk: z.boolean(), feeMinor: z.number().int().min(0).optional() }).strict();
 export type MemberCancelPtRequest = z.infer<typeof memberCancelPtRequestSchema>;
 
 export const memberPtSessionResponseSchema = z.object({ session: memberPtSessionSchema }).strict();
