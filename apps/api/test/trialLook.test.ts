@@ -27,8 +27,6 @@ describe("two gyms that are not alike are never listed", () => {
     ["Muscle Factory", "Muscle Beach", null],
     ["Iron Paradise", "Iron Temple", null],
     ["Body Zone", "Body Tone", null],
-    ["Spartan Gym", "Spartans MMA", null],
-    ["Crunch Fitness", "Crunch Yoga", null],
     ["Yoga Studio", "Pilates Studio", null],
     ["24 Hour Fitness", "24/7 Fitness", null],
     ["Fitness Hub", "Fitness Arena", null],
@@ -37,6 +35,23 @@ describe("two gyms that are not alike are never listed", () => {
     ["Snap Fitness", "Snap Fitness Koregaon Park", null],
     ["शक्ति जिम", "शान्ति जिम", null],
     ["", "Gym", null],
+    // One letter changed is another name, not a slip.
+    ["Shakti Gym", "Shanti Gym", null],
+    ["Rajesh Fitness", "Ramesh Fitness", null],
+    ["Naresh Gym", "Paresh Gym", null],
+    ["Shivam Fitness", "Shivay Fitness", null],
+    ["Bounce Fitness", "Pounce Fitness", null],
+    // A name that only says what kind of gym, or for whom.
+    ["The Yoga Studio", "Yoga Centre", null],
+    ["MMA Academy", "MMA Club", null],
+    ["CrossFit Gym", "CrossFit Studio", null],
+    ["Ladies Gym", "Ladies Fitness Centre", null],
+    ["Women's Gym", "Women Fitness Club", null],
+    ["Zumba Studio", "Zumba Fitness", null],
+    ["Kickboxing Academy", "Kickboxing Club", null],
+    ["Pilates Studio", "Pilates Centre", null],
+    ["Kids Sports Academy", "Family Fitness Club", null],
+    ["Iron Man Gym", "Iron Gym", null],
   ];
   it.each(table)("%s · %s", (a, b, city) => {
     expect(alike(a, b, city)).toBe(false);
@@ -62,6 +77,13 @@ describe("two names that are alike", () => {
     ["Iron House Pune", "Iron House Gym", "Pune"],
     ["Anytime Fitness", "Anytime Fitness", null],
     ["शक्ति जिम", "शक्ति  जिम", null],
+    // The same name, whatever kind of gym or plural it is written with.
+    ["Spartan Gym", "Spartans MMA", null],
+    ["Crunch Fitness", "Crunch Yoga", null],
+    ["Power Clubs", "Power Club", null],
+    ["Physique Gym", "Physique Fitness", null],
+    ["Shakti Gym", "Shakti Fitness Academies", null],
+    ["Ganesh Gym", "Ganesha Gym", null],
   ];
   it.each(table)("%s · %s", (a, b, city) => {
     expect(alike(a, b, city)).toBe(true);
@@ -86,6 +108,8 @@ describe("the same address", () => {
   const different: [string, string][] = [
     ["Shop 4, Phoenix Mall, Mumbai 400013", "Shop 5, Phoenix Mall, Mumbai 400013"],
     ["12 MG Road Pune 411001", "12 MG Road Pune 411002"],
+    ["Shop 1, 23 Linking Road, Mumbai 400050", "Shop 12, 3 Linking Road, Mumbai 400050"],
+    ["Plot 14, Sector 21", "Plot 1, 4 Sector 21"],
   ];
   it.each(different)("%s is not %s", (a, b) => {
     expect(addressKey(a)).not.toBe(addressKey(b));
@@ -95,6 +119,9 @@ describe("the same address", () => {
     expect(addressKey("Main Road, Pune")).toBeNull();
     expect(addressKey("Near bus stand")).toBeNull();
     expect(addressKey("Plot 4")).toBeNull();
+    expect(addressKey("Baner, Pune 411045")).toBeNull();
+    expect(addressKey("1st Floor, Main Road")).toBeNull();
+    expect(addressKey("Sector 17, Chandigarh")).toBeNull();
     expect(addressKey("   ")).toBeNull();
     expect(addressKey(null)).toBeNull();
   });
@@ -135,10 +162,19 @@ describe("trialClues", () => {
     expect(trialClues([spelt], [gym("a")]).get("s")).toEqual([{ kind: "name_city", gymId: "a" }]);
   });
 
-  it("finds the same address in any city, whatever the name", () => {
+  it("finds the same address, whatever the name, where one gym has no city but both have the PIN code", () => {
     const t = trial("t", { name: "Spartan MMA", city: "Mumbai", address: "Shop 4, Phoenix Mall, Mumbai 400013" });
     const a = gym("a", { name: "Power Gym", city: null, address: "shop 4 phoenix mall mumbai 400013" });
     expect(trialClues([t], [a]).get("t")).toEqual([{ kind: "address", gymId: "a" }]);
+  });
+
+  it("never says the same address of two gyms in different towns", () => {
+    const t = trial("t", { name: "Spartan MMA", city: "Nagpur", address: "Shop 3, Station Road" });
+    const a = gym("a", { name: "Power Gym", city: "Pune", address: "Shop 3, Station Rd." });
+    const noCity = gym("b", { name: "Power Gym", city: null, address: "Shop 3, Station Rd." });
+    expect(trialClues([t], [a, noCity]).has("t")).toBe(false);
+    const sameCity = gym("c", { name: "Power Gym", city: "nagpur", address: "Shop 3, Station Rd." });
+    expect(trialClues([t], [sameCity]).get("t")).toEqual([{ kind: "address", gymId: "c" }]);
   });
 
   it("lists 2d's first-people gym first, then the address, then the name, one line each", () => {

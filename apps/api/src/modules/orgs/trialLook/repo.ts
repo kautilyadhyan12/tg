@@ -17,6 +17,8 @@ export interface TrialLookWarning {
   city: string | null;
   ownerEmail: string | null;
   trialStartedAt: Date;
+  /** The gym's own time zone, for the day its trial started. */
+  timezone: string;
   clues: { kind: ClueKind; gymId: string; name: string | null; plan: OtherGymPlan }[];
 }
 
@@ -40,15 +42,16 @@ const toLookGym = (row: GymRow): LookGym => ({
 
 /** Newest free trial first. */
 export async function trialLookWarnings(sql: SqlOrTx): Promise<TrialLookWarning[]> {
-  const trials = await sql<(GymRow & { email: string | null; trial_started_at: Date; look_gym_id: string | null })[]>`
-    SELECT DISTINCT ON (g.id) g.id, g.name, g.city, g.postal_address, g.created_at,
+  // Our own free trials, a pilot code's included, as the trial sweep counts them.
+  const trials = await sql<(GymRow & { email: string | null; timezone: string; trial_started_at: Date; look_gym_id: string | null })[]>`
+    SELECT DISTINCT ON (g.id) g.id, g.name, g.city, g.postal_address, g.created_at, g.timezone,
            coalesce(u.trial_person_key, u.id::text) AS owner, u.email::text AS email,
            s.created_at AS trial_started_at,
            CASE WHEN s.trial_check = 'look' THEN s.trial_check_gym_id END AS look_gym_id
     FROM subscriptions s
     JOIN gyms g ON g.id = s.owner_id
     JOIN users u ON u.id = g.owner_user_id
-    WHERE s.owner_type = 'gym' AND s.status = 'trialing' AND s.provider = 'none' AND g.status = 'active'
+    WHERE s.owner_type = 'gym' AND s.status = 'trialing' AND s.provider IN ('none','pilot') AND g.status = 'active'
     ORDER BY g.id, s.created_at DESC`;
   if (trials.length === 0) return [];
 
@@ -73,7 +76,7 @@ export async function trialLookWarnings(sql: SqlOrTx): Promise<TrialLookWarning[
       CASE
         WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.owner_type = 'gym' AND s.owner_id = g.id AND s.paid_at IS NOT NULL) THEN 'paid'
         WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.owner_type = 'gym' AND s.owner_id = g.id
-                       AND s.status = 'trialing' AND s.provider = 'none') THEN 'trial'
+                       AND s.status = 'trialing' AND s.provider IN ('none','pilot')) THEN 'trial'
         WHEN EXISTS (SELECT 1 FROM subscriptions s WHERE s.owner_type = 'gym' AND s.owner_id = g.id
                        AND s.trial_ends_at IS NOT NULL) THEN 'trial_ended'
         ELSE 'none'
@@ -91,6 +94,7 @@ export async function trialLookWarnings(sql: SqlOrTx): Promise<TrialLookWarning[
         city: t.city,
         ownerEmail: t.email,
         trialStartedAt: t.trial_started_at,
+        timezone: t.timezone,
         clues: found.map((c) => {
           const other = plan.get(c.gymId);
           return { kind: c.kind, gymId: c.gymId, name: other?.name ?? null, plan: other?.plan ?? "none" };

@@ -3,11 +3,17 @@
 // again. Never blocks anything and never tells the gym; Kd reads the list and may pause or
 // remove. The database fetches the gyms; this decides which ones are alike.
 
-/** Words nearly every gym's name has, so two names that share only these are not alike. */
+/** Words that say a place is a gym, what kind or for whom, not which one: two names that
+ *  share only these are not alike ("The Yoga Studio", "Yoga Centre"). A word the name is
+ *  called by is not here, however common ("Iron", "Physique", "Shakti"): two gyms of one
+ *  name in one city are the clue. A plural is set aside with its word ("Clubs"). */
 const NAME_WORDS_EVERY_GYM_HAS = new Set([
-  "a", "an", "and", "the", "of",
-  "gym", "gyms", "gymnasium", "fitness", "fit", "studio", "studios", "club",
-  "centre", "center", "health", "wellness", "academy", "training", "unisex",
+  "a", "an", "and", "the", "of", "for", "by",
+  "gym", "gymnasium", "multigym", "fitness", "fit", "studio", "club", "centre", "center",
+  "health", "wellness", "academy", "training", "spa", "sport", "sports",
+  "yoga", "pilates", "zumba", "dance", "aerobics", "mma", "boxing", "kickboxing", "crossfit",
+  "martial", "arts", "gymnastics",
+  "unisex", "ladies", "lady", "women", "womens", "men", "mens", "kid", "kids", "family",
   "ltd", "pvt", "private", "limited", "llc", "inc", "co",
 ]);
 
@@ -18,9 +24,17 @@ const ADDRESS_SHORT_FORMS = new Map([
   ["apt", "apartment"], ["fl", "floor"], ["flr", "floor"],
 ]);
 
-/** An address shorter than this once read, or with no number in it, is too vague to say two
- *  gyms share it ("Main Road, Pune"). */
+/** An address shorter than this once read is too vague to say two gyms share it. */
 const ADDRESS_LEAST_LENGTH = 10;
+/** Words whose number names an area, not a building ("Sector 17"). */
+const AREA_WORDS = new Set(["sector", "phase", "ward", "zone", "stage"]);
+/** A shop, plot or house number: "12", "4b"; never "1st" nor a PIN or ZIP code. */
+const PLACE_NUMBER = /^\d{1,4}[a-z]?$/;
+/** A PIN (six digits) or ZIP (five) code. */
+const POSTCODE = /^\d{5,6}$/;
+
+const LATIN_ACCENTS = new RegExp(`[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`, "g");
+const APOSTROPHES = new RegExp(`['\`${String.fromCharCode(0x2019)}]`, "g");
 
 /** Lower case, accents off ("Café" is "cafe"), apostrophes dropped ("Gold's" is "golds"),
  *  split on anything that is not a letter, a mark or a number, in any script. Only the Latin
@@ -29,20 +43,21 @@ export function words(text: string): string[] {
   // Most names and addresses are plain ASCII, and the list reads every gym's: they skip the
   // accent step, which is most of the cost.
   const plain = /^[\x20-\x7e\r\n\t]*$/.test(text)
-    ? text.toLowerCase().replace(/['`]/g, "").replace(/&/g, " and ").split(/[^a-z0-9]+/)
+    ? text.toLowerCase().replace(APOSTROPHES, "").replace(/&/g, " and ").split(/[^a-z0-9]+/)
     : text
         .normalize("NFKD")
-        .replace(/[̀-ͯ]/g, "")
+        .replace(LATIN_ACCENTS, "")
         .normalize("NFC")
         .toLowerCase()
-        .replace(/['’`]/g, "")
+        .replace(APOSTROPHES, "")
         .replace(/&/g, " and ")
         .split(/[^\p{L}\p{M}\p{N}]+/u);
   return plain.filter((w) => w !== "");
 }
 
-/** "golds" and "gold" are one word; "boss" stays. */
+/** "golds" and "gold" are one word, "academies" and "academy"; "boss" stays. */
 function singular(word: string): string {
+  if (word.length >= 5 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
   return word.length >= 4 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word;
 }
 
@@ -56,21 +71,21 @@ export function cityKey(city: string | null): string | null {
 export function nameCore(name: string, city: string | null): string[] {
   const cityWords = new Set(city === null ? [] : words(city));
   return words(name)
-    .filter((w) => !NAME_WORDS_EVERY_GYM_HAS.has(w) && !cityWords.has(w))
+    .filter((w) => !NAME_WORDS_EVERY_GYM_HAS.has(w) && !NAME_WORDS_EVERY_GYM_HAS.has(singular(w)) && !cityWords.has(w))
     .map(singular);
 }
 
-/** Two words one typing slip apart: one letter added, dropped, changed, or two swapped. */
+/** Two words one typing slip apart: one letter added or dropped, or two neighbours swapped.
+ *  A letter changed is not a slip: "Shakti" and "Shanti", "Rajesh" and "Ramesh" are names. */
 function oneSlipApart(a: string, b: string): boolean {
   if (a === b) return false;
-  if (Math.abs(a.length - b.length) > 1) return false;
   if (a.length === b.length) {
     const differ: number[] = [];
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differ.push(i);
-    if (differ.length === 1) return true;
     const [i, j] = differ;
     return differ.length === 2 && i !== undefined && j === i + 1 && a[i] === b[j] && a[j] === b[i];
   }
+  if (Math.abs(a.length - b.length) !== 1) return false;
   const [long, short] = a.length > b.length ? [a, b] : [b, a];
   for (let i = 0; i < long.length; i++) {
     if (long.slice(0, i) + long.slice(i + 1) === short) return true;
@@ -78,8 +93,7 @@ function oneSlipApart(a: string, b: string): boolean {
   return false;
 }
 
-/** A word must be this long before a typing slip in it still reads as the same name: "Body
- *  Zone" and "Body Tone" are two gyms. */
+/** A word must be this long before a typing slip in it still reads as the same name. */
 const SLIP_WORD_LEAST_LENGTH = 6;
 
 /** Two names are alike when, once the words every gym has are set aside, they are the same
@@ -110,11 +124,24 @@ export function namesAlike(a: readonly string[], b: readonly string[]): boolean 
 }
 
 /** The address as one run of letters and numbers, short forms read as words, so "12, M.G.
- *  Rd, Pune-411001" and "12 MG Road Pune 411001" are one. Null when too vague to compare. */
+ *  Rd, Pune-411001" and "12 MG Road Pune 411001" are one; two numbers side by side stay
+ *  apart ("Shop 1, 23" is not "Shop 12, 3"). Null when it names no shop, plot or house by
+ *  number, which "Baner, Pune 411045", "1st Floor, Main Road" and "Sector 17" do not. */
 export function addressKey(address: string | null): string | null {
   if (address === null) return null;
-  const key = words(address).map((w) => ADDRESS_SHORT_FORMS.get(w) ?? w).join("");
-  return key.length >= ADDRESS_LEAST_LENGTH && /\p{N}/u.test(key) ? key : null;
+  const tokens = words(address).map((w) => ADDRESS_SHORT_FORMS.get(w) ?? w);
+  const placed = tokens.some((w, i) => PLACE_NUMBER.test(w) && !AREA_WORDS.has(tokens[i - 1] ?? ""));
+  let key = "";
+  for (const [i, w] of tokens.entries()) {
+    const before = tokens[i - 1];
+    key += before !== undefined && /\d$/.test(before) && /^\d/.test(w) ? ` ${w}` : w;
+  }
+  return placed && key.length >= ADDRESS_LEAST_LENGTH ? key : null;
+}
+
+/** The address's PIN or ZIP code, if it has one. */
+export function postcodeOf(address: string | null): string | null {
+  return address === null ? null : words(address).find((w) => POSTCODE.test(w)) ?? null;
 }
 
 export interface LookGym {
@@ -139,6 +166,16 @@ export interface Clue {
 }
 
 const KIND_ORDER: readonly ClueKind[] = ["first_people", "address", "name_city"];
+
+/** Two gyms at the same address in the same town: the same city, or, where either has none,
+ *  the same PIN or ZIP code. Every town has a "Shop 3, Station Road". */
+function sameTown(a: LookGym, b: LookGym): boolean {
+  const ca = cityKey(a.city);
+  const cb = cityKey(b.city);
+  if (ca !== null && cb !== null) return ca === cb;
+  const pa = postcodeOf(a.address);
+  return pa !== null && pa === postcodeOf(b.address);
+}
 
 /** Each trial gym's clues against the older gyms of other owners. The owner's own other gyms
  *  are left out: one free trial per person, and Kd's second-trial code, already cover them. */
@@ -172,7 +209,7 @@ export function trialClues(trials: readonly TrialGym[], others: readonly LookGym
 
     const address = addressKey(trial.address);
     for (const gym of address === null ? [] : byAddress.get(address) ?? []) {
-      if (older(gym)) clues.push({ kind: "address", gymId: gym.id });
+      if (older(gym) && sameTown(trial, gym)) clues.push({ kind: "address", gymId: gym.id });
     }
     const city = cityKey(trial.city);
     const core = nameCore(trial.name, trial.city);

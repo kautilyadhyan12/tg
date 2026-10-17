@@ -11,7 +11,9 @@ import { trialClues, type LookGym } from "../src/modules/orgs/trialLook/clues.js
 import { trialLookWarnings } from "../src/modules/orgs/trialLook/repo.js";
 
 const url = process.env["DATABASE_URL"];
-if (url === undefined || !/localhost|127\.0\.0\.1/.test(url)) throw new Error("DATABASE_URL must be a local database");
+if (url === undefined || !["localhost", "127.0.0.1"].includes(new URL(url).hostname)) {
+  throw new Error("DATABASE_URL must be a local database");
+}
 const sql = postgres(url, { prepare: false, max: 1 });
 
 const GYMS = 20_000;

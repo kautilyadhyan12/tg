@@ -93,6 +93,7 @@ d("the have-a-look warnings (real Postgres)", () => {
     const older = await gym(await person(), "Iron House Gym", 30);
     await trialEnded(older);
     const elsewhere = await gym(await person(), "Iron House Gym", 30, { city: `Mumbai ${run}` });
+    const planless = await gym(await person(), "Iron House Studio", 20);
     const owner = await person();
     const trial = await gym(owner, "IronHouse Fitness", 2);
     await freeTrial(trial, 2);
@@ -100,11 +101,13 @@ d("the have-a-look warnings (real Postgres)", () => {
     const found = await warningFor(trial);
     expect(found).toMatchObject({ name: "IronHouse Fitness", city: `Pune ${run}` });
     expect(found?.ownerEmail).toMatch(/^triallook/);
-    expect(found?.clues).toEqual([{ kind: "name_city", gymId: older, name: "Iron House Gym", plan: "trial_ended" }]);
+    expect(found?.clues).toHaveLength(2);
+    expect(found?.clues).toContainEqual({ kind: "name_city", gymId: older, name: "Iron House Gym", plan: "trial_ended" });
+    expect(found?.clues).toContainEqual({ kind: "name_city", gymId: planless, name: "Iron House Studio", plan: "none" });
     expect(found?.clues.some((c) => c.gymId === elsewhere)).toBe(false);
   }, TIMEOUT_MS);
 
-  it("lists the same address in another city, and says the other gym has paid", async () => {
+  it("lists the same address where the other gym has no city but the same PIN code, and says it has paid", async () => {
     const older = await gym(await person(), "Power Gym", 30, { city: null, address: "Shop 4, Phoenix Mall, Mumbai 400013" });
     await paid(older);
     const trial = await gym(await person(), "Spartan MMA", 3, {
@@ -114,6 +117,15 @@ d("the have-a-look warnings (real Postgres)", () => {
     await freeTrial(trial, 3);
 
     expect((await warningFor(trial))?.clues).toEqual([{ kind: "address", gymId: older, name: "Power Gym", plan: "paid" }]);
+  }, TIMEOUT_MS);
+
+  it("never says the same address of two gyms in different cities", async () => {
+    const older = await gym(await person(), "Power Gym", 30, { address: "Shop 3, Station Rd." });
+    await trialEnded(older);
+    const trial = await gym(await person(), "Spartan MMA", 3, { city: `Nagpur ${run}`, address: "Shop 3, Station Road" });
+    await freeTrial(trial, 3);
+
+    expect(await warningFor(trial)).toBeUndefined();
   }, TIMEOUT_MS);
 
   it("leaves out the owner's own other gym, under another spelling of the same address", async () => {
@@ -132,10 +144,27 @@ d("the have-a-look warnings (real Postgres)", () => {
     await paid(paying);
     const ended = await gym(await person(), "Body Builders Hub Gym", 5);
     await trialEnded(ended);
+    const paidTrial = await gym(await person(), "Bodybuilders Hub Studio", 5);
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, trial_ends_at, current_period_end)
+      SELECT 'gym', ${paidTrial}, id, 'trialing', 'paddle', ${`sub_triallook_${run}_${String(seq++)}`}, now() + INTERVAL '5 days', now() + INTERVAL '5 days'
+      FROM plans WHERE trial_days > 0 ORDER BY code LIMIT 1`;
+    const archived = await gym(await person(), "Bodybuilders Hub Club", 5);
+    await freeTrial(archived, 5);
+    await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${archived}`;
+    const pilot = await gym(await person(), "Bodybuilders Hub Centre", 4);
+    await sql`
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, trial_ends_at)
+      SELECT 'gym', ${pilot}, id, 'trialing', 'pilot', now() + INTERVAL '60 days'
+      FROM plans WHERE trial_days > 0 ORDER BY code LIMIT 1`;
 
     const ids = (await mine()).map((w) => w.gymId);
     expect(ids).not.toContain(paying);
     expect(ids).not.toContain(ended);
+    expect(ids).not.toContain(paidTrial);
+    expect(ids).not.toContain(archived);
+    // A pilot code's trial is ours too.
+    expect(ids).toContain(pilot);
   }, TIMEOUT_MS);
 
   it("lists a gym 2d kept on its look list, with that gym, and puts the newest trial first", async () => {

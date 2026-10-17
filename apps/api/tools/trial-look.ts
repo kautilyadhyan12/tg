@@ -36,7 +36,8 @@ try {
   const gyms = await trialLookWarnings(sql);
   if (gyms.length === 0) console.log("No gym to look at.");
   for (const gym of gyms) {
-    const day = gym.trialStartedAt.toISOString().slice(0, 10);
+    // The day in the gym's own time zone, written 2026-11-03.
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: gym.timezone }).format(gym.trialStartedAt);
     const where = gym.city === null ? "" : ` · ${gym.city}`;
     console.log(`${day}  ${gym.name}${where} · ${gym.ownerEmail ?? "no email"} · ${gym.gymId}`);
     for (const clue of gym.clues) {
