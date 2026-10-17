@@ -175,6 +175,7 @@ d("co-owners (real Postgres)", () => {
           letters.push(letter);
           return Promise.resolve();
         },
+        sendOwnerRequest: () => Promise.resolve(),
       },
     });
     await api().ready();

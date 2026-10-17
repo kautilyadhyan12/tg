@@ -156,3 +156,33 @@ export const gymCoOwnerRequests = pgTable(
     check("gym_co_owner_requests_expires_check", sql`${t.expiresAt} > ${t.createdAt}`),
   ],
 );
+
+/** The owner hands the gym to a co-owner, who accepts (4b-ii, migration `0138`). One waiting a gym. */
+export const gymOwnerRequests = pgTable(
+  "gym_owner_requests",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    /** Their staff row's `created_at` when asked: the request counts while that row stands. */
+    staffSince: timestamp("staff_since", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    state: text("state").notNull().default("pending"),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    /** When its email went: one person is emailed at most once a day by these requests. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("gym_owner_requests_pending_uq").on(t.gymId).where(sql`${t.state} = 'pending'`),
+    index("gym_owner_requests_user_idx").on(t.userId).where(sql`${t.state} = 'pending'`),
+    check("gym_owner_requests_state_check", sql`${t.state} IN ('pending','accepted','declined','cancelled','expired')`),
+    check("gym_owner_requests_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
+    check("gym_owner_requests_expires_check", sql`${t.expiresAt} > ${t.createdAt}`),
+  ],
+);

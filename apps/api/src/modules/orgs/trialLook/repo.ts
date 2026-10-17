@@ -50,7 +50,8 @@ export async function trialLookWarnings(sql: SqlOrTx): Promise<TrialLookWarning[
            CASE WHEN s.trial_check = 'look' THEN s.trial_check_gym_id END AS look_gym_id
     FROM subscriptions s
     JOIN gyms g ON g.id = s.owner_id
-    JOIN users u ON u.id = g.owner_user_id
+    -- The person whose trial it is (4b-ii), not whoever owns the gym since.
+    JOIN users u ON u.id = COALESCE(s.trial_started_by, g.owner_user_id)
     WHERE s.owner_type = 'gym' AND s.status = 'trialing' AND s.provider IN ('none','pilot') AND g.status = 'active'
     ORDER BY g.id, s.created_at DESC`;
   if (trials.length === 0) return [];

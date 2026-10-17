@@ -4,6 +4,12 @@
 //   GET    /v1/orgs/:gymId/co-owner-request                    the caller's own, waiting here
 //   POST   /v1/orgs/:gymId/co-owner-request/:requestId/accept  the person asked
 //   POST   /v1/orgs/:gymId/co-owner-request/:requestId/decline
+// The owner hands the gym to a co-owner (4b-ii), the same five shapes:
+//   POST   /v1/orgs/:gymId/staff/:userId/owner-request         the owner asks a co-owner
+//   DELETE /v1/orgs/:gymId/staff/:userId/owner-request         the owner cancels it
+//   GET    /v1/orgs/:gymId/owner-request                       the caller's own, waiting here
+//   POST   /v1/orgs/:gymId/owner-request/:requestId/accept     the co-owner asked
+//   POST   /v1/orgs/:gymId/owner-request/:requestId/decline
 // Who may is the service's: the owner by the gym's own owner id, the person asked by theirs.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
@@ -68,6 +74,32 @@ export function registerCoOwnerRoutes(app: FastifyInstance, deps: Omit<service.C
       const params = parseOr400(coOwnerRequestParamsSchema, req.params, req, reply);
       if (params === null) return;
       return reply.status(200).send(await service.answerCoOwnerRequest(coOwnerDeps, callerId(req), params.gymId, params.requestId, answer === "accept"));
+    });
+  }
+
+  app.post("/v1/orgs/:gymId/staff/:userId/owner-request", { preHandler: [app.authenticate, sendLimit] }, async (req, reply) => {
+    const params = parseOr400(coOwnerStaffParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(201).send(await service.sendOwnerRequest(coOwnerDeps, callerId(req), params.gymId, params.userId));
+  });
+
+  app.delete("/v1/orgs/:gymId/staff/:userId/owner-request", { preHandler: [app.authenticate, sendLimit] }, async (req, reply) => {
+    const params = parseOr400(coOwnerStaffParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.cancelOwnerRequest(coOwnerDeps, callerId(req), params.gymId, params.userId));
+  });
+
+  app.get("/v1/orgs/:gymId/owner-request", { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.myOwnerRequest(coOwnerDeps, callerId(req), params.gymId));
+  });
+
+  for (const answer of answers) {
+    app.post(`/v1/orgs/:gymId/owner-request/:requestId/${answer}`, { preHandler: [app.authenticate, answerLimit] }, async (req, reply) => {
+      const params = parseOr400(coOwnerRequestParamsSchema, req.params, req, reply);
+      if (params === null) return;
+      return reply.status(200).send(await service.answerOwnerRequest(coOwnerDeps, callerId(req), params.gymId, params.requestId, answer === "accept"));
     });
   }
 }
