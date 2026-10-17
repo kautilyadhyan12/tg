@@ -15,8 +15,20 @@ const api = {
   addPtTimeOff: vi.fn(),
   removePtTimeOff: vi.fn(),
   getBookingSettings: vi.fn(),
+  getMemberList: vi.fn(),
 };
 vi.mock('../../api/orgsApi', async (importOriginal) => ({ ...(await importOriginal()), orgService: api }));
+// The person's page is its own screen with its own tests: here it says whose it is, and closes.
+vi.mock('./MemberListPerson', () => ({
+  default: ({ entryId, onClose }) => (
+    <div data-testid="person-page">
+      {entryId}
+      <button type="button" onClick={onClose}>
+        Close page
+      </button>
+    </div>
+  ),
+}));
 let ORG;
 vi.mock('./useConsoleOrg', () => ({ useConsoleOrg: () => ({ loading: false, error: null, org: ORG, notFound: false, reload: () => {} }) }));
 
@@ -642,6 +654,26 @@ describe('cancelling', () => {
     api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ membership: null, entryId: null })]) });
     open();
     expect((await friday()).getByTestId('pt-session').textContent).toContain('1 session used from their pack');
+  });
+
+  // 18h-ii: a session's fee is recorded or waived on the person's page, opened from their name.
+  it("a session's name opens that person's page over the week, and closing it reads the week again", async () => {
+    api.getMemberList.mockResolvedValue({ data: { list: { columns: [] } } });
+    open();
+    fireEvent.click((await friday()).getByRole('button', { name: 'Open Maya Lopez' }));
+    expect(screen.getByTestId('person-page').textContent).toContain(MAYA);
+    expect(api.getMemberList).toHaveBeenCalledWith('g1');
+    const reads = api.getPtWeek.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: 'Close page' }));
+    expect(screen.queryByTestId('person-page')).toBeNull();
+    await waitFor(() => expect(api.getPtWeek.mock.calls.length).toBeGreaterThan(reads));
+  });
+
+  it('a session whose person the reader may not open has no button on its name', async () => {
+    api.getPtTrainers.mockResolvedValue({ data: trainers({ canManage: false, canBook: false, trainers: [{ ...sam, mine: true }] }) });
+    api.getPtWeek.mockResolvedValue({ data: week([mayaSession({ membership: null, entryId: null })]) });
+    open();
+    expect((await friday()).queryByRole('button', { name: 'Open Maya Lopez' })).toBeNull();
   });
 
   it('a session that has started has no Cancel', async () => {

@@ -11,7 +11,8 @@ import TimePick from '../../components/console/TimePick';
 import { DateField, Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { viewerPrivileges } from './consoleView';
+import { canRemoveMembers, viewerPrivileges } from './consoleView';
+import MemberListPerson from './MemberListPerson';
 import { canManageStaff } from './staffView';
 import { calendarTo, canOpenPlace, placeFor } from './consolePlaces';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
@@ -683,6 +684,7 @@ function SessionRow({
   onCancel,
   onClose,
   onMark,
+  onOpen,
 }) {
   const row = sessionRow(appointment, clockFormat);
   const clash = sessionClash(appointment, classes, timeOff, canBook);
@@ -693,7 +695,15 @@ function SessionRow({
       <div className="flex items-center justify-between gap-3 min-w-0 min-h-11">
         <div className="flex flex-col min-w-0">
           <span className="c-s15 c-w6 c-t1 c-ell">
-            <span className="c-num">{row.time}</span> · {row.name}
+            <span className="c-num">{row.time}</span> ·{' '}
+            {typeof appointment.entryId === 'string' && onOpen !== undefined ? (
+              // Their page, where a fee is recorded or waived: for staff who may open it.
+              <button type="button" onClick={() => onOpen(appointment.entryId)} aria-label={`Open ${row.name}`} className="c-btn-link c-s15 c-w6 text-left">
+                {row.name}
+              </button>
+            ) : (
+              row.name
+            )}
           </span>
           {row.detail === '' ? null : <span className="c-s13 c-t3 c-ell">{row.detail}</span>}
           {clash === null ? null : (
@@ -803,6 +813,10 @@ export default function PersonalTraining() {
   // Came or no-show: the session being saved, and the one whose save was refused.
   const [markBusy, setMarkBusy] = useState(null);
   const [markFailed, setMarkFailed] = useState(null);
+  // The person whose page is open over the week, from their name, as the class calendar
+  // does: their fees are recorded or waived there (18h-ii). The gym's own columns, for it.
+  const [person, setPerson] = useState(null);
+  const [memberList, setMemberList] = useState(null);
   // The day of the week on screen that is open: one day at a time.
   const [dayWanted, setDayWanted] = useState(null);
   // A press on a trainer's name or See week: their week is brought into view once it is
@@ -897,6 +911,15 @@ export default function PersonalTraining() {
   const calendarFor = (day) => (canOpenPlace(privileges, 'calendar') ? calendarTo(orgSlug, day) : null);
   // A session booked or cancelled: the week is read again, and the steps with it while
   // they are on screen, so "Book a session" ticks without a reload.
+  const openPerson = (entryId) => {
+    setPerson(entryId);
+    if (memberList !== null) return;
+    orgService.getMemberList(gymId).then(
+      (res) => setMemberList(res.data.list),
+      () => undefined,
+    );
+  };
+
   const sessionsChanged = () => {
     readWeekAgain();
     if (steps.show) setListKey((n) => n + 1);
@@ -1433,6 +1456,7 @@ export default function PersonalTraining() {
                                       setCancelError(null);
                                     }}
                                     onCancel={(choice) => void cancelSession(appointment, choice)}
+                                    onOpen={openPerson}
                                   />
                                 ))}
                               </ul>
@@ -1521,6 +1545,24 @@ export default function PersonalTraining() {
           ) : null}
         </section>
       ) : null}
+
+      {person === null ? null : (
+        <MemberListPerson
+          key={person}
+          gymId={gymId}
+          gym={org}
+          entryId={person}
+          list={memberList}
+          words={orgWords(org?.orgType)}
+          readOnly={readOnly}
+          canRemove={canRemoveMembers(viewerPrivileges(org))}
+          onClose={() => {
+            setPerson(null);
+            setWeekKey((n) => n + 1);
+          }}
+          onChanged={() => setWeekKey((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }
