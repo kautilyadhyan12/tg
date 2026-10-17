@@ -253,19 +253,23 @@ export function currencySign(currency) {
 }
 
 /** The closed section's one line: the settings as they stand, classes then personal training,
- *  and the class fees where any is set (18h-i). */
-export function bookingSettingsSummary(settings, pt, fees = null) {
+ *  each with its fees where any is set (18h-i, 18h-ii). */
+export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
-  const charged = fees === null || fees === undefined ? null : classFeesLine(fees);
-  const classes = `Classes: ${opensAndFree(settings)} · ${waitlist}${charged === null ? '' : ` · ${charged.toLowerCase()}`}`;
-  return pt === null || pt === undefined ? classes : `${classes}. Personal training: ${opensAndFree(pt)}.`;
+  const said = (f) => {
+    const line = f === null || f === undefined ? null : classFeesLine(f);
+    return line === null ? '' : ` · ${line.toLowerCase()}`;
+  };
+  const classes = `Classes: ${opensAndFree(settings)} · ${waitlist}${said(fees)}`;
+  return pt === null || pt === undefined ? classes : `${classes}. Personal training: ${opensAndFree(pt)}${said(ptFees)}.`;
 }
 
 const freeUntil = (minutes) => (minutes === 0 ? 'until it starts' : `until ${span(minutes)} before it starts`);
 
 /** The rules in one sentence, on the page they apply to: the classes' on Classes, personal
- *  training's own two on Personal training. `fees`: the class fees, said after (18h-i). */
+ *  training's own two on Personal training. `fees`: that page's own fees, said after (18h-i,
+ *  18h-ii). */
 export function bookingRulesLine(settings, orgType, fees = null) {
   const ahead = `${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} ahead`;
   const line = `${orgWords(orgType).peopleCap} can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;

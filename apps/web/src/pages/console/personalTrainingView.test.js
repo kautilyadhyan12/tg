@@ -396,6 +396,30 @@ describe('the box before a cancel', () => {
     expect(box.choices).toEqual([{ key: 'late', label: 'Cancel session', lateOk: true, giveBack: false }]);
   });
 
+  // 18h-ii: a late cancel that costs a fee names it on its button and sends it, and always
+  // sits beside a cancel that costs nothing, for a session the gym itself called off.
+  it('a late cancel with a fee names it, sends it, and offers a cancel with no fee', () => {
+    const fees = { lateCancelMinor: 500, noShowMinor: 800 };
+    const plain = session({ cancel: 'late', packCharged: false, membership: 'Gold PT', fees });
+    const box = cancelBox(plain, { ...view, currency: 'GBP' });
+    expect(box.question).toBe(
+      "Cancel Maya Lopez's session on Fri 9 Oct, 10:00 – 11:00? It starts in less than 2 hours, so it's too late to cancel for free. A late cancel adds a one-time £5.00 late cancel fee to their bill. If you're calling the session off, cancel with no fee.",
+    );
+    expect(box.choices).toEqual([
+      { key: 'late', label: 'Late cancel: add the £5.00 fee', lateOk: true, giveBack: false, feeMinor: 500 },
+      { key: 'back', label: 'Cancel with no fee', lateOk: true, giveBack: true },
+    ]);
+    // On a membership with a limit it also says the session still counts.
+    expect(cancelBox({ ...plain, usesLimit: true }, { ...view, currency: 'GBP' }).question).toContain(
+      'adds a one-time £5.00 late cancel fee to their bill and still counts as one of the sessions their membership includes.',
+    );
+    // A pack's session costs no fee: its own two choices, with no fee sent.
+    expect(cancelBox(session({ cancel: 'late', fees: null }), { ...view, currency: 'GBP' }).choices.every((c) => c.feeMinor === undefined)).toBe(true);
+    // A free cancel never sends a fee; a week with no money names none.
+    expect(cancelBox({ ...plain, cancel: 'free' }, { ...view, currency: 'GBP' }).choices).toEqual([{ key: 'free', label: 'Cancel session', lateOk: false, giveBack: false }]);
+    expect(cancelBox(plain, view).choices).toEqual([{ key: 'late', label: 'Cancel session', lateOk: true, giveBack: false }]);
+  });
+
   it('a length of time in words', () => {
     expect([30, 60, 90, 120, 1440, 2880].map(durationWords)).toEqual(['30 minutes', '1 hour', '90 minutes', '2 hours', '1 day', '2 days']);
   });
@@ -764,6 +788,23 @@ describe('came or no-show (17e-iv-b)', () => {
     expect(markRow(started({ status: 'no_show', packCharged: true, usesLimit: true })).note).toBe('The session stays used on their pack.');
     expect(markRow(started({ status: 'no_show', usesLimit: true })).note).toBe('It still counts as one of the sessions their membership includes.');
     expect(markRow(started({ status: 'no_show' })).note).toBe('');
+  });
+
+  // 18h-ii: what No-show adds, and where a no-show's fee stands.
+  it('a no-show fee is said before the mark, and after it as owed, paid or waived; a trainer reads what it is', () => {
+    const fees = { lateCancelMinor: 500, noShowMinor: 800 };
+    expect(markRow(started({ fees }), 'GBP').note).toBe('Not marked yet · No-show adds a one-time £8.00 fee');
+    expect(markRow(started({ fees }), null).note).toBe('Not marked yet');
+    expect(markRow(started({ fees: null }), 'GBP').note).toBe('Not marked yet');
+    expect(markRow(started({ status: 'attended', fees }), 'GBP').note).toBe('Changing to no-show adds a one-time £8.00 fee.');
+    const missed = (fee) => markRow(started({ status: 'no_show', fees, fee }), 'GBP').note;
+    expect(missed({ amountMinor: 800, state: 'owed' })).toBe('One-time no-show fee £8.00 · Payment due. Changing to came takes it off.');
+    expect(missed({ amountMinor: 800, state: 'paid' })).toBe('One-time no-show fee £8.00 · Paid.');
+    expect(missed({ amountMinor: 800, state: 'waived' })).toBe('One-time no-show fee £8.00 · Waived.');
+    expect(missed(null)).toBe("A one-time no-show fee of £8.00 goes on their bill. Changing to came takes it off if it isn't paid.");
+    expect(markRow(started({ status: 'no_show', usesLimit: true, fees, fee: { amountMinor: 800, state: 'paid' } }), 'GBP').note).toBe(
+      'It still counts as one of the sessions their membership includes. One-time no-show fee £8.00 · Paid.',
+    );
   });
 
   it('the week turns back as far as the server reads, and says why days gone by are shown', () => {

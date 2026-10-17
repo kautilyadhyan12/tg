@@ -670,6 +670,7 @@ function SessionRow({
   first,
   clockFormat,
   freeCancelMinutes,
+  currency,
   locked,
   asking,
   settled,
@@ -685,8 +686,8 @@ function SessionRow({
 }) {
   const row = sessionRow(appointment, clockFormat);
   const clash = sessionClash(appointment, classes, timeOff, canBook);
-  const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
-  const mark = markRow(appointment);
+  const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat, currency }) : null;
+  const mark = markRow(appointment, currency);
   return (
     <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
       <div className="flex items-center justify-between gap-3 min-w-0 min-h-11">
@@ -979,14 +980,16 @@ export default function PersonalTraining() {
     setCancelBusy(true);
     setCancelError(null);
     try {
-      await orgService.cancelPt(gymId, appointment.id, { lateOk: choice.lateOk, giveBack: choice.giveBack });
+      // A late cancel that costs a fee says yes to the one its button named (18h-ii).
+      const body = { lateOk: choice.lateOk, giveBack: choice.giveBack, ...(choice.feeMinor === undefined ? {} : { feeMinor: choice.feeMinor }) };
+      await orgService.cancelPt(gymId, appointment.id, body);
       sessionsChanged();
     } catch (err) {
-      // The free time ran out while the box was open: read the week again, so the box
-      // asks the late question.
+      // The free time ran out while the box was open, or the fee changed: read the week
+      // again, so the box asks the late question with the fee as it now is.
       if (err?.response?.data?.error === 'late_cancel') {
         setWeekKey((n) => n + 1);
-        setCancelError("It's now too late to cancel for free. Choose again.");
+        setCancelError(appointment.cancel === 'late' ? 'The late cancel fee has changed. Choose again.' : "It's now too late to cancel for free. Choose again.");
       } else if (err?.response?.data?.error === 'kept_used') {
         // Already cancelled as a late cancel by somebody else: say so, and offer nothing more.
         setCancelError(errorText(err, 'This session was already cancelled as a late cancel. The session stays used.'));
@@ -1409,6 +1412,7 @@ export default function PersonalTraining() {
                                     first={index === 0}
                                     clockFormat={clockFormat}
                                     freeCancelMinutes={shownWeek.data.freeCancelMinutes ?? list.freeCancelMinutes}
+                                    currency={shownWeek.data.currency ?? null}
                                     locked={readOnly}
                                     asking={cancelling === appointment.id}
                                     settled={cancelling === appointment.id && cancelSettled}

@@ -381,8 +381,51 @@ describe('a member’s personal training', () => {
     expect(box.textContent).toContain("Iron House's time to cancel for free has passed. Cancelling now counts as a late cancel, and the session stays used on your pack.");
     svc.cancel.mockResolvedValueOnce(session(S1, { status: 'late_cancelled', cancel: null }));
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel session' }));
-    expect(svc.cancel).toHaveBeenCalledWith('g1', S1, true);
+    // A late cancel sends the fee its box showed: none on a pack.
+    expect(svc.cancel).toHaveBeenCalledWith('g1', S1, true, 0);
     expect((await screen.findByRole('status')).textContent).toBe('Cancelled late. The session stays used on your pack.');
+  });
+
+  it('fees (18h-ii): said for the day and under a session, named in the late cancel box, sent with the yes, and asked again when they change', async () => {
+    const fees = { lateCancelMinor: 500, noShowMinor: 800, currency: 'GBP' };
+    const GOLD = { membership: 'Gold PT', sessionsLeft: null };
+    const late = session(S1, { cancel: 'late', packCharged: false, fees });
+    serve(view({ days: DAYS.map((localDate) => ({ localDate, pays: GOLD, why: null, limit: null, fees })), sessions: [late] }));
+    render(<PersonalTraining gym={GYM} />);
+    expect((await screen.findByTestId('pt-session-fees')).textContent).toBe('One-time fee for each late cancel £5.00 · no-show £8.00');
+    pickDay(FRI);
+    expect(screen.getByTestId('pt-day-fees').textContent).toBe('One-time fee for each late cancel £5.00 · no-show £8.00');
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel session/ }));
+    const box = screen.getByRole('dialog', { name: 'Cancel late?' });
+    expect(box.textContent).toContain('Cancelling now counts as a late cancel, and a one-time late cancel fee of £5.00 will be added to your bill.');
+    // The gym changed its fee while the box was open: nothing goes through, and it asks again with the new fee.
+    svc.cancel.mockRejectedValueOnce(refused(409, 'late_cancel', 'too late', { packCharged: false, feeMinor: 700, currency: 'GBP' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Cancel session' }));
+    expect(svc.cancel).toHaveBeenLastCalledWith('g1', S1, true, 500);
+    const again = await screen.findByRole('dialog', { name: 'Cancel late?' });
+    await waitFor(() => expect(again.textContent).toContain('a one-time late cancel fee of £7.00 will be added to your bill'));
+    svc.cancel.mockResolvedValueOnce(session(S1, { status: 'late_cancelled', cancel: null, packCharged: false, fees, fee: { amountMinor: 700, state: 'owed', currency: 'GBP' } }));
+    fireEvent.click(within(again).getByRole('button', { name: 'Cancel session' }));
+    await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', S1, true, 700));
+    expect((await screen.findByRole('status')).textContent).toBe('Cancelled late. A one-time late cancel fee of £7.00 was added to your bill.');
+  });
+
+  it('a session that is over says its own fee, and a pack day says none', async () => {
+    const S = (n) => `55555555-5555-4555-8555-55555555555${n}`;
+    serve(
+      view({
+        history: [
+          session(S(1), { status: 'no_show', cancel: null, packCharged: false, fee: { amountMinor: 800, state: 'owed', currency: 'GBP' } }),
+          session(S(2), { status: 'late_cancelled', cancel: null, packCharged: false, localDate: '2026-10-08', fee: { amountMinor: 500, state: 'paid', currency: 'GBP' } }),
+          session(S(3), { status: 'no_show', cancel: null, packCharged: true, localDate: '2026-10-07' }),
+        ],
+      }),
+    );
+    render(<PersonalTraining gym={GYM} />);
+    await screen.findByRole('list', { name: 'Your sessions' });
+    expect(screen.getAllByTestId('pt-session-fee').map((p) => p.textContent)).toEqual(['One-time no-show fee £8.00 · Payment due', 'One-time late cancel fee £5.00 · Paid']);
+    pickDay(FRI);
+    expect(screen.queryByTestId('pt-day-fees')).toBeNull();
   });
 
   it('the free time running out while the box is open asks again as a late cancel, and sends nothing late unasked', async () => {
