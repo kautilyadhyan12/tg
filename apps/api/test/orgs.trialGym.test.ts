@@ -357,6 +357,28 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
+    "the old gym's people invited at another spelling of their own email still came from it",
+    async () => {
+      const old = await oldGym();
+      const ten = await people(10);
+      await inGym(old, ten, 40);
+      // The owner invites each of them at a `+again` spelling: the mail reaches their own inbox,
+      // and each signs in as a new account that was never in the old gym's app.
+      const emails = await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ANY(${ten}::uuid[])`;
+      const respelt = await sql<{ id: string }[]>`
+        INSERT INTO users (email, display_name)
+        SELECT replace(e, '@gmail.com', '+again@gmail.com'), 'Trial Gym Member' FROM unnest(${emails.map((r) => r.email)}::text[]) e
+        RETURNING id`;
+      const owner = await makeUser();
+      const gym = await trialGym(owner);
+      await earlierInNewGym(gym, respelt.map((r) => r.id));
+      expect(await joinsThroughDoor(gym, owner, old)).toBe(false); // the 11th person from the old gym
+      expect(await trialOf(gym)).toEqual({ status: "expired", trial_check: "ended", trial_check_gym_id: old });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "a trial past its last day is the sweep's to end, not this rule's: no reason is given for it",
     async () => {
       const old = await oldGym();

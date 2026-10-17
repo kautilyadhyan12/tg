@@ -2255,9 +2255,10 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
   // The gym's people: the owner, always one (Kd: "the owner's own device counts as member
   // one"; the device is 2c's), from the moment the gym was made; then everybody else who
   // joined, removed ones included, each from their first join. Somebody "came from" another
-  // gym when they were in its app before that moment, and is counted once however many
-  // accounts their email has (`trial_person_key`; an account with no address is its own
-  // person). That gym counts only when its free trial began before this one and it never paid.
+  // gym when they, under any spelling of their email, were in its app before that moment, and
+  // are counted once however many accounts their email has (`trial_person_key`; an account
+  // with no address is its own person): an invitation to `asha+again@…` makes a new account,
+  // and it is still Asha (the passes' re-check, High-1). That gym counts only when its free trial began before this one and it never paid.
   // A gym on a free trial holds 100 members at a time (`GYM_TRIAL_MEMBERS`), so the whole list
   // is read: 16 ms for 100 people who were each in 3 other gyms (`.cost/measure-2d-trial-check.mts`).
   const rows = await tx<{ gym_id: string; came: number; owner_was_there: boolean }[]>`
@@ -2276,7 +2277,12 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
       SELECT x.gym_id, count(DISTINCT COALESCE(u.trial_person_key, p.user_id::text))::int AS came
       FROM people p
       JOIN users u ON u.id = p.user_id
-      JOIN gym_members x ON x.user_id = p.user_id AND x.gym_id <> ${gymId} AND x.joined_at < p.came_at
+      CROSS JOIN LATERAL (
+        SELECT p.user_id AS id
+        UNION
+        SELECT s.id FROM users s WHERE s.trial_person_key = u.trial_person_key
+      ) acct
+      JOIN gym_members x ON x.user_id = acct.id AND x.gym_id <> ${gymId} AND x.joined_at < p.came_at
       GROUP BY x.gym_id
     ),
     earlier AS (
