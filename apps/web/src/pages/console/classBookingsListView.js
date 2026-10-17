@@ -74,11 +74,14 @@ export function markRow(booking, list) {
     };
   }
   if (status !== 'booked' || !canMark) return null;
-  // What a No-show costs them, said before it is pressed (18h-i).
-  const fee = Number.isInteger(booking?.noShowFeeMinor) && typeof list?.currency === 'string' ? formatMinor(booking.noShowFeeMinor, list.currency) : null;
+  // What a No-show costs them, said before it is pressed (18h-i); to the class's coach, the
+  // gym's price once for the class, since whose pack it would not touch is not theirs to read.
+  const money = (minor) => (Number.isInteger(minor) && typeof list?.currency === 'string' ? formatMinor(minor, list.currency) : null);
+  const fee = money(booking?.noShowFeeMinor);
+  const may = fee === null ? money(list?.noShowFeeMayMinor) : null;
   return {
     tag: null,
-    note: fee === null ? 'Not marked yet' : `Not marked yet · No-show adds a one-time ${fee} fee`,
+    note: fee !== null ? `Not marked yet · No-show adds a one-time ${fee} fee` : may !== null ? `Not marked yet · No-show may add a one-time ${may} fee` : 'Not marked yet',
     actions: [
       { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
       { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },

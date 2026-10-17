@@ -105,5 +105,7 @@ describe('a late cancel or no-show fee on the list (18h-i)', () => {
     expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: 800 }, started).note).toBe('Not marked yet · No-show adds a one-time £8.00 fee');
     expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: null }, started).note).toBe('Not marked yet');
     expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: 800 }, { canMark: true, currency: null }).note).toBe('Not marked yet');
+    // The class's coach: the gym's price once for the class, never whose it would be.
+    expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: null }, { ...started, noShowFeeMayMinor: 800 }).note).toBe('Not marked yet · No-show may add a one-time £8.00 fee');
   });
 });

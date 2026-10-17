@@ -362,7 +362,8 @@ const staffBookingSchema = z
     /** Its late cancel or no-show fee (18h-i), owed, paid or waived, in the list's
      *  `currency`; null for none, and for a coach reading their own class's list. */
     fee: z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "waived"]) }).strict().nullable().default(null),
-    /** What marking them No-show would add (`classFeeFor`); null for nothing, and for a coach. */
+    /** What marking them No-show would add (`classFeeFor`); null for nothing, and for a coach,
+     *  who is sent the list's `noShowFeeMayMinor` instead. */
     noShowFeeMinor: z.number().int().min(1).nullable().default(null),
   })
   .strict();
@@ -383,6 +384,10 @@ export const classSessionBookingsResponseSchema = z
     lateCancelledTotal: z.number().int(),
     /** The money a list's fees are in (18h-i); null where the gym sells no memberships here. */
     currency: z.string().regex(/^[A-Z]{3}$/).nullable().default(null),
+    /** For the class's own coach: the gym's no-show fee, which marking somebody No-show may add.
+     *  One value for the class, so a coach's list says nothing of who holds a pack. Null for
+     *  staff who are sent each place's own `noShowFeeMinor`, and where there is no fee. */
+    noShowFeeMayMinor: z.number().int().min(1).nullable().default(null),
     /** The class has started and runs, so the reader can mark who came (17f). */
     canMark: z.boolean(),
     /** The class runs and has not started, so the reader can take a person off it (17g). */

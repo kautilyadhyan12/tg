@@ -608,9 +608,11 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     clock = T0;
     const list = await inject("GET", `/v1/orgs/${gym.id}/class-sessions/${past}/bookings`, coach.cookies);
     expect(list.statusCode, list.body).toBe(200);
-    const [row] = (JSON.parse(list.body) as { booked: { noShowFeeMinor: number | null; fee: unknown; membership: unknown }[] }).booked;
-    // The gym's price is said to the coach; what Lena pays with and owes is not.
-    expect(row).toMatchObject({ noShowFeeMinor: NO_SHOW, fee: null, membership: null });
+    const read = JSON.parse(list.body) as { noShowFeeMayMinor: number | null; booked: { noShowFeeMinor: number | null; fee: unknown; membership: unknown }[] };
+    // The gym's price is said to the coach once for the class; nothing of Lena's own: what she
+    // pays with, what she owes, or whether No-show costs her anything (a pack holder's does not).
+    expect(read.noShowFeeMayMinor).toBe(NO_SHOW);
+    expect(read.booked[0]).toMatchObject({ noShowFeeMinor: null, fee: null, membership: null });
     expect((await mark(gym, past, await bookingId(past, lena), "no_show", coach)).statusCode).toBe(200);
     expect((await standing(lena)).map((f) => [f.fee, f.amount_minor])).toEqual([["no_show", NO_SHOW]]);
   });
