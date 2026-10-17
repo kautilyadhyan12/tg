@@ -404,7 +404,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 2f. **Paying during the trial** (Kd, RULINGS 2026-09-29 and 2026-09-30).
      - 2f-i. [x] **Paying in the trial means paying today** — merged 2026-09-30 (PR #140).
      - 2f-ii. ~~"Start my plan now" for a gym that kept its trial~~ **Struck 2026-09-30, never built** (RULINGS that day): paying in the trial always starts the plan now.
-   - 2g. [ ] **A limit on creating gyms**: five an hour per account and twenty per address; ten gyms that never paid per owner (Kd, 2026-10-17).
+   - 2g. [x] **A limit on creating gyms** — merged 2026-10-17 (PR #307).
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18** (18c is this line; 18a, 18b and the Connect buttons are new).
 
 ## Stage 4 — Launch readiness
