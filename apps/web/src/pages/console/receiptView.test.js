@@ -179,3 +179,42 @@ describe('the receipt on paper', () => {
     expect(html).toContain('Tom &amp; Jerry&#39;s &quot;Gym&quot;');
   });
 });
+
+describe('a sale of several products (18q)', () => {
+  const tax = (minor, included = false, name = 'Sales tax', bp = 825) => ({ name, bp, included, minor });
+  // Two waters at $2.50 with Staff 20 ($1.00 off) and 8.25% on $4.00 ($0.33); a towel at $5.00
+  // with 8.25% ($0.41); a bar at $2.50 with County tax 1% ($0.03). By hand: $4.00 + $5.00 + $2.50
+  // = $11.50, tax $0.74 + $0.03, total $12.27.
+  const lines = [
+    { name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: tax(33), totalMinor: 433 } },
+    { name: 'Towel', quantity: 1, unitPriceMinor: 500, amounts: { listedMinor: 500, discount: null, tax: tax(41), totalMinor: 541 } },
+    { name: 'Protein bar', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: tax(3, false, 'County tax', 100), totalMinor: 253 } },
+  ];
+
+  it('prints each product with its discount under it, what they come to, each tax by its rate, one total and how it was paid', () => {
+    expect(drawn(sale({ lines, totalMinor: 1227, method: 'cash' }))).toEqual([
+      '2 × Water at $2.50 each | $5.00',
+      'Discount: Staff 20 | −$1.00',
+      '1 × Towel | $5.00',
+      '1 × Protein bar | $2.50',
+      'Subtotal | $11.50',
+      'Sales tax 8.25% | $0.74',
+      'County tax 1% | $0.03',
+      'Total | $12.27',
+      'Paid by cash | $12.27',
+    ]);
+  });
+
+  it('where the prices hold the tax, says it inside the total, by rate', () => {
+    const inside = [
+      { name: 'Water', quantity: 1, unitPriceMinor: 200, amounts: { listedMinor: 200, discount: null, tax: tax(15, true, 'VAT', 800), totalMinor: 200 } },
+      { name: 'Towel', quantity: 1, unitPriceMinor: 540, amounts: { listedMinor: 540, discount: null, tax: tax(40, true, 'VAT', 800), totalMinor: 540 } },
+    ];
+    expect(drawn(sale({ lines: inside, totalMinor: 740, method: 'card_at_desk' }))).toEqual(['1 × Water | $2.00', '1 × Towel | $5.40', 'Total | $7.40', 'Includes VAT 8% | $0.55', 'Paid by card at the desk | $7.40']);
+  });
+
+  it('a refund names the product it was for', () => {
+    const refunded = sale({ lines, totalMinor: 1227, refunds: [{ number: 52, on: '2026-10-16', amountMinor: 541, item: 'Towel' }] });
+    expect(receiptNotes(refunded)[0]).toBe('$5.41 given back for Towel on 16 Oct 2026 (refund receipt #52).');
+  });
+});

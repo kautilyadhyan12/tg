@@ -886,3 +886,94 @@ describe('refund a sale (18p)', () => {
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');
   });
 });
+
+describe('a basket (18q)', () => {
+  // Two waters ($3.98 + 8.25% = $4.31) and a towel ($5.00 + 8.25% = $5.41) under one receipt, #41.
+  const towelLine = (over = {}) =>
+    sale({ id: 's2', itemName: 'Towel', quantity: 1, unitPriceMinor: 500, netMinor: 500, taxMinor: 41, totalMinor: 541, receiptNumber: 41, lineNo: 2, ...over });
+  const basketPage = (over = {}) => {
+    const lines = [sale({ lineNo: 1, person: { entryId: 'e-maya', name: 'Maya Patel' }, ...over }), towelLine({ person: { entryId: 'e-maya', name: 'Maya Patel' }, ...over })];
+    return page({ sales: lines, totals: totals({ count: 1, totalMinor: 972, taxMinor: 74, cash: 972 }) });
+  };
+
+  it('rings up two products as one sale: each its own line, one total, one press, one receipt', async () => {
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-water');
+    pick('Add a product', 'p-towel');
+    // The same product again is one more on its line, not a second line.
+    pick('Add a product', 'p-water');
+    const lines = within(newSale()).getAllByTestId('basket-line');
+    expect(lines.map((l) => within(l).getByLabelText('How many').value)).toEqual(['2', '1']);
+    expect(lines.map((l) => l.textContent)).toEqual([expect.stringContaining('Water$1.99 each$3.98'), expect.stringContaining('Towel$5.00 each$5.00')]);
+    expect(within(newSale()).getByTestId('sale-summary').textContent).toBe('Subtotal$8.98Sales tax 8.25%$0.74Total$9.72');
+    expect(takeButton().textContent).toBe('Take payment · $9.72');
+    // Remove takes a product off the sale, and back on it goes with Add a product.
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Remove Towel' }));
+    expect(takeButton().textContent).toBe('Take payment · $4.31');
+    pick('Add a product', 'p-towel');
+
+    svc.sell.mockResolvedValue({ saleId: 's1', receiptNumber: 41, register: basketPage({ person: null }) });
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    expect(svc.sell.mock.calls[0][1]).toEqual({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      entryId: null,
+      method: 'cash',
+      totalMinor: 972,
+      lines: [
+        { productId: 'p-water', quantity: 2, discountId: null, totalMinor: 431 },
+        { productId: 'p-towel', quantity: 1, discountId: null, totalMinor: 541 },
+      ],
+    });
+    const done = await within(newSale()).findByTestId('sale-done');
+    expect(done.textContent).toContain('Sold: 2 × Water, 1 × Towel to a walk-in. $9.72, cash.');
+    expect(within(done).getByRole('button', { name: 'View receipt #41 for this sale' })).toBeTruthy();
+    // Today counts it once, in one row.
+    expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $9.72 from 1 sale. Cash $9.72.');
+    expect(within(today()).getAllByTestId('takings-row').map((r) => r.textContent)).toEqual([expect.stringContaining('2 × Water, 1 × Towel · $9.72')]);
+  });
+
+  it('Refund sale asks which product first, then that product’s box; Void sale names every product', async () => {
+    svc.get.mockResolvedValue(basketPage({ canRefund: true, canUndo: true, refunds: [], refundedMinor: 0, stockCounted: false }));
+    svc.refundSale.mockResolvedValue({ receiptNumber: 42 });
+    open();
+    const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+    const more = () => within(row).getByRole('button', { name: 'More for the sale of 2 × Water, 1 × Towel' });
+    fireEvent.click(more());
+    fireEvent.click(within(row).getByRole('menuitem', { name: /^Refund sale/ }));
+    const ask = within(row).getByTestId('basket-refund');
+    expect(within(within(ask).getByLabelText('Which product was it for?')).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Choose one',
+      '2 × Water · $4.31 can be refunded',
+      '1 × Towel · $5.41 can be refunded',
+    ]);
+    expect(within(row).queryByTestId('sale-refund-form')).toBeNull();
+    fireEvent.change(within(ask).getByLabelText('Which product was it for?'), { target: { value: 's2' } });
+    const box = within(row).getByTestId('sale-refund-form');
+    expect(within(box).getByText('Refund sale: 1 × Towel')).toBeTruthy();
+    expect(within(box).getByLabelText('Amount given back (USD)').value).toBe('5.41');
+    fireEvent.change(within(box).getByLabelText('Why it was refunded'), { target: { value: 'faulty' } });
+    fireEvent.click(within(box).getByRole('button', { name: 'Note refund' }));
+    await waitFor(() => expect(svc.refundSale).toHaveBeenCalledTimes(1));
+    // The refund is noted on the towel, never on the sale's first product.
+    expect(svc.refundSale.mock.calls[0].slice(0, 2)).toEqual(['g1', 's2']);
+    expect(svc.refundSale.mock.calls[0][2]).toMatchObject({ amountMinor: 541, reason: 'faulty' });
+
+    fireEvent.click(more());
+    fireEvent.click(within(row).getByRole('menuitem', { name: /^Void sale/ }));
+    expect(within(row).getByTestId('void-sale').textContent).toContain('Void this sale? 2 × Water, 1 × Towel, $9.72.');
+  });
+
+  it("each refund under a sale of several says which product it was for", async () => {
+    const refund = { id: 'rf1', amountMinor: 541, method: 'cash', reason: 'faulty', restocked: 0, refundedOn: '2026-10-12', by: 'Priya Desk', receiptNumber: 43, voided: null };
+    svc.get.mockResolvedValue(basketPage({ canRefund: true, canUndo: false, refunds: [], refundedMinor: 0 }));
+    const withRefund = basketPage({ canRefund: true, canUndo: false });
+    withRefund.sales[1] = { ...withRefund.sales[1], refunds: [refund], refundedMinor: 541, canRefund: false };
+    svc.get.mockResolvedValue(withRefund);
+    open();
+    const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+    expect(within(row).getByTestId('sale-refund').textContent).toContain('Towel · Cash · 12 Oct 2026 · Faulty or damaged · by Priya Desk');
+    expect(row.textContent).toContain('Part refunded');
+  });
+});
