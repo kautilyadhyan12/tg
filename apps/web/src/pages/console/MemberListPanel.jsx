@@ -393,6 +393,8 @@ export default function MemberListPanel({
   sentMessagesTo = null,
   startShow = null,
   onStartTaken = () => undefined,
+  startPerson = null,
+  onStartPersonTaken = () => undefined,
 }) {
   const [list, setList] = useState(null);
   const [listError, setListError] = useState(null);
@@ -433,6 +435,12 @@ export default function MemberListPanel({
   const opensMemberships = canOpenPlace(viewerPrivileges(gym), 'memberships');
   /** undefined: no box open · null: adding somebody · an id: that person's page. */
   const [openId, setOpenId] = useState(undefined);
+  // A person asked for from another page (`?person=` on Members): their page opens, once.
+  useEffect(() => {
+    if (startPerson === null) return;
+    setOpenId(startPerson);
+    onStartPersonTaken();
+  }, [startPerson, onStartPersonTaken]);
   const phone = usePhone();
   const [filtering, setFiltering] = useState(false);
   const [importing, setImporting] = useState(false);
