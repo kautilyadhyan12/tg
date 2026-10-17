@@ -161,7 +161,7 @@ export function actionsOf(c) {
 }
 
 /** The fees a late cancel and a no-show of this class would cost this person, said under
- *  its buttons (18h-i): "One-time fees: late cancel £5.00 · no-show £8.00". Null where neither
+ *  its buttons (18h-i): "One-time fee for each late cancel £5.00 · no-show £8.00". Null where neither
  *  costs anything, or there is nothing left to book or give up. */
 export function feesText(c) {
   if (c.fees === null || c.fees === undefined || c.cancelled) return null;

@@ -238,8 +238,8 @@ describe('a member’s classes', () => {
     serve([late, open]);
     render(<Classes gym={GYM} />);
     await screen.findByRole('button', { name: /^Book: Yoga/ });
-    expect(within(rowOf('Yoga')).getByTestId('class-fees').textContent).toBe('One-time fees: late cancel £5.00 · no-show £8.00');
-    expect(within(rowOf('Spin')).getByTestId('class-fees').textContent).toBe('One-time fees: late cancel £5.00 · no-show £8.00');
+    expect(within(rowOf('Yoga')).getByTestId('class-fees').textContent).toBe('One-time fee for each late cancel £5.00 · no-show £8.00');
+    expect(within(rowOf('Spin')).getByTestId('class-fees').textContent).toBe('One-time fee for each late cancel £5.00 · no-show £8.00');
     fireEvent.click(screen.getByRole('button', { name: /^Cancel booking: Spin/ }));
     const box = screen.getByRole('dialog', { name: 'Cancel late?' });
     expect(box.textContent).toContain('a one-time late cancel fee of £5.00 will be added to your bill');

@@ -265,15 +265,15 @@ export function lateCancelFeeWords(minor: number, currency: string): string {
 }
 
 /** The fees a class costs, said where a member books it, each charged once for each late
- *  cancel or no-show and never monthly (Kd, 2026-10-17): "One-time fees: late cancel ₹200 ·
- *  no-show ₹300", either alone, or null for none. */
+ *  cancel or no-show and never monthly (Kd, 2026-10-17): "One-time fee for each late cancel
+ *  ₹200 · no-show ₹300", either alone, or null for none. */
 export function classFeesLine(fees: ClassFees & { currency: string }): string | null {
   const parts = [
     fees.lateCancelMinor > 0 ? `late cancel ${formatMinor(fees.lateCancelMinor, fees.currency)}` : null,
     fees.noShowMinor > 0 ? `no-show ${formatMinor(fees.noShowMinor, fees.currency)}` : null,
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return null;
-  return `${parts.length === 1 ? "One-time fee" : "One-time fees"}: ${parts.join(" · ")}`;
+  return `One-time fee for each ${parts.join(" · ")}`;
 }
 
 const feeMinorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);

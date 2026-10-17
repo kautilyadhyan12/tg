@@ -33,9 +33,9 @@ describe("the words", () => {
     expect(lateCancelFeeWords(20000, "INR")).toContain("a one-time late cancel fee of ₹200.00 will be added");
   });
   it("the line beside a class says only the fees that cost something", () => {
-    expect(classFeesLine({ ...fees, currency: "GBP" })).toBe("One-time fees: late cancel £5.00 · no-show £8.00");
-    expect(classFeesLine({ lateCancelMinor: 0, noShowMinor: 800, currency: "GBP" })).toBe("One-time fee: no-show £8.00");
-    expect(classFeesLine({ lateCancelMinor: 500, noShowMinor: 0, currency: "GBP" })).toBe("One-time fee: late cancel £5.00");
+    expect(classFeesLine({ ...fees, currency: "GBP" })).toBe("One-time fee for each late cancel £5.00 · no-show £8.00");
+    expect(classFeesLine({ lateCancelMinor: 0, noShowMinor: 800, currency: "GBP" })).toBe("One-time fee for each no-show £8.00");
+    expect(classFeesLine({ lateCancelMinor: 500, noShowMinor: 0, currency: "GBP" })).toBe("One-time fee for each late cancel £5.00");
     expect(classFeesLine({ lateCancelMinor: 0, noShowMinor: 0, currency: "GBP" })).toBeNull();
   });
   it("a fee is named for what it was for", () => {
