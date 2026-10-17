@@ -6,6 +6,7 @@
 // THE RULE THIS FILE HOLDS: nobody becomes an owner unless the gym's own owner asked them,
 // while they were on its staff, and they themselves pressed Accept before the request ended.
 import type { Sql, TransactionSql } from "postgres";
+import type { PayProvider } from "../../billing/repo.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -413,7 +414,11 @@ export async function myOwnerRequest(
   return row === undefined ? null : { id: row.id, ownerName: row.owner_name, expiresAt: row.expires_at };
 }
 
-export type AnswerOwnerOutcome = AnswerOutcome | { kind: "paid_plan" };
+export type AnswerOwnerOutcome =
+  | Exclude<AnswerOutcome, { kind: "accepted" }>
+  | { kind: "paid_plan" }
+  /** `closed`: the payment windows Accept closed that the payment company holds, to cancel there. */
+  | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[] };
 
 /** Accept or Decline, by the person asked and nobody else: the request is found only with
  *  the caller's own id in the WHERE. Accepting asks again, under the gym's lock, everything
@@ -433,7 +438,7 @@ export async function answerOwnerRequest(
     const request = rows[0];
     if (request === undefined) return { kind: "not_found" };
     if (request.state === "accepted" && input.accept) {
-      return request.owner_user_id === input.userId ? { kind: "accepted" } : { kind: "request_gone" };
+      return request.owner_user_id === input.userId ? { kind: "accepted", closed: [] } : { kind: "request_gone" };
     }
     if (request.state !== "pending") return { kind: "request_gone" };
     if (request.expires_at.getTime() <= input.now.getTime()) {
@@ -479,10 +484,10 @@ export async function answerOwnerRequest(
     // A payment window still open is closed, as a newer press closes it (`beginCheckout`): paid
     // after this, it is set aside as a duplicate and refunded, never the gym's plan, so the old
     // owner never pays for the new owner's gym. Both checkout writers hold this same lock.
-    const closed = await tx<{ id: string }[]>`
+    const closed = await tx<{ id: string; provider: PayProvider; provider_ref: string | null }[]>`
       UPDATE billing_checkouts SET state = 'superseded', updated_at = now()
       WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
-      RETURNING id`;
+      RETURNING id, provider, provider_ref`;
     await tx`
       UPDATE gym_staff SET privileges = ${[...input.ownerPrivileges]}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
@@ -501,6 +506,8 @@ export async function answerOwnerRequest(
       targetId: input.gymId,
       meta: { requestId: input.requestId, from: oldOwner, to: input.userId, closedCheckouts: closed.map((c) => c.id) },
     });
-    return { kind: "accepted" };
+    // A window still being made has no reference yet: the press making it cancels it itself
+    // when it finds it closed (`markCheckoutOpen`).
+    return { kind: "accepted", closed: closed.flatMap((c) => (c.provider_ref === null ? [] : [{ provider: c.provider, ref: c.provider_ref }])) };
   });
 }

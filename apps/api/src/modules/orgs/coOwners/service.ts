@@ -20,6 +20,7 @@ import {
   type SendOwnerRequestResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
+import { closeSuperseded, type BillingDeps } from "../../billing/service.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
 import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
 import { emailHmac } from "../invites/address.js";
@@ -36,6 +37,9 @@ export interface CoOwnerDeps {
   webOrigin: string;
   now: () => Date;
   log: { warn: (obj: object, msg: string) => void };
+  /** Paddle and Razorpay, to cancel the payment windows a hand-over closes; null where neither
+   *  is set up (a window paid anyway is then set aside and refunded when it arrives). */
+  billing: BillingDeps | null;
 }
 
 const ownerOnly = (): OrgsError => new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
@@ -217,7 +221,10 @@ export async function answerOwnerRequest(
     case "paid_plan":
       throw paidPlan();
     case "accepted":
+      // After the hand-over is saved: the old owner's payment windows can no longer be paid.
+      if (deps.billing !== null) await closeSuperseded(deps.billing, outcome.closed);
+      return { status: "accepted" };
     case "declined":
-      return { status: outcome.kind };
+      return { status: "declined" };
   }
 }

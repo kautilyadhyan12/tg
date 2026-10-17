@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { FakePaddle } from "./fakePaddle.js";
 import type { CoOwnerRequestLetter } from "../src/modules/orgs/coOwners/email.js";
 import {
   OWNER_REQUEST_DAYS,
@@ -30,6 +31,11 @@ const baseEnv = {
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "hand-over-secret-0123456789abcdefgh", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
+  // A fake Paddle, so Accept can be seen cancelling the old owner's window there. Built at run
+  // time so no key-shaped text is in the repository.
+  PADDLE_ENV: "sandbox",
+  PADDLE_API_KEY: ["pdl", "sdbx", "apikey", "01" + "h".repeat(24), "HandOverHandOverHandOv", "Xyz"].join("_"),
+  PADDLE_CLIENT_TOKEN: ["test", "2".repeat(27)].join("_"),
 };
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -57,6 +63,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const signInCodes = new Map<string, string>();
   const letters: CoOwnerRequestLetter[] = [];
+  const paddle = new FakePaddle({});
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -171,6 +178,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true, seat_cap = 100000`;
     app = await buildApp(loadConfig(baseEnv), {
+      paddleApi: paddle,
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
         sendPasswordResetEmail: () => Promise.resolve(),
@@ -367,6 +375,8 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       // Closed as a newer press closes them: paid after this, a window is set aside and refunded.
       const states = await sql<{ state: string }[]>`SELECT state FROM billing_checkouts WHERE gym_id = ${gym.id}`;
       expect(states.map((r) => r.state)).toEqual(["superseded", "superseded"]);
+      // And cancelled at Paddle, so the old owner cannot be charged for it at all.
+      expect(paddle.cancelledTxns).toContain("txn_" + gym.id);
     }, TEST_TIMEOUT_MS);
 
     it("a gym with no plan, its trial over, can still be handed over", async () => {

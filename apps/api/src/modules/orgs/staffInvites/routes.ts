@@ -58,7 +58,7 @@ export function registerStaffInviteRoutes(
     sql: deps.sql,
     invites: deps.invites,
     now,
-    coOwners: { sql: deps.sql, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, webOrigin: deps.webOrigin, now, log: app.log },
+    coOwners: { sql: deps.sql, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, webOrigin: deps.webOrigin, now, log: app.log, billing: null },
   };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   // Every invitation is an email: the gym's own caps (20 a day) are the real limit; this
