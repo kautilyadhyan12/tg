@@ -52,6 +52,14 @@ describe("two gyms that are not alike are never listed", () => {
     ["Pilates Studio", "Pilates Centre", null],
     ["Kids Sports Academy", "Family Fitness Club", null],
     ["Iron Man Gym", "Iron Gym", null],
+    // One shared word, and the kind of gym tells them apart.
+    ["Power Yoga", "Power Gym", null],
+    ["Hot Yoga", "Hot Gym", null],
+    ["Shakti Yoga", "Shakti Gym", null],
+    ["Iron Yoga", "Iron Pilates", null],
+    ["Power Yoga Studio", "Power Boxing Club", null],
+    ["Spartan Gym", "Spartans MMA", null],
+    ["Crunch Fitness", "Crunch Yoga", null],
   ];
   it.each(table)("%s · %s", (a, b, city) => {
     expect(alike(a, b, city)).toBe(false);
@@ -77,9 +85,9 @@ describe("two names that are alike", () => {
     ["Iron House Pune", "Iron House Gym", "Pune"],
     ["Anytime Fitness", "Anytime Fitness", null],
     ["शक्ति जिम", "शक्ति  जिम", null],
-    // The same name, whatever kind of gym or plural it is written with.
-    ["Spartan Gym", "Spartans MMA", null],
-    ["Crunch Fitness", "Crunch Yoga", null],
+    // The same name, written with other words for a gym, or a plural.
+    ["Shakti Yoga", "Shakti Yoga Studio", null],
+    ["Spartans MMA Club", "Spartan MMA", null],
     ["Power Clubs", "Power Club", null],
     ["Physique Gym", "Physique Fitness", null],
     ["Shakti Gym", "Shakti Fitness Academies", null],

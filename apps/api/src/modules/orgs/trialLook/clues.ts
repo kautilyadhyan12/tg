@@ -3,19 +3,27 @@
 // again. Never blocks anything and never tells the gym; Kd reads the list and may pause or
 // remove. The database fetches the gyms; this decides which ones are alike.
 
-/** Words that say a place is a gym, what kind or for whom, not which one: two names that
- *  share only these are not alike ("The Yoga Studio", "Yoga Centre"). A word the name is
- *  called by is not here, however common ("Iron", "Physique", "Shakti"): two gyms of one
- *  name in one city are the clue. A plural is set aside with its word ("Clubs"). */
+/** Words that say only that a place is a gym, set aside from every name ("Iron House Gym",
+ *  "IronHouse Fitness"). A plural is set aside with its word ("Clubs"). */
 const NAME_WORDS_EVERY_GYM_HAS = new Set([
   "a", "an", "and", "the", "of", "for", "by",
   "gym", "gymnasium", "multigym", "fitness", "fit", "studio", "club", "centre", "center",
-  "health", "wellness", "academy", "training", "spa", "sport", "sports",
+  "health", "wellness", "academy", "training",
+  "ltd", "pvt", "private", "limited", "llc", "inc", "co",
+]);
+
+/** Words that say what kind of gym or for whom. They stay in a name, since they tell "Power
+ *  Yoga" from "Power Gym"; a name of nothing else is no name ("The Yoga Studio", "Yoga
+ *  Centre"), and is never compared. A word the name is called by is in neither list, however
+ *  common ("Iron", "Physique", "Shakti"): two gyms of one name in one city are the clue. */
+const NAME_WORDS_OF_A_KIND = new Set([
+  "spa", "sport", "sports",
   "yoga", "pilates", "zumba", "dance", "aerobics", "mma", "boxing", "kickboxing", "crossfit",
   "martial", "arts", "gymnastics",
   "unisex", "ladies", "lady", "women", "womens", "men", "mens", "kid", "kids", "family",
-  "ltd", "pvt", "private", "limited", "llc", "inc", "co",
 ]);
+
+const inList = (list: ReadonlySet<string>, word: string) => list.has(word) || list.has(singular(word));
 
 /** The short forms an address is typed with, read as the word. */
 const ADDRESS_SHORT_FORMS = new Map([
@@ -67,12 +75,12 @@ export function cityKey(city: string | null): string | null {
   return key === "" ? null : key;
 }
 
-/** The words of a gym's name that tell it apart: not the words every gym has, not its city. */
+/** The words of a gym's name that tell it apart: not the words every gym has, not its city;
+ *  none at all when only words of a kind are left. */
 export function nameCore(name: string, city: string | null): string[] {
   const cityWords = new Set(city === null ? [] : words(city));
-  return words(name)
-    .filter((w) => !NAME_WORDS_EVERY_GYM_HAS.has(w) && !NAME_WORDS_EVERY_GYM_HAS.has(singular(w)) && !cityWords.has(w))
-    .map(singular);
+  const left = words(name).filter((w) => !inList(NAME_WORDS_EVERY_GYM_HAS, w) && !cityWords.has(w));
+  return left.every((w) => inList(NAME_WORDS_OF_A_KIND, w)) ? [] : left.map(singular);
 }
 
 /** Two words one typing slip apart: one letter added or dropped, or two neighbours swapped.
