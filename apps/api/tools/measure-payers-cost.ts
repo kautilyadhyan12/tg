@@ -138,6 +138,7 @@ try {
   const measure = async (name: string, runs: number, run: (i: number) => Promise<unknown>): Promise<void> => {
     const walls: number[] = [];
     const busy: number[] = [];
+    const stalls: number[] = [];
     for (let i = 0; i < runs + 1; i++) {
       delay.reset();
       delay.enable();
@@ -147,12 +148,14 @@ try {
       const wall = performance.now() - start;
       delay.disable();
       const used = performance.eventLoopUtilization(before).active;
+      const stall = delay.max / 1e6;
       // The first run warms the connections and is not counted.
       if (i === 0) continue;
       walls.push(wall);
       busy.push(used);
+      stalls.push(stall);
     }
-    console.log(`  ${name.padEnd(62)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(busy))} (worst ${fmt(Math.max(...busy))})`);
+    console.log(`  ${name.padEnd(62)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(busy))} (worst ${fmt(Math.max(...busy))}) · longest stall ${fmt(Math.max(...stalls))}`);
   };
   const deps = { sql, now: () => new Date(t0) };
   const today = dayOf(t0);
