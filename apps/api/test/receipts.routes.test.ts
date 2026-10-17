@@ -280,7 +280,7 @@ d("receipts (real Postgres)", () => {
       }
       // Its own number 1 is its own sale, under its own name, for nobody of ours.
       const theirs = await receipt(theirGym, 1, nextDoor.cookies);
-      expect(theirs).toMatchObject({ kind: "sale", number: 1, gym: { name: "Rcp Next Door", address: null }, person: null, item: { name: "Their Water" } });
+      expect(theirs).toMatchObject({ kind: "sale", number: 1, gym: { name: "Rcp Next Door", address: null }, person: null, lines: [{ name: "Their Water" }] });
       expect(JSON.stringify(theirs)).not.toContain("Maya");
       // Each gym's refund number 4 is its own refund, of its own member.
       expect(await receipt(theirGym, 2, nextDoor.cookies)).toMatchObject({ kind: "payment", person: "Zoe Next", item: { name: "Their Gold" } });
@@ -305,7 +305,7 @@ d("receipts (real Postgres)", () => {
         balance: null,
         refunds: [{ number: 4, on: "2026-10-15", amountMinor: 1000 }],
       });
-      expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({ kind: "sale", person: null, personDeleted: false, item: { name: "Water", quantity: 1, unitPriceMinor: 250 } });
+      expect(await receipt(gymId, 2, owner.cookies)).toMatchObject({ kind: "sale", person: null, personDeleted: false, lines: [{ name: "Water", quantity: 1, unitPriceMinor: 250 }] });
       expect(await receipt(gymId, 3, owner.cookies)).toMatchObject({ kind: "sale", person: "Maya Patel" });
 
       // A number the gym has not given; staff who may only change prices or read the list;
@@ -533,8 +533,8 @@ d("receipts (real Postgres)", () => {
       expect(await receipt(gymId, 5, owner.cookies)).toMatchObject({
         kind: "sale",
         cancelled: false,
-        item: { name: "Water", quantity: 2, unitPriceMinor: 250 },
-        amounts: { listedMinor: 500, discount: { name: "Staff 20", minor: 100 }, tax: null, totalMinor: 400 },
+        lines: [{ name: "Water", quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: "Staff 20", minor: 100 }, tax: null, totalMinor: 400 } }],
+        totalMinor: 400,
         method: "bank_transfer",
       });
       // The Sell page lists the sale and the day's payments with their numbers.

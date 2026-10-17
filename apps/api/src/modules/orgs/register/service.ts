@@ -35,6 +35,7 @@ import {
   discountRefusalWords,
   memberCurrencyForCountry,
   memberPurchasesResponseSchema,
+  oneLineOnlyWords,
   outOfStockWords,
   productCurrencyWords,
   sellPageResponseSchema,
@@ -112,16 +113,17 @@ const iso = (p: repo.ProductRow) => ({ ...p, archivedAt: p.archivedAt === null ?
 
 const isoDiscount = (d: discounts.DiscountRow) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() });
 
-/** A sale as a screen reads it. Void sale is for the sale's own day and only while no refund
- *  stands on it; Refund sale for any day while some of it is left to give back (18p). */
-const shownSale = (s: repo.SaleRow, today: string, canSell: boolean) => {
-  const standing = s.refunds.some((r) => r.voided === null);
-  return {
+/** Each line of a sale as a screen reads it, from every line of each sale. Void sale is for
+ *  the sale's own day and only while no refund stands on any of its lines (18q); Refund sale
+ *  for any day while some of a line is left to give back (18p). */
+const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: boolean) => {
+  const refunded = new Set(sales.filter((s) => s.refunds.some((r) => r.voided === null)).map((s) => s.receiptNumber));
+  return sales.map((s) => ({
     ...s,
     soldAt: s.soldAt.toISOString(),
-    canUndo: canSell && !s.undone && s.soldOn === today && !standing,
+    canUndo: canSell && !s.undone && s.soldOn === today && !refunded.has(s.receiptNumber),
     canRefund: canSell && !s.undone && s.refundedMinor < s.totalMinor,
-  };
+  }));
 };
 
 async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: string | null = null): Promise<SellPageResponse> {
@@ -167,8 +169,8 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
     membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId, free: t.free })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
-    sales: row.sales.map((s) => shownSale(s, today, viewer.canSell)),
-    salesNotShown: row.salesTotal - row.sales.length,
+    sales: shownSales(row.sales, today, viewer.canSell),
+    salesNotShown: row.salesTotal - new Set(row.sales.map((s) => s.receiptNumber)).size,
     payments:
       paid === null
         ? null
@@ -321,20 +323,17 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
   const outcome = await repo.sell(deps.sql, {
     gymId,
     requestKey: req.requestKey,
-    productId: req.productId,
-    quantity: req.quantity,
     entryId: req.entryId,
     method: req.method,
     totalMinor: req.totalMinor,
-    discountId: req.discountId,
-    memberGift: req.memberGift,
+    lines: req.lines,
     today: dayInTz(now, viewer.timezone),
     actorUserId: userId,
     now,
   });
   switch (outcome.kind) {
     case "ok":
-      return sellProductResponseSchema.parse({ saleId: outcome.saleId, register: await read(deps, gymId, viewer) });
+      return sellProductResponseSchema.parse({ saleId: outcome.saleId, receiptNumber: outcome.receiptNumber, register: await read(deps, gymId, viewer) });
     case "product_not_found":
       throw new OrgsError(409, "product_not_for_sale", REGISTER_WORDS.product_not_found);
     case "person_not_found":
@@ -363,6 +362,8 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
       throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
     case "member_gift_with_discount":
       throw new OrgsError(409, "member_gift_with_discount", MEMBER_GIFT_WORDS.with_discount);
+    case "one_line_only":
+      throw new OrgsError(409, "discount_one_line", oneLineOnlyWords(outcome.name));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale outcome: ${JSON.stringify(never)}`);
@@ -533,5 +534,5 @@ export async function getPurchases(deps: RegisterDeps, gymId: string, viewer: Vi
   const found = await repo.purchasesOf(deps.sql, gymId, entryId, PURCHASES_SHOWN);
   if (found === null) throw new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
   const today = dayInTz(deps.now(), viewer.timezone);
-  return memberPurchasesResponseSchema.parse({ sales: found.sales.map((s) => shownSale(s, today, viewer.canSell)), notShown: found.total - found.sales.length });
+  return memberPurchasesResponseSchema.parse({ sales: shownSales(found.sales, today, viewer.canSell), notShown: found.total - new Set(found.sales.map((s) => s.receiptNumber)).size });
 }

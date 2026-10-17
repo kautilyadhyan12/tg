@@ -212,7 +212,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await stockOf(water.id)).toBe(8);
       const notes = await auditOf(gymId, "org.sale_recorded");
       expect(notes).toHaveLength(1);
-      expect(Object.keys(notes[0]?.meta ?? {}).sort()).toEqual(["currency", "entryId", "method", "product", "productId", "quantity", "taxMinor", "totalMinor"]);
+      expect(Object.keys(notes[0]?.meta ?? {}).sort()).toEqual(["currency", "entryId", "method", "product", "productId", "quantity", "receiptNumber", "taxMinor", "totalMinor"]);
       expect(notes[0]?.meta["entryId"]).toBe(maya);
       expect(JSON.stringify(notes[0]?.meta)).not.toContain("Maya");
       // And again a moment later: still one.
@@ -475,7 +475,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await auditOf(us, "org.tax_rate_updated")).map((a) => a.meta)).toEqual([{ before: "Sales tax", after: "State tax", bpBefore: "825", bpAfter: "625" }]);
       // No sale's note holds a name of a person or anything of a card.
       for (const note of await auditOf(us, "org.sale_recorded")) {
-        expect(Object.keys(note.meta).sort()).toEqual(["currency", "method", "product", "productId", "quantity", "taxMinor", "totalMinor"]);
+        expect(Object.keys(note.meta).sort()).toEqual(["currency", "method", "product", "productId", "quantity", "receiptNumber", "taxMinor", "totalMinor"]);
       }
     },
     T,

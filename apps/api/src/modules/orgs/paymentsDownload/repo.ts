@@ -12,6 +12,7 @@ const lineSchema = z.object({
   kind: z.enum(["payment", "refund", "sale", "sale_refund"]),
   day: z.string(),
   receipt: z.number().int(),
+  line: z.number().int(),
   name: z.string().nullable(),
   person_deleted: z.boolean(),
   walk_in: z.boolean(),
@@ -32,12 +33,13 @@ const lineSchema = z.object({
   by: z.string().nullable(),
 });
 
-export type LineRow = PaymentLineRow & { currency: string };
+/** `line` is a sale's line number (18q), 0 for anything else: the lines of one sale share its receipt. */
+export type LineRow = PaymentLineRow & { currency: string; line: number };
 
 /** The four tables as one list of lines, each read for this gym and these days. */
 function lines(sql: Sql, gymId: string, from: string, to: string) {
   return sql`
-    SELECT 'payment' AS kind, p.paid_on::text AS day, p.receipt_number AS receipt, e.full_name AS name,
+    SELECT 'payment' AS kind, p.paid_on::text AS day, p.receipt_number AS receipt, 0 AS line, e.full_name AS name,
            (h.entry_id IS NULL) AS person_deleted, false AS walk_in, t.name AS item, NULL::int AS quantity,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            p.amount_minor, b.amount_minor AS whole_minor, b.tax_minor AS whole_tax_minor, p.method, p.currency,
@@ -53,7 +55,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     LEFT JOIN users u ON u.id = p.recorded_by
     WHERE p.gym_id = ${gymId} AND p.paid_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
-    SELECT 'refund', r.refunded_on::text, r.receipt_number, e.full_name,
+    SELECT 'refund', r.refunded_on::text, r.receipt_number, 0, e.full_name,
            (h.entry_id IS NULL), false, t.name, NULL::int,
            b.covers_from::text, b.covers_to::text,
            r.amount_minor, b.amount_minor, b.tax_minor, r.method, r.currency,
@@ -68,7 +70,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     LEFT JOIN users u ON u.id = r.recorded_by
     WHERE r.gym_id = ${gymId} AND r.refunded_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
-    SELECT 'sale', s.sold_on::text, s.receipt_number, e.full_name,
+    SELECT 'sale', s.sold_on::text, s.receipt_number, s.line_no::int, e.full_name,
            (s.entry_id IS NULL AND s.for_member), (s.entry_id IS NULL AND NOT s.for_member), s.item_name, s.quantity,
            NULL::text, NULL::text,
            s.total_minor, s.total_minor, s.tax_minor, s.method, s.currency,
@@ -81,7 +83,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     LEFT JOIN users u ON u.id = s.recorded_by
     WHERE s.gym_id = ${gymId} AND s.sold_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
-    SELECT 'sale_refund', f.refunded_on::text, f.receipt_number, e.full_name,
+    SELECT 'sale_refund', f.refunded_on::text, f.receipt_number, 0, e.full_name,
            (s.entry_id IS NULL AND s.for_member), (s.entry_id IS NULL AND NOT s.for_member), s.item_name, NULL::int,
            NULL::text, NULL::text,
            f.amount_minor, s.total_minor, s.tax_minor, f.method, f.currency,
@@ -94,7 +96,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     WHERE f.gym_id = ${gymId} AND f.refunded_on BETWEEN ${from}::date AND ${to}::date`;
 }
 
-/** One page of lines in date order, then receipt order, after the line `after`, none with a
+/** One page of lines in date order, then receipt order and a sale's own line order, after the line `after`, none with a
  *  receipt past `upTo`: a line recorded while the file is written stays out of it, as it is
  *  out of its Totals. */
 export async function linesPage(
@@ -103,13 +105,13 @@ export async function linesPage(
   from: string,
   to: string,
   upTo: number,
-  after: { on: string; receipt: number } | null,
+  after: { on: string; receipt: number; line: number } | null,
 ): Promise<LineRow[]> {
   const rows = await sql`
     SELECT * FROM (${lines(sql, gymId, from, to)}) x
     WHERE x.receipt <= ${upTo}::int
-      AND ${after === null ? sql`true` : sql`(x.day, x.receipt) > (${after.on}::text, ${after.receipt}::int)`}
-    ORDER BY x.day, x.receipt
+      AND ${after === null ? sql`true` : sql`(x.day, x.receipt, x.line) > (${after.on}::text, ${after.receipt}::int, ${after.line}::int)`}
+    ORDER BY x.day, x.receipt, x.line
     LIMIT ${DOWNLOAD_PAGE}`;
   return rows.map((raw) => {
     const r = lineSchema.parse(raw);
@@ -117,6 +119,7 @@ export async function linesPage(
       kind: r.kind,
       on: r.day,
       receipt: r.receipt,
+      line: r.line,
       name: r.name,
       personDeleted: r.person_deleted,
       walkIn: r.walk_in,

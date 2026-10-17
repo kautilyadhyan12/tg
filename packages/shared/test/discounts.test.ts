@@ -413,8 +413,8 @@ describe("the discount form as the server takes it", () => {
 
   it("a sale names one discount or none, and an older screen that names none still sells", () => {
     const sale = { requestKey: "00000000-0000-4000-8000-000000000001", productId: WATER, quantity: 1, entryId: null, method: "cash", totalMinor: 199 };
-    expect(sellProductRequestSchema.parse(sale).discountId).toBeNull();
-    expect(sellProductRequestSchema.parse({ ...sale, discountId: WATER }).discountId).toBe(WATER);
+    expect(sellProductRequestSchema.parse(sale).lines[0]?.discountId).toBeNull();
+    expect(sellProductRequestSchema.parse({ ...sale, discountId: WATER }).lines[0]?.discountId).toBe(WATER);
     expect(sellProductRequestSchema.safeParse({ ...sale, discountId: "SUMMER20" }).success).toBe(false);
     expect(sellProductRequestSchema.safeParse({ ...sale, discountIds: [WATER] }).success).toBe(false);
   });

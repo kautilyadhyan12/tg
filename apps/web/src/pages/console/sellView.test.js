@@ -64,6 +64,7 @@ const sale = (over = {}) => ({
   undone: false,
   voided: null,
   canUndo: true,
+  receiptNumber: 40 + Number(String(over.id ?? 's1').replace(/\D/g, '') || '0'),
   ...over,
 });
 const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
@@ -244,7 +245,7 @@ describe('today', () => {
     );
   });
   it('a purchase on a person’s page', () => {
-    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false, voided: null, refundTag: null });
+    expect(purchaseLine(sale())).toEqual({ title: '2 × Water', amount: '$4.31', facts: '12 Oct 2026 · Cash · $0.33 Sales tax', undone: false, voided: null, refundTag: null, receiptNumber: 41 });
     // A sale made before rates had names says "tax".
     expect(saleTaxWords(sale({ taxName: null }))).toBe('$0.33 tax');
     expect(saleTaxWords(sale({ taxMinor: 0 }))).toBeNull();
@@ -255,6 +256,7 @@ describe('today', () => {
       undone: true,
       voided: 'Voided 12 October 2026 by Sam Desk · Recorded by mistake',
       refundTag: null,
+      receiptNumber: 41,
     });
   });
 });

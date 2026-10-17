@@ -18,7 +18,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import os from "node:os";
 import postgres from "postgres";
-import { DISCOUNTS_MAX, discountOff } from "@app/shared";
+import { DISCOUNTS_MAX, PURCHASES_SHOWN, SALES_SHOWN, SALE_LINES_MAX, discountOff, saleAmounts } from "@app/shared";
 import { findPeople, getPurchases, getRegister, sellProduct, type RegisterDeps } from "../src/modules/orgs/register/service.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
@@ -151,7 +151,7 @@ try {
   const discounted = untaxed.price_minor - discountOff({ kind: "percent", percentBp: 1000, amountMinor: null }, untaxed.price_minor);
   const sold: string[] = [];
   const sell = async (gym: Made): Promise<void> => {
-    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), productId: untaxed.id, quantity: 1, entryId: gym.buyer, method: "cash", totalMinor: discounted, discountId: gym.discountId, memberGift: null });
+    const answer = await sellProduct(deps, gym.owner, gym.gymId, viewer, { requestKey: randomUUID(), entryId: gym.buyer, method: "cash", totalMinor: discounted, lines: [{ productId: untaxed.id, quantity: 1, discountId: gym.discountId, memberGift: null, totalMinor: discounted }] });
     sold.push(answer.saleId);
   };
 
@@ -200,6 +200,43 @@ try {
   await sql`DELETE FROM gym_sales WHERE id = ANY(${sold}::uuid[])`;
   sold.length = 0;
   await measure("5 staff each record a sale at one moment", () => Promise.all(Array.from({ length: 5 }, () => sell(big))));
+
+  // A basket (18q): the most a page lists is 100 sales of 20 products each. A day long ago
+  // holds that many, all bought by one person, so their purchases are 20 sales of 20 too.
+  const OLD_DAY = 400;
+  const items = await sql<{ id: string; price_minor: number; tax_rate_id: string | null }[]>`
+    SELECT id, price_minor, tax_rate_id FROM gym_products WHERE gym_id = ${big.gymId} ORDER BY id LIMIT ${SALE_LINES_MAX}`;
+  await sql`
+    WITH base AS (SELECT receipts_issued AS b FROM gyms WHERE id = ${big.gymId}),
+    ins AS (
+      INSERT INTO gym_sales (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
+                             tax_bp, tax_included, currency, method, sold_on, recorded_by, created_at, receipt_number, for_member, line_no)
+      SELECT ${big.gymId}, md5(${big.gymId}::text || n::text)::uuid, (${items.map((i) => i.id)}::uuid[])[l], ${big.buyer}, 'Product ' || l::text,
+             1, 240, 200, 40, 240, 2000, true, 'GBP', 'cash', ${today}::date - ${OLD_DAY}::int, ${big.owner},
+             ${now}::timestamptz - make_interval(days => ${OLD_DAY}, mins => n), base.b + n, true, l
+      FROM generate_series(1, ${SALES_SHOWN}) AS n, generate_series(1, ${SALE_LINES_MAX}) AS l, base
+      RETURNING 1)
+    UPDATE gyms SET receipts_issued = receipts_issued + ${SALES_SHOWN} WHERE id = ${big.gymId}`;
+  await sql`ANALYZE gym_sales`;
+  const [{ oldDay } = { oldDay: "" }] = await sql<{ oldDay: string }[]>`SELECT to_char(${today}::date - ${OLD_DAY}::int, 'YYYY-MM-DD') AS "oldDay"`;
+  await measure(`a day of ${String(SALES_SHOWN)} sales of ${String(SALE_LINES_MAX)} products`, async () => {
+    const page = await getRegister(deps, big.gymId, viewer, oldDay);
+    if (page.sales.length !== SALES_SHOWN * SALE_LINES_MAX || page.totals.count !== SALES_SHOWN) throw new Error(`read ${String(page.sales.length)} lines, ${String(page.totals.count)} sales`);
+  });
+  await measure(`one person's purchases, sales of ${String(SALE_LINES_MAX)} products`, async () => {
+    const found = await getPurchases(deps, big.gymId, viewer, big.buyer);
+    if (found.sales.length !== PURCHASES_SHOWN * SALE_LINES_MAX) throw new Error(`read ${String(found.sales.length)} lines`);
+  });
+  const basketLines = items.map((i) => {
+    const amounts = saleAmounts({ unitPriceMinor: i.price_minor, quantity: 1, taxed: i.tax_rate_id !== null, taxBp: 2000, taxIncluded: true });
+    if (!amounts.ok) throw new Error("a product with no price");
+    return { productId: i.id, quantity: 1, discountId: null, memberGift: null, totalMinor: amounts.totalMinor };
+  });
+  const basketTotal = basketLines.reduce((n, l) => n + l.totalMinor, 0);
+  await measure(`one sale of ${String(SALE_LINES_MAX)} products recorded, and the page read after it`, async () => {
+    const answer = await sellProduct(deps, big.owner, big.gymId, viewer, { requestKey: randomUUID(), entryId: big.buyer, method: "cash", totalMinor: basketTotal, lines: basketLines });
+    sold.push(answer.saleId);
+  });
   if (KEEP) console.log(`kept: the big gym is ${big.gymId}`);
 } finally {
   if (!KEEP) await cleanup();

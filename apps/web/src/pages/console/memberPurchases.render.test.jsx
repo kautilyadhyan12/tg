@@ -29,7 +29,7 @@ const sale = (over = {}) => ({
   undone: false,
   voided: null,
   canUndo: true,
-  receiptNumber: 7,
+  receiptNumber: 6 + Number(String(over.id ?? 's1').replace(/\D/g, '') || '0'),
   ...over,
 });
 

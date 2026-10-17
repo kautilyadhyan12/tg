@@ -440,6 +440,24 @@ d("Refer a friend: the friend's gift (real Postgres)", () => {
         expect(leo.lead).toEqual({ id: leadId, fullName: "Leo Grant" });
         const offered = await get(`/v1/orgs/${gymB.org.id}/member-list/entries/${leo.entryId}/friend-gift`, ownerB.cookies);
         expect(friendGiftResponseSchema.parse(JSON.parse(offered.body)).friendGift?.discount.id).toBe(gift);
+        // A basket (18q): the gift goes on one product of a sale; on two, nothing is sold.
+        const shakerRes = await post(`/v1/orgs/${gymB.org.id}/register/products`, { name: "Shaker", priceMinor: 400, taxRateId: null, stock: null }, ownerB.cookies);
+        expect(shakerRes.statusCode, shakerRes.body).toBe(201);
+        const [shaker] = await sql<{ id: string }[]>`SELECT id FROM gym_products WHERE gym_id = ${gymB.org.id} AND name = 'Shaker'`;
+        if (shaker === undefined) throw new Error("no shaker");
+        const both = await sell({
+          requestKey: nextForm(),
+          entryId: leo.entryId,
+          method: "cash",
+          totalMinor: 510,
+          lines: [
+            { productId: bar.id, quantity: 1, totalMinor: 170, discountId: gift },
+            { productId: shaker.id, quantity: 1, totalMinor: 340, discountId: gift },
+          ],
+        });
+        expect(both.statusCode, both.body).toBe(409);
+        expect(errorOf(both)).toBe("discount_one_line");
+        expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymB.org.id} AND entry_id = ${leo.entryId}`)[0]?.n).toBe(0);
         expect((await sell(sale(leo.entryId))).statusCode).toBe(201);
         expect(errorOf(await sell(sale(leo.entryId)))).toBe("friend_gift_not_theirs");
         const count = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymB.org.id} AND discount_id = ${gift}`;

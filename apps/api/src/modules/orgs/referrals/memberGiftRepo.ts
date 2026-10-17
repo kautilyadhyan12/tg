@@ -68,7 +68,8 @@ export async function giveMemberGift(tx: TransactionSql, input: { gymId: string;
   // payment voided or refunded in full does not stand, so the next one is the first again.
   const paymentId0 = "paymentId" in input.by ? input.by.paymentId : null;
   const saleId0 = "saleId" in input.by ? input.by.saleId : null;
-  if ((await standingOther(tx, input.gymId, input.friendEntryId, paymentId0, saleId0)) !== undefined) return;
+  // The sale just recorded is left out whole: its other products are the same purchase (18q).
+  if ((await standingOther(tx, input.gymId, input.friendEntryId, paymentId0, saleId0, true)) !== undefined) return;
   const offer = await settingsFor(tx, input.gymId);
   if (!offer.on || offer.member === null) return;
   // The member who sent the link, still a member here, with a live account; never the friend
@@ -344,13 +345,16 @@ export async function friendPaymentGone(tx: TransactionSql, input: { gymId: stri
 }
 
 /** Another of the friend's payments or sales that stands: a membership payment not voided
- *  and not refunded in full, or a sale not voided and not refunded in full (18p); the earliest. */
+ *  and not refunded in full, or a sale not voided and not refunded in full (18p); the earliest.
+ *  A sale is a product of a sale (18q): `wholeSale` leaves out every product of `saleId`'s sale,
+ *  not that product alone. */
 async function standingOther(
   tx: TransactionSql,
   gymId: string,
   friendEntryId: string,
   paymentId: string | null,
   saleId: string | null,
+  wholeSale = false,
 ): Promise<{ paymentId: string | null; saleId: string | null } | undefined> {
   const [payment] = await tx<{ id: string }[]>`
     SELECT p.id FROM gym_member_payments p
@@ -365,7 +369,11 @@ async function standingOther(
   const [sale] = await tx<{ id: string }[]>`
     SELECT s.id FROM gym_sales s
     WHERE s.gym_id = ${gymId} AND s.entry_id = ${friendEntryId} AND s.undone_at IS NULL
-      AND (${saleId}::uuid IS NULL OR s.id <> ${saleId}::uuid)
+      AND (${saleId}::uuid IS NULL OR ${
+        wholeSale
+          ? tx`s.receipt_number <> (SELECT o.receipt_number FROM gym_sales o WHERE o.gym_id = ${gymId} AND o.id = ${saleId}::uuid)`
+          : tx`s.id <> ${saleId}::uuid`
+      })
       AND s.total_minor > COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f
                                     WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)
     ORDER BY s.seq LIMIT 1`;

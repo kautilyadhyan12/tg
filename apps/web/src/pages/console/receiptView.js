@@ -45,10 +45,10 @@ export function receiptLines(receipt) {
     lines.push({ label: `Given back by ${lower(methodWords(receipt.method))}`, amount: money(receipt.refundedMinor), strong: true });
     return lines;
   }
-  const { amounts } = receipt;
+  if (receipt.kind === 'sale' && receipt.lines.length > 1) return basketLines(receipt, money);
+  const amounts = receipt.kind === 'sale' ? receipt.lines[0].amounts : receipt.amounts;
   if (receipt.kind === 'sale') {
-    const each = receipt.item.quantity > 1 ? ` at ${money(receipt.item.unitPriceMinor)} each` : '';
-    lines.push({ label: `${String(receipt.item.quantity)} × ${receipt.item.name}${each}`, amount: money(amounts.listedMinor) });
+    lines.push(productLine(receipt.lines[0], money));
   } else {
     lines.push({ label: membershipLabel(receipt.item), amount: money(amounts.listedMinor) });
   }
@@ -66,12 +66,49 @@ export function receiptLines(receipt) {
   return lines;
 }
 
+const productLine = (line, money) => {
+  const each = line.quantity > 1 ? ` at ${money(line.unitPriceMinor)} each` : '';
+  return { label: `${String(line.quantity)} × ${line.name}${each}`, amount: money(line.amounts.listedMinor) };
+};
+
+/** A sale of several products (18q), as a till's slip: each product with its discount under
+ *  it, what they come to and each tax added on top by its rate, the total, each tax inside
+ *  the prices, and how it was paid. */
+function basketLines(receipt, money) {
+  const lines = [];
+  const taxes = new Map();
+  let subtotal = 0;
+  for (const line of receipt.lines) {
+    const { amounts } = line;
+    lines.push(productLine(line, money));
+    if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
+    subtotal += amounts.tax !== null && !amounts.tax.included ? amounts.totalMinor - amounts.tax.minor : amounts.totalMinor;
+    if (amounts.tax !== null) {
+      const key = `${amounts.tax.included ? 'in' : 'on'} ${tax(amounts.tax)}`;
+      taxes.set(key, { tax: amounts.tax, minor: (taxes.get(key)?.minor ?? 0) + amounts.tax.minor });
+    }
+  }
+  const onTop = [...taxes.values()].filter((t) => !t.tax.included);
+  const inside = [...taxes.values()].filter((t) => t.tax.included);
+  if (onTop.length > 0) {
+    lines.push({ label: 'Subtotal', amount: money(subtotal) });
+    for (const t of onTop) lines.push({ label: tax(t.tax), amount: money(t.minor) });
+  }
+  lines.push({ label: 'Total', amount: money(receipt.totalMinor), total: true });
+  for (const t of inside) lines.push({ label: `Includes ${tax(t.tax)}`, amount: money(t.minor) });
+  lines.push({ label: `Paid by ${lower(methodWords(receipt.method))}`, amount: money(receipt.totalMinor), strong: true });
+  return lines;
+}
+
 /** The notes under the lines: the refunds noted against a payment or a sale (18p), and who took it. */
 export function receiptNotes(receipt) {
   const money = (minor) => formatMinor(minor, receipt.currency);
   const notes = [];
   if (receipt.kind === 'payment' || receipt.kind === 'sale') {
-    for (const r of receipt.refunds ?? []) notes.push(`${money(r.amountMinor)} given back on ${shortDay(r.on)} (refund receipt #${String(r.number)}).`);
+    for (const r of receipt.refunds ?? []) {
+      const what = typeof r.item === 'string' ? ` for ${r.item}` : '';
+      notes.push(`${money(r.amountMinor)} given back${what} on ${shortDay(r.on)} (refund receipt #${String(r.number)}).`);
+    }
   }
   if (receipt.by !== null) notes.push(`${receipt.kind === 'refund' ? 'Given back' : 'Taken'} by ${receipt.by}.`);
   return notes;
