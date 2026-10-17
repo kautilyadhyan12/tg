@@ -721,7 +721,7 @@ export async function giveHeld(
       if (opened === undefined) throw new Error("a new membership's bill was not opened");
       if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: opened.id, saleId: null, offMinor: gift.offMinor, currency: type.currency, now: input.now });
       if (pays && input.method !== null) {
-        const paymentId = await insertPayment(
+        const recorded = await insertPayment(
           tx,
           {
             gymId: input.gymId,
@@ -736,7 +736,8 @@ export async function giveHeld(
           },
           input.now,
         );
-        if (paymentId === null) throw new Error("a new membership's payment was not recorded");
+        if (recorded === null) throw new Error("a new membership's payment was not recorded");
+        const paymentId = recorded.id;
         await setBillStatus(tx, input.gymId, opened.id, "paid", input.now);
         // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
         await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
@@ -754,6 +755,7 @@ export async function giveHeld(
             amountMinor: String(firstBill.amountMinor),
             currency: type.currency,
             method: input.method,
+            ...(recorded.paidByName === null ? {} : { paidBy: recorded.paidByName }),
           },
         });
       }

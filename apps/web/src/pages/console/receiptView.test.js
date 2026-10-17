@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { orgWords } from '@app/shared';
-import { cancelledLine, noAddressLine, receiptButtonLabel, receiptDay, receiptLines, receiptNotes, receiptPerson, receiptPrintHtml, receiptTitle } from './receiptView';
+import { cancelledLine, noAddressLine, receiptButtonLabel, receiptDay, receiptLines, receiptNotes, receiptPayer, receiptPerson, receiptPrintHtml, receiptTitle } from './receiptView';
 
 // A RECEIPT'S WORDS (ROADMAP 18g-i): every line a printed receipt says, from what the
 // server sends. Amounts are worked by hand: Texas's 8.25% on $50.00 is $4.13; India's GST
@@ -216,5 +216,24 @@ describe('a sale of several products (18q)', () => {
   it('a refund names the product it was for', () => {
     const refunded = sale({ lines, totalMinor: 1227, refunds: [{ number: 52, on: '2026-10-16', amountMinor: 541, item: 'Towel' }] });
     expect(receiptNotes(refunded)[0]).toBe('$5.41 given back for Towel on 16 Oct 2026 (refund receipt #52).');
+  });
+});
+
+describe('who paid, where somebody else pays for the person (18i)', () => {
+  it('a payment says Paid by, a refund Given back to, a sale and a person paying for themselves say neither', () => {
+    expect(receiptPayer(payment({ paidBy: 'Priya Sharma' }))).toEqual({ label: 'Paid by', name: 'Priya Sharma' });
+    expect(receiptPayer(refund({ paidBy: 'Priya Sharma' }))).toEqual({ label: 'Given back to', name: 'Priya Sharma' });
+    expect(receiptPayer(payment({ paidBy: '  ' }))).toEqual({ label: 'Paid by', name: 'No name on their record' });
+    expect(receiptPayer(payment({ paidBy: null, paidByDeleted: true }))).toEqual({ label: 'Paid by', name: 'A deleted member' });
+    expect(receiptPayer(refund({ paidBy: null, paidByDeleted: true }))).toEqual({ label: 'Given back to', name: 'A deleted member' });
+    expect(receiptPayer(payment({ paidBy: null }))).toBeNull();
+    expect(receiptPayer(payment())).toBeNull();
+    expect(receiptPayer(sale({ paidBy: null }))).toBeNull();
+  });
+
+  it('the paper names the payer under who it is for, as words', () => {
+    const html = receiptPrintHtml(payment({ paidBy: '<b>Priya</b>' }));
+    expect(html).toContain('<tr><td>For</td><td>Maya Patel</td></tr><tr><td>Paid by</td><td>&lt;b&gt;Priya&lt;/b&gt;</td></tr></table>');
+    expect(receiptPrintHtml(payment())).not.toContain('Paid by</td>');
   });
 });

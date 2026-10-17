@@ -49,6 +49,13 @@ const receiptCommon = {
    *  record was deleted for good since (`personDeleted`). */
   person: z.string().nullable(),
   personDeleted: z.boolean(),
+  /** Who paid for them, where somebody else on the gym's list pays for this person (18i),
+   *  by the name that record had when it was paid; '' for a record with no name. On a
+   *  refund, who the money went back to. Null where they paid for themselves, and on a
+   *  sale, which whoever stood at the desk paid. */
+  paidBy: z.string().nullable().default(null),
+  /** Somebody else paid, whose record was deleted for good since: "A deleted member". */
+  paidByDeleted: z.boolean().default(false),
   /** The member of staff who took it; null where they have since left the app. */
   by: z.string().nullable(),
   currency: currencySchema,

@@ -299,11 +299,11 @@ d("download payments (real Postgres)", () => {
       expect(disposition).toBe("All payments to 15 Oct 2026.xlsx");
       expect(JSON.stringify(sheets)).not.toMatch(new RegExp(theirs.join("|")));
       expect(sheetOf(sheets, "Payments")).toEqual([
-        ["Date", "Receipt", "Type", "Person", "Details", "Refund of receipt", "Reason for refund", "Payment method", "Amount (USD)", "Tax (USD)", "Amount counted (USD)", "Status", "Recorded by"],
-        ["2026-10-15", 1, "Membership payment", "Maya Patel", "Gold Monthly · 15 Oct – 14 Nov 2026", null, null, "Cash", 54.13, 4.13, 54.13, "Part refunded", "Pd worst-owner"],
-        ["2026-10-15", 2, "Membership refund", "Maya Patel", "Gold Monthly · 15 Oct – 14 Nov 2026", 1, "Paid twice", "Cash", -10, -0.76, -10, null, "Pd worst-owner"],
-        ["2026-10-15", 3, "Product sale", "Walk-in", "1 × Water", null, null, "Cash", 2.5, 0, 2.5, null, "Pd worst-owner"],
-        ["2026-10-15", 4, "Product sale", "Maya Patel", "1 × Water", null, null, "Cash", 2.5, 0, 2.5, null, "Pd worst-owner"],
+        ["Date", "Receipt", "Type", "Person", "Paid by", "Details", "Refund of receipt", "Reason for refund", "Payment method", "Amount (USD)", "Tax (USD)", "Amount counted (USD)", "Status", "Recorded by"],
+        ["2026-10-15", 1, "Membership payment", "Maya Patel", null, "Gold Monthly · 15 Oct – 14 Nov 2026", null, null, "Cash", 54.13, 4.13, 54.13, "Part refunded", "Pd worst-owner"],
+        ["2026-10-15", 2, "Membership refund", "Maya Patel", null, "Gold Monthly · 15 Oct – 14 Nov 2026", 1, "Paid twice", "Cash", -10, -0.76, -10, null, "Pd worst-owner"],
+        ["2026-10-15", 3, "Product sale", "Walk-in", null, "1 × Water", null, null, "Cash", 2.5, 0, 2.5, null, "Pd worst-owner"],
+        ["2026-10-15", 4, "Product sale", "Maya Patel", null, "1 × Water", null, null, "Cash", 2.5, 0, 2.5, null, "Pd worst-owner"],
       ]);
       expect(sheetOf(sheets, "Totals")).toEqual([
         ["Totals", "USD"],
@@ -319,7 +319,7 @@ d("download payments (real Postgres)", () => {
       ]);
       // And next door's own file is its own.
       const next = sheetOf((await download(theirGym, nextDoor.cookies)).sheets, "Payments");
-      expect(next.slice(1).map((r) => [r[1], r[3], r[4]])).toEqual([
+      expect(next.slice(1).map((r) => [r[1], r[3], r[5]])).toEqual([
         [1, "Zoe Next", "Their Gold · 15 Oct – 14 Nov 2026"],
         [2, "Zoe Next", "1 × Their Water"],
       ]);
@@ -363,9 +363,9 @@ d("download payments (real Postgres)", () => {
       const today = await download(gymId, owner.cookies, { from: "2026-10-15", to: "2026-10-15" });
       expect(today.disposition).toBe("Payments 15 Oct 2026.xlsx");
       expect(sheetOf(today.sheets, "Payments").slice(1)).toEqual([
-        ["2026-10-15", 2, "Product sale", "Walk-in", "1 × Protein bar", null, null, "Cash", 12, 0, 0, "Voided · Recorded by mistake", "Pd days-owner"],
-        ["2026-10-15", 3, "Product sale", "Walk-in", "1 × Protein bar", null, null, "Cash", 12, 0, 12, "Part refunded", "Pd days-owner"],
-        ["2026-10-15", 4, "Product refund", "Walk-in", "Protein bar", 3, "Faulty or damaged", "Cash", -6, 0, -6, null, "Pd days-owner"],
+        ["2026-10-15", 2, "Product sale", "Walk-in", null, "1 × Protein bar", null, null, "Cash", 12, 0, 0, "Voided · Recorded by mistake", "Pd days-owner"],
+        ["2026-10-15", 3, "Product sale", "Walk-in", null, "1 × Protein bar", null, null, "Cash", 12, 0, 12, "Part refunded", "Pd days-owner"],
+        ["2026-10-15", 4, "Product refund", "Walk-in", null, "Protein bar", 3, "Faulty or damaged", "Cash", -6, 0, -6, null, "Pd days-owner"],
       ]);
 
       // Both days: yesterday's first, and the formula is only ever text.
@@ -428,7 +428,7 @@ d("download payments (real Postgres)", () => {
       await sold(gymId, owner.cookies, water.id, 250);
 
       const { sheets } = await download(gymId, owner.cookies);
-      expect(sheetOf(sheets, "Payments").slice(1).map((r) => [r[1], r[2], r[8], r[10], r[11]])).toEqual([
+      expect(sheetOf(sheets, "Payments").slice(1).map((r) => [r[1], r[2], r[9], r[11], r[12]])).toEqual([
         [1, "Membership payment", 50, 0, "Voided · Wrong person"],
         [2, "Membership refund", -10, 0, "Voided · Noted by mistake"],
         [3, "Product sale", 2.5, 2.5, null],
@@ -462,8 +462,8 @@ d("download payments (real Postgres)", () => {
 
       const both = await download(gymId, owner.cookies, { from: "2026-10-14", to: "2026-10-15" });
       const rows = sheetOf(both.sheets, "Payments");
-      expect(rows[0]).toEqual(["Date", "Receipt", "Type", "Person", "Details", "Refund of receipt", "Reason for refund", "Payment method", "Amount", "Tax", "Amount counted", "Status", "Recorded by", "Currency"]);
-      expect(rows.slice(1).map((r) => [r[1], r[8], r[13]])).toEqual([
+      expect(rows[0]).toEqual(["Date", "Receipt", "Type", "Person", "Paid by", "Details", "Refund of receipt", "Reason for refund", "Payment method", "Amount", "Tax", "Amount counted", "Status", "Recorded by", "Currency"]);
+      expect(rows.slice(1).map((r) => [r[1], r[9], r[14]])).toEqual([
         [1, 2.5, "EUR"],
         [2, 2.5, "USD"],
       ]);
@@ -473,7 +473,7 @@ d("download payments (real Postgres)", () => {
 
       // Only the other currency on the days: Reports shows none of it, and Totals does not say it does.
       const euroOnly = await download(gymId, owner.cookies, { from: "2026-10-14", to: "2026-10-14" });
-      expect(sheetOf(euroOnly.sheets, "Payments")[0]?.[8]).toBe("Amount (EUR)");
+      expect(sheetOf(euroOnly.sheets, "Payments")[0]?.[9]).toBe("Amount (EUR)");
       expect(sheetOf(euroOnly.sheets, "Totals").at(-1)?.[0]).toBe("Voided transactions are listed and count 0.");
     },
     T,

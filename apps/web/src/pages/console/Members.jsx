@@ -510,6 +510,25 @@ export default function Members() {
     );
   }, [showing, setSearchParams]);
 
+  // A person's name on another person's page (Who pays, 18i) opens their page here
+  // (`?person=`), once, on the list.
+  const personParam = searchParams.get('person');
+  const [startPerson, setStartPerson] = useState(null);
+  useEffect(() => {
+    if (personParam === null) return undefined;
+    setSearchParams(
+      (was) => {
+        const params = new URLSearchParams(was);
+        params.delete('person');
+        params.delete('view');
+        return params;
+      },
+      { replace: true },
+    );
+    if (canSeeList && /^[0-9a-f-]{36}$/i.test(personParam)) setStartPerson(personParam);
+    return undefined;
+  }, [personParam, canSeeList, setSearchParams]);
+
   // Overview's Start here list opens Import, Add or Invite staff here (`?open=`), once.
   const opening = searchParams.get('open');
   useEffect(() => {
@@ -693,6 +712,8 @@ export default function Members() {
           onActionTaken={clearAction}
           startShow={startShow}
           onStartTaken={() => setStartShow(null)}
+          startPerson={startPerson}
+          onStartPersonTaken={() => setStartPerson(null)}
           emptyExtra={
             <AlreadyInApp
               items={state.items}
