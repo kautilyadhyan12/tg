@@ -2,7 +2,8 @@
   "sources": [
     "support.google.com/mail/answer/7436150: dots don't matter in Gmail; they do change a work or school address",
     "learn.microsoft.com, Plus addressing in Exchange Online: sean+newsletter@contoso.com reaches sean@contoso.com",
-    "gmass.co, domains gmail.com, googlemail.com and google.com: one mailbox, both domains"
+    "gmass.co, domains gmail.com, googlemail.com and google.com: one mailbox, both domains",
+    "fastmail.help/hc/en-us/articles/360060591053, Plus addressing and subdomain addressing: anything@username.fastmail.com reaches username@fastmail.com"
   ],
   "same": [
     ["Google: dotted Gmail", "johnsmith@gmail.com", "john.smith@gmail.com"],
@@ -14,7 +15,10 @@
     ["Outlook +tag", "priya.nair@outlook.com", "priya.nair+trial2@outlook.com"],
     ["iCloud +tag", "arjun@icloud.com", "arjun+gym@icloud.com"],
     ["capitals and spaces", "Rahul.Sharma+Gym@GMail.com ", "rahulsharma@gmail.com"],
-    ["dots and a tag together", "f.i.t.n.e.s.s+2@gmail.com", "fitness@gmail.com"]
+    ["dots and a tag together", "f.i.t.n.e.s.s+2@gmail.com", "fitness@gmail.com"],
+    ["Fastmail: subdomain addressing", "gym2@kdfit.fastmail.com", "kdfit@fastmail.com"],
+    ["Fastmail: two subdomain addresses", "gym2@kdfit.fastmail.com", "Gym3@KDFit.Fastmail.com"],
+    ["Fastmail +tag", "kdfit+trial@fastmail.com", "kdfit@fastmail.com"]
   ],
   "different": [
     ["Google: dots change a work address", "j.smith@yourdomain.com", "jsmith@yourdomain.com"],
@@ -26,6 +30,9 @@
     ["a Gmail look-alike domain", "kdgym@gmail.com", "kdgym@gmail.co"],
     ["a subdomain is not Gmail", "kd.gym@mail.gmail.com", "kdgym@gmail.com"],
     ["a hyphen is not a tag", "anita-k@yahoo.com", "anita@yahoo.com"],
-    ["the tag alone is not a name", "+gym@gmail.com", "+other@gmail.com"]
+    ["the tag alone is not a name", "+gym@gmail.com", "+other@gmail.com"],
+    ["Fastmail: another user's subdomain", "gym@kdfit.fastmail.com", "gym@asha.fastmail.com"],
+    ["Fastmail: a deeper subdomain is not a user", "gym@a.kdfit.fastmail.com", "kdfit@fastmail.com"],
+    ["not Fastmail: a look-alike domain", "gym@kdfit.fastmail.co", "kdfit@fastmail.co"]
   ]
 }

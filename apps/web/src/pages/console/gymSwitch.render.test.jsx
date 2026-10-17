@@ -318,7 +318,7 @@ describe('walking from one gym to another', () => {
     // …and gym B gets its OWN prompt, about gym B: the trial is spent now, so
     // the honest arm is the price list rather than a button that would 409.
     expect(await screen.findByTestId('plan-modal')).toBeTruthy();
-    expect(screen.getByText(/already used your one free trial/i)).toBeTruthy();
+    expect(screen.getByText(/owner has already used their free trial/i)).toBeTruthy();
   });
 
   it('recovers when gym B’s row still says the trial is unspent', async () => {

@@ -260,7 +260,9 @@ export function registerOrgRoutes(
       if (!(err instanceof service.OrgsError && err.code === "unpaid_gym_limit")) await giveBackRateLimit(createLimitOptions, req);
       throw err;
     }
-    return reply.status(201).send(created);
+    // The same press again made nothing, so it is given back too.
+    if (created.replayed) await giveBackRateLimit(createLimitOptions, req);
+    return reply.status(201).send(created.response);
   });
 
   // EDIT THE GYM'S OWN DETAILS (Kd approved `org.manage`, 2026-08-26). It is a
@@ -297,14 +299,15 @@ export function registerOrgRoutes(
    *  stays loose because a gym's whole front desk can share one address. No §
    *  governs either; both are chosen and recorded in DECISIONS with the pair
    *  above. */
-  const trialLimit = createDualRateLimit({
+  const trialLimitOptions = {
     name: "orgs_trial",
     max: 10,
     ipMax: 60,
     windowMs: 60 * 60 * 1000,
-    identifier: (req) => req.authUser?.id ?? null,
+    identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
     redis: deps.redis,
-  });
+  };
+  const trialLimit = createDualRateLimit(trialLimitOptions);
 
   app.post(
     "/v1/orgs/:gymId/trial",
@@ -312,13 +315,27 @@ export function registerOrgRoutes(
     async (req, reply) => {
       const params = parseOr400(orgParamsSchema, req.params, req, reply);
       if (params === null) return;
-      // A body with no code is an ordinary press; a second-trial code rides in it (2e-i).
-      const body = parseOr400(startOrgTrialRequestSchema, req.body ?? {}, req, reply);
+      // A body with no code is an ordinary press; a second-trial code rides in it (2e-i). The
+      // body is required: the console sends `{}` as JSON, which another website cannot send
+      // without the browser asking first, while a press with no body at all can be made from
+      // any page and would spend a signed-in owner's one free trial (the passes' High-2).
+      const body = parseOr400(startOrgTrialRequestSchema, req.body, req, reply);
       if (body === null) return;
-      // One device, one trial (2c): a browser with no mark is given one here, so the trial
-      // it starts is recorded against it. Only the mark's hash reaches the database.
+      // One device, one trial (2c): the browser has its mark from `/v1/orgs/mine`; one that
+      // has none here is given one, so the trial it starts is recorded against it. Only the
+      // mark's hash reaches the database.
       const mark = trialMarkOf(req) ?? mintOpaqueToken();
-      const started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId, sha256Hex(mark), body.code);
+      let started;
+      try {
+        started = await service.startOrgTrial(orgDeps, requireUserId(req), params.gymId, sha256Hex(mark), body.code);
+      } catch (err) {
+        // A press on a gym the caller may not pay for is given back, so strangers at one
+        // address cannot spend its owners' presses (the passes' Low-3). A wrong code counts.
+        if (err instanceof service.OrgsError && (err.statusCode === 403 || err.statusCode === 404)) {
+          await giveBackRateLimit(trialLimitOptions, req);
+        }
+        throw err;
+      }
       if (started.outcome === "started") {
         reply.setCookie(TRIAL_DEVICE_COOKIE, mark, cookieOptions(deps.config, TRIAL_MARK_MAX_AGE_S, TRIAL_MARK_PATH));
       }
@@ -750,6 +767,12 @@ export function registerOrgRoutes(
   app.get("/v1/orgs/mine", { preHandler: [app.authenticate] }, async (req, reply) => {
     const mark = trialMarkOf(req);
     const orgs = await service.listMyOrgs(orgDeps, requireUserId(req), mark === null ? null : sha256Hex(mark));
+    // A browser with no trial mark is given one before anybody presses Start free trial, so a
+    // press whose answer is lost, or two presses at once, carry the one mark (the passes'
+    // integrity Low-2). It is random and stored nowhere until a trial starts.
+    if (mark === null) {
+      reply.setCookie(TRIAL_DEVICE_COOKIE, mintOpaqueToken(), cookieOptions(deps.config, TRIAL_MARK_MAX_AGE_S, TRIAL_MARK_PATH));
+    }
     return reply.status(200).send(orgs);
   });
 
