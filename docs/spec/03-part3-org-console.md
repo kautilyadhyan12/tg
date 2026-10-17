@@ -1802,7 +1802,7 @@ address has an account (the account-existence oracle `packages/shared/src/orgs.t
 warned about is why the old route looked only inside the roster) · `GET` the pending
 ones · `DELETE …/:id` cancels · `POST …/:id/resend` restarts the 7 days, at most 3
 times. 20 pending and 20 sends a day a gym. The roles offered are manager and trainer;
-a second owner is a co-owner (4b-i, below); handing the gym over is 4b-ii.
+a second owner is a co-owner (4b-i, below); handing the gym over is 4b-ii, below.
 
 **Accepting.** The invitation appears in 10.2's `GET /v1/orgs/invitations` with its
 role. Accept writes a `gym_staff` row with the role's default ticks and **no
@@ -1857,6 +1857,12 @@ directions. Marking attendance still needs a membership.
 - A co-owner's row is an `owner` row that is not `gyms.owner_user_id`; the staff list, the member list's staff tag and the caller's own gym row carry `coOwner`. Only the owner changes, ticks or removes an owner's row (`owner_row_locked`); the owner is never removed (`last_owner`), never changes role (`owner_role_locked`) and always keeps staff management and billing (`last_owner_locked`).
 - **Invite staff offers Co-owner** to the owner alone (`role: "owner"` on `POST …/staff/invites`; `0129` lets an invitation's role be `owner`, with the owner's ticks and no role name of the gym's own). It never skips Accept: an address already in the app gets an invitation rather than being appointed, an address on the staff gets a co-owner request (`outcome: "asked"`), and Accept of a co-owner's invitation opens only while its sender is the gym's owner.
 - Screens: Make co-owner, Send request and Cancel request in a staff member's panel (Members & staff → Staff); "Asked to be co-owner" on the row; "Be a co-owner of {gym}" with Accept and Decline at the top of that gym's Overview; "Co-owner" as the person's role everywhere the console names it.
+**Out of 4b-ii (built 2026-10-17; `rulings/2026-10-17-4b-ii.md`).** The owner hands the gym to a co-owner, who accepts, for a gym not on a paid plan.
+
+- Migration `0138`: `gym_owner_requests` (as `gym_co_owner_requests`, one pending a GYM); `subscriptions.trial_started_by` (the gym's owner when its trial began, written by a trigger, backfilled); `subscriptions_owner_idx` (by gym).
+- Routes: `POST`/`DELETE /v1/orgs/:gymId/staff/:userId/owner-request` (the gym's own owner; only a co-owner can be asked, `not_co_owner`; refused on a paid plan, `paid_plan`: a Paddle or Razorpay subscription trialing, active or past due); `GET /v1/orgs/:gymId/owner-request` and `POST …/owner-request/:requestId/accept|decline` (the co-owner asked, by their own id in the WHERE). Accept, under the gym's lock, asks again that the sender is still the owner, the person is still a co-owner on the staff row they were asked on and the gym is on no paid plan; then `gyms.owner_user_id` moves to them with the owner's ticks, and the old owner's row stays an owner's, so they are a co-owner. The old owner's waiting co-owner requests and co-owner invitations are cancelled. One email to the person asked.
+- **The free trial stays with whoever started it.** "Has had a free trial" reads `trial_started_by` (and every spelling of the person, 2b); a gym's own past trial always counts (`gymTrialUsed`), so a gym handed over gets no second one, and its new owner is told "This {gym} has already had its free trial, so it needs a plan to start." The 2d check and the look list judge a trial by the person who started it.
+- Screens: an Owner part on a co-owner's panel, for the owner: Make owner, the box (who becomes the owner and can remove co-owners, you included; you stay on as a co-owner; no new free trial), Send request, Cancel request; greyed with "This {gym} is on a paid plan, so it can't be handed over."; with another co-owner asked, their name and Open {name}. "Asked to be owner" on the row. "Be the owner of {gym}" with Accept and Decline on that gym's Overview.
 
 ### 10.4 A seat is a person using the member app (4c)
 
