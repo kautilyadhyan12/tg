@@ -1186,7 +1186,7 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  console, so the client requires a definite answer before it blocks
    *  anything. */
   ownerTrialUsed: z.boolean().nullable().default(null),
-  /** This gym's free trial ended early because most of its first people came from another
+  /** This gym's free trial ended early because 11 of its people came from another
    *  gym that already had one and never paid (Stage 3 item 2d): the subscribe prompt says why.
    *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
   trialEndedFirstPeople: z.boolean().nullable().default(null),

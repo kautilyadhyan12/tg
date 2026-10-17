@@ -193,7 +193,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 11. [ ] ~~Photo sharing to the gym (one-week life, reactions only, report-and-remove)~~ (**item 19b since 2026-09-22**), the photo/stats editor.
 12. [ ] ~~Reports section~~ (**item 21 since 2026-09-22**); billing section buttons; the seat cap re-counted (**by 4c's rule since 2026-09-21**); the two sweeps run in production configuration.
 13. ~~The invite card~~ — **moved to Stage 5 item 7** the same day it was planned (Kd, 2026-09-13); the emailed invitation (items 3 and 5) is the main path instead.
-14. [ ] Kd's admin panel — last. It shows the "have a look" warnings (Stage 3 item 2e-ii), newest first, and lets Kd clear one (Kd, 2026-10-17).
+14. [ ] Kd's admin panel — last. It shows the "have a look" warnings (Stage 3 item 2e-ii), newest first, and lets Kd clear one (Kd, 2026-10-17). It reads them in the worker or from a cache, never inside a request: about 150 ms of the server's own time a read at 20,000 gyms (2h, security L5).
 15. [ ] **Gym management features** (Kd, RULINGS 2026-09-19: *"it will be a management app but the management feature we will built later"*). What a gym runs its members with: plans, fees, start, renewal and expiry dates, payments and who has paid, reminders. The member list (items 3 and 5) is its first piece and already serves a gym with no other software; this line adds the rest. Not planned yet: a Fable planning chat first, which also settles with Kd where it sits in the order and how it meets Stage 3 item 3 (the gym marks a member paid) and Stage 2 items 8 and 9 (classes; the gym's own prices). The upload then learns those columns (spec Part 3 §9.11). **2026-09-21: the upload learns them NOW** — the file's membership type, dates and payment-status word are kept by 3a-v (Part 2 of the re-plan, spec §11); what is left of this line — plans as things a gym sells, taking payments, reminders — is planned in Parts 4, 5 and 7.
 
 16. **Check-in at the front desk** (RULINGS 2026-09-21, Part 3 of the re-plan; spec Part 3 §12). After 3a-v-b — a visit hangs on the durable member record. Every card Opus xhigh; the two extra passes run once over 16a–16c before any gym uses it.
@@ -405,6 +405,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 2f-i. [x] **Paying in the trial means paying today** — merged 2026-09-30 (PR #140).
      - 2f-ii. ~~"Start my plan now" for a gym that kept its trial~~ **Struck 2026-09-30, never built** (RULINGS that day): paying in the trial always starts the plan now.
    - 2g. [x] **A limit on creating gyms** — merged 2026-10-17 (PR #307).
+   - 2h. [ ] **The two extra passes' fixes** over the free trial (3 High, 8 Low; `handoff/2026-10-17-stage3-2h.md`). Before anybody uses the free trial.
 3. ~~Gym-collects-from-members~~ **Re-planned 2026-09-22 as Stage 2 item 18** (18c is this line; 18a, 18b and the Connect buttons are new).
 
 ## Stage 4 — Launch readiness

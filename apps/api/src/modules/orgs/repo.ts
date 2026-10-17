@@ -117,7 +117,7 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
-  /** This gym's free trial was ended because most of its first people came from another gym
+  /** This gym's free trial was ended because 11 of its people came from another gym
    *  that never paid (2d); the service withholds it as it does `ownerTrialUsed`. */
   trialEndedFirstPeople: boolean;
   /** The gym's postal address for its invitations; the service withholds it from a
@@ -2258,7 +2258,8 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
   // gym when they were in its app before that moment, and is counted once however many
   // accounts their email has (`trial_person_key`; an account with no address is its own
   // person). That gym counts only when its free trial began before this one and it never paid.
-  // A gym on a free trial holds at most 200 people, so the whole list is read.
+  // A gym on a free trial holds 100 members at a time (`GYM_TRIAL_MEMBERS`), so the whole list
+  // is read: 16 ms for 100 people who were each in 3 other gyms (`.cost/measure-2d-trial-check.mts`).
   const rows = await tx<{ gym_id: string; came: number; owner_was_there: boolean }[]>`
     WITH me AS (
       SELECT owner_user_id, created_at FROM gyms WHERE id = ${gymId}
