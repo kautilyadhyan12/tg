@@ -108,6 +108,10 @@ export interface OrgRouteOverrides {
   randomBytes?: (n: number) => Uint8Array;
   /** Tests move the leaderboard's clock; production uses the real one. */
   now?: () => Date;
+  /** How many gyms one person may create (2g): an hour per account and per address, and
+   *  never paid per owner. A test that makes many gyms for one owner raises them;
+   *  production uses 5, 20 and `UNPAID_GYMS_PER_OWNER`. */
+  gymLimits?: { perAccount: number; perAddress: number; unpaid: number };
 }
 
 /** The browser's trial mark (Stage 3 item 2c: one device, one trial). It goes only to the
@@ -155,6 +159,7 @@ export function registerOrgRoutes(
     log: app.log,
     onlinePayments: deps.onlinePayments,
     ...(overrides.now === undefined ? {} : { now: overrides.now }),
+    ...(overrides.gymLimits === undefined ? {} : { unpaidGymLimit: overrides.gymLimits.unpaid }),
   };
 
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
@@ -233,8 +238,8 @@ export function registerOrgRoutes(
   // counted: a form refused for a typo is given back.
   const createLimitOptions = {
     name: "orgs_create",
-    max: 5,
-    ipMax: 20,
+    max: overrides.gymLimits?.perAccount ?? 5,
+    ipMax: overrides.gymLimits?.perAddress ?? 20,
     windowMs: 60 * 60 * 1000,
     identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
     redis: deps.redis,
