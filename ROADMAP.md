@@ -260,7 +260,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18m. [x] **Payments stay when a record is deleted for good** — merged 2026-10-15 (PR #280).
    - 18o. [x] **Void a payment, as gym software does** — merged 2026-10-16 (PR #282).
    - 18p. [x] **Refund a sale at the desk** — merged 2026-10-16 (PR #295).
-   - 18q. [ ] **A basket at Sell** (Kd, 2026-10-16, `rulings/2026-10-16-18p.md`): several products in one sale, one payment and one receipt, as Square, Mindbody and Gymdesk do; refunds and discounts per line. After 18n.
+   - 18q. [x] **A basket at Sell** — merged 2026-10-17 (PR #306).
    - 18n. [x] **Download payments and receipts** — merged 2026-10-16 (PR #298).
    - 18h. [ ] **A fee for a late cancel or a no-show** (Kd, RULINGS 2026-10-08): the gym sets each fee for classes and for personal training (0, the starting value, is off); the member reads the fee before confirming a late cancel; it opens a bill in the notebook, and staff can waive it. Charged to a saved card only once a payment company is connected (18d). After 18a and 17f.
    - 18i. [ ] **Family plans: one person pays for several** (Kd, RULINGS 2026-10-08): a record names another record on the gym's list as its payer, so its bills, receipts and overdue notices go to that person; each keeps their own record, pass, bookings and membership. Its plan reads Mindbody's, PushPress's and Gymdesk's family accounts first, and settles what a payer may see. After 18a.
