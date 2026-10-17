@@ -185,7 +185,11 @@ try {
     await sql`DELETE FROM gym_member_bills WHERE gym_id = ANY(${ids}::uuid[]) AND fee IS NOT NULL`;
     await sql`UPDATE gym_class_bookings SET status = 'booked' WHERE gym_id = ANY(${ids}::uuid[]) AND status IN ('attended','no_show')`;
   };
-  const log = { warn: (obj: object) => console.error(obj) };
+  const log = {
+    warn: (obj: object) => {
+      console.error(obj);
+    },
+  };
   const at = new Date(t0 + 0 * MIN);
 
   const cpu = os.cpus()[0];
