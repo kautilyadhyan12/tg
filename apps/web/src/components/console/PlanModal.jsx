@@ -412,7 +412,7 @@ export default function PlanModal({ org, onSignOut, signingOut = false }) {
                 ? `This ${words.it}'s free trial has ended because 11 of its ${words.people} came from another ${words.it} that already had one. Choose a plan to keep going.`
                 : org?.ownerTrialUsed !== true && (deviceSpent || org?.deviceTrialUsed === true)
                   ? `A free trial has already been used on this computer, so this ${words.it} needs a plan to start.`
-                  : `This ${words.it}'s owner has already had their one free trial, so this ${words.it} needs a plan to start.`}
+                  : `This ${words.it}'s owner has already used their free trial, so this ${words.it} needs a plan to start.`}
             </p>
             <p className="text-sm mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
               Until it has one, nobody can be checked in at your front desk.

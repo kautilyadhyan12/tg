@@ -631,7 +631,7 @@ describe('the forced subscribe prompt', () => {
     renderConsole(Overview);
 
     await screen.findByTestId('plan-list');
-    expect(screen.getByText(/owner has already had their one free trial/i)).toBeTruthy();
+    expect(screen.getByText(/owner has already used their free trial/i)).toBeTruthy();
     // With no plan the front desk is paused too (Kd, 2026-10-15).
     expect(screen.getByText('Until it has one, nobody can be checked in at your front desk.')).toBeTruthy();
     expect(orgService.getPlans).toHaveBeenCalledWith(GYM_ID);
@@ -658,7 +658,7 @@ describe('the forced subscribe prompt', () => {
         "This gym's free trial has ended because 11 of its members came from another gym that already had one. Choose a plan to keep going.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText(/owner has already had their one free trial/i)).toBeNull();
+    expect(screen.queryByText(/owner has already used their free trial/i)).toBeNull();
     expect(screen.getByText('$35 a month')).toBeTruthy();
   });
 
@@ -670,7 +670,7 @@ describe('the forced subscribe prompt', () => {
     expect(
       screen.getByText('A free trial has already been used on this computer, so this gym needs a plan to start.'),
     ).toBeTruthy();
-    expect(screen.queryByText(/owner has already had their one free trial/i)).toBeNull();
+    expect(screen.queryByText(/owner has already used their free trial/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
   });
 
@@ -679,7 +679,7 @@ describe('the forced subscribe prompt', () => {
     renderConsole(Overview);
 
     await screen.findByTestId('plan-list');
-    expect(screen.getByText(/owner has already had their one free trial/i)).toBeTruthy();
+    expect(screen.getByText(/owner has already used their free trial/i)).toBeTruthy();
     expect(screen.queryByText(/on this computer/i)).toBeNull();
   });
 
@@ -1031,6 +1031,6 @@ describe('who the prompt stops', () => {
 
     await screen.findByTestId('plan-list');
     expect(screen.queryByRole('button', { name: /start your 10-day free trial/i })).toBeNull();
-    expect(screen.getByText(/owner has already had their one free trial/i)).toBeTruthy();
+    expect(screen.getByText(/owner has already used their free trial/i)).toBeTruthy();
   });
 });

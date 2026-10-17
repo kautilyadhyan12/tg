@@ -2260,7 +2260,7 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
   // with no address is its own person): an invitation to `asha+again@…` makes a new account,
   // and it is still Asha (the passes' re-check, High-1). That gym counts only when its free trial began before this one and it never paid.
   // A gym on a free trial holds 100 members at a time (`GYM_TRIAL_MEMBERS`), so the whole list
-  // is read: 16 ms for 100 people who were each in 3 other gyms (`.cost/measure-2d-trial-check.mts`).
+  // is read: 18–20 ms for 100 people who were each in 3 other gyms (`.cost/measure-2d-trial-check.mts`).
   const rows = await tx<{ gym_id: string; came: number; owner_was_there: boolean }[]>`
     WITH me AS (
       SELECT owner_user_id, created_at FROM gyms WHERE id = ${gymId}
