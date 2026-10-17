@@ -117,7 +117,8 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
-  /** This gym itself already had a free trial, whoever started it (4b-ii). */
+  /** This gym already had a free trial and its owner never had one of their own (4b-ii): a
+   *  gym handed over. */
   gymTrialUsed: boolean;
   /** This gym's free trial was ended because 11 of its people came from another gym
    *  that never paid (2d); the service withholds it as it does `ownerTrialUsed`. */
@@ -780,7 +781,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
           }),
     seatsUsed: r.seats_used,
     ownerTrialUsed: r.owner_trial_used || r.gym_trial_used,
-    gymTrialUsed: r.gym_trial_used,
+    // Said of the gym only when the owner never had one of their own, as the door says it.
+    gymTrialUsed: r.gym_trial_used && !r.owner_trial_used,
     trialEndedFirstPeople: r.trial_ended_first_people,
     postalAddress: r.postal_address,
     billingMobile: r.billing_mobile,

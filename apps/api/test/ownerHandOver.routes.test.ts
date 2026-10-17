@@ -68,6 +68,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
   const cleanup = async () => {
     await sql`DELETE FROM gym_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_co_owner_requests WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invite_sends WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
@@ -82,7 +83,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "DELETE", path: string, who: User, payload?: unknown) =>
+  const send = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, who: User, payload?: unknown) =>
     api().inject({
       method,
       url: path,
@@ -285,7 +286,8 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       const mo = await makeCoOwner(three, "Mo");
       expect((await ask(three, mo)).statusCode).toBe(201);
       const moId = await requestIdFor(three, mo);
-      await sql`UPDATE gym_staff SET role = 'manager', privileges = ${[...ROLE_PRIVILEGES.manager]} WHERE gym_id = ${three.id} AND user_id = ${mo.userId}`;
+      const demoted = await send("PATCH", `/v1/orgs/${three.id}/staff/${mo.userId}`, three.owner, { role: "manager" });
+      expect(demoted.statusCode, demoted.body).toBe(200);
       expect(errorOf(await answer(three, moId, mo))).toBe("request_gone");
       expect(await ownerOf(three)).toBe(three.owner.userId);
 
@@ -327,6 +329,13 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect(errorOf(refused)).toBe("paid_plan");
       expect((await staffList(paid, paid.owner)).paidPlan).toBe(true);
 
+      const carded = await makeGym("Kd", undefined, "none");
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, trial_ends_at)
+        VALUES ('gym', ${carded.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'paddle', ${"sub_" + carded.id}, now() + interval '5 days')`;
+      const cy = await makeCoOwner(carded, "Cy");
+      expect(errorOf(await ask(carded, cy))).toBe("paid_plan");
+
       const gym = await makeGym("Kd");
       const ria = await makeCoOwner(gym, "Ria");
       expect((await staffList(gym, gym.owner)).paidPlan).toBe(false);
@@ -341,6 +350,32 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect(errorOf(late)).toBe("paid_plan");
       expect(await ownerOf(gym)).toBe(gym.owner.userId);
       expect(await ownerOf(paid)).toBe(paid.owner.userId);
+    }, TEST_TIMEOUT_MS);
+
+    it("an open payment window stops a hand-over: paid after Accept, the old owner would be paying for somebody else's gym", async () => {
+      const gym = await makeGym("Kd");
+      const ria = await makeCoOwner(gym, "Ria");
+      expect((await ask(gym, ria)).statusCode).toBe(201);
+      const riaId = await requestIdFor(gym, ria);
+      // The owner is on Paddle's payment page.
+      await sql`
+        INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, state, provider_ref)
+        VALUES (${gym.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), ${gym.owner.userId}, ${"key-" + gym.id}, 'paddle', 'open', ${"txn_" + gym.id})`;
+      expect((await staffList(gym, gym.owner)).paidPlan).toBe(true);
+      const accepted = await answer(gym, riaId, ria);
+      expect(accepted.statusCode).toBe(409);
+      expect(errorOf(accepted)).toBe("paid_plan");
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+      const other = await makeCoOwner(gym, "Oz");
+      expect(errorOf(await ask(gym, other))).toBe("paid_plan");
+    }, TEST_TIMEOUT_MS);
+
+    it("a gym with no plan, its trial over, can still be handed over", async () => {
+      const gym = await makeGym("Kd", undefined, "none");
+      const nia = await makeCoOwner(gym, "Nia");
+      expect((await ask(gym, nia)).statusCode).toBe(201);
+      expect((await answer(gym, await requestIdFor(gym, nia), nia)).statusCode).toBe(200);
+      expect(await ownerOf(gym)).toBe(nia.userId);
     }, TEST_TIMEOUT_MS);
 
     it("a stranger cannot read or answer anybody's request", async () => {
@@ -451,6 +486,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
         expect(cancelled.statusCode).toBe(403);
       } else {
         expect(cancelled.statusCode).toBe(200);
+        expect(accepted.statusCode).toBe(409);
         expect(owner).toBe(raced.owner.userId);
       }
     }, TEST_TIMEOUT_MS);
@@ -494,11 +530,16 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect(again.statusCode).toBe(409);
       expect(errorOf(again)).toBe("trial_already_used");
       expect(messageOf(again)).toBe("This gym has already had its free trial, so it needs a plan to start.");
+      await sql`UPDATE subscriptions SET trial_started_by = NULL WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      expect(messageOf(await startTrial(gym, asha))).toBe("This gym has already had its free trial, so it needs a plan to start.");
+      expect(await onScreen(gym, asha)).toEqual({ ownerTrialUsed: true, gymTrialUsed: true });
 
       // Asha never started one: her own new gym can have its trial.
       const ashaNew = await makeGym("Asha", asha, "none");
       expect(await onScreen(ashaNew, asha)).toEqual({ ownerTrialUsed: false, gymTrialUsed: false });
       expect((await startTrial(ashaNew, asha)).statusCode).toBe(200);
+      // Her own trial, on her own gym: said of her, not of the gym.
+      expect(await onScreen(ashaNew, asha)).toEqual({ ownerTrialUsed: true, gymTrialUsed: false });
     }, TEST_TIMEOUT_MS);
   });
 });

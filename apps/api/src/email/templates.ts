@@ -152,7 +152,7 @@ export function ownerRequestEmail(words: { to: string; ownerName: string; gymNam
   const who = words.ownerName === "" ? `The owner of ${gym}` : words.ownerName;
   const lines = {
     lead: `${who} asked you to be the owner of ${gym}.`,
-    what: "As the owner you can also add and remove co-owners. They stay on as a co-owner.",
+    what: `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.`,
     how: `Sign in with this email address, ${words.to}, and press Accept on the Overview:`,
     only: `The request works for ${String(words.days)} days.`,
     ignore: "If you weren't expecting it, you can ignore this email.",

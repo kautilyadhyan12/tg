@@ -38,6 +38,8 @@ const { orgService } = await import('../../api/orgsApi');
 const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Members = (await import('./Members')).default;
 const CoOwnerRequest = (await import('../../components/console/CoOwnerRequest')).default;
+const { StaffPersonPanel } = await import('./MembersStaffPanels');
+const { orgWords } = await import('./consoleView');
 
 const ORG = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -192,6 +194,17 @@ describe('Make owner', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Send request' }));
     expect(await within(panel.getByTestId('staff-owner')).findByText("While a paid plan is running, the owner can't be changed.")).toBeTruthy();
   });
+});
+
+it("a gym with no plan is still handed over: Make owner can be pressed while the rest of the panel is greyed", () => {
+  render(
+    <StaffPersonPanel person={CORA} roles={[]} orgType="gym" words={orgWords('gym')} gymName="Iron House" viewerIsOwner staff={[OWNER, CORA]} readOnly busy={false} error={null} onClose={vi.fn()} />,
+  );
+  const owner = within(screen.getByTestId('staff-owner'));
+  const button = owner.getByRole('button', { name: 'Make owner' });
+  expect(button.disabled).toBe(false);
+  fireEvent.click(button);
+  expect(owner.getByRole('button', { name: 'Send request' }).disabled).toBe(false);
 });
 
 describe('the co-owner asked, on Overview', () => {

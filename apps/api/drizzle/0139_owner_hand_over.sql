@@ -30,7 +30,8 @@ CREATE INDEX IF NOT EXISTS "gym_owner_requests_user_idx" ON "gym_owner_requests"
 -- Who started a gym's free trial: the gym's owner at that moment. "Has this person had a
 -- free trial" reads it, so a gym handed over stays counted against whoever started its
 -- trial. A trigger writes it, as `paid_at`'s does, so every writer of `subscriptions` is
--- covered; backfilled from today's owners, before any gym has been handed over.
+-- covered; backfilled from today's owners, before any gym has been handed over. It stamps a row
+-- only when its trial first appears, never later, so a row whose starter is cleared stays cleared.
 ALTER TABLE "subscriptions" ADD COLUMN "trial_started_by" uuid REFERENCES "users"("id") ON DELETE set null;--> statement-breakpoint
 UPDATE "subscriptions" s SET "trial_started_by" = g."owner_user_id"
   FROM "gyms" g
@@ -39,6 +40,11 @@ CREATE FUNCTION "subscriptions_trial_started_by"() RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD."trial_ends_at" IS NOT NULL THEN
+      RETURN NEW;
+    END IF;
+  END IF;
   IF NEW."trial_started_by" IS NULL AND NEW."owner_type" = 'gym' AND NEW."trial_ends_at" IS NOT NULL THEN
     SELECT g."owner_user_id" INTO NEW."trial_started_by" FROM "gyms" g WHERE g."id" = NEW."owner_id";
   END IF;

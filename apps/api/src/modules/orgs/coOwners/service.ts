@@ -133,7 +133,9 @@ const notOwner = (): OrgsError => new OrgsError(403, "owner_only", OWNER_REQUEST
 const paidPlan = (): OrgsError => new OrgsError(409, "paid_plan", OWNER_REQUEST_WORDS.paid_plan);
 
 export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, gymId: string, userId: string): Promise<SendOwnerRequestResponse> {
-  await requireWritablePrivilege(deps, gymId, actorUserId, "staff.manage");
+  // Not the read-only gate a co-owner request has: a gym past its trial with no plan is handed
+  // over too, often to the partner who will pay for it.
+  await requirePrivilege(deps, gymId, actorUserId, "staff.manage");
   const outcome = await repo.sendOwnerRequest(deps.sql, { gymId, userId, actorUserId, now: deps.now(), days: OWNER_REQUEST_DAYS });
   switch (outcome.kind) {
     case "owner_only":

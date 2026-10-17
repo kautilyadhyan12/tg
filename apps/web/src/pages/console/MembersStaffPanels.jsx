@@ -777,7 +777,8 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
           gymName={gymName}
           words={words}
           view={owner}
-          off={off}
+          // A gym with no plan can still be handed over: only a change on its way greys it.
+          off={busy}
           note={ownerNote}
           error={error?.at === 'owner' ? error : null}
           onAsk={onAskOwner}

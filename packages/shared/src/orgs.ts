@@ -1190,8 +1190,8 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  gym that already had one and never paid (Stage 3 item 2d): the subscribe prompt says why.
    *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
   trialEndedFirstPeople: z.boolean().nullable().default(null),
-  /** This gym itself already had a free trial, whoever started it (4b-ii: a gym handed over
-   *  keeps its trial's history), so `ownerTrialUsed` is true and the prompt says it of the gym.
+  /** This gym already had a free trial and its owner never had one of their own (4b-ii: a gym
+   *  handed over keeps its trial), so `ownerTrialUsed` is true and the prompt says it of the gym.
    *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
   gymTrialUsed: z.boolean().nullable().default(null),
   /** The browser this list was read in already started a free trial, under any account

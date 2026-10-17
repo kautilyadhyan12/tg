@@ -257,12 +257,16 @@ export async function answerRequest(
 // A WAITING REQUEST, in every reader below: pending, in date, sent by the gym's owner as it
 // is now, to somebody still a co-owner on the staff row they were asked on.
 
-/** The gym is on a plan somebody pays for at Paddle or Razorpay, live or still being paid. */
+/** The gym is on a plan somebody pays for at Paddle or Razorpay, live or still being paid, or
+ *  somebody has its payment window open: a checkout paid after a hand-over would put the gym on
+ *  a plan the old owner pays for. Both checkout writers hold the gym's lock, as Accept does. */
 async function onPaidPlan(tx: Sql | TransactionSql, gymId: string): Promise<boolean> {
   const rows = await tx`
     SELECT 1 FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId}
       AND provider NOT IN ('none','pilot') AND status IN ('trialing','active','past_due')
+    UNION ALL
+    SELECT 1 FROM billing_checkouts WHERE gym_id = ${gymId} AND state IN ('creating','open')
     LIMIT 1`;
   return rows.length > 0;
 }
