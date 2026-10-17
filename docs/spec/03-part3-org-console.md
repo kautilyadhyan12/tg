@@ -3613,6 +3613,28 @@ list's Payment reads the bills.
   Writing off the rest of a part-paid bill, and a refund sent through a payment company
   (18d), are not built.
 
+**As built, 18h-i (2026-10-17; `rulings/2026-10-17-18h-i.md`): a fee for a late cancel or a
+no-show, for classes.** The gym sets two amounts in Booking rules (0 is off; changing them
+needs `billing.members`). A fee is a bill with no period (`gym_member_bills.fee`, `0136`) on
+the membership the booking used, the amount typed with that membership's tax rate inside
+it, due the day it is opened, one standing fee a booking. **The one rule** is
+`classFeeFor`: the gym's amount where the place was held on a membership that is not a
+pack; a pack holder's class stays used and that is all. **Opened** by the member's late
+cancel, which the server takes only with `feeMinor` equal to the fee it costs now (else 409
+`late_cancel` again, with `feeMinor`); by the run that marks ended classes (a no-show); and
+by staff marking No-show. **Taken off**, unpaid: staff marking Came, and the class not
+running; a fee staff waived is never opened again for that booking. **On the person's page**
+under the membership's bills: Record payment (all of it, with a receipt), Waive fee, and
+Void payment; every unpaid fee and the newest 50 settled. Period rules never read a fee
+(`billsFor` and the rest read periods alone); what counts money owed or taken does: the
+Members list and the membership's line read Payment due, receipts, Download payments and
+the day's takings name it "Late cancel fee · Spin" with the class's day, Reports count it
+under its membership. A member reads the fees under a class's buttons and in the late
+cancel box; staff read each place's fee, and what No-show adds, on the class's list.
+**Not built**: personal training's fees (18h-ii), a notice for an unpaid fee, a fee's
+refund, and charging a saved card (18d: 24 hours after the fee, the bill's id as the
+company's idempotency key).
+
 ### 14.3 The register
 
 **Sell**: staff pick a product or a membership type (a day pass, a bottle of water),
