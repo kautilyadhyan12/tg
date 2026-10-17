@@ -99,6 +99,8 @@ export default function NewGym() {
   const [error, setError] = useState(null);
   // A throwaway address cannot open a gym (2b): the way on is another address.
   const [throwaway, setThrowaway] = useState(false);
+  // Ten gyms with no paid plan (2g): the way on is a plan for one of them, from Your gyms.
+  const [atUnpaidLimit, setAtUnpaidLimit] = useState(false);
   // DOES THIS PERSON RUN ANYTHING YET? A new owner from the "Manage" door is
   // sent here by `ConsoleHome` because they run nothing (Kd 2026-09-07), and a
   // Cancel link back to that screen would bounce them straight back here. So
@@ -156,6 +158,7 @@ export default function NewGym() {
       // client-side rewrite would produce.
       setError(errorText(err, `We couldn't create your ${words.it}. Please try again.`));
       setThrowaway(errorCode(err) === 'email_throwaway');
+      setAtUnpaidLimit(errorCode(err) === 'unpaid_gym_limit');
     } finally {
       setSubmitting(false);
     }
@@ -346,6 +349,15 @@ export default function NewGym() {
           >
             {signingOut ? 'Signing out…' : 'Sign in with another email'}
           </button>
+        ) : null}
+        {atUnpaidLimit ? (
+          <Link
+            to="/console"
+            className="self-start rounded-xl px-4 py-2 text-sm font-medium"
+            style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F' }}
+          >
+            Go to your gyms
+          </Link>
         ) : null}
 
         <div className="flex items-center gap-3">

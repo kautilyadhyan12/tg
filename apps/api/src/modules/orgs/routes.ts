@@ -11,7 +11,7 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import type { OnlinePayments } from "../billing/online.js";
-import { createDualRateLimit } from "../auth/rateLimit.js";
+import { createDualRateLimit, giveBackRateLimit } from "../auth/rateLimit.js";
 import { cookieOptions, mintOpaqueToken, sha256Hex } from "../auth/tokens.js";
 import { TRIAL_DEVICE_COOKIE, startOrgTrialRequestSchema, trialDeviceMarkSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
@@ -227,10 +227,34 @@ export function registerOrgRoutes(
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
-  app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
+  // A real owner creates a gym once, so 5 an hour per account is far past anybody honest;
+  // 20 an hour per address leaves room for a few owners on one connection (2g). Without
+  // it one account could fill the database with gyms in a minute. Only a gym created is
+  // counted: a form refused for a typo is given back.
+  const createLimitOptions = {
+    name: "orgs_create",
+    max: 5,
+    ipMax: 20,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
+    redis: deps.redis,
+    message: "Too many gyms or studios have been created from here in the last hour. Please try again in an hour.",
+  };
+  const createLimit = createDualRateLimit(createLimitOptions);
+
+  app.post("/v1/orgs", { preHandler: [app.authenticate, createLimit] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    const created = await service.createOrg(orgDeps, requireUserId(req), body);
+    if (body === null) {
+      await giveBackRateLimit(createLimitOptions, req);
+      return;
+    }
+    let created;
+    try {
+      created = await service.createOrg(orgDeps, requireUserId(req), body);
+    } catch (err) {
+      await giveBackRateLimit(createLimitOptions, req);
+      throw err;
+    }
     return reply.status(201).send(created);
   });
 

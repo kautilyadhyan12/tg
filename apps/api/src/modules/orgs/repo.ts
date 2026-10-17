@@ -328,8 +328,18 @@ export class OrgNameTakenError extends Error {
   }
 }
 
+/** The owner already has as many gyms that never paid as one owner may (2g). */
+export class UnpaidGymLimitError extends Error {
+  constructor() {
+    super("org create refused: the owner's unpaid gyms are at the limit");
+    this.name = "UnpaidGymLimitError";
+  }
+}
+
 export interface CreateOrgInput {
   ownerUserId: string;
+  /** How many gyms that never paid one owner may have (2g); the new gym is refused at it. */
+  unpaidLimit: number;
   slug: string;
   name: string;
   city: string | null;
@@ -369,13 +379,25 @@ export async function findUserEmail(sql: SqlOrTx, userId: string): Promise<strin
  *  none.
  *
  *  Throws `OrgNameTakenError` on a uniqueness race; the SERVICE decides how to
- *  retry, because it owns the randomness. */
+ *  retry, because it owns the randomness. Throws `UnpaidGymLimitError` when the owner
+ *  already has `unpaidLimit` gyms that never paid, counted under the owner's lock so two
+ *  presses at once cannot both pass. */
 export async function createOrgAttempt(
   sql: Sql,
   input: CreateOrgInput,
 ): Promise<CreateOrgResult> {
   try {
     return await sql.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-create:${input.ownerUserId}`}))`;
+      // A gym "paid" as 2d stamps it: any of its plans reached Paid or Payment due.
+      const unpaid = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gyms g
+        WHERE g.owner_user_id = ${input.ownerUserId}
+          AND NOT EXISTS (
+            SELECT 1 FROM subscriptions ps
+            WHERE ps.owner_type = 'gym' AND ps.owner_id = g.id AND ps.paid_at IS NOT NULL
+          )`;
+      if ((unpaid[0]?.n ?? 0) >= input.unpaidLimit) throw new UnpaidGymLimitError();
       const orgRows = await tx<RawOrg[]>`
         INSERT INTO gyms (slug, name, city, country, org_type, timezone, locale,
                           currency_display, owner_user_id, billing_mobile)
