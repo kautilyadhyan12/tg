@@ -252,11 +252,13 @@ export function currencySign(currency) {
   return formatMinor(0, currency).replace(/[\d.,\s]/g, '') || currency;
 }
 
-/** The closed section's one line: the settings as they stand, classes then personal training. */
-export function bookingSettingsSummary(settings, pt) {
+/** The closed section's one line: the settings as they stand, classes then personal training,
+ *  and the class fees where any is set (18h-i). */
+export function bookingSettingsSummary(settings, pt, fees = null) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
-  const classes = `Classes: ${opensAndFree(settings)} · ${waitlist}`;
+  const charged = fees === null || fees === undefined ? null : classFeesLine(fees);
+  const classes = `Classes: ${opensAndFree(settings)} · ${waitlist}${charged === null ? '' : ` · ${charged.toLowerCase()}`}`;
   return pt === null || pt === undefined ? classes : `${classes}. Personal training: ${opensAndFree(pt)}.`;
 }
 

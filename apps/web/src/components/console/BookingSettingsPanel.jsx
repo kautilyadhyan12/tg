@@ -214,7 +214,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   };
 
   return (
-    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}

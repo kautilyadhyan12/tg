@@ -132,9 +132,13 @@ export function paymentLine(m, today) {
     if (p.until === null) return { text: 'Paid', due: false };
     return { text: m.view.renewsOn === null ? 'Paid to the end' : `Paid · next payment due ${dayWords(p.until)}`, due: false };
   }
-  if (p.since === null) return { text: 'Payment due', due: true };
-  if (p.since > today) return { text: `Payment due on ${dayWords(p.since)}`, due: false };
-  return { text: p.since === today ? 'Payment due today' : `Payment due since ${dayWords(p.since)}`, due: true };
+  // What is owed is a late cancel or no-show fee alone (18h-i): said so to staff who read the
+  // fees, so the line does not sit over a paid bill saying a payment is due.
+  const feeOnly = m.billing !== null && m.billing !== undefined && m.billing.pay === null && (m.billing.fees ?? []).some((f) => f.state === 'due' || f.state === 'overdue');
+  const owed = feeOnly ? 'Fee due' : 'Payment due';
+  if (p.since === null) return { text: owed, due: true };
+  if (p.since > today) return { text: `${owed} on ${dayWords(p.since)}`, due: false };
+  return { text: p.since === today ? `${owed} today` : `${owed} since ${dayWords(p.since)}`, due: true };
 }
 
 /** What the type costs once: "£49.99", or "Free". */
