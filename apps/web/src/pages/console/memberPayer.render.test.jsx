@@ -84,9 +84,10 @@ const heldAnswer = (memberships) => ({
 const person = (entryId, name, past = false) => ({ entryId, name, past });
 const payers = (over = {}) => ({ data: memberPayersResponseSchema.parse({ paidBy: null, paysFor: [], canChange: true, ...over }) });
 
+const listChanged = vi.fn();
 const draw = (entryId, name, gym = IRON) => (
   <MemoryRouter>
-    <MemberPayer gymId={GYM} gym={gym} entryId={entryId} name={name} readOnly={false} />
+    <MemberPayer gymId={GYM} gym={gym} entryId={entryId} name={name} readOnly={false} onChanged={listChanged} />
   </MemoryRouter>
 );
 const box = () => screen.getByRole('region', { name: 'Who pays' });
@@ -124,6 +125,8 @@ describe('Who pays', () => {
     orgService.changeHeldMembership.mockResolvedValue(heldAnswer([paid]));
     fireEvent.click(within(form).getByRole('button', { name: 'Record payment' }));
     await screen.findByText('₹1,500.00 recorded from Priya Sharma for Aarav Sharma.');
+    // The Members list behind the page reads again: Aarav's row no longer says Payment due.
+    expect(listChanged).toHaveBeenCalledTimes(1);
     expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1);
     const [gymSent, entrySent, membershipSent, path, body] = orgService.changeHeldMembership.mock.calls[0];
     expect([gymSent, entrySent, membershipSent, path]).toEqual([GYM, AARAV, aaravGold.id, 'payments']);

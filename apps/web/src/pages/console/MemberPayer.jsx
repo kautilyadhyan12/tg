@@ -204,7 +204,7 @@ function PayForm({ gymId, item, person, payerName, today, onDone, onBack }) {
 
 /** One person somebody pays for, on the payer's page: their name, what they owe now and
  *  Record payment for each, and Remove. */
-function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, membersTo, onRemove }) {
+function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, membersTo, onRemove, onPaid }) {
   const [held, setHeld] = useState({ for: null, data: null, error: null });
   const [paying, setPaying] = useState(null);
   const [done, setDone] = useState(null);
@@ -265,6 +265,7 @@ function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, members
                 setHeld({ for: person.entryId, data, error: null });
                 setDone(said);
                 setReceiptFor(null);
+                onPaid();
               }}
             />
           ) : null}
@@ -287,7 +288,9 @@ function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, members
   );
 }
 
-export default function MemberPayer({ gymId, gym, entryId, name, readOnly }) {
+/** `onChanged`: something the Members list shows changed (a payment on another person's page),
+ *  so the list behind this page reads again. */
+export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onChanged = () => undefined }) {
   const privileges = viewerPrivileges(gym);
   const routed = useInRouterContext();
   const membersTo = routed ? placeFor(gym?.slug, privileges, 'members') : null;
@@ -325,6 +328,7 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly }) {
       setState({ entryId, answer, error: null });
       setOpen(null);
       setDone(words);
+      onChanged();
     } catch (err) {
       setRefusal(errorText(err, "We couldn't save that. Try again."));
     } finally {
@@ -372,6 +376,7 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly }) {
               canBill={canBill}
               canChange={canChange}
               membersTo={membersTo}
+              onPaid={onChanged}
               onRemove={() => {
                 setDone(null);
                 setRefusal(null);
