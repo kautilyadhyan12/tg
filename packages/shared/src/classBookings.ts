@@ -261,17 +261,19 @@ export function classFeeFor(input: { fee: "late_cancel" | "no_show"; heldMembers
 
 /** What the member reads in the box before a late cancel that costs money. */
 export function lateCancelFeeWords(minor: number, currency: string): string {
-  return `It's too late to cancel for free. Cancelling now counts as a late cancel, and a late cancel fee of ${formatMinor(minor, currency)} will be added to your bill.`;
+  return `It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of ${formatMinor(minor, currency)} will be added to your bill.`;
 }
 
-/** The fees a class costs, said where a member books it: "Late cancel fee ₹200 · No-show
- *  fee ₹300", either alone, or null for none. */
+/** The fees a class costs, said where a member books it, each charged once for each late
+ *  cancel or no-show and never monthly (Kd, 2026-10-17): "One-time fees: late cancel ₹200 ·
+ *  no-show ₹300", either alone, or null for none. */
 export function classFeesLine(fees: ClassFees & { currency: string }): string | null {
   const parts = [
-    fees.lateCancelMinor > 0 ? `Late cancel fee ${formatMinor(fees.lateCancelMinor, fees.currency)}` : null,
-    fees.noShowMinor > 0 ? `No-show fee ${formatMinor(fees.noShowMinor, fees.currency)}` : null,
+    fees.lateCancelMinor > 0 ? `late cancel ${formatMinor(fees.lateCancelMinor, fees.currency)}` : null,
+    fees.noShowMinor > 0 ? `no-show ${formatMinor(fees.noShowMinor, fees.currency)}` : null,
   ].filter((part): part is string => part !== null);
-  return parts.length === 0 ? null : parts.join(" · ");
+  if (parts.length === 0) return null;
+  return `${parts.length === 1 ? "One-time fee" : "One-time fees"}: ${parts.join(" · ")}`;
 }
 
 const feeMinorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);

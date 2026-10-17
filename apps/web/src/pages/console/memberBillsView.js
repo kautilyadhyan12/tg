@@ -187,7 +187,7 @@ export function feeRow(fee, currency, today) {
   return {
     id: fee.id,
     title: MEMBER_FEE_WORDS[fee.fee] ?? 'Fee',
-    about: `${fee.forName}, ${dayWords(fee.on)}`,
+    about: `One-time fee · ${fee.forName}, ${dayWords(fee.on)}`,
     amount: formatMinor(fee.amountMinor, currency),
     tag: state.tag,
     tone: state.tone,

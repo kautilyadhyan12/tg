@@ -351,7 +351,7 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect(JSON.parse(asked.body)).toMatchObject({ error: CLASS_LATE_CANCEL_ERROR, feeMinor: LATE, currency: "GBP", packCharged: false });
     expect(errorOf(asked)).toBe(CLASS_LATE_CANCEL_ERROR);
     expect((JSON.parse(asked.body) as { message: string }).message).toBe(
-      "It's too late to cancel for free. Cancelling now counts as a late cancel, and a late cancel fee of £5.00 will be added to your bill.",
+      "It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of £5.00 will be added to your bill.",
     );
     // A yes with no fee in it, or another fee, is asked again: nobody pays what they were not shown.
     for (const body of [{ lateOk: true }, { lateOk: true, feeMinor: LATE - 1 }, { lateOk: true, feeMinor: 0 }]) {

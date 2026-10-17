@@ -262,16 +262,18 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
               <>
                 <Row
                   title="Late cancel fee"
-                  hint="Added to the member's bill when they cancel after free cancelling ends. They see the fee before they confirm. 0 means no fee. Members on a class pack never pay it: the class stays used on their pack."
+                  hint="A one-time charge, never monthly: added once to the member's bill each time they cancel after free cancelling ends. They see the fee before they confirm. 0 means no fee. Members on a class pack never pay it: the class stays used on their pack."
                 >
                   <MoneyBox label="Late cancel fee" sign={sign} value={feeDraft.lateText} onChange={(lateText) => editFees({ lateText })} disabled={feesOff} />
+                  <span>once, for each late cancel</span>
                 </Row>
 
                 <Row
                   title="No-show fee"
-                  hint="Added to the member's bill when they are marked No-show: by staff, or by itself 15 minutes after the class ends when you check people in and they never checked in. Marking them Came takes it off. 0 means no fee. Class pack members never pay it."
+                  hint="A one-time charge, never monthly: added once to the member's bill each time they are marked No-show, by staff, or by itself 15 minutes after the class ends when you check people in and they never checked in. Marking them Came takes it off. 0 means no fee. Class pack members never pay it."
                 >
                   <MoneyBox label="No-show fee" sign={sign} value={feeDraft.noShowText} onChange={(noShowText) => editFees({ noShowText })} disabled={feesOff} />
+                  <span>once, for each no-show</span>
                 </Row>
 
                 {fees.canChange ? null : (

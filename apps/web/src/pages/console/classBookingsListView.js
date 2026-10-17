@@ -76,7 +76,7 @@ export function markRow(booking, list) {
   const fee = Number.isInteger(booking?.noShowFeeMinor) && typeof list?.currency === 'string' ? formatMinor(booking.noShowFeeMinor, list.currency) : null;
   return {
     tag: null,
-    note: fee === null ? 'Not marked yet' : `Not marked yet · No-show adds a ${fee} fee`,
+    note: fee === null ? 'Not marked yet' : `Not marked yet · No-show adds a one-time ${fee} fee`,
     actions: [
       { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
       { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },

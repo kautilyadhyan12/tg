@@ -238,17 +238,17 @@ describe('a member’s classes', () => {
     serve([late, open]);
     render(<Classes gym={GYM} />);
     await screen.findByRole('button', { name: /^Book: Yoga/ });
-    expect(within(rowOf('Yoga')).getByTestId('class-fees').textContent).toBe('Late cancel fee £5.00 · No-show fee £8.00');
-    expect(within(rowOf('Spin')).getByTestId('class-fees').textContent).toBe('Late cancel fee £5.00 · No-show fee £8.00');
+    expect(within(rowOf('Yoga')).getByTestId('class-fees').textContent).toBe('One-time fees: late cancel £5.00 · no-show £8.00');
+    expect(within(rowOf('Spin')).getByTestId('class-fees').textContent).toBe('One-time fees: late cancel £5.00 · no-show £8.00');
     fireEvent.click(screen.getByRole('button', { name: /^Cancel booking: Spin/ }));
     const box = screen.getByRole('dialog', { name: 'Cancel late?' });
-    expect(box.textContent).toContain('a late cancel fee of £5.00 will be added to your bill');
+    expect(box.textContent).toContain('a one-time late cancel fee of £5.00 will be added to your bill');
     // The gym changed its fee while the box was open: asked again, with the new fee.
     svc.cancel.mockRejectedValueOnce(refused(409, 'late_cancel', 'too late', { packCharged: false, feeMinor: 700, currency: 'GBP' }));
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel booking' }));
     expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true, 500);
     const again = await screen.findByRole('dialog', { name: 'Cancel late?' });
-    await waitFor(() => expect(again.textContent).toContain('a late cancel fee of £7.00 will be added to your bill'));
+    await waitFor(() => expect(again.textContent).toContain('a one-time late cancel fee of £7.00 will be added to your bill'));
     answers(svc.cancel, { ...late, mine: mine('late_cancelled'), can: can({ book: false }) });
     fireEvent.click(within(again).getByRole('button', { name: 'Cancel booking' }));
     await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true, 700));

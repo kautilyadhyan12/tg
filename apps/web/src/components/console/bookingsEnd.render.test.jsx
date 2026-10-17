@@ -276,6 +276,10 @@ describe('Settings → Booking rules: the class fees (18h-i)', () => {
     expect(screen.getByLabelText('Late cancel fee').value).toBe('5.00');
     expect(screen.getByLabelText('No-show fee').value).toBe('0');
     expect(screen.getByText(/Members on a class pack never pay it/)).toBeTruthy();
+    // Each is charged once for each late cancel or no-show, never monthly (Kd, 2026-10-17).
+    expect(screen.getByText('once, for each late cancel')).toBeTruthy();
+    expect(screen.getByText('once, for each no-show')).toBeTruthy();
+    expect(screen.getByText(/A one-time charge, never monthly: added once to the member's bill each time they cancel/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('No-show fee'), { target: { value: '7.50' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));

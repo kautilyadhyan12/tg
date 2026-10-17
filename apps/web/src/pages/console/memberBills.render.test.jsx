@@ -693,7 +693,7 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     expect(item.textContent).toContain('Late cancel fee');
     expect(item.textContent).toContain('£5.00');
     expect(item.textContent).toContain('Overdue');
-    expect(item.textContent).toContain('Spin, 14 Oct');
+    expect(item.textContent).toContain('One-time fee · Spin, 14 Oct');
     fireEvent.click(within(item).getByRole('button', { name: 'Record payment · £5.00' }));
     const form = within(within(item).getByTestId('held-fee-pay'));
     fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
