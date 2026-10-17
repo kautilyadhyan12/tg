@@ -798,11 +798,14 @@ describe('came or no-show (17e-iv-b)', () => {
     expect(markRow(started({ fees: null }), 'GBP').note).toBe('Not marked yet');
     expect(markRow(started({ status: 'attended', fees }), 'GBP').note).toBe('Changing to no-show adds a one-time £8.00 fee.');
     const missed = (fee) => markRow(started({ status: 'no_show', fees, fee }), 'GBP').note;
-    expect(missed({ amountMinor: 800, state: 'owed' })).toBe('One-time no-show fee £8.00 · Payment due. Changing to came takes it off.');
-    expect(missed({ amountMinor: 800, state: 'paid' })).toBe('One-time no-show fee £8.00 · Paid.');
-    expect(missed({ amountMinor: 800, state: 'waived' })).toBe('One-time no-show fee £8.00 · Waived.');
-    expect(missed(null)).toBe("A one-time no-show fee of £8.00 goes on their bill. Changing to came takes it off if it isn't paid.");
-    expect(markRow(started({ status: 'no_show', usesLimit: true, fees, fee: { amountMinor: 800, state: 'paid' } }), 'GBP').note).toBe(
+    expect(missed({ kind: 'no_show', amountMinor: 800, state: 'owed' })).toBe('One-time no-show fee £8.00 · Payment due. Changing to came takes it off.');
+    expect(missed({ kind: 'no_show', amountMinor: 800, state: 'paid' })).toBe('One-time no-show fee £8.00 · Paid.');
+    expect(missed({ kind: 'no_show', amountMinor: 800, state: 'waived' })).toBe('One-time no-show fee £8.00 · Waived.');
+    // Round one, H2: a trainer, who is sent no fee, is told nothing the gym's price would only guess.
+    expect(missed(null)).toBe('');
+    // Came after a fee was paid or waived: the server sends no fees, and nothing says No-show adds one.
+    expect(markRow(started({ status: 'attended', fees: null, fee: { kind: 'no_show', amountMinor: 800, state: 'waived' } }), 'GBP').note).toBe('');
+    expect(markRow(started({ status: 'no_show', usesLimit: true, fees, fee: { kind: 'no_show', amountMinor: 800, state: 'paid' } }), 'GBP').note).toBe(
       'It still counts as one of the sessions their membership includes. One-time no-show fee £8.00 · Paid.',
     );
   });

@@ -342,16 +342,14 @@ function noShowFee(appointment, currency) {
 
 const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', waived: 'Waived' };
 
-/** A no-show's fee, said under its mark: owed, paid or waived for staff who may open the
- *  person's page; what it is, for a trainer who may not. */
+/** A no-show's fee, said under its mark: owed, paid or waived, for staff who may open the
+ *  person's page. A trainer who may not is told nothing of it: what a fee did is the
+ *  server's to say, never guessed from the gym's price (round one, H2). */
 function noShowFeeNote(appointment, currency) {
-  if (typeof currency === 'string' && appointment.fee) {
-    const amount = formatMinor(appointment.fee.amountMinor, currency);
-    const state = FEE_STATE_WORDS[appointment.fee.state] ?? 'Payment due';
-    return appointment.fee.state === 'owed' ? `One-time no-show fee ${amount} · ${state}. Changing to came takes it off.` : `One-time no-show fee ${amount} · ${state}.`;
-  }
-  const fee = noShowFee(appointment, currency);
-  return fee === null ? '' : `A one-time no-show fee of ${fee} goes on their bill. Changing to came takes it off if it isn't paid.`;
+  if (typeof currency !== 'string' || !appointment.fee) return '';
+  const amount = formatMinor(appointment.fee.amountMinor, currency);
+  const state = FEE_STATE_WORDS[appointment.fee.state] ?? 'Payment due';
+  return appointment.fee.state === 'owed' ? `One-time no-show fee ${amount} · ${state}. Changing to came takes it off.` : `One-time no-show fee ${amount} · ${state}.`;
 }
 
 const joinedNote = (...parts) => parts.filter((p) => p !== '').join(' ');

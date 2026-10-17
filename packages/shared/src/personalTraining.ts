@@ -537,8 +537,12 @@ export const savePtTrainerRequestSchema = z
   });
 export type SavePtTrainerRequest = z.infer<typeof savePtTrainerRequestSchema>;
 
-/** A session's fee as a list shows it (18h-ii): its amount, and owed, paid or waived. */
-export const ptFeeStateSchema = z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "waived"]) }).strict();
+/** A session's fee as a list shows it (18h-ii): which fee it is (its own, never read from
+ *  the session's mark, which staff can change after it is paid), its amount, and owed, paid
+ *  or waived. */
+export const ptFeeStateSchema = z
+  .object({ kind: z.enum(["late_cancel", "no_show"]), amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "waived"]) })
+  .strict();
 export type PtFeeState = z.infer<typeof ptFeeStateSchema>;
 
 /** Fees in the gym's money, as a member reads them. */
@@ -570,8 +574,9 @@ export const ptAppointmentSchema = z
     cancel: z.enum(["free", "late"]).nullable(),
     /** It has started and was not cancelled, so staff can mark it came or no-show. */
     canMark: z.boolean(),
-    /** What a late cancel and a no-show of it cost (`classFeeFor` with personal training's
-     *  own amounts, 18h-ii), in the week's `currency`; null where neither costs anything. */
+    /** What a late cancel and a no-show of it would add (`classFeeFor` with personal training's
+     *  own amounts, 18h-ii), in the week's `currency`; null where neither would, and once a fee
+     *  of it stands or was waived, since no mark then adds another. */
     fees: classFeesSchema.nullable().default(null),
     /** Its late cancel or no-show fee, owed, paid or waived, for staff who may open a
      *  person's page; null for none, and for anybody else. */

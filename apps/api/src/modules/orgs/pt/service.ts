@@ -202,7 +202,8 @@ function shown(row: repo.AppointmentRow, view: ShownView): PtAppointment {
     usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
     canMark: decidePtMark({ status: row.status, started: time.started, to: "attended" }).kind !== "refuse",
-    fees: ptFeesOfSession(view.gym, row),
+    // A session whose fee stands or was waived gets no other (`openPtFees`): no mark adds one.
+    fees: row.fee === null ? ptFeesOfSession(view.gym, row) : null,
     // Whether somebody owes, paid or was let off a fee is money, as what they pay with is.
     fee: view.opens ? row.fee : null,
   });

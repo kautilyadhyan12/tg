@@ -344,8 +344,10 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     expect(await feesOf(u)).toEqual([]);
     const yes = await memberCancel(gym, u, us, { lateOk: true, feeMinor: LATE });
     expect(yes.statusCode, yes.body).toBe(200);
-    // Sent again, the same: one fee.
+    // Sent again, the same: one fee; and again with no fee said, still the same answer, never a refusal.
     expect((await memberCancel(gym, u, us, { lateOk: true, feeMinor: LATE })).statusCode).toBe(200);
+    const resent = await memberCancel(gym, u, us, { lateOk: true });
+    expect(resent.statusCode, resent.body).toBe(200);
     expect(await standing(u)).toMatchObject([{ fee: "late_cancel", amount_minor: LATE, held_membership_id: u.heldId, pt_appointment_id: us }]);
 
     // Staff late cancel a session on a membership with a limit: the same yes is needed, and
@@ -397,6 +399,9 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     if (fee === undefined) throw new Error("no fee on Hari's page");
     expect((await inject("POST", `${feeUrl(gym, h, fee.id)}/waive`, gym.owner.cookies, {})).statusCode).toBe(200);
     expect((await mark(gym, hs, "attended")).statusCode).toBe(200);
+    // Round one, H2: waived, Came reads no fee that changing back would add, to staff or trainer.
+    for (const by of [gym.owner, gym.trainer]) expect((await weekOf(gym, by)).find((a) => a.id === hs)?.fees).toBeNull();
+    expect((await memberView(gym, h)).history.find((s) => s.id === hs)?.fee).toMatchObject({ kind: "no_show", state: "waived" });
     expect((await mark(gym, hs, "no_show")).statusCode).toBe(200);
     expect(await standing(h)).toEqual([]);
     expect((await feesOf(h)).map((x) => x.void_reason)).toEqual(["waived"]);
@@ -414,12 +419,13 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     expect(fee).toMatchObject({ fee: "no_show", of: "pt", forName: "Personal training with Sam Trainer", on: FRIDAY, amountMinor: NO_SHOW, state: "due", stillOwed: true });
     if (fee === undefined) throw new Error("no fee");
     // Staff read it on the trainer's week; the trainer, who may not open a person's page, reads what it costs and not whether it is paid.
-    expect((await weekOf(gym, gym.owner)).find((a) => a.id === ks)?.fee).toEqual({ amountMinor: NO_SHOW, state: "owed" });
+    expect((await weekOf(gym, gym.owner)).find((a) => a.id === ks)?.fee).toEqual({ kind: "no_show", amountMinor: NO_SHOW, state: "owed" });
     const trainersView = (await weekOf(gym, gym.trainer)).find((a) => a.id === ks);
     expect(trainersView?.fee).toBeNull();
-    expect(trainersView?.fees).toEqual({ lateCancelMinor: LATE, noShowMinor: NO_SHOW });
+    // Its fee is opened, so nothing a mark does adds another: no reader is told one would.
+    expect(trainersView?.fees).toBeNull();
     // The member reads their own.
-    expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toEqual({ amountMinor: NO_SHOW, state: "owed", currency: "GBP" });
+    expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toEqual({ kind: "no_show", amountMinor: NO_SHOW, state: "owed", currency: "GBP" });
 
     const paid = await inject("POST", `${feeUrl(gym, k, fee.id)}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: NO_SHOW, method: "cash" });
     expect(paid.statusCode, paid.body).toBe(200);
@@ -432,6 +438,13 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     // Paid, then marked Came: the payment stands until staff void it, and voiding takes the fee off.
     expect((await mark(gym, ks, "attended")).statusCode).toBe(200);
     expect((await feesOnPage(gym, k))[0]).toMatchObject({ state: "paid", stillOwed: false });
+    // Round one, H1 and H2: the session they came to still names its fee as the no-show fee it
+    // is, and nobody is told that changing back to No-show adds one, since it adds none.
+    expect((await memberView(gym, k)).history.find((s) => s.id === ks)?.fee).toEqual({ kind: "no_show", amountMinor: NO_SHOW, state: "paid", currency: "GBP" });
+    for (const by of [gym.owner, gym.trainer]) expect((await weekOf(gym, by)).find((a) => a.id === ks)?.fees).toBeNull();
+    expect((await mark(gym, ks, "no_show")).statusCode).toBe(200);
+    expect((await feesOf(k)).map((x) => x.status)).toEqual(["paid"]);
+    expect((await mark(gym, ks, "attended")).statusCode).toBe(200);
     const voided = await inject("POST", `${feeUrl(gym, k, fee.id)}/payments/${payment.id}/void`, gym.owner.cookies, { reason: "mistake" });
     expect(voided.statusCode, voided.body).toBe(200);
     expect((await feesOnPage(gym, k))[0]).toMatchObject({ state: "removed" });

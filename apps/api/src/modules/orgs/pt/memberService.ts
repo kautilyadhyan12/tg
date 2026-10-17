@@ -80,7 +80,7 @@ function ownView(row: repo.OwnSessionRow, now: Date, clock: repo.GymClock): Memb
     packCharged: row.packCharged,
     usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
-    fees: feesInMoney(clock, row),
+    fees: row.fee === null ? feesInMoney(clock, row) : null,
     fee: row.fee === null || currency === null ? null : { ...row.fee, currency },
   });
 }

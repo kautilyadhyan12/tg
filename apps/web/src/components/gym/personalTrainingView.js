@@ -161,7 +161,7 @@ export function ptCancelAsk(s, timezone, gymName) {
       s.packCharged
         ? `${until} Your pack gets the session back.`
         : s.usesLimit === true
-          ? `${until} It then no longer counts as one of the sessions your membership includes.`
+          ? `${until} It then no longer counts as one of the sessions your membership includes.${lateFee > 0 ? ` After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.` : ''}`
           : lateFee > 0
             ? `${until} After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.`
             : until,
@@ -177,7 +177,8 @@ const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', waived: 'Waived' };
  *  Payment due"; null for none. */
 export function ptFeeText(s) {
   if (s.fee === null || s.fee === undefined) return null;
-  const kind = s.status === 'no_show' ? MEMBER_FEE_WORDS.no_show : MEMBER_FEE_WORDS.late_cancel;
+  // The fee's own kind: staff can change a no-show to came after its fee is paid.
+  const kind = MEMBER_FEE_WORDS[s.fee.kind] ?? 'Fee';
   return `One-time ${kind.charAt(0).toLowerCase()}${kind.slice(1)} ${formatMinor(s.fee.amountMinor, s.fee.currency)} · ${FEE_STATE_WORDS[s.fee.state] ?? 'Payment due'}`;
 }
 

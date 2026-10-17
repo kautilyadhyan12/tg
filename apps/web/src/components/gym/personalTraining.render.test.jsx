@@ -404,10 +404,20 @@ describe('a member’s personal training', () => {
     expect(svc.cancel).toHaveBeenLastCalledWith('g1', S1, true, 500);
     const again = await screen.findByRole('dialog', { name: 'Cancel late?' });
     await waitFor(() => expect(again.textContent).toContain('a one-time late cancel fee of £7.00 will be added to your bill'));
-    svc.cancel.mockResolvedValueOnce(session(S1, { status: 'late_cancelled', cancel: null, packCharged: false, fees, fee: { amountMinor: 700, state: 'owed', currency: 'GBP' } }));
+    svc.cancel.mockResolvedValueOnce(session(S1, { status: 'late_cancelled', cancel: null, packCharged: false, fees, fee: { kind: 'late_cancel', amountMinor: 700, state: 'owed', currency: 'GBP' } }));
     fireEvent.click(within(again).getByRole('button', { name: 'Cancel session' }));
     await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', S1, true, 700));
     expect((await screen.findByRole('status')).textContent).toBe('Cancelled late. A one-time late cancel fee of £7.00 was added to your bill.');
+  });
+
+  it('round one, L1: free cancelling on a membership with a session limit also names the late cancel fee to come', async () => {
+    const fees = { lateCancelMinor: 500, noShowMinor: 800, currency: 'GBP' };
+    serve(view({ sessions: [session(S1, { packCharged: false, usesLimit: true, fees })] }));
+    render(<PersonalTraining gym={GYM} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Cancel session/ }));
+    expect(screen.getByRole('dialog', { name: 'Cancel your session?' }).textContent).toContain(
+      'It then no longer counts as one of the sessions your membership includes. After that there is a one-time late cancel fee of £5.00.',
+    );
   });
 
   it('a session that is over says its own fee, and a pack day says none', async () => {
@@ -415,15 +425,21 @@ describe('a member’s personal training', () => {
     serve(
       view({
         history: [
-          session(S(1), { status: 'no_show', cancel: null, packCharged: false, fee: { amountMinor: 800, state: 'owed', currency: 'GBP' } }),
-          session(S(2), { status: 'late_cancelled', cancel: null, packCharged: false, localDate: '2026-10-08', fee: { amountMinor: 500, state: 'paid', currency: 'GBP' } }),
+          session(S(1), { status: 'no_show', cancel: null, packCharged: false, fee: { kind: 'no_show', amountMinor: 800, state: 'owed', currency: 'GBP' } }),
+          session(S(2), { status: 'late_cancelled', cancel: null, packCharged: false, localDate: '2026-10-08', fee: { kind: 'late_cancel', amountMinor: 500, state: 'paid', currency: 'GBP' } }),
           session(S(3), { status: 'no_show', cancel: null, packCharged: true, localDate: '2026-10-07' }),
+          // Round one, H1: marked No-show, the fee paid, then changed to Came: still its no-show fee.
+          session(S(4), { status: 'attended', cancel: null, packCharged: false, localDate: '2026-10-07', fee: { kind: 'no_show', amountMinor: 800, state: 'paid', currency: 'GBP' } }),
         ],
       }),
     );
     render(<PersonalTraining gym={GYM} />);
     await screen.findByRole('list', { name: 'Your sessions' });
-    expect(screen.getAllByTestId('pt-session-fee').map((p) => p.textContent)).toEqual(['One-time no-show fee £8.00 · Payment due', 'One-time late cancel fee £5.00 · Paid']);
+    expect(screen.getAllByTestId('pt-session-fee').map((p) => p.textContent)).toEqual([
+      'One-time no-show fee £8.00 · Payment due',
+      'One-time late cancel fee £5.00 · Paid',
+      'One-time no-show fee £8.00 · Paid',
+    ]);
     pickDay(FRI);
     expect(screen.queryByTestId('pt-day-fees')).toBeNull();
   });
