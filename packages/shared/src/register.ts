@@ -21,6 +21,8 @@ export const PRODUCTS_MAX = 200;
 export const PRODUCT_ARCHIVED_PAGE = 50;
 export const PRODUCT_STOCK_MAX = 100_000;
 export const SALE_QUANTITY_MAX = 99;
+/** How many products one sale can hold (18q): each is a line of its own. */
+export const SALE_LINES_MAX = 20;
 /** How many of a day's sales the Sell page lists, newest first. */
 export const SALES_SHOWN = 100;
 /** How many of a person's purchases their page lists, newest first. */
@@ -273,11 +275,55 @@ export const gymSaleSchema = z
     stockCounted: z.boolean().default(false),
     /** Whether money can still be given back for it: it stands, and not all of it went back. */
     canRefund: z.boolean().default(false),
-    /** Its receipt's number, the gym's own (18g-i). */
+    /** Its receipt's number, the gym's own (18g-i): every line of one sale has the same. */
     receiptNumber: receiptNumberSchema,
+    /** Its place in its sale, from 1 (18q). Who bought it, how it was paid, its day and
+     *  whether it was voided are the whole sale's, the same on each of its lines. */
+    lineNo: z.number().int().min(1).max(SALE_LINES_MAX).default(1),
   })
   .strict();
 export type GymSale = z.infer<typeof gymSaleSchema>;
+
+/** ONE SALE AS STAFF SEE IT (18q): its lines, in the order they were rung up, and what it
+ *  came to. A list of lines from the server is made into sales here, the newest first as
+ *  the list had them, so every screen draws a sale the same way. */
+export interface SaleBasket<S extends GymSale = GymSale> {
+  receiptNumber: number;
+  /** The first line, which carries what is the whole sale's. */
+  first: S;
+  lines: S[];
+  totalMinor: number;
+  taxMinor: number;
+  discountMinor: number;
+  /** What the refunds that stand on its lines gave back. */
+  refundedMinor: number;
+}
+
+export function saleBaskets<S extends GymSale>(sales: readonly S[]): SaleBasket<S>[] {
+  const byNumber = new Map<number, S[]>();
+  for (const sale of sales) {
+    const lines = byNumber.get(sale.receiptNumber);
+    if (lines === undefined) byNumber.set(sale.receiptNumber, [sale]);
+    else lines.push(sale);
+  }
+  const baskets: SaleBasket<S>[] = [];
+  for (const [receiptNumber, unsorted] of byNumber) {
+    const lines = [...unsorted].sort((a, b) => a.lineNo - b.lineNo);
+    const first = lines[0];
+    if (first === undefined) continue;
+    const sum = (pick: (s: S) => number): number => lines.reduce((n, s) => n + pick(s), 0);
+    baskets.push({
+      receiptNumber,
+      first,
+      lines,
+      totalMinor: sum((s) => s.totalMinor),
+      taxMinor: sum((s) => s.taxMinor),
+      discountMinor: sum((s) => s.discountMinor),
+      refundedMinor: sum((s) => s.refundedMinor),
+    });
+  }
+  return baskets;
+}
 
 export const voidSaleRequestSchema = z.object({ reason: saleVoidReasonSchema }).strict();
 export type VoidSaleRequest = z.infer<typeof voidSaleRequestSchema>;
@@ -382,30 +428,71 @@ export const sellPageQuerySchema = z
   .object({ day: z.string().refine((d) => isRealDay(d) && d >= "2000-01-01", "not_a_day").optional() })
   .strict();
 
-/** `requestKey` is made by the screen once a form: the same key twice is one sale.
- *  `totalMinor` is the total the screen showed: a sale that would now come to anything
- *  else is refused. `entryId` null is a walk-in. `discountId` is the gym's discount the
- *  sale is made with, if any: one a sale. */
-export const sellProductRequestSchema = z
+const saleTotalSchema = z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX);
+/** The buyer's own Refer a friend gift filled in (20e-ii-b-ii-a), in place of a discount, and
+ *  what the screen showed it takes off: worked out again on the server. */
+const memberGiftUseSchema = z.object({ id: z.string().uuid(), offMinor: saleTotalSchema }).strict().nullable().default(null);
+
+/** One product of a sale (18q): how many, the gym's discount on it if any, and what the
+ *  screen showed it comes to. */
+export const saleLineRequestSchema = z
+  .object({
+    productId: z.string().uuid(),
+    quantity: z.number().int().min(1).max(SALE_QUANTITY_MAX),
+    discountId: z.string().uuid().nullable().default(null),
+    memberGift: memberGiftUseSchema,
+    totalMinor: saleTotalSchema,
+  })
+  .strict();
+
+const basketRequestSchema = z
+  .object({
+    requestKey: z.string().uuid(),
+    entryId: z.string().uuid().nullable(),
+    method: memberPaymentByHandSchema,
+    totalMinor: saleTotalSchema,
+    lines: z.array(saleLineRequestSchema).min(1).max(SALE_LINES_MAX),
+  })
+  .strict();
+
+/** A sale of one product may still be sent as that product's fields alone. */
+const oneProductRequestSchema = z
   .object({
     requestKey: z.string().uuid(),
     productId: z.string().uuid(),
     quantity: z.number().int().min(1).max(SALE_QUANTITY_MAX),
     entryId: z.string().uuid().nullable(),
     method: memberPaymentByHandSchema,
-    totalMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX),
+    totalMinor: saleTotalSchema,
     discountId: z.string().uuid().nullable().default(null),
-    /** The buyer's own Refer a friend gift filled in (20e-ii-b-ii-a), in place of a discount,
-     *  and what the screen showed it takes off: worked out again on the server. */
-    memberGift: z.object({ id: z.string().uuid(), offMinor: z.number().int().min(1).max(MEMBERSHIP_PRICE_MINOR_MAX) }).strict().nullable().default(null),
+    memberGift: memberGiftUseSchema,
   })
   .strict()
-  .refine((v) => v.memberGift === null || (v.discountId === null && v.entryId !== null), { message: "member_gift_alone" });
+  .transform(({ productId, quantity, discountId, memberGift, ...sale }) => ({
+    ...sale,
+    lines: [{ productId, quantity, discountId, memberGift, totalMinor: sale.totalMinor }],
+  }));
+
+/** A SALE (18q): one or more products, one buyer, one payment, one receipt. `requestKey` is
+ *  made by the screen once a form: the same key twice is one sale. Each line's `totalMinor`,
+ *  and the sale's, are what the screen showed: a sale that would now come to anything else
+ *  is refused. `entryId` null is a walk-in. A product is one line, however many of it; the
+ *  buyer's own gift goes on one line, with no discount beside it. */
+export const sellProductRequestSchema = z.union([basketRequestSchema, oneProductRequestSchema]).superRefine((v, ctx) => {
+  const products = new Set(v.lines.map((l) => l.productId));
+  if (products.size !== v.lines.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "product_twice" });
+  const gifts = v.lines.filter((l) => l.memberGift !== null);
+  if (gifts.length > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "member_gift_once" });
+  if (gifts.some((l) => l.discountId !== null) || (gifts.length > 0 && v.entryId === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "member_gift_alone" });
+  if (v.lines.reduce((n, l) => n + l.totalMinor, 0) !== v.totalMinor) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "total_not_lines" });
+});
 export type SellProductRequest = z.infer<typeof sellProductRequestSchema>;
-/** The same, as a screen sends it: `discountId` may be left out. */
+export type SaleLineRequest = SellProductRequest["lines"][number];
+/** The same, as a screen sends it: a line's `discountId` may be left out. */
 export type SellProductRequestBody = z.input<typeof sellProductRequestSchema>;
 
-export const sellProductResponseSchema = z.object({ saleId: z.string().uuid(), register: sellPageResponseSchema }).strict();
+/** `saleId` is the sale's first line; every line of it has `receiptNumber`. */
+export const sellProductResponseSchema = z.object({ saleId: z.string().uuid(), receiptNumber: receiptNumberSchema, register: sellPageResponseSchema }).strict();
 export type SellProductResponse = z.infer<typeof sellProductResponseSchema>;
 
 export const salePeopleQuerySchema = z.object({ query: z.string().trim().min(2).max(80) }).strict();
@@ -475,6 +562,12 @@ export function taxRateInUseWords(name: string, uses: { products: number; member
       ? ` A membership keeps the tax it was sold with, so ${name} can be removed once nobody holds one. You can still change its name or rate.`
       : "";
   return first + change + held;
+}
+
+/** A discount that takes a set amount off, or Refer a friend's gift, on more than one product
+ *  of a sale (18q): it is taken off once a sale. */
+export function oneLineOnlyWords(name: string): string {
+  return `${name} can go on one product of a sale. Nothing was sold: leave it on one product only.`;
 }
 
 /** How many are left, said to staff who asked for more. */

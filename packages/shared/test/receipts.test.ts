@@ -57,20 +57,22 @@ describe("receiptSchema", () => {
     const sale = {
       ...common,
       kind: "sale",
-      item: { name: "Water", quantity: 1, unitPriceMinor: 250 },
-      amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 },
+      lines: [{ name: "Water", quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 } }],
+      totalMinor: 250,
       method: "cash",
     };
     expect(receiptSchema.safeParse(sale).success).toBe(true);
     expect(receiptSchema.safeParse({ ...sale, method: "link" }).success).toBe(false);
+    // A sale has at least one product (18q).
+    expect(receiptSchema.safeParse({ ...sale, lines: [] }).success).toBe(false);
   });
   it("a sale listed above the cap reads back: two at the top price, half off, so its total fits", () => {
     const listed = 2 * 99_999_999;
     const big = {
       ...common,
       kind: "sale",
-      item: { name: "Lifetime", quantity: 2, unitPriceMinor: 99_999_999 },
-      amounts: { listedMinor: listed, discount: { name: "Half", minor: 99_999_999 }, tax: null, totalMinor: 99_999_999 },
+      lines: [{ name: "Lifetime", quantity: 2, unitPriceMinor: 99_999_999, amounts: { listedMinor: listed, discount: { name: "Half", minor: 99_999_999 }, tax: null, totalMinor: 99_999_999 } }],
+      totalMinor: 99_999_999,
       method: "cash",
     };
     expect(receiptSchema.safeParse(big).success).toBe(true);

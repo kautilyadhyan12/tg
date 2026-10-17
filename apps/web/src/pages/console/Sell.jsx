@@ -17,12 +17,13 @@ import TaxRates from './TaxRates';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import DatePick from '../../components/console/DatePick';
 import MoreMenu from '../../components/console/MoreMenu';
-import { SaleRefundBox, SaleRefundLines } from './SaleRefunds';
+import { BasketRefundBox, SaleRefundLines } from './SaleRefunds';
 import { SALE_MENU_WORDS } from './saleRefundView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
-import { applyPromoCode, discountOption, discountsFor, offeredDiscounts, oldMoneySaleLine, promoCodeNote } from './sellDiscountsView';
+import { discountOption, offeredDiscounts, oldMoneySaleLine } from './sellDiscountsView';
+import { addToBasket, applyBasketCode, basketBody, basketCodeNote, basketView, withFriendGift, withLineDiscount, withoutDiscount } from './sellBasketView';
 import { FriendGiftNote, MemberGiftNote } from './FriendGift';
-import { MEMBER_GIFT_SALE_NAME, memberGiftOff } from '@app/shared';
+import { SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
 import {
   NO_SELLING_LINE,
   PAY_CHOICES,
@@ -30,12 +31,9 @@ import {
   SELL_REFUSED,
   canOpenSell,
   canSellMemberships,
-  discountMinorFor,
   personOption,
   productOption,
   quantityMax,
-  saleProblem,
-  saleSummary,
   soldWords,
   takingsHeading,
   takingsNotes,
@@ -160,8 +158,14 @@ function WhoPicker({ gymId, who, setWho, person, setPerson, mustPick, disabled, 
  *  form is gone, so a second press cannot sell again, and the next sale starts with its
  *  own button. */
 function SaleRecorded({ words, note, onNew, children, below = null }) {
+  // A basket's form is long and this box is short: it is brought into sight, so the desk reads
+  // that the sale went through where it pressed (18q).
+  const box = useRef(null);
+  useEffect(() => {
+    box.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
   return (
-    <div className="flex flex-col gap-3" role="status" data-testid="sale-done">
+    <div ref={box} className="flex flex-col gap-3" role="status" data-testid="sale-done">
       <p className="c-s16 c-w7 c-t1 m-0 flex items-center gap-2">
         <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
         Sale recorded
@@ -197,22 +201,97 @@ function PayPicker({ method, setMethod, disabled }) {
   );
 }
 
-/** A product, how many, who and how: one press records the sale. */
+/** One product in the basket: how many, its discount if the gym has any, what it comes to, and
+ *  Remove. */
+function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }) {
+  const quantityId = useId();
+  const discountId = useId();
+  const { product } = row;
+  if (product === null) {
+    return (
+      <li className="flex flex-wrap items-center justify-between gap-3 py-3" style={LINE} data-testid="basket-line">
+        <p className="c-s14 c-t2 m-0">{row.problem}</p>
+        <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={disabled} aria-label="Remove the product no longer on sale" onClick={onRemove}>
+          Remove
+        </button>
+      </li>
+    );
+  }
+  const each = formatMinor(product.priceMinor, product.currency);
+  return (
+    <li className="flex flex-col gap-2 py-3" style={LINE} data-testid="basket-line">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col min-w-0">
+          <p className="c-s15 c-w6 c-t1 m-0">{product.name}</p>
+          <p className="c-s13 c-t2 m-0">{`${each} each`}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {row.amount !== null ? <span className="c-s15 c-w6 c-t1 c-num">{row.amount}</span> : null}
+          <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={disabled} aria-label={`Remove ${product.name}`} onClick={onRemove}>
+            Remove
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="c-field">
+          <label className="c-label" htmlFor={quantityId}>
+            How many
+          </label>
+          <input
+            id={quantityId}
+            className="c-input"
+            style={{ maxWidth: 120 }}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={quantityMax(product)}
+            value={row.quantityText}
+            disabled={disabled}
+            onChange={(e) => onQuantity(e.target.value)}
+          />
+        </div>
+        {offered && row.gift === null ? (
+          <div className="c-field">
+            <label className="c-label" htmlFor={discountId}>
+              Discount
+            </label>
+            {row.usable.length === 0 ? (
+              <p id={discountId} className="c-s14 c-t2 m-0">
+                No discount applies to this product today.
+              </p>
+            ) : (
+              <select id={discountId} className="c-input" value={row.discount === null ? '' : row.discount.id} disabled={disabled} onChange={(e) => onDiscount(e.target.value)}>
+                <option value="">No discount</option>
+                {row.usable.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {discountOption(d)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        ) : null}
+      </div>
+      {row.offWords !== null ? <p className="c-s14 c-t2 m-0">{row.offWords}</p> : null}
+      {row.problem !== null ? <p className="c-s14 c-t2 m-0">{row.problem}</p> : null}
+    </li>
+  );
+}
+
+/** A BASKET (18q): products added one by one, each its own line with how many and its own
+ *  discount, then who is buying and how they paid, and one press records the whole sale. */
 function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, canAdd, onAddProduct, onPage }) {
-  const [productId, setProductId] = useState('');
-  const [quantityText, setQuantityText] = useState('1');
+  const [lines, setLines] = useState([]);
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
   const [person, setPerson] = useState(firstPerson);
   const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, done: null });
-  const [discountId, setDiscountId] = useState('');
   const [code, setCode] = useState({ text: '', note: null, appliedId: null });
   /** Refer a friend's gift for the person picked, where they are a friend a member invited
-   *  (20e-ii-b-i): filled in on the sale, with Remove. */
+   *  (20e-ii-b-i), and the buyer's own gift (20e-ii-b-ii-a): each filled in, with Remove. */
   const [giftRead, setGiftRead] = useState(null);
-  /** The buyer's own Refer a friend gift (20e-ii-b-ii-a), filled in where no discount is
-   *  picked, unless staff press Remove. */
+  const [friendGiftRemoved, setFriendGiftRemoved] = useState(false);
   const [giftRemoved, setGiftRemoved] = useState(false);
   const buyerId = who === 'member' && person !== null ? person.entryId : null;
   const gift = giftRead !== null && giftRead.buyerId === buyerId ? giftRead.gift : null;
@@ -226,8 +305,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         const found = res.friendGift !== null && res.friendGift.discount.forProducts ? res.friendGift : null;
         setGiftRead({ buyerId, gift: found, memberGift: res.memberGift ?? null });
         setGiftRemoved(false);
-        // Only where staff have picked no discount of their own for this sale.
-        if (found !== null) setDiscountId((picked) => (picked === '' ? found.discount.id : picked));
+        setFriendGiftRemoved(false);
       },
       () => undefined,
     );
@@ -237,59 +315,45 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   }, [gymId, buyerId]);
   // The gift is offered for its own friend only; any other discount as the gym set it.
   const page = gift === null ? gymPage : { ...gymPage, friendGiftId: gift.discount.id };
-  const productSelect = useId();
-  const quantityId = useId();
-  const discountSelect = useId();
+  // Refer a friend's gift goes on the dearest product it fits, never over a discount staff
+  // picked, until staff press Remove.
+  const shownLines = gift !== null && !friendGiftRemoved ? withFriendGift(lines, page, gift.discount.id) : lines;
+  const pickerId = useId();
   const codeId = useId();
 
-  const product = page.products.find((p) => p.id === productId) ?? null;
-  const quantity = /^\d{1,2}$/.test(quantityText.trim()) ? Number(quantityText.trim()) : Number.NaN;
-  // Only a discount that can be used on this product today is ever sent: one picked for
-  // another product, or since used up, falls back to none.
-  const usable = discountsFor(page, product);
-  const discount = usable.find((d) => d.id === discountId) ?? null;
+  const view = basketView({ page, lines: shownLines, who, person, memberGift, giftRemoved });
+  const offered = offeredDiscounts(page).length > 0;
   const hasCodes = offeredDiscounts(page).some((d) => d.code !== null);
-  // The buyer's own gift takes a discount's place: used where no discount is picked and it
-  // fits this price; else kept for their next payment.
-  const giftFits = memberGift !== null && product !== null && Number.isInteger(quantity) && memberGiftOff(memberGift, product.priceMinor * quantity, product.currency) > 0;
-  const giftUsed = giftFits && discount === null && !giftRemoved ? memberGift : null;
-  const offShown = discount ?? (giftUsed === null ? null : { ...giftUsed, name: MEMBER_GIFT_SALE_NAME });
-  const summary = Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, offShown) : null;
-  const problem = saleProblem({ product, quantity, who, person, currency: page.currency, discount });
-  // "Applied" is said only while the applied discount is the one on the sale.
-  const codeNote = promoCodeNote(page, product, discount, code);
+  const codeNote = basketCodeNote(page, view.rows, code);
   const oldMoney = oldMoneySaleLine(page);
+  const giftOn = gift === null ? -1 : shownLines.findIndex((l) => l.discountId === gift.discount.id);
+  const giftFits = gift !== null && view.rows.some((r) => r.usable.some((d) => d.id === gift.discount.id));
+  const giftLine = view.giftAt === -1 ? null : (view.rows[view.giftAt] ?? null);
+  const touched = () => setState((was) => (was.error === null && was.done === null ? was : { ...was, error: null, done: null }));
+  const change = (next) => {
+    setLines(next);
+    touched();
+  };
   const applyCode = () => {
-    const found = applyPromoCode(page, product, code.text);
-    if (found.discount !== null) setDiscountId(found.discount.id);
+    const found = applyBasketCode(page, shownLines, code.text);
+    if (found.discount !== null) setLines(found.lines);
     setCode((was) => ({ ...was, note: found.note, appliedId: found.discount === null ? null : found.discount.id }));
     touched();
   };
-  const touched = () => setState((was) => (was.error === null && was.done === null ? was : { ...was, error: null, done: null }));
 
   const sell = async () => {
-    if (problem !== null || summary === null || product === null) return;
+    if (view.problem !== null || view.summary === null) return;
     setState({ busy: true, error: null, done: null });
     try {
-      const answer = await registerService.sell(gymId, {
-        requestKey: key,
-        productId: product.id,
-        quantity,
-        entryId: who === 'member' && person !== null ? person.entryId : null,
-        method,
-        totalMinor: summary.totalMinor,
-        discountId: discount === null ? null : discount.id,
-        ...(giftUsed === null ? {} : { memberGift: { id: giftUsed.id, offMinor: discountMinorFor(product, quantity, offShown) } }),
-      });
-      const sold = answer.register.sales.find((s) => s.id === answer.saleId);
-      setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold), receiptNumber: sold?.receiptNumber ?? null, receiptOpen: false });
+      const answer = await registerService.sell(gymId, basketBody(view, { requestKey: key, entryId: buyerId, method }));
+      const sold = saleBaskets(answer.register.sales).find((b) => b.receiptNumber === answer.receiptNumber);
+      setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold), receiptNumber: answer.receiptNumber, receiptOpen: false });
       setKey(newKey());
-      setProductId('');
-      setQuantityText('1');
+      setLines([]);
       setWho('walkin');
       setPerson(null);
-      setDiscountId('');
       setGiftRemoved(false);
+      setFriendGiftRemoved(false);
       setGiftRead(null);
       setCode({ text: '', note: null, appliedId: null });
       onPage(answer.register);
@@ -342,50 +406,54 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     );
   }
 
+  const full = lines.length >= SALE_LINES_MAX;
   return (
     <div className="flex flex-col gap-4">
       <div className="c-field">
-        <label className="c-label" htmlFor={productSelect}>
-          Product
+        <label className="c-label" htmlFor={pickerId}>
+          Add a product
         </label>
         <select
-          id={productSelect}
+          id={pickerId}
           className="c-input"
-          value={productId}
-          disabled={locked || state.busy}
+          value=""
+          disabled={locked || state.busy || full}
           onChange={(e) => {
-            setProductId(e.target.value);
-            touched();
+            const product = page.products.find((p) => p.id === e.target.value);
+            if (product !== undefined) change(addToBasket(shownLines, product));
           }}
         >
-          <option value="">Pick a product</option>
+          <option value="">{lines.length === 0 ? 'Pick a product' : 'Pick another product'}</option>
           {page.products.map((p) => (
             <option key={p.id} value={p.id}>
               {productOption(p)}
             </option>
           ))}
         </select>
+        {full ? <p className="c-s14 c-t2 m-0">{`One sale can hold up to ${String(SALE_LINES_MAX)} products. Take payment for these, then start a new sale.`}</p> : null}
+        {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
       </div>
-      <div className="c-field">
-        <label className="c-label" htmlFor={quantityId}>
-          How many
-        </label>
-        <input
-          id={quantityId}
-          className="c-input"
-          style={{ maxWidth: 120 }}
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={quantityMax(product)}
-          value={quantityText}
-          disabled={locked || state.busy}
-          onChange={(e) => {
-            setQuantityText(e.target.value);
-            touched();
-          }}
-        />
-      </div>
+
+      {view.rows.length > 0 ? (
+        <ul className="list-none m-0 p-0 flex flex-col" aria-label="In this sale">
+          {view.rows.map((row) => (
+            <BasketLine
+              key={row.key}
+              row={row}
+              offered={offered}
+              disabled={locked || state.busy}
+              onQuantity={(text) => change(shownLines.map((l, i) => (i === row.index ? { ...l, quantityText: text } : l)))}
+              onDiscount={(id) => {
+                if (gift !== null && row.discount !== null && row.discount.id === gift.discount.id) setFriendGiftRemoved(true);
+                change(withLineDiscount(shownLines, row.index, id, page));
+                setCode((was) => ({ ...was, note: null, appliedId: null }));
+              }}
+              onRemove={() => change(shownLines.filter((_, i) => i !== row.index))}
+            />
+          ))}
+        </ul>
+      ) : null}
+
       <WhoPicker
         gymId={gymId}
         who={who}
@@ -402,113 +470,77 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         disabled={locked || state.busy}
         addMemberTo={addMemberTo}
       />
-      {product !== null && gift !== null ? (
+      {view.rows.length > 0 && gift !== null ? (
         <FriendGiftNote
           gift={gift}
-          applied={discount !== null && discount.id === gift.discount.id}
-          fits={usable.some((d) => d.id === gift.discount.id)}
-          what={product.name}
+          applied={giftOn !== -1}
+          fits={giftFits}
+          what={view.rows.length === 1 ? (view.rows[0]?.product?.name ?? null) : 'these products'}
           onRemove={() => {
-            setDiscountId('');
-            touched();
+            setFriendGiftRemoved(true);
+            change(withoutDiscount(shownLines, gift.discount.id));
           }}
           onPutBack={() => {
-            setDiscountId(gift.discount.id);
-            touched();
+            setFriendGiftRemoved(false);
+            change(withFriendGift(shownLines, page, gift.discount.id));
           }}
           disabled={locked || state.busy}
         />
       ) : null}
-      {product !== null && memberGift !== null ? (
+      {view.rows.length > 0 && memberGift !== null ? (
         <MemberGiftNote
           gift={memberGift}
-          applied={giftUsed !== null}
-          fits={giftFits}
-          what={product.name}
+          applied={giftLine !== null}
+          fits={view.giftFits}
+          what={view.rows.length === 1 ? (view.rows[0]?.product?.name ?? null) : 'these products'}
           onRemove={() => {
             setGiftRemoved(true);
             touched();
           }}
           onPutBack={() => {
             setGiftRemoved(false);
-            setDiscountId('');
-            setCode((was) => ({ ...was, note: null, appliedId: null }));
             touched();
           }}
           disabled={locked || state.busy}
         />
       ) : null}
-      {product !== null && offeredDiscounts(page).length > 0 ? (
-        <div className="flex flex-col gap-3">
-          <div className="c-field">
-            <label className="c-label" htmlFor={discountSelect}>
-              Discount
-            </label>
-            {usable.length === 0 ? (
-              <p id={discountSelect} className="c-s14 c-t2 m-0">
-                No discount applies to this product today.
-              </p>
-            ) : (
-              <select
-                id={discountSelect}
-                className="c-input"
-                value={discount === null ? '' : discount.id}
-                disabled={locked || state.busy}
-                onChange={(e) => {
-                  setDiscountId(e.target.value);
-                  setCode((was) => ({ ...was, note: null, appliedId: null }));
-                  touched();
-                }}
-              >
-                <option value="">No discount</option>
-                {usable.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {discountOption(d)}
-                  </option>
-                ))}
-              </select>
-            )}
-            {oldMoney !== null ? <p className="c-s14 c-t2 m-0">{oldMoney}</p> : null}
+      {view.rows.length > 0 && hasCodes ? (
+        <div className="c-field">
+          <label className="c-label" htmlFor={codeId}>
+            Promo code
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <input
+              id={codeId}
+              className="c-input"
+              style={{ maxWidth: 220, textTransform: 'uppercase' }}
+              value={code.text}
+              maxLength={40}
+              autoComplete="off"
+              disabled={locked || state.busy}
+              onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') applyCode();
+              }}
+            />
+            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || state.busy} onClick={applyCode}>
+              Apply
+            </button>
           </div>
-          {hasCodes ? (
-            <div className="c-field">
-              <label className="c-label" htmlFor={codeId}>
-                Promo code
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <input
-                  id={codeId}
-                  className="c-input"
-                  style={{ maxWidth: 220, textTransform: 'uppercase' }}
-                  value={code.text}
-                  maxLength={40}
-                  autoComplete="off"
-                  disabled={locked || state.busy}
-                  onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') applyCode();
-                  }}
-                />
-                <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || state.busy} onClick={applyCode}>
-                  Apply
-                </button>
-              </div>
-              {codeNote !== null ? (
-                <p className="c-s14 c-t2 m-0" role="status">
-                  {codeNote}
-                </p>
-              ) : (
-                <p className="c-s13 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>
-              )}
-            </div>
-          ) : null}
+          {codeNote !== null ? (
+            <p className="c-s14 c-t2 m-0" role="status">
+              {codeNote}
+            </p>
+          ) : (
+            <p className="c-s13 c-t3 m-0">If the customer gives a code, type it here and press Apply.</p>
+          )}
         </div>
       ) : null}
       <PayPicker method={method} setMethod={setMethod} disabled={locked || state.busy} />
 
-      {summary !== null ? (
+      {view.summary !== null ? (
         <dl className="flex flex-col gap-1 m-0 pt-3" style={LINE} data-testid="sale-summary">
-          {summary.lines.map((line) => (
+          {view.summary.lines.map((line) => (
             <div key={line.label} className="flex justify-between gap-4" style={{ maxWidth: 360 }}>
               <dt className={line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}>{line.label}</dt>
               <dd className={`m-0 c-num ${line.strong ? 'c-s16 c-w7 c-t1' : 'c-s14 c-t2'}`}>{line.value}</dd>
@@ -518,11 +550,11 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       ) : null}
 
       <div className="flex flex-col gap-2">
-        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked || state.busy || problem !== null || summary === null} onClick={() => void sell()}>
+        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked || state.busy || view.problem !== null || view.summary === null} onClick={() => void sell()}>
           {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {state.busy ? 'Recording…' : summary !== null ? `Take payment · ${summary.total}` : 'Take payment'}
+          {state.busy ? 'Recording…' : view.summary !== null ? `Take payment · ${view.summary.total}` : 'Take payment'}
         </button>
-        {problem !== null && productId !== '' ? <p className="c-s14 c-t2 m-0">{problem}</p> : null}
+        {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <p className="c-s14 c-t2 m-0">{view.problem}</p> : null}
         <p className="c-s13 c-t3 m-0">{SALE_HINT}</p>
       </div>
       {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
@@ -619,7 +651,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
     setState({ busy: true, error: null, done: null });
     try {
       onPage(await registerService.voidSale(gymId, row.sale.id, { reason: voidReason.reason }));
-      setState({ busy: false, error: null, done: { key: row.key, words: saleVoidedWords(row.sale) } });
+      setState({ busy: false, error: null, done: { key: row.key, words: saleVoidedWords(row.basket) } });
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't void that sale. Try again."), done: null });
     }
@@ -716,8 +748,8 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                   </p>
                 ) : null}
                 {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                {refunding === row.key && row.sale !== null ? (
-                  <SaleRefundBox gymId={gymId} sale={row.sale} who={row.sale.person?.name ?? null} onDone={doneHere(row.key)} onClose={() => setRefunding(null)} />
+                {refunding === row.key && row.basket !== null ? (
+                  <BasketRefundBox gymId={gymId} basket={row.basket} who={row.sale.person?.name ?? null} onDone={doneHere(row.key)} onClose={() => setRefunding(null)} />
                 ) : null}
                 {asking === row.key && row.sale !== null ? (
                   <form
@@ -729,7 +761,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                       if (!state.busy) void voidSale(row);
                     }}
                   >
-                    <p className="c-s14 c-t1 m-0">{voidSaleQuestion(row.sale)}</p>
+                    <p className="c-s14 c-t1 m-0">{voidSaleQuestion(row.basket)}</p>
                     <label className="c-field">
                       <span className="c-label">Why are you voiding it?</span>
                       <select className="c-sel" value={voidReason.reason} onChange={(e) => setVoidReason({ reason: e.target.value, tried: false })}>
@@ -756,7 +788,11 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                     </div>
                   </form>
                 ) : null}
-                {row.sale !== null ? <SaleRefundLines gymId={gymId} gym={org} sale={row.sale} canAct={!locked && page.canSell} onDone={doneHere(row.key)} /> : null}
+                {row.basket !== null
+                  ? row.basket.lines.map((line) => (
+                      <SaleRefundLines key={line.id} gymId={gymId} gym={org} sale={line} named={row.basket.lines.length > 1} canAct={!locked && page.canSell} onDone={doneHere(row.key)} />
+                    ))
+                  : null}
               </li>
             );
           })}

@@ -4,12 +4,13 @@ import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import { saleBaskets } from '@app/shared';
 import { canSell, purchaseLine } from './sellView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import ReceiptBox from '../../components/console/ReceiptBox';
 import MoreMenu from '../../components/console/MoreMenu';
 import { consoleIsReadOnly } from './billingView';
-import { SaleRefundBox, SaleRefundLines } from './SaleRefunds';
+import { BasketRefundBox, SaleRefundLines } from './SaleRefunds';
 import { SALE_MENU_WORDS } from './saleRefundView';
 
 // WHAT ONE PERSON BOUGHT AT THE DESK, on their page (spec Part 3 §14.3; ROADMAP 18b-i),
@@ -64,8 +65,9 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
         <p className="c-s14 c-t2 m-0">Nothing yet. Products sold to them on the Sell page are listed here.</p>
       ) : (
         <ul className="list-none m-0 p-0">
-          {state.found.sales.map((sale) => {
-            const line = purchaseLine(sale);
+          {saleBaskets(state.found.sales).map((basket) => {
+            const sale = basket.first;
+            const line = purchaseLine(basket);
             return (
               <li key={sale.id} className="py-2 flex flex-col gap-2" data-testid="purchase-row">
                 <div className="flex justify-between gap-3">
@@ -91,7 +93,7 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
                       >
                         {RECEIPT_BUTTON}
                       </button>
-                      {acts && sale.canRefund ? (
+                      {acts && basket.lines.some((l) => l.canRefund === true) ? (
                         <MoreMenu label={null} alignRight ariaLabel={`More for the sale of ${line.title}`} items={[{ ...SALE_MENU_WORDS.refund, onPick: () => setRefunding(sale.id) }]} />
                       ) : null}
                     </span>
@@ -103,14 +105,16 @@ export default function MemberPurchases({ gymId, gym, entryId, name, past }) {
                   </p>
                 ) : null}
                 {receiptFor === sale.id ? <ReceiptBox gymId={gymId} gym={gym} number={line.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
-                {refunding === sale.id ? <SaleRefundBox gymId={gymId} sale={sale} who={who} onDone={doneHere(sale.id)} onClose={() => setRefunding(null)} /> : null}
-                <SaleRefundLines gymId={gymId} gym={gym} sale={sale} canAct={acts} onDone={doneHere(sale.id)} />
+                {refunding === sale.id ? <BasketRefundBox gymId={gymId} basket={basket} who={who} onDone={doneHere(sale.id)} onClose={() => setRefunding(null)} /> : null}
+                {basket.lines.map((l) => (
+                  <SaleRefundLines key={l.id} gymId={gymId} gym={gym} sale={l} named={basket.lines.length > 1} canAct={acts} onDone={doneHere(sale.id)} />
+                ))}
               </li>
             );
           })}
         </ul>
       )}
-      {state.found !== null && state.found.notShown > 0 ? <p className="c-s13 c-t3 m-0">{`Showing the newest ${String(state.found.sales.length)}.`}</p> : null}
+      {state.found !== null && state.found.notShown > 0 ? <p className="c-s13 c-t3 m-0">{`Showing the newest ${String(saleBaskets(state.found.sales).length)}.`}</p> : null}
       {sellTo !== null && routed ? (
         <Link to={sellTo} state={{ sellTo: { entryId, name: who, past: past === true } }} className="c-btn c-btn-s c-btn-sm self-start">
           {`Sell a product to ${who}`}

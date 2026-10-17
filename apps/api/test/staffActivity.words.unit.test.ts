@@ -107,6 +107,9 @@ describe("Staff activity's sentences", () => {
       ["org.lead_changed", { about: "Sam Lee", meta: { status: "on_trial" } }, "Marked the lead Sam Lee as On trial"],
       ["org.trainer_time_off_added", { about: "Tara", meta: { from: "2026-10-20", to: "2026-10-22" } }, "Added time off for Tara from 20 Oct 2026 to 22 Oct 2026"],
       ["org.sale_recorded", { about: "Amit Rao", meta: { product: "Protein bar", quantity: "2", totalMinor: "20000", currency: "INR", method: "card_at_desk" } }, "Sold 2 × Protein bar for ₹200.00 to Amit Rao (Card at the desk)"],
+      // A sale of several products (18q) names the first and counts the rest.
+      ["org.sale_recorded", { about: null, meta: { product: "Protein bar", quantity: "1", others: "2", totalMinor: "66900", currency: "INR", method: "cash" } }, "Sold 1 × Protein bar and 2 more products for ₹669.00 (Cash)"],
+      ["org.sale_undone", { meta: { product: "Water", quantity: "2", others: "1" } }, "Undid the sale of 2 × Water and 1 more product"],
       ["org.member_list_unlisted_removed", { meta: { removed: "12" } }, "Removed 12 members who are no longer on the list from the app"],
       ["org.group_message_sent", { meta: { people: "1" } }, "Sent a message to 1 member"],
       ["org.waiver_signed", { about: "Riya", meta: { via: "desk", signer: "guardian" } }, "Had Riya's parent or guardian sign the waiver at the desk"],

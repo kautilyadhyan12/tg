@@ -115,7 +115,7 @@ export async function file(deps: PaymentsDownloadDeps, userId: string, gymId: st
   const header = [...PAYMENTS_FILE_HEADINGS.map((h) => (!mixed && MONEY_HEADINGS.has(h) ? `${h} (${single})` : h)), ...(mixed ? ["Currency"] : [])];
 
   async function* rows(): AsyncGenerator<Cell[][]> {
-    let after: { on: string; receipt: number } | null = null;
+    let after: { on: string; receipt: number; line: number } | null = null;
     for (;;) {
       const page = await repo.linesPage(deps.sql, gymId, days.from, days.to, lastReceipt, after);
       if (page.length === 0) return;
@@ -141,7 +141,7 @@ export async function file(deps: PaymentsDownloadDeps, userId: string, gymId: st
       });
       const last = page[page.length - 1];
       if (last === undefined || page.length < repo.DOWNLOAD_PAGE) return;
-      after = { on: last.on, receipt: last.receipt };
+      after = { on: last.on, receipt: last.receipt, line: last.line };
     }
   }
 

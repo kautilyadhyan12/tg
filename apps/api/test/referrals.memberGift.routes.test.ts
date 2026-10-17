@@ -920,4 +920,102 @@ d("Refer a friend: the member's gift (real Postgres)", () => {
       TIMEOUT_MS,
     );
   });
+
+  describe("a basket (18q): a sale of several products is one purchase", () => {
+    const linesOf = (gymId: string, entryId: string) =>
+      sql<{ id: string; item_name: string; line_no: number }[]>`
+        SELECT id, item_name, line_no FROM gym_sales WHERE gym_id = ${gymId} AND entry_id = ${entryId} ORDER BY receipt_number, line_no`;
+    const byOf = (gymId: string, friendEntryId: string) =>
+      sql<{ by_sale_id: string | null; taken_back_why: string | null; used_off_minor: number | null }[]>`
+        SELECT by_sale_id, taken_back_why, used_off_minor FROM gym_referral_member_gifts WHERE gym_id = ${gymId} AND friend_entry_id = ${friendEntryId}`;
+    let shaker = "";
+    const basket = (entryId: string, lines: Record<string, unknown>[]) => ({
+      requestKey: nextForm(),
+      entryId,
+      method: "cash",
+      totalMinor: lines.reduce((n, l) => n + Number(l["totalMinor"]), 0),
+      lines,
+    });
+    beforeAll(async () => {
+      const res = await post(`/v1/orgs/${gymA.org.id}/register/products`, { name: "Shaker", priceMinor: 1200, taxRateId: null, stock: null }, owner.cookies);
+      expect(res.statusCode, res.body).toBe(201);
+      const [row] = await sql<{ id: string }[]>`SELECT id FROM gym_products WHERE gym_id = ${gymA.org.id} AND name = 'Shaker'`;
+      if (row === undefined) throw new Error("no shaker");
+      shaker = row.id;
+    }, TIMEOUT_MS);
+
+    it(
+      "round one H1: a friend's first purchase rung up as two products gives the member their gift, once, as one product does; a refund of one product leaves it standing on the other, and of both takes it back",
+      async () => {
+        // Bea's bill is paid, so her gift waits for her next payment: a gift not yet used is the
+        // one taken back when nothing of the friend's stands any more.
+        const bea = await memberWithBill("bea", "Bea Stone", true);
+        const leadId = await invited(bea.code, "Cal Moss", "cal.moss@example.com");
+        const cal = await added(gymA.org.id, owner.cookies, { fullName: "Cal Moss", email: "cal.moss@example.com", leadId });
+        const sold = await post(
+          `/v1/orgs/${gymA.org.id}/register/sales`,
+          basket(cal, [
+            { productId: barA, quantity: 1, totalMinor: 2500 },
+            { productId: shaker, quantity: 1, totalMinor: 1200 },
+          ]),
+          owner.cookies,
+        );
+        expect(sold.statusCode, sold.body).toBe(201);
+        const [tub, shake] = await linesOf(gymA.org.id, cal);
+        if (tub === undefined || shake === undefined) throw new Error("no lines");
+        // Given once, for the sale, waiting for Bea.
+        expect(await byOf(gymA.org.id, cal)).toEqual([{ by_sale_id: tub.id, taken_back_why: null, used_off_minor: null }]);
+        expect((await memberships(gymA.org.id, bea.entryId, owner.cookies)).memberGift).toMatchObject({ words: "£10.00 off", friendName: "Cal Moss" });
+        // The tub given back in full: the shaker still stands for the gift, so it stays.
+        const back = await post(`/v1/orgs/${gymA.org.id}/register/sales/${tub.id}/refunds`, { requestKey: nextForm(), amountMinor: 2500, method: "cash", reason: "returned", restock: 0 }, owner.cookies);
+        expect(back.statusCode, back.body).toBe(201);
+        expect(await byOf(gymA.org.id, cal)).toEqual([{ by_sale_id: shake.id, taken_back_why: null, used_off_minor: null }]);
+        // The shaker given back too: nothing of the friend's stands, and the gift is taken back.
+        const rest = await post(`/v1/orgs/${gymA.org.id}/register/sales/${shake.id}/refunds`, { requestKey: nextForm(), amountMinor: 1200, method: "cash", reason: "returned", restock: 0 }, owner.cookies);
+        expect(rest.statusCode, rest.body).toBe(201);
+        expect((await byOf(gymA.org.id, cal)).map((g) => g.taken_back_why)).toEqual(["refunded"]);
+      },
+      TIMEOUT_MS,
+    );
+
+    it(
+      "the buyer's own gift goes on one product of a basket and is used by that product's line; on two it is refused",
+      async () => {
+        await setOffer(gymA, owner.cookies, TEN_POUNDS, "products");
+        try {
+          const una = await memberWithBill("una", "Una Reed", true);
+          const leadId = await invited(una.code, "Vic Hale", "vic.hale@example.com");
+          const vic = await added(gymA.org.id, owner.cookies, { fullName: "Vic Hale", email: "vic.hale@example.com", leadId });
+          expect((await post(`/v1/orgs/${gymA.org.id}/register/sales`, basket(vic, [{ productId: barA, quantity: 1, totalMinor: 2500 }]), owner.cookies)).statusCode).toBe(201);
+          const waiting = (await memberships(gymA.org.id, una.entryId, owner.cookies)).memberGiftAtSell;
+          if (waiting === null) throw new Error("no waiting gift");
+          const gift = { id: waiting.id, offMinor: 1000 };
+          const twice = await post(
+            `/v1/orgs/${gymA.org.id}/register/sales`,
+            basket(una.entryId, [
+              { productId: barA, quantity: 1, totalMinor: 1500, memberGift: gift },
+              { productId: shaker, quantity: 1, totalMinor: 200, memberGift: gift },
+            ]),
+            owner.cookies,
+          );
+          expect(twice.statusCode).toBe(400);
+          const once = await post(
+            `/v1/orgs/${gymA.org.id}/register/sales`,
+            basket(una.entryId, [
+              { productId: shaker, quantity: 1, totalMinor: 1200 },
+              { productId: barA, quantity: 1, totalMinor: 1500, memberGift: gift },
+            ]),
+            owner.cookies,
+          );
+          expect(once.statusCode, once.body).toBe(201);
+          const lines = await linesOf(gymA.org.id, una.entryId);
+          const tubLine = lines.find((l) => l.item_name === "Protein tub");
+          expect((await giftsOf(gymA.org.id)).filter((g) => g.friend_entry_id === vic)).toMatchObject([{ used_sale_id: tubLine?.id, used_off_minor: 1000, taken_back_why: null }]);
+        } finally {
+          await setOffer(gymA, owner.cookies, TEN_POUNDS);
+        }
+      },
+      TIMEOUT_MS,
+    );
+  });
 });

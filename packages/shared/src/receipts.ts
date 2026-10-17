@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
-import { SALE_QUANTITY_MAX } from "./register.js";
+import { SALE_LINES_MAX, SALE_QUANTITY_MAX } from "./register.js";
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const minorSchema = z.number().int().min(0).max(99_999_999);
@@ -56,15 +56,23 @@ const receiptCommon = {
   cancelled: z.boolean(),
 };
 
+/** One product of a sale (18q), with its own discount and tax. */
+const saleReceiptLineSchema = z
+  .object({ name: z.string(), quantity: z.number().int().min(1).max(SALE_QUANTITY_MAX), unitPriceMinor: minorSchema, amounts: receiptAmountsSchema })
+  .strict();
+
 export const saleReceiptSchema = z
   .object({
     ...receiptCommon,
     kind: z.literal("sale"),
-    item: z.object({ name: z.string(), quantity: z.number().int().min(1).max(99), unitPriceMinor: minorSchema }).strict(),
-    amounts: receiptAmountsSchema,
+    /** Its products, in the order they were rung up (18q). */
+    lines: z.array(saleReceiptLineSchema).min(1).max(SALE_LINES_MAX),
+    /** What the whole sale came to: its lines' totals added up. */
+    totalMinor: minorSchema,
     method: memberPaymentByHandSchema,
-    /** The refunds that stand against it, oldest first (18p). */
-    refunds: z.array(z.object({ number: receiptNumberSchema, on: daySchema, amountMinor: minorSchema }).strict()).default([]),
+    /** The refunds that stand against it, oldest first (18p); `item` names the product given
+     *  back for, on a sale of more than one (18q), and is null on a sale of one. */
+    refunds: z.array(z.object({ number: receiptNumberSchema, on: daySchema, amountMinor: minorSchema, item: z.string().nullable().default(null) }).strict()).default([]),
   })
   .strict();
 

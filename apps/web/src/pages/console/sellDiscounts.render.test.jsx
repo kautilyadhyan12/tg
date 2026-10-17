@@ -98,7 +98,7 @@ const page = (over = {}) => ({
   totals: totals(),
   ...over,
 });
-const SOLD = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true };
+const SOLD = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true, receiptNumber: 41 };
 const refusal = (status, message) => Object.assign(new Error(message), { response: { status, data: { message } } });
 
 const open = (org = ORG) => {
@@ -138,7 +138,7 @@ describe('a sale with a discount', () => {
     await screen.findByRole('region', { name: 'New sale' });
     // No product picked yet: there is nothing to discount, so nothing is offered.
     expect(within(newSale()).queryByLabelText('Discount')).toBeNull();
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     pick('How many', '2');
     // Only what can be used on water today is offered: not the towels' one.
     expect(options('Discount')).toEqual(['No discount', 'Staff · $1.00 off', 'Summer sale · 20% off · code SUMMER20']);
@@ -148,10 +148,16 @@ describe('a sale with a discount', () => {
     expect(summary()).toBe('Price$3.98Discount (Summer sale)-$0.80Sales tax 8.25%$0.26Total$3.44');
     expect(takeButton().textContent).toBe('Take payment · $3.44');
 
-    svc.sell.mockResolvedValue({ saleId: 's1', register: page({ sales: [SOLD], totals: totals({ count: 1, totalMinor: 344, taxMinor: 26, cash: 344, discountMinor: 80 }) }) });
+    svc.sell.mockResolvedValue({ saleId: 's1', receiptNumber: 41, register: page({ sales: [SOLD], totals: totals({ count: 1, totalMinor: 344, taxMinor: 26, cash: 344, discountMinor: 80 }) }) });
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
-    expect(svc.sell.mock.calls[0][1]).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), productId: 'p-water', quantity: 2, entryId: null, method: 'cash', totalMinor: 344, discountId: 'd-summer' });
+    expect(svc.sell.mock.calls[0][1]).toEqual({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      entryId: null,
+      method: 'cash',
+      totalMinor: 344,
+      lines: [{ productId: 'p-water', quantity: 2, discountId: 'd-summer', totalMinor: 344 }],
+    });
     const done = await within(newSale()).findByTestId('sale-done');
     expect(done.textContent).toContain('Sold: 2 × Water to a walk-in. $3.44, cash. Summer sale: $0.80 off.');
     expect(within(today()).getByTestId('takings-row').textContent).toContain('Summer sale: $0.80 off');
@@ -159,18 +165,18 @@ describe('a sale with a discount', () => {
 
     // The next sale starts with no discount: the last one is not carried over.
     fireEvent.click(within(newSale()).getByRole('button', { name: 'New sale' }));
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     expect(within(newSale()).getByLabelText('Discount').value).toBe('');
     expect(within(newSale()).getByLabelText('Promo code').value).toBe('');
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(2));
-    expect(svc.sell.mock.calls[1][1]).toMatchObject({ totalMinor: 215, discountId: null });
+    expect(svc.sell.mock.calls[1][1]).toMatchObject({ totalMinor: 215, lines: [{ discountId: null }] });
   });
 
   it('a promo code typed picks its discount, and one that cannot be used says why and picks nothing', async () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     const apply = () => fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
     const type = (text) => fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: text } });
     expect(within(newSale()).getByText('If the customer gives a code, type it here and press Apply.')).toBeTruthy();
@@ -188,21 +194,21 @@ describe('a sale with a discount', () => {
     expect(within(newSale()).getByLabelText('Discount').value).toBe('d-summer');
     expect(summary()).toBe('Price$1.99Discount (Summer sale)-$0.40Sales tax 8.25%$0.13Total$1.72');
 
-    // The product is changed to one the picked discount is not for: it falls back to none.
-    pick('Discount', 'd-staff');
-    pick('Product', 'p-towel');
-    expect(within(newSale()).getByLabelText('Discount').value).toBe('d-staff');
-    pick('Discount', 'd-towels');
-    pick('Product', 'p-water');
-    expect(within(newSale()).getByLabelText('Discount').value).toBe('');
-    expect(summary()).toBe('Price$1.99Sales tax 8.25%$0.16Total$2.15');
+    // A second product is a line of its own (18q): the water keeps its discount, and the towel
+    // offers only what can be used on a towel.
+    pick('Add a product', 'p-towel');
+    const [onWater, onTowel] = within(newSale()).getAllByLabelText('Discount');
+    expect([onWater.value, onTowel.value]).toEqual(['d-summer', '']);
+    expect(Array.from(onTowel.options).map((o) => o.value)).toEqual(['', 'd-staff', 'd-summer', 'd-towels']);
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Remove Towel' }));
+    expect(within(newSale()).getAllByLabelText('Discount').map((d) => d.value)).toEqual(['d-summer']);
   });
 
   it('a discount that takes the whole price is not sold, and one the server refuses is said and the page read again', async () => {
     svc.get.mockResolvedValue(page({ discounts: [discount({ id: 'd-two', name: 'Two off', code: null, kind: 'amount', percentBp: null, amountMinor: 200, currency: 'USD' }), discount()] }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     pick('Discount', 'd-two');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).getByText('Two off takes off the whole price, so there is nothing to pay. Choose No discount, or another one.')).toBeTruthy();
@@ -223,7 +229,7 @@ describe('a sale with a discount', () => {
     svc.get.mockResolvedValue(page({ discounts: [] }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     expect(within(newSale()).queryByLabelText('Discount')).toBeNull();
     expect(within(newSale()).queryByLabelText('Promo code')).toBeNull();
     expect(within(discounts()).getByText('No discounts for products yet. Add one to take a percentage or a fixed amount off a product, with a promo code if you want one.')).toBeTruthy();
@@ -385,7 +391,7 @@ describe('the Discounts list', () => {
     expect(within(discounts()).queryByRole('button', { name: /^Change / })).toBeNull();
     expect(within(discounts()).queryByRole('button', { name: /^Archive / })).toBeNull();
     expect(within(discounts()).getByText('The owner, or staff who can change membership types and prices, can add and change discounts.')).toBeTruthy();
-    pick('Product', 'p-towel');
+    pick('Add a product', 'p-towel');
     expect(options('Discount')).toEqual(['No discount', 'Staff · $1.00 off', 'Summer sale · 20% off · code SUMMER20', 'Towels only · 10% off · code TOWEL']);
   });
 
@@ -393,21 +399,20 @@ describe('what the screen says stays true', () => {
   it('a promo code is said to be applied only while its discount is on the sale', async () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-towel');
+    pick('Add a product', 'p-towel');
     fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: 'towel' } });
     fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
     expect(within(newSale()).getByRole('status').textContent).toBe('TOWEL applied: 10% off.');
     expect(within(newSale()).getByLabelText('Discount').value).toBe('d-towels');
-    // Water is picked instead: the towels' discount is off the sale, and the line says so.
-    pick('Product', 'p-water');
-    expect(within(newSale()).getByLabelText('Discount').value).toBe('');
+    // Water is added: the towel keeps its discount, and the code is still said to be applied.
+    pick('Add a product', 'p-water');
+    expect(within(newSale()).getAllByLabelText('Discount').map((d) => d.value)).toEqual(['d-towels', '']);
+    expect(within(newSale()).getByRole('status').textContent).toBe('TOWEL applied: 10% off.');
+    // The towel is taken off the sale: the towels' discount is off it too, and the line says so.
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Remove Towel' }));
     expect(within(newSale()).queryByText('TOWEL applied: 10% off.')).toBeNull();
     expect(within(newSale()).getByRole('status').textContent).toBe('Towels only does not apply to Water. No discount is on this sale.');
     expect(summary()).toBe('Price$1.99Sales tax 8.25%$0.16Total$2.15');
-    // Back on the towel it is the one on the sale again, and is said to be.
-    pick('Product', 'p-towel');
-    expect(within(newSale()).getByLabelText('Discount').value).toBe('d-towels');
-    expect(within(newSale()).getByRole('status').textContent).toBe('TOWEL applied: 10% off.');
     // Another discount picked by hand: nothing is said of the code any more.
     pick('Discount', 'd-summer');
     expect(within(newSale()).queryByRole('status')).toBeNull();
@@ -417,7 +422,7 @@ describe('what the screen says stays true', () => {
     svc.get.mockResolvedValue(page({ discounts: [discount({ maxUses: 5, uses: 4 })] }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     fireEvent.change(within(newSale()).getByLabelText('Promo code'), { target: { value: 'summer20' } });
     fireEvent.click(within(newSale()).getByRole('button', { name: 'Apply' }));
     expect(within(newSale()).getByRole('status').textContent).toBe('SUMMER20 applied: 20% off.');
@@ -437,7 +442,7 @@ describe('what the screen says stays true', () => {
     expect(within(discounts()).getByTestId('discount-row').textContent).toBe(
       'StaffNeeds saving$1.00 off · No promo code · All products · Not used yetThis amount is in USD. Press Change and save it again to use it in GBP.ChangeArchive',
     );
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     expect(within(newSale()).getByText('No discount applies to this product today.')).toBeTruthy();
     expect(within(newSale()).getByText('Staff cannot be used until its amount is saved again in GBP. Open it under Discounts below and press Change.')).toBeTruthy();
     // Change opens it with the amount, to be saved in the gym's money as it is now.
