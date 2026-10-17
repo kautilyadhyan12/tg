@@ -90,10 +90,10 @@ export type AnswerOwnerRequestResponse = z.infer<typeof answerOwnerRequestRespon
 
 /** What the server says when it refuses a hand-over, in the words the console shows. */
 export const OWNER_REQUEST_WORDS = {
-  owner_only: "Only the owner can hand the gym over.",
+  owner_only: "Only the owner can choose a new owner.",
   not_staff: "That person isn't on your staff any more.",
   not_co_owner: "Only a co-owner can be made the owner. Make them a co-owner first.",
-  paid_plan: "A gym on a paid plan can't be handed over.",
+  paid_plan: "While a paid plan is running, the owner can't be changed.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
   no_request: "There's no request waiting.",
   request_gone: "This request has ended. Ask the owner to send it again if you still want to be the owner.",

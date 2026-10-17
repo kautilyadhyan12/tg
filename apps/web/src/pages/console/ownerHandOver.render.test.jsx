@@ -185,12 +185,12 @@ describe('Make owner', () => {
   });
 
   it("a refusal is the server's sentence, in the Owner part", async () => {
-    orgService.askOwner.mockRejectedValue(apiError(409, 'paid_plan', "A gym on a paid plan can't be handed over."));
+    orgService.askOwner.mockRejectedValue(apiError(409, 'paid_plan', "While a paid plan is running, the owner can't be changed."));
     drawStaff();
     const panel = await openPerson('u3', 'Cora Lim');
     fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
     fireEvent.click(panel.getByRole('button', { name: 'Send request' }));
-    expect(await within(panel.getByTestId('staff-owner')).findByText("A gym on a paid plan can't be handed over.")).toBeTruthy();
+    expect(await within(panel.getByTestId('staff-owner')).findByText("While a paid plan is running, the owner can't be changed.")).toBeTruthy();
   });
 });
 
