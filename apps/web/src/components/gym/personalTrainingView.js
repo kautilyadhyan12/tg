@@ -161,7 +161,7 @@ export function ptCancelAsk(s, timezone, gymName) {
       s.packCharged
         ? `${until} Your pack gets the session back.`
         : s.usesLimit === true
-          ? `${until} It then no longer counts as one of the sessions your membership includes.${lateFee > 0 ? ` After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.` : ''}`
+          ? `${until} It then no longer counts as one of the sessions your membership includes.${lateFee > 0 ? ` After ${instantText(s.freeCancelUntil, timezone)} there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.` : ''}`
           : lateFee > 0
             ? `${until} After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.`
             : until,

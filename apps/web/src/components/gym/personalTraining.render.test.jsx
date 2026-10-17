@@ -416,7 +416,7 @@ describe('a member’s personal training', () => {
     render(<PersonalTraining gym={GYM} />);
     fireEvent.click(await screen.findByRole('button', { name: /^Cancel session/ }));
     expect(screen.getByRole('dialog', { name: 'Cancel your session?' }).textContent).toContain(
-      'It then no longer counts as one of the sessions your membership includes. After that there is a one-time late cancel fee of £5.00.',
+      'It then no longer counts as one of the sessions your membership includes. After Fri 9 Oct, 8:00 am there is a one-time late cancel fee of £5.00.',
     );
   });
 
