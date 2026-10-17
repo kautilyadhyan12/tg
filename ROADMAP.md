@@ -262,7 +262,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18p. [x] **Refund a sale at the desk** — merged 2026-10-16 (PR #295).
    - 18q. [x] **A basket at Sell** — merged 2026-10-17 (PR #306).
    - 18n. [x] **Download payments and receipts** — merged 2026-10-16 (PR #298).
-   - 18h-i. [ ] **A fee for a late cancel or a no-show, for classes** — built, PR #309 (Kd, `rulings/2026-10-17-18h-i.md`; the line as first written is in `handoff/2026-10-17-18h-i.md`).
+   - 18h-i. [x] **A fee for a late cancel or a no-show, for classes** — merged 2026-10-17 (PR #309).
    - 18h-ii. [ ] **The same fees for personal training**: the gym sets each; a late cancel that keeps the session used, and a no-show, open a bill on the membership it used; a pack holder's session stays used and that is all; the member and staff read the fee first. After 18h-i.
    - 18i. [ ] **Family plans: one person pays for several** (Kd, RULINGS 2026-10-08): a record names another record on the gym's list as its payer, so its bills, receipts and overdue notices go to that person; each keeps their own record, pass, bookings and membership. Its plan reads Mindbody's, PushPress's and Gymdesk's family accounts first, and settles what a payer may see. After 18a.
    - 18j. [ ] **My membership** (RULINGS 2026-10-08): in the app (the member web until the phone app) a member reads what they hold, when it renews or ends, classes left, and their own bills, payments and receipts; nobody else's. After 18g (18c was dropped 2026-10-15). Laid out as Stage 5 item 16 says (Kd, `rulings/2026-10-15-18m.md`).
