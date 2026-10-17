@@ -19,6 +19,13 @@
 // reads the time off, and a time off reads the bookings, each under the gym's lock, so one
 // of them always sees the other; a time off over a session or a class already there names
 // them and writes nothing until the request confirms exactly those.
+//
+// A late cancel or a no-show can cost a fee (18h-ii): the worst thing there is a fee on
+// somebody who came, on a session the gym called off, or on somebody else's bills. So a fee
+// is opened only in the write that makes the session a late cancel or a no-show, on the
+// membership the session itself used, by the one rule (`classFeeFor`); a session given
+// back is cancelled and costs nothing; Came takes an unpaid fee off; and a late cancel that
+// costs one goes through only with the fee the screen showed.
 import { createHash } from "node:crypto";
 import type { Sql, TransactionSql } from "postgres";
 import {
@@ -32,6 +39,9 @@ import {
   PT_WEEK_DAYS,
   PT_WORDS,
   addDays,
+  classFeeFor,
+  lateCancelFeeWords,
+  memberCurrencyForCountry,
   decidePtBook,
   decidePtCancel,
   decidePtMark,
@@ -54,6 +64,7 @@ import {
   type AddPtTimeOffRequest,
   type BookPtRequest,
   type CancelPtRequest,
+  type ClassFees,
   type MarkPtRequest,
   type PtAppointment,
   type PtBookRefusal,
@@ -74,6 +85,7 @@ import { OrgsError, holdsPrivilege, requireWritableGym } from "../service.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack, heldForPtOf } from "../memberships/heldRepo.js";
+import { openPtFees, removePtFees } from "../memberships/feesRepo.js";
 import { fillClassSessions } from "../classes/fill.js";
 import * as repo from "./repo.js";
 
@@ -148,7 +160,29 @@ function staffName(row: Pick<repo.TrainerRow, "displayName" | "email">): { name:
   return named.name === null ? { name: row.email, initials: "" } : named;
 }
 
-function shown(row: repo.AppointmentRow, view: { now: Date; freeCancelMinutes: number; opens: boolean }): PtAppointment {
+/** What a late cancel and a no-show of a session would cost, by the one rule with personal
+ *  training's own amounts; null where neither costs anything, or the gym has no money a
+ *  membership is sold in. */
+export function ptFeesOfSession(
+  gym: { fees: ClassFees; country: string | null },
+  session: { heldMembershipId: string | null; packCharged: boolean },
+): ClassFees | null {
+  if (memberCurrencyForCountry(gym.country) === null) return null;
+  // Named one by one: a session row carries a `fee` of its own, which must never stand in for which fee is asked.
+  const on = { heldMembershipId: session.heldMembershipId, packCharged: session.packCharged, fees: gym.fees };
+  const lateCancelMinor = classFeeFor({ fee: "late_cancel", ...on });
+  const noShowMinor = classFeeFor({ fee: "no_show", ...on });
+  return lateCancelMinor === 0 && noShowMinor === 0 ? null : { lateCancelMinor, noShowMinor };
+}
+
+interface ShownView {
+  now: Date;
+  freeCancelMinutes: number;
+  opens: boolean;
+  gym: { fees: ClassFees; country: string | null };
+}
+
+function shown(row: repo.AppointmentRow, view: ShownView): PtAppointment {
   const named = row.personName === null ? { name: null, initials: "" } : fullName({ displayName: row.personName, email: null, recordName: null });
   const time = ptTime(view.now.getTime(), row.startsAt.getTime(), view.freeCancelMinutes);
   return ptAppointmentSchema.parse({
@@ -168,6 +202,9 @@ function shown(row: repo.AppointmentRow, view: { now: Date; freeCancelMinutes: n
     usesLimit: row.usesLimit,
     cancel: row.status !== "booked" || time.started ? null : time.freeCancel ? "free" : "late",
     canMark: decidePtMark({ status: row.status, started: time.started, to: "attended" }).kind !== "refuse",
+    fees: ptFeesOfSession(view.gym, row),
+    // Whether somebody owes, paid or was let off a fee is money, as what they pay with is.
+    fee: view.opens ? row.fee : null,
   });
 }
 
@@ -282,7 +319,7 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
     ...timeOff,
   ];
   const free = ptFreeTimes(slots, { minutes: trainer.sessionMinutes ?? 0, taken, nowMs: now.getTime() });
-  const view = { now, freeCancelMinutes: clock.freeCancelMinutes, opens: standing.confirms };
+  const view = { now, freeCancelMinutes: clock.freeCancelMinutes, opens: standing.confirms, gym: clock };
   return ptWeekResponseSchema.parse({
     trainerId: trainer.userId,
     timezone: clock.timezone,
@@ -292,6 +329,7 @@ export async function getWeek(deps: PtDeps, staffId: string, gymId: string, quer
     lastDay,
     firstDay,
     freeCancelMinutes: clock.freeCancelMinutes,
+    currency: memberCurrencyForCountry(clock.country),
     sessionMinutes: trainer.sessionMinutes,
     offers: trainer.offers,
     days: days.map((localDate) => ({
@@ -476,17 +514,22 @@ export async function bookUnderLock(tx: TransactionSql, now: Date, gymId: string
 async function appointmentView(deps: PtDeps, standing: Standing, gymId: string, id: string): Promise<PtAppointment> {
   const [row, clock] = await Promise.all([repo.appointmentById(deps.sql, gymId, id, false), repo.gymClock(deps.sql, gymId)]);
   if (row === null || clock === null) throw appointmentNotFound();
-  return shown(row, { now: deps.now(), freeCancelMinutes: clock.freeCancelMinutes, opens: standing.confirms });
+  return shown(row, { now: deps.now(), freeCancelMinutes: clock.freeCancelMinutes, opens: standing.confirms, gym: clock });
 }
 
-/** The 409 a cancel answers past the free time until staff say which it is: `packCharged`
- *  says whether a pack's session is at stake. */
+/** The 409 a cancel answers past the free time until staff say which it is, or until the
+ *  late cancel says yes to the fee it costs now: `packCharged` says whether a pack's session
+ *  is at stake, `feeMinor` what a late cancel's fee is (0 for none, 18h-ii). */
 export class PtLateCancel extends Error {
   readonly packCharged: boolean;
-  constructor(packCharged: boolean) {
-    super(PT_WORDS.late_cancel);
+  readonly feeMinor: number;
+  readonly currency: string;
+  constructor(packCharged: boolean, feeMinor = 0, currency = "") {
+    super(feeMinor > 0 ? lateCancelFeeWords(feeMinor, currency) : PT_WORDS.late_cancel);
     this.name = "PtLateCancel";
     this.packCharged = packCharged;
+    this.feeMinor = feeMinor;
+    this.currency = currency;
   }
 }
 
@@ -530,16 +573,21 @@ export async function cancelUnderLock(
   const [row, clock] = await Promise.all([repo.appointmentById(tx, gymId, appointmentId, true), repo.gymClock(tx, gymId)]);
   if (row === null || clock === null) return appointmentNotFound();
   if (by.member && (onlyEntryId === null || row.entryId !== onlyEntryId)) return appointmentNotFound();
+  // A late cancel that keeps the session used costs its fee: it goes through only where the
+  // request says yes to that fee, the one it costs now. One given back costs nothing.
+  const fee = ptFeesOfSession(clock, row)?.lateCancelMinor ?? 0;
+  const feeSeen = req.giveBack || fee === 0 || req.feeMinor === fee;
   const decision = decidePtCancel({
     status: row.status,
     ...ptTime(now.getTime(), row.startsAt.getTime(), clock.freeCancelMinutes),
     packCharged: row.packCharged,
-    lateOk: req.lateOk,
+    // Only a session still booked can be charged; a cancel sent again is answered as before.
+    lateOk: req.lateOk && (row.status !== "booked" || feeSeen),
     giveBack: req.giveBack,
   });
   if (decision.kind === "already") return null;
   if (decision.kind === "refuse") {
-    if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged);
+    if (decision.reason === "late_cancel") return new PtLateCancel(row.packCharged, fee, memberCurrencyForCountry(clock.country) ?? "");
     const words = by.member ? PT_MEMBER_CANCEL_WORDS : PT_WORDS;
     if (decision.reason === "kept_used") return new OrgsError(409, PT_KEPT_USED_ERROR, words.kept_used);
     if (decision.reason === "not_kept") return new OrgsError(409, PT_NOT_KEPT_ERROR, words.not_kept);
@@ -547,6 +595,7 @@ export async function cancelUnderLock(
   }
   await repo.markCancelled(tx, { gymId, id: row.id, status: decision.status, packCharged: row.packCharged && !decision.refundPack, now });
   if (decision.refundPack && row.heldMembershipId !== null) await givePackClassBack(tx, gymId, row.heldMembershipId, now);
+  if (decision.status === "late_cancelled") await openPtFees(tx, gymId, [row.id], "late_cancel", now);
   await insertAudit(tx, {
     actorUserId: by.userId,
     gymId,
@@ -593,6 +642,9 @@ export async function mark(
     if (decision.kind === "already") return null;
     if (decision.kind === "refuse") return new OrgsError(409, decision.reason, PT_WORDS[decision.reason]);
     await repo.markAttendance(tx, { gymId, id: row.id, status: req.status });
+    // A no-show opens its fee; came takes an unpaid one off (18h-ii).
+    if (req.status === "no_show") await openPtFees(tx, gymId, [row.id], "no_show", now);
+    else await removePtFees(tx, gymId, [row.id], now);
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,

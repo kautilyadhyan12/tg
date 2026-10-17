@@ -215,7 +215,9 @@ export const memberFeeSchema = z
   .object({
     id: z.string().uuid(),
     fee: memberFeeKindSchema,
-    /** The class it was for, as it was named then, and its day. */
+    /** A class's fee, or a personal training session's (18h-ii). */
+    of: z.enum(["class", "pt"]).default("class"),
+    /** The class it was for, as it was named then, or "Personal training with Ravi", and its day. */
     forName: z.string().min(1),
     on: daySchema,
     amountMinor: minorSchema,
@@ -228,7 +230,7 @@ export const memberFeeSchema = z
     /** Who waived it, on the gym's own day; null where it was not waived. */
     waived: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable(),
     /** Its booking still counts as the late cancel or no-show it was opened for. False once
-     *  staff marked them came or the class was cancelled: a fee paid before that stays paid,
+     *  staff marked them came, the class was cancelled, or the session is gone: a fee paid before that stays paid,
      *  and voiding its payment takes the fee off instead of making it owed again. */
     stillOwed: z.boolean().default(true),
     payments: z.array(memberPaymentSchema),

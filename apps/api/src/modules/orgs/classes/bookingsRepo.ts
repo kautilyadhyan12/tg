@@ -818,16 +818,21 @@ export interface BookingRules {
   pt: PtBookingSettings;
   /** The class fees (18h-i). */
   fees: ClassFees;
+  /** Personal training's own two fees (18h-ii). */
+  ptFees: ClassFees;
 }
 
 /** The gym's four booking settings and personal training's two; null where there is no
  *  such gym. */
 export async function readSettings(sql: SqlOrTx, gymId: string): Promise<BookingRules | null> {
-  const rows = await sql<{ opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number; late_fee: number; no_show_fee: number }[]>`
+  const rows = await sql<
+    { opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number; late_fee: number; no_show_fee: number; pt_late_fee: number; pt_no_show_fee: number }[]
+  >`
     SELECT booking_opens_days AS opens, booking_free_cancel_minutes AS free,
            waitlist_handover_minutes AS handover, waitlist_max AS waitlist,
            pt_opens_days AS pt_opens, pt_free_cancel_minutes AS pt_free,
-           class_late_cancel_fee_minor AS late_fee, class_no_show_fee_minor AS no_show_fee
+           class_late_cancel_fee_minor AS late_fee, class_no_show_fee_minor AS no_show_fee,
+           pt_late_cancel_fee_minor AS pt_late_fee, pt_no_show_fee_minor AS pt_no_show_fee
     FROM gyms WHERE id = ${gymId}`;
   const r = rows[0];
   if (r === undefined) return null;
@@ -835,16 +840,18 @@ export async function readSettings(sql: SqlOrTx, gymId: string): Promise<Booking
     settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist },
     pt: { opensDays: r.pt_opens, freeCancelMinutes: r.pt_free },
     fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee },
+    ptFees: { lateCancelMinor: r.pt_late_fee, noShowMinor: r.pt_no_show_fee },
   };
 }
 
-export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt, fees }: BookingRules): Promise<void> {
+export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt, fees, ptFees }: BookingRules): Promise<void> {
   await tx`
     UPDATE gyms
     SET booking_opens_days = ${s.opensDays}, booking_free_cancel_minutes = ${s.freeCancelMinutes},
         waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax},
         pt_opens_days = ${pt.opensDays}, pt_free_cancel_minutes = ${pt.freeCancelMinutes},
-        class_late_cancel_fee_minor = ${fees.lateCancelMinor}, class_no_show_fee_minor = ${fees.noShowMinor}
+        class_late_cancel_fee_minor = ${fees.lateCancelMinor}, class_no_show_fee_minor = ${fees.noShowMinor},
+        pt_late_cancel_fee_minor = ${ptFees.lateCancelMinor}, pt_no_show_fee_minor = ${ptFees.noShowMinor}
     WHERE id = ${gymId}`;
 }
 

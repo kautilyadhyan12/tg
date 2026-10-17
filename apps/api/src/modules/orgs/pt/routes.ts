@@ -165,7 +165,9 @@ export function registerPtRoutes(app: FastifyInstance, deps: { sql: Sql; redis: 
       return await reply.status(200).send({ appointment });
     } catch (err) {
       if (!(err instanceof service.PtLateCancel)) throw err;
-      return reply.status(409).send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
+      return reply
+        .status(409)
+        .send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, feeMinor: err.feeMinor, currency: err.currency, requestId: req.id });
     }
   });
 
@@ -222,7 +224,9 @@ export function registerPtRoutes(app: FastifyInstance, deps: { sql: Sql; redis: 
     } catch (err) {
       if (!(err instanceof service.PtLateCancel)) throw err;
       // A member's late cancel keeps the session used; the box says so before they confirm.
-      return reply.status(409).send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, requestId: req.id });
+      return reply
+        .status(409)
+        .send({ error: PT_LATE_CANCEL_ERROR, message: err.message, packCharged: err.packCharged, feeMinor: err.feeMinor, currency: err.currency, requestId: req.id });
     }
   });
 }

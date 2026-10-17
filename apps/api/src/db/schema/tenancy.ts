@@ -143,6 +143,9 @@ export const gyms = pgTable(
      *  `gyms_class_fees_check`: 0 is off. */
     classLateCancelFeeMinor: integer("class_late_cancel_fee_minor").notNull().default(0),
     classNoShowFeeMinor: integer("class_no_show_fee_minor").notNull().default(0),
+    /** A personal training session's own two (0137; 18h-ii), under `gyms_pt_fees_check`. */
+    ptLateCancelFeeMinor: integer("pt_late_cancel_fee_minor").notNull().default(0),
+    ptNoShowFeeMinor: integer("pt_no_show_fee_minor").notNull().default(0),
     /** Days after its due date an unpaid bill reads Overdue (0093; spec Part 3 §14.2),
      *  under `gyms_bills_overdue_days_check`. */
     billsOverdueDays: integer("bills_overdue_days").notNull().default(0),

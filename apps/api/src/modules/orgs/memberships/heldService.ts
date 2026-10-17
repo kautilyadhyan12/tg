@@ -163,6 +163,7 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
   return {
     id: f.id,
     fee: f.fee,
+    of: f.of,
     forName: f.forName,
     on: f.on,
     amountMinor: f.amountMinor,

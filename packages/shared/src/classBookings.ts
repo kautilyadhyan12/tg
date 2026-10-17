@@ -253,7 +253,8 @@ export const CLASS_FEES_OFF: ClassFees = { lateCancelMinor: 0, noShowMinor: 0 };
  *  gym's own amount, where the place was booked on a membership that is not a pack. A pack
  *  holder's class stays used on their pack and that is all (Kd, 2026-10-17, as Mindbody
  *  does); a booking with no membership behind it (a gym that sells none here, or one
- *  deleted since) has no bills to put a fee on. 0 is no fee. */
+ *  deleted since) has no bills to put a fee on. 0 is no fee. A personal training session is
+ *  decided by this same rule, with personal training's own two amounts (18h-ii). */
 export function classFeeFor(input: { fee: "late_cancel" | "no_show"; heldMembershipId: string | null; packCharged: boolean; fees: ClassFees }): number {
   if (input.heldMembershipId === null || input.packCharged) return 0;
   return input.fee === "late_cancel" ? input.fees.lateCancelMinor : input.fees.noShowMinor;
@@ -500,8 +501,11 @@ export const ptBookingSettingsSchema = z
 export type PtBookingSettings = z.infer<typeof ptBookingSettingsSchema>;
 
 /** What a save sends: the four for classes and personal training's two, every one every time,
- *  and the class fees (18h-i) from a screen that shows them; left out, they stay as they are. */
-export const bookingSettingsBodySchema = classBookingSettingsSchema.extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional() }).strict();
+ *  and the class fees (18h-i) and personal training's (18h-ii) from a screen that shows them;
+ *  left out, they stay as they are. */
+export const bookingSettingsBodySchema = classBookingSettingsSchema
+  .extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional(), ptFees: classFeesSchema.optional() })
+  .strict();
 export type BookingSettingsBody = z.infer<typeof bookingSettingsBodySchema>;
 
 /** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
@@ -514,6 +518,8 @@ export const classBookingSettingsResponseSchema = z
      *  members' payments, the tick a fee needs. `onBills`: the gym sells memberships here,
      *  so a fee has bills to go on. */
     fees: classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/), canChange: z.boolean(), onBills: z.boolean() }).strict(),
+    /** Personal training's own two fees (18h-ii), in the same money, under the same tick. */
+    ptFees: classFeesSchema,
     movedIn: z.number().int().optional(),
   })
   .strict();
