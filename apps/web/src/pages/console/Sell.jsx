@@ -158,8 +158,14 @@ function WhoPicker({ gymId, who, setWho, person, setPerson, mustPick, disabled, 
  *  form is gone, so a second press cannot sell again, and the next sale starts with its
  *  own button. */
 function SaleRecorded({ words, note, onNew, children, below = null }) {
+  // A basket's form is long and this box is short: it is brought into sight, so the desk reads
+  // that the sale went through where it pressed (18q).
+  const box = useRef(null);
+  useEffect(() => {
+    box.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
   return (
-    <div className="flex flex-col gap-3" role="status" data-testid="sale-done">
+    <div ref={box} className="flex flex-col gap-3" role="status" data-testid="sale-done">
       <p className="c-s16 c-w7 c-t1 m-0 flex items-center gap-2">
         <CheckCircle2 aria-hidden="true" className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--good)' }} />
         Sale recorded
