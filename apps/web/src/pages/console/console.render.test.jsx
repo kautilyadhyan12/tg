@@ -608,6 +608,23 @@ describe('Create a gym', () => {
     expect(await screen.findByText(/not open in that country yet/i)).toBeTruthy();
   });
 
+  it('sends one key with every press of Create, so a press sent again after a lost answer makes no second gym', async () => {
+    orgService.createOrg.mockRejectedValueOnce(new Error('Network Error'));
+    orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: null } });
+    drawNew();
+    fireEvent.change(screen.getByLabelText('Gym name'), { target: { value: 'Iron House' } });
+    await chooseCountry('United States');
+    fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
+    fireEvent.click(screen.getByText('Create'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('Create').closest('button').disabled).toBe(false));
+    fireEvent.click(screen.getByText('Create'));
+    await waitFor(() => expect(orgService.createOrg).toHaveBeenCalledTimes(2));
+    const [first, second] = orgService.createOrg.mock.calls.map((c) => c[0].createKey);
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(second).toBe(first);
+  });
+
   it('does not submit without a name', async () => {
     // T3 rule-4: this only ever exercised the button's `disabled` attribute —
     // deleting the `if (!canSubmit) return` guard left it GREEN (measured by the
