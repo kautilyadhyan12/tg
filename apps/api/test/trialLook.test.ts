@@ -60,6 +60,10 @@ describe("two gyms that are not alike are never listed", () => {
     ["Power Yoga Studio", "Power Boxing Club", null],
     ["Spartan Gym", "Spartans MMA", null],
     ["Crunch Fitness", "Crunch Yoga", null],
+    // A word of a kind on both is not a second word of the name.
+    ["Power Yoga", "Power House Yoga", null],
+    ["Ladies Power Gym", "Ladies Power House", null],
+    ["Iron Pilates", "Iron House Pilates", null],
   ];
   it.each(table)("%s · %s", (a, b, city) => {
     expect(alike(a, b, city)).toBe(false);
@@ -88,6 +92,8 @@ describe("two names that are alike", () => {
     // The same name, written with other words for a gym, or a plural.
     ["Shakti Yoga", "Shakti Yoga Studio", null],
     ["Spartans MMA Club", "Spartan MMA", null],
+    ["Shakti Yoga", "Shakti Yoga Centre", null],
+    ["Iron House Yoga", "Iron House Elite Yoga", null],
     ["Power Clubs", "Power Club", null],
     ["Physique Gym", "Physique Fitness", null],
     ["Shakti Gym", "Shakti Fitness Academies", null],

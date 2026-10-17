@@ -24,6 +24,9 @@ const NAME_WORDS_OF_A_KIND = new Set([
 ]);
 
 const inList = (list: ReadonlySet<string>, word: string) => list.has(word) || list.has(singular(word));
+/** A word of a kind, as typed or as a name holds it ("pilates" is held as "pilate"). */
+const KIND_AS_HELD = new Set([...NAME_WORDS_OF_A_KIND].map(singular));
+const isKind = (word: string) => inList(NAME_WORDS_OF_A_KIND, word) || KIND_AS_HELD.has(word);
 
 /** The short forms an address is typed with, read as the word. */
 const ADDRESS_SHORT_FORMS = new Map([
@@ -80,7 +83,7 @@ export function cityKey(city: string | null): string | null {
 export function nameCore(name: string, city: string | null): string[] {
   const cityWords = new Set(city === null ? [] : words(city));
   const left = words(name).filter((w) => !inList(NAME_WORDS_EVERY_GYM_HAS, w) && !cityWords.has(w));
-  return left.every((w) => inList(NAME_WORDS_OF_A_KIND, w)) ? [] : left.map(singular);
+  return left.every(isKind) ? [] : left.map(singular);
 }
 
 /** Two words one typing slip apart: one letter added or dropped, or two neighbours swapped.
@@ -108,7 +111,8 @@ const SLIP_WORD_LEAST_LENGTH = 6;
  *  letters ("Iron House Gym", "IronHouse Fitness"), the same words but one long word slipped
  *  ("Musclemania", "Muscelmania"), or one is two or more words that are all in the other
  *  ("Iron House", "Iron House Elite"). One shared word alone is not enough: "Power Gym" and
- *  "Power House" are two gyms. */
+ *  "Power House" are two gyms, and so are "Power Yoga" and "Power House Yoga", since a word
+ *  of a kind is not a second word of the name. */
 export function namesAlike(a: readonly string[], b: readonly string[]): boolean {
   const ja = a.join("");
   const jb = b.join("");
@@ -126,7 +130,7 @@ export function namesAlike(a: readonly string[], b: readonly string[]): boolean 
   }
 
   const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
-  if (shorter.length < 2 || shorter.length === longer.length) return false;
+  if (shorter.filter((w) => !isKind(w)).length < 2 || shorter.length === longer.length) return false;
   const inLonger = new Set(longer);
   return shorter.every((w) => inLonger.has(w));
 }
