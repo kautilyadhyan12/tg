@@ -352,22 +352,21 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect(await ownerOf(paid)).toBe(paid.owner.userId);
     }, TEST_TIMEOUT_MS);
 
-    it("an open payment window stops a hand-over: paid after Accept, the old owner would be paying for somebody else's gym", async () => {
+    it("Accept closes the old owner's payment windows, an abandoned one or one still open, and the gym is not called paid", async () => {
       const gym = await makeGym("Kd");
       const ria = await makeCoOwner(gym, "Ria");
-      expect((await ask(gym, ria)).statusCode).toBe(201);
-      const riaId = await requestIdFor(gym, ria);
-      // The owner is on Paddle's payment page.
+      // A Razorpay window the owner opened a month ago and shut, and a Paddle one open now.
       await sql`
-        INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, state, provider_ref)
-        VALUES (${gym.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), ${gym.owner.userId}, ${"key-" + gym.id}, 'paddle', 'open', ${"txn_" + gym.id})`;
-      expect((await staffList(gym, gym.owner)).paidPlan).toBe(true);
-      const accepted = await answer(gym, riaId, ria);
-      expect(accepted.statusCode).toBe(409);
-      expect(errorOf(accepted)).toBe("paid_plan");
-      expect(await ownerOf(gym)).toBe(gym.owner.userId);
-      const other = await makeCoOwner(gym, "Oz");
-      expect(errorOf(await ask(gym, other))).toBe("paid_plan");
+        INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, state, provider_ref, created_at)
+        VALUES (${gym.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), ${gym.owner.userId}, ${"old-" + gym.id}, 'razorpay', 'open', ${"sub_old_" + gym.id}, now() - interval '30 days'),
+               (${gym.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), ${gym.owner.userId}, ${"new-" + gym.id}, 'paddle', 'open', ${"txn_" + gym.id}, now())`;
+      expect((await staffList(gym, gym.owner)).paidPlan).toBe(false);
+      expect((await ask(gym, ria)).statusCode).toBe(201);
+      expect((await answer(gym, await requestIdFor(gym, ria), ria)).statusCode).toBe(200);
+      expect(await ownerOf(gym)).toBe(ria.userId);
+      // Closed as a newer press closes them: paid after this, a window is set aside and refunded.
+      const states = await sql<{ state: string }[]>`SELECT state FROM billing_checkouts WHERE gym_id = ${gym.id}`;
+      expect(states.map((r) => r.state)).toEqual(["superseded", "superseded"]);
     }, TEST_TIMEOUT_MS);
 
     it("a gym with no plan, its trial over, can still be handed over", async () => {

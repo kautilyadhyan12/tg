@@ -257,16 +257,12 @@ export async function answerRequest(
 // A WAITING REQUEST, in every reader below: pending, in date, sent by the gym's owner as it
 // is now, to somebody still a co-owner on the staff row they were asked on.
 
-/** The gym is on a plan somebody pays for at Paddle or Razorpay, live or still being paid, or
- *  somebody has its payment window open: a checkout paid after a hand-over would put the gym on
- *  a plan the old owner pays for. Both checkout writers hold the gym's lock, as Accept does. */
+/** The gym is on a plan somebody pays for at Paddle or Razorpay, live or still being paid. */
 async function onPaidPlan(tx: Sql | TransactionSql, gymId: string): Promise<boolean> {
   const rows = await tx`
     SELECT 1 FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId}
       AND provider NOT IN ('none','pilot') AND status IN ('trialing','active','past_due')
-    UNION ALL
-    SELECT 1 FROM billing_checkouts WHERE gym_id = ${gymId} AND state IN ('creating','open')
     LIMIT 1`;
   return rows.length > 0;
 }
@@ -480,6 +476,13 @@ export async function answerOwnerRequest(
       WHERE id = ${input.gymId} AND owner_user_id = ${oldOwner}
       RETURNING id`;
     if (moved.length !== 1) throw new Error("the gym's owner changed under its lock");
+    // A payment window still open is closed, as a newer press closes it (`beginCheckout`): paid
+    // after this, it is set aside as a duplicate and refunded, never the gym's plan, so the old
+    // owner never pays for the new owner's gym. Both checkout writers hold this same lock.
+    const closed = await tx<{ id: string }[]>`
+      UPDATE billing_checkouts SET state = 'superseded', updated_at = now()
+      WHERE gym_id = ${input.gymId} AND state IN ('creating','open')
+      RETURNING id`;
     await tx`
       UPDATE gym_staff SET privileges = ${[...input.ownerPrivileges]}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
@@ -496,7 +499,7 @@ export async function answerOwnerRequest(
       action: "org.owner_handed_over",
       targetType: "gym",
       targetId: input.gymId,
-      meta: { requestId: input.requestId, from: oldOwner, to: input.userId },
+      meta: { requestId: input.requestId, from: oldOwner, to: input.userId, closedCheckouts: closed.map((c) => c.id) },
     });
     return { kind: "accepted" };
   });
