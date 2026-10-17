@@ -81,6 +81,22 @@ export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidReason, string>
   other: "Something else",
 };
 
+/** A fee for a late cancel or a no-show (18h-i): a bill of the membership the booking
+ *  used, of no period. It is the amount the gym set, its tax in, and it moves no date. */
+export const MEMBER_FEES = ["late_cancel", "no_show"] as const;
+export const memberFeeKindSchema = z.enum(MEMBER_FEES);
+export type MemberFeeKind = z.infer<typeof memberFeeKindSchema>;
+
+export const MEMBER_FEE_WORDS: Readonly<Record<MemberFeeKind, string>> = {
+  late_cancel: "Late cancel fee",
+  no_show: "No-show fee",
+};
+
+/** What a fee is called on a receipt, in a download and in the day's takings. */
+export function feeItemName(fee: MemberFeeKind, forName: string): string {
+  return `${MEMBER_FEE_WORDS[fee]} · ${forName}`;
+}
+
 /** How many days after its due date an unpaid bill reads Overdue: the gym's own number. */
 export const BILL_OVERDUE_DAYS_DEFAULT = 0;
 export const BILL_OVERDUE_DAYS_MAX = 60;
@@ -188,6 +204,42 @@ export const memberBillSchema = z
   .strict();
 export type MemberBill = z.infer<typeof memberBillSchema>;
 
+/** Where a fee stands: owed (due or overdue), paid, or waived by staff. A fee taken off by
+ *  itself (the booking was marked came, or the class did not run) is not sent. */
+export const MEMBER_FEE_STATES = ["due", "overdue", "paid", "waived"] as const;
+export type MemberFeeState = (typeof MEMBER_FEE_STATES)[number];
+
+/** One fee of a membership, and what staff can do about it now. */
+export const memberFeeSchema = z
+  .object({
+    id: z.string().uuid(),
+    fee: memberFeeKindSchema,
+    /** The class it was for, as it was named then, and its day. */
+    forName: z.string().min(1),
+    on: daySchema,
+    amountMinor: minorSchema,
+    tax: z
+      .object({ name: z.string(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
+      .strict()
+      .nullable(),
+    dueOn: daySchema,
+    state: z.enum(MEMBER_FEE_STATES),
+    /** Who waived it, on the gym's own day; null where it was not waived. */
+    waived: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable(),
+    payments: z.array(memberPaymentSchema),
+    voidedPayments: z.array(voidedMemberPaymentSchema),
+    can: z
+      .object({
+        pay: z.boolean(),
+        waive: z.boolean(),
+        /** The payment that can be voided: the one that paid it. */
+        voidPaymentId: z.string().uuid().nullable(),
+      })
+      .strict(),
+  })
+  .strict();
+export type MemberFee = z.infer<typeof memberFeeSchema>;
+
 /** A membership's bills and what staff can do about them, for a reader who holds the
  *  `billing.members` tick. `pay` is the one period a payment can be taken for; `undo`
  *  the one payment, or the one older mark with no payment behind it, that can be taken
@@ -216,6 +268,8 @@ export const memberBillingSchema = z
         z.object({ kind: z.literal("mark"), paidPeriods: z.number().int().min(0) }).strict(),
       ])
       .nullable(),
+    /** Its late cancel and no-show fees, newest first (18h-i). */
+    fees: z.array(memberFeeSchema).default([]),
   })
   .strict();
 export type MemberBilling = z.infer<typeof memberBillingSchema>;
@@ -231,6 +285,19 @@ export const recordMemberPaymentRequestSchema = z
   })
   .strict();
 export type RecordMemberPaymentRequest = z.infer<typeof recordMemberPaymentRequestSchema>;
+
+/** A fee is paid all at once: `amountMinor` is what the screen showed, refused where the
+ *  fee is no longer that. */
+export const recordMemberFeePaymentRequestSchema = z
+  .object({
+    requestKey: z.string().uuid(),
+    amountMinor: z.number().int().min(1).max(99_999_999),
+    method: memberPaymentByHandSchema,
+  })
+  .strict();
+export type RecordMemberFeePaymentRequest = z.infer<typeof recordMemberFeePaymentRequestSchema>;
+
+export const waiveMemberFeeRequestSchema = z.object({}).strict();
 
 export const voidMemberPaymentRequestSchema = z.object({ reason: paymentVoidReasonSchema }).strict();
 export type VoidMemberPaymentRequest = z.infer<typeof voidMemberPaymentRequestSchema>;

@@ -159,8 +159,9 @@ export function dayWords(day: string): string {
   return `${String(d)} ${MONTHS[(m ?? 1) - 1] ?? ""} ${String(y)}`;
 }
 
-/** "1 Oct – 31 Oct 2026", the year once where both share it. */
+/** "1 Oct – 31 Oct 2026", the year once where both share it; one day alone, a fee's (18h-i). */
 export function coversWords(from: string, to: string): string {
+  if (from === to) return dayWords(from);
   const a = dayWords(from);
   const b = dayWords(to);
   return from.slice(0, 4) === to.slice(0, 4) ? `${a.slice(0, -5)} – ${b}` : `${a} – ${b}`;

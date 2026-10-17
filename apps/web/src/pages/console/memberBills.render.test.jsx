@@ -661,3 +661,96 @@ describe('the Bills card on Memberships', () => {
     expect(screen.queryByTestId('bill-settings')).toBeNull();
   });
 });
+
+describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
+  const FEE_ID = '55555555-5555-4555-8555-000000000001';
+  const PAY_ID = '66666666-6666-4666-8666-000000000001';
+  const fee = (over = {}) => ({
+    id: FEE_ID,
+    fee: 'late_cancel',
+    forName: 'Spin',
+    on: '2026-10-14',
+    amountMinor: 500,
+    tax: null,
+    dueOn: '2026-10-14',
+    state: 'overdue',
+    waived: null,
+    payments: [],
+    voidedPayments: [],
+    can: { pay: true, waive: true, voidPaymentId: null },
+    ...over,
+  });
+  const withFees = (m, fees) => ({ ...m, billing: { ...m.billing, fees } });
+  const feesIn = async () => within((await rowsSoon())[0]).getByTestId('held-fees');
+
+  it('says what the fee was for and when it was due, and Record payment sends that fee, all of it', async () => {
+    const gold = withFees(held(1, GOLD, '2026-10-04', true), [fee()]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([gold]));
+    render(draw());
+    const box = await feesIn();
+    const item = within(box).getByTestId('held-fee');
+    expect(item.textContent).toContain('Late cancel fee');
+    expect(item.textContent).toContain('£5.00');
+    expect(item.textContent).toContain('Overdue');
+    expect(item.textContent).toContain('Spin, 14 Oct');
+    fireEvent.click(within(item).getByRole('button', { name: 'Record payment · £5.00' }));
+    const form = within(within(item).getByTestId('held-fee-pay'));
+    fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
+    expect(form.getByRole('alert').textContent).toBe('Pick how they paid.');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    fireEvent.change(form.getByLabelText('How they paid'), { target: { value: 'card_at_desk' } });
+    fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
+    await waitFor(() =>
+      expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `fees/${FEE_ID}/payments`, {
+        requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        amountMinor: 500,
+        method: 'card_at_desk',
+      }),
+    );
+    expect(await screen.findByText('£5.00 recorded for the late cancel fee. Its receipt is under the fee.')).toBeTruthy();
+  });
+
+  it('Waive fee asks first, naming whose fee and what for, then sends the waive', async () => {
+    const gold = withFees(held(1, GOLD, '2026-10-04', true), [fee({ fee: 'no_show', state: 'due', dueOn: TODAY })]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([gold]));
+    render(draw());
+    const item = within(await feesIn()).getByTestId('held-fee');
+    expect(item.textContent).toContain('Due today');
+    fireEvent.click(within(item).getByRole('button', { name: 'Waive fee' }));
+    const ask = within(item).getByTestId('held-fee-waive');
+    expect(ask.textContent).toContain("Waive Ada Lovelace's no-show fee of £5.00?");
+    expect(ask.textContent).toContain('Ada Lovelace will owe nothing for it.');
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Waive fee' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `fees/${FEE_ID}/waive`, {}));
+  });
+
+  it('a paid fee shows its payment with its receipt, and Void payment sends why', async () => {
+    const paid = fee({ state: 'paid', payments: [{ id: PAY_ID, amountMinor: 500, method: 'cash', paidOn: '2026-10-15', by: 'Sam Owner', refunds: [], voidedRefunds: [], refundableMinor: 0, receiptNumber: 41 }], can: { pay: false, waive: false, voidPaymentId: PAY_ID } });
+    const gold = withFees(held(1, GOLD, '2026-10-04', true), [paid]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([gold]));
+    render(draw());
+    const item = within(await feesIn()).getByTestId('held-fee');
+    expect(within(item).queryByRole('button', { name: /Record payment/ })).toBeNull();
+    expect(within(item).queryByRole('button', { name: 'Waive fee' })).toBeNull();
+    expect(within(item).getByTestId('held-fee-payment').textContent).toContain('Cash · 15 Oct 2026 · by Sam Owner');
+    fromMenu(item, /^More for the payment/, 'Void payment');
+    const ask = within(item).getByTestId('held-fee-void');
+    fireEvent.change(within(ask).getByRole('combobox'), { target: { value: 'mistake' } });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Void payment' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `fees/${FEE_ID}/payments/${PAY_ID}/void`, { reason: 'mistake' }));
+  });
+
+  it('a waived fee says who waived it and offers nothing to press', async () => {
+    const gold = withFees(held(1, GOLD, '2026-10-04', true), [fee({ state: 'waived', waived: { on: '2026-10-16', by: 'Sam Owner' }, can: { pay: false, waive: false, voidPaymentId: null } })]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw());
+    const item = within(await feesIn()).getByTestId('held-fee');
+    expect(item.textContent).toContain('Waived');
+    expect(item.textContent).toContain('Waived 16 October 2026 by Sam Owner');
+    expect(within(item).queryAllByRole('button')).toEqual([]);
+  });
+});

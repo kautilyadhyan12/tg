@@ -220,6 +220,8 @@ export default function Settings() {
           <BookingSettingsPanel
             key={`bookings-${org.id}`}
             org={org}
+            orgSlug={orgSlug}
+            privileges={privileges}
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.bookingRules)}
           />

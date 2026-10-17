@@ -39,6 +39,8 @@ import {
   type HeldMembershipView,
   type HeldMembershipsResponse,
   type MemberBilling,
+  type MemberFee,
+  type RecordMemberFeePaymentRequest,
   type NoteMemberRefundRequest,
   type RecordMemberPaymentRequest,
   type VoidMemberPaymentRequest,
@@ -54,6 +56,8 @@ import { membershipDiscounts } from "../register/discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
+import * as feesRepo from "./feesRepo.js";
+import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 
 export interface HeldDeps {
   sql: Sql;
@@ -74,6 +78,7 @@ function billingOf(
   payments: readonly PaymentRow[],
   refunds: readonly RefundRow[],
   voided: { payments: readonly VoidedPaymentRow[]; refunds: readonly VoidedRefundRow[] },
+  fees: { fees: readonly FeeRow[]; payments: readonly FeePaymentRow[] },
   ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }> },
 ): MemberBilling {
   const view = heldMembershipView(row.membership, ctx.today);
@@ -144,6 +149,30 @@ function billingOf(
           },
     cancel: cancelBill === undefined ? null : { billId: cancelBill.id },
     undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
+    fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx)),
+  };
+}
+
+/** One fee as a person's page draws it (18h-i): paid all at once or waived while it is owed,
+ *  and its payment voided while it stands. */
+function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: string; overdueAfterDays: number }): MemberFee {
+  const mine = payments.filter((p) => p.billId === f.id);
+  const standing = mine.filter((p) => p.voided === null);
+  const owed = f.status === "open";
+  const paymentOf = (p: FeePaymentRow) => ({ id: p.id, amountMinor: p.amountMinor, method: p.method, paidOn: p.paidOn, by: p.by, receiptNumber: p.receiptNumber });
+  return {
+    id: f.id,
+    fee: f.fee,
+    forName: f.forName,
+    on: f.on,
+    amountMinor: f.amountMinor,
+    tax: f.tax,
+    dueOn: f.dueOn,
+    state: f.waived !== null ? "waived" : owed ? (memberBillState({ status: "open", dueOn: f.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue" ? "overdue" : "due") : "paid",
+    waived: f.waived,
+    payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0 })),
+    voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
+    can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" ? (standing[0]?.id ?? null) : null },
   };
 }
 
@@ -156,12 +185,17 @@ function billingOf(
  *  A past member's memberships are not in use, so their own clock says nothing true of
  *  money: for them a payment is due where a bill of that membership is still open, since
  *  its oldest, and nothing is said otherwise. */
-function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], today: string, past: boolean): HeldMembershipView {
+function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly BillRow[], fees: readonly FeeRow[], today: string, past: boolean): HeldMembershipView {
   const view = heldMembershipView(row.membership, today);
+  // An unpaid fee that has fallen due is a payment due on its membership too, as the
+  // Members list reads it (18h-i).
+  const fee = fees.filter((f) => f.membershipId === row.id && f.status === "open" && f.dueOn <= today).sort((a, b) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0))[0];
   if (past) {
     const left = bills.filter((b) => b.membershipId === row.id && b.status === "open").sort((a, b) => a.periodIndex - b.periodIndex)[0];
-    return { ...view, payment: left === undefined ? null : { state: "due", since: left.dueOn } };
+    const since = left === undefined ? fee?.dueOn : fee === undefined || left.dueOn <= fee.dueOn ? left.dueOn : fee.dueOn;
+    return { ...view, payment: since === undefined ? null : { state: "due", since } };
   }
+  if (fee !== undefined && view.payment?.state !== "due") return { ...view, payment: { state: "due", since: fee.dueOn } };
   if (view.payment === null || view.payment.state !== "due" || view.payment.since === null) return view;
   const owed = bills
     .filter((b) => b.membershipId === row.id && b.status === "open" && b.periodIndex <= row.membership.paidPeriods)
@@ -210,6 +244,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
               payments: list.voidedPayments.filter((p) => p.membershipId === row.id),
               refunds: list.voidedRefunds.filter((r) => r.membershipId === row.id),
             },
+            { fees: list.fees.filter((f) => f.membershipId === row.id), payments: list.feePayments },
             ctx,
           )
         : null,
@@ -232,7 +267,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       discount: row.discount,
       freeDays: freeDays.get(row.id) ?? [],
       tax: row.tax,
-      view: viewOf(row, list.bills, today, list.past),
+      view: viewOf(row, list.bills, list.fees, today, list.past),
     }))
     .sort(
       (a, b) =>
@@ -592,6 +627,69 @@ export async function voidMemberRefund(
 ): Promise<HeldMembershipsResponse> {
   const { today, now } = await requireBilling(deps, userId, gymId);
   throwOnBillFailure(await billsRepo.voidRefund(deps.sql, { gymId, entryId, membershipId, paymentId, refundId, reason: req.reason, today, actorUserId: userId, now }));
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+// ── A late cancel or no-show fee (18h-i): the payments' own tick ──
+
+function throwOnFeeFailure(outcome: feesRepo.FeeWriteOutcome): void {
+  switch (outcome.kind) {
+    case "ok":
+      return;
+    case "entry_not_found":
+      throw notFound();
+    case "fee_not_found":
+      throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
+    case "payment_not_found":
+      throw new OrgsError(404, "member_payment_not_found", "That payment was not found.");
+    case "request_reused":
+      throw new OrgsError(409, "request_reused", "That form was already used. Open it again.");
+    case "fee_changed":
+      throw new OrgsError(409, "member_fee_changed", "This fee has changed since you opened it. Nothing was saved: check it and try again.");
+    default: {
+      const never: never = outcome;
+      throw new Error(`unhandled fee outcome: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+/** Staff record that a fee was paid, all of it. */
+export async function recordMemberFeePayment(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  billId: string,
+  req: RecordMemberFeePaymentRequest,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnFeeFailure(
+    await feesRepo.recordFeePayment(deps.sql, { gymId, entryId, membershipId, billId, requestKey: req.requestKey, amountMinor: req.amountMinor, method: req.method, today, actorUserId: userId, now }),
+  );
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+/** Staff waive an unpaid fee. */
+export async function waiveMemberFee(deps: HeldDeps, userId: string, gymId: string, entryId: string, membershipId: string, billId: string): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnFeeFailure(await feesRepo.waiveFee(deps.sql, { gymId, entryId, membershipId, billId, today, actorUserId: userId, now }));
+  return await readOr404(deps, gymId, entryId, today, true);
+}
+
+/** Staff void the payment of a fee, recorded by mistake: the fee is owed again. */
+export async function voidMemberFeePayment(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  billId: string,
+  paymentId: string,
+  req: VoidMemberPaymentRequest,
+): Promise<HeldMembershipsResponse> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  throwOnFeeFailure(await feesRepo.voidFeePayment(deps.sql, { gymId, entryId, membershipId, billId, paymentId, reason: req.reason, actorUserId: userId, now }));
   return await readOr404(deps, gymId, entryId, today, true);
 }
 

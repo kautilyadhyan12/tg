@@ -257,3 +257,55 @@ describe('Settings → Booking rules', () => {
     expect(screen.queryByLabelText('Days before a class that booking opens')).toBeNull();
   });
 });
+
+describe('Settings → Booking rules: the class fees (18h-i)', () => {
+  const ORG = { id: 'g1', orgType: 'gym' };
+  const START = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
+  const PT = { opensDays: 3, freeCancelMinutes: 1440 };
+  const FEES = { lateCancelMinor: 500, noShowMinor: 0, currency: 'GBP', canChange: true, onBills: true };
+  const open = async (fees) => {
+    api.getBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT, fees } });
+    render(<BookingSettingsPanel org={ORG} readOnly={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Booking rules/ }));
+    await screen.findByLabelText('Days before a class that booking opens');
+  };
+
+  it("shows each fee in the gym’s money, 0 for off, and Save sends them with the rules", async () => {
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT, fees: { ...FEES, noShowMinor: 750 } } });
+    await open(FEES);
+    expect(screen.getByLabelText('Late cancel fee').value).toBe('5.00');
+    expect(screen.getByLabelText('No-show fee').value).toBe('0');
+    expect(screen.getByText(/Members on a class pack never pay it/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('No-show fee'), { target: { value: '7.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, pt: PT, fees: { lateCancelMinor: 500, noShowMinor: 750 } }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(screen.getByLabelText('No-show fee').value).toBe('7.50');
+  });
+
+  it('a fee that is not an amount cannot be saved', async () => {
+    await open(FEES);
+    fireEvent.change(screen.getByLabelText('Late cancel fee'), { target: { value: '5.5.5' } });
+    expect(screen.getByText('Type each fee as an amount, or 0 for no fee.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
+  });
+
+  it('staff who do not record payments read the fees, cannot change them, and their save leaves them be', async () => {
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: { ...START, waitlistMax: 8 }, pt: PT, fees: { ...FEES, canChange: false } } });
+    await open({ ...FEES, canChange: false });
+    expect(screen.getByLabelText('Late cancel fee').disabled).toBe(true);
+    expect(screen.getByLabelText('No-show fee').disabled).toBe(true);
+    expect(screen.getByTestId('fees-who').textContent).toBe("Only staff who record members' payments can change fees. Ask the owner.");
+    fireEvent.change(screen.getByLabelText('How many people a waitlist holds'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, waitlistMax: 8, pt: PT }));
+  });
+
+  it('a gym that sells no memberships here is told a fee needs one, and who can add one', async () => {
+    await open({ ...FEES, onBills: false });
+    expect(screen.getByTestId('fees-need-membership').textContent).toBe(
+      'A fee goes on the bills of the membership a member booked with, so fees start once you sell memberships here.The owner or a manager can add one on Memberships.',
+    );
+  });
+});

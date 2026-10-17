@@ -4,7 +4,7 @@ import { CLASS_LATE_CANCEL_ERROR, MEMBER_CLASSES_WEEKS } from '@app/shared';
 import { classesService } from '../../api/classesApi';
 import { errorCode, errorStatus, errorText } from '../../api/orgsApi';
 import Sheet from './Sheet';
-import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, LINK_READ_AGAIN_MS, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
+import { MORE_CLASSES, actionsOf, byDay, cancelAsk, cancelledText, dayHeading, feesText, LINK_READ_AGAIN_MS, mineText, nextReadAt, onlineText, placesText, weekText, whenText, whyText, zoneNote } from './classesView';
 
 // A GYM'S CLASSES FOR ITS MEMBER (spec Part 3 §13.6; ROADMAP 17d): the coming classes by
 // day, with Book, Join waitlist, Claim place and Cancel. The server decides every one; a
@@ -29,6 +29,7 @@ function ClassRow({ c, busy, said, onTake, onGive }) {
   const mine = mineText(c);
   const places = placesText(c);
   const why = whyText(c);
+  const fees = feesText(c);
   const waiting = c.mine?.status === 'waitlisted';
   const online = onlineText(c);
   return (
@@ -96,6 +97,11 @@ function ClassRow({ c, busy, said, onTake, onGive }) {
             </button>
           )}
         </div>
+      )}
+      {fees !== null && (
+        <p className="text-xs" style={{ color: MUTED }} data-testid="class-fees">
+          {fees}
+        </p>
       )}
     </li>
   );
@@ -197,16 +203,21 @@ export default function Classes({ gym }) {
     setBusyId(c.sessionId);
     say(c.sessionId, null, false);
     try {
-      const now = await classesService.cancel(gym.id, c.sessionId, lateOk);
+      // A late cancel says yes to the fee the box showed, so the server charges no other (18h-i).
+      const now = lateOk ? await classesService.cancel(gym.id, c.sessionId, true, c.fees?.lateCancelMinor ?? 0) : await classesService.cancel(gym.id, c.sessionId, false);
       put(now);
       say(c.sessionId, cancelledText(now), false);
       setAsking(null);
       load();
     } catch (err) {
-      if (errorCode(err) === CLASS_LATE_CANCEL_ERROR && !lateOk) {
-        // The free time ran out while the box was open: ask again, as a late cancel.
-        const packCharged = err.response?.data?.packCharged === true;
-        setAsking({ ...c, can: { ...c.can, cancel: 'late' }, mine: c.mine === null ? null : { ...c.mine, packCharged } });
+      if (errorCode(err) === CLASS_LATE_CANCEL_ERROR) {
+        // The free time ran out while the box was open, or the fee changed: ask again, as a
+        // late cancel, with the fee the server says it costs now.
+        const data = err.response?.data ?? {};
+        const packCharged = data.packCharged === true;
+        const feeMinor = Number.isInteger(data.feeMinor) ? data.feeMinor : 0;
+        const fees = feeMinor > 0 && typeof data.currency === 'string' ? { lateCancelMinor: feeMinor, noShowMinor: c.fees?.noShowMinor ?? 0, currency: data.currency } : null;
+        setAsking({ ...c, can: { ...c.can, cancel: 'late' }, mine: c.mine === null ? null : { ...c.mine, packCharged }, fees });
       } else {
         setAsking(null);
         say(c.sessionId, errorText(err, "That didn't go through. Try again."), true);

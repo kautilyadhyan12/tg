@@ -30,8 +30,12 @@ export const classesService = {
     ),
   /** Cancel a booking, or leave the waitlist. Past the free time the server answers 409
    *  `late_cancel` until `lateOk`. */
-  cancel: (gymId, sessionId, lateOk) =>
-    readThrough(classBookingResponseSchema, 'your booking', authApi.post(`${bookingPath(gymId, sessionId)}/cancel`, { lateOk })).then(
+  cancel: (gymId, sessionId, lateOk, feeMinor) =>
+    readThrough(
+      classBookingResponseSchema,
+      'your booking',
+      authApi.post(`${bookingPath(gymId, sessionId)}/cancel`, feeMinor === undefined ? { lateOk } : { lateOk, feeMinor }),
+    ).then(
       (data) => data.booking,
     ),
 };

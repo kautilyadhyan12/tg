@@ -1,3 +1,4 @@
+import { formatMinor } from '@app/shared';
 import { errorStatus, errorText } from '../../api/orgsApi';
 
 // WHO IS BOOKED ON A CLASS (spec Part 3 §13.6; ROADMAP 17c-iii): the words of the list a
@@ -25,12 +26,24 @@ export function lateHeading(list) {
   return total > shown ? `Cancelled late · ${count(total)} (the first ${count(shown)} are listed)` : `Cancelled late · ${count(total)}`;
 }
 
-/** One person: their name, and what they booked with where the server says. */
-export function bookingRow(booking) {
+const FEE_STATE_WORDS = { owed: 'on their bills', paid: 'paid', waived: 'waived' };
+
+/** A booking's late cancel or no-show fee (18h-i): "No-show fee £8.00 · on their bills";
+ *  null for none. */
+export function feeLine(booking, currency) {
+  const fee = booking?.fee ?? null;
+  if (fee === null || typeof currency !== 'string') return null;
+  const what = booking.status === 'late_cancelled' ? 'Late cancel fee' : 'No-show fee';
+  return `${what} ${formatMinor(fee.amountMinor, currency)} · ${FEE_STATE_WORDS[fee.state] ?? 'on their bills'}`;
+}
+
+/** One person: their name, what they booked with where the server says, and its fee. */
+export function bookingRow(booking, currency = null) {
   const name = typeof booking?.name === 'string' && booking.name !== '' ? booking.name : 'No name';
   const membership = typeof booking?.membership === 'string' ? booking.membership : '';
-  if (membership === '') return { name, detail: '' };
-  return { name, detail: booking.packCharged === true ? `${membership} · 1 class used from this pack` : membership };
+  const held = membership === '' ? '' : booking.packCharged === true ? `${membership} · 1 class used from this pack` : membership;
+  const fee = feeLine(booking, currency);
+  return { name, detail: fee === null ? held : held === '' ? fee : `${held} · ${fee}` };
 }
 
 export const NOBODY_BOOKED = 'Nobody has booked this class yet.';
@@ -59,9 +72,11 @@ export function markRow(booking, list) {
     };
   }
   if (status !== 'booked' || !canMark) return null;
+  // What a No-show costs them, said before it is pressed (18h-i).
+  const fee = Number.isInteger(booking?.noShowFeeMinor) && typeof list?.currency === 'string' ? formatMinor(booking.noShowFeeMinor, list.currency) : null;
   return {
     tag: null,
-    note: 'Not marked yet',
+    note: fee === null ? 'Not marked yet' : `Not marked yet · No-show adds a ${fee} fee`,
     actions: [
       { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
       { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },

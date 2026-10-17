@@ -1,6 +1,6 @@
 // The words of a class's list of people (ROADMAP 17c-iii).
 import { describe, expect, it } from 'vitest';
-import { MARK_HELP, bookedHeading, bookingRow, lateHeading, listRefusal, markRow, waitlistHeading } from './classBookingsListView';
+import { MARK_HELP, bookedHeading, bookingRow, feeLine, lateHeading, listRefusal, markRow, waitlistHeading } from './classBookingsListView';
 
 // (Which names open a person's page is the screen's test: classWeek.render.test.jsx.)
 const people = (n) => Array.from({ length: n }, (_, i) => ({ bookingId: String(i) }));
@@ -84,5 +84,24 @@ describe('came or no-show for one place', () => {
     expect(MARK_HELP).toContain('1 hour before the class');
     expect(MARK_HELP).toContain('15 minutes after it ends');
     expect(MARK_HELP).toContain('You can change any of them here.');
+  });
+});
+
+describe('a late cancel or no-show fee on the list (18h-i)', () => {
+  const started = { canMark: true, currency: 'GBP' };
+  it('says each fee in the gym’s money, owed, paid or waived, after what they booked with', () => {
+    expect(bookingRow({ name: 'Maya Shah', status: 'no_show', membership: 'Gold Monthly', packCharged: false, fee: { amountMinor: 800, state: 'owed' } }, 'GBP').detail).toBe(
+      'Gold Monthly · No-show fee £8.00 · on their bills',
+    );
+    expect(feeLine({ status: 'late_cancelled', fee: { amountMinor: 500, state: 'paid' } }, 'GBP')).toBe('Late cancel fee £5.00 · paid');
+    expect(feeLine({ status: 'no_show', fee: { amountMinor: 800, state: 'waived' } }, 'GBP')).toBe('No-show fee £8.00 · waived');
+    expect(feeLine({ status: 'no_show', fee: null }, 'GBP')).toBeNull();
+    // A coach's own list carries no fee and no money.
+    expect(bookingRow({ name: 'Maya Shah', status: 'no_show', membership: null, packCharged: null, fee: null }, null).detail).toBe('');
+  });
+  it('says what No-show will add before it is pressed, and nothing where it adds nothing', () => {
+    expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: 800 }, started).note).toBe('Not marked yet · No-show adds a £8.00 fee');
+    expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: null }, started).note).toBe('Not marked yet');
+    expect(markRow({ name: 'Maya Shah', status: 'booked', noShowFeeMinor: 800 }, { canMark: true, currency: null }).note).toBe('Not marked yet');
   });
 });

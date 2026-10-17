@@ -11,9 +11,11 @@ import { z } from "zod";
 import {
   CLASS_BOOKING_COUNTED,
   CLASS_BOOKING_HOLDS_PLACE,
+  memberCurrencyForCountry,
   bookingPeriod,
   classBookingStatusSchema,
   type ClassBookingSettings,
+  type ClassFees,
   type PtBookingSettings,
   type ClassBookingStatus,
   type HeldCover,
@@ -122,6 +124,9 @@ const BOOKING = (sql: SqlOrTx) => sql`id, seq, session_id, user_id, status, held
 export interface BookingContext {
   session: BookingSession;
   settings: ClassBookingSettings & { timezone: string };
+  /** The gym's late cancel and no-show fees for classes, and the money its memberships are
+   *  sold in (18h-i); null where it sells none here. */
+  fees: ClassFees & { currency: string | null };
   /** How many hold a place in the class, and how many wait. */
   counts: { booked: number; waitlisted: number };
   /** Whether the gym has any membership type on its price list. */
@@ -154,6 +159,9 @@ const rawContext = z.object({
   handover: z.number().int(),
   waitlist: z.number().int(),
   timezone: z.string(),
+  late_fee: z.number().int(),
+  no_show_fee: z.number().int(),
+  country: z.string().nullable(),
   booked: z.number().int(),
   waitlisted: z.number().int(),
   has_types: z.boolean(),
@@ -169,6 +177,7 @@ async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: Retu
            s.starts_at, s.minutes, s.places, s.status AS session_status, s.coach_user_id, s.online, s.online_link,
            g.booking_opens_days AS opens, g.booking_free_cancel_minutes AS free,
            g.waitlist_handover_minutes AS handover, g.waitlist_max AS waitlist, g.timezone,
+           g.class_late_cancel_fee_minor AS late_fee, g.class_no_show_fee_minor AS no_show_fee, g.country,
            (SELECT count(*)::int FROM gym_class_bookings b
             WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = ANY(${[...CLASS_BOOKING_HOLDS_PLACE]}::text[])) AS booked,
            (SELECT count(*)::int FROM gym_class_bookings b
@@ -208,6 +217,7 @@ async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: Retu
         onlineLink: r.online_link,
       },
       settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
+      fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee, currency: memberCurrencyForCountry(r.country) },
       counts: { booked: r.booked, waitlisted: r.waitlisted },
       gymHasTypes: r.has_types,
       booker: r.member ? { entryId: r.entry_id } : null,
@@ -462,6 +472,9 @@ export interface StaffBookingRow {
   entryId: string | null;
   membership: string | null;
   packCharged: boolean;
+  heldMembershipId: string | null;
+  /** Its late cancel or no-show fee that stands, or one waived (18h-i). */
+  fee: { amountMinor: number; state: "owed" | "paid" | "waived" } | null;
   at: Date;
 }
 
@@ -484,10 +497,15 @@ export async function staffList(
       entry_id: string | null;
       membership: string | null;
       pack_charged: boolean;
+      held_membership_id: string | null;
+      fee_minor: number | null;
+      fee_status: string | null;
+      fee_waived: boolean | null;
       at: Date;
     }[]
   >`
-    SELECT b.id, b.status, b.pack_charged, COALESCE(b.cancelled_at, b.booked_at, b.created_at) AS at, e.id AS entry_id,
+    SELECT b.id, b.status, b.pack_charged, b.held_membership_id, COALESCE(b.cancelled_at, b.booked_at, b.created_at) AS at, e.id AS entry_id,
+           f.amount_minor AS fee_minor, f.status AS fee_status, (f.void_reason = 'waived') AS fee_waived,
            CASE WHEN u.status = 'active' THEN u.display_name END AS display_name,
            CASE WHEN u.status = 'active' THEN u.email::text END AS email,
            nullif(btrim(e.full_name), '') AS record_name,
@@ -497,6 +515,11 @@ export async function staffList(
     LEFT JOIN gym_member_list_entries e ON e.gym_id = b.gym_id AND e.id = b.entry_id
     LEFT JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     LEFT JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    LEFT JOIN LATERAL (
+      SELECT x.amount_minor, x.status, x.void_reason FROM gym_member_bills x
+      WHERE x.gym_id = b.gym_id AND x.class_booking_id = b.id AND (x.status <> 'void' OR x.void_reason = 'waived')
+      ORDER BY x.created_at DESC LIMIT 1
+    ) f ON true
     WHERE b.gym_id = ${gymId} AND b.session_id = ${sessionId} AND b.status = ANY(${[...statuses]}::text[])
     ORDER BY b.seq
     LIMIT ${limit}`;
@@ -509,6 +532,11 @@ export async function staffList(
     entryId: r.entry_id,
     membership: r.membership,
     packCharged: r.pack_charged,
+    heldMembershipId: r.held_membership_id,
+    fee:
+      r.fee_minor === null || r.fee_status === null
+        ? null
+        : { amountMinor: r.fee_minor, state: r.fee_waived === true ? "waived" : r.fee_status === "open" ? "owed" : "paid" },
     at: r.at,
   }));
 }
@@ -525,7 +553,7 @@ export async function countStatus(sql: SqlOrTx, gymId: string, sessionId: string
 /** One class as a hand-over reads it: no one person in it. */
 export type ClassContext = Pick<BookingContext, "session" | "settings" | "counts" | "gymHasTypes">;
 
-const rawClassContext = rawContext.omit({ member: true, entry_id: true, mine_id: true });
+const rawClassContext = rawContext.omit({ member: true, entry_id: true, mine_id: true, late_fee: true, no_show_fee: true, country: true });
 
 /** One class of this gym with its counts, its row held until the transaction ends; null
  *  where the gym has no such class. For a write under the gym's lock. */
@@ -788,31 +816,43 @@ export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhe
 export interface BookingRules {
   settings: ClassBookingSettings;
   pt: PtBookingSettings;
+  /** The class fees (18h-i). */
+  fees: ClassFees;
 }
 
 /** The gym's four booking settings and personal training's two; null where there is no
  *  such gym. */
 export async function readSettings(sql: SqlOrTx, gymId: string): Promise<BookingRules | null> {
-  const rows = await sql<{ opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number }[]>`
+  const rows = await sql<{ opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number; late_fee: number; no_show_fee: number }[]>`
     SELECT booking_opens_days AS opens, booking_free_cancel_minutes AS free,
            waitlist_handover_minutes AS handover, waitlist_max AS waitlist,
-           pt_opens_days AS pt_opens, pt_free_cancel_minutes AS pt_free
+           pt_opens_days AS pt_opens, pt_free_cancel_minutes AS pt_free,
+           class_late_cancel_fee_minor AS late_fee, class_no_show_fee_minor AS no_show_fee
     FROM gyms WHERE id = ${gymId}`;
   const r = rows[0];
   if (r === undefined) return null;
   return {
     settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist },
     pt: { opensDays: r.pt_opens, freeCancelMinutes: r.pt_free },
+    fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee },
   };
 }
 
-export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt }: BookingRules): Promise<void> {
+export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt, fees }: BookingRules): Promise<void> {
   await tx`
     UPDATE gyms
     SET booking_opens_days = ${s.opensDays}, booking_free_cancel_minutes = ${s.freeCancelMinutes},
         waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax},
-        pt_opens_days = ${pt.opensDays}, pt_free_cancel_minutes = ${pt.freeCancelMinutes}
+        pt_opens_days = ${pt.opensDays}, pt_free_cancel_minutes = ${pt.freeCancelMinutes},
+        class_late_cancel_fee_minor = ${fees.lateCancelMinor}, class_no_show_fee_minor = ${fees.noShowMinor}
     WHERE id = ${gymId}`;
+}
+
+/** Whether the gym has a membership type on sale: a fee goes on a membership's bills (18h-i). */
+export async function hasMembershipTypes(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const [row] = await sql<{ any: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM gym_membership_types WHERE gym_id = ${gymId} AND archived_at IS NULL) AS any`;
+  return row?.any ?? false;
 }
 
 // ── CHECK-IN MEETS BOOKINGS (17f) ──

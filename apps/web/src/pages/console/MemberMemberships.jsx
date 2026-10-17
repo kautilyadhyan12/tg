@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, Plus } from 'lucide-react';
-import { memberGiftDaysLine } from '@app/shared';
+import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
@@ -47,6 +47,11 @@ import {
   billsToDraw,
   cancelBillBody,
   cancelBillWords,
+  feePaidWords,
+  feePayBody,
+  feePayDraft,
+  feeRow,
+  feesOwed,
   paidWords,
   payLabel,
   paymentBody,
@@ -60,7 +65,9 @@ import {
   refundedWords,
   undoWords,
   voidBody,
+  voidFeePaymentWords,
   voidRefundWords,
+  waiveFeeWords,
 } from './memberBillsView';
 
 // A PERSON'S MEMBERSHIPS, on their page (spec Part 3 §13.2; ROADMAP 17a-ii): what they
@@ -109,7 +116,7 @@ const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 /** Refusals that mean the page is out of date: it is read again. */
-const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled'];
+const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -162,6 +169,9 @@ export default function MemberMemberships({
   const [voidForm, setVoidForm] = useState(null);
   /** The membership whose bills are all drawn, by its id. */
   const [allBills, setAllBills] = useState(null);
+  /** A fee's own form (18h-i): { what: 'payFee' | 'waiveFee' | 'voidFeePayment', billId,
+   *  requestKey, method, tried }, for the membership in `open`. */
+  const [feeForm, setFeeForm] = useState(null);
   const addedNow = useRef(false);
 
   useEffect(() => {
@@ -233,8 +243,9 @@ export default function MemberMemberships({
   if (types.length === 0 && shown.memberships.length === 0) return null;
 
   const today = shown.today;
-  /** A bill of it can be paid now: one that is over and still owes is not folded away. */
-  const owes = (m) => m.billing !== null && m.billing.pay !== null;
+  /** A bill of it can be paid now, or a fee of it is owed: one that is over and still owes
+   *  is not folded away. */
+  const owes = (m) => m.billing !== null && (m.billing.pay !== null || feesOwed(m).length > 0);
   const live = shown.memberships.filter((m) => isLive(m) || owes(m));
   const over = shown.memberships.filter((m) => !isLive(m) && !owes(m));
   const canAct = !readOnly && !shown.past;
@@ -256,6 +267,7 @@ export default function MemberMemberships({
       setBillForm(null);
       setRefundForm(null);
       setVoidForm(null);
+      setFeeForm(null);
       // What a press says when done may read the server's answer (a void's "owes … again").
       setNotice(typeof said === 'function' ? said(res.data) : (said ?? doneWords(what, m)));
       // The list behind this page says what the person holds (23a-i): it reads again.
@@ -281,6 +293,7 @@ export default function MemberMemberships({
         setBillForm(null);
         setRefundForm(null);
         setVoidForm(null);
+        setFeeForm(null);
         setAttempt((n) => n + 1);
       }
     } finally {
@@ -349,6 +362,199 @@ export default function MemberMemberships({
     setBillForm(null);
     setRefundForm(null);
     setVoidForm(null);
+    setFeeForm(null);
+  };
+
+  /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */
+  const startFee = (m, what, fee) => {
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    setFeeForm({ what, ...feePayDraft(fee, newRequestKey), tried: false });
+    // Void payment asks why in the box every void uses.
+    setVoidForm(what === 'voidFeePayment' ? { reason: '', tried: false } : null);
+    setOpen({ what, id: m.id });
+  };
+
+  /** The box a fee's button opened, drawn inside that fee. */
+  const renderFeeBox = (m, fee) => {
+    const path = `fees/${encodeURIComponent(fee.id)}`;
+    if (feeForm.what === 'payFee') {
+      const { problem, body } = feePayBody(feeForm, fee);
+      return (
+        <form
+          noValidate
+          className="rounded-[14px] p-3 flex flex-col gap-3"
+          style={{ background: 'var(--raise)' }}
+          data-testid="held-fee-pay"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (busy) return;
+            if (body === null) {
+              setFeeForm((f) => ({ ...f, tried: true }));
+              return;
+            }
+            void run('payFee', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/payments`, body), feePaidWords(fee, m.currency));
+          }}
+        >
+          <p className="c-s15 c-w6 c-t1 m-0">{`Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
+          <label className="c-field">
+            <span className="c-label">How they paid</span>
+            <select className="c-sel" value={feeForm.method} onChange={(e) => setFeeForm((f) => ({ ...f, method: e.target.value }))}>
+              <option value="">Choose one</option>
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method.value} value={method.value}>
+                  {method.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {feeForm.tried && problem !== null ? (
+            <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
+              {problem}
+            </span>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className={MAIN} disabled={busy}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              Record payment
+            </button>
+            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      );
+    }
+    if (feeForm.what === 'waiveFee') {
+      const words = waiveFeeWords(fee, m.currency, name);
+      return (
+        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="held-fee-waive">
+          <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+          <p className="c-s14 c-t2 m-0">{words.detail}</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={DANGER}
+              disabled={busy}
+              onClick={() => void run('waiveFee', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/waive`, {}), words.done)}
+            >
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              {words.button}
+            </button>
+            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+              Keep it
+            </button>
+          </div>
+        </div>
+      );
+    }
+    const words = voidFeePaymentWords(fee, m.currency, name);
+    return renderVoid(m, words, PAYMENT_VOID_CHOICES, 'held-fee-void', (body) =>
+      run('voidFeePayment', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/payments/${encodeURIComponent(fee.can.voidPaymentId)}/void`, body), words.done),
+    );
+  };
+
+  /** A membership's late cancel and no-show fees (18h-i), each a box of its own under its
+   *  bills: what it was for, Record payment and Waive fee while it is owed, and its payment
+   *  with its receipt and Void payment. */
+  const renderFees = (m) => {
+    const fees = m.billing?.fees ?? [];
+    if (fees.length === 0) return null;
+    const acts = !readOnly && !(open !== null && open.id === m.id);
+    const here = open !== null && open.id === m.id && feeForm !== null ? feeForm : null;
+    const SPLIT = { borderTop: '1px solid var(--line)' };
+    return (
+      <div className="flex flex-col gap-2 pt-2" data-testid="held-fees">
+        <span className="c-s13 c-w6 c-t2 uppercase" style={{ letterSpacing: '0.04em' }}>
+          Fees
+        </span>
+        <ul className="m-0 p-0 list-none flex flex-col gap-2">
+          {fees.map((fee) => {
+            const row = feeRow(fee, m.currency, today);
+            const notes = [row.about, row.tax, row.when, row.waived].filter((line) => line !== null);
+            return (
+              <li
+                key={row.id}
+                className="flex flex-col rounded-[12px]"
+                style={{ border: '1px solid var(--raise-line)', borderLeft: `3px solid ${TONE_COLOURS[row.tone]}` }}
+                data-testid="held-fee"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+                  <span className="c-s14 c-w6 c-t1 flex-1" style={{ minWidth: 150 }}>
+                    {row.title}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="c-s14 c-w6 c-t1 whitespace-nowrap">{row.amount}</span>
+                    <span className={`c-tag ${TAG_TONES[row.tone]} whitespace-nowrap`}>{row.tag}</span>
+                  </span>
+                </div>
+                <div className="flex flex-col px-3 pb-2.5">
+                  {notes.map((line) => (
+                    <span key={line} className="c-s13 c-t2" style={row.tone === 'red' && line === row.when ? { color: 'var(--bad)' } : undefined}>
+                      {line}
+                    </span>
+                  ))}
+                </div>
+                {row.payments.map((p) => (
+                  <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid={p.voided === null ? 'held-fee-payment' : 'held-fee-voided-payment'}>
+                    <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-x-3">
+                      <span className="c-s14 c-w6 whitespace-nowrap" style={p.voided === null ? { minWidth: 84, color: 'var(--good)' } : { minWidth: 84, ...VOIDED }}>
+                        {p.amount}
+                      </span>
+                      <span className="c-s13 c-t2 md:flex-1 flex flex-col">
+                        <span>{p.detail}</span>
+                        {p.voided === null ? null : <span>{p.voided}</span>}
+                      </span>
+                      <span className="flex items-center gap-2 self-start md:self-auto">
+                        <button
+                          type="button"
+                          className={SMALL}
+                          aria-expanded={receiptFor === p.receiptNumber}
+                          aria-label={receiptButtonLabel(p.receiptNumber, `the payment of ${p.amount}`)}
+                          onClick={() => toggleReceipt(p.receiptNumber)}
+                        >
+                          {RECEIPT_BUTTON}
+                        </button>
+                        {acts && p.voided === null && p.id === row.voidPaymentId ? (
+                          <MoreMenu
+                            label={null}
+                            alignRight
+                            ariaLabel={`More for the payment of ${p.amount}`}
+                            items={[{ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) }]}
+                            disabled={busy}
+                          />
+                        ) : null}
+                      </span>
+                    </div>
+                    {receiptFor === p.receiptNumber ? <ReceiptBox gymId={gymId} gym={gym} number={p.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
+                  </div>
+                ))}
+                {acts && (row.canPay || row.canWaive) ? (
+                  <div className="flex flex-wrap gap-2 px-3 py-2.5" style={SPLIT}>
+                    {row.canPay ? (
+                      <button type="button" className={PAY} disabled={busy} onClick={() => startFee(m, 'payFee', fee)}>
+                        {`Record payment · ${row.amount}`}
+                      </button>
+                    ) : null}
+                    {row.canWaive ? (
+                      <button type="button" className={SMALL} disabled={busy} onClick={() => startFee(m, 'waiveFee', fee)}>
+                        Waive fee
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {here !== null && here.billId === fee.id ? (
+                  <div className="px-3 py-2.5" style={SPLIT}>
+                    {renderFeeBox(m, fee)}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
   };
 
   /** Void payment and Void refund: what is voided, what changes, and why, picked. */
@@ -947,6 +1153,7 @@ export default function MemberMemberships({
           </span>
         ) : null}
         {renderBills(m, payInBill)}
+        {renderFees(m)}
         {inUse && !shown.canBill && can.markPaid !== null ? (
           <p className="c-s13 c-t2 m-0" data-testid="held-no-payments">
             {NO_PAYMENTS_LINE}

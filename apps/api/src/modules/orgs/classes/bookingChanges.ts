@@ -9,6 +9,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import { CLASS_CHECKIN_BEFORE_MINUTES, MEMBERSHIP_BOOKINGS_ENDING_SHOWN, type PtSessionsEnding, bookingTime, handsOverNow, pickCover, type Cover, type HeldCover } from "@app/shared";
 import { chargePack, givePackClassesBack } from "../memberships/heldRepo.js";
+import { removeClassFeesOf } from "../memberships/feesRepo.js";
 import { endLeaversPlaces } from "../events/places.js";
 import { endSessionsOf, sessionsEndingFor } from "../pt/changes.js";
 import * as repo from "./bookingsRepo.js";
@@ -165,6 +166,8 @@ export async function endClassBookings(
 ): Promise<BookingsEnded> {
   const ended = await repo.endBookings(tx, gymId, { classes: sessionIds }, now);
   const packClasses = await giveBack(tx, gymId, ended, now);
+  // Nor a fee for one: an unpaid late cancel or no-show fee comes off (18h-i).
+  await removeClassFeesOf(tx, gymId, sessionIds, now);
   if (opts.remove) await repo.deleteBookingsOf(tx, gymId, sessionIds);
   const waiting = ended.filter((b) => b.was === "waitlisted").length;
   const late = ended.filter((b) => b.was === "late_cancelled").length;

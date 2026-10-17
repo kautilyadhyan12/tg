@@ -216,7 +216,8 @@ describe('a member’s classes', () => {
     answers(svc.cancel, { ...late, mine: mine('late_cancelled', { packCharged: true }), can: can({ book: true }) });
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel booking' }));
     expect(await screen.findByText('Cancelled late.')).toBeTruthy();
-    expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true);
+    // A late cancel sends the fee its box showed: none here.
+    expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true, 0);
 
     // The free time ran out while the box was open: nothing is cancelled until they say yes again.
     svc.cancel.mockRejectedValueOnce(refused(409, 'late_cancel', 'too late', { packCharged: false }));
@@ -227,7 +228,30 @@ describe('a member’s classes', () => {
     expect(rowOf('Yoga').textContent).toContain("You're booked");
     answers(svc.cancel, { ...free, mine: mine('late_cancelled'), can: can({ book: true }) });
     fireEvent.click(within(again).getByRole('button', { name: 'Cancel booking' }));
-    await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's2', true));
+    await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's2', true, 0));
+  });
+
+  it('a class with fees says them under its buttons, the late cancel box names the fee, and the yes sends it', async () => {
+    const fees = { lateCancelMinor: 500, noShowMinor: 800, currency: 'GBP' };
+    const late = klass('s1', 'Spin', { mine: mine('booked'), can: can({ cancel: 'late' }), fees });
+    const open = klass('s2', 'Yoga', { can: can({ book: true }), fees });
+    serve([late, open]);
+    render(<Classes gym={GYM} />);
+    await screen.findByRole('button', { name: /^Book: Yoga/ });
+    expect(within(rowOf('Yoga')).getByTestId('class-fees').textContent).toBe('Late cancel fee £5.00 · No-show fee £8.00');
+    expect(within(rowOf('Spin')).getByTestId('class-fees').textContent).toBe('Late cancel fee £5.00 · No-show fee £8.00');
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel booking: Spin/ }));
+    const box = screen.getByRole('dialog', { name: 'Cancel late?' });
+    expect(box.textContent).toContain('a late cancel fee of £5.00 will be added to your bill');
+    // The gym changed its fee while the box was open: asked again, with the new fee.
+    svc.cancel.mockRejectedValueOnce(refused(409, 'late_cancel', 'too late', { packCharged: false, feeMinor: 700, currency: 'GBP' }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Cancel booking' }));
+    expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true, 500);
+    const again = await screen.findByRole('dialog', { name: 'Cancel late?' });
+    await waitFor(() => expect(again.textContent).toContain('a late cancel fee of £7.00 will be added to your bill'));
+    answers(svc.cancel, { ...late, mine: mine('late_cancelled'), can: can({ book: false }) });
+    fireEvent.click(within(again).getByRole('button', { name: 'Cancel booking' }));
+    await waitFor(() => expect(svc.cancel).toHaveBeenLastCalledWith('g1', 's1', true, 700));
   });
 
   it('Claim place is offered to somebody waiting when a place is free', async () => {

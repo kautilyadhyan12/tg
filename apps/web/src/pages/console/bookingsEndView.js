@@ -1,7 +1,12 @@
 import {
   CLASS_BOOKING_LIMITS,
   CLASS_HAS_BOOKINGS_ERROR,
+  MEMBERSHIP_PRICE_MINOR_MAX,
+  classFeesLine,
+  formatMinor,
+  minorToPriceText,
   orgWords,
+  priceToMinor,
   classBookingsEndingSchema,
 } from '@app/shared';
 import { dayHeading } from './classesView';
@@ -221,6 +226,32 @@ const opensAndFree = (rules) => {
   return `${opens} · ${free}`;
 };
 
+// ── A late cancel and a no-show fee for classes (18h-i) ──
+
+/** The two fee boxes as they start: the gym's amounts, "0" for off. */
+export function classFeesDraft(fees) {
+  const text = (minor) => (!Number.isInteger(minor) || minor === 0 ? '0' : minorToPriceText(minor, fees.currency));
+  return { lateText: text(fees?.lateCancelMinor), noShowText: text(fees?.noShowMinor) };
+}
+
+/** The two fees as typed, in minor units; null where either box is not an amount. */
+export function classFeesFromDraft(draft, currency) {
+  const minor = (text) => {
+    const trimmed = String(text ?? '').trim();
+    if (trimmed === '' || /^0+([.,]0*)?$/.test(trimmed)) return 0;
+    const value = priceToMinor(trimmed, currency);
+    return value === null || value < 0 || value > MEMBERSHIP_PRICE_MINOR_MAX ? null : value;
+  };
+  const lateCancelMinor = minor(draft?.lateText);
+  const noShowMinor = minor(draft?.noShowText);
+  return lateCancelMinor === null || noShowMinor === null ? null : { lateCancelMinor, noShowMinor };
+}
+
+/** The money sign a fee box sits behind: "£", "₹". */
+export function currencySign(currency) {
+  return formatMinor(0, currency).replace(/[\d.,\s]/g, '') || currency;
+}
+
 /** The closed section's one line: the settings as they stand, classes then personal training. */
 export function bookingSettingsSummary(settings, pt) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
@@ -232,10 +263,12 @@ export function bookingSettingsSummary(settings, pt) {
 const freeUntil = (minutes) => (minutes === 0 ? 'until it starts' : `until ${span(minutes)} before it starts`);
 
 /** The rules in one sentence, on the page they apply to: the classes' on Classes, personal
- *  training's own two on Personal training. */
-export function bookingRulesLine(settings, orgType) {
+ *  training's own two on Personal training. `fees`: the class fees, said after (18h-i). */
+export function bookingRulesLine(settings, orgType, fees = null) {
   const ahead = `${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} ahead`;
-  return `${orgWords(orgType).peopleCap} can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;
+  const line = `${orgWords(orgType).peopleCap} can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;
+  const charged = fees === null || fees === undefined || fees.onBills === false ? null : classFeesLine(fees);
+  return charged === null ? line : `${line} ${charged}.`;
 }
 
 /** The same for staff who may not change the rules, from the one they are sent; null

@@ -18,6 +18,7 @@ import {
   decideClassSweep,
 } from "@app/shared";
 import { lockOrgRow } from "../repo.js";
+import { openClassFees } from "../memberships/feesRepo.js";
 import * as repo from "./bookingsRepo.js";
 
 const marksNow = (now: Date) => (b: repo.MarkableBooking) =>
@@ -103,11 +104,11 @@ export async function markEndedClasses(
               await lockOrgRow(tx, gymId);
               // Decided again on what is read under the lock: a place cancelled or marked since is not written.
               const { came, missed, left } = await decide(tx, gymId, true);
-              return {
-                attended: await repo.markAs(tx, gymId, came, "attended", ["booked"]),
-                noShows: await repo.markAs(tx, gymId, missed, "no_show", ["booked"]),
-                left,
-              };
+              const attended = await repo.markAs(tx, gymId, came, "attended", ["booked"]);
+              const noShows = await repo.markAs(tx, gymId, missed, "no_show", ["booked"]);
+              // Each no-show opens its fee where the gym charges one (18h-i).
+              await openClassFees(tx, gymId, missed, "no_show", now);
+              return { attended, noShows, left };
             });
       run.gyms += 1;
       run.attended += done.attended;
