@@ -26,6 +26,11 @@ const count = (s: Said, key: string): number | null => {
   const n = typeof v === "number" ? v : typeof v === "string" && /^-?\d{1,15}$/.test(v) ? Number(v) : NaN;
   return Number.isSafeInteger(n) ? n : null;
 };
+/** " and 2 more products", for a sale of several (18q); nothing for a sale of one. */
+const others = (s: Said): string => {
+  const n = count(s, "others");
+  return n === null || n < 1 ? "" : ` and ${String(n)} more ${n === 1 ? "product" : "products"}`;
+};
 const money = (s: Said, key: string): string | null => {
   const minor = count(s, key);
   return minor === null ? null : formatMinor(minor, text(s, "currency") ?? s.currency);
@@ -215,10 +220,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.product_restored": (s) => `Put the product${quoted(text(s, "name"))} back on sale`,
   "org.sale_recorded": (s) => {
     const total = money(s, "totalMinor");
-    const what = `${String(count(s, "quantity") ?? 1)} × ${text(s, "product") ?? "a product"}`;
+    const what = `${String(count(s, "quantity") ?? 1)} × ${text(s, "product") ?? "a product"}${others(s)}`;
     return `Sold ${what}${total === null ? "" : ` for ${total}`}${s.about === null ? "" : ` to ${s.about}`}${methodWords(s)}`;
   },
-  "org.sale_undone": (s) => `Undid the sale of ${String(count(s, "quantity") ?? 1)} × ${text(s, "product") ?? "a product"}`,
+  "org.sale_undone": (s) => `Undid the sale of ${String(count(s, "quantity") ?? 1)} × ${text(s, "product") ?? "a product"}${others(s)}`,
   "org.sale_refund_noted": (s) => {
     const amount = money(s, "amountMinor");
     return `Recorded a refund${amount === null ? "" : ` of ${amount}`} for ${text(s, "product") ?? "a product"}${methodWords(s)}`;

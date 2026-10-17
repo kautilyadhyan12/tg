@@ -1,5 +1,5 @@
 // THE REGISTER (Part 3 §14.3; ROADMAP Stage 2 items 18b-i, 18b-ii-a and 18b-ii-b). Mirrors
-// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` 1:1; the migrations carry the reasoning.
+// `0102_register.sql`, `0104_discounts.sql`, `0107_membership_discounts.sql` and `0112_tax_rates.sql` and `0128_sale_refunds.sql` and `0135_sale_baskets.sql` 1:1; the migrations carry the reasoning.
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -11,6 +11,7 @@ import {
   integer,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -175,8 +176,9 @@ export const gymDiscountMembershipTypes = pgTable(
   ],
 );
 
-/** One sale of a product: what staff say they were handed. The name, price and tax are the
- *  sale's own, as they were when it was sold. One taken back keeps its row, with
+/** One product of a sale: what staff say they were handed. The name, price and tax are the
+ *  line's own, as they were when it was sold. The lines of one sale (18q) share its receipt
+ *  number, request key, buyer, payment and day. One taken back keeps its row, with
  *  `undone_at`. */
 export const gymSales = pgTable(
   "gym_sales",
@@ -217,17 +219,21 @@ export const gymSales = pgTable(
     forMember: boolean("for_member").notNull().default(false),
     /** Its discount line is a member's Refer a friend gift (0121), not one of the gym's discounts. */
     memberGift: boolean("member_gift").notNull().default(false),
+    /** Its place in its sale, from 1 (0135; 18q). */
+    lineNo: smallint("line_no").notNull().default(1),
     createdAt: createdAt(),
   },
   (t) => [
+    check("gym_sales_line_no_check", sql`${t.lineNo} BETWEEN 1 AND 20`),
+    unique("gym_sales_basket_product_uq").on(t.gymId, t.receiptNumber, t.productId),
     check(
       "gym_sales_void_reason_check",
       sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_item','returned','other'))`,
     ),
-    unique("gym_sales_receipt_uq").on(t.gymId, t.receiptNumber),
+    unique("gym_sales_receipt_uq").on(t.gymId, t.receiptNumber, t.lineNo),
     check("gym_sales_receipt_check", sql`${t.receiptNumber} >= 1`),
     check("gym_sales_for_member_check", sql`${t.entryId} IS NULL OR ${t.forMember}`),
-    unique("gym_sales_request_uq").on(t.gymId, t.requestKey),
+    unique("gym_sales_request_uq").on(t.gymId, t.requestKey, t.lineNo),
     unique("gym_sales_gym_id_uq").on(t.gymId, t.id),
     check("gym_sales_name_check", sql`char_length(${t.itemName}) BETWEEN 1 AND 80`),
     check("gym_sales_quantity_check", sql`${t.quantity} BETWEEN 1 AND 99`),

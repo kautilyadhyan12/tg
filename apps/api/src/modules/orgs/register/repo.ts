@@ -31,7 +31,7 @@ import {
 } from "@app/shared";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { nextReceipt } from "../receipts/repo.js";
-import { lockedDiscount, returnUse, takeUse } from "./discountsRepo.js";
+import { lockedDiscount, returnUse, takeUse, type DiscountRow } from "./discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { friendPaymentGone, giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { rateOf, readRates, taxIncludedOf } from "./taxRepo.js";
@@ -101,6 +101,8 @@ export interface SaleRow {
   /** What the refunds that stand gave back. */
   refundedMinor: number;
   stockCounted: boolean;
+  /** Its place in its sale, from 1 (18q). */
+  lineNo: number;
 }
 
 export interface SaleRefundRow {
@@ -144,6 +146,7 @@ interface RawSale {
   receipt_number: number;
   refunded_minor: number;
   stock_counted: boolean;
+  line_no: number;
 }
 
 /** A record with no name typed is still somebody: the row says so. */
@@ -180,6 +183,7 @@ const sale = (r: RawSale): SaleRow => ({
   refunds: [],
   refundedMinor: r.refunded_minor,
   stockCounted: r.stock_counted,
+  lineNo: r.line_no,
 });
 
 interface RawSaleRefund {
@@ -245,7 +249,7 @@ const saleColumns = (sql: Sql | TransactionSql) => sql`
   e.full_name AS person_name, s.for_member, s.undone_at IS NOT NULL AS undone, s.void_reason,
   CASE WHEN s.undone_at IS NOT NULL THEN (s.undone_at AT TIME ZONE (SELECT g.timezone FROM gyms g WHERE g.id = s.gym_id))::date::text END AS voided_on,
   CASE WHEN s.undone_by IS NOT NULL THEN (SELECT v.display_name FROM users v WHERE v.id = s.undone_by) END AS voided_by,
-  s.receipt_number, s.stock_counted,
+  s.receipt_number, s.stock_counted, s.line_no,
   COALESCE((SELECT sum(f.amount_minor) FROM gym_sale_refunds f
             WHERE f.gym_id = s.gym_id AND f.sale_id = s.id AND f.undone_at IS NULL), 0)::int AS refunded_minor`;
 
@@ -255,9 +259,11 @@ export interface RegisterRow {
   products: ProductRow[];
   archived: ProductRow[];
   archivedTotal: number;
+  /** Every line of the newest sales of the day. */
   sales: SaleRow[];
+  /** The day's sales, each counted once however many lines it has (18q). */
   salesTotal: number;
-  /** The day's sales that stand, added up in each money they were taken in. */
+  /** The day's sales that stand, added up in each money they were taken in; `count` counts sales. */
   totals: { currency: string; count: number; totalMinor: number; taxMinor: number; discountMinor: number; cash: number; card_at_desk: number; bank_transfer: number }[];
   /** Refunds of sales noted on the day that stand, in each money (18p). */
   refunds: { currency: string; totalMinor: number }[];
@@ -296,13 +302,15 @@ export async function readRegister(
       LEFT JOIN users u ON u.id = s.recorded_by
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
       WHERE s.gym_id = ${gymId} AND s.sold_on = ${day}::date
-      ORDER BY s.seq DESC
-      LIMIT ${salesShown}`,
+        AND s.receipt_number IN (SELECT f.receipt_number FROM gym_sales f
+                                 WHERE f.gym_id = ${gymId} AND f.sold_on = ${day}::date AND f.line_no = 1
+                                 ORDER BY f.seq DESC LIMIT ${salesShown})
+      ORDER BY s.receipt_number DESC, s.line_no`,
     !withSales
       ? []
       : sql<{ currency: string; n: number; standing: number; total: string; tax: string; discount: string; cash: string; card: string; bank: string }[]>`
-      SELECT currency, count(*)::int AS n,
-             (count(*) FILTER (WHERE undone_at IS NULL))::int AS standing,
+      SELECT currency, (count(*) FILTER (WHERE line_no = 1))::int AS n,
+             (count(*) FILTER (WHERE line_no = 1 AND undone_at IS NULL))::int AS standing,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS total,
              COALESCE(sum(tax_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS tax,
              COALESCE(sum(discount_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS discount,
@@ -500,7 +508,7 @@ export async function restoreProduct(sql: Sql, input: { gymId: string; productId
 // ── A sale ──────────────────────────────────────────────────────────────────
 
 export type SellOutcome =
-  | { kind: "ok"; saleId: string }
+  | { kind: "ok"; saleId: string; receiptNumber: number }
   | { kind: "product_not_found" }
   | { kind: "person_not_found" }
   /** The key was already used for a different sale. */
@@ -524,59 +532,90 @@ export type SellOutcome =
   | { kind: "member_gift_not_theirs" }
   /** What it takes off is no longer what the screen showed, or it no longer fits. */
   | { kind: "member_gift_changed" }
-  /** The gift and a discount on one sale. */
-  | { kind: "member_gift_with_discount" };
+  /** The gift and a discount on one line. */
+  | { kind: "member_gift_with_discount" }
+  /** A set amount off, or Refer a friend's gift, on more than one line of a sale (18q). */
+  | { kind: "one_line_only"; name: string };
 
-export interface SellInput {
-  gymId: string;
-  requestKey: string;
+export interface SellLineInput {
   productId: string;
   quantity: number;
-  entryId: string | null;
-  method: MemberPaymentByHand;
-  /** The total the screen showed. */
-  totalMinor: number;
-  /** The gym's discount the sale is made with; null for none. */
+  /** The gym's discount on this line; null for none. */
   discountId: string | null;
   /** The buyer's own Refer a friend gift in place of a discount, and what the screen showed it
    *  takes off; null for none. */
   memberGift: { id: string; offMinor: number } | null;
+  /** What the screen showed the line comes to. */
+  totalMinor: number;
+}
+
+export interface SellInput {
+  gymId: string;
+  requestKey: string;
+  entryId: string | null;
+  method: MemberPaymentByHand;
+  /** The total the screen showed. */
+  totalMinor: number;
+  /** Each product, in the order it was rung up (18q). */
+  lines: readonly SellLineInput[];
   /** The gym's own day. */
   today: string;
   actorUserId: string;
   now: Date;
 }
 
-/** ONE SALE: one row, the stock count down by what was sold, one use of its discount
- *  counted, and its note in the gym's record, together or not at all. Under the gym's lock, so the same request arriving
- *  twice at one instant is one sale and the last one in stock is sold once. */
+interface PricedLine {
+  item: RawProduct;
+  quantity: number;
+  used: { id: string; name: string; offMinor: number } | null;
+  gift: { id: string; offMinor: number } | null;
+  rate: { name: string; bp: number } | null;
+  netMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+}
+
+/** ONE SALE (18q): a row for each of its products under one receipt number, each stock count
+ *  down by what was sold, one use of each discount on it counted, and its note in the gym's
+ *  record, together or not at all. Every line is priced again here; one line refused refuses
+ *  the sale. Under the gym's lock, so the same request arriving twice at one instant is one
+ *  sale and the last one in stock is sold once. */
 export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
   return await sql.begin(async (tx): Promise<SellOutcome> => {
     await lockOrgRow(tx, input.gymId);
 
     // The same request again: the sale it made stands, and nothing is added.
-    const [again] = await tx<{ id: string; product_id: string; quantity: number; method: string; total_minor: number; discount_id: string | null }[]>`
-      SELECT id, product_id, quantity, method, total_minor, discount_id FROM gym_sales
-      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
-    if (again !== undefined) {
+    const again = await tx<{ id: string; product_id: string; quantity: number; method: string; total_minor: number; discount_id: string | null; receipt_number: number }[]>`
+      SELECT id, product_id, quantity, method, total_minor, discount_id, receipt_number FROM gym_sales
+      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}
+      ORDER BY line_no`;
+    const made = again[0];
+    if (made !== undefined) {
       // Not who bought it: their record may have been joined to another or deleted since,
       // and the press is still the same press.
       const same =
-        again.product_id === input.productId &&
-        again.quantity === input.quantity &&
-        again.method === input.method &&
-        again.total_minor === input.totalMinor &&
-        again.discount_id === input.discountId;
-      return same ? { kind: "ok", saleId: again.id } : { kind: "request_reused" };
+        again.length === input.lines.length &&
+        again.every((row, i) => {
+          const line = input.lines[i];
+          return (
+            line !== undefined &&
+            row.product_id === line.productId &&
+            row.quantity === line.quantity &&
+            row.method === input.method &&
+            row.total_minor === line.totalMinor &&
+            row.discount_id === line.discountId
+          );
+        });
+      return same ? { kind: "ok", saleId: made.id, receiptNumber: made.receipt_number } : { kind: "request_reused" };
     }
 
     const [gym] = await tx<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${input.gymId}`;
     const included = await taxIncludedOf(tx, input.gymId);
     if (gym === undefined || included === null) return { kind: "product_not_found" };
-    const [item] = await tx<RawProduct[]>`
+    const items = await tx<RawProduct[]>`
       SELECT id, name, price_minor, currency, tax_rate_id, stock, archived_at, updated_at FROM gym_products
-      WHERE gym_id = ${input.gymId} AND id = ${input.productId} AND archived_at IS NULL`;
-    if (item === undefined) return { kind: "product_not_found" };
+      WHERE gym_id = ${input.gymId} AND id = ANY(${input.lines.map((l) => l.productId)}::uuid[]) AND archived_at IS NULL`;
+    const itemOf = new Map(items.map((i) => [i.id, i]));
 
     // A past member can buy a bottle of water: any record of this gym's, and no other's.
     if (input.entryId !== null) {
@@ -587,141 +626,192 @@ export async function sell(sql: Sql, input: SellInput): Promise<SellOutcome> {
 
     // One day's total is one money: a product still priced in the gym's old one is not sold.
     const selling = memberCurrencyForCountry(gym.country);
-    if (item.currency !== selling) return { kind: "currency_changed", name: item.name, was: item.currency, now: selling };
+    // Each discount is this gym's own, read once under its lock, and judged on the gym's own day.
+    const discountOf = new Map<string, DiscountRow | null>();
+    const priced: PricedLine[] = [];
+    for (const line of input.lines) {
+      const item = itemOf.get(line.productId);
+      if (item === undefined) return { kind: "product_not_found" };
+      if (item.currency !== selling) return { kind: "currency_changed", name: item.name, was: item.currency, now: selling };
 
-    // The discount is this gym's own, read under its lock, and judged on the gym's own day.
-    let used: { id: string; name: string; offMinor: number } | null = null;
-    if (input.discountId !== null) {
-      const found = await lockedDiscount(tx, input.gymId, input.discountId);
-      if (found === null) return { kind: "discount_not_found" };
-      const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, productId: item.id, currency: item.currency });
-      if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
-      // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i): never to a
-      // walk-in.
-      if (found.referralGift && (input.entryId === null || !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today)))) {
-        return { kind: "friend_gift_not_theirs" };
+      let used: PricedLine["used"] = null;
+      if (line.discountId !== null) {
+        if (!discountOf.has(line.discountId)) discountOf.set(line.discountId, await lockedDiscount(tx, input.gymId, line.discountId));
+        const found = discountOf.get(line.discountId) ?? null;
+        if (found === null) return { kind: "discount_not_found" };
+        const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, productId: item.id, currency: item.currency });
+        if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
+        // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i): never to a
+        // walk-in.
+        if (found.referralGift && (input.entryId === null || !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today)))) {
+          return { kind: "friend_gift_not_theirs" };
+        }
+        used = { id: found.id, name: found.name, offMinor: discountOff(found, item.price_minor * line.quantity) };
+        // No use is spent on a discount that takes nothing off.
+        if (used.offMinor === 0) return { kind: "discount_nothing_off", name: found.name };
       }
-      used = { id: found.id, name: found.name, offMinor: discountOff(found, item.price_minor * input.quantity) };
-      // No use is spent on a discount that takes nothing off.
-      if (used.offMinor === 0) return { kind: "discount_nothing_off", name: found.name };
-    }
-    // The buyer's own Refer a friend gift (20e-ii-b-ii-a), in a discount's place: theirs, still
-    // waiting, read under its lock, and taking off what the screen showed.
-    let gift: { id: string; offMinor: number } | null = null;
-    if (input.memberGift !== null) {
-      if (input.discountId !== null) return { kind: "member_gift_with_discount" };
-      if (input.entryId === null) return { kind: "member_gift_not_theirs" };
-      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "products");
-      if (found === null) return { kind: "member_gift_not_theirs" };
-      const off = memberGiftOff(found, item.price_minor * input.quantity, item.currency);
-      if (off === 0 || off !== input.memberGift.offMinor) return { kind: "member_gift_changed" };
-      gift = { id: found.id, offMinor: off };
-    }
-    const offName = used?.name ?? (gift === null ? null : MEMBER_GIFT_SALE_NAME);
-    const offMinor = used?.offMinor ?? gift?.offMinor ?? 0;
+      // The buyer's own Refer a friend gift (20e-ii-b-ii-a), in a discount's place: theirs, still
+      // waiting, read under its lock, and taking off what the screen showed.
+      let gift: PricedLine["gift"] = null;
+      if (line.memberGift !== null) {
+        if (line.discountId !== null) return { kind: "member_gift_with_discount" };
+        if (input.entryId === null) return { kind: "member_gift_not_theirs" };
+        const found = await lockedWaitingGift(tx, input.gymId, input.entryId, line.memberGift.id, "products");
+        if (found === null) return { kind: "member_gift_not_theirs" };
+        const off = memberGiftOff(found, item.price_minor * line.quantity, item.currency);
+        if (off === 0 || off !== line.memberGift.offMinor) return { kind: "member_gift_changed" };
+        gift = { id: found.id, offMinor: off };
+      }
 
-    // The product's rate as it is now, read under the gym's lock that its changes take.
-    const rate = item.tax_rate_id === null ? null : await rateOf(tx, input.gymId, item.tax_rate_id);
-    const amounts = saleAmounts({
-      unitPriceMinor: item.price_minor,
-      quantity: input.quantity,
-      taxed: rate !== null,
-      taxBp: rate?.bp ?? 0,
-      taxIncluded: included,
-      discountMinor: offMinor,
-    });
-    if (!amounts.ok && amounts.reason === "nothing_to_pay") return { kind: "nothing_to_pay" };
-    if (!amounts.ok || amounts.totalMinor !== input.totalMinor) return { kind: "price_changed" };
-    if (item.stock !== null && item.stock < input.quantity) return { kind: "out_of_stock", name: item.name, left: item.stock };
-    // The last check before anything is written: the count moves only if the limit allows.
-    if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
-
-    // The sale takes the gym's next receipt number in the statement that writes it (18g-i).
-    const [created] = await tx<{ id: string }[]>`
-      WITH n AS (${nextReceipt(tx, input.gymId)})
-      INSERT INTO gym_sales
-        (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
-         tax_bp, tax_name, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
-         discount_id, discount_name, discount_minor, receipt_number, for_member, member_gift)
-      SELECT ${input.gymId}, ${input.requestKey}, ${item.id}, ${input.entryId}, ${item.name}, ${input.quantity}, ${item.price_minor},
-             ${amounts.netMinor}, ${amounts.taxMinor}, ${amounts.totalMinor}, ${rate?.bp ?? 0}, ${rate?.name ?? null}, ${included}, ${item.currency},
-             ${input.method}, ${input.today}::date, ${input.actorUserId}, ${item.stock !== null}, ${input.now},
-             ${used?.id ?? null}, ${offName}, ${offMinor}, n.number, ${input.entryId !== null}, ${gift !== null}
-      FROM n
-      RETURNING id`;
-    if (created === undefined) throw new Error("sale insert returned no row");
-    if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: null, saleId: created.id, offMinor: gift.offMinor, currency: item.currency, now: input.now });
-    // A friend a member invited has paid at the desk: the member's Refer a friend gift.
-    if (input.entryId !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { saleId: created.id }, today: input.today, now: input.now });
-    if (item.stock !== null) {
-      await tx`
-        UPDATE gym_products SET stock = stock - ${input.quantity}, updated_at = ${input.now}
-        WHERE gym_id = ${input.gymId} AND id = ${item.id}`;
+      // The product's rate as it is now, read under the gym's lock that its changes take.
+      const rate = item.tax_rate_id === null ? null : await rateOf(tx, input.gymId, item.tax_rate_id);
+      const amounts = saleAmounts({
+        unitPriceMinor: item.price_minor,
+        quantity: line.quantity,
+        taxed: rate !== null,
+        taxBp: rate?.bp ?? 0,
+        taxIncluded: included,
+        discountMinor: used?.offMinor ?? gift?.offMinor ?? 0,
+      });
+      if (!amounts.ok && amounts.reason === "nothing_to_pay") return { kind: "nothing_to_pay" };
+      if (!amounts.ok || amounts.totalMinor !== line.totalMinor) return { kind: "price_changed" };
+      if (item.stock !== null && item.stock < line.quantity) return { kind: "out_of_stock", name: item.name, left: item.stock };
+      priced.push({ item, quantity: line.quantity, used, gift, rate, netMinor: amounts.netMinor, taxMinor: amounts.taxMinor, totalMinor: amounts.totalMinor });
     }
+    if (priced.reduce((n, p) => n + p.totalMinor, 0) !== input.totalMinor) return { kind: "price_changed" };
+
+    // A set amount off, and Refer a friend's gift, are taken off once a sale: on one line.
+    for (const found of discountOf.values()) {
+      if (found === null || (found.kind !== "amount" && !found.referralGift)) continue;
+      if (priced.filter((p) => p.used?.id === found.id).length > 1) return { kind: "one_line_only", name: found.name };
+    }
+    // The last check before anything is written: each count moves only if its limit allows,
+    // once a sale however many of its lines the discount is on.
+    for (const found of discountOf.values()) {
+      if (found !== null && !(await takeUse(tx, input.gymId, found.id))) return { kind: "discount_refused", name: found.name, reason: "used_up" };
+    }
+
+    // The sale takes the gym's next receipt number, and every line of it carries that number (18g-i).
+    const [numbered] = await nextReceipt(tx, input.gymId);
+    if (numbered === undefined) throw new Error("receipt number returned no row");
+    const receiptNumber = Number(numbered.number);
+    const ids: string[] = [];
+    for (const [i, p] of priced.entries()) {
+      const [created] = await tx<{ id: string }[]>`
+        INSERT INTO gym_sales
+          (gym_id, request_key, product_id, entry_id, item_name, quantity, unit_price_minor, net_minor, tax_minor, total_minor,
+           tax_bp, tax_name, tax_included, currency, method, sold_on, recorded_by, stock_counted, created_at,
+           discount_id, discount_name, discount_minor, receipt_number, for_member, member_gift, line_no)
+        VALUES (${input.gymId}, ${input.requestKey}, ${p.item.id}, ${input.entryId}, ${p.item.name}, ${p.quantity}, ${p.item.price_minor},
+                ${p.netMinor}, ${p.taxMinor}, ${p.totalMinor}, ${p.rate?.bp ?? 0}, ${p.rate?.name ?? null}, ${included}, ${p.item.currency},
+                ${input.method}, ${input.today}::date, ${input.actorUserId}, ${p.item.stock !== null}, ${input.now},
+                ${p.used?.id ?? null}, ${p.used?.name ?? (p.gift === null ? null : MEMBER_GIFT_SALE_NAME)}, ${p.used?.offMinor ?? p.gift?.offMinor ?? 0},
+                ${receiptNumber}, ${input.entryId !== null}, ${p.gift !== null}, ${i + 1})
+        RETURNING id`;
+      if (created === undefined) throw new Error("sale insert returned no row");
+      ids.push(created.id);
+      if (p.gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: p.gift.id, billId: null, saleId: created.id, offMinor: p.gift.offMinor, currency: p.item.currency, now: input.now });
+      if (p.item.stock !== null) {
+        await tx`
+          UPDATE gym_products SET stock = stock - ${p.quantity}, updated_at = ${input.now}
+          WHERE gym_id = ${input.gymId} AND id = ${p.item.id}`;
+      }
+    }
+    const firstId = ids[0];
+    const first = priced[0];
+    if (firstId === undefined || first === undefined) throw new Error("a sale with no line");
+    // A friend a member invited has paid at the desk: the member's Refer a friend gift, once a sale.
+    if (input.entryId !== null) await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { saleId: firstId }, today: input.today, now: input.now });
+    const offMinor = priced.reduce((n, p) => n + (p.used?.offMinor ?? p.gift?.offMinor ?? 0), 0);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
       action: "org.sale_recorded",
       targetType: "gym_sale",
-      targetId: created.id,
+      targetId: firstId,
       meta: {
-        productId: item.id,
-        product: item.name,
-        quantity: String(input.quantity),
-        totalMinor: String(amounts.totalMinor),
-        taxMinor: String(amounts.taxMinor),
-        currency: item.currency,
+        productId: first.item.id,
+        product: first.item.name,
+        quantity: String(first.quantity),
+        ...(priced.length > 1 ? { others: String(priced.length - 1) } : {}),
+        totalMinor: String(input.totalMinor),
+        taxMinor: String(priced.reduce((n, p) => n + p.taxMinor, 0)),
+        currency: first.item.currency,
         method: input.method,
+        receiptNumber: String(receiptNumber),
         ...(input.entryId === null ? {} : { entryId: input.entryId }),
-        ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor) }),
-        ...(gift === null ? {} : { memberGiftId: gift.id, discountMinor: String(gift.offMinor) }),
+        ...(offMinor === 0 ? {} : { discountMinor: String(offMinor) }),
+        ...(first.used === null ? {} : { discountId: first.used.id, discount: first.used.name }),
+        ...(first.gift === null ? {} : { memberGiftId: first.gift.id }),
       },
     });
-    return { kind: "ok", saleId: created.id };
+    return { kind: "ok", saleId: firstId, receiptNumber };
   });
 }
 
 export type VoidSaleOutcome = { kind: "ok" } | { kind: "sale_not_found" } | { kind: "not_today" } | { kind: "has_refund" };
 
-/** Voids one sale (18o): its row is kept, marked with who, when and why, what it took
- *  from the stock count is returned where the product is still counted, and the use of
- *  its discount is given back. Pressed twice it is voided once. */
+/** Voids one sale (18o), every line of it (18q), from any of its lines: each row is kept,
+ *  marked with who, when and why, what each took from a stock count is returned where the
+ *  product is still counted, and the use of each discount on it is given back. Pressed twice
+ *  it is voided once. */
 export async function voidSale(
   sql: Sql,
   input: { gymId: string; saleId: string; reason: SaleVoidReason; today: string; actorUserId: string; now: Date },
 ): Promise<VoidSaleOutcome> {
   return await sql.begin(async (tx): Promise<VoidSaleOutcome> => {
     await lockOrgRow(tx, input.gymId);
-    const [row] = await tx<{ product_id: string; quantity: number; sold_on: string; stock_counted: boolean; undone: boolean; total_minor: number; currency: string; item_name: string; discount_id: string | null }[]>`
-      SELECT product_id, quantity, sold_on::text AS sold_on, stock_counted, undone_at IS NOT NULL AS undone, total_minor, currency, item_name, discount_id
-      FROM gym_sales WHERE gym_id = ${input.gymId} AND id = ${input.saleId}`;
-    if (row === undefined) return { kind: "sale_not_found" };
-    if (row.undone) return { kind: "ok" };
-    if (row.sold_on !== input.today) return { kind: "not_today" };
-    // A refund standing on it is voided first: a refund only ever stands on a sale that stands.
+    const rows = await tx<
+      { id: string; product_id: string; quantity: number; sold_on: string; stock_counted: boolean; undone: boolean; total_minor: number; currency: string; item_name: string; discount_id: string | null; receipt_number: number }[]
+    >`
+      SELECT s.id, s.product_id, s.quantity, s.sold_on::text AS sold_on, s.stock_counted, s.undone_at IS NOT NULL AS undone, s.total_minor, s.currency, s.item_name,
+             s.discount_id, s.receipt_number
+      FROM gym_sales s
+      WHERE s.gym_id = ${input.gymId}
+        AND s.receipt_number = (SELECT o.receipt_number FROM gym_sales o WHERE o.gym_id = ${input.gymId} AND o.id = ${input.saleId})
+      ORDER BY s.line_no`;
+    const first = rows[0];
+    if (first === undefined) return { kind: "sale_not_found" };
+    if (first.undone) return { kind: "ok" };
+    if (first.sold_on !== input.today) return { kind: "not_today" };
+    // A refund standing on any line is voided first: a refund only ever stands on a sale that stands.
     const [refunded] = await tx<{ id: string }[]>`
-      SELECT id FROM gym_sale_refunds WHERE gym_id = ${input.gymId} AND sale_id = ${input.saleId} AND undone_at IS NULL LIMIT 1`;
+      SELECT id FROM gym_sale_refunds WHERE gym_id = ${input.gymId} AND sale_id = ANY(${rows.map((r) => r.id)}::uuid[]) AND undone_at IS NULL LIMIT 1`;
     if (refunded !== undefined) return { kind: "has_refund" };
     await tx`
       UPDATE gym_sales SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
-      WHERE gym_id = ${input.gymId} AND id = ${input.saleId} AND undone_at IS NULL`;
-    if (row.stock_counted) {
+      WHERE gym_id = ${input.gymId} AND receipt_number = ${first.receipt_number} AND undone_at IS NULL`;
+    for (const row of rows) {
+      if (!row.stock_counted) continue;
       await tx`
         UPDATE gym_products SET stock = LEAST(stock + ${row.quantity}, 100000), updated_at = ${input.now}
         WHERE gym_id = ${input.gymId} AND id = ${row.product_id} AND stock IS NOT NULL`;
     }
-    if (row.discount_id !== null) await returnUse(tx, input.gymId, row.discount_id);
+    // One use a sale was taken of each discount on it, so one is given back.
+    for (const discountId of new Set(rows.map((r) => r.discount_id))) {
+      if (discountId !== null) await returnUse(tx, input.gymId, discountId);
+    }
     // A member's Refer a friend gift taken off it waits again; a friend's sale that gave one
-    // no longer stands for it (20e-ii-b-ii-a).
-    await giftUseUndone(tx, input.gymId, { saleId: input.saleId }, input.today, input.now);
-    await friendPaymentGone(tx, { gymId: input.gymId, by: { saleId: input.saleId }, why: "voided", today: input.today, now: input.now });
+    // no longer stands for it (20e-ii-b-ii-a). Read once every line is voided.
+    for (const row of rows) {
+      await giftUseUndone(tx, input.gymId, { saleId: row.id }, input.today, input.now);
+      await friendPaymentGone(tx, { gymId: input.gymId, by: { saleId: row.id }, why: "voided", today: input.today, now: input.now });
+    }
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,
       action: "org.sale_undone",
       targetType: "gym_sale",
-      targetId: input.saleId,
-      meta: { product: row.item_name, quantity: String(row.quantity), totalMinor: String(row.total_minor), currency: row.currency, reason: input.reason },
+      targetId: first.id,
+      meta: {
+        product: first.item_name,
+        quantity: String(first.quantity),
+        ...(rows.length > 1 ? { others: String(rows.length - 1) } : {}),
+        totalMinor: String(rows.reduce((n, r) => n + r.total_minor, 0)),
+        currency: first.currency,
+        reason: input.reason,
+        receiptNumber: String(first.receipt_number),
+      },
     });
     return { kind: "ok" };
   });
@@ -906,8 +996,8 @@ export async function peopleLike(sql: Sql, gymId: string, like: string, limit: n
   return rows.map((r) => ({ entryId: r.id, name: r.full_name.trim() === "" ? NO_NAME : r.full_name, email: r.email, memberNumber: r.member_number, past: r.past }));
 }
 
-/** What one record has bought, newest first, and how many there are in all; null where
- *  the record is not this gym's. */
+/** What one record has bought, newest first: every line of its newest `limit` sales, and how
+ *  many sales there are in all; null where the record is not this gym's. */
 export async function purchasesOf(sql: Sql, gymId: string, entryId: string, limit: number): Promise<{ sales: SaleRow[]; total: number } | null> {
   const [entry] = await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`;
   if (entry === undefined) return null;
@@ -918,9 +1008,11 @@ export async function purchasesOf(sql: Sql, gymId: string, entryId: string, limi
       LEFT JOIN users u ON u.id = s.recorded_by
       LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
       WHERE s.gym_id = ${gymId} AND s.entry_id = ${entryId}
-      ORDER BY s.seq DESC
-      LIMIT ${limit}`,
-    sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymId} AND entry_id = ${entryId}`,
+        AND s.receipt_number IN (SELECT f.receipt_number FROM gym_sales f
+                                 WHERE f.gym_id = ${gymId} AND f.entry_id = ${entryId} AND f.line_no = 1
+                                 ORDER BY f.seq DESC LIMIT ${limit})
+      ORDER BY s.receipt_number DESC, s.line_no`,
+    sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND line_no = 1`,
   ]);
   return { sales: await refundsOf(sql, gymId, rows.map(sale)), total: count[0]?.n ?? 0 };
 }

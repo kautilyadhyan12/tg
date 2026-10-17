@@ -34,8 +34,9 @@ const taxOf = (r: { tax_bp: number; tax_name: string | null; tax_included: boole
 const coversOf = (r: { covers_from: string | null; covers_to: string | null }) =>
   r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to };
 
+/** A sale (18q): every line of it under its one number. */
 async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
-  const [r] = await sql<
+  const rows = await sql<
     {
       id: string;
       item_name: string;
@@ -64,13 +65,16 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     FROM gym_sales s
     LEFT JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
     LEFT JOIN users u ON u.id = s.recorded_by
-    WHERE s.gym_id = ${gymId} AND s.receipt_number = ${number}`;
+    WHERE s.gym_id = ${gymId} AND s.receipt_number = ${number}
+    ORDER BY s.line_no`;
+  const r = rows[0];
   if (r === undefined) return null;
-  const refunds = await sql<{ receipt_number: number; refunded_on: string; amount_minor: number }[]>`
-    SELECT receipt_number, refunded_on::text AS refunded_on, amount_minor
-    FROM gym_sale_refunds
-    WHERE gym_id = ${gymId} AND sale_id = ${r.id} AND undone_at IS NULL
-    ORDER BY receipt_number`;
+  const refunds = await sql<{ receipt_number: number; refunded_on: string; amount_minor: number; item_name: string }[]>`
+    SELECT f.receipt_number, f.refunded_on::text AS refunded_on, f.amount_minor, s.item_name
+    FROM gym_sale_refunds f
+    JOIN gym_sales s ON s.gym_id = f.gym_id AND s.id = f.sale_id
+    WHERE f.gym_id = ${gymId} AND f.sale_id = ANY(${rows.map((line) => line.id)}::uuid[]) AND f.undone_at IS NULL
+    ORDER BY f.receipt_number`;
   return {
     kind: "sale",
     number,
@@ -81,16 +85,21 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
-    item: { name: r.item_name, quantity: r.quantity, unitPriceMinor: r.unit_price_minor },
-    amounts: receiptAmounts({
-      totalMinor: r.total_minor,
-      listedMinor: r.unit_price_minor * r.quantity,
-      tax: taxOf(r),
-      discount: r.discount_name === null ? null : { name: r.discount_name, minor: r.discount_minor },
-    }),
+    lines: rows.map((line) => ({
+      name: line.item_name,
+      quantity: line.quantity,
+      unitPriceMinor: line.unit_price_minor,
+      amounts: receiptAmounts({
+        totalMinor: line.total_minor,
+        listedMinor: line.unit_price_minor * line.quantity,
+        tax: taxOf(line),
+        discount: line.discount_name === null ? null : { name: line.discount_name, minor: line.discount_minor },
+      }),
+    })),
+    totalMinor: rows.reduce((n, line) => n + line.total_minor, 0),
     // Text under a CHECK: parsed, so a method this build does not know fails here.
     method: memberPaymentByHandSchema.parse(r.method),
-    refunds: refunds.map((f) => ({ number: f.receipt_number, on: f.refunded_on, amountMinor: f.amount_minor })),
+    refunds: refunds.map((f) => ({ number: f.receipt_number, on: f.refunded_on, amountMinor: f.amount_minor, item: rows.length > 1 ? f.item_name : null })),
   };
 }
 

@@ -157,8 +157,8 @@ describe("the wire", () => {
   };
   const memberGift = { id: "00000000-0000-4000-8000-000000000005", offMinor: 1000 };
   it("a sale carries the gift alone, for somebody on the list, never with a discount or for a walk-in", () => {
-    expect(sellProductRequestSchema.parse(sale).memberGift).toBeNull();
-    expect(sellProductRequestSchema.parse({ ...sale, memberGift }).memberGift).toEqual(memberGift);
+    expect(sellProductRequestSchema.parse(sale).lines[0]?.memberGift).toBeNull();
+    expect(sellProductRequestSchema.parse({ ...sale, memberGift }).lines[0]?.memberGift).toEqual(memberGift);
     expect(sellProductRequestSchema.safeParse({ ...sale, memberGift, discountId: "00000000-0000-4000-8000-000000000006" }).success).toBe(false);
     expect(sellProductRequestSchema.safeParse({ ...sale, memberGift, entryId: null }).success).toBe(false);
     expect(sellProductRequestSchema.safeParse({ ...sale, memberGift: { ...memberGift, offMinor: 0 } }).success).toBe(false);
