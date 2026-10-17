@@ -284,6 +284,9 @@ export const createOrgRequestSchema = z
      *  on one of the gym's places, no gives them the console only. Asked, never
      *  defaulted. */
     trainsHere: z.boolean(),
+    /** Made by the form when it opens: a second press with it, after an answer that never
+     *  arrived, answers the gym the first press made instead of making another. */
+    createKey: z.string().uuid().optional(),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;

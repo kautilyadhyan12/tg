@@ -253,11 +253,13 @@ function resolveCurrency(country: string): string {
   return currencyDisplay;
 }
 
+/** `replayed`: the gym was made by an earlier press with the same `createKey`, so the route
+ *  does not count this press toward the hour's limit. */
 export async function createOrg(
   deps: OrgsDeps,
   ownerUserId: string,
   req: CreateOrgRequest,
-): Promise<CreateOrgResponse> {
+): Promise<{ response: CreateOrgResponse; replayed: boolean }> {
   // Throwaway addresses are refused at the Manage door (Stage 3 item 2b).
   const ownerEmail = await repo.findUserEmail(deps.sql, ownerUserId);
   if (ownerEmail !== null && isThrowawayEmail(ownerEmail)) {
@@ -295,6 +297,7 @@ export async function createOrg(
         code: deps.joinCodes ? { code: codeFromBytes(deps.randomBytes(6)), label: FIRST_CODE_LABEL } : null,
         billingMobile,
         trainsHere: req.trainsHere,
+        createKey: req.createKey ?? null,
         // §4.0 step 1's owner row starts with the owner role's whole set. Same
         // source as an appointment's, so "what does an owner start with" has
         // one answer in one place.
@@ -303,14 +306,17 @@ export async function createOrg(
       // An owner who trains here is a member from now (§10.4), which is a membership
       // change like any other — §4.1's cache would otherwise answer from a snapshot
       // taken before the org existed.
-      if (req.trainsHere) await bustEntitlements(deps.redis, ownerUserId);
+      if (req.trainsHere && !created.replayed) await bustEntitlements(deps.redis, ownerUserId);
       // Parsed on the way OUT, like the catalog reader next door. It is not
       // ceremony: it is what would have caught a response missing
       // `currencyDisplay` after the schema gained the field (T3 round 1 L-4).
-      return createOrgResponseSchema.parse({
-        org: toOrgSummary(created.org),
-        joinCode: created.code,
-      });
+      return {
+        response: createOrgResponseSchema.parse({
+          org: toOrgSummary(created.org),
+          joinCode: created.code,
+        }),
+        replayed: created.replayed,
+      };
     } catch (err) {
       if (err instanceof repo.OrgNameTakenError) continue;
       if (err instanceof repo.UnpaidGymLimitError) {
@@ -1235,10 +1241,13 @@ export async function startOrgTrial(
       // Names the rule and the ONE fact that makes it feel fair rather than
       // arbitrary — it is per person, not per gym, so "make another gym" is
       // visibly not the answer. The way to write to us is the plan box's own line (2e-i).
+      // Anybody but the owner never had a trial: the line is about the owner (the passes' Low-2).
       throw new OrgsError(
         409,
         "trial_already_used",
-        `You've already used your free trial. It's one per person, not one per ${orgWords(org.orgType).it}.`,
+        outcome.byOwner
+          ? `You've already used your free trial. It's one per person, not one per ${orgWords(org.orgType).it}.`
+          : `This ${orgWords(org.orgType).it}'s owner has already used their free trial, so this ${orgWords(org.orgType).it} needs a plan to start.`,
       );
     case "trial_used_on_device":
       // One device, one trial (2c). "This computer", never "you": the person pressing may

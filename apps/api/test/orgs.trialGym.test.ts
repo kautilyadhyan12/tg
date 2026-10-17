@@ -1,7 +1,13 @@
 // The trial belongs to the gym (ROADMAP Stage 3 item 2d; RULINGS 2026-09-08, layer 2), against
-// real Postgres. A free trial looks at the gym's first 20 people, the owner counted as one;
-// when more than half came from one gym that had its free trial first and never paid, the
-// trial ends, unless the owner was staff or a member there (then it goes on, for Kd to look at).
+// real Postgres. A free trial looks at the gym's people while it runs, the owner counted as one;
+// when 11 came from one gym that had its free trial first and never paid, the trial ends,
+// unless the owner was staff or a member there (then it goes on, for Kd to look at). Since the
+// trial's two extra passes (2h; Kd, 2026-10-17) it is a count over the whole trial, each person
+// once however their email is spelled, not a share of the first 20.
+//
+// THE WORST THING 2h's FIX COULD LET THROUGH: an owner whose old gym never paid keeps a second
+// trial by having spare accounts join first, so the old gym's people are not "most of the first
+// 20". Its test is the first one below the 2d test.
 //
 // THE WORST THING THIS JOB COULD DO: take the free trial from a real new gym (a trainer who
 // brings members from the gym they worked at), or leave a second one to an owner who opens
@@ -304,7 +310,119 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
-    "10 of the first 20 from the old gym is not more than half; the owner counts as one, so an owner who came from it after its trial makes 11",
+    "WORST THING (2h): nine or nineteen spare accounts joining first, removed again or not, do not save the trial",
+    async () => {
+      const old = await oldGym();
+      for (const spare of [9, 19]) {
+        const owner = await makeUser();
+        const gym = await trialGym(owner);
+        const spares = await people(spare);
+        const ten = await people(10);
+        await inGym(old, ten, 40);
+        await earlierInNewGym(gym, [...spares, ...ten]);
+        // The spares were taken off again: they still joined.
+        await sql`UPDATE gym_members SET removed_at = now() WHERE gym_id = ${gym} AND user_id = ANY(${spares}::uuid[])`;
+        expect(await joinsThroughDoor(gym, owner, old)).toBe(false); // the 11th from the old gym
+        expect(await trialOf(gym), `${String(spare)} spare accounts`).toEqual({ status: "expired", trial_check: "ended", trial_check_gym_id: old });
+      }
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "one person with two spellings of their email counts once; the eleventh person ends it",
+    async () => {
+      const old = await oldGym();
+      const owner = await makeUser();
+      const gym = await trialGym(owner);
+      const nine = await people(9);
+      // A tenth person in the old gym's app with two accounts: one mailbox, two spellings.
+      const local = `${run}twice${String(seq++)}`;
+      const spelt = await sql<{ id: string }[]>`
+        INSERT INTO users (email, display_name)
+        VALUES (${`${TAG}.${local}.x@gmail.com`}, 'Trial Gym Member'), (${`${TAG}.${local}x+second@gmail.com`}, 'Trial Gym Member')
+        RETURNING id`;
+      const two = spelt.map((r) => r.id);
+      const keys = await sql<{ k: string }[]>`SELECT trial_person_key AS k FROM users WHERE id = ANY(${two}::uuid[])`;
+      expect(new Set(keys.map((r) => r.k)).size).toBe(1);
+      await inGym(old, [...nine, ...two], 40);
+      await earlierInNewGym(gym, [...nine, ...two]);
+      // Eleven accounts from the old gym, ten people: not yet.
+      await joinsThroughDoor(gym, owner);
+      expect(await trialOf(gym)).toMatchObject({ status: "trialing", trial_check: null });
+      expect(await joinsThroughDoor(gym, owner, old)).toBe(false);
+      expect(await trialOf(gym)).toMatchObject({ status: "expired", trial_check: "ended" });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a trial past its last day is the sweep's to end, not this rule's: no reason is given for it",
+    async () => {
+      const old = await oldGym();
+      const owner = await makeUser();
+      const gym = await trialGym(owner);
+      const ten = await people(10);
+      await inGym(old, ten, 40);
+      await earlierInNewGym(gym, ten);
+      // Its last day was three hours ago, and the nightly sweep has not run yet.
+      await sql`UPDATE subscriptions SET trial_ends_at = now() - INTERVAL '3 hours' WHERE owner_type = 'gym' AND owner_id = ${gym}`;
+      await joinsThroughDoor(gym, owner, old);
+      expect(await trialOf(gym)).toEqual({ status: "trialing", trial_check: null, trial_check_gym_id: null });
+      expect((await onScreen(owner, gym))?.trialEndedFirstPeople).toBe(false);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a trial ended while the rule was deciding keeps that end: one end, no second reason",
+    async () => {
+      const old = await oldGym();
+      const owner = await makeUser();
+      const gym = await trialGym(owner);
+      const ten = await people(10);
+      await inGym(old, ten, 40);
+      await earlierInNewGym(gym, ten);
+      const sub = (await sql<{ id: string; trial_ends_at: Date }[]>`
+        SELECT id, trial_ends_at FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym}`)[0];
+      if (sub === undefined) throw new Error("no trial");
+      const { invitationId, person } = await invited(gym, owner, old);
+      // Another writer (the sweep takes no gym lock) holds the row, ending it, while the join's
+      // rule reads it as still running; it commits after the rule has decided.
+      let release: () => void = () => undefined;
+      const held = new Promise<void>((r) => (release = r));
+      let ending: Promise<unknown> = Promise.resolve();
+      await new Promise<void>((locked) => {
+        ending = sql.begin(async (tx) => {
+          await tx`UPDATE subscriptions SET status = 'expired', ended_at = now() WHERE id = ${sub.id}`;
+          locked();
+          await held;
+        });
+      });
+      const joining = accept(person, invitationId);
+      // Released once the join's rule is waiting on the row.
+      for (let i = 0; i < 200; i++) {
+        const waiting = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND query LIKE '%trial_check = ''ended''%'`;
+        if ((waiting[0]?.n ?? 0) > 0) break;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      release();
+      await ending;
+      expect((await joining).statusCode).toBe(200);
+      const after = (await sql<{ status: string; trial_check: string | null; trial_ends_at: Date }[]>`
+        SELECT status, trial_check, trial_ends_at FROM subscriptions WHERE id = ${sub.id}`)[0];
+      expect(after).toEqual({ status: "expired", trial_check: null, trial_ends_at: sub.trial_ends_at });
+      const notes = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym} AND action = 'org.trial_ended_first_people'`;
+      expect(notes[0]?.n).toBe(0);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "10 from the old gym is one short; the owner counts as one, so an owner who came from it after its trial makes 11",
     async () => {
       const old = await oldGym();
       const ten = await people(10);
@@ -385,19 +503,9 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
-    "only the first 20 count, removed people among them still count, and a decision stands",
+    "removed people still count, and a decision stands",
     async () => {
       const old = await oldGym();
-      // Owner + 19 from nowhere, then 11 from the old gym: they are not among the first 20.
-      const owner = await makeUser();
-      const gym = await trialGym(owner);
-      const nineteen = await people(19);
-      const eleven = await people(11);
-      await inGym(old, eleven, 40);
-      await earlierInNewGym(gym, [...nineteen, ...eleven.slice(0, 10)]);
-      await joinsThroughDoor(gym, owner, old);
-      expect(await trialOf(gym)).toMatchObject({ status: "trialing", trial_check: null });
-
       // Ten from the old gym who were removed again still count.
       const owner2 = await makeUser();
       const gym2 = await trialGym(owner2);

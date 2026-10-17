@@ -156,9 +156,14 @@ export const gyms = pgTable(
     /** What the desk does with somebody who has not signed the waiver in use (0106; 3e-ii),
      *  under `gyms_checkin_waiver_check`. */
     checkinWaiver: text("checkin_waiver").notNull().default("let_in"),
+    /** The key the create form sent (0136), so a second press with it answers the gym the
+     *  first one made; null for a gym made before it or by a caller with none. */
+    createKey: uuid("create_key"),
     createdAt: createdAt(),
   },
   (t) => [
+    uniqueIndex("gyms_owner_create_key_uq").on(t.ownerUserId, t.createKey).where(sql`${t.createKey} IS NOT NULL`),
+    index("gyms_owner_user_id_idx").on(t.ownerUserId),
     check(
       "gyms_leaderboard_boards_off_check",
       sql`${t.leaderboardBoardsOff} <@ ARRAY['gym_days','workout_days','streak']::text[]`,

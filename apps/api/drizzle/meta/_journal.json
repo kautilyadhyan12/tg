@@ -946,6 +946,13 @@
       "when": 1790726400135,
       "tag": "0135_sale_baskets",
       "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1790726400136,
+      "tag": "0136_trial_passes",
+      "breakpoints": true
     }
   ]
 }
