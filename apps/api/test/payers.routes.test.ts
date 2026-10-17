@@ -277,7 +277,7 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
 
     // Aarav's thirty days began eight days ago, unpaid: his bill is late. Ravi's too, his own.
     const aaravHeld = await give(gym, aarav.entryId, -8);
-    await give(gym, ravi.entryId, -8);
+    const raviHeld = await give(gym, ravi.entryId, -8);
     await run([gym, next]);
     const told = await overdueTo(gym);
     expect(told.map((r) => r.user_id).sort()).toEqual([priya.userId, ravi.userId].sort());
@@ -292,6 +292,10 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect(part.paidBy).toBe("Priya Sharma");
     const onPaper = await receipt(gym, part.receipt);
     expect(onPaper).toMatchObject({ kind: "payment", person: "Aarav Sharma", paidBy: "Priya Sharma" });
+    // Ravi pays for himself while Aarav's link stands: his payment names nobody.
+    const ravis = await pay(gym, ravi.entryId, raviHeld, 3000);
+    expect(ravis.paidBy).toBeNull();
+    expect((await receipt(gym, ravis.receipt)).paidBy).toBeNull();
 
     // The gym removes Priya as payer: what Aarav owes is his again, and only his.
     const removed = await inject("DELETE", payerUrl(gym, aarav.entryId), gym.owner.cookies);
@@ -300,7 +304,7 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     await sql`DELETE FROM gym_member_messages WHERE gym_id = ${gym.id}`;
     await run([gym], 1);
     const after = await overdueTo(gym);
-    expect(after.map((r) => r.user_id).sort()).toEqual([aarav.userId, ravi.userId].sort());
+    expect(after.map((r) => r.user_id)).toEqual([aarav.userId]);
     expect(after.find((r) => r.user_id === aarav.userId)?.body).toBe("Hi Aarav, your payment to Payers Iron House is overdue. Please get in touch so we can sort it out.");
     // A payment taken now names nobody but Aarav; the earlier receipt keeps what was true then.
     expect((await pay(gym, aarav.entryId, aaravHeld, 500)).paidBy).toBeNull();
@@ -313,7 +317,7 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect((await payersOf(gym, aarav.entryId)).paidBy).toBeNull();
     await sql`DELETE FROM gym_member_messages WHERE gym_id = ${gym.id}`;
     await run([gym], 2);
-    expect((await overdueTo(gym)).map((r) => r.user_id).sort()).toEqual([aarav.userId, ravi.userId].sort());
+    expect((await overdueTo(gym)).map((r) => r.user_id)).toEqual([aarav.userId]);
   });
 
   it("one notice names everybody whose payment is late, the payer's own first as \"you\"; a payer with no app account is told nothing, and nor is the person", async () => {
