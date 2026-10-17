@@ -2046,12 +2046,16 @@ export const orgService = {
     readThrough(ptAppointmentResponseSchema, 'that session', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments`, body)),
 
   /** POST …/pt/appointments/:id/cancel — past the free time the server answers 409
-   *  `late_cancel` until `lateOk`; `giveBack` then gives a pack its session back. */
-  cancelPt: (gymId, appointmentId, { lateOk = false, giveBack = false } = {}) =>
+   *  `late_cancel` until `lateOk`; `giveBack` then gives a pack its session back. `feeMinor`:
+   *  the late cancel fee the box named, where it costs one (18h-ii). */
+  cancelPt: (gymId, appointmentId, { lateOk = false, giveBack = false, feeMinor } = {}) =>
     readThrough(
       ptAppointmentResponseSchema,
       'that session',
-      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments/${encodeURIComponent(appointmentId)}/cancel`, { lateOk, giveBack }),
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/pt/appointments/${encodeURIComponent(appointmentId)}/cancel`,
+        feeMinor === undefined ? { lateOk, giveBack } : { lateOk, giveBack, feeMinor },
+      ),
     ),
 
   /** POST …/pt/appointments/:id/mark — came (`attended`) or no-show (`no_show`), once the

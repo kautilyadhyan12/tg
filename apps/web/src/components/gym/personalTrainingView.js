@@ -1,4 +1,4 @@
-import { PT_MEMBER_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod, orgWords, ptNotOnListWords } from '@app/shared';
+import { MEMBER_FEE_WORDS, PT_MEMBER_WORDS, PT_RECORD_SHARED_WORDS, addDays, bookingPeriod, classFeesLine, formatMinor, orgWords, ptNotOnListWords } from '@app/shared';
 import { clockText, dayHeading, instantText } from './classesView';
 import { dayLabel } from './leaderboardView';
 
@@ -82,11 +82,19 @@ export function opensLaterText(opensDays, some) {
 }
 
 /** One day of the page: what a booking on it would use, and each trainer's times on it. */
+/** The fees a late cancel and a no-show would cost (18h-ii): "One-time fee for each late
+ *  cancel £5.00 · no-show £8.00", or null for none. */
+export function ptFeesText(fees) {
+  return fees === null || fees === undefined ? null : classFeesLine(fees);
+}
+
 export function ptDay(view, localDate, orgType = undefined) {
   const day = view.days.find((d) => d.localDate === localDate);
   const pay = day === undefined ? null : payText(view, day, orgType);
   return {
     pay,
+    // What a session booked on this day would cost if cancelled late or missed.
+    fees: day === undefined || pay === null || !pay.can ? null : ptFeesText(day.fees),
     // A day past the last one the gym has opened: it has no time to press, and says why
     // (the gym's own number of days can be as few as one, 17e-vi).
     notOpen: localDate > view.lastDay ? `Booking for this day isn't open yet. You can book up to ${dayLabel(view.lastDay)}.` : null,
@@ -121,19 +129,25 @@ export function sessionText(s) {
 
 /** What the box asks before a session is cancelled. The time to cancel for free is the
  *  gym's own setting, so the box says whose it is. */
+const lateFeeOf = (s) => (s.fees !== null && s.fees !== undefined && s.fees.lateCancelMinor > 0 ? s.fees.lateCancelMinor : 0);
+
 export function ptCancelAsk(s, timezone, gymName) {
   const what = sessionText(s);
+  const lateFee = lateFeeOf(s);
   if (s.cancel === 'late') {
     const passed = `${gymName}'s time to cancel for free has passed. Cancelling now counts as a late cancel`;
+    const counts = s.usesLimit === true ? ' It still counts as one of the sessions your membership includes.' : '';
     return {
       title: 'Cancel late?',
       lines: [
         what,
-        s.packCharged
-          ? `${passed}, and the session stays used on your pack.`
-          : s.usesLimit === true
-            ? `${passed}, and it still counts as one of the sessions your membership includes.`
-            : `${passed}.`,
+        lateFee > 0
+          ? `${passed}, and a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)} will be added to your bill.${counts}`
+          : s.packCharged
+            ? `${passed}, and the session stays used on your pack.`
+            : s.usesLimit === true
+              ? `${passed}, and it still counts as one of the sessions your membership includes.`
+              : `${passed}.`,
       ],
       yes: 'Cancel session',
       no: 'Keep it',
@@ -142,10 +156,30 @@ export function ptCancelAsk(s, timezone, gymName) {
   const until = `${gymName} lets you cancel for free until ${instantText(s.freeCancelUntil, timezone)}.`;
   return {
     title: 'Cancel your session?',
-    lines: [what, s.packCharged ? `${until} Your pack gets the session back.` : s.usesLimit === true ? `${until} It then no longer counts as one of the sessions your membership includes.` : until],
+    lines: [
+      what,
+      s.packCharged
+        ? `${until} Your pack gets the session back.`
+        : s.usesLimit === true
+          ? `${until} It then no longer counts as one of the sessions your membership includes.${lateFee > 0 ? ` After ${instantText(s.freeCancelUntil, timezone)} there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.` : ''}`
+          : lateFee > 0
+            ? `${until} After that there is a one-time late cancel fee of ${formatMinor(lateFee, s.fees.currency)}.`
+            : until,
+    ],
     yes: 'Cancel session',
     no: 'Keep it',
   };
+}
+
+const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', waived: 'Waived' };
+
+/** A session's own fee, under it in the list (18h-ii): "One-time late cancel fee £5.00 ·
+ *  Payment due"; null for none. */
+export function ptFeeText(s) {
+  if (s.fee === null || s.fee === undefined) return null;
+  // The fee's own kind: staff can change a no-show to came after its fee is paid.
+  const kind = MEMBER_FEE_WORDS[s.fee.kind] ?? 'Fee';
+  return `One-time ${kind.charAt(0).toLowerCase()}${kind.slice(1)} ${formatMinor(s.fee.amountMinor, s.fee.currency)} · ${FEE_STATE_WORDS[s.fee.state] ?? 'Payment due'}`;
 }
 
 /** What happened to a session that is over or was cancelled: the line under it in the list. */
@@ -167,6 +201,7 @@ export function historyText(s) {
 /** What is said once a cancel has gone through, from the session as the server now has it. */
 export function ptCancelledText(s) {
   if (s.status === 'late_cancelled') {
+    if (s.fee !== null && s.fee !== undefined) return `Cancelled late. A one-time late cancel fee of ${formatMinor(s.fee.amountMinor, s.fee.currency)} was added to your bill.`;
     if (s.packCharged) return 'Cancelled late. The session stays used on your pack.';
     return s.usesLimit === true ? 'Cancelled late. It still counts as one of the sessions your membership includes.' : 'Cancelled late.';
   }

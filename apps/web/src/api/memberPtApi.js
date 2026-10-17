@@ -26,11 +26,11 @@ export const memberPtService = {
   book: (gymId, requestKey, time) =>
     readThrough(memberPtSessionResponseSchema, 'your session', authApi.post(`${path(gymId)}/sessions`, { requestKey, ...time })).then((data) => data.session),
   /** Cancel one of the reader's sessions. Past the free time the server answers 409
-   *  `late_cancel` until `lateOk`. */
-  cancel: (gymId, sessionId, lateOk) =>
+   *  `late_cancel` until `lateOk`, with the late cancel fee the box showed (`feeMinor`, 18h-ii). */
+  cancel: (gymId, sessionId, lateOk, feeMinor) =>
     readThrough(
       memberPtSessionResponseSchema,
       'your session',
-      authApi.post(`${path(gymId)}/sessions/${encodeURIComponent(sessionId)}/cancel`, { lateOk }),
+      authApi.post(`${path(gymId)}/sessions/${encodeURIComponent(sessionId)}/cancel`, feeMinor === undefined ? { lateOk } : { lateOk, feeMinor }),
     ).then((data) => data.session),
 };

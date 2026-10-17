@@ -1,11 +1,15 @@
-// A FEE FOR A LATE CANCEL OR A NO-SHOW (spec Part 3 §14.2; ROADMAP 18h-i).
+// A FEE FOR A LATE CANCEL OR A NO-SHOW (spec Part 3 §14.2; ROADMAP 18h-i, and 18h-ii for
+// personal training).
 //
 // The worst thing this could do to a real person: put a fee on somebody who came, or on
 // somebody else's bills. So a fee is opened only for a booking that IS late-cancelled or a
 // no-show as the write that made it so commits (read again here, under the gym's lock that
 // write holds), only on the membership that booking itself used, and it is taken off by
 // itself, unpaid, when staff change the no-show to came or the class does not run. Whether
-// it costs anything is `classFeeFor`'s to say.
+// it costs anything is `classFeeFor`'s to say. A personal training session is held to the
+// same: a fee only for a session that IS late-cancelled or a no-show, on the membership the
+// session itself used, taken off unpaid when staff mark them came, with the session's own
+// two amounts (`openPtFees`, `removePtFees`).
 //
 // A fee is a bill of its own (`gym_member_bills`, no period, `0136`): paid all at once, with
 // a receipt, or waived by staff. It never moves a membership's dates or its count of paid
@@ -26,6 +30,7 @@ import {
   type PaymentVoidReason,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
+import { fullName } from "../leaderboard/rank.js";
 import { insertAudit } from "../repo.js";
 import { lockedEntry } from "./heldRepo.js";
 import { billOf, insertPayment, type BillTax, type Voided } from "./billsSql.js";
@@ -33,13 +38,17 @@ import { billOf, insertPayment, type BillTax, type Voided } from "./billsSql.js"
 const STATUS_FOR: Record<MemberFeeKind, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
 
 /** In a statement that names a fee's bill `b`: its booking is still the late cancel or the
- *  no-show it was opened for, in a class that runs. False once staff marked them came, the
- *  class was cancelled or removed, or the booking is gone. */
+ *  no-show it was opened for, in a class that runs, or its personal training session still
+ *  is (18h-ii). False once staff marked them came, the class was cancelled or removed, or
+ *  the booking or session is gone. */
 const stillOwedSql = (sql: Sql | TransactionSql) => sql`
-  EXISTS (SELECT 1 FROM gym_class_bookings k
-          JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
-          WHERE k.gym_id = b.gym_id AND k.id = b.class_booking_id AND s.status = 'scheduled'
-            AND k.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END)`;
+  (EXISTS (SELECT 1 FROM gym_class_bookings k
+           JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
+           WHERE k.gym_id = b.gym_id AND k.id = b.class_booking_id AND s.status = 'scheduled'
+             AND k.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END)
+   OR EXISTS (SELECT 1 FROM gym_pt_appointments a
+              WHERE a.gym_id = b.gym_id AND a.id = b.pt_appointment_id
+                AND a.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END))`;
 
 /** The class fees of a gym, as the database holds them. */
 export async function classFeesOf(sql: Sql | TransactionSql, gymId: string): Promise<ClassFees> {
@@ -155,6 +164,120 @@ export async function removeClassFees(tx: TransactionSql, gymId: string, booking
   return rows.length;
 }
 
+// ── Personal training (18h-ii) ──────────────────────────────────────────────
+
+/** Personal training's two fees of a gym, as the database holds them. */
+export async function ptFeesOf(sql: Sql | TransactionSql, gymId: string): Promise<ClassFees> {
+  const [row] = await sql<{ late: number; no_show: number }[]>`
+    SELECT pt_late_cancel_fee_minor AS late, pt_no_show_fee_minor AS no_show FROM gyms WHERE id = ${gymId}`;
+  return row === undefined ? { lateCancelMinor: 0, noShowMinor: 0 } : { lateCancelMinor: row.late, noShowMinor: row.no_show };
+}
+
+/** What a session's fee is called on the person's page, a receipt and a download:
+ *  "Personal training with Ravi", or without a name where the trainer has none or is gone. */
+export function ptFeeFor(trainer: { displayName: string | null; email: string | null } | null): string {
+  const name = trainer === null || trainer.displayName === null ? null : fullName({ displayName: trainer.displayName, email: trainer.email, recordName: null }).name;
+  return (name === null ? "Personal training" : `Personal training with ${name}`).slice(0, 80);
+}
+
+/** THESE SESSIONS WERE JUST LATE-CANCELLED, OR MARKED NO-SHOW: each opens its fee where the
+ *  rule says it costs something, as `openClassFees` does for a class. In the caller's
+ *  transaction, under the gym's lock, after the session's own write. A session already
+ *  holding a fee that stands, or one staff waived, opens none. Answers how many it opened. */
+export async function openPtFees(tx: TransactionSql, gymId: string, appointmentIds: readonly string[], fee: MemberFeeKind, now: Date): Promise<number> {
+  if (appointmentIds.length === 0) return 0;
+  const rows = await tx<
+    {
+      id: string;
+      held_membership_id: string | null;
+      pack_charged: boolean;
+      currency: string;
+      tax_name: string | null;
+      tax_bp: number | null;
+      trainer_name: string | null;
+      trainer_email: string | null;
+      day: string;
+      timezone: string;
+      late: number;
+      no_show: number;
+    }[]
+  >`
+    SELECT a.id, a.held_membership_id, a.pack_charged, h.currency, r.name AS tax_name, r.rate_bp AS tax_bp,
+           u.display_name AS trainer_name, u.email::text AS trainer_email, a.local_date::text AS day, g.timezone,
+           g.pt_late_cancel_fee_minor AS late, g.pt_no_show_fee_minor AS no_show
+    FROM gym_pt_appointments a
+    JOIN gyms g ON g.id = a.gym_id
+    JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = a.held_membership_id AND h.entry_id IS NOT NULL
+    LEFT JOIN gym_tax_rates r ON r.gym_id = h.gym_id AND r.id = h.tax_rate_id
+    LEFT JOIN users u ON u.id = a.trainer_user_id
+    WHERE a.gym_id = ${gymId} AND a.id = ANY(${[...appointmentIds]}::uuid[]) AND a.status = ${STATUS_FOR[fee]}
+      AND NOT EXISTS (SELECT 1 FROM gym_member_bills x
+                      WHERE x.gym_id = a.gym_id AND x.pt_appointment_id = a.id AND (x.status <> 'void' OR x.void_reason = 'waived'))`;
+  const opening = rows.flatMap((row) => {
+    const minor = classFeeFor({ fee, heldMembershipId: row.held_membership_id, packCharged: row.pack_charged, fees: { lateCancelMinor: row.late, noShowMinor: row.no_show } });
+    if (minor === 0 || row.held_membership_id === null) return [];
+    // The amount the gym set is what the person pays: the membership's rate is inside it.
+    const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
+    const bill = billOf(minor, tax);
+    return [
+      {
+        m: row.held_membership_id,
+        s: row.id,
+        a: bill.amountMinor,
+        tm: bill.tax?.minor ?? 0,
+        tb: bill.tax?.bp ?? 0,
+        tn: bill.tax?.name ?? null,
+        ti: bill.tax?.included ?? null,
+        c: row.currency,
+        d: dayInTz(now, row.timezone),
+        day: row.day,
+        n: ptFeeFor(row.trainer_name === null ? null : { displayName: row.trainer_name, email: row.trainer_email }),
+      },
+    ];
+  });
+  if (opening.length === 0) return 0;
+  const opened = await tx<{ id: string }[]>`
+    INSERT INTO gym_member_bills
+      (gym_id, held_membership_id, period_index, fee, fee_for, pt_appointment_id, amount_minor, tax_minor, tax_bp, tax_name, tax_included,
+       currency, due_on, covers_from, covers_to, created_at, updated_at)
+    SELECT ${gymId}, r.m, NULL, ${fee}, r.n, r.s, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.d, r.day, r.day, ${now}, ${now}
+    FROM jsonb_to_recordset(${tx.json(opening)}) AS r(m uuid, s uuid, a int, tm int, tb int, tn text, ti boolean, c text, d date, day date, n text)
+    ON CONFLICT (pt_appointment_id) WHERE pt_appointment_id IS NOT NULL AND status <> 'void' DO NOTHING
+    RETURNING id`;
+  if (opened.length > 0) {
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId,
+      action: "org.member_fees_opened",
+      targetType: "gym",
+      targetId: gymId,
+      meta: { fee, bills: String(opened.length), of: "pt" },
+    });
+  }
+  return opened.length;
+}
+
+/** THESE SESSIONS NO LONGER OWE A FEE: marked came after a no-show. An unpaid fee is taken
+ *  off, kept and marked; one paid stays paid, for staff to void its payment if they mean to. */
+export async function removePtFees(tx: TransactionSql, gymId: string, appointmentIds: readonly string[], now: Date): Promise<number> {
+  if (appointmentIds.length === 0) return 0;
+  const rows = await tx<{ id: string }[]>`
+    UPDATE gym_member_bills SET status = 'void', updated_at = ${now}
+    WHERE gym_id = ${gymId} AND pt_appointment_id = ANY(${[...appointmentIds]}::uuid[]) AND status = 'open'
+    RETURNING id`;
+  if (rows.length > 0) {
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId,
+      action: "org.member_fees_removed",
+      targetType: "gym",
+      targetId: gymId,
+      meta: { bills: String(rows.length), of: "pt" },
+    });
+  }
+  return rows.length;
+}
+
 /** THESE CLASSES WILL NOT RUN: every unpaid fee of a booking of theirs comes off. */
 export async function removeClassFeesOf(tx: TransactionSql, gymId: string, sessionIds: readonly string[], now: Date): Promise<number> {
   if (sessionIds.length === 0) return 0;
@@ -170,6 +293,8 @@ export interface FeeRow {
   id: string;
   membershipId: string;
   fee: MemberFeeKind;
+  /** A class's fee, or a personal training session's. */
+  of: "class" | "pt";
   forName: string;
   on: string;
   amountMinor: number;
@@ -223,14 +348,15 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       voided_on: string | null;
       voided_by_name: string | null;
       still_owed: boolean;
+      of_pt: boolean;
     }[]
   >`
-    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.covers_from, x.amount_minor, x.tax_minor, x.tax_bp,
+    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.of_pt, x.covers_from, x.amount_minor, x.tax_minor, x.tax_bp,
            x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name, x.still_owed
     FROM (
       SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from, b.amount_minor, b.tax_minor, b.tax_bp,
              b.tax_name, b.tax_included, b.currency, b.due_on::text AS due_on, b.status, b.void_reason, b.voided_on::text AS voided_on,
-             b.voided_by, b.created_at, ${stillOwedSql(sql)} AS still_owed,
+             b.voided_by, b.created_at, ${stillOwedSql(sql)} AS still_owed, b.pt_appointment_id IS NOT NULL AS of_pt,
              row_number() OVER (PARTITION BY b.held_membership_id, b.status = 'open' ORDER BY b.created_at DESC, b.id) AS n
       FROM gym_member_bills b
       WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${ids}::uuid[]) AND b.fee IS NOT NULL
@@ -273,6 +399,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       membershipId: r.held_membership_id,
       // Text under a CHECK: parsed, so a kind this build does not know fails here.
       fee: memberFeeKindSchema.parse(r.fee),
+      of: r.of_pt ? "pt" : "class",
       forName: r.fee_for,
       on: r.covers_from,
       amountMinor: r.amount_minor,
@@ -416,8 +543,8 @@ export async function waiveFee(
 }
 
 /** Staff void the payment of a fee, recorded by mistake: the fee is owed again, where its
- *  booking is still the late cancel or no-show it was for; where staff have since marked them
- *  came or the class did not run, it is taken off instead, so nobody who came owes it. The
+ *  booking or session is still the late cancel or no-show it was for; where staff have since
+ *  marked them came or the class did not run, it is taken off instead, so nobody who came owes it. The
  *  row is kept, marked with who, when and why. Pressed twice, voided once. */
 export async function voidFeePayment(
   sql: Sql,

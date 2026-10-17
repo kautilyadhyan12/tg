@@ -22,8 +22,8 @@ import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 // booking settings for classes, and personal training's own two (when a member can book
 // a session, and until when a cancel is free), each a starting value it can change
 // (RULINGS 2026-09-21, 2026-10-08). All six wait for one Save, as the gym's details do
-// above, and so do the classes' late cancel and no-show fees (18h-i), which only staff who
-// record members' payments can change.
+// above, and so do the late cancel and no-show fees, the classes' (18h-i) and personal
+// training's own (18h-ii), which only staff who record members' payments can change.
 
 const inputStyle = {
   background: '#0A0908',
@@ -127,6 +127,9 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   // The class fees as saved, with their money and who may change them, and as typed.
   const [fees, setFees] = useState(null);
   const [feeDraft, setFeeDraft] = useState(null);
+  // Personal training's own two, as saved and as typed (18h-ii), in the same money.
+  const [ptFees, setPtFees] = useState(null);
+  const [ptFeeDraft, setPtFeeDraft] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -144,6 +147,8 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
           setDraft(bookingSettingsDraft(res.data.settings, res.data.pt));
           setFees(res.data.fees ?? null);
           setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
+          setPtFees(res.data.ptFees ?? null);
+          setPtFeeDraft(res.data.fees && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
         })
         .catch((err) => {
           if (isLive()) setLoadError(errorText(err, "We couldn't load your booking settings."));
@@ -169,8 +174,14 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   const hasFees = ready && fees !== null && feeDraft !== null;
   const typedFees = hasFees ? classFeesFromDraft(feeDraft, fees.currency) : null;
   const feesChanged = hasFees && fees.canChange && (typedFees === null || typedFees.lateCancelMinor !== fees.lateCancelMinor || typedFees.noShowMinor !== fees.noShowMinor);
-  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged);
-  const problem = !ready || !changed ? null : (bookingSettingsProblem(draft) ?? (hasFees && typedFees === null ? 'Type each fee as an amount, or 0 for no fee.' : null));
+  // Personal training's (18h-ii), where the server sent them.
+  const hasPtFees = hasFees && ptFees !== null && ptFeeDraft !== null;
+  const typedPtFees = hasPtFees ? classFeesFromDraft(ptFeeDraft, fees.currency) : null;
+  const ptFeesChanged =
+    hasPtFees && fees.canChange && (typedPtFees === null || typedPtFees.lateCancelMinor !== ptFees.lateCancelMinor || typedPtFees.noShowMinor !== ptFees.noShowMinor);
+  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged || ptFeesChanged);
+  const feeTypo = (hasFees && typedFees === null) || (hasPtFees && typedPtFees === null);
+  const problem = !ready || !changed ? null : (bookingSettingsProblem(draft) ?? (feeTypo ? 'Type each fee as an amount, or 0 for no fee.' : null));
   const canSave = changed && problem === null && !saving && !readOnly;
   const off = readOnly || saving;
 
@@ -184,6 +195,11 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     setSaved(null);
     setSaveError(null);
   };
+  const editPtFees = (patch) => {
+    setPtFeeDraft({ ...ptFeeDraft, ...patch });
+    setSaved(null);
+    setSaveError(null);
+  };
   const feesOff = off || !fees?.canChange;
   const sign = fees === null ? '' : currencySign(fees.currency);
   const membershipsTo = placeFor(orgSlug, privileges, 'memberships');
@@ -193,9 +209,10 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     if (!canSave) return;
     const rules = bookingSettingsBody(draft);
     const sendsFees = hasFees && fees.canChange;
-    if (rules === null || (sendsFees && typedFees === null)) return;
+    const sendsPtFees = hasPtFees && fees.canChange;
+    if (rules === null || (sendsFees && typedFees === null) || (sendsPtFees && typedPtFees === null)) return;
     // The fees go only from staff who may change them; anybody else's save leaves them be.
-    const body = sendsFees ? { ...rules, fees: typedFees } : rules;
+    const body = { ...rules, ...(sendsFees ? { fees: typedFees } : {}), ...(sendsPtFees ? { ptFees: typedPtFees } : {}) };
     setSaving(true);
     setSaveError(null);
     try {
@@ -205,6 +222,8 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
       setDraft(bookingSettingsDraft(res.data.settings, res.data.pt));
       setFees(res.data.fees ?? null);
       setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
+      setPtFees(res.data.ptFees ?? null);
+      setPtFeeDraft(res.data.fees && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
       setSaved(bookingSettingsSavedLine(res.data.movedIn));
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save your booking settings."));
@@ -214,7 +233,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   };
 
   return (
-    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees, fees !== null && ptFees !== null ? { ...ptFees, currency: fees.currency } : null)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
@@ -315,6 +334,32 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
               <UnitPick label="Free cancelling for personal training, in" value={draft.ptFreeUnit} one={draft.ptFreeAmount === '1'} onChange={(ptFreeUnit) => edit({ ptFreeUnit })} disabled={off} />
               <span>before the session</span>
             </Row>
+
+            {hasPtFees ? (
+              <>
+                <Row
+                  title="Late cancel fee"
+                  hint="A one-time charge, never monthly: added once to the member's bill each time a session is cancelled after free cancelling ends and stays used. They see the fee before they confirm. 0 means no fee. A session your staff give back costs nothing. Members on a personal training pack never pay it: the session stays used on their pack."
+                >
+                  <MoneyBox label="Late cancel fee for personal training" sign={sign} value={ptFeeDraft.lateText} onChange={(lateText) => editPtFees({ lateText })} disabled={feesOff} />
+                  <span>once, for each late cancel</span>
+                </Row>
+
+                <Row
+                  title="No-show fee"
+                  hint="A one-time charge, never monthly: added once to the member's bill each time staff mark them No-show. Marking them Came takes an unpaid fee off. 0 means no fee. Members on a personal training pack never pay it."
+                >
+                  <MoneyBox label="No-show fee for personal training" sign={sign} value={ptFeeDraft.noShowText} onChange={(noShowText) => editPtFees({ noShowText })} disabled={feesOff} />
+                  <span>once, for each no-show</span>
+                </Row>
+
+                {fees.canChange ? null : (
+                  <p className="text-xs m-0" style={hintStyle} data-testid="pt-fees-who">
+                    Only staff who record members' payments can change fees. Ask the owner.
+                  </p>
+                )}
+              </>
+            ) : null}
           </Part>
 
           {problem === null ? null : (

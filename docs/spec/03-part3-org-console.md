@@ -3635,6 +3635,22 @@ cancel box; staff read each place's fee, and what No-show adds, on the class's l
 refund, and charging a saved card (18d: 24 hours after the fee, the bill's id as the
 company's idempotency key).
 
+**As built, 18h-ii (2026-10-17; `rulings/2026-10-17-18h-ii.md`): the same fees for personal
+training.** Two amounts of their own in Booking rules, under Personal training (`gyms.pt_*`,
+`0138`; 0 is off; the same tick as the class fees). A session's fee is a bill with no period
+naming the session (`gym_member_bills.pt_appointment_id`, one standing fee a session), "Late
+cancel fee · Personal training with Arjun Rao" with the session's day. The rule is the
+classes' own, `classFeeFor`, with personal training's amounts: a pack holder's session stays
+used and that is all; a session booked on no membership costs nothing. **Opened** by a late
+cancel that keeps the session used (the member's, or staff's "Late cancel: add the ₹500.00
+fee"), taken only with `feeMinor` equal to what it costs now (else 409 `late_cancel` with
+`feeMinor`), and by staff marking No-show. **Costs nothing**: a cancel staff make with "Cancel
+with no fee" (the session given back), and Came, which takes an unpaid fee off. Everything else
+is 18h-i's: the person's page, receipts, Download payments, takings and Reports. A member reads
+the fees for a day's times, under a coming session and in the late cancel box, and a past
+session's own fee; staff read each session's fee and what No-show adds on the trainer's week,
+and the person's name there opens their page.
+
 ### 14.3 The register
 
 **Sell**: staff pick a product or a membership type (a day pass, a bottle of water),

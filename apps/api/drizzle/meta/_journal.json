@@ -960,6 +960,13 @@
       "when": 1790726400137,
       "tag": "0137_trial_passes",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1790726400138,
+      "tag": "0138_pt_fees",
+      "breakpoints": true
     }
   ]
 }

@@ -27,8 +27,10 @@ export default function BookingRulesLine({ org, orgSlug, privileges, of = 'class
       .then((res) => {
         if (!live) return;
         setSettings((of === 'pt' ? res?.data?.pt : res?.data?.settings) ?? null);
-        // The class fees (18h-i) are said on Classes alone.
-        setFees(of === 'pt' ? null : (res?.data?.fees ?? null));
+        // Each page says its own fees: the classes' (18h-i), or personal training's (18h-ii) in the same money.
+        const classFees = res?.data?.fees ?? null;
+        const ptFees = res?.data?.ptFees ?? null;
+        setFees(of !== 'pt' ? classFees : classFees === null || ptFees === null ? null : { ...ptFees, currency: classFees.currency, onBills: classFees.onBills });
       })
       .catch(() => {});
     return () => {

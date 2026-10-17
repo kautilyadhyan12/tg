@@ -10,6 +10,7 @@ import {
   PT_TIME_OFF_MAX,
   PT_TIME_OFF_OVER_ERROR,
   aCoach,
+  formatMinor,
   orgWords,
   ptHoursProblem,
   ptTimeOffOverSchema,
@@ -332,30 +333,56 @@ export function pastDaysNote(week) {
 /** Came or no-show, for a session that has started (`canMark`); null for any other. What
  *  it is marked now (`tag`), what that means for the person (`note`), and the buttons:
  *  each `status` is what the server is sent. */
-export function markRow(appointment) {
+/** The one-time no-show fee a session costs, in words ("£8.00"); null where it costs none
+ *  or the week names no money (18h-ii). */
+function noShowFee(appointment, currency) {
+  const minor = appointment.fees?.noShowMinor ?? 0;
+  return minor > 0 && typeof currency === 'string' ? formatMinor(minor, currency) : null;
+}
+
+const FEE_STATE_WORDS = { owed: 'Payment due', paid: 'Paid', waived: 'Waived' };
+
+/** A no-show's fee, said under its mark: owed, paid or waived, for staff who may open the
+ *  person's page. A trainer who may not is told nothing of it: what a fee did is the
+ *  server's to say, never guessed from the gym's price (round one, H2). */
+function noShowFeeNote(appointment, currency) {
+  if (typeof currency !== 'string' || !appointment.fee) return '';
+  const amount = formatMinor(appointment.fee.amountMinor, currency);
+  const state = FEE_STATE_WORDS[appointment.fee.state] ?? 'Payment due';
+  return appointment.fee.state === 'owed' ? `One-time no-show fee ${amount} · ${state}. Changing to came takes it off.` : `One-time no-show fee ${amount} · ${state}.`;
+}
+
+const joinedNote = (...parts) => parts.filter((p) => p !== '').join(' ');
+
+/** `currency`: the money the week's fees are in (18h-ii); null for none. */
+export function markRow(appointment, currency = null) {
   if (appointment?.canMark !== true) return null;
   const name = appointment.name ?? 'this person';
+  const fee = noShowFee(appointment, currency);
   if (appointment.status === 'attended') {
     return {
       tag: { label: 'Came', tone: 'good' },
-      note: '',
+      note: fee === null ? '' : `Changing to no-show adds a one-time ${fee} fee.`,
       actions: [{ status: 'no_show', label: 'Change to no-show', aria: `Change ${name} to no-show` }],
     };
   }
   if (appointment.status === 'no_show') {
     return {
       tag: { label: 'No-show', tone: 'warn' },
-      note: appointment.packCharged
-        ? 'The session stays used on their pack.'
-        : appointment.usesLimit === true
-          ? 'It still counts as one of the sessions their membership includes.'
-          : '',
+      note: joinedNote(
+        appointment.packCharged
+          ? 'The session stays used on their pack.'
+          : appointment.usesLimit === true
+            ? 'It still counts as one of the sessions their membership includes.'
+            : '',
+        noShowFeeNote(appointment, currency),
+      ),
       actions: [{ status: 'attended', label: 'Change to came', aria: `Change ${name} to came` }],
     };
   }
   return {
     tag: null,
-    note: 'Not marked yet',
+    note: fee === null ? 'Not marked yet' : `Not marked yet · No-show adds a one-time ${fee} fee`,
     actions: [
       { status: 'attended', label: 'Came', aria: `Mark that ${name} came` },
       { status: 'no_show', label: 'No-show', aria: `Mark ${name} as a no-show` },
@@ -636,9 +663,25 @@ export function bookCost(person) {
 }
 
 /** The box before a cancel: what it costs the person, and the buttons that say so. */
-export function cancelBox(appointment, { freeCancelMinutes, clockFormat }) {
+/** `currency`: the money the week's fees are in (18h-ii). A late cancel that costs a fee
+ *  names it on its button, sends it as `feeMinor`, and always sits beside a way to cancel
+ *  that costs nothing, for a session the gym itself called off. */
+export function cancelBox(appointment, { freeCancelMinutes, clockFormat, currency = null }) {
   const row = sessionRow(appointment, clockFormat);
   const what = `${row.name}'s session on ${dayLabel(appointment.localDate)}, ${row.time}`;
+  const lateMinor = appointment.cancel === 'late' && typeof currency === 'string' ? (appointment.fees?.lateCancelMinor ?? 0) : 0;
+  if (lateMinor > 0) {
+    const fee = formatMinor(lateMinor, currency);
+    const inside = freeCancelMinutes > 0 ? `It starts in less than ${durationWords(freeCancelMinutes)}, so it's too late to cancel for free.` : "It's too late to cancel for free.";
+    const counts = !appointment.packCharged && appointment.usesLimit === true ? ' and still counts as one of the sessions their membership includes' : '';
+    return {
+      question: `Cancel ${what}? ${inside} A late cancel adds a one-time ${fee} late cancel fee to their bill${counts}. If you're calling the session off, cancel with no fee.`,
+      choices: [
+        { key: 'late', label: `Late cancel: add the ${fee} fee`, lateOk: true, giveBack: false, feeMinor: lateMinor },
+        { key: 'back', label: 'Cancel with no fee', lateOk: true, giveBack: true },
+      ],
+    };
+  }
   if (appointment.cancel === 'free') {
     return {
       question: appointment.packCharged

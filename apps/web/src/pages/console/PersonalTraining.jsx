@@ -11,7 +11,8 @@ import TimePick from '../../components/console/TimePick';
 import { DateField, Tick } from './ClassFields';
 import { useConsoleOrg } from './useConsoleOrg';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
-import { viewerPrivileges } from './consoleView';
+import { canRemoveMembers, viewerPrivileges } from './consoleView';
+import MemberListPerson from './MemberListPerson';
 import { canManageStaff } from './staffView';
 import { calendarTo, canOpenPlace, placeFor } from './consolePlaces';
 import { WEEKDAYS, addDays, gymToday } from './hoursView';
@@ -670,6 +671,7 @@ function SessionRow({
   first,
   clockFormat,
   freeCancelMinutes,
+  currency,
   locked,
   asking,
   settled,
@@ -682,17 +684,26 @@ function SessionRow({
   onCancel,
   onClose,
   onMark,
+  onOpen,
 }) {
   const row = sessionRow(appointment, clockFormat);
   const clash = sessionClash(appointment, classes, timeOff, canBook);
-  const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat }) : null;
-  const mark = markRow(appointment);
+  const box = asking ? cancelBox(appointment, { freeCancelMinutes, clockFormat, currency }) : null;
+  const mark = markRow(appointment, currency);
   return (
     <li className="flex flex-col gap-3 py-3 min-w-0" style={first ? undefined : { borderTop: '1px solid var(--line)' }} data-testid="pt-session">
       <div className="flex items-center justify-between gap-3 min-w-0 min-h-11">
         <div className="flex flex-col min-w-0">
           <span className="c-s15 c-w6 c-t1 c-ell">
-            <span className="c-num">{row.time}</span> · {row.name}
+            <span className="c-num">{row.time}</span> ·{' '}
+            {typeof appointment.entryId === 'string' && onOpen !== undefined ? (
+              // Their page, where a fee is recorded or waived: for staff who may open it.
+              <button type="button" onClick={() => onOpen(appointment.entryId)} aria-label={`Open ${row.name}`} className="c-btn-link c-s15 c-w6 text-left">
+                {row.name}
+              </button>
+            ) : (
+              row.name
+            )}
           </span>
           {row.detail === '' ? null : <span className="c-s13 c-t3 c-ell">{row.detail}</span>}
           {clash === null ? null : (
@@ -802,6 +813,10 @@ export default function PersonalTraining() {
   // Came or no-show: the session being saved, and the one whose save was refused.
   const [markBusy, setMarkBusy] = useState(null);
   const [markFailed, setMarkFailed] = useState(null);
+  // The person whose page is open over the week, from their name, as the class calendar
+  // does: their fees are recorded or waived there (18h-ii). The gym's own columns, for it.
+  const [person, setPerson] = useState(null);
+  const [memberList, setMemberList] = useState(null);
   // The day of the week on screen that is open: one day at a time.
   const [dayWanted, setDayWanted] = useState(null);
   // A press on a trainer's name or See week: their week is brought into view once it is
@@ -896,6 +911,15 @@ export default function PersonalTraining() {
   const calendarFor = (day) => (canOpenPlace(privileges, 'calendar') ? calendarTo(orgSlug, day) : null);
   // A session booked or cancelled: the week is read again, and the steps with it while
   // they are on screen, so "Book a session" ticks without a reload.
+  const openPerson = (entryId) => {
+    setPerson(entryId);
+    if (memberList !== null) return;
+    orgService.getMemberList(gymId).then(
+      (res) => setMemberList(res.data.list),
+      () => undefined,
+    );
+  };
+
   const sessionsChanged = () => {
     readWeekAgain();
     if (steps.show) setListKey((n) => n + 1);
@@ -979,14 +1003,16 @@ export default function PersonalTraining() {
     setCancelBusy(true);
     setCancelError(null);
     try {
-      await orgService.cancelPt(gymId, appointment.id, { lateOk: choice.lateOk, giveBack: choice.giveBack });
+      // A late cancel that costs a fee says yes to the one its button named (18h-ii).
+      const body = { lateOk: choice.lateOk, giveBack: choice.giveBack, ...(choice.feeMinor === undefined ? {} : { feeMinor: choice.feeMinor }) };
+      await orgService.cancelPt(gymId, appointment.id, body);
       sessionsChanged();
     } catch (err) {
-      // The free time ran out while the box was open: read the week again, so the box
-      // asks the late question.
+      // The free time ran out while the box was open, or the fee changed: read the week
+      // again, so the box asks the late question with the fee as it now is.
       if (err?.response?.data?.error === 'late_cancel') {
         setWeekKey((n) => n + 1);
-        setCancelError("It's now too late to cancel for free. Choose again.");
+        setCancelError(appointment.cancel === 'late' ? 'The late cancel fee has changed. Choose again.' : "It's now too late to cancel for free. Choose again.");
       } else if (err?.response?.data?.error === 'kept_used') {
         // Already cancelled as a late cancel by somebody else: say so, and offer nothing more.
         setCancelError(errorText(err, 'This session was already cancelled as a late cancel. The session stays used.'));
@@ -1409,6 +1435,7 @@ export default function PersonalTraining() {
                                     first={index === 0}
                                     clockFormat={clockFormat}
                                     freeCancelMinutes={shownWeek.data.freeCancelMinutes ?? list.freeCancelMinutes}
+                                    currency={shownWeek.data.currency ?? null}
                                     locked={readOnly}
                                     asking={cancelling === appointment.id}
                                     settled={cancelling === appointment.id && cancelSettled}
@@ -1429,6 +1456,7 @@ export default function PersonalTraining() {
                                       setCancelError(null);
                                     }}
                                     onCancel={(choice) => void cancelSession(appointment, choice)}
+                                    onOpen={openPerson}
                                   />
                                 ))}
                               </ul>
@@ -1517,6 +1545,24 @@ export default function PersonalTraining() {
           ) : null}
         </section>
       ) : null}
+
+      {person === null ? null : (
+        <MemberListPerson
+          key={person}
+          gymId={gymId}
+          gym={org}
+          entryId={person}
+          list={memberList}
+          words={orgWords(org?.orgType)}
+          readOnly={readOnly}
+          canRemove={canRemoveMembers(viewerPrivileges(org))}
+          onClose={() => {
+            setPerson(null);
+            setWeekKey((n) => n + 1);
+          }}
+          onChanged={() => setWeekKey((n) => n + 1)}
+        />
+      )}
     </div>
   );
 }

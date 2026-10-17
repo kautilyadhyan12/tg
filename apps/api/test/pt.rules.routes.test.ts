@@ -257,6 +257,8 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
   const PT_START: PtBookingSettings = { opensDays: 7, freeCancelMinutes: 120 };
   // The class fees (18h-i): off at the start; the owner may change them; no membership on sale here.
   const FEES_START = { lateCancelMinor: 0, noShowMinor: 0, currency: "GBP", canChange: true, onBills: false };
+  // Personal training's own two (18h-ii): off at the start too.
+  const PT_FEES_START = { lateCancelMinor: 0, noShowMinor: 0 };
   const settingsUrl = (gym: Gym) => `/v1/orgs/${gym.id}/booking-settings`;
   interface Rules {
     settings: ClassBookingSettings;
@@ -518,7 +520,7 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
     "the settings: a new gym's two start at 7 days and 2 hours; the owner changes them alone or with the classes' four, each inside its limits, and what changed is written down",
     async () => {
       const gym = await makeGym("Settings");
-      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: PT_START, fees: FEES_START });
+      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: PT_START, fees: FEES_START, ptFees: PT_FEES_START });
 
       // Every value outside its limits, a missing part and an extra one are refused whole.
       const whole = { ...CLASS_START, pt: PT_START };
@@ -548,8 +550,8 @@ d("personal training's own booking rules (real Postgres, two api instances)", { 
       // Personal training's two alone: the classes' four are as they were.
       const res = await inject("PUT", settingsUrl(gym), gym.owner.cookies, { ...CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 } });
       expect(res.statusCode, res.body).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, movedIn: 0 });
-      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START });
+      expect(JSON.parse(res.body)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, ptFees: PT_FEES_START, movedIn: 0 });
+      expect(await rulesOf(gym)).toEqual({ settings: CLASS_START, pt: { opensDays: 3, freeCancelMinutes: 0 }, fees: FEES_START, ptFees: PT_FEES_START });
       expect(await stored(gym)).toEqual({ classes: [7, 120], pt: [3, 0] });
       // The classes' alone: personal training's are as they were.
       await setRules(gym, { opensDays: 14, freeCancelMinutes: 60 }, { opensDays: 3, freeCancelMinutes: 0 });
