@@ -473,6 +473,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // and the answer (`0129`): the gym's record of who holds its keys. The person asked goes
   // with their account (`ON DELETE cascade`), the owner who asked is set null.
   "gym_co_owner_requests",
+  // gym_owner_requests.user_id and requested_by — which co-owner the owner asked to take the
+  // gym over, and the answer (`0139`), on the same footing. `subscriptions.trial_started_by`
+  // (`0139`, set null) is on the `subscriptions` line below.
+  "gym_owner_requests",
   // gym_member_notes.author_user_id — which member of staff wrote a note on a person's
   // record (`0083`), on gym_leads' footing: the gym's record; `ON DELETE set null`. The
   // note goes with the record it is about.
@@ -537,7 +541,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   "usage_daily",
   "trace_samples",
   "gyms", // gyms.owner_user_id
-  "subscriptions", // subscriptions.owner_id — polymorphic, no FK, see below
+  "subscriptions", // subscriptions.owner_id — polymorphic, no FK, see below; trial_started_by (4b-ii)
   "exercise_definitions", // exercise_definitions.published_by
   // The consent log (migration 0025): KEPT past Day 14 on the audit_log
   // footing — it is the proof a disclaimer was tapped, and a row holds only the

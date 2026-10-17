@@ -967,6 +967,13 @@
       "when": 1790726400138,
       "tag": "0138_pt_fees",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1790726400139,
+      "tag": "0139_owner_hand_over",
+      "breakpoints": true
     }
   ]
 }

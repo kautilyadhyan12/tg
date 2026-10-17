@@ -21,6 +21,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getAttendanceDay: vi.fn(),
       getStartHere: vi.fn(),
       getMyCoOwnerRequest: vi.fn(() => Promise.resolve({ data: { request: null } })),
+      getMyOwnerRequest: vi.fn(() => Promise.resolve({ data: { request: null } })),
       setStartHereHidden: vi.fn(),
     },
   };

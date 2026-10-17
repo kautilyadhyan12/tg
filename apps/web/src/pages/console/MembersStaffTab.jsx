@@ -121,7 +121,8 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
 export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null }) {
-  const [staff, setStaff] = useState({ loading: true, error: null, list: [] });
+  // `paidPlan`: the gym is on a paid plan, so it is not handed over (4b-ii).
+  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
   const [invites, setInvites] = useState({ loading: true, error: null, list: [] });
@@ -138,6 +139,8 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
   const [ptEnding, setPtEnding] = useState(null);
   // What Send request or Cancel request did, said in that person's Co-owner part (4b-i).
   const [coOwnerNote, setCoOwnerNote] = useState(null);
+  // The same for Make owner (4b-ii), said in that person's Owner part.
+  const [ownerNote, setOwnerNote] = useState(null);
   // Only the newest read is drawn; one still on its way when the tab goes is dropped.
   const reads = useRef(0);
 
@@ -164,7 +167,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       return null;
     }
     const list = staffAnswer.value.data?.staff ?? [];
-    setStaff({ loading: false, error: null, list });
+    setStaff({ loading: false, error: null, list, paidPlan: staffAnswer.value.data?.paidPlan === true });
     return list;
   }, [gymId]);
 
@@ -290,6 +293,39 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       setCoOwnerNote({ who: person.userId, message: `Request cancelled. ${person.displayName} can't accept it any more.` });
     } catch (err) {
       setPanelError({ at: 'co-owner', who: person.userId, message: errorText(err, "We couldn't cancel that request. Please try again."), retryable: false });
+    }
+    await read();
+    setBusyId(null);
+  };
+
+  /** Make owner (4b-ii): ask a co-owner to take the gym over, or cancel the request. */
+  const askOwner = async (person) => {
+    setBusyId(person.userId);
+    setPanelError(null);
+    setOwnerNote(null);
+    try {
+      const done = (await orgService.askOwner(gymId, person.userId)).data;
+      setOwnerNote({
+        who: person.userId,
+        message: done.emailed
+          ? `Request sent. We've emailed ${person.displayName}; they accept it on the Overview when they open the console.`
+          : `Request sent, but we couldn't email ${person.displayName}. They'll see it on the Overview when they open the console.`,
+      });
+    } catch (err) {
+      setPanelError({ at: 'owner', who: person.userId, message: errorText(err, "We couldn't send that request. Please try again."), retryable: false });
+    }
+    await read();
+    setBusyId(null);
+  };
+  const cancelOwner = async (person) => {
+    setBusyId(person.userId);
+    setPanelError(null);
+    setOwnerNote(null);
+    try {
+      await orgService.cancelOwnerRequest(gymId, person.userId);
+      setOwnerNote({ who: person.userId, message: `Request cancelled. ${person.displayName} can't accept it any more.` });
+    } catch (err) {
+      setPanelError({ at: 'owner', who: person.userId, message: errorText(err, "We couldn't cancel that request. Please try again."), retryable: false });
     }
     await read();
     setBusyId(null);
@@ -454,6 +490,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
                       // shut is still theirs to read.
                       setPanelError((was) => (was !== null && was.who === person.userId ? was : null));
                       setCoOwnerNote((was) => (was !== null && was.who === person.userId ? was : null));
+                      setOwnerNote((was) => (was !== null && was.who === person.userId ? was : null));
                       onInviting(false);
                       setOpenId(person.userId);
                     }}
@@ -470,6 +507,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
                       <span className="flex flex-wrap gap-1.5 md:justify-end md:flex-shrink-0">
                         <span className="c-tag c-tag-soft">{staffRoleText(person.role, person.roleName ?? null, words, person.coOwner)}</span>
                         {person.coOwnerRequest ? <span className="c-tag c-tag-warn">Asked to be co-owner</span> : null}
+                        {person.ownerRequest ? <span className="c-tag c-tag-warn">Asked to be owner</span> : null}
                         {person.isMember ? <span className="c-tag c-tag-good">Uses the app</span> : null}
                       </span>
                     </span>
@@ -513,6 +551,12 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           coOwnerNote={coOwnerNote !== null && coOwnerNote.who === open.userId ? coOwnerNote.message : null}
           onAskCoOwner={() => void askCoOwner(open)}
           onCancelCoOwner={() => void cancelCoOwner(open)}
+          staff={staff.list}
+          paidPlan={staff.paidPlan}
+          ownerNote={ownerNote !== null && ownerNote.who === open.userId ? ownerNote.message : null}
+          onAskOwner={() => void askOwner(open)}
+          onCancelOwner={() => void cancelOwner(open)}
+          onOpenPerson={(userId) => setOpenId(userId)}
           onRetry={retry}
           onClose={() => {
             // Read, so it goes; a refusal about somebody else waits for their own panel.

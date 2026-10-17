@@ -160,6 +160,19 @@ export function coOwnerView(person, viewerIsOwner) {
   return until === null ? { kind: 'offer' } : { kind: 'waiting', until };
 }
 
+/** What a co-owner's panel says about handing the gym to them (ROADMAP 4b-ii), for the
+ *  gym's owner alone; null for anybody else or any other row.
+ *  `offer`: Make owner. `waiting`: asked, not answered (`until`). `paid`: the gym is on a paid
+ *  plan, so it is not handed over. `other`: another co-owner is asked (`person`). */
+export function ownerView(person, viewerIsOwner, staff, paidPlan) {
+  if (!viewerIsOwner || person?.role !== 'owner' || person.coOwner !== true) return null;
+  const until = person.ownerRequest?.expiresAt ?? null;
+  if (until !== null) return { kind: 'waiting', until };
+  if (paidPlan === true) return { kind: 'paid' };
+  const other = Array.isArray(staff) ? staff.find((p) => p?.userId !== person.userId && p?.ownerRequest) : undefined;
+  return other === undefined ? { kind: 'offer' } : { kind: 'other', person: other };
+}
+
 /** "3 people run your gym", from the whole list.
  *
  *  It takes the ARRAY and not a page because `listStaff` has no LIMIT and no

@@ -70,6 +70,7 @@ import { registerReceiptRoutes } from "./receipts/routes.js";
 import { registerPaymentsDownloadRoutes } from "./paymentsDownload/routes.js";
 import { registerWeekRoutes } from "./week/routes.js";
 import { registerCoOwnerRoutes } from "./coOwners/routes.js";
+import type { BillingDeps } from "../billing/service.js";
 import type { CoOwnerEmailSender } from "./coOwners/email.js";
 import * as service from "./service.js";
 import { PT_SESSIONS_ENDING_ERROR, confirmPtSessionsQuerySchema } from "@app/shared";
@@ -138,6 +139,9 @@ export function registerOrgRoutes(
     supportEmail: string | null;
     /** The co-owner request's email, and the console's origin for its link (4b-i). */
     coOwnerEmail: CoOwnerEmailSender;
+    /** Paddle and Razorpay, for the payment windows a hand-over closes (4b-ii); absent or null
+     *  where neither is set up. */
+    billing?: BillingDeps | null;
     webOrigin: string;
     joinCodes: boolean;
     memberTap: boolean;
@@ -218,7 +222,7 @@ export function registerOrgRoutes(
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
   registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, coOwnerEmail: deps.coOwnerEmail, webOrigin: deps.webOrigin });
   // Co-owners: the owner asks one of the staff, who accepts or declines (ROADMAP 4b-i).
-  registerCoOwnerRoutes(app, { sql: deps.sql, redis: deps.redis, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, webOrigin: deps.webOrigin, now: overrides.now ?? (() => new Date()) });
+  registerCoOwnerRoutes(app, { sql: deps.sql, redis: deps.redis, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, billing: deps.billing ?? null, webOrigin: deps.webOrigin, now: overrides.now ?? (() => new Date()) });
 
   // Overview's "Start here" list: what the gym has set up (ROADMAP 23b).
   registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });

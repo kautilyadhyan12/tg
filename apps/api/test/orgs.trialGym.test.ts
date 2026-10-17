@@ -357,6 +357,27 @@ d("the trial belongs to the gym (real Postgres)", () => {
   );
 
   it(
+    "a gym handed over during its trial is judged by the person who started it, not by its new owner (4b-ii)",
+    async () => {
+      const old = await oldGym();
+      const followers = await people(10);
+      await inGym(old, followers, 40);
+      // The trainer was a member of the old gym and starts the trial; a partner who was never
+      // there takes the gym over before the old gym's people come.
+      const trainer = await makeUser();
+      await inGym(old, [trainer.userId], 40);
+      const gym = await trialGym(trainer);
+      const partner = await makeUser();
+      await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gym}, ${partner.userId}, 'owner')`;
+      await sql`UPDATE gyms SET owner_user_id = ${partner.userId} WHERE id = ${gym}`;
+      await earlierInNewGym(gym, followers);
+      expect(await joinsThroughDoor(gym, partner, old)).toBe(true);
+      expect(await trialOf(gym)).toEqual({ status: "trialing", trial_check: "look", trial_check_gym_id: old });
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
     "the old gym's people invited at another spelling of their own email still came from it",
     async () => {
       const old = await oldGym();

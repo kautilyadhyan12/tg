@@ -4,7 +4,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../../../config.js";
 import type { EmailTransport } from "../../../email/resend.js";
-import { coOwnerRequestEmail } from "../../../email/templates.js";
+import { coOwnerRequestEmail, ownerRequestEmail } from "../../../email/templates.js";
 
 export interface CoOwnerRequestLetter {
   to: string;
@@ -16,6 +16,8 @@ export interface CoOwnerRequestLetter {
 
 export interface CoOwnerEmailSender {
   sendCoOwnerRequest(letter: CoOwnerRequestLetter): Promise<void>;
+  /** The owner asks a co-owner to be the owner (4b-ii): the same letter's fields. */
+  sendOwnerRequest(letter: CoOwnerRequestLetter): Promise<void>;
 }
 
 export function createLogOnlyCoOwnerEmailSender(log: FastifyBaseLogger): CoOwnerEmailSender {
@@ -23,6 +25,10 @@ export function createLogOnlyCoOwnerEmailSender(log: FastifyBaseLogger): CoOwner
     sendCoOwnerRequest: () => {
       log.info({ event: "email.co_owner_request.not_sent" }, "log-only sender delivers nothing");
       return Promise.reject(new Error("log-only email sender: the co-owner request was NOT sent"));
+    },
+    sendOwnerRequest: () => {
+      log.info({ event: "email.owner_request.not_sent" }, "log-only sender delivers nothing");
+      return Promise.reject(new Error("log-only email sender: the owner request was NOT sent"));
     },
   };
 }
@@ -35,6 +41,10 @@ export function createDevCoOwnerEmailSender(log: FastifyBaseLogger, config: AppC
       log.info({ event: "email.co_owner_request.dev", consoleLink: letter.consoleLink }, "DEV ONLY — co-owner request (no RESEND_API_KEY set)");
       return Promise.resolve();
     },
+    sendOwnerRequest: (letter) => {
+      log.info({ event: "email.owner_request.dev", consoleLink: letter.consoleLink }, "DEV ONLY — owner request (no RESEND_API_KEY set)");
+      return Promise.resolve();
+    },
   };
 }
 
@@ -43,6 +53,10 @@ export function createResendCoOwnerEmailSender(transport: EmailTransport, log: F
     sendCoOwnerRequest: async (letter) => {
       await transport.send(coOwnerRequestEmail(letter));
       log.info({ event: "email.co_owner_request.sent" }, "co-owner request email sent");
+    },
+    sendOwnerRequest: async (letter) => {
+      await transport.send(ownerRequestEmail(letter));
+      log.info({ event: "email.owner_request.sent" }, "owner request email sent");
     },
   };
 }

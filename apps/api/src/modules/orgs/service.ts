@@ -624,6 +624,7 @@ export async function listMyOrgs(
       // their own console, so the honest failure is to draw NOTHING rather than
       // to guess an arm. The client requires a definite boolean before it blocks.
       ownerTrialUsed: privileges.includes("billing.manage") ? r.ownerTrialUsed : null,
+      gymTrialUsed: privileges.includes("billing.manage") ? r.gymTrialUsed : null,
       trialEndedFirstPeople: privileges.includes("billing.manage") ? r.trialEndedFirstPeople : null,
       deviceTrialUsed: privileges.includes("billing.manage") ? deviceTrialUsed : null,
       // IS THIS GYM'S CONSOLE READ-ONLY — Part 3 §4.2, and Kd's ruling of
@@ -1245,7 +1246,10 @@ export async function startOrgTrial(
       throw new OrgsError(
         409,
         "trial_already_used",
-        outcome.byOwner
+        // A gym handed over keeps its own trial, which its new owner never had (4b-ii).
+        outcome.gymOnly
+          ? `This ${orgWords(org.orgType).it} has already had its free trial, so it needs a plan to start.`
+          : outcome.byOwner
           ? `You've already used your free trial. It's one per person, not one per ${orgWords(org.orgType).it}.`
           : `This ${orgWords(org.orgType).it}'s owner has already used their free trial, so this ${orgWords(org.orgType).it} needs a plan to start.`,
       );
@@ -2133,7 +2137,11 @@ export async function listOrgStaff(
   await requirePrivilege(deps, gymId, userId, "staff.manage");
   const rows = await repo.listStaff(deps.sql, gymId);
   // Who the owner has asked to be a co-owner and has not answered (4b-i).
-  const asked = await coOwnerRepo.waitingRequests(deps.sql, gymId, deps.now?.() ?? new Date());
+  const now = deps.now?.() ?? new Date();
+  const asked = await coOwnerRepo.waitingRequests(deps.sql, gymId, now);
+  // The co-owner asked to be the owner (4b-ii), and whether a paid plan stops a hand-over.
+  const toOwner = await coOwnerRepo.waitingOwnerRequest(deps.sql, gymId, now);
+  const paidPlan = await coOwnerRepo.gymOnPaidPlan(deps.sql, gymId);
   // Whose current list record is certainly theirs: removing them from the app moves it
   // to past members, and the Staff tab's box says so (4a-ii round one, L5).
   const members = rows.filter((r) => r.isMember).map((r) => r.userId);
@@ -2150,8 +2158,14 @@ export async function listOrgStaff(
   return orgStaffResponseSchema.parse({
     staff: rows.map((r) => {
       const until = asked.get(r.userId);
-      return { ...toOrgStaff(r, userId), movesRecord: onList.has(r.userId), coOwnerRequest: until === undefined ? null : { expiresAt: until.toISOString() } };
+      return {
+        ...toOrgStaff(r, userId),
+        movesRecord: onList.has(r.userId),
+        coOwnerRequest: until === undefined ? null : { expiresAt: until.toISOString() },
+        ownerRequest: toOwner?.userId === r.userId ? { expiresAt: toOwner.expiresAt.toISOString() } : null,
+      };
     }),
+    paidPlan,
   });
 }
 
