@@ -113,6 +113,8 @@ export interface PaymentLineRow {
   /** Who paid for a membership's bill, or was given its refund, where somebody else on the
    *  list pays for this person (18i), as that record was named then; null otherwise. */
   paidBy: string | null;
+  /** Somebody else paid, whose record was deleted for good since. */
+  paidByDeleted: boolean;
   /** What it was for: a membership type's name, or the product's. */
   item: string;
   quantity: number | null;
@@ -220,7 +222,7 @@ export function paymentLine(row: PaymentLineRow): PaymentLine {
     receipt: row.receipt,
     type: PAYMENT_LINE_KIND_WORDS[row.kind],
     person: personWords(row),
-    paidBy: row.paidBy === null ? "" : row.paidBy.trim() === "" ? PAYMENTS_DOWNLOAD_WORDS.no_name : row.paidBy,
+    paidBy: row.paidByDeleted ? PAYMENTS_DOWNLOAD_WORDS.deleted : row.paidBy === null ? "" : row.paidBy.trim() === "" ? PAYMENTS_DOWNLOAD_WORDS.no_name : row.paidBy,
     details: detailsWords(row),
     forReceipt: refund ? row.forReceipt : null,
     refundReason: refund ? (lookup(reasons, row.refundReason) ?? "") : "",

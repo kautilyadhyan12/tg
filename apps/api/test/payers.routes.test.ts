@@ -310,11 +310,16 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect((await pay(gym, aarav.entryId, aaravHeld, 500)).paidBy).toBeNull();
     expect((await receipt(gym, part.receipt)).paidBy).toBe("Priya Sharma");
 
-    // Priya pays again, then her record is deleted for good: the link goes with it.
+    // Priya pays again, then the gym takes her off its list and deletes her record for good, by
+    // the real routes: the link goes with it, and what she paid keeps no name of hers.
     await linked(gym, aarav.entryId, priya.entryId);
-    await sql`DELETE FROM gym_members WHERE gym_id = ${gym.id} AND user_id = ${priya.userId}`;
-    await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${priya.entryId}`;
+    const off = await inject("DELETE", `/v1/orgs/${gym.id}/member-list/entries/${priya.entryId}`, gym.owner.cookies);
+    expect(off.statusCode, off.body).toBe(200);
+    const gone = await inject("DELETE", `/v1/orgs/${gym.id}/member-list/former/${priya.entryId}`, gym.owner.cookies);
+    expect(gone.statusCode, gone.body).toBe(200);
     expect((await payersOf(gym, aarav.entryId)).paidBy).toBeNull();
+    expect(await receipt(gym, part.receipt)).toMatchObject({ person: "Aarav Sharma", paidBy: null, paidByDeleted: true });
+    expect((await sql`SELECT 1 FROM gym_member_payments WHERE gym_id = ${gym.id} AND paid_by_name = 'Priya Sharma'`).length).toBe(0);
     await sql`DELETE FROM gym_member_messages WHERE gym_id = ${gym.id}`;
     await run([gym], 2);
     expect((await overdueTo(gym)).map((r) => r.user_id)).toEqual([aarav.userId]);
@@ -465,10 +470,14 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect(joined.statusCode, joined.body).toBe(200);
     expect((await payersOf(gym, kidNew)).paidBy?.entryId).toBe(mum);
 
-    // The payer's own two records joined: the people she pays for follow the kept one.
+    // The payer's own two records joined: the people she pays for, and what she paid, follow the kept one.
+    const paid = await pay(gym, kidNew, await give(gym, kidNew, 0), 3000);
     const mumAgain = await record(gym, "Sara Joseph");
     expect((await merge(mum, mumAgain)).statusCode).toBe(200);
     expect((await payersOf(gym, mumAgain)).paysFor.map((p) => p.entryId)).toEqual([kidNew]);
+    const [moved] = await sql<{ paid_by_entry_id: string | null; paid_by_name: string | null }[]>`
+      SELECT paid_by_entry_id, paid_by_name FROM gym_member_payments WHERE gym_id = ${gym.id} AND id = ${paid.id}`;
+    expect(moved).toEqual({ paid_by_entry_id: mumAgain, paid_by_name: "Sara Joseph" });
 
     // A link between the two records goes: nobody pays for themselves.
     expect((await merge(kidNew, mumAgain)).statusCode).toBe(200);

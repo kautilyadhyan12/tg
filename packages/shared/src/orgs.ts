@@ -1190,6 +1190,10 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  gym that already had one and never paid (Stage 3 item 2d): the subscribe prompt says why.
    *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
   trialEndedFirstPeople: z.boolean().nullable().default(null),
+  /** This gym already had a free trial and its owner never had one of their own (4b-ii: a gym
+   *  handed over keeps its trial), so `ownerTrialUsed` is true and the prompt says it of the gym.
+   *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
+  gymTrialUsed: z.boolean().nullable().default(null),
   /** The browser this list was read in already started a free trial, under any account
    *  (Stage 3 item 2c: one device, one trial). Told to whoever can pay, as `ownerTrialUsed`
    *  is; false when the request carries no mark; null means "we could not ask". */
@@ -2140,10 +2144,16 @@ export const orgStaffSchema = z.object({
   coOwner: z.boolean().optional(),
   /** The owner has asked them to be a co-owner and they have not answered: when it ends. */
   coOwnerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
+  /** The owner has asked this co-owner to be the owner and they have not answered (4b-ii). */
+  ownerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 
-export const orgStaffResponseSchema = z.object({ staff: z.array(orgStaffSchema) });
+export const orgStaffResponseSchema = z.object({
+  staff: z.array(orgStaffSchema),
+  /** The gym is on a paid plan, so it cannot be handed over here (4b-ii; 4b-iii moves who pays). */
+  paidPlan: z.boolean().optional(),
+});
 export type OrgStaffResponse = z.infer<typeof orgStaffResponseSchema>;
 
 /** ADDING SOMEBODY: an email, and it must belong to a LIVE MEMBER of this gym.

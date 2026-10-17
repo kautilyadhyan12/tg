@@ -515,7 +515,7 @@ export const gymMemberEntryTags = pgTable(
   ],
 );
 
-/** WHO PAYS FOR A PERSON on the gym's list (0139; ROADMAP 18i): one row a person paid
+/** WHO PAYS FOR A PERSON on the gym's list (0140; ROADMAP 18i): one row a person paid
  *  for, naming the record that pays. Their bills stay their own; the payer is who staff
  *  take the money from, who receipts name, and who is told a payment is overdue. Both
  *  records are the gym's (the keys carry it), nobody pays for themselves, and a record

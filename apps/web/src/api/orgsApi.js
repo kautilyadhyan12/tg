@@ -145,6 +145,10 @@ import {
   cancelCoOwnerRequestResponseSchema,
   myCoOwnerRequestResponseSchema,
   answerCoOwnerRequestResponseSchema,
+  sendOwnerRequestResponseSchema,
+  cancelOwnerRequestResponseSchema,
+  myOwnerRequestResponseSchema,
+  answerOwnerRequestResponseSchema,
   ptAppointmentResponseSchema,
   ptPeopleResponseSchema,
   ptTrainersResponseSchema,
@@ -1585,6 +1589,28 @@ export const orgService = {
       answerCoOwnerRequestResponseSchema,
       'your answer',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/co-owner-request/${encodeURIComponent(requestId)}/${accept ? 'accept' : 'decline'}`, {}),
+    ),
+
+  /** The owner hands the gym to a co-owner (ROADMAP 4b-ii): the same four calls. */
+  askOwner: (gymId, userId) =>
+    readThrough(
+      sendOwnerRequestResponseSchema,
+      'that request',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/staff/${encodeURIComponent(userId)}/owner-request`, {}),
+    ),
+  cancelOwnerRequest: (gymId, userId) =>
+    readThrough(
+      cancelOwnerRequestResponseSchema,
+      'that request',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/staff/${encodeURIComponent(userId)}/owner-request`),
+    ),
+  getMyOwnerRequest: (gymId) =>
+    readThrough(myOwnerRequestResponseSchema, 'your owner request', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request`)),
+  answerOwnerRequest: (gymId, requestId, accept) =>
+    readThrough(
+      answerOwnerRequestResponseSchema,
+      'your answer',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request/${encodeURIComponent(requestId)}/${accept ? 'accept' : 'decline'}`, {}),
     ),
 
   /** The gym's membership types (Part 3 §13.1): what it sells and what each costs.

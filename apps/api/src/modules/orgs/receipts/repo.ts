@@ -84,6 +84,7 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     // Sold to somebody whose record was deleted for good since: theirs, and nobody named.
     personDeleted: r.entry_id === null && r.for_member,
     paidBy: null,
+    paidByDeleted: false,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
@@ -138,6 +139,7 @@ async function saleRefundReceipt(sql: Sql, gymId: string, number: number): Promi
     person: r.entry_id === null ? null : personName(r.full_name),
     personDeleted: r.entry_id === null && r.for_member,
     paidBy: null,
+    paidByDeleted: false,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
@@ -188,6 +190,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       full_name: string | null;
       person_deleted: boolean;
       paid_by_name: string | null;
+      paid_by_deleted: boolean;
       type_name: string;
       bill_minor: number;
       covers_from: string | null;
@@ -204,7 +207,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     }[]
   >`
     SELECT h.price_minor AS held_price, CASE WHEN b.fee IS NULL THEN h.discount_name END AS discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
-           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, p.paid_by_name, ${billItemSql(sql)} AS type_name,
+           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, p.paid_by_name, p.paid_by_deleted, ${billItemSql(sql)} AS type_name,
            b.amount_minor AS bill_minor, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
@@ -229,6 +232,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     person: r.person_deleted ? null : personName(r.full_name),
     personDeleted: r.person_deleted,
     paidBy: r.paid_by_name,
+    paidByDeleted: r.paid_by_deleted,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
@@ -253,6 +257,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
       full_name: string | null;
       person_deleted: boolean;
       paid_by_name: string | null;
+      paid_by_deleted: boolean;
       type_name: string;
       covers_from: string | null;
       covers_to: string | null;
@@ -261,7 +266,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
   >`
     SELECT r.amount_minor, r.currency, r.method, r.refunded_on::text AS refunded_on,
            (r.undone_at IS NOT NULL OR p.undone_at IS NOT NULL) AS cancelled,
-           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, p.paid_by_name, ${billItemSql(sql)} AS type_name,
+           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, p.paid_by_name, p.paid_by_deleted, ${billItemSql(sql)} AS type_name,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, p.receipt_number AS for_receipt
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
@@ -280,6 +285,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
     personDeleted: r.person_deleted,
     // Given back to whoever paid it.
     paidBy: r.paid_by_name,
+    paidByDeleted: r.paid_by_deleted,
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,

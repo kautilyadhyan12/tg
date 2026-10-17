@@ -353,12 +353,20 @@ export const gymMemberPayments = pgTable(
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
     /** Who paid, as their record was named when it was recorded, where somebody else on the
-     *  gym's list pays for this person (0139; 18i); null where they paid for themselves. */
+     *  gym's list pays for this person (0140; 18i); null where they paid for themselves. */
     paidByName: text("paid_by_name"),
+    /** That record while it is on the list (0140): a join moves it, and a record deleted for good
+     *  blanks the name first and marks `paidByDeleted`, as a payment's own person deleted reads. */
+    paidByEntryId: uuid("paid_by_entry_id"),
+    paidByDeleted: boolean("paid_by_deleted").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
     check("gym_member_payments_paid_by_name_check", sql`${t.paidByName} IS NULL OR char_length(${t.paidByName}) <= 120`),
+    check("gym_member_payments_paid_by_check", sql`NOT ${t.paidByDeleted} OR (${t.paidByName} IS NULL AND ${t.paidByEntryId} IS NULL)`),
+    // Its `(gym_id, paid_by_entry_id)` key to the gym's list, ON DELETE SET NULL (paid_by_entry_id),
+    // is in `0140_member_payers.sql` alone: Drizzle's builder cannot say a column list.
+    index("gym_member_payments_paid_by_idx").on(t.gymId, t.paidByEntryId).where(sql`${t.paidByEntryId} IS NOT NULL`),
     check(
       "gym_member_payments_void_reason_check",
       sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','wrong_person','other'))`,

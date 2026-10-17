@@ -124,9 +124,11 @@ export function receiptPerson(receipt) {
  *  Priya Sharma", or on a refund "Given back to Priya Sharma". Null where they paid for
  *  themselves, and on a sale. */
 export function receiptPayer(receipt) {
+  const label = receipt.kind === 'refund' ? 'Given back to' : 'Paid by';
+  if (receipt.paidByDeleted === true) return { label, name: 'A deleted member' };
   if (receipt.paidBy === null || receipt.paidBy === undefined) return null;
   const name = receipt.paidBy.trim() === '' ? 'No name on their record' : receipt.paidBy;
-  return { label: receipt.kind === 'refund' ? 'Given back to' : 'Paid by', name };
+  return { label, name };
 }
 
 /** "15 Oct 2026". */

@@ -1144,11 +1144,15 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_member_list_not_duplicates.second_entry_id",
       "gym_member_notes.entry_id",
       "gym_member_notes.gym_id",
-      // Who pays for whom (0139; 18i): the join moves both sides to the kept record, and
+      // Who pays for whom (0140; 18i): the join moves both sides to the kept record, and
       // either record deleted for good takes the link with it (`payers.routes.test.ts`).
       "gym_member_payers.entry_id",
       "gym_member_payers.gym_id",
       "gym_member_payers.payer_entry_id",
+      // Who paid for a payment (0140; 18i): moved by the join; a record deleted for good
+      // blanks the name and marks it a deleted member's (`payers.routes.test.ts`).
+      "gym_member_payments.gym_id",
+      "gym_member_payments.paid_by_entry_id",
       "gym_members.entry_id",
       "gym_members.gym_id",
       // The record a membership was removed with (0048): moved by a merge with the rest.

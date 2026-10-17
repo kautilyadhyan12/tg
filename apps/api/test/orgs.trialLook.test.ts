@@ -107,6 +107,18 @@ d("the have-a-look warnings (real Postgres)", () => {
     expect(found?.clues.some((c) => c.gymId === elsewhere)).toBe(false);
   }, TIMEOUT_MS);
 
+  it("names the person who started the free trial, not an owner the gym was handed to since (4b-ii)", async () => {
+    const older = await gym(await person(), "Bronze Anvil Gym", 30);
+    await trialEnded(older);
+    const starter = `triallook${run}-starter@gmail.com`;
+    const trial = await gym(await person(starter), "BronzeAnvil Fitness", 2);
+    await freeTrial(trial, 2);
+    const taker = await person(`triallook${run}-taker@gmail.com`);
+    await sql`UPDATE gyms SET owner_user_id = ${taker} WHERE id = ${trial}`;
+
+    expect((await warningFor(trial))?.ownerEmail).toBe(starter);
+  }, TIMEOUT_MS);
+
   it("lists the same address where the other gym has no city but the same PIN code, and says it has paid", async () => {
     const older = await gym(await person(), "Power Gym", 30, { city: null, address: "Shop 4, Phoenix Mall, Mumbai 400013" });
     await paid(older);

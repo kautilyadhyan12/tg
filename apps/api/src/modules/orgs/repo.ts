@@ -117,6 +117,9 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
+  /** This gym already had a free trial and its owner never had one of their own (4b-ii): a
+   *  gym handed over. */
+  gymTrialUsed: boolean;
   /** This gym's free trial was ended because 11 of its people came from another gym
    *  that never paid (2d); the service withholds it as it does `ownerTrialUsed`. */
   trialEndedFirstPeople: boolean;
@@ -521,6 +524,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       billing_mobile: string | null;
       seats_used: number;
       owner_trial_used: boolean;
+      gym_trial_used: boolean;
       trial_ended_first_people: boolean;
       postal_address: string | null;
       contact_phone: string | null;
@@ -612,11 +616,14 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            -- Since Stage 3 item 2b the owner is a PERSON: their own account and every
            -- proved account whose address is a spelling of the same mailbox, as the door;
            -- an unproved owner is only their own account.
+           -- Since 4b-ii a trial is counted against whoever STARTED it (trial_started_by),
+           -- so a gym handed over moves no trial; this gym's own trial (gym_trial_used,
+           -- below) counts too, joined in toOrgRow: two lookups, each by its own index.
            EXISTS (
-             SELECT 1 FROM subscriptions ts JOIN gyms tg ON tg.id = ts.owner_id
+             SELECT 1 FROM subscriptions ts
              WHERE ts.owner_type = 'gym'
                AND ts.trial_ends_at IS NOT NULL
-               AND tg.owner_user_id IN (
+               AND ts.trial_started_by IN (
                  SELECT g.owner_user_id
                  UNION ALL
                  SELECT tu.id FROM users ou JOIN users tu ON tu.trial_person_key = ou.trial_person_key
@@ -631,6 +638,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
                    )
                )
            ) AS owner_trial_used,
+           EXISTS (
+             SELECT 1 FROM subscriptions gs
+             WHERE gs.owner_type = 'gym' AND gs.owner_id = g.id AND gs.trial_ends_at IS NOT NULL
+           ) AS gym_trial_used,
            EXISTS (
              SELECT 1 FROM subscriptions fs
              WHERE fs.owner_type = 'gym' AND fs.owner_id = g.id AND fs.trial_check = 'ended'
@@ -769,7 +780,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             fitted_members: r.sub_fitted_members,
           }),
     seatsUsed: r.seats_used,
-    ownerTrialUsed: r.owner_trial_used,
+    ownerTrialUsed: r.owner_trial_used || r.gym_trial_used,
+    // Said of the gym only when the owner never had one of their own, as the door says it.
+    gymTrialUsed: r.gym_trial_used && !r.owner_trial_used,
     trialEndedFirstPeople: r.trial_ended_first_people,
     postalAddress: r.postal_address,
     billingMobile: r.billing_mobile,
@@ -1917,7 +1930,7 @@ export type StartTrialOutcome =
   | { kind: "started"; subscription: GymSubscriptionRow }
   | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
   // `byOwner`: whether the person who pressed is the owner, whose trial it was.
-  | { kind: "trial_already_used"; byOwner: boolean }
+  | { kind: "trial_already_used"; byOwner: boolean; gymOnly: boolean }
   | { kind: "trial_used_on_device" }
   // A second-trial code was typed that is not one Kd made for this owner, unused and in date.
   | { kind: "trial_code_not_valid" }
@@ -2084,24 +2097,31 @@ export async function startGymTrial(
     // The gym's lock does not cover the person's other gyms, so two presses on two of
     // them would both read "never had one"; the lock is the person's.
     await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-trial:${personKey ?? gym.owner_user_id}`}))`;
-    const used = await tx<{ one: number }[]>`
-      SELECT 1 AS one
-      FROM subscriptions s JOIN gyms g ON g.id = s.owner_id
-      WHERE s.owner_type = 'gym'
-        AND s.trial_ends_at IS NOT NULL
-        AND g.owner_user_id IN (
-          SELECT ${gym.owner_user_id}::uuid
-          UNION ALL
-          SELECT u.id FROM users u
-          WHERE u.trial_person_key = ${personKey}
-            AND EXISTS (
-              SELECT 1 FROM one_time_tokens t
-              WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
-            )
-        )
-      LIMIT 1`;
+    // Counted against whoever STARTED each trial (4b-ii), and this gym's own always counts:
+    // a gym handed over keeps its trial, and its old owner gets no second one. `theirs` says
+    // whether one was the owner's own, so a new owner is not told they had one.
+    const used = await tx<{ n: number; theirs: boolean }[]>`
+      WITH person AS (
+        SELECT ${gym.owner_user_id}::uuid AS id
+        UNION ALL
+        SELECT u.id FROM users u
+        WHERE u.trial_person_key = ${personKey}
+          AND EXISTS (
+            SELECT 1 FROM one_time_tokens t
+            WHERE t.user_id = u.id AND t.purpose = 'verify_email' AND t.used_at IS NOT NULL
+          )
+      )
+      SELECT count(*)::int AS n, COALESCE(bool_or(x.theirs), false) AS theirs
+      FROM (
+        SELECT true AS theirs FROM subscriptions s
+        WHERE s.owner_type = 'gym' AND s.trial_ends_at IS NOT NULL AND s.trial_started_by IN (SELECT id FROM person)
+        UNION ALL
+        SELECT s.trial_started_by IN (SELECT id FROM person) FROM subscriptions s
+        WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId} AND s.trial_ends_at IS NOT NULL
+      ) x`;
+    const usedHere = used[0] ?? { n: 0, theirs: false };
     let refused: "trial_already_used" | "trial_used_on_device" | null =
-      used[0] === undefined ? null : "trial_already_used";
+      usedHere.n === 0 ? null : "trial_already_used";
     // One device, one trial (Stage 3 item 2c): a browser that started a free trial starts no
     // other, under any account. Locked on the mark too, so two gyms pressed at once in one
     // browser do not both read "never had one"; the person's lock is always taken first. Taken
@@ -2123,7 +2143,7 @@ export async function startGymTrial(
     if (refused !== null) {
       if (input.code === null) {
         return refused === "trial_already_used"
-          ? { kind: refused, byOwner: input.actorUserId === gym.owner_user_id }
+          ? { kind: refused, byOwner: input.actorUserId === gym.owner_user_id, gymOnly: !usedHere.theirs }
           : { kind: refused };
       }
       if (personKey === null) {
@@ -2242,8 +2262,8 @@ export async function startGymTrial(
  *  "ended" stands; a "look" is asked again on each join, so a second gym the owner was never
  *  at still ends the trial whichever of the two filled up first. */
 export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): Promise<TrialCheck> {
-  const subs = await tx<{ id: string; created_at: Date; trial_check: string | null }[]>`
-    SELECT id, created_at, trial_check FROM subscriptions
+  const subs = await tx<{ id: string; created_at: Date; trial_check: string | null; trial_started_by: string | null }[]>`
+    SELECT id, created_at, trial_check, trial_started_by FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId}
       AND status = 'trialing' AND provider = 'none' AND (trial_check IS NULL OR trial_check = 'look')
       AND trial_ends_at > now()
@@ -2263,7 +2283,9 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
   // is read: 18–20 ms for 100 people who were each in 3 other gyms (`.cost/measure-2d-trial-check.mts`).
   const rows = await tx<{ gym_id: string; came: number; owner_was_there: boolean }[]>`
     WITH me AS (
-      SELECT owner_user_id, created_at FROM gyms WHERE id = ${gymId}
+      -- "The owner" is whoever started this trial (4b-ii): a gym handed over during its trial
+      -- is still judged by the person whose trial it is.
+      SELECT COALESCE(${sub.trial_started_by}::uuid, owner_user_id) AS owner_user_id, created_at FROM gyms WHERE id = ${gymId}
     ),
     people AS (
       SELECT owner_user_id AS user_id, created_at AS came_at FROM me

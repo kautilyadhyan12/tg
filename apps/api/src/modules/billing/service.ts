@@ -234,10 +234,10 @@ function beginRefusal(
   }
 }
 
-/** Cancel, at their payment company, the checkouts a newer press replaced: only one checkout
- *  per gym can be paid. One that will not cancel is logged; if it is paid anyway, the second
+/** Cancel, at their payment company, the checkouts a newer press replaced (or a hand-over
+ *  closed, 4b-ii): only one checkout per gym can be paid. One that will not cancel is logged; if it is paid anyway, the second
  *  plan is set aside and refunded when it arrives. */
-async function closeSuperseded(deps: BillingDeps, superseded: readonly { provider: repo.PayProvider; ref: string }[]): Promise<void> {
+export async function closeSuperseded(deps: BillingDeps, superseded: readonly { provider: repo.PayProvider; ref: string }[]): Promise<void> {
   for (const old of superseded) {
     const razorpay = deps.razorpay ?? null;
     if (old.provider === "razorpay" && razorpay !== null) {

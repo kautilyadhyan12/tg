@@ -81,6 +81,8 @@ export async function movePayerLinks(
   if ((state.gone_payer !== null || state.keep_payer !== null) && (state.gone_pays || state.keep_pays)) return "merge_payer_and_paid_for";
   await tx`UPDATE gym_member_payers SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
   await tx`UPDATE gym_member_payers SET payer_entry_id = ${keepId} WHERE gym_id = ${gymId} AND payer_entry_id = ${goneId}`;
+  // What the record not kept paid for others is the kept one's, under the name it had then.
+  await tx`UPDATE gym_member_payments SET paid_by_entry_id = ${keepId} WHERE gym_id = ${gymId} AND paid_by_entry_id = ${goneId}`;
   return null;
 }
 

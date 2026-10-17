@@ -47,6 +47,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getOverview: vi.fn(),
       getStartHere: vi.fn(),
       getMyCoOwnerRequest: vi.fn(() => Promise.resolve({ data: { request: null } })),
+      getMyOwnerRequest: vi.fn(() => Promise.resolve({ data: { request: null } })),
       getAttendanceDay: vi.fn(),
       getPlans: vi.fn(),
       startCheckout: vi.fn(),
@@ -660,6 +661,16 @@ describe('the forced subscribe prompt', () => {
     ).toBeTruthy();
     expect(screen.queryByText(/owner has already used their free trial/i)).toBeNull();
     expect(screen.getByText('$35 a month')).toBeTruthy();
+  });
+
+  it('says it of the gym when the gym itself already had its free trial, which a new owner never had (4b-ii)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...spent, gymTrialUsed: true }));
+    renderConsole(Overview);
+
+    await screen.findByTestId('plan-list');
+    expect(screen.getByText('This gym has already had its free trial, so it needs a plan to start.')).toBeTruthy();
+    expect(screen.queryByText(/owner has already used their free trial/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /free trial/i })).toBeNull();
   });
 
   it('says "this computer" when the browser already started a free trial and the owner never had one (2c)', async () => {

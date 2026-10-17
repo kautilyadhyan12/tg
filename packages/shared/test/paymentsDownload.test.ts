@@ -20,6 +20,7 @@ const base: PaymentLineRow = {
   personDeleted: false,
   walkIn: false,
   paidBy: null,
+  paidByDeleted: false,
   item: "Gold Monthly",
   quantity: null,
   coversFrom: "2026-10-01",
@@ -140,6 +141,7 @@ describe("a line of the file", () => {
     expect(paymentLine(row({ paidBy: "Priya Sharma" }))).toMatchObject({ person: "Maya Patel", paidBy: "Priya Sharma" });
     expect(paymentLine(row({ kind: "refund", amountMinor: 1000, forReceipt: 41, refundReason: "paid_twice", paidBy: "Priya Sharma" })).paidBy).toBe("Priya Sharma");
     expect(paymentLine(row({ paidBy: "  " })).paidBy).toBe("No name on their record");
+    expect(paymentLine(row({ paidByDeleted: true })).paidBy).toBe("A deleted member");
     expect(paymentLine(row({})).paidBy).toBe("");
     expect(paymentLine(row({ kind: "sale", item: "Water", quantity: 1 })).paidBy).toBe("");
   });

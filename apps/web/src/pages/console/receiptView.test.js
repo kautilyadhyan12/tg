@@ -224,6 +224,8 @@ describe('who paid, where somebody else pays for the person (18i)', () => {
     expect(receiptPayer(payment({ paidBy: 'Priya Sharma' }))).toEqual({ label: 'Paid by', name: 'Priya Sharma' });
     expect(receiptPayer(refund({ paidBy: 'Priya Sharma' }))).toEqual({ label: 'Given back to', name: 'Priya Sharma' });
     expect(receiptPayer(payment({ paidBy: '  ' }))).toEqual({ label: 'Paid by', name: 'No name on their record' });
+    expect(receiptPayer(payment({ paidBy: null, paidByDeleted: true }))).toEqual({ label: 'Paid by', name: 'A deleted member' });
+    expect(receiptPayer(refund({ paidBy: null, paidByDeleted: true }))).toEqual({ label: 'Given back to', name: 'A deleted member' });
     expect(receiptPayer(payment({ paidBy: null }))).toBeNull();
     expect(receiptPayer(payment())).toBeNull();
     expect(receiptPayer(sale({ paidBy: null }))).toBeNull();

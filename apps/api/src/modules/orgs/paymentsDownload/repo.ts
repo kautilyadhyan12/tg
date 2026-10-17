@@ -18,6 +18,7 @@ const lineSchema = z.object({
   person_deleted: z.boolean(),
   walk_in: z.boolean(),
   paid_by: z.string().nullable(),
+  paid_by_deleted: z.boolean(),
   item: z.string(),
   quantity: z.number().int().nullable(),
   covers_from: z.string().nullable(),
@@ -42,7 +43,7 @@ export type LineRow = PaymentLineRow & { currency: string; line: number };
 function lines(sql: Sql, gymId: string, from: string, to: string) {
   return sql`
     SELECT 'payment' AS kind, p.paid_on::text AS day, p.receipt_number AS receipt, 0 AS line, e.full_name AS name,
-           (h.entry_id IS NULL) AS person_deleted, false AS walk_in, p.paid_by_name AS paid_by, ${billItemSql(sql)} AS item, NULL::int AS quantity,
+           (h.entry_id IS NULL) AS person_deleted, false AS walk_in, p.paid_by_name AS paid_by, p.paid_by_deleted, ${billItemSql(sql)} AS item, NULL::int AS quantity,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            p.amount_minor, b.amount_minor AS whole_minor, b.tax_minor AS whole_tax_minor, p.method, p.currency,
            (p.undone_at IS NOT NULL) AS voided, p.void_reason, NULL::int AS for_receipt, NULL::text AS refund_reason,
@@ -58,7 +59,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     WHERE p.gym_id = ${gymId} AND p.paid_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
     SELECT 'refund', r.refunded_on::text, r.receipt_number, 0, e.full_name,
-           (h.entry_id IS NULL), false, p.paid_by_name, ${billItemSql(sql)}, NULL::int,
+           (h.entry_id IS NULL), false, p.paid_by_name, p.paid_by_deleted, ${billItemSql(sql)}, NULL::int,
            b.covers_from::text, b.covers_to::text,
            r.amount_minor, b.amount_minor, b.tax_minor, r.method, r.currency,
            (r.undone_at IS NOT NULL OR p.undone_at IS NOT NULL), r.void_reason, p.receipt_number, r.reason,
@@ -73,7 +74,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     WHERE r.gym_id = ${gymId} AND r.refunded_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
     SELECT 'sale', s.sold_on::text, s.receipt_number, s.line_no::int, e.full_name,
-           (s.entry_id IS NULL AND s.for_member), (s.entry_id IS NULL AND NOT s.for_member), NULL::text, s.item_name, s.quantity,
+           (s.entry_id IS NULL AND s.for_member), (s.entry_id IS NULL AND NOT s.for_member), NULL::text, false, s.item_name, s.quantity,
            NULL::text, NULL::text,
            s.total_minor, s.total_minor, s.tax_minor, s.method, s.currency,
            (s.undone_at IS NOT NULL), s.void_reason, NULL::int, NULL::text,
@@ -86,7 +87,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     WHERE s.gym_id = ${gymId} AND s.sold_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
     SELECT 'sale_refund', f.refunded_on::text, f.receipt_number, 0, e.full_name,
-           (s.entry_id IS NULL AND s.for_member), (s.entry_id IS NULL AND NOT s.for_member), NULL::text, s.item_name, NULL::int,
+           (s.entry_id IS NULL AND s.for_member), (s.entry_id IS NULL AND NOT s.for_member), NULL::text, false, s.item_name, NULL::int,
            NULL::text, NULL::text,
            f.amount_minor, s.total_minor, s.tax_minor, f.method, f.currency,
            (f.undone_at IS NOT NULL OR s.undone_at IS NOT NULL), f.void_reason, s.receipt_number, f.reason,
@@ -126,6 +127,7 @@ export async function linesPage(
       personDeleted: r.person_deleted,
       walkIn: r.walk_in,
       paidBy: r.paid_by,
+      paidByDeleted: r.paid_by_deleted,
       item: r.item,
       quantity: r.quantity,
       coversFrom: r.covers_from,

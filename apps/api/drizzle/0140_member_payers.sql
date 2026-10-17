@@ -24,6 +24,15 @@ ALTER TABLE "gym_member_payers" ADD CONSTRAINT "gym_member_payers_set_by_users_i
 CREATE INDEX "gym_member_payers_payer_idx" ON "gym_member_payers" USING btree ("gym_id","payer_entry_id");--> statement-breakpoint
 -- Who paid, as that record was named the moment the payment was recorded: a receipt and
 -- the download say it after the link or the name changes. NULL where the person paid for
--- themselves; '' for a payer whose record has no name.
+-- themselves; '' for a payer whose record has no name. `paid_by_entry_id` is that record
+-- while it is on the gym's list, moved by a join of two records; a record deleted for good
+-- blanks the name first (`deleteEntry`) and is then let go, and `paid_by_deleted` says a
+-- deleted member paid, as a payment's own person deleted reads (`0116`).
 ALTER TABLE "gym_member_payments" ADD COLUMN "paid_by_name" text;--> statement-breakpoint
-ALTER TABLE "gym_member_payments" ADD CONSTRAINT "gym_member_payments_paid_by_name_check" CHECK ("paid_by_name" IS NULL OR char_length("paid_by_name") <= 120);
+ALTER TABLE "gym_member_payments" ADD COLUMN "paid_by_entry_id" uuid;--> statement-breakpoint
+ALTER TABLE "gym_member_payments" ADD COLUMN "paid_by_deleted" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "gym_member_payments" ADD CONSTRAINT "gym_member_payments_paid_by_fk" FOREIGN KEY ("gym_id","paid_by_entry_id") REFERENCES "public"."gym_member_list_entries"("gym_id","id") ON DELETE SET NULL ("paid_by_entry_id");--> statement-breakpoint
+ALTER TABLE "gym_member_payments" ADD CONSTRAINT "gym_member_payments_paid_by_name_check" CHECK ("paid_by_name" IS NULL OR char_length("paid_by_name") <= 120);--> statement-breakpoint
+ALTER TABLE "gym_member_payments" ADD CONSTRAINT "gym_member_payments_paid_by_check" CHECK (NOT "paid_by_deleted" OR ("paid_by_name" IS NULL AND "paid_by_entry_id" IS NULL));--> statement-breakpoint
+-- A record deleted for good finds the payments it made.
+CREATE INDEX "gym_member_payments_paid_by_idx" ON "gym_member_payments" USING btree ("gym_id","paid_by_entry_id") WHERE "paid_by_entry_id" IS NOT NULL;

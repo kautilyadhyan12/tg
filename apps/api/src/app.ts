@@ -325,6 +325,7 @@ export async function buildApp(
   const invites = inviteSettings(config);
   const paddle = paddleSettings(config, overrides.paddleApi);
   const razorpay = razorpaySettings(config, overrides.razorpayApi);
+  const billing = { sql, redis, paddle, razorpay, log: app.log, now: () => new Date() };
   registerOrgRoutes(
     app,
     {
@@ -336,6 +337,7 @@ export async function buildApp(
       // The server's own disk until Cloudflare R2 is connected at deploy (Stage 4 item 1).
       photos: overrides.photoStore ?? createDiskPhotoStore(config.PHOTO_DIR ?? join(tmpdir(), "aihg-gym-photos")),
       supportEmail: config.SUPPORT_EMAIL ?? null,
+      billing,
       coOwnerEmail:
         overrides.coOwnerEmailSender ??
         (transport !== null ? createResendCoOwnerEmailSender(transport, app.log) : createDevCoOwnerEmailSender(app.log, config)),
@@ -359,12 +361,7 @@ export async function buildApp(
   });
   // A gym paying us through Paddle, or Razorpay for an Indian gym, and their webhooks.
   registerBillingRoutes(app, {
-    sql,
-    redis,
-    paddle,
-    razorpay,
-    log: app.log,
-    now: () => new Date(),
+    ...billing,
     webhookSecret: config.PADDLE_WEBHOOK_SECRET,
     razorpayWebhookSecret: config.RAZORPAY_WEBHOOK_SECRET,
     nowSeconds: () => Math.floor(Date.now() / 1000),
