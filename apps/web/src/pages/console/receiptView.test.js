@@ -22,8 +22,8 @@ const sale = (over = {}) => ({
   ...common,
   kind: 'sale',
   person: null,
-  item: { name: 'Water', quantity: 2, unitPriceMinor: 250 },
-  amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 433 },
+  lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 433 } }],
+  totalMinor: 433,
   method: 'card_at_desk',
   ...over,
 });
@@ -94,7 +94,7 @@ describe('receiptLines', () => {
       'Total | $4.33',
       'Paid by card at the desk | $4.33',
     ]);
-    expect(drawn(sale({ item: { name: 'Water', quantity: 1, unitPriceMinor: 250 }, amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 }, method: 'cash' }))).toEqual([
+    expect(drawn(sale({ lines: [{ name: 'Water', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 } }], totalMinor: 250, method: 'cash' }))).toEqual([
       '1 × Water | $2.50',
       'Total | $2.50',
       'Paid by cash | $2.50',
@@ -171,7 +171,7 @@ describe('the receipt on paper', () => {
   });
 
   it("what staff or a member typed is printed as words, never as the page's own markup", () => {
-    const html = receiptPrintHtml(sale({ person: '<img src=x onerror=alert(1)>', gym: { name: 'Tom & Jerry\'s "Gym"', address: '<b>1</b>' }, item: { name: '</td><script>x</script>', quantity: 1, unitPriceMinor: 250 } }));
+    const html = receiptPrintHtml(sale({ person: '<img src=x onerror=alert(1)>', gym: { name: 'Tom & Jerry\'s "Gym"', address: '<b>1</b>' }, lines: [{ name: '</td><script>x</script>', quantity: 1, unitPriceMinor: 250, amounts: { listedMinor: 250, discount: null, tax: null, totalMinor: 250 } }], totalMinor: 250 }));
     expect(html).not.toContain('<img');
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<b>1</b>');

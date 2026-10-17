@@ -67,8 +67,8 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
             </p>
           ) : null}
           <div className="flex flex-col pt-2" data-testid="receipt-lines">
-            {receiptLines(receipt).map((line) => (
-              <div key={line.label} className={`c-receipt-line c-s14${line.total ? ' c-receipt-total' : ''}${line.strong ? ' c-w7' : ''}`}>
+            {receiptLines(receipt).map((line, i) => (
+              <div key={`${String(i)}-${line.label}`} className={`c-receipt-line c-s14${line.total ? ' c-receipt-total' : ''}${line.strong ? ' c-w7' : ''}`}>
                 <span>{line.label}</span>
                 {line.amount !== null ? <span className="c-num whitespace-nowrap">{line.amount}</span> : null}
               </div>

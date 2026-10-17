@@ -53,8 +53,8 @@ const receipt = (over = {}) => ({
   by: 'Sam Desk',
   currency: 'USD',
   cancelled: false,
-  item: { name: 'Water', quantity: 2, unitPriceMinor: 250 },
-  amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 433 },
+  lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 250, amounts: { listedMinor: 500, discount: { name: 'Staff 20', minor: 100 }, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 433 } }],
+  totalMinor: 433,
   method: 'cash',
   ...over,
 });

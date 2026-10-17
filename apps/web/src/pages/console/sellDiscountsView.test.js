@@ -237,8 +237,8 @@ describe('what a sale with a discount shows', () => {
     expect(saleProblem(base)).toBeNull();
   });
 
-  const sold = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true };
-  const plain = { ...sold, id: 's2', discountName: null, discountMinor: 0, netMinor: 398, taxMinor: 33, totalMinor: 431 };
+  const sold = { id: 's1', itemName: 'Water', quantity: 2, unitPriceMinor: 199, netMinor: 318, taxMinor: 26, totalMinor: 344, taxBp: 825, taxName: 'Sales tax', taxIncluded: false, discountName: 'Summer sale', discountMinor: 80, currency: 'USD', method: 'cash', soldOn: '2026-10-13', soldAt: '2026-10-13T15:00:00.000Z', by: 'Sam Desk', person: null, undone: false, canUndo: true, receiptNumber: 41 };
+  const plain = { ...sold, id: 's2', receiptNumber: 42, discountName: null, discountMinor: 0, netMinor: 398, taxMinor: 33, totalMinor: 431 };
 
   it('says the discount where the sale is said: in the box, in the day and on the person', () => {
     expect(soldWords(sold)).toBe('Sold: 2 × Water to a walk-in. $3.44, cash. Summer sale: $0.80 off.');

@@ -87,7 +87,7 @@ const sale = (over = {}) => ({
   undone: false,
   voided: null,
   canUndo: true,
-  receiptNumber: 41,
+  receiptNumber: 40 + Number(String(over.id ?? 's1').replace(/\D/g, '') || '0'),
   ...over,
 });
 const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0, ...over });
@@ -146,7 +146,7 @@ beforeEach(() => {
   svc.get.mockResolvedValue(page());
   svc.findPeople.mockResolvedValue([MAYA]);
   svc.friendGift.mockResolvedValue({ friendGift: null });
-  svc.sell.mockResolvedValue({ saleId: 's1', register: withSale() });
+  svc.sell.mockResolvedValue({ saleId: 's1', receiptNumber: 41, register: withSale() });
   orgApi.getMemberList.mockResolvedValue({ data: { list: null } });
   orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [MONTH] } });
 });
@@ -164,9 +164,9 @@ describe('a product sale', () => {
     expect(svc.get).toHaveBeenCalledWith('g1');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).queryByTestId('sale-summary')).toBeNull();
-    expect(Array.from(screen.getByLabelText('Product').options).map((o) => o.textContent)).toEqual(['Pick a product', 'Towel · $5.00', 'Water · $1.99 · 8 left']);
+    expect(Array.from(screen.getByLabelText('Add a product').options).map((o) => o.textContent)).toEqual(['Pick a product', 'Towel · $5.00', 'Water · $1.99 · 8 left']);
 
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
     pick('How did they pay?', 'card_at_desk');
     expect(within(newSale()).getByTestId('sale-summary').textContent).toBe('Price$3.98Sales tax 8.25%$0.33Total$4.31');
@@ -181,36 +181,42 @@ describe('a product sale', () => {
     expect(svc.sell).toHaveBeenCalledTimes(1);
     const [gymId, body] = svc.sell.mock.calls[0];
     expect(gymId).toBe('g1');
-    expect(body).toEqual({ requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/), productId: 'p-water', quantity: 2, entryId: null, method: 'card_at_desk', totalMinor: 431, discountId: null });
-    finish({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
+    expect(body).toEqual({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      entryId: null,
+      method: 'card_at_desk',
+      totalMinor: 431,
+      lines: [{ productId: 'p-water', quantity: 2, discountId: null, totalMinor: 431 }],
+    });
+    finish({ saleId: 's1', receiptNumber: 41, register: withSale(sale({ method: 'card_at_desk' })) });
 
     const done = await within(newSale()).findByTestId('sale-done');
     expect(done.textContent).toBe("Sale recordedSold: 2 × Water to a walk-in. $4.31, card at the desk.It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale.New saleView receipt");
     // The form is gone: there is nothing to press a second time by mistake.
     expect(within(newSale()).queryByRole('button', { name: /^Take payment/ })).toBeNull();
-    expect(screen.queryByLabelText('Product')).toBeNull();
+    expect(screen.queryByLabelText('Add a product')).toBeNull();
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: $4.31 from 1 sale. Cash $4.31.');
     expect(within(today()).getAllByTestId('takings-row').map((r) => r.textContent)).toEqual([expect.stringContaining('2 × Water · $4.31')]);
     // New sale brings back an empty form: no product picked, so nothing can be sold yet.
     fireEvent.click(within(newSale()).getByRole('button', { name: 'New sale' }));
     expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
-    expect(screen.getByLabelText('Product').value).toBe('');
-    expect(screen.getByLabelText('How many').value).toBe('1');
+    expect(screen.getByLabelText('Add a product').value).toBe('');
+    expect(screen.queryByLabelText('How many')).toBeNull();
     expect(takeButton().disabled).toBe(true);
     fireEvent.click(takeButton());
     expect(svc.sell).toHaveBeenCalledTimes(1);
     // The next sale has a key of its own.
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(2));
     expect(svc.sell.mock.calls[1][1].requestKey).not.toBe(body.requestKey);
-    expect(svc.sell.mock.calls[1][1]).toMatchObject({ quantity: 1, totalMinor: 215 });
+    expect(svc.sell.mock.calls[1][1]).toMatchObject({ totalMinor: 215, lines: [{ quantity: 1, totalMinor: 215 }] });
   });
 
   it('is for a walk-in until a member is found and picked, and then names them', async () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-towel');
+    pick('Add a product', 'p-towel');
     expect(screen.getByLabelText('Walk-in (not on your list)').checked).toBe(true);
     fireEvent.click(screen.getByLabelText('A member'));
     expect(takeButton().disabled).toBe(true);
@@ -223,7 +229,7 @@ describe('a product sale', () => {
     expect(within(newSale()).getByTestId('sell-person').textContent).toBe('Maya Patel · No. 1042');
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
-    expect(svc.sell.mock.calls[0][1]).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', totalMinor: 541 });
+    expect(svc.sell.mock.calls[0][1]).toMatchObject({ entryId: 'e-maya', totalMinor: 541, lines: [{ productId: 'p-towel' }] });
   });
 
   it("Refer a friend's gift is filled in for the friend picked, never for a walk-in or anybody else, and Remove takes it off (20e-ii-b-i)", async () => {
@@ -237,7 +243,7 @@ describe('a product sale', () => {
     svc.friendGift.mockImplementation((_gym, entryId) => Promise.resolve({ friendGift: entryId === 'e-maya' ? { discount: gift, words: '10% off products', invitedBy: 'Ravi Kumar' } : null }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-towel');
+    pick('Add a product', 'p-towel');
     expect(within(newSale()).queryByTestId('friend-gift')).toBeNull();
     expect(within(newSale()).queryByRole('option', { name: /WELCOME10/ })).toBeNull();
 
@@ -252,7 +258,7 @@ describe('a product sale', () => {
     fireEvent.click(note.getByRole('button', { name: 'Put it back' }));
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
-    expect(svc.sell.mock.calls[0][1]).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', discountId: 'd-friend' });
+    expect(svc.sell.mock.calls[0][1]).toMatchObject({ entryId: 'e-maya', lines: [{ productId: 'p-towel', discountId: 'd-friend' }] });
   });
 
   it("a member's own Refer a friend gift is filled in for them at Sell, in a discount's place, and Remove keeps it (20e-ii-b-ii-a)", async () => {
@@ -260,7 +266,7 @@ describe('a product sale', () => {
     svc.friendGift.mockImplementation((_gym, entryId) => Promise.resolve({ friendGift: null, memberGift: entryId === 'e-maya' ? memberGift : null }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-towel');
+    pick('Add a product', 'p-towel');
     expect(within(newSale()).queryByTestId('member-gift')).toBeNull();
     fireEvent.click(screen.getByLabelText('A member'));
     fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
@@ -276,8 +282,8 @@ describe('a product sale', () => {
     fireEvent.click(takeButton());
     await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
     const sent = svc.sell.mock.calls[0][1];
-    expect(sent).toMatchObject({ productId: 'p-towel', entryId: 'e-maya', discountId: null, memberGift: { id: 'g-maya' } });
-    expect(sent.memberGift.offMinor).toBeGreaterThan(0);
+    expect(sent).toMatchObject({ entryId: 'e-maya', lines: [{ productId: 'p-towel', discountId: null, memberGift: { id: 'g-maya' } }] });
+    expect(sent.lines[0].memberGift.offMinor).toBeGreaterThan(0);
   });
 
   it("Refer a friend's gift never replaces a discount staff picked before it was found", async () => {
@@ -292,7 +298,7 @@ describe('a product sale', () => {
     svc.friendGift.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-towel');
+    pick('Add a product', 'p-towel');
     fireEvent.click(screen.getByLabelText('A member'));
     fireEvent.change(within(newSale()).getByLabelText('Find them by name or member number'), { target: { value: 'may' } });
     fireEvent.click(await within(newSale()).findByRole('button', { name: 'Maya Patel · No. 1042' }));
@@ -326,7 +332,7 @@ describe('a product sale', () => {
     svc.sell.mockRejectedValue(refusal(409, 'The price or the tax changed while this was open. Nothing was sold: check the total and press again.'));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     svc.get.mockResolvedValue(page({ tax: NO_TAX }));
     fireEvent.click(takeButton());
     expect((await within(newSale()).findByRole('alert')).textContent).toBe('The price or the tax changed while this was open. Nothing was sold: check the total and press again.');
@@ -339,11 +345,12 @@ describe('a product sale', () => {
     svc.get.mockResolvedValue(page({ products: [product({ stock: 0 }), product({ id: 'p-bar', name: 'Bar', stock: 2 })] }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).getByText('Water is out of stock. Change its stock count under Products if you have more.')).toBeTruthy();
-    pick('Product', 'p-bar');
-    fireEvent.change(screen.getByLabelText('How many'), { target: { value: '3' } });
+    pick('Add a product', 'p-bar');
+    // Each product is a line of its own, with its own How many.
+    fireEvent.change(screen.getAllByLabelText('How many')[1], { target: { value: '3' } });
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).getByText('Only 2 left in stock.')).toBeTruthy();
     expect(svc.sell).not.toHaveBeenCalled();
@@ -372,7 +379,7 @@ describe('today', () => {
     expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');
     expect(within(today()).getByText('1 sale or payment today was taken in another currency. It is listed below and not added to the total above.')).toBeTruthy();
     // The product still priced in the old money cannot be sold, and its row says what to do.
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     expect(takeButton().disabled).toBe(true);
     expect(within(newSale()).getByText('Water is priced in USD, and you now sell in GBP. Open Water under Products and save its price in GBP.')).toBeTruthy();
     expect(within(products()).getByTestId('product-row').textContent).toContain('priced in USD: save its price in GBP to sell it');
@@ -452,8 +459,8 @@ describe('receipts (18g-i)', () => {
     by: 'Sam Desk',
     currency: 'USD',
     cancelled: false,
-    item: { name: 'Water', quantity: 2, unitPriceMinor: 199 },
-    amounts: { listedMinor: 398, discount: null, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 431 },
+    lines: [{ name: 'Water', quantity: 2, unitPriceMinor: 199, amounts: { listedMinor: 398, discount: null, tax: { name: 'Sales tax', bp: 825, included: false, minor: 33 }, totalMinor: 431 } }],
+    totalMinor: 431,
     method: 'card_at_desk',
     ...over,
   });
@@ -462,10 +469,10 @@ describe('receipts (18g-i)', () => {
     svc.receipt.mockResolvedValue(paper());
     open();
     await screen.findByRole('region', { name: 'New sale' });
-    pick('Product', 'p-water');
+    pick('Add a product', 'p-water');
     fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
     pick('How did they pay?', 'card_at_desk');
-    svc.sell.mockResolvedValue({ saleId: 's1', register: withSale(sale({ method: 'card_at_desk' })) });
+    svc.sell.mockResolvedValue({ saleId: 's1', receiptNumber: 41, register: withSale(sale({ method: 'card_at_desk' })) });
     fireEvent.click(takeButton());
     const done = await within(newSale()).findByTestId('sale-done');
     fireEvent.click(within(done).getByRole('button', { name: 'View receipt #41 for this sale' }));
@@ -498,7 +505,7 @@ describe('a membership', () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
     expect(within(newSale()).queryByRole('button', { name: 'A membership' })).toBeNull();
-    expect(within(newSale()).getByLabelText('Product')).toBeTruthy();
+    expect(within(newSale()).getByLabelText('Add a product')).toBeTruthy();
     const box = screen.getByRole('region', { name: 'Sell a membership' });
     expect(within(box).getByText("Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and how they paid.")).toBeTruthy();
     fireEvent.change(within(box).getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
@@ -544,7 +551,7 @@ describe('products and tax', () => {
     await waitFor(() => expect(svc.addProduct).toHaveBeenCalledWith('g1', { name: 'Water', priceMinor: 199, taxRateId: null, stock: 24 }));
     expect(await within(products()).findByText('Water added. It is now on the Sell form above.')).toBeTruthy();
     expect(within(products()).queryByRole('form')).toBeNull();
-    expect(screen.getByLabelText('Product')).toBeTruthy();
+    expect(screen.getByLabelText('Add a product')).toBeTruthy();
   });
 
   it('a product is changed with the time its form read it, and archived only after the box is answered', async () => {
@@ -746,8 +753,8 @@ describe('who sees what', () => {
     open({ ...ORG, consoleReadOnly: true });
     await screen.findByRole('region', { name: 'New sale' });
     expect(screen.getAllByText('This gym needs a plan before anything here can be changed.').length).toBeGreaterThan(0);
-    pick('Product', 'p-towel');
-    expect(screen.getByLabelText('Product').disabled).toBe(true);
+    pick('Add a product', 'p-towel');
+    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
     expect(takeButton().disabled).toBe(true);
     expect(within(today()).queryByRole('button', { name: 'More for the sale of 2 × Water' })).toBeNull();
     expect(within(products()).getByRole('button', { name: 'Add a product' }).disabled).toBe(true);

@@ -9,6 +9,7 @@ import {
   SALE_REFUND_CHOICES,
   SALE_REFUND_VOID_CHOICES,
   asksRestock,
+  refundLineOption,
   restockChoices,
   saleRefundBody,
   saleRefundDraft,
@@ -134,9 +135,44 @@ export function SaleRefundBox({ gymId, sale, who, onDone, onClose }) {
   );
 }
 
-/** A sale's refunds under it. `canAct`: the viewer may sell, at a gym that can be changed. */
-export function SaleRefundLines({ gymId, gym, sale, canAct, onDone }) {
-  const lines = saleRefundLines(sale);
+/** Refund sale on a sale (18q): on a sale of several products, which one the money went back
+ *  for is picked first, from those with something left to refund; then that product's box. */
+export function BasketRefundBox({ gymId, basket, who, onDone, onClose }) {
+  const open = basket.lines.filter((line) => line.canRefund === true);
+  const [lineId, setLineId] = useState(open.length === 1 ? (open[0]?.id ?? '') : '');
+  const line = open.find((l) => l.id === lineId) ?? null;
+  if (basket.lines.length === 1) return <SaleRefundBox gymId={gymId} sale={basket.first} who={who} onDone={onDone} onClose={onClose} />;
+  return (
+    <div className="flex flex-col gap-3" data-testid="basket-refund">
+      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX}>
+        <label className="c-field">
+          <span className="c-label">Which product was it for?</span>
+          <select className="c-sel" value={lineId} onChange={(e) => setLineId(e.target.value)}>
+            <option value="">Choose one</option>
+            {open.map((l) => (
+              <option key={l.id} value={l.id}>
+                {refundLineOption(l)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {line === null ? (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={PLAIN} onClick={onClose}>
+              Back
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {line !== null ? <SaleRefundBox key={line.id} gymId={gymId} sale={line} who={who} onDone={onDone} onClose={onClose} /> : null}
+    </div>
+  );
+}
+
+/** A sale's refunds under it. `canAct`: the viewer may sell, at a gym that can be changed.
+ *  `named`: the line is one product of a sale of several, so each refund names it. */
+export function SaleRefundLines({ gymId, gym, sale, canAct, onDone, named = false }) {
+  const lines = saleRefundLines(sale, named);
   const [receiptFor, setReceiptFor] = useState(null);
   const [voiding, setVoiding] = useState(null);
   const [form, setForm] = useState({ reason: '', tried: false });

@@ -91,14 +91,21 @@ export function saleRefundedWords(sale, body, receiptNumber) {
   return `Refund noted: ${formatMinor(body.amountMinor, sale.currency)} back on the sale of ${String(sale.quantity)} × ${sale.itemName}.${shelf} Its receipt is #${String(receiptNumber)}.`;
 }
 
-/** A sale's refunds, those that stand and those voided, in the order they were noted. */
-export function saleRefundLines(sale) {
+/** A product of a sale of several (18q), as Refund sale offers it: what is left to refund on it. */
+export function refundLineOption(sale) {
+  return `${String(sale.quantity)} × ${sale.itemName} · ${formatMinor(refundableMinor(sale), sale.currency)} can be refunded`;
+}
+
+/** A sale's refunds, those that stand and those voided, in the order they were noted. `named`:
+ *  the sale has several products, so each refund says which it was for (18q). */
+export function saleRefundLines(sale, named = false) {
   return (sale.refunds ?? []).map((r) => ({
     id: r.id,
     receiptNumber: r.receiptNumber,
     amount: `${formatMinor(r.amountMinor, sale.currency)} refunded`,
     money: formatMinor(r.amountMinor, sale.currency),
     detail: joined([
+      named ? sale.itemName : null,
       methodWords(r.method),
       shortDay(r.refundedOn),
       SALE_REFUND_REASON_WORDS[r.reason] ?? null,

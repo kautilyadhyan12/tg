@@ -18,6 +18,7 @@ import {
   minorToPriceText,
   priceToMinor,
   saleAmounts,
+  saleBaskets,
   taxRateToBp,
 } from '@app/shared';
 import { sentTime } from './memberListPeople';
@@ -143,11 +144,33 @@ export function saleProblem({ product, quantity, who, person, currency, discount
   return null;
 }
 
+/** A sale's lines as one sale (18q): a basket from `saleBaskets`, or one line read alone. */
+const asBasket = (sale) =>
+  Array.isArray(sale.lines) ? sale : { receiptNumber: sale.receiptNumber, first: sale, lines: [sale], totalMinor: sale.totalMinor, taxMinor: sale.taxMinor, refundedMinor: sale.refundedMinor ?? 0 };
+
+/** "1 × Protein bar, 2 × Water": a sale's products, in the order they were rung up. */
+export function basketTitle(sale) {
+  return asBasket(sale)
+    .lines.map((line) => `${String(line.quantity)} × ${line.itemName}`)
+    .join(', ');
+}
+
+/** Each discount on a sale's lines, as one product's sale says it; null for none. */
+export function basketDiscountWords(sale) {
+  const words = asBasket(sale)
+    .lines.map(saleDiscountWords)
+    .filter((w) => w !== null);
+  return words.length === 0 ? null : words.join('. ');
+}
+
 /** Said in the same place once a sale is recorded. */
 export function soldWords(sale) {
-  const to = sale.person === null ? 'a walk-in' : sale.person.name;
-  const sold = `Sold: ${String(sale.quantity)} × ${sale.itemName} to ${to}. ${formatMinor(sale.totalMinor, sale.currency)}, ${methodWords(sale.method).toLowerCase()}.`;
-  return sale.discountName === null || sale.discountName === undefined ? sold : `${sold} ${saleDiscountWords(sale)}.`;
+  const basket = asBasket(sale);
+  const first = basket.first;
+  const to = first.person === null ? 'a walk-in' : first.person.name;
+  const sold = `Sold: ${basketTitle(basket)} to ${to}. ${formatMinor(basket.totalMinor, first.currency)}, ${methodWords(first.method).toLowerCase()}.`;
+  const off = basketDiscountWords(basket);
+  return off === null ? sold : `${sold} ${off}.`;
 }
 
 /** "Summer sale: $0.80 off", for a sale made with a discount; null for one made without. */
@@ -223,26 +246,39 @@ export function takingsPerson(person, deleted) {
   return deleted ? 'A deleted member' : 'Walk-in';
 }
 
-/** Today's product sales and membership payments as one list, newest first. */
+/** "Refunded" once all of a sale went back, "Part refunded" while some did; null for none. */
+export function basketRefundTag(sale) {
+  const basket = asBasket(sale);
+  // Each line's refunds, as the server counts them; a line read without them has none.
+  const refundedMinor = basket.lines.reduce((n, line) => n + (line.refundedMinor ?? 0), 0);
+  return saleRefundTag({ ...basket.first, totalMinor: basket.totalMinor, refundedMinor });
+}
+
+/** Today's product sales and membership payments as one list, newest first: a sale of several
+ *  products is one row (18q). */
 export function takingsRows(page, timeZone, clockFormat) {
   const facts = (who, method, at, by, discount = null) =>
     [who, methodWords(method), discount, sentTime(at, timeZone, clockFormat), by === null ? null : `by ${by}`].filter((x) => x !== null && x !== '').join(' · ');
-  const sales = page.sales.map((sale) => ({
-    key: `sale-${sale.id}`,
-    kind: 'sale',
-    at: sale.soldAt,
-    title: `${String(sale.quantity)} × ${sale.itemName}`,
-    amount: formatMinor(sale.totalMinor, sale.currency),
-    facts: facts(takingsPerson(sale.person, sale.personDeleted === true), sale.method, sale.soldAt, sale.by, saleDiscountWords(sale)),
-    person: sale.person,
-    undone: sale.undone,
-    voided: saleVoidedLine(sale),
-    refundTag: saleRefundTag(sale),
-    canUndo: sale.canUndo,
-    canRefund: sale.canRefund === true,
-    receiptNumber: sale.receiptNumber,
-    sale,
-  }));
+  const sales = saleBaskets(page.sales).map((basket) => {
+    const sale = basket.first;
+    return {
+      key: `sale-${sale.id}`,
+      kind: 'sale',
+      at: sale.soldAt,
+      title: basketTitle(basket),
+      amount: formatMinor(basket.totalMinor, sale.currency),
+      facts: facts(takingsPerson(sale.person, sale.personDeleted === true), sale.method, sale.soldAt, sale.by, basketDiscountWords(basket)),
+      person: sale.person,
+      undone: sale.undone,
+      voided: saleVoidedLine(sale),
+      refundTag: basketRefundTag(basket),
+      canUndo: sale.canUndo,
+      canRefund: basket.lines.some((line) => line.canRefund === true),
+      receiptNumber: basket.receiptNumber,
+      sale,
+      basket,
+    };
+  });
   const payments = (page.payments ?? []).map((payment) => ({
     key: `payment-${payment.id}`,
     kind: 'payment',
@@ -258,6 +294,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     canRefund: false,
     receiptNumber: payment.receiptNumber,
     sale: null,
+    basket: null,
   }));
   return [...sales, ...payments].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
@@ -272,14 +309,15 @@ export function saleVoidedLine(sale) {
   return sale.voided === null || sale.voided === undefined ? 'Voided' : voidedLine(sale.voided, SALE_VOID_REASON_WORDS);
 }
 
-/** What the Void sale box asks. */
+/** What the Void sale box asks: every product of the sale is voided. */
 export function voidSaleQuestion(sale) {
-  return `Void this sale? ${String(sale.quantity)} × ${sale.itemName}, ${formatMinor(sale.totalMinor, sale.currency)}. It will no longer count in today's total, and it stays in the list crossed out. If you took the money, give it back yourself.`;
+  const basket = asBasket(sale);
+  return `Void this sale? ${basketTitle(basket)}, ${formatMinor(basket.totalMinor, basket.first.currency)}. It will no longer count in today's total, and it stays in the list crossed out. If you took the money, give it back yourself.`;
 }
 
 /** The done line of a void. */
 export function saleVoidedWords(sale) {
-  return `Sale voided: ${String(sale.quantity)} × ${sale.itemName}. It no longer counts in today's total.`;
+  return `Sale voided: ${basketTitle(sale)}. It no longer counts in today's total.`;
 }
 
 /** "$0.18 GST": the tax in a sale, by the name it was charged under; null for none. */
@@ -288,19 +326,22 @@ export function saleTaxWords(sale) {
   return `${formatMinor(sale.taxMinor, sale.currency)} ${sale.taxName ?? 'tax'}`;
 }
 
-/** One purchase on a person's page. */
-export function purchaseLine(sale) {
+/** One purchase on a person's page: a sale, every product of it (18q). */
+export function purchaseLine(sold) {
+  const basket = asBasket(sold);
+  const sale = basket.first;
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(sale.soldOn);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const when = day === null ? sale.soldOn : `${String(Number(day[3]))} ${months[Number(day[2]) - 1] ?? ''} ${day[1]}`;
+  const tax = basket.lines.length === 1 ? saleTaxWords(sale) : basket.taxMinor > 0 ? `${formatMinor(basket.taxMinor, sale.currency)} tax` : null;
   return {
-    title: `${String(sale.quantity)} × ${sale.itemName}`,
-    amount: formatMinor(sale.totalMinor, sale.currency),
-    facts: [when, methodWords(sale.method), saleDiscountWords(sale), saleTaxWords(sale)].filter((x) => x !== null).join(' · '),
+    title: basketTitle(basket),
+    amount: formatMinor(basket.totalMinor, sale.currency),
+    facts: [when, methodWords(sale.method), basketDiscountWords(basket), tax].filter((x) => x !== null).join(' · '),
     undone: sale.undone,
     voided: saleVoidedLine(sale),
-    refundTag: saleRefundTag(sale),
-    receiptNumber: sale.receiptNumber,
+    refundTag: basketRefundTag(basket),
+    receiptNumber: basket.receiptNumber,
   };
 }
 
