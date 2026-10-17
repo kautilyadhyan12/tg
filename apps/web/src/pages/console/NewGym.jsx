@@ -70,6 +70,9 @@ export default function NewGym() {
   const zones = useMemo(() => timezoneOptions(detected), [detected]);
 
   const [name, setName] = useState('');
+  // One key for this form: pressing Create again after an answer that never arrived gets the
+  // gym the first press made, not a second one.
+  const [createKey] = useState(() => crypto.randomUUID());
   const [city, setCity] = useState('');
   const [orgType, setOrgType] = useState('gym');
   // T3 C/H-1 — NO PRESELECTED COUNTRY, and this is the whole ruling in one line.
@@ -139,6 +142,7 @@ export default function NewGym() {
         timezone: timezone.trim(),
         ...(inIndia ? { billingMobile: mobile } : {}),
         trainsHere,
+        createKey,
       });
       // THE CONSOLE HAS TO BE TOLD, AND THIS IS THE ONLY PLACE THAT CAN TELL IT
       // (T3 C/H-1). Every console screen reads one kept answer to "which gyms do

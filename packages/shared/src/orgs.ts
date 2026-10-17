@@ -284,6 +284,9 @@ export const createOrgRequestSchema = z
      *  on one of the gym's places, no gives them the console only. Asked, never
      *  defaulted. */
     trainsHere: z.boolean(),
+    /** Made by the form when it opens: a second press with it, after an answer that never
+     *  arrived, answers the gym the first press made instead of making another. */
+    createKey: z.string().uuid().optional(),
   })
   .strict();
 export type CreateOrgRequest = z.infer<typeof createOrgRequestSchema>;
@@ -1183,7 +1186,7 @@ export const myOrgSchema = orgSummarySchema.extend({
    *  console, so the client requires a definite answer before it blocks
    *  anything. */
   ownerTrialUsed: z.boolean().nullable().default(null),
-  /** This gym's free trial ended early because most of its first people came from another
+  /** This gym's free trial ended early because 11 of its people came from another
    *  gym that already had one and never paid (Stage 3 item 2d): the subscribe prompt says why.
    *  Told to whoever can pay, as `ownerTrialUsed` is; null means "we could not ask". */
   trialEndedFirstPeople: z.boolean().nullable().default(null),

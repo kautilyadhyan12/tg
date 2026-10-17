@@ -3637,7 +3637,7 @@ company's idempotency key).
 
 **As built, 18h-ii (2026-10-17; `rulings/2026-10-17-18h-ii.md`): the same fees for personal
 training.** Two amounts of their own in Booking rules, under Personal training (`gyms.pt_*`,
-`0137`; 0 is off; the same tick as the class fees). A session's fee is a bill with no period
+`0138`; 0 is off; the same tick as the class fees). A session's fee is a bill with no period
 naming the session (`gym_member_bills.pt_appointment_id`, one standing fee a session), "Late
 cancel fee · Personal training with Arjun Rao" with the session's day. The rule is the
 classes' own, `classFeeFor`, with personal training's amounts: a pack holder's session stays

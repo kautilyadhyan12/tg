@@ -1,9 +1,11 @@
 // One person for free-trial counting, however the address is spelled (RULINGS 2026-09-08,
 // layer 1; ROADMAP Stage 3 item 2b). Gmail ignores dots and treats googlemail.com as
-// gmail.com; most providers deliver `name+tag` to `name`. Dots stay everywhere else:
-// Google's own page says they change a work or school address.
+// gmail.com; most providers deliver `name+tag` to `name`; Fastmail delivers
+// `anything@name.fastmail.com` to `name@fastmail.com`. Dots stay everywhere else: Google's own
+// page says they change a work or school address.
 
 const GMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+const FASTMAIL_SUBDOMAIN = /^([a-z0-9-]+)\.fastmail\.com$/;
 
 /** The address's domain, lower-cased, or null when it has none. */
 export function emailDomain(email: string): string | null {
@@ -24,5 +26,7 @@ export function trialPersonKey(email: string): string {
   // "+tag@x" alone has no name to fall back to, so it stays as written.
   if (plus > 0) local = local.slice(0, plus);
   if (GMAIL_DOMAINS.has(domain)) return `${local.replaceAll(".", "")}@gmail.com`;
+  const fastmailName = FASTMAIL_SUBDOMAIN.exec(domain)?.[1];
+  if (fastmailName !== undefined) return `${fastmailName}@fastmail.com`;
   return `${local}@${domain}`;
 }

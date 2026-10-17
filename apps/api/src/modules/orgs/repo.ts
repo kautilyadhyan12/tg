@@ -21,7 +21,7 @@ import { reworkTimeOffInstants } from "./pt/repo.js";
 import { endTrainersSessions, endedAuditMeta, requireSessionsConfirmed } from "./pt/changes.js";
 import { streaks, visitsWithOwner } from "./leaderboard/visits.js";
 import { comeBackTooSoon } from "./atRisk/repo.js";
-import { TRIAL_FIRST_PEOPLE, decideTrialCheck, type TrialCheck } from "./trialFirstPeople.js";
+import { decideTrialCheck, type TrialCheck } from "./trialFirstPeople.js";
 import {
   ATTENDANCE_PAGE_LIMIT,
   ATTENDANCE_SUMMARY_LIMIT,
@@ -117,7 +117,7 @@ export interface MyOrgRow extends OrgRow {
    *  the service nulls it for a caller who is not staff, as it does the two
    *  fields above. */
   ownerTrialUsed: boolean;
-  /** This gym's free trial was ended because most of its first people came from another gym
+  /** This gym's free trial was ended because 11 of its people came from another gym
    *  that never paid (2d); the service withholds it as it does `ownerTrialUsed`. */
   trialEndedFirstPeople: boolean;
   /** The gym's postal address for its invitations; the service withholds it from a
@@ -357,6 +357,8 @@ export interface CreateOrgInput {
   billingMobile: string | null;
   /** The owner's "Do you train here too?": yes is an ordinary seat (§10.4). */
   trainsHere: boolean;
+  /** The form's key for this press, or null; a gym already made with it is answered again. */
+  createKey: string | null;
   /** The owner's starting ticks, computed by the service from the owner role's
    *  template — policy stays in one place, storage in this one. */
   ownerPrivileges: readonly string[];
@@ -365,6 +367,8 @@ export interface CreateOrgInput {
 export interface CreateOrgResult {
   org: OrgRow;
   code: { code: string; label: string } | null;
+  /** The gym was made by an earlier press with the same key: nothing was made now. */
+  replayed: boolean;
 }
 
 /** The account's email, or null for an account without one. */
@@ -389,6 +393,19 @@ export async function createOrgAttempt(
   try {
     return await sql.begin(async (tx) => {
       await tx`SELECT pg_advisory_xact_lock(hashtext(${`gym-create:${input.ownerUserId}`}))`;
+      // The same press again, after its answer was lost: the gym it made, made once.
+      if (input.createKey !== null) {
+        const made = await tx<RawOrg[]>`
+          SELECT id, slug, name, city, country, org_type, timezone, locale,
+                 currency_display, clock_format, manual_attendance_enabled, status
+          FROM gyms WHERE owner_user_id = ${input.ownerUserId} AND create_key = ${input.createKey}`;
+        const madeOrg = made[0];
+        if (madeOrg !== undefined) {
+          const codes = await tx<{ code: string; label: string }[]>`
+            SELECT code, label FROM gym_codes WHERE gym_id = ${madeOrg.id} ORDER BY created_at, id LIMIT 1`;
+          return { org: toOrgRow(madeOrg), code: codes[0] ?? null, replayed: true };
+        }
+      }
       // A gym "paid" as 2d stamps it: any of its plans reached Paid or Payment due.
       const unpaid = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gyms g
@@ -400,10 +417,11 @@ export async function createOrgAttempt(
       if ((unpaid[0]?.n ?? 0) >= input.unpaidLimit) throw new UnpaidGymLimitError();
       const orgRows = await tx<RawOrg[]>`
         INSERT INTO gyms (slug, name, city, country, org_type, timezone, locale,
-                          currency_display, owner_user_id, billing_mobile)
+                          currency_display, owner_user_id, billing_mobile, create_key)
         VALUES (${input.slug}, ${input.name}, ${input.city}, ${input.country},
                 ${input.orgType}, ${input.timezone}, ${input.locale},
-                ${input.currencyDisplay}, ${input.ownerUserId}, ${input.billingMobile})
+                ${input.currencyDisplay}, ${input.ownerUserId}, ${input.billingMobile},
+                ${input.createKey})
         RETURNING id, slug, name, city, country, org_type, timezone, locale,
                   currency_display, clock_format, manual_attendance_enabled, status`;
       const rawOrg = orgRows[0];
@@ -447,7 +465,7 @@ export async function createOrgAttempt(
         meta: { orgType: org.orgType },
       });
 
-      return { org, code };
+      return { org, code, replayed: false };
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -1501,9 +1519,12 @@ async function claimSeat(
   }
 
   const inserted = await tx<{ id: string; joined_at: Date }[]>`
-    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary, entry_id, last_listed_at)
+    INSERT INTO gym_members (gym_id, user_id, code_id, consent_at, complimentary, entry_id, last_listed_at, joined_at)
     VALUES (${input.org.id}, ${input.userId}, ${input.codeId}, ${input.consentAt}, false,
-            ${input.entryId ?? null}, ${input.listedAt ?? null})
+            ${input.entryId ?? null}, ${input.listedAt ?? null},
+            -- The moment the gym's lock let this person in, not when the transaction began: two
+            -- people joining together are stored in the order they were counted (2d).
+            clock_timestamp())
     ON CONFLICT (gym_id, user_id) WHERE removed_at IS NULL DO NOTHING
     RETURNING id, joined_at`;
 
@@ -1895,7 +1916,8 @@ export async function deviceHadTrial(sql: SqlOrTx, deviceHash: string): Promise<
 export type StartTrialOutcome =
   | { kind: "started"; subscription: GymSubscriptionRow }
   | { kind: "already_subscribed"; subscription: GymSubscriptionRow }
-  | { kind: "trial_already_used" }
+  // `byOwner`: whether the person who pressed is the owner, whose trial it was.
+  | { kind: "trial_already_used"; byOwner: boolean }
   | { kind: "trial_used_on_device" }
   // A second-trial code was typed that is not one Kd made for this owner, unused and in date.
   | { kind: "trial_code_not_valid" }
@@ -2099,7 +2121,11 @@ export async function startGymTrial(
     // only by a confirmed owner. The person's lock is held, so one code starts one trial.
     let codeId: string | null = null;
     if (refused !== null) {
-      if (input.code === null) return { kind: refused };
+      if (input.code === null) {
+        return refused === "trial_already_used"
+          ? { kind: refused, byOwner: input.actorUserId === gym.owner_user_id }
+          : { kind: refused };
+      }
       if (personKey === null) {
         return { kind: "email_not_confirmed", byOwner: input.actorUserId === gym.owner_user_id };
       }
@@ -2208,10 +2234,11 @@ export async function startGymTrial(
   });
 }
 
-/** THE TRIAL BELONGS TO THE GYM (Stage 3 item 2d): looks at the gym's first people and ends
- *  its free trial, or puts it on Kd's look list, by `decideTrialCheck`. The caller holds the
+/** THE TRIAL BELONGS TO THE GYM (Stage 3 item 2d): looks at the gym's people and ends its
+ *  free trial, or puts it on Kd's look list, by `decideTrialCheck`. The caller holds the
  *  gym's lock, so two people joining at once are counted one after the other. It does
- *  nothing unless the gym is on our own free trial: a gym that paid is never touched. An
+ *  nothing unless the gym is on our own free trial and it has not run out: a gym that paid is
+ *  never touched, and a trial past its last day is the sweep's to end, not this rule's. An
  *  "ended" stands; a "look" is asked again on each join, so a second gym the owner was never
  *  at still ends the trial whichever of the two filled up first. */
 export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): Promise<TrialCheck> {
@@ -2219,16 +2246,21 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
     SELECT id, created_at, trial_check FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId}
       AND status = 'trialing' AND provider = 'none' AND (trial_check IS NULL OR trial_check = 'look')
+      AND trial_ends_at > now()
       -- A free trial a second-trial code started is one Kd has looked at (2e-i).
       AND NOT EXISTS (SELECT 1 FROM second_trial_codes c WHERE c.subscription_id = subscriptions.id)`;
   const sub = subs[0];
   if (sub === undefined) return { kind: "none" };
 
-  // The first people: the owner, always one (Kd: "the owner's own device counts as member
-  // one"; the device is 2c's), from the moment the gym was made; then the first others to
-  // join, removed ones included, each from their first join. Somebody "came from" another gym
-  // when they were in its app before that moment. That gym counts only when its free trial
-  // began before this one and it never paid.
+  // The gym's people: the owner, always one (Kd: "the owner's own device counts as member
+  // one"; the device is 2c's), from the moment the gym was made; then everybody else who
+  // joined, removed ones included, each from their first join. Somebody "came from" another
+  // gym when they, under any spelling of their email, were in its app before that moment, and
+  // are counted once however many accounts their email has (`trial_person_key`; an account
+  // with no address is its own person): an invitation to `asha+again@…` makes a new account,
+  // and it is still Asha (the passes' re-check, High-1). That gym counts only when its free trial began before this one and it never paid.
+  // A gym on a free trial holds 100 members at a time (`GYM_TRIAL_MEMBERS`), so the whole list
+  // is read: 18–20 ms for 100 people who were each in 3 other gyms (`.cost/measure-2d-trial-check.mts`).
   const rows = await tx<{ gym_id: string; came: number; owner_was_there: boolean }[]>`
     WITH me AS (
       SELECT owner_user_id, created_at FROM gyms WHERE id = ${gymId}
@@ -2236,17 +2268,21 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
     people AS (
       SELECT owner_user_id AS user_id, created_at AS came_at FROM me
       UNION ALL
-      (SELECT m.user_id, min(m.joined_at) AS came_at
-       FROM gym_members m CROSS JOIN me
-       WHERE m.gym_id = ${gymId} AND m.user_id <> me.owner_user_id
-       GROUP BY m.user_id
-       ORDER BY min(m.joined_at), m.user_id
-       LIMIT ${TRIAL_FIRST_PEOPLE - 1})
+      SELECT m.user_id, min(m.joined_at) AS came_at
+      FROM gym_members m CROSS JOIN me
+      WHERE m.gym_id = ${gymId} AND m.user_id <> me.owner_user_id
+      GROUP BY m.user_id
     ),
     came AS (
-      SELECT x.gym_id, count(DISTINCT p.user_id)::int AS came
+      SELECT x.gym_id, count(DISTINCT COALESCE(u.trial_person_key, p.user_id::text))::int AS came
       FROM people p
-      JOIN gym_members x ON x.user_id = p.user_id AND x.gym_id <> ${gymId} AND x.joined_at < p.came_at
+      JOIN users u ON u.id = p.user_id
+      CROSS JOIN LATERAL (
+        SELECT p.user_id AS id
+        UNION
+        SELECT s.id FROM users s WHERE s.trial_person_key = u.trial_person_key
+      ) acct
+      JOIN gym_members x ON x.user_id = acct.id AND x.gym_id <> ${gymId} AND x.joined_at < p.came_at
       GROUP BY x.gym_id
     ),
     earlier AS (
@@ -2279,18 +2315,22 @@ export async function checkTrialFirstPeople(tx: TransactionSql, gymId: string): 
   if (check.kind === "none") return check;
   if (check.kind === "look" && sub.trial_check === "look") return check;
 
-  if (check.kind === "ended") {
-    await tx`
-      UPDATE subscriptions
-      SET status = 'expired', ended_at = now(), trial_ends_at = now(),
-          trial_check = 'ended', trial_check_gym_id = ${check.gymId}, trial_checked_at = now()
-      WHERE id = ${sub.id}`;
-  } else {
-    await tx`
-      UPDATE subscriptions
-      SET trial_check = 'look', trial_check_gym_id = ${check.gymId}, trial_checked_at = now()
-      WHERE id = ${sub.id}`;
-  }
+  // Changed only while it is still a running free trial: the expiry sweep does not take the
+  // gym's lock, so it can have ended it since the read above, and its end then stands.
+  const changed =
+    check.kind === "ended"
+      ? await tx<{ id: string }[]>`
+          UPDATE subscriptions
+          SET status = 'expired', ended_at = now(), trial_ends_at = now(),
+              trial_check = 'ended', trial_check_gym_id = ${check.gymId}, trial_checked_at = now()
+          WHERE id = ${sub.id} AND status = 'trialing' AND trial_ends_at > now()
+          RETURNING id`
+      : await tx<{ id: string }[]>`
+          UPDATE subscriptions
+          SET trial_check = 'look', trial_check_gym_id = ${check.gymId}, trial_checked_at = now()
+          WHERE id = ${sub.id} AND status = 'trialing' AND trial_ends_at > now()
+          RETURNING id`;
+  if (changed[0] === undefined) return { kind: "none" };
   // The other gym is not in the note: Staff activity reads these, and a gym is never told
   // another gym's name. It is on the subscription, for Kd.
   await insertAudit(tx, {

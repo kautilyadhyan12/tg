@@ -187,6 +187,16 @@ export async function deleteAddressKeyedRows(tx: TransactionSql, userId: string)
   await tx`
     DELETE FROM sign_in_codes
     WHERE email = (SELECT email FROM users WHERE id = ${userId})`;
+  // A second-trial code (2e-i) keeps the SHA-256 of the address's trial key, which a guess
+  // of the address can be checked against. An unused one goes; a used one stays, as the
+  // record of the trial it started, with its own id's hash in place of the address's.
+  await tx`
+    DELETE FROM second_trial_codes
+    WHERE used_at IS NULL
+      AND person_hash = encode(sha256(convert_to((SELECT trial_person_key FROM users WHERE id = ${userId}), 'UTF8')), 'hex')`;
+  await tx`
+    UPDATE second_trial_codes SET person_hash = encode(sha256(convert_to(id::text, 'UTF8')), 'hex')
+    WHERE person_hash = encode(sha256(convert_to((SELECT trial_person_key FROM users WHERE id = ${userId}), 'UTF8')), 'hex')`;
 }
 
 /** §5.2: "anonymize `users` row to a tombstone (email→null, display_name→

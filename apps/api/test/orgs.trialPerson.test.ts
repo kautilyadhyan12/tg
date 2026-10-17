@@ -128,13 +128,16 @@ d("one free trial per person (real Postgres)", () => {
   // Two addresses that both start with TAG and this run's number, from one case's pair.
   // The case's own names keep their dots, tags, capitals and domain. A lone "+tag" case
   // cannot be prefixed and stay what it is, so it is checked by the pure and database tests.
+  // On a Fastmail subdomain the subdomain is the name, so it is prefixed too.
   let caseSeq = 0;
   const addresses = (a: string, b: string): [string, string] => {
     const n = `${run}${String(caseSeq++)}`;
     const name = (email: string) => {
       const at = email.lastIndexOf("@");
       const local = email.slice(0, at).trim();
-      return `${TAG}${n}${local}${email.slice(at)}`.trim();
+      const domain = email.slice(at + 1).trim();
+      const sub = /^[a-z0-9-]+\.fastmail\.com$/i.test(domain) ? `${TAG}${n}` : "";
+      return `${TAG}${n}${local}@${sub}${domain}`;
     };
     return [name(a), name(b)];
   };

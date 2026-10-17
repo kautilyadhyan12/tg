@@ -282,7 +282,7 @@ export const gymMemberBills = pgTable(
     fee: text("fee"),
     feeFor: text("fee_for"),
     classBookingId: uuid("class_booking_id"),
-    /** A personal training session's fee (0137; 18h-ii): the session while it stands. */
+    /** A personal training session's fee (0138; 18h-ii): the session while it stands. */
     ptAppointmentId: uuid("pt_appointment_id"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -294,7 +294,7 @@ export const gymMemberBills = pgTable(
     ),
     // `0136` holds its foreign key, which sets the booking to null when it goes.
     uniqueIndex("gym_member_bills_class_fee_uq").on(t.classBookingId).where(sql`${t.classBookingId} IS NOT NULL AND ${t.status} <> 'void'`),
-    // `0137` holds the session's foreign key, which sets it to null when the session goes.
+    // `0138` holds the session's foreign key, which sets it to null when the session goes.
     check("gym_member_bills_pt_fee_check", sql`(${t.ptAppointmentId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.ptAppointmentId} IS NULL OR ${t.classBookingId} IS NULL)`),
     uniqueIndex("gym_member_bills_pt_fee_uq").on(t.ptAppointmentId).where(sql`${t.ptAppointmentId} IS NOT NULL AND ${t.status} <> 'void'`),
     index("gym_member_bills_pt_appointment_idx").on(t.ptAppointmentId).where(sql`${t.ptAppointmentId} IS NOT NULL`),
