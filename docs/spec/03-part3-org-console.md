@@ -3878,6 +3878,31 @@ day or any later one.
 - **Refer a friend**: a friend's sale refunded in full no longer stands for the member's gift (a
   gift not yet used is taken back); the refund voided gives it again.
 
+**As built, 18q (2026-10-17; `rulings/2026-10-16-18p.md`, `rulings/2026-10-17-18q.md`).**
+**A basket at Sell**, as Square, Mindbody and Gymdesk do it: several products in one sale, one
+payment, one receipt.
+- **New sale**: "Add a product" puts a product in the sale as a line of its own; the same product
+  again is one more on its line. Each line has How many, its own Discount and Remove, and shows
+  what it comes to. One sale holds up to 20 products. Then who is buying, how they paid, and one
+  Take payment for the whole sale. One product reads as it always did; several read as a till's
+  slip: Subtotal and each tax added on top by its rate, Total, each tax inside the prices.
+- **Discounts**: a percentage comes off every line it is picked on; a set amount, and Refer a
+  friend's friend's gift, go on one line of a sale (the server refuses a second, "can go on one
+  product of a sale"). A promo code goes on every line it fits, or the dearest one for a set
+  amount. The buyer's own gift goes on the dearest line with no discount. One discount on several
+  lines of a sale counts as one use of it.
+- **The server** works every line out again: one line out of stock, priced differently or with a
+  discount used up refuses the whole sale, and nothing is sold. A sale is a row of `gym_sales` for
+  each product, numbered from 1, sharing the sale's receipt number, request key, buyer, payment
+  and day (migration `0135`); one product is never two lines of a sale.
+- **Lists**: Sell's day, a person's "Bought at the desk", the day's count and its 100 newest are
+  counted in sales, not lines. Reports and Download payments read each product as before; the
+  file keeps a sale's products together.
+- **Void sale** voids every product of the sale, on its own day, while no refund stands on any of
+  them; each goes back on its shelf and each discount's use is given back once. **Refund sale**
+  on a sale of several asks "Which product was it for?" first; each refund line under the sale
+  names its product, and the sale's receipt says "given back for Water".
+
 ### 14.4 Pay by the gym's own link
 
 **DROPPED 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`: not standard practice; members pay
