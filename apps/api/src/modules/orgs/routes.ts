@@ -234,8 +234,8 @@ export function registerOrgRoutes(
 
   // A real owner creates a gym once, so 5 an hour per account is far past anybody honest;
   // 20 an hour per address leaves room for a few owners on one connection (2g). Without
-  // it one account could fill the database with gyms in a minute. Only a gym created is
-  // counted: a form refused for a typo is given back.
+  // it one account could fill the database with gyms in a minute. A form refused for a
+  // mistake is given back; a gym created, or refused at the unpaid limit, is counted.
   const createLimitOptions = {
     name: "orgs_create",
     max: overrides.gymLimits?.perAccount ?? 5,
@@ -243,7 +243,7 @@ export function registerOrgRoutes(
     windowMs: 60 * 60 * 1000,
     identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
     redis: deps.redis,
-    message: "Too many gyms or studios have been created from here in the last hour. Please try again in an hour.",
+    message: "Too many gyms or studios have been created in the last hour. Please try again later.",
   };
   const createLimit = createDualRateLimit(createLimitOptions);
 
@@ -257,7 +257,7 @@ export function registerOrgRoutes(
     try {
       created = await service.createOrg(orgDeps, requireUserId(req), body);
     } catch (err) {
-      await giveBackRateLimit(createLimitOptions, req);
+      if (!(err instanceof service.OrgsError && err.code === "unpaid_gym_limit")) await giveBackRateLimit(createLimitOptions, req);
       throw err;
     }
     return reply.status(201).send(created);

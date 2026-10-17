@@ -32,8 +32,8 @@ const nextIp = () => `10.31.${String(Math.floor(ipCounter / 250))}.${String((ipC
 
 const TAG = "gymlimits";
 const run = String(Date.now() % 1_000_000);
-const TOO_FAST = "Too many gyms or studios have been created from here in the last hour. Please try again in an hour.";
-const AT_LIMIT = `You already have 10 gyms or studios with no paid plan. Choose a plan for one of them to create another. To add more without a plan, write to us at ${SUPPORT}.`;
+const TOO_FAST = "Too many gyms or studios have been created in the last hour. Please try again later.";
+const AT_LIMIT = "You already have 10 gyms or studios with no paid plan. Choose a plan for one of them to create another.";
 
 d("creating gyms: how fast and how many (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -230,6 +230,8 @@ d("creating gyms: how fast and how many (real Postgres)", () => {
     async () => {
       const owner = await makeOwner();
       const gyms = await earlierGyms(owner, UNPAID_GYMS_PER_OWNER);
+      // A gym that was archived still counts.
+      await sql`UPDATE gyms SET status = 'archived', archived_at = now() WHERE id = ${gyms[9] ?? ""}`;
       const refused = await create(owner);
       expect(refused.statusCode).toBe(403);
       expect(body(refused)).toMatchObject({ error: "unpaid_gym_limit", message: AT_LIMIT });
@@ -248,6 +250,19 @@ d("creating gyms: how fast and how many (real Postgres)", () => {
       expect(await gymsOf(owner)).toBe(UNPAID_GYMS_PER_OWNER + 1);
       // And it is the eleventh gym, ten of them unpaid again: the next is refused.
       expect((await create(owner)).statusCode).toBe(403);
+    },
+    TIMEOUT_MS,
+  );
+
+  it(
+    "a press refused at the unpaid limit counts toward the hour, so an owner at ten cannot press without end",
+    async () => {
+      const owner = await makeOwner();
+      await earlierGyms(owner, UNPAID_GYMS_PER_OWNER);
+      for (let i = 0; i < 5; i++) expect((await create(owner)).statusCode).toBe(403);
+      const sixth = await create(owner);
+      expect(sixth.statusCode).toBe(429);
+      expect(body(sixth).message).toBe(TOO_FAST);
     },
     TIMEOUT_MS,
   );

@@ -314,11 +314,10 @@ export async function createOrg(
     } catch (err) {
       if (err instanceof repo.OrgNameTakenError) continue;
       if (err instanceof repo.UnpaidGymLimitError) {
-        const writeToUs = deps.supportEmail === null ? "" : ` To add more without a plan, write to us at ${deps.supportEmail}.`;
         throw new OrgsError(
           403,
           "unpaid_gym_limit",
-          `You already have ${String(deps.unpaidGymLimit ?? UNPAID_GYMS_PER_OWNER)} gyms or studios with no paid plan. Choose a plan for one of them to create another.${writeToUs}`,
+          `You already have ${String(deps.unpaidGymLimit ?? UNPAID_GYMS_PER_OWNER)} gyms or studios with no paid plan. Choose a plan for one of them to create another.`,
         );
       }
       throw err;
