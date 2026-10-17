@@ -16,6 +16,7 @@ import PlaceLink from './PlaceLink';
 export default function BookingRulesLine({ org, orgSlug, privileges, of = 'classes', freeCancelMinutes = null }) {
   const may = canOpenPlace(privileges, 'bookingRules');
   const [settings, setSettings] = useState(null);
+  const [fees, setFees] = useState(null);
 
   useEffect(() => {
     if (!may) return undefined;
@@ -24,7 +25,10 @@ export default function BookingRulesLine({ org, orgSlug, privileges, of = 'class
     Promise.resolve()
       .then(() => orgService.getBookingSettings(org.id))
       .then((res) => {
-        if (live) setSettings((of === 'pt' ? res?.data?.pt : res?.data?.settings) ?? null);
+        if (!live) return;
+        setSettings((of === 'pt' ? res?.data?.pt : res?.data?.settings) ?? null);
+        // The class fees (18h-i) are said on Classes alone.
+        setFees(of === 'pt' ? null : (res?.data?.fees ?? null));
       })
       .catch(() => {});
     return () => {
@@ -38,7 +42,7 @@ export default function BookingRulesLine({ org, orgSlug, privileges, of = 'class
   }
   return (
     <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="booking-rules-line">
-      {settings !== null ? <span>{bookingRulesLine(settings, org.orgType)}</span> : null}
+      {settings !== null ? <span>{bookingRulesLine(settings, org.orgType, fees)}</span> : null}
       <PlaceLink to={placeTo(orgSlug, 'bookingRules')} className="c-lk c-w6">
         Change booking rules
       </PlaceLink>

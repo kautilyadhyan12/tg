@@ -4,6 +4,7 @@
 import type { Sql } from "postgres";
 import { z } from "zod";
 import { memberPaymentMethodSchema, type PaymentLineRow, type PaymentsTotals } from "@app/shared";
+import { billItemSql } from "../memberships/billsSql.js";
 
 /** How many lines one read takes. */
 export const DOWNLOAD_PAGE = 500;
@@ -40,7 +41,7 @@ export type LineRow = PaymentLineRow & { currency: string; line: number };
 function lines(sql: Sql, gymId: string, from: string, to: string) {
   return sql`
     SELECT 'payment' AS kind, p.paid_on::text AS day, p.receipt_number AS receipt, 0 AS line, e.full_name AS name,
-           (h.entry_id IS NULL) AS person_deleted, false AS walk_in, t.name AS item, NULL::int AS quantity,
+           (h.entry_id IS NULL) AS person_deleted, false AS walk_in, ${billItemSql(sql)} AS item, NULL::int AS quantity,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            p.amount_minor, b.amount_minor AS whole_minor, b.tax_minor AS whole_tax_minor, p.method, p.currency,
            (p.undone_at IS NOT NULL) AS voided, p.void_reason, NULL::int AS for_receipt, NULL::text AS refund_reason,
@@ -56,7 +57,7 @@ function lines(sql: Sql, gymId: string, from: string, to: string) {
     WHERE p.gym_id = ${gymId} AND p.paid_on BETWEEN ${from}::date AND ${to}::date
     UNION ALL
     SELECT 'refund', r.refunded_on::text, r.receipt_number, 0, e.full_name,
-           (h.entry_id IS NULL), false, t.name, NULL::int,
+           (h.entry_id IS NULL), false, ${billItemSql(sql)}, NULL::int,
            b.covers_from::text, b.covers_to::text,
            r.amount_minor, b.amount_minor, b.tax_minor, r.method, r.currency,
            (r.undone_at IS NOT NULL OR p.undone_at IS NOT NULL), r.void_reason, p.receipt_number, r.reason,

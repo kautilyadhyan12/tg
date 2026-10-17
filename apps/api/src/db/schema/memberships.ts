@@ -258,7 +258,8 @@ export const gymMemberBills = pgTable(
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
     heldMembershipId: uuid("held_membership_id").notNull(),
-    periodIndex: integer("period_index").notNull(),
+    /** Null on a fee alone (0136; 18h-i). */
+    periodIndex: integer("period_index"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     dueOn: date("due_on").notNull(),
@@ -276,10 +277,21 @@ export const gymMemberBills = pgTable(
     taxBp: integer("tax_bp").notNull().default(0),
     taxName: text("tax_name"),
     taxIncluded: boolean("tax_included"),
+    /** A fee for a late cancel or a no-show (0136; 18h-i): which, the class's name, and the
+     *  booking while it stands. The class's day is `covers_from` and `covers_to`. */
+    fee: text("fee"),
+    feeFor: text("fee_for"),
+    classBookingId: uuid("class_booking_id"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "gym_member_bills_fee_check",
+      sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL)`,
+    ),
+    // `0136` holds its foreign key, which sets the booking to null when it goes.
+    uniqueIndex("gym_member_bills_class_fee_uq").on(t.classBookingId).where(sql`${t.classBookingId} IS NOT NULL AND ${t.status} <> 'void'`),
     check(
       "gym_member_bills_tax_check",
       sql`${t.taxBp} BETWEEN 0 AND 3000 AND (${t.taxName} IS NULL) = (${t.taxBp} = 0) AND (${t.taxName} IS NULL) = (${t.taxIncluded} IS NULL) AND ${t.taxMinor} >= 0 AND ${t.taxMinor} < ${t.amountMinor} AND (${t.taxBp} > 0 OR ${t.taxMinor} = 0) AND (${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30)`,
@@ -287,7 +299,7 @@ export const gymMemberBills = pgTable(
     unique("gym_member_bills_period_uq").on(t.heldMembershipId, t.periodIndex),
     check(
       "gym_member_bills_void_check",
-      sql`(${t.voidReason} IS NULL) = (${t.voidedOn} IS NULL) AND (${t.voidReason} IS NOT NULL OR ${t.voidedBy} IS NULL) AND (${t.voidReason} IS NULL OR (${t.status} = 'void' AND ${t.voidReason} IN ('mistake','not_charging','other')))`,
+      sql`(${t.voidReason} IS NULL) = (${t.voidedOn} IS NULL) AND (${t.voidReason} IS NOT NULL OR ${t.voidedBy} IS NULL) AND (${t.voidReason} IS NULL OR (${t.status} = 'void' AND ${t.voidReason} IN ('mistake','not_charging','other','waived'))) AND (${t.voidReason} <> 'waived' OR ${t.fee} IS NOT NULL)`,
     ),
     unique("gym_member_bills_gym_id_uq").on(t.gymId, t.id),
     check("gym_member_bills_period_check", sql`${t.periodIndex} BETWEEN 0 AND 100000`),

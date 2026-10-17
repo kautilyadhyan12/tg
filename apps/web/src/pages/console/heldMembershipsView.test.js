@@ -102,6 +102,17 @@ describe('what a membership reads as', () => {
     for (const [m, want, today = TODAY] of cases) expect(paymentLine(m, today), datesLine(m)).toEqual(want);
   });
 
+  it('says Fee due when only a late cancel or no-show fee is owed, and Payment due when a period is', () => {
+    const paid = held(monthly, '2026-10-04', true);
+    const owedFee = { state: 'due' };
+    const feeOnly = { ...paid, view: { ...paid.view, payment: { state: 'due', since: TODAY } }, billing: { pay: null, fees: [owedFee] } };
+    expect(paymentLine(feeOnly, TODAY)).toEqual({ text: 'Fee due today', due: true });
+    // A period owed as well: the period's own words.
+    expect(paymentLine({ ...feeOnly, billing: { pay: { periodIndex: 1 }, fees: [owedFee] } }, TODAY).text).toBe('Payment due today');
+    // Staff who read no bills are sent no fees: the plain words.
+    expect(paymentLine({ ...feeOnly, billing: null }, TODAY).text).toBe('Payment due today');
+  });
+
   it('counts a pack\'s classes, and says nothing for a day pass or another kind', () => {
     expect(classesLine(held(tenPack, TODAY, true))).toBe('10 of 10 classes left');
     expect(classesLine({ ...held(tenPack, TODAY, true), classesLeft: 1 })).toBe('1 of 10 classes left');

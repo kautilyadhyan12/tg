@@ -14,6 +14,8 @@
 //   GET  /v1/orgs/:gymId/member-list/entries/:entryId/memberships            (`members.confirm`)
 //   POST /v1/orgs/:gymId/member-list/entries/:entryId/memberships            give one
 //   POST …/memberships/:membershipId/freeze | unfreeze | cancel | paid       change one
+//   POST …/memberships/:membershipId/fees/:billId/payments | waive           a fee (18h-i)
+//   POST …/memberships/:membershipId/fees/:billId/payments/:paymentId/void
 //
 // Each answers with the person's memberships.
 //
@@ -38,6 +40,8 @@ import {
   billSettingsSchema,
   paidHeldMembershipRequestSchema,
   recordMemberPaymentRequestSchema,
+  recordMemberFeePaymentRequestSchema,
+  waiveMemberFeeRequestSchema,
   cancelMemberBillRequestSchema,
   noteMemberRefundRequestSchema,
   voidMemberPaymentRequestSchema,
@@ -51,6 +55,7 @@ import {
   heldMembershipParamsSchema,
   memberPaymentParamsSchema,
   memberBillParamsSchema,
+  memberFeePaymentParamsSchema,
   memberRefundParamsSchema,
   memberListEntryParamsSchema,
   membershipTypeParamsSchema,
@@ -339,6 +344,34 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.refundId,
       body,
     );
+    return reply.status(200).send(list);
+  });
+
+  // ── A late cancel or no-show fee (18h-i): paid all at once, waived, its payment voided ──
+
+  app.post(`${heldUrl}/:membershipId/fees/:billId/payments`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(recordMemberFeePaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.recordMemberFeePayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.billId, body);
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/fees/:billId/waive`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    if (parseOr400(waiveMemberFeeRequestSchema, req.body ?? {}, req, reply) === null) return;
+    const list = await held.waiveMemberFee(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.billId);
+    return reply.status(200).send(list);
+  });
+
+  app.post(`${heldUrl}/:membershipId/fees/:billId/payments/:paymentId/void`, paymentGuarded, async (req, reply) => {
+    const params = parseOr400(memberFeePaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(voidMemberPaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const list = await held.voidMemberFeePayment(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, params.billId, params.paymentId, body);
     return reply.status(200).send(list);
   });
 

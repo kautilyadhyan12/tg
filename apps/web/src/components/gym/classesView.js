@@ -1,4 +1,4 @@
-import { CLASS_BOOKING_WORDS, CLASS_ONLINE_WORDS } from '@app/shared';
+import { CLASS_BOOKING_WORDS, CLASS_ONLINE_WORDS, classFeesLine, formatMinor, lateCancelFeeWords } from '@app/shared';
 import { dayLabel, ordinal, timeText } from './leaderboardView';
 
 // A MEMBER'S CLASSES, IN WORDS (spec Part 3 §13.6; ROADMAP 17d). Pure. A class's day and
@@ -160,6 +160,17 @@ export function actionsOf(c) {
   return { take, give };
 }
 
+/** The fees a late cancel and a no-show of this class would cost this person, said under
+ *  its buttons (18h-i): "One-time fee for each late cancel £5.00 · no-show £8.00". Null where neither
+ *  costs anything, or there is nothing left to book or give up. */
+export function feesText(c) {
+  if (c.fees === null || c.fees === undefined || c.cancelled) return null;
+  const { take, give } = actionsOf(c);
+  return take === null && give === null ? null : classFeesLine(c.fees);
+}
+
+const lateFee = (c) => (c.fees !== null && c.fees !== undefined && c.fees.lateCancelMinor > 0 ? c.fees.lateCancelMinor : 0);
+
 /** "Wed 7 Oct, 7:30 am": an instant on the gym's clock. */
 export function instantText(at, timezone) {
   const day = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: timezone }).format(new Date(at));
@@ -185,7 +196,10 @@ export function cancelAsk(c) {
   if (c.can.cancel === 'late') {
     return {
       title: 'Cancel late?',
-      lines: [what, c.mine?.packCharged ? CLASS_BOOKING_WORDS.late_cancel_pack : CLASS_BOOKING_WORDS.late_cancel],
+      lines: [
+        what,
+        lateFee(c) > 0 ? lateCancelFeeWords(lateFee(c), c.fees.currency) : c.mine?.packCharged ? CLASS_BOOKING_WORDS.late_cancel_pack : CLASS_BOOKING_WORDS.late_cancel,
+      ],
       yes: 'Cancel booking',
       no: 'Keep it',
     };
@@ -196,7 +210,9 @@ export function cancelAsk(c) {
       what,
       c.mine?.packCharged
         ? `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}. Your pack gets the class back.`
-        : `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}.`,
+        : lateFee(c) > 0
+          ? `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}. After that there is a one-time late cancel fee of ${formatMinor(lateFee(c), c.fees.currency)}.`
+          : `Free to cancel until ${instantText(c.freeCancelUntil, c.timezone)}.`,
     ],
     yes: 'Cancel booking',
     no: 'Keep it',

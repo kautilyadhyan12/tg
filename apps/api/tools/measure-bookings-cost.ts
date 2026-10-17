@@ -181,7 +181,7 @@ const single: [string, () => Promise<unknown>][] = [
     async () => {
       const full = await classOf(s, 72, 1, 1, 20);
       const start = performance.now();
-      await cancel(deps, s.people[0] ?? "", s.gymId, full, false, yes);
+      await cancel(deps, s.people[0] ?? "", s.gymId, full, { lateOk: false }, yes);
       return performance.now() - start;
     },
   ],

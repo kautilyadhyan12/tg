@@ -82,7 +82,8 @@ export async function recordPayment(
     // stands and nothing is added.
     // The same key with anything else in it, or after its payment was taken back, is not
     // the same request: it is refused, never answered as recorded.
-    const [byKey] = await tx<{ held_membership_id: string; period_index: number; amount_minor: number; undone: boolean }[]>`
+    // A fee's payment (18h-i) has no period, so its key is never this request's.
+    const [byKey] = await tx<{ held_membership_id: string; period_index: number | null; amount_minor: number; undone: boolean }[]>`
       SELECT b.held_membership_id, b.period_index, p.amount_minor, p.undone_at IS NOT NULL AS undone
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
@@ -197,7 +198,7 @@ export async function voidPayment(
       SELECT p.undone_at IS NOT NULL AS undone, p.bill_id, p.amount_minor, p.currency, b.period_index
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
-      WHERE p.gym_id = ${input.gymId} AND p.id = ${input.paymentId} AND b.held_membership_id = ${row.id}`;
+      WHERE p.gym_id = ${input.gymId} AND p.id = ${input.paymentId} AND b.held_membership_id = ${row.id} AND b.period_index IS NOT NULL`;
     if (payment === undefined) return { kind: "payment_not_found" };
     if (payment.undone) return { kind: "ok" };
     if (entry.past) return { kind: "past_member" };
@@ -329,8 +330,8 @@ export async function cancelMemberBill(
   });
 }
 
-/** One payment of one membership, with its bill, under the gym's lock; null where it is
- *  not that membership's. */
+/** One payment of one period of one membership, with its bill, under the gym's lock; null
+ *  where it is not that membership's. A fee's payment is `feesRepo.ts`'s. */
 async function paymentOf(
   tx: TransactionSql,
   gymId: string,
@@ -341,7 +342,7 @@ async function paymentOf(
     SELECT p.undone_at IS NOT NULL AS undone, p.bill_id, p.amount_minor, p.currency, b.period_index
     FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
-    WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId}`;
+    WHERE p.gym_id = ${gymId} AND p.id = ${paymentId} AND b.held_membership_id = ${membershipId} AND b.period_index IS NOT NULL`;
   return payment ?? null;
 }
 

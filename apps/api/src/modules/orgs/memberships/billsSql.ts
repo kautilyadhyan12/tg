@@ -1,6 +1,10 @@
 // The statements that read and write a gym's bills, payments and refunds (spec Part 3
-// §14.2; ROADMAP 18a-i and 18a-ii; the day's takings for the Sell page, 18b-i). With `billsRepo.ts` and the give in `heldRepo.ts`,
+// §14.2; ROADMAP 18a-i and 18a-ii; the day's takings for the Sell page, 18b-i). With `billsRepo.ts`, `feesRepo.ts` and the give in `heldRepo.ts`,
 // the only files that touch the three tables.
+//
+// A late cancel or no-show fee (18h-i) is a bill with no period. What a membership's periods
+// are worked out from reads periods alone (`billsFor` to `voidedRefundsFor`); what counts
+// money owed or taken reads fees too.
 //
 // Every statement carries `gym_id` in its WHERE. A write runs in its caller's
 // transaction, under the gym's lock and the record's.
@@ -9,6 +13,9 @@ import { nextReceipt } from "../receipts/repo.js";
 import {
   billAmounts,
   billCancelReasonSchema,
+  MEMBER_FEE_WORDS,
+  feeItemName,
+  memberFeeKindSchema,
   memberBillStatusSchema,
   memberPaymentByHandSchema,
   memberPaymentMethodSchema,
@@ -24,6 +31,13 @@ import {
   type RefundVoidReason,
   type TaxApplied,
 } from "@app/shared";
+
+/** What a bill is for, in a statement that names its bill `b` and its membership's type
+ *  `t`: the type's name, or a fee's own (`feeItemName`, 18h-i). */
+export const billItemSql = (sql: Sql | TransactionSql) => sql`
+  CASE b.fee WHEN 'late_cancel' THEN ${MEMBER_FEE_WORDS.late_cancel}::text || ' · ' || b.fee_for
+             WHEN 'no_show' THEN ${MEMBER_FEE_WORDS.no_show}::text || ' · ' || b.fee_for
+             ELSE t.name END`;
 
 /** The tax inside a bill's amount, as it was opened (18b-iii). */
 export interface BillTax {
@@ -102,7 +116,7 @@ const bill = (r: RawBill): BillRow => ({
     r.void_reason === null || r.voided_on === null ? null : { reason: billCancelReasonSchema.parse(r.void_reason), on: r.voided_on, by: r.voided_by_name },
 });
 
-/** Every bill of the memberships named, each with what has been paid against it. */
+/** Every bill of a period of the memberships named, each with what has been paid against it. */
 export async function billsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<BillRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<RawBill[]>`
@@ -116,7 +130,7 @@ export async function billsFor(sql: Sql | TransactionSql, gymId: string, members
            b.void_reason, b.voided_on::text AS voided_on, v.display_name AS voided_by_name
     FROM gym_member_bills b
     LEFT JOIN users v ON v.id = b.voided_by
-    WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[])
+    WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND b.period_index IS NOT NULL
     ORDER BY b.held_membership_id, b.period_index DESC`;
   return rows.map(bill);
 }
@@ -137,7 +151,7 @@ export interface PaymentRow {
   receiptNumber: number;
 }
 
-/** The payments that stand on the memberships named, in the order they were recorded. */
+/** The payments that stand on the periods of the memberships named, in the order they were recorded. */
 export async function paymentsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<PaymentRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<
@@ -150,7 +164,7 @@ export async function paymentsFor(sql: Sql | TransactionSql, gymId: string, memb
     FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     LEFT JOIN users u ON u.id = p.recorded_by
-    WHERE p.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND p.undone_at IS NULL
+    WHERE p.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND p.undone_at IS NULL AND b.period_index IS NOT NULL
     ORDER BY p.seq`;
   return rows.map((r) => ({
     id: r.id,
@@ -193,7 +207,7 @@ export async function refundsFor(sql: Sql | TransactionSql, gymId: string, membe
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     LEFT JOIN users u ON u.id = r.recorded_by
     WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[])
-      AND r.undone_at IS NULL AND p.undone_at IS NULL
+      AND r.undone_at IS NULL AND p.undone_at IS NULL AND b.period_index IS NOT NULL
     ORDER BY r.created_at, r.id`;
   return rows.map((r) => ({
     id: r.id,
@@ -248,7 +262,7 @@ export async function voidedPaymentsFor(sql: Sql | TransactionSql, gymId: string
     JOIN gyms g ON g.id = p.gym_id
     LEFT JOIN users u ON u.id = p.recorded_by
     LEFT JOIN users v ON v.id = p.undone_by
-    WHERE p.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND p.undone_at IS NOT NULL
+    WHERE p.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND p.undone_at IS NOT NULL AND b.period_index IS NOT NULL
     ORDER BY p.seq`;
   return rows.map((r) => ({
     id: r.id,
@@ -294,7 +308,7 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
     JOIN gyms g ON g.id = r.gym_id
     LEFT JOIN users u ON u.id = r.recorded_by
     LEFT JOIN users v ON v.id = r.undone_by
-    WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND r.undone_at IS NOT NULL
+    WHERE r.gym_id = ${gymId} AND b.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND r.undone_at IS NOT NULL AND b.period_index IS NOT NULL
     ORDER BY r.created_at, r.id`;
   return rows.map((r) => ({
     id: r.id,
@@ -314,7 +328,7 @@ export async function voidedRefundsFor(sql: Sql | TransactionSql, gymId: string,
  *  the whole gym (null):
  *  - `owedSince`: each record with a bill still open that fell due on or before `today`,
  *    and the earliest such day, whichever of its memberships the bill is for (one that
- *    is over too);
+ *    is over too), a fee's among them (18h-i);
  *  - `notCharged`: the memberships with no money kept for their newest period counted
  *    as paid: its bill was cancelled by staff, or refunded in full. */
 export async function listBillFacts(
@@ -516,8 +530,8 @@ export async function paymentsOn(
   limit: number,
 ): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; count: number; totalMinor: number }[]; refunds: { currency: string; totalMinor: number }[] }> {
   const [rows, sums, refunds] = await Promise.all([
-    sql<{ id: string; type_name: string; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string | null; full_name: string | null; receipt_number: number }[]>`
-      SELECT p.id, t.name AS type_name, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name, p.receipt_number
+    sql<{ id: string; type_name: string; fee: string | null; fee_for: string | null; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string | null; full_name: string | null; receipt_number: number }[]>`
+      SELECT p.id, t.name AS type_name, b.fee, b.fee_for, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name, p.receipt_number
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
@@ -543,7 +557,8 @@ export async function paymentsOn(
   return {
     payments: rows.map((r) => ({
       id: r.id,
-      typeName: r.type_name,
+      // A fee is named for what it was for, never for the membership it is on.
+      typeName: r.fee === null || r.fee_for === null ? r.type_name : feeItemName(memberFeeKindSchema.parse(r.fee), r.fee_for),
       amountMinor: r.amount_minor,
       currency: r.currency,
       method: memberPaymentMethodSchema.parse(r.method),

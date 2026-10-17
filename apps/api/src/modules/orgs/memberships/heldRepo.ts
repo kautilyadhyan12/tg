@@ -66,6 +66,7 @@ import { lockedDiscount, takeUse } from "../register/discountsRepo.js";
 import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
+import { feesFor, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 import {
   billOf,
   billsFor,
@@ -271,6 +272,9 @@ export interface HeldList {
   /** The payments and refunds staff voided (18o): shown struck through, counted in nothing. */
   voidedPayments: VoidedPaymentRow[];
   voidedRefunds: VoidedRefundRow[];
+  /** The late cancel and no-show fees on them, and their payments (18h-i). */
+  fees: FeeRow[];
+  feePayments: FeePaymentRow[];
   overdueAfterDays: number;
   /** Whether the gym's prices hold its tax (18b-iii), for the Add form's total. */
   taxIncluded: boolean;
@@ -313,6 +317,12 @@ async function listedMembership(
   };
 }
 
+/** The fees of these memberships and their payments, as `HeldList` holds them. */
+async function feesOf(tx: TransactionSql, gymId: string, ids: readonly string[]): Promise<{ fees: FeeRow[]; feePayments: FeePaymentRow[] }> {
+  const read = await feesFor(tx, gymId, ids);
+  return { fees: read.fees, feePayments: read.payments };
+}
+
 /** A record's memberships, or null where the record is not this gym's. */
 export async function readHeld(sql: Sql, gymId: string, entryId: string): Promise<HeldList | null> {
   // One connection and one moment: the page of earlier ones and their count agree.
@@ -342,6 +352,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       refunds: await refundsFor(tx, gymId, ids),
       voidedPayments: await voidedPaymentsFor(tx, gymId, ids),
       voidedRefunds: await voidedRefundsFor(tx, gymId, ids),
+      ...(await feesOf(tx, gymId, ids)),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
     };

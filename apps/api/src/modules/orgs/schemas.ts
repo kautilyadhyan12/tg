@@ -419,6 +419,11 @@ export const memberBillParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), billId: z.string().uuid() })
   .strict();
 
+/** The same down to one fee and one payment of it (18h-i). */
+export const memberFeePaymentParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), billId: z.string().uuid(), paymentId: z.string().uuid() })
+  .strict();
+
 /** The same down to one refund noted against a payment (§14.2). */
 export const memberRefundParamsSchema = z
   .object({

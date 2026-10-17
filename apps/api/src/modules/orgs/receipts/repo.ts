@@ -11,6 +11,7 @@ import {
   type RefundReceipt,
   type SaleReceipt,
 } from "@app/shared";
+import { billItemSql } from "../memberships/billsSql.js";
 
 /** The gym's next receipt number, as the CTE `n` (`number`) of the statement that writes
  *  the payment, refund or sale it is for: the count and the row move together or not at
@@ -199,8 +200,8 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       discount_payments: string | null;
     }[]
   >`
-    SELECT h.price_minor AS held_price, h.discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
-           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, t.name AS type_name,
+    SELECT h.price_minor AS held_price, CASE WHEN b.fee IS NULL THEN h.discount_name END AS discount_name, h.discount_minor, h.discount_payments, p.id, p.amount_minor, p.currency, p.method, p.paid_on::text AS paid_on, p.undone_at IS NOT NULL AS cancelled,
+           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, ${billItemSql(sql)} AS type_name,
            b.amount_minor AS bill_minor, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
            b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
@@ -255,7 +256,7 @@ async function refundReceipt(sql: Sql, gymId: string, number: number): Promise<R
   >`
     SELECT r.amount_minor, r.currency, r.method, r.refunded_on::text AS refunded_on,
            (r.undone_at IS NOT NULL OR p.undone_at IS NOT NULL) AS cancelled,
-           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, t.name AS type_name,
+           u.display_name AS by, e.full_name, (h.entry_id IS NULL) AS person_deleted, ${billItemSql(sql)} AS type_name,
            b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, p.receipt_number AS for_receipt
     FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id

@@ -8,7 +8,7 @@ import { classDaySchema } from "./classes.js";
 import { classOnlineViewSchema } from "./classOnline.js";
 import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
-import type { MembershipAccess, MembershipLimitPeriod } from "./memberships.js";
+import { MEMBERSHIP_PRICE_MINOR_MAX, formatMinor, type MembershipAccess, type MembershipLimitPeriod } from "./memberships.js";
 
 export const CLASS_BOOKING_STATUSES = ["booked", "waitlisted", "cancelled", "late_cancelled", "attended", "no_show"] as const;
 export const classBookingStatusSchema = z.enum(CLASS_BOOKING_STATUSES);
@@ -239,12 +239,57 @@ export const CLASS_HAS_BOOKINGS_ERROR = "class_has_bookings";
 
 export const CLASS_LATE_CANCEL_ERROR = "late_cancel";
 
+// ── A FEE FOR A LATE CANCEL OR A NO-SHOW (18h-i) ──
+
+/** The gym's two amounts for classes, in minor units of its money: 0 is off. */
+export interface ClassFees {
+  lateCancelMinor: number;
+  noShowMinor: number;
+}
+
+export const CLASS_FEES_OFF: ClassFees = { lateCancelMinor: 0, noShowMinor: 0 };
+
+/** THE ONE RULE for whether a late cancel or a no-show costs money, and how much: the
+ *  gym's own amount, where the place was booked on a membership that is not a pack. A pack
+ *  holder's class stays used on their pack and that is all (Kd, 2026-10-17, as Mindbody
+ *  does); a booking with no membership behind it (a gym that sells none here, or one
+ *  deleted since) has no bills to put a fee on. 0 is no fee. */
+export function classFeeFor(input: { fee: "late_cancel" | "no_show"; heldMembershipId: string | null; packCharged: boolean; fees: ClassFees }): number {
+  if (input.heldMembershipId === null || input.packCharged) return 0;
+  return input.fee === "late_cancel" ? input.fees.lateCancelMinor : input.fees.noShowMinor;
+}
+
+/** What the member reads in the box before a late cancel that costs money. */
+export function lateCancelFeeWords(minor: number, currency: string): string {
+  return `It's too late to cancel for free. Cancelling now counts as a late cancel, and a one-time late cancel fee of ${formatMinor(minor, currency)} will be added to your bill.`;
+}
+
+/** The fees a class costs, said where a member books it, each charged once for each late
+ *  cancel or no-show and never monthly (Kd, 2026-10-17): "One-time fee for each late cancel
+ *  ₹200 · no-show ₹300", either alone, or null for none. */
+export function classFeesLine(fees: ClassFees & { currency: string }): string | null {
+  const parts = [
+    fees.lateCancelMinor > 0 ? `late cancel ${formatMinor(fees.lateCancelMinor, fees.currency)}` : null,
+    fees.noShowMinor > 0 ? `no-show ${formatMinor(fees.noShowMinor, fees.currency)}` : null,
+  ].filter((part): part is string => part !== null);
+  if (parts.length === 0) return null;
+  return `One-time fee for each ${parts.join(" · ")}`;
+}
+
+const feeMinorSchema = z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX);
+
+export const classFeesSchema = z.object({ lateCancelMinor: feeMinorSchema, noShowMinor: feeMinorSchema }).strict();
+
 // ── THE WIRE ──
 
 export const bookClassRequestSchema = z.object({ requestKey: z.string().uuid(), joinWaitlist: z.boolean() }).strict();
 export type BookClassRequest = z.infer<typeof bookClassRequestSchema>;
 
-export const cancelClassBookingRequestSchema = z.object({ lateOk: z.boolean() }).strict();
+/** `feeMinor`: the late cancel fee the member was shown and said yes to (18h-i). A late
+ *  cancel that costs anything else, or that they were shown no fee for, is asked again. */
+export const cancelClassBookingRequestSchema = z
+  .object({ lateOk: z.boolean(), feeMinor: z.number().int().min(0).max(MEMBERSHIP_PRICE_MINOR_MAX).optional() })
+  .strict();
 export type CancelClassBookingRequest = z.infer<typeof cancelClassBookingRequestSchema>;
 
 /** One class as the person booking it sees it. */
@@ -287,6 +332,9 @@ export const classBookingViewSchema = z
     /** An online class as this person meets it, its link only while it is theirs to use
      *  (`classOnlineView`); null for a class at the gym. */
     online: classOnlineViewSchema.nullable(),
+    /** What a late cancel and a no-show of this class would cost this person
+     *  (`classFeeFor`), in the gym's money; null where neither costs anything (18h-i). */
+    fees: classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/) }).strict().nullable().default(null),
   })
   .strict();
 export type ClassBookingView = z.infer<typeof classBookingViewSchema>;
@@ -311,6 +359,12 @@ const staffBookingSchema = z
      *  (`members.confirm`); null for anybody else, and where they are not on the list. */
     entryId: z.string().uuid().nullable(),
     at: z.string().datetime(),
+    /** Its late cancel or no-show fee (18h-i), owed, paid or waived, in the list's
+     *  `currency`; null for none, and for a coach reading their own class's list. */
+    fee: z.object({ amountMinor: z.number().int().min(1), state: z.enum(["owed", "paid", "waived"]) }).strict().nullable().default(null),
+    /** What marking them No-show would add (`classFeeFor`); null for nothing, and for a coach,
+     *  who is sent the list's `noShowFeeMayMinor` instead. */
+    noShowFeeMinor: z.number().int().min(1).nullable().default(null),
   })
   .strict();
 export type StaffClassBooking = z.infer<typeof staffBookingSchema>;
@@ -328,6 +382,12 @@ export const classSessionBookingsResponseSchema = z
     waitlisted: z.array(staffBookingSchema),
     lateCancelled: z.array(staffBookingSchema),
     lateCancelledTotal: z.number().int(),
+    /** The money a list's fees are in (18h-i); null where the gym sells no memberships here. */
+    currency: z.string().regex(/^[A-Z]{3}$/).nullable().default(null),
+    /** For the class's own coach: the gym's no-show fee, which marking somebody No-show may add.
+     *  One value for the class, so a coach's list says nothing of who holds a pack. Null for
+     *  staff who are sent each place's own `noShowFeeMinor`, and where there is no fee. */
+    noShowFeeMayMinor: z.number().int().min(1).nullable().default(null),
     /** The class has started and runs, so the reader can mark who came (17f). */
     canMark: z.boolean(),
     /** The class runs and has not started, so the reader can take a person off it (17g). */
@@ -439,14 +499,23 @@ export const ptBookingSettingsSchema = z
   .strict();
 export type PtBookingSettings = z.infer<typeof ptBookingSettingsSchema>;
 
-/** What a save sends: the four for classes and personal training's two, every one every time. */
-export const bookingSettingsBodySchema = classBookingSettingsSchema.extend({ pt: ptBookingSettingsSchema }).strict();
+/** What a save sends: the four for classes and personal training's two, every one every time,
+ *  and the class fees (18h-i) from a screen that shows them; left out, they stay as they are. */
+export const bookingSettingsBodySchema = classBookingSettingsSchema.extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional() }).strict();
 export type BookingSettingsBody = z.infer<typeof bookingSettingsBodySchema>;
 
 /** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
  *  free place to at once. */
 export const classBookingSettingsResponseSchema = z
-  .object({ settings: classBookingSettingsSchema, pt: ptBookingSettingsSchema, movedIn: z.number().int().optional() })
+  .object({
+    settings: classBookingSettingsSchema,
+    pt: ptBookingSettingsSchema,
+    /** The class fees (18h-i), in the gym's money. `canChange`: this reader also records
+     *  members' payments, the tick a fee needs. `onBills`: the gym sells memberships here,
+     *  so a fee has bills to go on. */
+    fees: classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/), canChange: z.boolean(), onBills: z.boolean() }).strict(),
+    movedIn: z.number().int().optional(),
+  })
   .strict();
 export type ClassBookingSettingsResponse = z.infer<typeof classBookingSettingsResponseSchema>;
 

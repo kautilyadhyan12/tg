@@ -22,14 +22,14 @@ import {
 // booking's membership or see what else they hold. Once the class has started each
 // place says came or no-show, with a button to mark or change it (17f).
 
-function People({ heading, help = null, rows, numbered = false, onOpen, list = null, marks = false, onMark, busy = false, failed = null, asking = null, onAsk, onRemove }) {
+function People({ heading, help = null, rows, numbered = false, onOpen, list = null, currency = null, marks = false, onMark, busy = false, failed = null, asking = null, onAsk, onRemove }) {
   return (
     <div className="flex flex-col gap-1.5 min-w-0">
       <div className="c-s13 c-w6 c-t3">{heading}</div>
       {help === null ? null : <p className="c-s13 c-t3 m-0">{help}</p>}
       <ol className="m-0 p-0 list-none flex flex-col gap-1.5">
         {rows.map((booking, index) => {
-          const row = bookingRow(booking);
+          const row = bookingRow(booking, list?.currency ?? currency);
           const mark = marks ? markRow(booking, list) : null;
           const remove = list === null ? null : removeAsk(booking, list);
           const asked = remove !== null && asking === booking.bookingId;
@@ -235,7 +235,7 @@ export default function ClassBookingsList({ gymId, sessionId, version = 0, onOpe
           onRemove={onRemove}
         />
       ) : null}
-      {list.lateCancelledTotal > 0 ? <People heading={lateHeading(list)} rows={list.lateCancelled} onOpen={onOpen} /> : null}
+      {list.lateCancelledTotal > 0 ? <People heading={lateHeading(list)} rows={list.lateCancelled} onOpen={onOpen} currency={list.currency ?? null} /> : null}
     </div>
   );
 }
