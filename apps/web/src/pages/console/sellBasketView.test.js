@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SALE_LINES_MAX } from '@app/shared';
-import { addToBasket, applyBasketCode, basketBody, basketView, newLine, onceASale, withFriendGift, withLineDiscount, withoutDiscount } from './sellBasketView';
+import { GONE_LINE, addToBasket, applyBasketCode, basketBody, basketView, newLine, onceASale, withFriendGift, withLineDiscount, withoutDiscount } from './sellBasketView';
 
 // A BASKET AT SELL (ROADMAP 18q): every case of where a discount and a gift go, and what the
 // basket comes to. The sums are worked out by hand from the prices, not by the code under test.
@@ -174,6 +174,10 @@ describe('what the basket comes to', () => {
     expect(basketView({ page: out, lines: [line('p-water'), line('p-towel')], who: 'walkin', person: null }).problem).toBe('Towel is out of stock. Change its stock count under Products if you have more.');
     expect(view([line('p-towel', '3')]).problem).toBe('Only 2 left in stock.');
     expect(view([line('p-towel', '')]).problem).toBe('Enter how many, 1 or more.');
+    // A product archived while it was in the basket (round one, L1): its line says so, with its
+    // Remove, and Take payment stays off.
+    const gone = view([line('p-towel'), line('p-gone')]);
+    expect([gone.rows[1].problem, gone.problem, gone.summary]).toEqual([GONE_LINE, GONE_LINE, null]);
     expect(basketView({ page: page(), lines: [line('p-towel')], who: 'member', person: null }).problem).toBe('Find and pick the member, or choose Walk-in.');
     // The total still shows while the member is being found.
     expect(basketView({ page: page(), lines: [line('p-towel')], who: 'member', person: null }).summary?.total).toBe('$5.00');

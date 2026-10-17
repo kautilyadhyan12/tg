@@ -27,6 +27,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { linesPage } from "../src/modules/orgs/paymentsDownload/repo.js";
+import { purchasesOf, readRegister } from "../src/modules/orgs/register/repo.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -434,20 +435,25 @@ d("a basket at Sell (real Postgres)", () => {
       expect([day.totals.count, day.totals.totalMinor, day.totals.discountMinor]).toEqual([1, 720, 80]);
       const second = (await rowsOf(gymId))[1];
       if (second === undefined) throw new Error("no second line");
+      // Another sale with it: two uses. Voiding the basket gives back one, not one a product.
+      await sold(gymId, owner.cookies, basket([{ productId: water.id, quantity: 1, totalMinor: 180, discountId: tenOff.id }]));
+      expect(await usesOf(tenOff.id)).toBe(2);
 
       const voids = await Promise.all([0, 1].map(() => post(`${register(gymId)}/sales/${second.id}/void`, { reason: "mistake" }, owner.cookies)));
       expect(voids.map((r) => r.statusCode)).toEqual([200, 200]);
       expect((await rowsOf(gymId)).map((r) => [r.item_name, r.undone])).toEqual([
         ["Water", true],
         ["Protein bar", true],
+        ["Water", false],
       ]);
-      expect([await stockOf(water.id), await stockOf(bar.id), await usesOf(tenOff.id)]).toEqual([10, 10, 0]);
+      expect([await stockOf(water.id), await stockOf(bar.id), await usesOf(tenOff.id)]).toEqual([9, 10, 1]);
       const after = await sellPage(gymId, owner.cookies);
-      expect([after.totals.count, after.totals.totalMinor]).toEqual([0, 0]);
+      expect([after.totals.count, after.totals.totalMinor]).toEqual([1, 180]);
       const voidedReceipt = await receipt(gymId, made.receiptNumber, owner.cookies);
       expect([voidedReceipt.cancelled, voidedReceipt.kind === "sale" ? voidedReceipt.lines.length : 0]).toEqual([true, 2]);
       const notes = await sql<{ action: string; meta: Record<string, string> }[]>`
-        SELECT action, meta FROM audit_log WHERE gym_id = ${gymId} AND action IN ('org.sale_recorded', 'org.sale_undone') ORDER BY at, action`;
+        SELECT action, meta FROM audit_log WHERE gym_id = ${gymId} AND action IN ('org.sale_recorded', 'org.sale_undone')
+          AND meta->>'receiptNumber' = ${String(made.receiptNumber)} ORDER BY at, action`;
       expect(notes.map((n) => [n.action, n.meta["product"], n.meta["others"], n.meta["totalMinor"]])).toEqual([
         ["org.sale_recorded", "Water", "1", "720"],
         ["org.sale_undone", "Water", "1", "720"],
@@ -496,6 +502,39 @@ d("a basket at Sell (real Postgres)", () => {
       );
       expect([await usesOf(dollarOff.id), await usesOf(once.id)]).toEqual([1, 1]);
       expect(answer(await sell(gymId, owner.cookies, basket([{ productId: water.id, quantity: 1, totalMinor: 180, discountId: once.id }])))).toEqual([409, "discount_used_up"]);
+    },
+    T,
+  );
+
+  it(
+    "the day's newest and a person's newest are counted in sales, every line of each: with room for 2, a sale of 3, one of 1 and one of 3 show the last two whole",
+    async () => {
+      const owner = await makeUser("count-owner", "Sam Owner");
+      const gymId = await makeGym(owner, "Sb Count Gym");
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", "sb-count-maya@gmail.com");
+      const water = await addProduct(gymId, owner.cookies, "Water", 100, null);
+      const bar = await addProduct(gymId, owner.cookies, "Protein bar", 200, null);
+      const towel = await addProduct(gymId, owner.cookies, "Towel", 300, null);
+      const three = [
+        { productId: water.id, quantity: 1, totalMinor: 100 },
+        { productId: bar.id, quantity: 1, totalMinor: 200 },
+        { productId: towel.id, quantity: 1, totalMinor: 300 },
+      ];
+      const first = await sold(gymId, owner.cookies, basket(three, maya));
+      const second = await sold(gymId, owner.cookies, basket([{ productId: bar.id, quantity: 1, totalMinor: 200 }], maya));
+      const third = await sold(gymId, owner.cookies, basket(three, maya));
+      const day = await readRegister(sql, gymId, TODAY, TODAY, 2, true);
+      if (day === null) throw new Error("no register");
+      expect(day.sales.map((s) => [s.receiptNumber, s.lineNo])).toEqual([
+        [third.receiptNumber, 1],
+        [third.receiptNumber, 2],
+        [third.receiptNumber, 3],
+        [second.receiptNumber, 1],
+      ]);
+      expect([day.salesTotal, day.totals[0]?.count]).toEqual([3, 3]);
+      const bought = await purchasesOf(sql, gymId, maya, 2);
+      expect([bought?.sales.map((s) => s.receiptNumber), bought?.total]).toEqual([[third.receiptNumber, third.receiptNumber, third.receiptNumber, second.receiptNumber], 3]);
+      expect(first.receiptNumber).toBeLessThan(second.receiptNumber);
     },
     T,
   );

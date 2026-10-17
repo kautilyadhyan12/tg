@@ -207,7 +207,16 @@ function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }
   const quantityId = useId();
   const discountId = useId();
   const { product } = row;
-  if (product === null) return null;
+  if (product === null) {
+    return (
+      <li className="flex flex-wrap items-center justify-between gap-3 py-3" style={LINE} data-testid="basket-line">
+        <p className="c-s14 c-t2 m-0">{row.problem}</p>
+        <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={disabled} aria-label="Remove the product no longer on sale" onClick={onRemove}>
+          Remove
+        </button>
+      </li>
+    );
+  }
   const each = formatMinor(product.priceMinor, product.currency);
   return (
     <li className="flex flex-col gap-2 py-3" style={LINE} data-testid="basket-line">

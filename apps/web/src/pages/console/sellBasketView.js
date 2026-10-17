@@ -8,6 +8,9 @@ import { discountMinorFor, quantityMax, rateById, rateLabel, saleProblem, saleSu
 // rule (`saleAmounts`), and the server works every line out again and refuses a sale that no
 // longer comes to it.
 
+/** Said on a line whose product was archived or removed while the sale was open (round one, L1). */
+export const GONE_LINE = 'This product is no longer on sale. Remove it to take payment for the rest.';
+
 /** A line as the form holds it: the product, how many as typed, and its discount picked. */
 export const newLine = (productId) => ({ productId, quantityText: '1', discountId: '' });
 
@@ -120,7 +123,7 @@ export function basketView({ page, lines, who, person, memberGift = null, giftRe
     const discount = usable.find((d) => d.id === line.discountId) ?? null;
     const gift = giftUsed && index === giftAt ? memberGift : null;
     const off = discount ?? (gift === null ? null : { ...gift, name: MEMBER_GIFT_SALE_NAME });
-    const problem = saleProblem({ product, quantity, who: 'walkin', person: null, currency: page.currency, discount });
+    const problem = product === null ? GONE_LINE : saleProblem({ product, quantity, who: 'walkin', person: null, currency: page.currency, discount });
     const summary = product !== null && Number.isInteger(quantity) ? saleSummary(product, quantity, page.tax, off) : null;
     const offMinor = summary === null ? 0 : discountMinorFor(product, quantity, off);
     return {
