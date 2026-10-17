@@ -87,6 +87,7 @@ export const PAYMENTS_FILE_HEADINGS = [
   "Receipt",
   "Type",
   "Person",
+  "Paid by",
   "Details",
   "Refund of receipt",
   "Reason for refund",
@@ -109,6 +110,9 @@ export interface PaymentLineRow {
   personDeleted: boolean;
   /** A product sold to nobody on the list. */
   walkIn: boolean;
+  /** Who paid for a membership's bill, or was given its refund, where somebody else on the
+   *  list pays for this person (18i), as that record was named then; null otherwise. */
+  paidBy: string | null;
   /** What it was for: a membership type's name, or the product's. */
   item: string;
   quantity: number | null;
@@ -137,6 +141,7 @@ export interface PaymentLine {
   receipt: number;
   type: string;
   person: string;
+  paidBy: string;
   details: string;
   forReceipt: number | null;
   refundReason: string;
@@ -215,6 +220,7 @@ export function paymentLine(row: PaymentLineRow): PaymentLine {
     receipt: row.receipt,
     type: PAYMENT_LINE_KIND_WORDS[row.kind],
     person: personWords(row),
+    paidBy: row.paidBy === null ? "" : row.paidBy.trim() === "" ? PAYMENTS_DOWNLOAD_WORDS.no_name : row.paidBy,
     details: detailsWords(row),
     forReceipt: refund ? row.forReceipt : null,
     refundReason: refund ? (lookup(reasons, row.refundReason) ?? "") : "",

@@ -514,3 +514,37 @@ export const gymMemberEntryTags = pgTable(
     index("gym_member_entry_tags_tag_idx").on(t.gymId, t.tagId),
   ],
 );
+
+/** WHO PAYS FOR A PERSON on the gym's list (0139; ROADMAP 18i): one row a person paid
+ *  for, naming the record that pays. Their bills stay their own; the payer is who staff
+ *  take the money from, who receipts name, and who is told a payment is overdue. Both
+ *  records are the gym's (the keys carry it), nobody pays for themselves, and a record
+ *  deleted for good takes its rows with it. One level only is kept by the write, under
+ *  the gym's lock: a payer is paid for by nobody. */
+export const gymMemberPayers = pgTable(
+  "gym_member_payers",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id").notNull(),
+    payerEntryId: uuid("payer_entry_id").notNull(),
+    setBy: uuid("set_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_member_payers_pk", columns: [t.gymId, t.entryId] }),
+    foreignKey({
+      name: "gym_member_payers_entry_fk",
+      columns: [t.gymId, t.entryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "gym_member_payers_payer_fk",
+      columns: [t.gymId, t.payerEntryId],
+      foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id],
+    }).onDelete("cascade"),
+    index("gym_member_payers_payer_idx").on(t.gymId, t.payerEntryId),
+    check("gym_member_payers_self_check", sql`${t.entryId} <> ${t.payerEntryId}`),
+  ],
+);

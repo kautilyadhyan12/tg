@@ -352,9 +352,13 @@ export const gymMemberPayments = pgTable(
     voidReason: text("void_reason"),
     /** Its receipt's number, the gym's own (0114; 18g-i). */
     receiptNumber: integer("receipt_number").notNull(),
+    /** Who paid, as their record was named when it was recorded, where somebody else on the
+     *  gym's list pays for this person (0139; 18i); null where they paid for themselves. */
+    paidByName: text("paid_by_name"),
     createdAt: createdAt(),
   },
   (t) => [
+    check("gym_member_payments_paid_by_name_check", sql`${t.paidByName} IS NULL OR char_length(${t.paidByName}) <= 120`),
     check(
       "gym_member_payments_void_reason_check",
       sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','wrong_person','other'))`,

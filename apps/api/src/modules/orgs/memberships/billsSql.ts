@@ -492,18 +492,30 @@ export interface NewPayment {
 }
 
 /** Records a payment, with the gym's next receipt number (18g-i). Null where this request,
- *  or this payment of a company's, is already recorded: nothing is added. */
-export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date): Promise<string | null> {
-  const [row] = await tx<{ id: string }[]>`
-    WITH n AS (${nextReceipt(tx, p.gymId)})
+ *  or this payment of a company's, is already recorded: nothing is added.
+ *
+ *  Who paid is read here, in the same statement, for every way a payment is recorded: the
+ *  record that pays for the bill's person at this moment (18i), by the name it has now, or
+ *  nobody. `paidByName` is that name, for the caller's note. */
+export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date): Promise<{ id: string; paidByName: string | null } | null> {
+  const [row] = await tx<{ id: string; paid_by_name: string | null }[]>`
+    WITH n AS (${nextReceipt(tx, p.gymId)}),
+         payer AS (
+           SELECT pe.full_name
+           FROM gym_member_bills b
+           JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+           JOIN gym_member_payers l ON l.gym_id = h.gym_id AND l.entry_id = h.entry_id
+           JOIN gym_member_list_entries pe ON pe.gym_id = l.gym_id AND pe.id = l.payer_entry_id
+           WHERE b.gym_id = ${p.gymId} AND b.id = ${p.billId})
     INSERT INTO gym_member_payments
-      (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on, recorded_by, created_at, receipt_number)
+      (gym_id, bill_id, amount_minor, currency, method, provider, provider_payment_id, request_key, paid_on, recorded_by, created_at, receipt_number, paid_by_name)
     SELECT ${p.gymId}, ${p.billId}, ${p.amountMinor}, ${p.currency}, ${p.method}, ${p.provider?.name ?? null},
-           ${p.provider?.paymentId ?? null}, ${p.requestKey}, ${p.paidOn}::date, ${p.recordedBy}, ${now}, n.number
+           ${p.provider?.paymentId ?? null}, ${p.requestKey}, ${p.paidOn}::date, ${p.recordedBy}, ${now}, n.number,
+           (SELECT full_name FROM payer)
     FROM n
     ON CONFLICT DO NOTHING
-    RETURNING id`;
-  return row?.id ?? null;
+    RETURNING id, paid_by_name`;
+  return row === undefined ? null : { id: row.id, paidByName: row.paid_by_name };
 }
 
 export interface DayPaymentRow {
