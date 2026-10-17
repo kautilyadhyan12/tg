@@ -20,6 +20,8 @@ import { WEEK_STARTS, attendanceDay, attendee, overview } from './__fixtures__/o
 vi.mock('./MemberMemberships', () => ({ default: () => null }));
 // Their tags and staff notes (5d) have their own tests in `memberNotes.render.test.jsx`.
 vi.mock('./MemberNotes', () => ({ default: () => null }));
+// Who pays (18i) has its own tests in `memberPayer.render.test.jsx`.
+vi.mock('./MemberPayer', () => ({ default: () => null }));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
