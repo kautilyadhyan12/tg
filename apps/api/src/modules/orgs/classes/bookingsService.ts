@@ -565,9 +565,10 @@ export async function getSessionBookings(
         // The way to a person's page, for staff who may open it.
         entryId: opens ? r.entryId : null,
         at: r.at.toISOString(),
-        // What a booking costs is money, as what it was paid with is (18h-i).
+        // A person's fee is money, as what they paid with is (18h-i); what No-show adds is the
+        // gym's own price, said to the class's coach too, who may press it.
         fee: manages ? r.fee : null,
-        noShowFeeMinor: manages && currency !== null ? classFeeFor({ fee: "no_show", heldMembershipId: r.heldMembershipId, packCharged: r.packCharged, fees }) || null : null,
+        noShowFeeMinor: currency !== null ? classFeeFor({ fee: "no_show", heldMembershipId: r.heldMembershipId, packCharged: r.packCharged, fees }) || null : null,
       };
     });
   return classSessionBookingsResponseSchema.parse({

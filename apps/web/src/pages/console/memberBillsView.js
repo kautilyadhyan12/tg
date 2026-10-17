@@ -175,7 +175,10 @@ const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 
 // ── A late cancel or no-show fee (18h-i) ──
 
-const FEE_TAGS = { ...STATE_TAGS, waived: { tag: 'Waived', tone: 'plain' } };
+const FEE_TAGS = { ...STATE_TAGS, waived: { tag: 'Waived', tone: 'plain' }, removed: { tag: 'Taken off', tone: 'plain' } };
+
+/** A fee paid, or taken off, after its booking stopped counting (18h-i, round one). */
+const NO_LONGER_OWED = 'No longer owed: they were marked Came, or the class was cancelled.';
 
 /** One fee as a box: what it is and what it was for, its amount and tag, when it is due,
  *  who waived it, and its payment, a voided one struck through. */
@@ -193,7 +196,14 @@ export function feeRow(fee, currency, today) {
     tone: state.tone,
     tax: billTaxLine(fee, currency),
     when,
-    waived: fee.waived === null ? null : `Waived ${dayWords(fee.waived.on)}${fee.waived.by === null ? '' : ` by ${fee.waived.by}`}`,
+    waived:
+      fee.waived !== null
+        ? `Waived ${dayWords(fee.waived.on)}${fee.waived.by === null ? '' : ` by ${fee.waived.by}`}`
+        : fee.state === 'removed'
+          ? NO_LONGER_OWED
+          : fee.state === 'paid' && fee.stillOwed === false
+            ? `${NO_LONGER_OWED} If you gave the money back, void the payment.`
+            : null,
     payments: [
       ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: null })),
       ...fee.voidedPayments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
@@ -239,9 +249,19 @@ export function waiveFeeWords(fee, currency, name) {
   };
 }
 
-/** The box Void payment opens on a fee. */
+/** The box Void payment opens on a fee. Where the booking no longer counts (marked came, or
+ *  the class did not run) the fee is taken off with it, and nothing is owed again. */
 export function voidFeePaymentWords(fee, currency, name) {
   const amount = formatMinor(fee.amountMinor, currency);
+  if (fee.stillOwed === false) {
+    return {
+      question: `Void this ${amount} payment for ${name}'s ${feeName(fee)}?`,
+      detail: `${capital(name)} no longer owes this fee: they were marked Came, or the class was cancelled. Voiding the payment takes the fee off too, so nothing is owed. Do it if you gave the money back. The payment stays on this page, crossed out, with who voided it and why.`,
+      label: 'Why are you voiding it?',
+      button: 'Void payment',
+      done: `Payment voided. ${capital(name)} owes nothing for this fee.`,
+    };
+  }
   return {
     question: `Void this ${amount} payment for ${name}'s ${feeName(fee)}?`,
     detail: `Only do this if it was recorded by mistake. The fee will be owed again. The payment stays on this page, crossed out, with who voided it and why.`,

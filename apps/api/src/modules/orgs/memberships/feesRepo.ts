@@ -32,6 +32,15 @@ import { billOf, insertPayment, type BillTax, type Voided } from "./billsSql.js"
 
 const STATUS_FOR: Record<MemberFeeKind, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
 
+/** In a statement that names a fee's bill `b`: its booking is still the late cancel or the
+ *  no-show it was opened for, in a class that runs. False once staff marked them came, the
+ *  class was cancelled or removed, or the booking is gone. */
+const stillOwedSql = (sql: Sql | TransactionSql) => sql`
+  EXISTS (SELECT 1 FROM gym_class_bookings k
+          JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
+          WHERE k.gym_id = b.gym_id AND k.id = b.class_booking_id AND s.status = 'scheduled'
+            AND k.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END)`;
+
 /** The class fees of a gym, as the database holds them. */
 export async function classFeesOf(sql: Sql | TransactionSql, gymId: string): Promise<ClassFees> {
   const [row] = await sql<{ late: number; no_show: number }[]>`
@@ -169,6 +178,8 @@ export interface FeeRow {
   dueOn: string;
   status: MemberBillStatus;
   waived: { on: string; by: string | null } | null;
+  /** Its booking still counts as the late cancel or no-show it was opened for. */
+  stillOwed: boolean;
 }
 
 export interface FeePaymentRow {
@@ -188,8 +199,8 @@ export interface FeePaymentRow {
 export const SETTLED_FEES_SHOWN = 50;
 
 /** The fees of the memberships named that a person's page shows, newest first: every
- *  unpaid one and the newest settled ones (`SETTLED_FEES_SHOWN`), never those taken off by
- *  themselves, with their payments, standing and voided. */
+ *  unpaid one and the newest settled ones (`SETTLED_FEES_SHOWN`), with their payments,
+ *  standing and voided. One taken off by itself is shown only where it ever had a payment. */
 export async function feesFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<{ fees: FeeRow[]; payments: FeePaymentRow[] }> {
   if (membershipIds.length === 0) return { fees: [], payments: [] };
   const ids = [...membershipIds];
@@ -211,18 +222,20 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       void_reason: string | null;
       voided_on: string | null;
       voided_by_name: string | null;
+      still_owed: boolean;
     }[]
   >`
     SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.covers_from, x.amount_minor, x.tax_minor, x.tax_bp,
-           x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name
+           x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name, x.still_owed
     FROM (
       SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from, b.amount_minor, b.tax_minor, b.tax_bp,
              b.tax_name, b.tax_included, b.currency, b.due_on::text AS due_on, b.status, b.void_reason, b.voided_on::text AS voided_on,
-             b.voided_by, b.created_at,
+             b.voided_by, b.created_at, ${stillOwedSql(sql)} AS still_owed,
              row_number() OVER (PARTITION BY b.held_membership_id, b.status = 'open' ORDER BY b.created_at DESC, b.id) AS n
       FROM gym_member_bills b
       WHERE b.gym_id = ${gymId} AND b.held_membership_id = ANY(${ids}::uuid[]) AND b.fee IS NOT NULL
-        AND (b.status <> 'void' OR b.void_reason = 'waived')
+        AND (b.status <> 'void' OR b.void_reason = 'waived'
+             OR EXISTS (SELECT 1 FROM gym_member_payments q WHERE q.gym_id = b.gym_id AND q.bill_id = b.id))
     ) x
     LEFT JOIN users v ON v.id = x.voided_by
     WHERE x.status = 'open' OR x.n <= ${SETTLED_FEES_SHOWN}
@@ -268,6 +281,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       dueOn: r.due_on,
       status: memberBillStatusSchema.parse(r.status),
       waived: r.void_reason === "waived" && r.voided_on !== null ? { on: r.voided_on, by: r.voided_by_name } : null,
+      stillOwed: r.still_owed,
     })),
     payments: payments.map((r) => ({
       id: r.id,
@@ -293,6 +307,8 @@ export type FeeWriteOutcome =
   | { kind: "fee_not_found" }
   | { kind: "payment_not_found" }
   | { kind: "request_reused" }
+  /** A past member's payment is voided only once they are back on the list, as a period's is. */
+  | { kind: "past_member" }
   /** The fee is paid, waived or taken off, or is not the amount the screen showed. */
   | { kind: "fee_changed" };
 
@@ -399,14 +415,17 @@ export async function waiveFee(
   });
 }
 
-/** Staff void the payment of a fee, recorded by mistake: the fee is owed again. The row is
- *  kept, marked with who, when and why. Pressed twice, voided once. */
+/** Staff void the payment of a fee, recorded by mistake: the fee is owed again, where its
+ *  booking is still the late cancel or no-show it was for; where staff have since marked them
+ *  came or the class did not run, it is taken off instead, so nobody who came owes it. The
+ *  row is kept, marked with who, when and why. Pressed twice, voided once. */
 export async function voidFeePayment(
   sql: Sql,
   input: { gymId: string; entryId: string; membershipId: string; billId: string; paymentId: string; reason: PaymentVoidReason; actorUserId: string; now: Date },
 ): Promise<FeeWriteOutcome> {
   return await sql.begin(async (tx): Promise<FeeWriteOutcome> => {
-    if ((await lockedEntry(tx, input.gymId, input.entryId)) === null) return { kind: "entry_not_found" };
+    const entry = await lockedEntry(tx, input.gymId, input.entryId);
+    if (entry === null) return { kind: "entry_not_found" };
     const fee = await lockedFee(tx, input);
     if (fee === null) return { kind: "fee_not_found" };
     const [payment] = await tx<{ undone: boolean; amount_minor: number }[]>`
@@ -414,10 +433,13 @@ export async function voidFeePayment(
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND bill_id = ${fee.id}`;
     if (payment === undefined) return { kind: "payment_not_found" };
     if (payment.undone) return { kind: "ok" };
+    if (entry.past) return { kind: "past_member" };
     await tx`
       UPDATE gym_member_payments SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND undone_at IS NULL`;
-    await tx`UPDATE gym_member_bills SET status = 'open', updated_at = ${input.now} WHERE gym_id = ${input.gymId} AND id = ${fee.id} AND status = 'paid'`;
+    await tx`
+      UPDATE gym_member_bills b SET status = CASE WHEN ${stillOwedSql(tx)} THEN 'open' ELSE 'void' END, updated_at = ${input.now}
+      WHERE b.gym_id = ${input.gymId} AND b.id = ${fee.id} AND b.status = 'paid'`;
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,

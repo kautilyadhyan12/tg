@@ -270,7 +270,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
 
                 <Row
                   title="No-show fee"
-                  hint="A one-time charge, never monthly: added once to the member's bill each time they are marked No-show, by staff, or by itself 15 minutes after the class ends when you check people in and they never checked in. Marking them Came takes it off. 0 means no fee. Class pack members never pay it."
+                  hint="A one-time charge, never monthly: added once to the member's bill each time they are marked No-show, by staff, or by itself 15 minutes after the class ends when you check people in and they never checked in. Marking them Came takes an unpaid fee off. 0 means no fee. Class pack members never pay it."
                 >
                   <MoneyBox label="No-show fee" sign={sign} value={feeDraft.noShowText} onChange={(noShowText) => editFees({ noShowText })} disabled={feesOff} />
                   <span>once, for each no-show</span>

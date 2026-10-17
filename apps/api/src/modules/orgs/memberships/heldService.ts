@@ -168,8 +168,18 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
     amountMinor: f.amountMinor,
     tax: f.tax,
     dueOn: f.dueOn,
-    state: f.waived !== null ? "waived" : owed ? (memberBillState({ status: "open", dueOn: f.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue" ? "overdue" : "due") : "paid",
+    state:
+      f.waived !== null
+        ? "waived"
+        : f.status === "void"
+          ? "removed"
+          : owed
+            ? memberBillState({ status: "open", dueOn: f.dueOn }, ctx.today, ctx.overdueAfterDays) === "overdue"
+              ? "overdue"
+              : "due"
+            : "paid",
     waived: f.waived,
+    stillOwed: f.stillOwed,
     payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0 })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
     can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" ? (standing[0]?.id ?? null) : null },
@@ -644,6 +654,8 @@ function throwOnFeeFailure(outcome: feesRepo.FeeWriteOutcome): void {
       throw new OrgsError(404, "member_payment_not_found", "That payment was not found.");
     case "request_reused":
       throw new OrgsError(409, "request_reused", "That form was already used. Open it again.");
+    case "past_member":
+      throw new OrgsError(409, "past_member", "This is a past member. Put them back on your list first.");
     case "fee_changed":
       throw new OrgsError(409, "member_fee_changed", "This fee has changed since you opened it. Nothing was saved: check it and try again.");
     default: {

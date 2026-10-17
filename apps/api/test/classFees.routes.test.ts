@@ -204,7 +204,7 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     return { ...person, entryId, heldId: held.id };
   };
 
-  const classAt = async (gym: Gym, startsAt: number): Promise<string> => {
+  const classAt = async (gym: Gym, startsAt: number, coach: string | null = null): Promise<string> => {
     const [type] = await sql<{ id: string }[]>`
       INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym)
       VALUES (${gym.id}, ${`Spin ${uniq()}`}, 45, NULL, 'blue', false)
@@ -212,8 +212,8 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     if (type === undefined) throw new Error("no class type");
     const at = new Date(startsAt);
     const [row] = await sql<{ id: string }[]>`
-      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
-      SELECT ${gym.id}, ${type.id}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${at}, 45, NULL, 'scheduled'
+      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status, coach_user_id)
+      SELECT ${gym.id}, ${type.id}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${at}, 45, NULL, 'scheduled', ${coach}
       FROM (SELECT ${at}::timestamptz AT TIME ZONE ${ZONE}::text AS l) x
       RETURNING id`;
     if (row === undefined) throw new Error("no class");
@@ -445,17 +445,23 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect((await feesOf(dana)).filter((f) => f.status !== "void" || f.void_reason === "waived").map((f) => f.void_reason)).toEqual(["waived"]);
     expect((await feesOnPage(gym, dana)).map((f) => f.state)).toEqual(["waived"]);
 
-    // A late cancel, then the gym cancels the class: the unpaid fee comes off.
+    // A late cancel, then the gym cancels the class: the unpaid fee comes off, and only
+    // that class's: Kim's late cancel of another class stands.
     const evan = await member(gym, "Evan Moss");
+    const kim = await member(gym, "Kim Ray");
     const soon = await classAt(gym, T0 + 60 * MIN);
+    const other = await classAt(gym, T0 + 70 * MIN);
     await book(gym, evan, soon);
+    await book(gym, kim, other);
     expect((await cancel(gym, evan, soon, { lateOk: true, feeMinor: LATE })).statusCode).toBe(200);
+    expect((await cancel(gym, kim, other, { lateOk: true, feeMinor: LATE })).statusCode).toBe(200);
     expect(await standing(evan)).toHaveLength(1);
     await sql.begin(async (tx) => {
       await endClassBookings(tx, gym.id, [soon], new Date(clock), { remove: true });
     });
     expect(await standing(evan)).toEqual([]);
     expect((await feesOf(evan)).map((f) => [f.status, f.class_booking_id])).toEqual([["void", null]]);
+    expect((await standing(kim)).map((f) => f.status)).toEqual(["open"]);
   });
 
   it("staff record a fee's payment with a receipt, void it, and waive; strangers and staff without the tick cannot", async () => {
@@ -483,6 +489,7 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     const desk = await signedIn("Desk Dee");
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'manager', ${["members.read", "members.confirm", "schedule.manage"]})`;
     expect((await pay(desk)).statusCode).toBe(403);
+    expect((await inject("POST", `${feeUrl(gym, finn, fee.id)}/waive`, desk.cookies, {})).statusCode).toBe(403);
     // A fee of another record, named through this one's address: not found.
     const gus = await member(gym, "Gus Hart");
     expect((await inject("POST", `/v1/orgs/${gym.id}/member-list/entries/${gus.entryId}/memberships/${gus.heldId}/fees/${fee.id}/waive`, gym.owner.cookies, {})).statusCode).toBe(404);
@@ -510,6 +517,10 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     const membership = (await page(gym, finn)).memberships.find((m) => m.id === finn.heldId);
     expect(membership?.billing?.bills.flatMap((b) => b.payments.map((p) => p.id))).not.toContain(payments[0]?.id);
 
+    // Staff without the tick cannot void it either.
+    expect((await inject("POST", `${feeUrl(gym, finn, fee.id)}/payments/${payments[0]?.id ?? ""}/void`, desk.cookies, { reason: "mistake" })).statusCode).toBe(403);
+    expect(await standing(finn)).toMatchObject([{ status: "paid" }]);
+
     // Voided: owed again, and then waived.
     const voided = await inject("POST", `${feeUrl(gym, finn, fee.id)}/payments/${payments[0]?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
     expect(voided.statusCode, voided.body).toBe(200);
@@ -535,6 +546,73 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     const shown = await feesOnPage(gym, hana);
     expect(shown.filter((f) => f.state === "waived")).toHaveLength(50);
     expect(shown.filter((f) => f.state !== "waived")).toHaveLength(3);
+  });
+
+  it("a fee paid before they were marked came, or before the class was cancelled, is never owed again", async () => {
+    clock = T0;
+    const gym = await makeGym("Came Fees");
+    const ivy = await member(gym, "Ivy Moon");
+    clock = T0 - 5 * HOUR;
+    const past = await classAt(gym, T0 - 2 * HOUR);
+    await book(gym, ivy, past);
+    clock = T0;
+    const booking = await bookingId(past, ivy);
+    expect((await mark(gym, past, booking, "no_show")).statusCode).toBe(200);
+    const [fee] = await feesOnPage(gym, ivy);
+    if (fee === undefined) throw new Error("no fee");
+    expect(fee.stillOwed).toBe(true);
+    const paid = await inject("POST", `${feeUrl(gym, ivy, fee.id)}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: NO_SHOW, method: "cash" });
+    expect(paid.statusCode, paid.body).toBe(200);
+    // She came after all: the paid fee stays paid, and the page says it is no longer owed.
+    expect((await mark(gym, past, booking, "attended")).statusCode).toBe(200);
+    const [after] = await feesOnPage(gym, ivy);
+    expect(after).toMatchObject({ state: "paid", stillOwed: false });
+    // Its payment voided: nothing is owed, then or after another Came.
+    const voided = await inject("POST", `${feeUrl(gym, ivy, fee.id)}/payments/${after?.can.voidPaymentId ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
+    expect(voided.statusCode, voided.body).toBe(200);
+    expect(await standing(ivy)).toEqual([]);
+    expect((await page(gym, ivy)).memberships.find((m) => m.id === ivy.heldId)?.view.payment?.state).not.toBe("due");
+    // The page still shows it, taken off, with its payment crossed out; another Came changes nothing.
+    expect((await feesOnPage(gym, ivy)).map((f) => [f.state, f.can.pay, f.can.waive, f.voidedPayments.length])).toEqual([["removed", false, false, 1]]);
+    expect((await mark(gym, past, booking, "attended")).statusCode).toBe(200);
+    expect(await standing(ivy)).toEqual([]);
+
+    // The same with a late cancel paid, then the class cancelled by the gym.
+    const jo = await member(gym, "Jo Park");
+    const soon = await classAt(gym, T0 + 60 * MIN);
+    await book(gym, jo, soon);
+    expect((await cancel(gym, jo, soon, { lateOk: true, feeMinor: LATE })).statusCode).toBe(200);
+    const [late] = await feesOnPage(gym, jo);
+    if (late === undefined) throw new Error("no late fee");
+    expect((await inject("POST", `${feeUrl(gym, jo, late.id)}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: LATE, method: "cash" })).statusCode).toBe(200);
+    await sql.begin(async (tx) => {
+      // As Cancel class does: the class is marked cancelled, then its bookings end.
+      await tx`UPDATE gym_class_sessions SET status = 'cancelled' WHERE id = ${soon}`;
+      await endClassBookings(tx, gym.id, [soon], new Date(clock), { remove: false });
+    });
+    const [lateAfter] = await feesOnPage(gym, jo);
+    expect(lateAfter).toMatchObject({ state: "paid", stillOwed: false });
+    expect((await inject("POST", `${feeUrl(gym, jo, late.id)}/payments/${lateAfter?.can.voidPaymentId ?? ""}/void`, gym.owner.cookies, { reason: "mistake" })).statusCode).toBe(200);
+    expect(await standing(jo)).toEqual([]);
+  });
+
+  it("the class's own coach is told what No-show adds, and their mark opens the fee", async () => {
+    clock = T0;
+    const gym = await makeGym("Coach Fees");
+    const coach = await signedIn("Coach Lee");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${coach.userId}, 'trainer', ${["members.read"]})`;
+    const lena = await member(gym, "Lena Fox");
+    clock = T0 - 5 * HOUR;
+    const past = await classAt(gym, T0 - 2 * HOUR, coach.userId);
+    await book(gym, lena, past);
+    clock = T0;
+    const list = await inject("GET", `/v1/orgs/${gym.id}/class-sessions/${past}/bookings`, coach.cookies);
+    expect(list.statusCode, list.body).toBe(200);
+    const [row] = (JSON.parse(list.body) as { booked: { noShowFeeMinor: number | null; fee: unknown; membership: unknown }[] }).booked;
+    // The gym's price is said to the coach; what Lena pays with and owes is not.
+    expect(row).toMatchObject({ noShowFeeMinor: NO_SHOW, fee: null, membership: null });
+    expect((await mark(gym, past, await bookingId(past, lena), "no_show", coach)).statusCode).toBe(200);
+    expect((await standing(lena)).map((f) => [f.fee, f.amount_minor])).toEqual([["no_show", NO_SHOW]]);
   });
 
   it("only staff who record payments change the fees; the rules page says what they are", async () => {

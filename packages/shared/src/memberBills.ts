@@ -204,9 +204,10 @@ export const memberBillSchema = z
   .strict();
 export type MemberBill = z.infer<typeof memberBillSchema>;
 
-/** Where a fee stands: owed (due or overdue), paid, or waived by staff. A fee taken off by
- *  itself (the booking was marked came, or the class did not run) is not sent. */
-export const MEMBER_FEE_STATES = ["due", "overdue", "paid", "waived"] as const;
+/** Where a fee stands: owed (due or overdue), paid, waived by staff, or taken off once its
+ *  payment was voided after the booking stopped counting (marked came, or the class did not
+ *  run). An unpaid fee taken off by itself, with no payment ever, is not sent. */
+export const MEMBER_FEE_STATES = ["due", "overdue", "paid", "waived", "removed"] as const;
 export type MemberFeeState = (typeof MEMBER_FEE_STATES)[number];
 
 /** One fee of a membership, and what staff can do about it now. */
@@ -226,6 +227,10 @@ export const memberFeeSchema = z
     state: z.enum(MEMBER_FEE_STATES),
     /** Who waived it, on the gym's own day; null where it was not waived. */
     waived: z.object({ on: daySchema, by: z.string().nullable() }).strict().nullable(),
+    /** Its booking still counts as the late cancel or no-show it was opened for. False once
+     *  staff marked them came or the class was cancelled: a fee paid before that stays paid,
+     *  and voiding its payment takes the fee off instead of making it owed again. */
+    stillOwed: z.boolean().default(true),
     payments: z.array(memberPaymentSchema),
     voidedPayments: z.array(voidedMemberPaymentSchema),
     can: z

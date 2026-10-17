@@ -744,6 +744,36 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `fees/${FEE_ID}/payments/${PAY_ID}/void`, { reason: 'mistake' }));
   });
 
+  it('a fee paid before they were marked Came says it is no longer owed, and its void says nothing is owed again', async () => {
+    const paidOld = fee({ state: 'paid', stillOwed: false, payments: [{ id: PAY_ID, amountMinor: 500, method: 'cash', paidOn: '2026-10-15', by: 'Sam Owner', refunds: [], voidedRefunds: [], refundableMinor: 0, receiptNumber: 41 }], can: { pay: false, waive: false, voidPaymentId: PAY_ID } });
+    const gold = withFees(held(1, GOLD, '2026-10-04', true), [paidOld]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw());
+    const item = within(await feesIn()).getByTestId('held-fee');
+    expect(item.textContent).toContain('No longer owed: they were marked Came, or the class was cancelled. If you gave the money back, void the payment.');
+    fromMenu(item, /^More for the payment/, 'Void payment');
+    const ask = within(item).getByTestId('held-fee-void');
+    expect(ask.textContent).toContain('Voiding the payment takes the fee off too, so nothing is owed.');
+    expect(ask.textContent).not.toContain('owed again');
+  });
+
+  it('a fee taken off after its payment was voided reads Taken off, with nothing to press', async () => {
+    const removed = fee({
+      state: 'removed',
+      stillOwed: false,
+      voidedPayments: [{ id: PAY_ID, amountMinor: 500, method: 'cash', paidOn: '2026-10-15', by: 'Sam Owner', voidedRefunds: [], receiptNumber: 41, voided: { reason: 'mistake', on: '2026-10-16', by: 'Sam Owner' } }],
+      can: { pay: false, waive: false, voidPaymentId: null },
+    });
+    const gold = withFees(held(1, GOLD, '2026-10-04', true), [removed]);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw());
+    const item = within(await feesIn()).getByTestId('held-fee');
+    expect(item.textContent).toContain('Taken off');
+    expect(item.textContent).toContain('No longer owed: they were marked Came, or the class was cancelled.');
+    expect(within(item).getByTestId('held-fee-voided-payment').textContent).toContain('Voided 16 October 2026 by Sam Owner');
+    expect(within(item).queryByRole('button', { name: /Record payment|Waive fee/ })).toBeNull();
+  });
+
   it('a waived fee says who waived it and offers nothing to press', async () => {
     const gold = withFees(held(1, GOLD, '2026-10-04', true), [fee({ state: 'waived', waived: { on: '2026-10-16', by: 'Sam Owner' }, can: { pay: false, waive: false, voidPaymentId: null } })]);
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));

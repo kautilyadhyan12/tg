@@ -34,7 +34,9 @@ export function feeLine(booking, currency) {
   const fee = booking?.fee ?? null;
   if (fee === null || typeof currency !== 'string') return null;
   const what = booking.status === 'late_cancelled' ? 'Late cancel fee' : 'No-show fee';
-  return `${what} ${formatMinor(fee.amountMinor, currency)} · ${FEE_STATE_WORDS[fee.state] ?? 'on their bills'}`;
+  // Paid before staff changed the no-show to came: still paid, and said so.
+  const state = booking.status === 'attended' && fee.state === 'paid' ? 'paid before they were marked Came' : (FEE_STATE_WORDS[fee.state] ?? 'on their bills');
+  return `${what} ${formatMinor(fee.amountMinor, currency)} · ${state}`;
 }
 
 /** One person: their name, what they booked with where the server says, and its fee. */
