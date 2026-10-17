@@ -208,7 +208,7 @@ d("Reports, attendance: whose figures, who reads them, and what they count (real
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(loadConfig(baseEnv), {
       redis,
-      orgs: { now: () => clock ?? new Date() },
+      orgs: { now: () => clock ?? new Date(), gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
         sendPasswordResetEmail: () => Promise.resolve(),

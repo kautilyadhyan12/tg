@@ -38,6 +38,9 @@ export interface DualRateLimitOptions {
    *  to count only the IP dimension. */
   identifier: (req: FastifyRequest) => string | null;
   redis: RedisLike;
+  /** The refusal's sentence, for a door whose reader needs to know what to do next. Left
+   *  out, the global limiter's own words. */
+  message?: string;
 }
 
 export function createDualRateLimit(
@@ -82,9 +85,23 @@ export function createDualRateLimit(
       // Same client-facing shape as the global limiter's 429 (R8.1).
       await reply.status(429).send({
         error: "rate_limited",
-        message: "Too many attempts. Please try again later.",
+        message: opts.message ?? "Too many attempts. Please try again later.",
         requestId: req.id,
       });
     }
   };
+}
+
+/** Gives back a press that `createDualRateLimit` let through, for a door that counts only
+ *  what it did (2g: a gym created, not a form refused for a typo). Call it only from the
+ *  handler the limiter let in, with the same options. */
+export async function giveBackRateLimit(
+  opts: Pick<DualRateLimitOptions, "name" | "ipMax" | "ipScope" | "identifier" | "redis">,
+  req: FastifyRequest,
+): Promise<void> {
+  const id = opts.identifier(req);
+  if (id !== null) await opts.redis.decrIfPositive(`rl:${opts.name}:id:${id}`);
+  if (opts.ipMax === null) return;
+  const scope = opts.ipScope?.(req) ?? null;
+  await opts.redis.decrIfPositive(`rl:${opts.name}:ip:${scope === null ? req.ip : `${scope}:${req.ip}`}`);
 }

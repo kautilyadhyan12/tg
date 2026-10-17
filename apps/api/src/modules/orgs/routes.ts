@@ -11,7 +11,7 @@ import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../redis.js";
 import type { OnlinePayments } from "../billing/online.js";
-import { createDualRateLimit } from "../auth/rateLimit.js";
+import { createDualRateLimit, giveBackRateLimit } from "../auth/rateLimit.js";
 import { cookieOptions, mintOpaqueToken, sha256Hex } from "../auth/tokens.js";
 import { TRIAL_DEVICE_COOKIE, startOrgTrialRequestSchema, trialDeviceMarkSchema } from "@app/shared";
 import type { AppConfig } from "../../config.js";
@@ -108,6 +108,10 @@ export interface OrgRouteOverrides {
   randomBytes?: (n: number) => Uint8Array;
   /** Tests move the leaderboard's clock; production uses the real one. */
   now?: () => Date;
+  /** How many gyms one person may create (2g): an hour per account and per address, and
+   *  never paid per owner. A test that makes many gyms for one owner raises them;
+   *  production uses 5, 20 and `UNPAID_GYMS_PER_OWNER`. */
+  gymLimits?: { perAccount: number; perAddress: number; unpaid: number };
 }
 
 /** The browser's trial mark (Stage 3 item 2c: one device, one trial). It goes only to the
@@ -155,6 +159,7 @@ export function registerOrgRoutes(
     log: app.log,
     onlinePayments: deps.onlinePayments,
     ...(overrides.now === undefined ? {} : { now: overrides.now }),
+    ...(overrides.gymLimits === undefined ? {} : { unpaidGymLimit: overrides.gymLimits.unpaid }),
   };
 
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
@@ -227,10 +232,34 @@ export function registerOrgRoutes(
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
-  app.post("/v1/orgs", { preHandler: [app.authenticate] }, async (req, reply) => {
+  // A real owner creates a gym once, so 5 an hour per account is far past anybody honest;
+  // 20 an hour per address leaves room for a few owners on one connection (2g). Without
+  // it one account could fill the database with gyms in a minute. A form refused for a
+  // mistake is given back; a gym created, or refused at the unpaid limit, is counted.
+  const createLimitOptions = {
+    name: "orgs_create",
+    max: overrides.gymLimits?.perAccount ?? 5,
+    ipMax: overrides.gymLimits?.perAddress ?? 20,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req: FastifyRequest) => req.authUser?.id ?? null,
+    redis: deps.redis,
+    message: "Too many gyms or studios have been created in the last hour. Please try again later.",
+  };
+  const createLimit = createDualRateLimit(createLimitOptions);
+
+  app.post("/v1/orgs", { preHandler: [app.authenticate, createLimit] }, async (req, reply) => {
     const body = parseOr400(createOrgRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    const created = await service.createOrg(orgDeps, requireUserId(req), body);
+    if (body === null) {
+      await giveBackRateLimit(createLimitOptions, req);
+      return;
+    }
+    let created;
+    try {
+      created = await service.createOrg(orgDeps, requireUserId(req), body);
+    } catch (err) {
+      if (!(err instanceof service.OrgsError && err.code === "unpaid_gym_limit")) await giveBackRateLimit(createLimitOptions, req);
+      throw err;
+    }
     return reply.status(201).send(created);
   });
 
