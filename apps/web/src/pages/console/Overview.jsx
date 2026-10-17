@@ -384,6 +384,8 @@ export default function Overview() {
       {/* The owner asked this person to be a co-owner (4b-i): their answer, first. Accepting
           changes what they may do, so the console's own read of the gym is taken again. */}
       <CoOwnerRequest gymId={org.id} gymName={org.name} onAccepted={refreshConsoleOrgsAfterChange} />
+      {/* The owner asked this co-owner to take the gym over (4b-ii). */}
+      <CoOwnerRequest kind="owner" gymId={org.id} gymName={org.name} onAccepted={refreshConsoleOrgsAfterChange} />
 
       {/* START HERE, first on the page (ROADMAP 23b): what to set up and where. */}
       {list.show === 'list' ? (
