@@ -142,7 +142,7 @@ describe('Who pays', () => {
     expect(link.getAttribute('href')).toBe(`/console/iron-temple/members?person=${PRIYA}`);
     expect(
       within(box()).getByText(
-        "Priya Sharma is who you take the money from. Priya Sharma's name goes on the receipts, and Priya Sharma is told in the app when a payment is overdue. Aarav Sharma keeps their own memberships, bookings and pass.",
+        'Take the money from Priya Sharma. Receipts name them, and they are told in the app when a payment is overdue. Aarav Sharma keeps their own memberships, bookings and pass.',
       ),
     ).toBeTruthy();
     expect(within(box()).getByRole('button', { name: 'Change who pays' })).toBeTruthy();

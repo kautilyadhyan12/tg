@@ -18,7 +18,7 @@ export function payerLine(answer, name) {
 export function payerMeans(answer, name) {
   if (answer.paidBy === null) return null;
   const payer = nameOf(answer.paidBy.name);
-  return `${payer} is who you take the money from. ${payer}'s name goes on the receipts, and ${payer} is told in the app when a payment is overdue. ${nameOf(name)} keeps their own memberships, bookings and pass.`;
+  return `Take the money from ${payer}. Receipts name them, and they are told in the app when a payment is overdue. ${nameOf(name)} keeps their own memberships, bookings and pass.`;
 }
 
 /** Said to staff who may not change it, so the box is never a dead end. */
