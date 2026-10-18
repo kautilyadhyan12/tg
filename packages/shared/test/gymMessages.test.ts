@@ -469,5 +469,7 @@ describe("how an overdue notice names somebody the reader pays for (18i)", () =>
     ["Sasha", "Sasha"],
     ["María José de los Santos Castillo y Sánchez", "María"],
     ["", "somebody you pay for"],
-  ])("%j reads %j", (full, shown) => expect(paidForName(full)).toBe(shown));
+  ])("%j reads %j", (full, shown) => {
+    expect(paidForName(full)).toBe(shown);
+  });
 });
