@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, ShieldCheck } from 'lucide-react';
 import { formatJoinedAt } from '../../pages/console/consoleView';
 import { errorText, orgService } from '../../api/orgsApi';
+import { closePaddleCheckout, openPaddleCheckout } from '../../utils/paddleCheckout';
 
 // "BE A CO-OWNER OF {GYM}" (ROADMAP 4b-i): the gym's owner asked the person reading this
 // Overview to be a co-owner. Accept makes them one; Decline tells the owner no. What
@@ -9,7 +10,14 @@ import { errorText, orgService } from '../../api/orgsApi';
 // that fails draws nothing: the email says where to come back to.
 //
 // `kind="owner"` is the same card for "Be the owner of {gym}" (ROADMAP 4b-ii): the owner
-// asked this co-owner to take the gym over.
+// asked this co-owner to take the gym over. A gym paying through Paddle (4b-iii-a): Accept opens
+// Paddle's window for their own card, and the gym is theirs once it is saved; closed without a
+// card, nothing has changed and the request still waits.
+
+/** How many times, two seconds apart, a saved card is asked after before the card says it
+ *  will show in a minute. */
+const CARD_TRIES = 30;
+const CARD_GAP_MS = 2000;
 
 const KINDS = {
   'co-owner': {
@@ -29,6 +37,14 @@ const KINDS = {
     asked: 'asked you to be the owner.',
     what: (who) => `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.`,
     yes: (gym) => `You're now the owner of ${gym}.`,
+    // Paying through Paddle: the plan is theirs to pay from the hand-over on.
+    card: {
+      what: (who) => `As the owner you can also add and remove co-owners, and you pay for the plan from now on with your own card. ${who} stays on as a co-owner and won't be charged again.`,
+      accept: 'Accept and add your card',
+      yes: (gym) => `You're now the owner of ${gym}. Your card pays for the plan from now on.`,
+      notSaved: "Your card wasn't saved, so nothing has changed. Press Accept and add your card to try again.",
+      slow: "Your card was saved. It can take a minute to show you as the owner: reload this page then.",
+    },
   },
 };
 
@@ -38,6 +54,17 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
   const [busy, setBusy] = useState(null);
   const [problem, setProblem] = useState(null);
   const [done, setDone] = useState(null);
+  const mounted = useRef(true);
+  // Paddle says "closed" after "completed" too: a card being confirmed is not "not saved".
+  const confirming = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      closePaddleCheckout();
+    };
+  }, []);
+  const card = request?.cardNeeded === true ? words.card ?? null : null;
 
   useEffect(() => {
     let live = true;
@@ -52,17 +79,77 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
     };
   }, [gymId, words]);
 
+  /** Ask until the saved card has made the gym theirs. The worker finishes it on its own too,
+   *  so running out of tries only means this card stops waiting. */
+  const confirmCard = async (requestId, cardWords) => {
+    for (let tries = 0; tries < CARD_TRIES; tries += 1) {
+      try {
+        const res = await orgService.ownerCardSaved(gymId, requestId);
+        if (res.data?.status === 'accepted') {
+          closePaddleCheckout();
+          if (!mounted.current) return;
+          setBusy(null);
+          setDone(cardWords.yes(gymName));
+          setRequest(null);
+          onAccepted?.();
+          return;
+        }
+      } catch (err) {
+        if (err?.response?.status === 409 || err?.response?.status === 404) {
+          closePaddleCheckout();
+          if (!mounted.current) return;
+          setBusy(null);
+          setProblem(errorText(err, words.card?.notSaved ?? ''));
+          return;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, CARD_GAP_MS));
+      if (!mounted.current) return;
+    }
+    closePaddleCheckout();
+    if (!mounted.current) return;
+    setBusy(null);
+    setDone(cardWords.slow);
+    setRequest(null);
+  };
+
+  const openCard = async (requestId, window, cardWords) => {
+    setBusy('card');
+    confirming.current = false;
+    await openPaddleCheckout({
+      environment: window.environment,
+      clientToken: window.clientToken,
+      transactionId: window.transactionId,
+      email: window.email,
+      onEvent: (event) => {
+        if (!mounted.current) return;
+        if (event.type === 'completed') {
+          confirming.current = true;
+          setBusy('confirming');
+          void confirmCard(requestId, cardWords);
+        } else if (event.type === 'closed' && !confirming.current) {
+          setBusy(null);
+          setProblem(cardWords.notSaved);
+        }
+      },
+    });
+  };
+
   const answer = async (accept) => {
     setBusy(accept ? 'accept' : 'decline');
     setProblem(null);
     try {
-      await words.answer(gymId, request.id, accept);
+      const res = await words.answer(gymId, request.id, accept);
+      if (accept && res.data?.status === 'card_needed') {
+        await openCard(request.id, res.data.card, words.card);
+        return;
+      }
       setDone(accept ? words.yes(gymName) : `You said no. ${request.ownerName || 'The owner'} can ask you again.`);
       setRequest(null);
       if (accept) onAccepted?.();
+      setBusy(null);
     } catch (err) {
       setProblem(errorText(err, "We couldn't send your answer. Please try again."));
-    } finally {
       setBusy(null);
     }
   };
@@ -97,7 +184,7 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
         </div>
       </div>
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        {words.what(request.ownerName || 'The owner')} The request works until {formatJoinedAt(request.expiresAt)}.
+        {(card ?? words).what(request.ownerName || 'The owner')} The request works until {formatJoinedAt(request.expiresAt)}.
       </p>
       {problem !== null ? (
         <p role="alert" className="text-xs" style={{ color: '#ef4444' }}>
@@ -112,8 +199,8 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
           className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-40"
           style={{ background: 'linear-gradient(135deg,#FF8A1F,#FFB347)', color: '#0A0908', minHeight: 44 }}
         >
-          {busy === 'accept' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Accept
+          {busy !== null && busy !== 'decline' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          {busy === 'confirming' ? 'Saving your card…' : card !== null ? card.accept : 'Accept'}
         </button>
         <button
           type="button"

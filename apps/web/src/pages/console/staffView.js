@@ -162,12 +162,13 @@ export function coOwnerView(person, viewerIsOwner) {
 
 /** What a co-owner's panel says about handing the gym to them (ROADMAP 4b-ii), for the
  *  gym's owner alone; null for anybody else or any other row.
- *  `offer`: Make owner. `waiting`: asked, not answered (`until`). `paid`: the gym is on a paid
- *  plan, so it is not handed over. `other`: another co-owner is asked (`person`). */
+ *  `offer`: Make owner. `waiting`: asked, not answered (`until`; `addingCard`: they pressed
+ *  Accept and are adding their card, 4b-iii-a). `paid`: the gym's plan stops a hand-over for
+ *  now. `other`: another co-owner is asked (`person`). */
 export function ownerView(person, viewerIsOwner, staff, paidPlan) {
   if (!viewerIsOwner || person?.role !== 'owner' || person.coOwner !== true) return null;
   const until = person.ownerRequest?.expiresAt ?? null;
-  if (until !== null) return { kind: 'waiting', until };
+  if (until !== null) return { kind: 'waiting', until, addingCard: person.ownerRequest?.addingCard === true };
   if (paidPlan === true) return { kind: 'paid' };
   const other = Array.isArray(staff) ? staff.find((p) => p?.userId !== person.userId && p?.ownerRequest) : undefined;
   return other === undefined ? { kind: 'offer' } : { kind: 'other', person: other };
