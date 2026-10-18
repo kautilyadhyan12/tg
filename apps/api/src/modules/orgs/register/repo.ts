@@ -997,8 +997,9 @@ export async function peopleLike(sql: Sql, gymId: string, like: string, limit: n
 }
 
 /** What one record has bought, newest first: every line of its newest `limit` sales, and how
- *  many sales there are in all; null where the record is not this gym's. */
-export async function purchasesOf(sql: Sql, gymId: string, entryId: string, limit: number): Promise<{ sales: SaleRow[]; total: number } | null> {
+ *  many sales there are in all; null where the record is not this gym's. `standing`: the
+ *  sales staff voided are left out of both (the member's own view, 18j). */
+export async function purchasesOf(sql: Sql, gymId: string, entryId: string, limit: number, standing = false): Promise<{ sales: SaleRow[]; total: number } | null> {
   const [entry] = await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ${entryId}`;
   if (entry === undefined) return null;
   const [rows, count] = await Promise.all([
@@ -1010,9 +1011,10 @@ export async function purchasesOf(sql: Sql, gymId: string, entryId: string, limi
       WHERE s.gym_id = ${gymId} AND s.entry_id = ${entryId}
         AND s.receipt_number IN (SELECT f.receipt_number FROM gym_sales f
                                  WHERE f.gym_id = ${gymId} AND f.entry_id = ${entryId} AND f.line_no = 1
+                                   AND (${!standing} OR f.undone_at IS NULL)
                                  ORDER BY f.seq DESC LIMIT ${limit})
       ORDER BY s.receipt_number DESC, s.line_no`,
-    sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND line_no = 1`,
+    sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_sales WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND line_no = 1 AND (${!standing} OR undone_at IS NULL)`,
   ]);
   return { sales: await refundsOf(sql, gymId, rows.map(sale)), total: count[0]?.n ?? 0 };
 }

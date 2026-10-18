@@ -68,6 +68,7 @@ import { registerStaffActivityRoutes } from "./staffActivity/routes.js";
 import { registerRegisterRoutes } from "./register/routes.js";
 import { registerReceiptRoutes } from "./receipts/routes.js";
 import { registerPayerRoutes } from "./payers/routes.js";
+import { registerMyMembershipRoutes } from "./myMembership/routes.js";
 import { registerPaymentsDownloadRoutes } from "./paymentsDownload/routes.js";
 import { registerWeekRoutes } from "./week/routes.js";
 import { registerCoOwnerRoutes } from "./coOwners/routes.js";
@@ -236,6 +237,8 @@ export function registerOrgRoutes(
   registerReceiptRoutes(app, { sql: deps.sql, redis: deps.redis });
   // Who pays for a person: family plans (ROADMAP 18i).
   registerPayerRoutes(app, { sql: deps.sql, redis: deps.redis });
+  // My membership: a member's own memberships, payments and receipts (ROADMAP 18j).
+  registerMyMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerPaymentsDownloadRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerWeekRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
