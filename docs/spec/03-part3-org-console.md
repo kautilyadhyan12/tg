@@ -3696,10 +3696,10 @@ staff can do left out. **Only their own record**: the one their live account alo
 (`soloHolders`'s rule); `record` reads "none" where staff have not linked them and "shared"
 where two accounts hold it, and neither carries money. **A payer** (Kd, *"i agree"*): while
 the list says Priya pays for Aarav, `paysFor` gives her each person's memberships with their
-money, and Aarav's own memberships carry their dates alone under `paidBy`; his desk purchases
-stay his. `GET .../my-membership/receipts/:number` opens a desk receipt of their own record, or
-a membership's where it is theirs to read by the same rule; every other number answers 404 as
-one the gym does not have. Cost (`tools/measure-my-membership-cost.ts`, 20 gyms of 200, 36
+money, and Aarav's own memberships carry their dates alone under `paidBy`, with no price; his
+desk purchases stay his. `GET .../my-membership/receipts/:number` opens a desk receipt of their
+own record, or a membership's where it is theirs to read by the same rule, naming no member of
+staff; one staff voided, and every other number, answers 404 as one the gym does not have. Cost (`tools/measure-my-membership-cost.ts`, 20 gyms of 200, 36
 paid months and 30 purchases each in the measured gym): one member 12.0 ms of the thread, a
 payer of ten 72.4 ms, all 200 at one moment 2.0 s with no stall over 18.8 ms.
 
