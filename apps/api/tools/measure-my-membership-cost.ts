@@ -5,6 +5,7 @@
 // member's page shows. Measured:
 //
 //   - one member opening My membership
+//   - a payer of ten (`PAYS_FOR_MAX`) opening it, every one of the ten's history read with it
 //   - the whole gym of 200 opening it at the same moment (a class lets out)
 //   - one member opening one of their receipts
 //
@@ -37,6 +38,7 @@ const DAY = 24 * 60 * 60_000;
 
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
+  await sql`DELETE FROM gym_member_payers WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_sales WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_products WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_payments WHERE gym_id IN (${gyms})`;
@@ -54,6 +56,8 @@ async function cleanup(): Promise<void> {
 interface Gym {
   gymId: string;
   members: string[];
+  entries: string[];
+  owner: string;
 }
 
 const dayOf = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
@@ -101,7 +105,7 @@ async function makeGym(n: number, t0: number, history: boolean): Promise<Gym> {
       INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to)
       SELECT ${gymId}, h, 0, ${PRICE}, 'INR', ${starts}::date, ${starts}::date, (${starts}::date + interval '1 month' - interval '1 day')::date
       FROM unnest(${heldIds}::uuid[]) AS h`;
-    return { gymId, members };
+    return { gymId, members, entries, owner };
   }
   // Every member's 36 months, each bill paid in full by one payment with its own receipt.
   const bills = await sql<{ id: string; covers_from: string; n: number }[]>`
@@ -124,7 +128,7 @@ async function makeGym(n: number, t0: number, history: boolean): Promise<Gym> {
            (${dayOf(t0)}::date - s), ${owner}, ${first} + (e.i - 1) * ${SALES} + s
     FROM unnest(${entries}::uuid[]) WITH ORDINALITY AS e(e, i), generate_series(0, ${SALES - 1}) AS s`;
   await sql`UPDATE gyms SET receipts_issued = ${first + MEMBERS * SALES} WHERE id = ${gymId}`;
-  return { gymId, members };
+  return { gymId, members, entries, owner };
 }
 
 await cleanup();
@@ -176,6 +180,12 @@ try {
   console.log(`  one member's answer: ${String(shown?.payments.length ?? 0)} payments (${String(shown?.olderPeriodsNotShown ?? 0)} older not sent), ${String(answer?.purchases.length ?? 0)} purchases (${String(answer?.purchasesNotShown ?? 0)} older not sent), ${String(JSON.stringify(answer).length)} characters`);
 
   await measure("one member opening My membership", 10, (i) => getMyMembership(deps, measured.members[i] ?? "", measured.gymId, open));
+  // The first member pays for the ten from the 191st on: the most one payer may.
+  const payerEntry = measured.entries[0] ?? "";
+  await sql`INSERT INTO gym_member_payers ${sql(measured.entries.slice(190, 200).map((e) => ({ gym_id: measured.gymId, entry_id: e, payer_entry_id: payerEntry, set_by: measured.owner })))}`;
+  const asPayer = await getMyMembership(deps, one, measured.gymId, open);
+  console.log(`  the payer's answer: ${String(asPayer?.paysFor.length ?? 0)} people, ${String(JSON.stringify(asPayer).length)} characters`);
+  await measure("a payer of ten opening My membership", 10, () => getMyMembership(deps, one, measured.gymId, open));
   await measure("all 200 of the gym opening it at once", 3, () => Promise.all(measured.members.map((m) => getMyMembership(deps, m, measured.gymId, open))));
   const receipt = shown?.payments[0]?.receiptNumber ?? 1;
   await measure("one member opening one of their receipts", 10, () => getMyReceipt(deps, one, measured.gymId, receipt, open));

@@ -341,6 +341,15 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect((await myReceipt(gym, priya, aaravPaid.receipt)).statusCode).toBe(200);
     expect((await myReceipt(gym, priya, aaravBought.receipt)).statusCode).toBe(404);
     expect((await myReceipt(gym, priya, raviPaid.receipt)).statusCode).toBe(404);
+    // A second family at the same gym: Neha pays for Kabir. Neither payer reaches the other's.
+    const neha = await member(gym, "Neha Iyer");
+    const kabir = await member(gym, "Kabir Iyer");
+    expect((await inject("PUT", `/v1/orgs/${gym.id}/member-list/entries/${kabir.entryId}/payer`, gym.owner.cookies, { payerEntryId: neha.entryId })).statusCode).toBe(200);
+    const kabirPaid = await pay(gym, kabir.entryId, await give(gym, kabir.entryId, 0), 3000);
+    expect((await myReceipt(gym, priya, kabirPaid.receipt)).statusCode).toBe(404);
+    expect((await myReceipt(gym, neha, aaravPaid.receipt)).statusCode).toBe(404);
+    expect((await myReceipt(gym, neha, kabirPaid.receipt)).statusCode).toBe(200);
+    expect((await mine(gym, priya)).paysFor.map((p) => p.name)).toEqual(["Aarav Sharma"]);
     // Another gym's Priya pays for nobody here.
     expect((await mine(next, otherMaya)).paysFor).toEqual([]);
     // The gym removes Priya as payer: she reads none of it, and Aarav reads his own again.
