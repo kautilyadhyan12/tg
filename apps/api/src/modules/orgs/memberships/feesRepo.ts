@@ -483,7 +483,7 @@ export async function recordFeePayment(
     const fee = await lockedFee(tx, input);
     if (fee === null) return { kind: "fee_not_found" };
     if (fee.status !== "open" || fee.amount_minor !== input.amountMinor) return { kind: "fee_changed" };
-    const paymentId = await insertPayment(
+    const recorded = await insertPayment(
       tx,
       {
         gymId: input.gymId,
@@ -498,7 +498,8 @@ export async function recordFeePayment(
       },
       input.now,
     );
-    if (paymentId === null) throw new Error("a fee's payment was not recorded under the gym's lock");
+    if (recorded === null) throw new Error("a fee's payment was not recorded under the gym's lock");
+    const paymentId = recorded.id;
     await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now} WHERE gym_id = ${input.gymId} AND id = ${fee.id}`;
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
@@ -506,7 +507,16 @@ export async function recordFeePayment(
       action: "org.member_fee_paid",
       targetType: "gym_member_payment",
       targetId: paymentId,
-      meta: { entryId: input.entryId, membershipId: input.membershipId, billId: fee.id, fee: fee.fee, amountMinor: String(fee.amount_minor), currency: fee.currency, method: input.method },
+      meta: {
+        entryId: input.entryId,
+        membershipId: input.membershipId,
+        billId: fee.id,
+        fee: fee.fee,
+        amountMinor: String(fee.amount_minor),
+        currency: fee.currency,
+        method: input.method,
+        ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
+      },
     });
     return { kind: "ok" };
   });

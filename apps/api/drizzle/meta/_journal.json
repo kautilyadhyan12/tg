@@ -979,7 +979,14 @@
       "idx": 139,
       "version": "7",
       "when": 1790726400140,
-      "tag": "0140_hand_over_card",
+      "tag": "0140_member_payers",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1790726400141,
+      "tag": "0141_hand_over_card",
       "breakpoints": true
     }
   ]

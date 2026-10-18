@@ -1866,7 +1866,7 @@ directions. Marking attendance still needs a membership.
 
 **Out of 4b-iii-a (built 2026-10-18; `rulings/2026-10-18-4b-iii-a.md`).** A gym paying through Paddle is handed over: the new owner adds their own card and pays from then on. A plan paid through Razorpay is 4b-iii-b.
 
-- Migration `0140`: on `gym_owner_requests`, the card window Accept opened (`card_subscription_ref`, `card_txn_ref`, `card_customer_ref`, `card_address_ref`, `card_opened_at`), when it was pointed back or found saved (`card_closed_at`), and when Paddle's payer moved (`payer_moved_at`).
+- Migration `0141`: on `gym_owner_requests`, the card window Accept opened (`card_subscription_ref`, `card_txn_ref`, `card_customer_ref`, `card_address_ref`, `card_opened_at`), when it was pointed back or found saved (`card_closed_at`), and when Paddle's payer moved (`payer_moved_at`).
 - Accept on a Paddle plan moves nothing: it finds or makes the person's own Paddle customer (by their email; the key needs `customer.write` and `address.write`), gives it the plan's country and postcode, points the plan's card window (`update-payment-method-transaction`) at it, and answers `card_needed` with that window. The gym moves, under its lock with the request asked again, once Paddle says that window saved THEIR card on that same plan (`POST …/owner-request/:requestId/card`, by the person asked; and the billing worker every minute). Then the subscription's customer and address move to them, so its charges and receipts are theirs (measured on Kd's sandbox 2026-10-18: a saved card pays the plan at once; the payer move moves the receipts).
 - A window no longer wanted (Cancel, Decline, the 7 days, the person changed) is pointed back at the plan's payer before its request ends, which makes Paddle refuse it even in a tab still open; Cancel after the card was saved answers `card_saved` and the hand-over stands. While a window is open the owner cannot change or remove that co-owner (`adding_card`), and Paddle's own page waits (`payer_moving`) until the payer has moved.
 - Still refused: money owed (past due, or a grace that ended, `plan_overdue`), a plan set to end (`plan_ending`), a Razorpay plan (`paid_plan`). The Staff list carries `paidPlanNote` (the sentence) and `cardNeeded`.
@@ -3664,6 +3664,34 @@ is 18h-i's: the person's page, receipts, Download payments, takings and Reports.
 the fees for a day's times, under a coming session and in the late cancel box, and a past
 session's own fee; staff read each session's fee and what No-show adds on the trainer's week,
 and the person's name there opens their page.
+
+**As built, 18i (2026-10-17; `rulings/2026-10-17-18i.md`): family plans, one person pays for
+others** (Mindbody's "Pays for", PushPress's sub-accounts). A record names another record on
+the same gym's list as its payer (`gym_member_payers`, `0140`; both keys carry the gym; one
+row a person paid for). Each keeps their own memberships, bills, bookings and pass; the bills
+stay on the person's own record. **One level only**: a payer is paid for by nobody, somebody
+paid for pays for nobody, nobody pays for themselves, and a payer pays for ten at most
+(`PAYS_FOR_MAX`), each kept under the gym's lock. A payer may be anybody on the list, a past
+member or somebody with no membership among them. **Who pays** on a person's page reads
+"Paid by Priya Sharma" (her name opens her page, Members `?person=`) or "Priya Sharma pays for
+2 people", with Choose who pays, Add someone they pay for and Remove, each asked first in a box
+naming who changes (`members.confirm` reads it; `billing.members` changes it). On a payer's
+page each person they pay for is listed with what they owe now (a bill due or overdue today,
+and each fee still owed), each with Record payment, sent on that person's own membership.
+**A payment names its payer** as their record is named the moment it is recorded
+(`gym_member_payments.paid_by_name`), read in the same statement for every way a payment is
+written: its receipt prints "Paid by", a refund's "Given back to", Download payments has a Paid
+by column, and Staff activity reads "from Priya Sharma for Aarav Sharma". **Payment overdue**
+goes to the payer's own app account (`soloHolders` of the payer's record), never to the person
+paid for, naming them: "Hi Priya, the payment to {gym} for Aarav Sharma is overdue", or "the
+payments … for you, Arjun Iyer, Dev Iyer and 2 more are overdue"; a payer with no app account
+of their own is told nothing, and nor is the person. Removing the payer, or the payer's record
+deleted for good, makes the person pay their own bills again; a payment already recorded keeps
+the name it was given. Two records joined move both sides of a link to the kept one, drop a
+link between the two, and refuse a join that would leave one person with two payers or a payer
+who is paid for. **Not built**: a payer's own view in the app (18j settles what a payer may
+see there), a sale at Sell for somebody paid for (whoever stands at the desk pays there), and
+charging the payer's saved card (18d).
 
 ### 14.3 The register
 

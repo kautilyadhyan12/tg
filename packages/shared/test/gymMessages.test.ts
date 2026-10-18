@@ -20,6 +20,7 @@ import {
   type GymMessageFacts,
   type GymMessageHeldReason,
   type GymMessageKind,
+  paidForName,
 } from "../src/gymMessages.js";
 
 const TODAY = "2026-10-09";
@@ -455,5 +456,20 @@ describe("the words and the shapes", () => {
     expect(markGymInboxReadRequestSchema.safeParse({ upTo: reply.asOf }).success).toBe(true);
     expect(markGymInboxReadRequestSchema.safeParse({ upTo: reply.asOf, userId: message.id }).success).toBe(false);
     expect(markGymInboxReadRequestSchema.safeParse({ upTo: "yesterday" }).success).toBe(false);
+  });
+});
+
+describe("how an overdue notice names somebody the reader pays for (18i)", () => {
+  // Real Indian, English and Spanish names: small s's, double spaces, a long one, none.
+  it.each([
+    ["Ravi Das", "Ravi Das"],
+    ["Krishna Iyer", "Krishna Iyer"],
+    ["Jessica  Moss", "Jessica Moss"],
+    ["  Aarav\tSharma ", "Aarav Sharma"],
+    ["Sasha", "Sasha"],
+    ["María José de los Santos Castillo y Sánchez", "María"],
+    ["", "somebody you pay for"],
+  ])("%j reads %j", (full, shown) => {
+    expect(paidForName(full)).toBe(shown);
   });
 });

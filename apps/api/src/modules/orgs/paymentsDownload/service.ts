@@ -56,7 +56,7 @@ export async function summary(deps: PaymentsDownloadDeps, gymId: string, days: D
   return paymentsDownloadSummarySchema.parse({ from: days.from, to: days.to, lines, totals: shownTotals(days, totals) });
 }
 
-const WIDTHS = [13, 10, 21, 26, 36, 11, 20, 18, 14, 12, 18, 30, 20];
+const WIDTHS = [13, 10, 21, 26, 26, 36, 11, 20, 18, 14, 12, 18, 30, 20];
 const MONEY_HEADINGS = new Set(["Amount", "Tax", "Amount counted"]);
 
 /** What Totals says of Reports: Reports counts the gym's own currency only, so a file with
@@ -127,6 +127,7 @@ export async function file(deps: PaymentsDownloadDeps, userId: string, gymId: st
           { kind: "int", value: line.receipt },
           { kind: "text", value: line.type },
           { kind: "text", value: line.person },
+          { kind: "text", value: line.paidBy },
           { kind: "text", value: line.details },
           line.forReceipt === null ? null : { kind: "int", value: line.forReceipt },
           { kind: "text", value: line.refundReason },

@@ -2273,6 +2273,10 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, entryId, at);
   await keepPaidMemberships(tx, gymId, entryId, at);
+  // What this record paid for somebody else stays, with no name: "A deleted member" (18i).
+  await tx`
+    UPDATE gym_member_payments SET paid_by_name = NULL, paid_by_entry_id = NULL, paid_by_deleted = true
+    WHERE gym_id = ${gymId} AND paid_by_entry_id = ${entryId}`;
   const rows = await tx<{ id: string }[]>`
     DELETE FROM gym_member_list_entries
     WHERE gym_id = ${gymId} AND id = ${entryId} AND (${!opts.onlyPast} OR former_at IS NOT NULL)

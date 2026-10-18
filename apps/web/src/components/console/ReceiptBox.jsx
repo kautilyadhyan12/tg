@@ -5,7 +5,7 @@ import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
 import { viewerPrivileges } from '../../pages/console/consoleView';
 import { canManageOrg } from '../../pages/console/gymDetailsView';
-import { cancelledLine, noAddressLine, receiptDay, receiptLines, receiptNotes, receiptPerson, receiptPrintHtml, receiptTitle } from '../../pages/console/receiptView';
+import { cancelledLine, noAddressLine, receiptDay, receiptLines, receiptNotes, receiptPayer, receiptPerson, receiptPrintHtml, receiptTitle } from '../../pages/console/receiptView';
 import { printHtml } from './receiptPrint';
 import PostalAddressBox from './PostalAddressBox';
 import SentencePlace from './SentencePlace';
@@ -61,6 +61,9 @@ export default function ReceiptBox({ gymId, gym, number, onClose }) {
           <p className="c-s15 c-w7 c-t1 m-0 pt-3">{receiptTitle(receipt)}</p>
           <p className="c-s14 c-t2 m-0">{receiptDay(receipt)}</p>
           <p className="c-s14 c-t1 m-0">{`For: ${receiptPerson(receipt)}`}</p>
+          {receiptPayer(receipt) !== null ? (
+            <p className="c-s14 c-t1 m-0" data-testid="receipt-paid-by">{`${receiptPayer(receipt).label}: ${receiptPayer(receipt).name}`}</p>
+          ) : null}
           {receipt.cancelled ? (
             <p className="c-s14 c-w6 m-0 pt-1" style={{ color: 'var(--bad)' }} data-testid="receipt-cancelled">
               {cancelledLine(receipt)}

@@ -138,7 +138,7 @@ export async function recordPayment(
       bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
     }
 
-    const paymentId = await insertPayment(
+    const recorded = await insertPayment(
       tx,
       {
         gymId: input.gymId,
@@ -153,7 +153,8 @@ export async function recordPayment(
       },
       input.now,
     );
-    if (paymentId === null) throw new Error("a payment was not recorded under the gym's lock");
+    if (recorded === null) throw new Error("a payment was not recorded under the gym's lock");
+    const paymentId = recorded.id;
     if (paid.status === "paid") await setBillStatus(tx, input.gymId, bill.id, "paid", input.now);
     if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
     // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
@@ -174,6 +175,7 @@ export async function recordPayment(
         currency: bill.currency,
         method: input.method,
         billSettled: String(paid.status === "paid"),
+        ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
       },
     });
     return { kind: "ok" };

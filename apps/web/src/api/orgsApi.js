@@ -104,6 +104,7 @@ import {
   gymMembershipTypesResponseSchema,
   heldMembershipsResponseSchema,
   memberGymTagsResponseSchema,
+  memberPayersResponseSchema,
   memberNotesAndTagsSchema,
   memberNotesOlderResponseSchema,
   memberTagsDoneResponseSchema,
@@ -1712,6 +1713,26 @@ export const orgService = {
       heldMembershipsResponseSchema,
       "this person's memberships",
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships`),
+    ),
+  /** Who pays for a person, and whom they pay for (ROADMAP 18i): read with `members.confirm`,
+   *  changed with `billing.members`. Each answers with that person's side of it. */
+  getPayers: (gymId, entryId) =>
+    readThrough(
+      memberPayersResponseSchema,
+      'who pays for them',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/payer`),
+    ),
+  setPayer: (gymId, entryId, payerEntryId) =>
+    readThrough(
+      memberPayersResponseSchema,
+      'who pays for them',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/payer`, { payerEntryId }),
+    ),
+  removePayer: (gymId, entryId) =>
+    readThrough(
+      memberPayersResponseSchema,
+      'who pays for them',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/payer`),
     ),
   giveHeldMembership: (gymId, entryId, body) =>
     readThrough(
