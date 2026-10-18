@@ -8,3 +8,4 @@
 - **Copies:** the canvas's sources and the tools that drew them are in `D:\Projects\ai-home-gym-design\5-redesign-2026-10-18` (outside git).
 - **Open:** Kd's merge of this pull request.
 - **Next:** each web folder builds its V jobs after every job before them on its list (RULINGS 2026-10-08); V1 first, in web folder 1.
+- **Merged 2026-10-18** (pull request #315) on Kd's *"merge"*; its checks green (the code checks ran too, as the boards are not .md files).
