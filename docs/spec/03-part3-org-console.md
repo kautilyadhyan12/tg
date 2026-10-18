@@ -3681,9 +3681,27 @@ of their own is told nothing, and nor is the person. Removing the payer, or the 
 deleted for good, makes the person pay their own bills again; a payment already recorded keeps
 the name it was given. Two records joined move both sides of a link to the kept one, drop a
 link between the two, and refuse a join that would leave one person with two payers or a payer
-who is paid for. **Not built**: a payer's own view in the app (18j settles what a payer may
-see there), a sale at Sell for somebody paid for (whoever stands at the desk pays there), and
-charging the payer's saved card (18d).
+who is paid for. **Not built**: a sale at Sell for somebody paid for (whoever stands at the
+desk pays there), and charging the payer's saved card (18d). A payer's own view in the app is
+18j's, below.
+
+**As built, 18j (2026-10-18; `rulings/2026-10-18-18j.md`): My membership, the member's own
+view**, the server part; the phone draws it (Part 6 §16, Stage 5 item 16). `GET
+/v1/orgs/:gymId/my-membership` answers a live app member of an active gym (404 for anybody
+else): each membership with its dates, what is owed now, each payment that stands with its
+receipt and the refunds under it, and its late cancel and no-show fees (owed, paid with its
+receipt, or waived); and **Purchases**, each desk sale with its lines, receipt and refunds.
+It is the person's page's own read (`readOwnHeld`), with staff names, voided rows and what
+staff can do left out. **Only their own record**: the one their live account alone holds
+(`soloHolders`'s rule); `record` reads "none" where staff have not linked them and "shared"
+where two accounts hold it, and neither carries money. **A payer** (Kd, *"i agree"*): while
+the list says Priya pays for Aarav, `paysFor` gives her each person's memberships with their
+money, and Aarav's own memberships carry their dates alone under `paidBy`, with no price; his
+desk purchases stay his. `GET .../my-membership/receipts/:number` opens a desk receipt of their
+own record, or a membership's where it is theirs to read by the same rule, naming no member of
+staff; one staff voided, and every other number, answers 404 as one the gym does not have. Cost (`tools/measure-my-membership-cost.ts`, 20 gyms of 200, 36
+paid months and 30 purchases each in the measured gym): one member 12.0 ms of the thread, a
+payer of ten 72.4 ms, all 200 at one moment 2.0 s with no stall over 18.8 ms.
 
 ### 14.3 The register
 
