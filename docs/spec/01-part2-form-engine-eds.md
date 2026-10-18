@@ -1273,6 +1273,8 @@ better, and the number is shown to Kd.
   why ("not counted: go lower").
 - **Set-up is checked, not ticked:** the whole body in view, the distance, the light,
   the phone's lean, the view the definition asks for. The set arms when it passes.
+  **Replaced 2026-10-18 (Kd; §11.8 step 4):** nothing waits for a check to pass; the
+  reference picture shows how to set up, with one line.
 - **The screen is for somebody 2 to 3 metres from a phone:** the count and the colour
   carry it, the voice says the rest, a short sound marks each counted rep. Its look is
   shown to Kd as pictures first (item 53).
@@ -1308,6 +1310,105 @@ trace is body points only (§7.1) and may; so may a definition and a tool.
 The web's camera page reads this same engine. Until Kd says the web's five workout pages
 may go, an engine change keeps their tests green; the terminal asks him when the phone's
 Workout section has passed his test.
+
+### 11.8 The workout's steps and the live form engineering (Kd, 2026-10-18)
+
+Written by a planning terminal in exercise folder 1 (Opus 5.5, max) with Kd's answers of
+that day (`rulings/2026-10-18-exercise-flow-plan.md`); no code. **Nothing in the plan of
+2026-10-12 changes:** the jobs, their order and the rulings stay, and this section says how
+the person's steps and the live form analysis work inside items 50 to 55 and 60 to 65 (Kd:
+*"I JUST ASKED YOU IMPROVE THE ENGINEERING OF REAL TIME FORM ANALSYSIS AND THE STEPS THAT
+USER FOLLOW"*). Where §11.5 differs, this section wins. The member web's workout pages were
+read as a reference for the idea only.
+
+**The steps (Kd's answers)**
+1. The Workout tab says **Choose the plan you want**: the app's plan, the gym's plan (Part 3
+   §15.7) or the person's own, made from the Exercise Library with Add to workout. Nobody
+   adds an exercise of their own (RULINGS 2026-08-16 stands).
+2. **Start** opens ONE screen for the whole workout: each exercise with its sets (reps,
+   time, weight), the rest timer and the next exercise (item 64).
+3. For each exercise the person picks **Camera** or **Count myself**, every time; nothing is
+   remembered. Count this set myself stays on the camera screen (RULINGS 2026-08-07).
+4. With the camera, the exercise's reference picture shows where the phone goes and which
+   way to face, with one line: "Set up your phone like the picture. From another angle the
+   count may be wrong." The set starts at once; nothing waits for a check to pass. If the
+   camera loses the person during the set, the screen says so.
+5. A set's target (reps, time, weight) comes from the chosen plan or from what the person
+   sets, never from last time. The set ends by itself at its target, or on Done; the rest,
+   the next set and the next exercise follow with nothing to press from 3 m away.
+6. A timed exercise gets a timer; where the camera can judge the position (a plank), the
+   timer runs only while it is held right. Machines: some by hand, some by camera, settled
+   for each exercise when it is built (§11.3 step 2).
+7. The person is told what stays private (below), to build trust (Kd): on the screen before
+   the phone first asks for the camera, and in one short line on the camera screen.
+
+**The engineering** (the terminal's own; each kept only if the measuring line says it is
+better, and the number is shown to Kd)
+- **Only on the phone.** The camera works only in the phone app; the laptop only measures
+  reference videos (item 50). Today's ordinary phones are the target, measured on Kd's
+  (item 51): the strongest pose model that runs smoothly there, on the phone's graphics
+  chip. Part 6 §3.5's floor and test phones are not the target (Kd: *"WE ARE NOT
+  TARGETTING NOKIA PHONES THOSE OLD BOXES"*).
+- **True proportions, item 50's first part.** Found 2026-10-18: `PoseFrame` carries x
+  divided by the picture's width and y by its height, and `geometry.ts` measures angles on
+  them as if the picture were square (the archived `angles.py` did the same). With the
+  engine's own formula, a true knee angle of 115° reads 139° on a 16:9 picture and 86° on a
+  9:16 one, and a true 160° reads 169° and 145°; the view classifier's width ratios move
+  the same way. The frame carries the picture's shape, angles are taken in true
+  proportions, the three web definitions are measured again so the web's tests stay green
+  (§11.7), and every number after it is measured that way.
+- **One person locked on (item 52).** More than one pose is asked for. The set's person is
+  the one standing where the reference picture shows, nearest the phone (the largest);
+  when two stand there, the screen asks one to raise a hand (Microsoft's own Xbox study,
+  CHI 2014, found a raised open hand the best way to engage). The lock keeps that body's
+  limb-length ratios and its place, in memory and only for the workout, and follows the
+  pose that matches; any other is ignored. Hidden or unsure, counting pauses: it never
+  guesses and never switches. A chair, a poster, a mirror or a TV is never chosen (the
+  person gate and the start rule). No camera fitness product read on 2026-10-18 publishes
+  how it does this; Exer's help asks for one person in view.
+- **Like machine learning, with rules.** Every number is set from measured videos, good and
+  wrong. Each person is judged against their own standing position and first reps (§3.5's
+  C1 and C2). A rep or a mistake is decided only when two separate signs agree (a knee
+  angle and the hip's height); a point seen poorly is not used and the decision waits.
+- **The voice coach.** Pre-recorded lines, made by Kd by hand on ElevenLabs' Starter plan
+  (about $6 a month), never through their API. Lines made on the free plan, or with a
+  model ElevenLabs marks beta, may not be used in an app (ElevenLabs' help centre, read
+  2026-10-18). The terminal writes the script: the shared lines (numbers, ready, rest, next,
+  praise) once, with item 53; each exercise's own lines when that exercise is built
+  (§11.3). A script is a table (when it plays, the line, the file name), two or three
+  wordings a line, with the one voice and its settings named once so every line sounds the
+  same. The coach knows the set: the count ("Halfway", "Last two"), one correction at a
+  time and only between reps, praise when it is earned ("Better — that's the depth" once a
+  mistake is fixed), another wording when a mistake comes back, encouragement when reps
+  slow near the end, the rest and what is next. **It is never wrong out loud** (Kd: *"IF
+  THE VOICE GIVES WRONG INPUT THAT WILL BE BIG NEGATIVE POINT"*): a correction plays only
+  for a rule that fired from the view it was made for, held long enough or on more than
+  one rep; unsure is silent; a line belongs to its rule's key (§11.5). The phone's music is
+  lowered, not stopped, while it speaks.
+- **Battery, and never a crash.** The camera and the pose model run only during a set and
+  sleep during the rest; the voice plays files on the phone. Item 51 measures battery, heat
+  and memory over 20 minutes and shows Kd the numbers. A camera or model failure turns
+  that set into Count myself and the workout goes on, kept on the phone at every step
+  (item 61).
+- **Privacy** (Kd: *"NOTHING SHOULD BE ONLINE OR ANYTHING EVERYTHING REMANS TO THE USER
+  ONLY EXCPET THE END RESULT WHCIH USERS CAN SHARE"*). The video and the body points stay
+  on the phone, are never stored and never sent, crash reports included. Only the finished
+  workout's numbers (sets, reps, time, weight, form score) are saved to the account;
+  sharing is the person's own tap.
+- **Thousands at once.** Each phone counts for itself, so the server does nothing during a
+  set. It receives one small save when a workout ends (`POST /v1/workouts/sync`, safe to
+  send twice), measured with many arriving at once before launch (CLAUDE.md §4, "Cost at
+  full size"). Clips and voice lines are downloaded once and kept on the phone.
+- **Share** (ROADMAP Stage 5 item 39): after a workout, a meal photo or a run, the person
+  takes or picks a photo and the stats are drawn on it, as Strava and Hevy do; the picture
+  is made on the phone and goes out through the phone's own share menu.
+
+**Proof, added to §11.6:** each mistake video plays its own line, and no correction plays
+on a good-form video; crowd tests made from real videos (a person walking past, crossing
+in front, a class side by side, a mirror) leave the count unchanged; each video is
+replayed the ways the world changes it (the phone tilted, nearer, farther, fewer frames a
+second, shaky points, a passer-by) and the count must not change. Kd gets these as
+numbers for each exercise.
 
 ---
 

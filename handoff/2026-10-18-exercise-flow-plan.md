@@ -1,0 +1,9 @@
+# 2026-10-18 · The workout's steps and the live form engineering (exercise folder 1, a planning terminal; branch `exercise-flow-plan`)
+
+- **Why:** Kd asked for the best engineering of the real-time form analysis and of the steps a person follows, with no code. Planned at Opus 5.5 max. His first answer struck everything that changed the plan of 2026-10-12; the agreed result changes no job and no ruling (`rulings/2026-10-18-exercise-flow-plan.md`).
+- **Written, no code:** spec Part 2 §11.8 (the steps, the engineering, the voice coach, battery, privacy, thousands at once, proof); §11.5's set-up line marked replaced; Part 6 §3.5 and Part 7 §5.1 marked; ROADMAP Stage 5 item 39 (Share with your photo) and After launch's share cards struck.
+- **Read that day, not run:** all six folders' state (exercise folders 1 and 2 had built nothing; the phone app had items 10, 11 and 12a to 12c); the engine (only rep mode A; a per-rep rule reaches no screen); the member web's five workout pages, mapped by a helper.
+- **Measured:** with the engine's own angle formula, a true knee angle of 115° reads 139° on a 16:9 picture and 86° on a 9:16 one (x and y are each divided by their own side); item 50 fixes it first.
+- **Researched (sources in the terminal's report, read 2026-10-18):** no camera fitness product publishes how it keeps one person in a crowd; ML Kit pose is one person only; MediaPipe's pose model card lists several people as out of scope for one pose; the cheapest ElevenLabs plan that allows use in an app is Starter, $6 a month (their pricing page).
+- **Open:** Kd's merge of this pull request. The voice scripts come with item 53 (the shared lines) and with each exercise.
+- **Next:** exercise folder 1, item 50 (its first part the true proportions); exercise folder 2, item 60. Each with "Build the next thing", from a fresh branch of `origin/master`.
