@@ -2,8 +2,11 @@
 // ROADMAP 20b-ii). Every statement names the gym. A membership and its bills are their
 // record's, so they are a person's only where that person holds the record alone
 // (`soloHolders`): a record two accounts share is nobody's, and neither is told about it.
+// Where somebody else on the list pays for a record (18i), its bills are the payer's to be
+// told about, through the payer's own record, and never its own person's.
 import {
   GYM_MESSAGE_PAYMENTS_DAYS,
+  NO_MEMBERSHIP_FACTS,
   membershipMessageFacts,
   type BillForMessages,
   type HeldForMessages,
@@ -13,6 +16,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { soloHolders } from "../leaderboard/visits.js";
 import { overdueDaysOf } from "../memberships/billsSql.js";
 import { inUseForList } from "../memberships/heldRepo.js";
+import { gymPayers } from "../payers/repo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -85,16 +89,34 @@ export async function membershipFactsByPerson(sql: SqlOrTx, gymId: string, today
   const byMembership = new Map<string, BillForMessages[]>();
   for (const bill of bills) byMembership.set(bill.membershipId, [...(byMembership.get(bill.membershipId) ?? []), bill]);
 
+  // Who pays for whom: a paid-for record's bills go to its payer's account, named.
+  const payerOf = new Map((await gymPayers(sql, gymId)).map((row) => [row.entryId, row]));
+
   const byPerson = new Map<string, HeldForMessages[]>();
+  const byPaidFor = new Map<string, HeldForMessages[]>();
   for (const row of held) {
+    const billedHere = !row.held.fromList || paidHere.has(row.held.id);
+    const one: HeldForMessages = { id: row.held.id, membership: row.held.membership, billedHere };
+    if (payerOf.has(row.entryId)) byPaidFor.set(row.entryId, [...(byPaidFor.get(row.entryId) ?? []), one]);
     const userId = holderOf.get(row.entryId);
     if (userId === undefined) continue;
-    const billedHere = !row.held.fromList || paidHere.has(row.held.id);
-    byPerson.set(userId, [...(byPerson.get(userId) ?? []), { id: row.held.id, membership: row.held.membership, billedHere }]);
+    byPerson.set(userId, [...(byPerson.get(userId) ?? []), one]);
   }
+  const paidForIds = new Set([...byPaidFor.values()].flat().map((m) => m.id));
   for (const [userId, memberships] of byPerson) {
-    const theirs = memberships.flatMap((m) => byMembership.get(m.id) ?? []);
+    // Their trial and what is ending are theirs; a bill somebody else pays is not.
+    const theirs = memberships.flatMap((m) => (paidForIds.has(m.id) ? [] : (byMembership.get(m.id) ?? [])));
     facts.set(userId, membershipMessageFacts(memberships, theirs, today));
+  }
+  for (const [entryId, memberships] of byPaidFor) {
+    const link = payerOf.get(entryId);
+    const payerUserId = link === undefined ? undefined : holderOf.get(link.payerEntryId);
+    // A payer with no account of their own in the app is told nothing, and nor is the person.
+    if (link === undefined || payerUserId === undefined) continue;
+    const bills = membershipMessageFacts(memberships, memberships.flatMap((m) => byMembership.get(m.id) ?? []), today).bills;
+    if (bills.length === 0) continue;
+    const before = facts.get(payerUserId) ?? NO_MEMBERSHIP_FACTS;
+    facts.set(payerUserId, { ...before, bills: [...before.bills, ...bills.map((b) => ({ ...b, forName: link.name }))] });
   }
   return facts;
 }

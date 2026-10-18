@@ -17,6 +17,7 @@ import {
   MEMBER_LIST_FIELD_LABELS,
   MEMBER_LIST_MAX_EDITED_FIELDS,
   MEMBER_LIST_MAX_NAME_CHARS,
+  MEMBER_PAYER_WORDS,
   type MemberListEntryDeleted,
   type MemberListEntryDetail,
   type MemberListEntryInput,
@@ -68,6 +69,7 @@ import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
 import { listBillFacts } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
+import { movePayerLinks } from "../payers/repo.js";
 
 type Sql = MemberListDeps["sql"];
 
@@ -904,6 +906,9 @@ export async function mergeEntries(
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
     await moveGiftLinks(tx, gymId, goneId, keepId);
     await moveDeskSignatures(tx, gymId, goneId, keepId);
+    // Who pays for either, and whom either pays for (18i): one person keeps one payer.
+    const payers = await movePayerLinks(tx, gymId, goneId, keepId);
+    if (payers !== null) throw new OrgsError(409, payers, MEMBER_PAYER_WORDS[payers]);
     // What the clock has ended on the kept record is marked first: only a membership
     // still in use there keeps the other record's from-list one from moving.
     const today = dayInTz(at, org.timezone);

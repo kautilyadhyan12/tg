@@ -83,3 +83,4 @@ export * from "./goals.js";
 export * from "./trialPerson.js";
 export * from "./coOwners.js";
 export * from "./paymentsDownload.js";
+export * from "./memberPayers.js";

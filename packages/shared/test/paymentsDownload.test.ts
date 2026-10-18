@@ -19,6 +19,8 @@ const base: PaymentLineRow = {
   name: "Maya Patel",
   personDeleted: false,
   walkIn: false,
+  paidBy: null,
+  paidByDeleted: false,
   item: "Gold Monthly",
   quantity: null,
   coversFrom: "2026-10-01",
@@ -133,6 +135,15 @@ describe("a line of the file", () => {
     const words = (["cash", "card_at_desk", "bank_transfer", "link", "company"] as const).map((method) => paymentLine(row({ method })).method);
     expect(words).toEqual(["Cash", "Card at the desk", "Bank transfer", "Payment link", "Card on file"]);
     expect(paymentLine(row({ by: null })).by).toBe("");
+  });
+
+  it("Paid by names who paid for somebody another person pays for (18i), and is empty otherwise", () => {
+    expect(paymentLine(row({ paidBy: "Priya Sharma" }))).toMatchObject({ person: "Maya Patel", paidBy: "Priya Sharma" });
+    expect(paymentLine(row({ kind: "refund", amountMinor: 1000, forReceipt: 41, refundReason: "paid_twice", paidBy: "Priya Sharma" })).paidBy).toBe("Priya Sharma");
+    expect(paymentLine(row({ paidBy: "  " })).paidBy).toBe("No name on their record");
+    expect(paymentLine(row({ paidByDeleted: true })).paidBy).toBe("A deleted member");
+    expect(paymentLine(row({})).paidBy).toBe("");
+    expect(paymentLine(row({ kind: "sale", item: "Water", quantity: 1 })).paidBy).toBe("");
   });
 
   it("a reason the app does not know is never printed as a code", () => {

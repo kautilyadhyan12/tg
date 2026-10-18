@@ -15,6 +15,9 @@ export interface Said {
   words: OrgWords;
   /** The gym's currency, for a price note written without one. */
   currency: string;
+  /** Who paid, or who pays, where the note names a payer's record (18i), looked up at this gym as
+   *  `about` is: null when that record no longer exists. */
+  payer?: string | null;
 }
 
 const text = (s: Said, key: string): string | null => {
@@ -83,6 +86,10 @@ const pay = (s: Said): string => {
   const amount = money(s, "amountMinor");
   return amount === null ? "a payment" : `a payment of ${amount}`;
 };
+/** "Priya Sharma for Aarav Sharma", where somebody else on the list paid for them (18i): both
+ *  as their records are named now; a payer's record that is gone reads as nobody on the list. */
+const payerOf = (s: Said): string => s.payer ?? `a ${s.words.person} no longer on your list`;
+const fromWhom = (s: Said): string => (text(s, "paidByEntryId") === null ? person(s) : `${payerOf(s)} for ${person(s)}`);
 const methodWords = (s: Said): string => {
   const method = text(s, "method");
   const said = method === null ? undefined : (MEMBER_PAYMENT_METHOD_WORDS as Readonly<Record<string, string>>)[method];
@@ -202,7 +209,7 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.held_membership_frozen": (s) => `Froze ${whose(s, membershipOf(s))}`,
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
-  "org.member_payment_recorded": (s) => `Recorded ${pay(s)} from ${person(s)}${methodWords(s)}`,
+  "org.member_payment_recorded": (s) => `Recorded ${pay(s)} from ${fromWhom(s)}${methodWords(s)}`,
   "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");
@@ -217,12 +224,14 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `Undid a refund${amount === null ? "" : ` of ${amount}`} to ${person(s)}`;
   },
   "org.bill_settings_changed": () => "Changed when an unpaid bill shows as Payment due",
-  "org.member_fee_paid": (s) => `Recorded ${pay(s)} from ${person(s)} for a ${feeOf(s)}${methodWords(s)}`,
+  "org.member_fee_paid": (s) => `Recorded ${pay(s)} from ${fromWhom(s)} for a ${feeOf(s)}${methodWords(s)}`,
   "org.member_fee_waived": (s) => {
     const amount = money(s, "amountMinor");
     return `Waived ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}`;
   },
   "org.member_fee_payment_voided": (s) => `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
+  "org.member_payer_set": (s) => `Set ${payerOf(s)} to pay for ${person(s)}`,
+  "org.member_payer_removed": (s) => `Stopped ${payerOf(s)} paying for ${person(s)}`,
   "org.product_created": (s) => {
     const price = money(s, "priceMinor");
     return `Added the product${quoted(text(s, "name"))}${price === null ? "" : ` at ${price}`}`;

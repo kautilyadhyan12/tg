@@ -485,6 +485,9 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym's tags and who put it on a record (`0083`), on the same footing.
   "gym_member_tags",
   "gym_member_entry_tags",
+  // gym_member_payers.set_by — which member of staff named who pays for a person (`0140`;
+  // 18i), on the same footing. Both people are records on the gym's list, not accounts.
+  "gym_member_payers",
   // gym_group_messages.sent_by — which member of staff sent a message to a group (`0092`),
   // on the same footing: the gym's record; `ON DELETE set null`. Each person's own copy is
   // a gym_member_messages row, deleted with them. The words are free text staff typed and

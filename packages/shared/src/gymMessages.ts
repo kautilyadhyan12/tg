@@ -202,8 +202,9 @@ export interface GymMessageFacts {
      *  nothing of its sort running on after it. `what`: a class pack, a repeating membership
      *  set to stop, or any other membership. */
     ending: { id: string; startsOn: string; endsOn: string; what: GymMessageEnding } | null;
-    /** The bills of the memberships they are using today (`membershipMessageFacts`). */
-    bills: readonly { id: string; dueOn: string; paid: boolean }[];
+    /** The bills of the memberships they are using today (`membershipMessageFacts`), and
+     *  those of the people they pay for (18i), each with that person's name (`forName`). */
+    bills: readonly { id: string; dueOn: string; paid: boolean; forName?: string }[];
     /** `MM-DD`. */
     birthday: string | null;
     /** The days the desk or staff checked them in, one a day. */
@@ -234,6 +235,9 @@ export interface GymMessageOccasion {
   what?: GymMessageEnding;
   /** What a class reminder is about. */
   reminder?: GymMessageReminder;
+  /** Whose payments an overdue notice is about, where any are for somebody they pay for
+   *  (18i): `self` where one of their own is overdue too, and the others' names. */
+  payingFor?: { self: boolean; names: string[] };
 }
 /** What a class reminder names: the class, or a personal training session and its trainer;
  *  when it is, as `reminderWhen` says it; and whether it is an online class. */
@@ -338,11 +342,16 @@ export function gymMessageOccasions(facts: GymMessageFacts): GymMessageOccasion[
         if (bill.paid || late === null || late < wait || late >= wait + GYM_MESSAGE_OVERDUE_LATE_DAYS) return [];
         const firstDay = todayNumber - (late - wait);
         const told = facts.sent.some((row) => row.kind === "payment_overdue" && (dayNumber(row.day) ?? Number.NEGATIVE_INFINITY) >= firstDay);
-        return told ? [] : [{ id: bill.id, late }];
+        return told ? [] : [{ id: bill.id, late, forName: bill.forName }];
       })
       .sort((a, b) => (a.late === b.late ? a.id.localeCompare(b.id) : b.late - a.late));
     const oldest = untold[0];
-    if (oldest !== undefined) found.push({ kind: "payment_overdue", occasion: `bill:${oldest.id}` });
+    if (oldest !== undefined) {
+      // A payer is told whose payments these are (18i): one notice names everybody in it.
+      const names = [...new Set(untold.flatMap((b) => (b.forName === undefined ? [] : [paidForName(b.forName)])))].sort((a, b) => a.localeCompare(b));
+      const self = untold.some((b) => b.forName === undefined);
+      found.push({ kind: "payment_overdue", occasion: `bill:${oldest.id}`, ...(names.length === 0 ? {} : { payingFor: { self, names } }) });
+    }
   }
 
   // An occasion is named by the row it belongs to, never by a day a freeze can move.
@@ -455,6 +464,25 @@ export function dayInWords(day: string | null): string | null {
 
 /** The fixed words of each kind, before the gym's own line. Null where the occasion does
  *  not name what the words need: a milestone's number, an ending's last day. */
+/** How an overdue notice names somebody the reader pays for (18i): the name on the gym's
+ *  list, or its first word where that is long, so three names always fit the message. */
+export function paidForName(fullName: string): string {
+  const name = fullName.trim().replace(/\s+/g, " ");
+  if (name.length > 0 && name.length <= 40) return name;
+  return greetingName(name) ?? "somebody you pay for";
+}
+/** The most names one overdue notice lists; the rest are "and 2 more". */
+const PAYING_FOR_NAMED = 3;
+
+/** "Aarav", "you and Aarav", "Aarav, Diya and Kabir", "Aarav, Diya, Kabir and 2 more". */
+function andList(items: readonly string[]): string {
+  const shown = items.slice(0, PAYING_FOR_NAMED);
+  const more = items.length - shown.length;
+  if (more > 0) return `${shown.join(", ")} and ${String(more)} more`;
+  if (shown.length <= 1) return shown.join("");
+  return `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1] ?? ""}`;
+}
+
 function fixedWords(send: GymMessageOccasion, gym: string, displayName: string | null): string | null {
   if (send.kind === "welcome") return welcomeMessage(gym, displayName);
   const name = greetingName(displayName);
@@ -477,7 +505,14 @@ function fixedWords(send: GymMessageOccasion, gym: string, displayName: string |
     return hi(`you're booked for ${title} ${about.when} at ${gym}. See you there.`);
   }
   if (send.kind === "review") return hi(`thanks for coming to ${gym}. If you have a minute, we'd love a review.`);
-  if (send.kind === "payment_overdue") return hi(`your payment to ${gym} is overdue. Please get in touch so we can sort it out.`);
+  if (send.kind === "payment_overdue") {
+    const paying = send.payingFor;
+    if (paying === undefined || paying.names.length === 0) return hi(`your payment to ${gym} is overdue. Please get in touch so we can sort it out.`);
+    // "for Aarav Sharma", "for you and Aarav Sharma", "for Aarav Sharma and Diya Sharma".
+    const whom = andList([...(paying.self ? ["you"] : []), ...paying.names]);
+    const many = paying.names.length + (paying.self ? 1 : 0) > 1;
+    return hi(`${many ? "the payments" : "the payment"} to ${gym} for ${whom} ${many ? "are" : "is"} overdue. Please get in touch so we can sort it out.`);
+  }
   if (send.kind === "trial_ending" || send.kind === "membership_ending") {
     const day = dayInWords(send.endsOn ?? null);
     if (day === null) return null;

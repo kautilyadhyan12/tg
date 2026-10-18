@@ -120,6 +120,17 @@ export function receiptPerson(receipt) {
   return receipt.personDeleted ? 'A deleted member' : 'Walk-in';
 }
 
+/** Who paid, where somebody else on the gym's list pays for this person (18i): "Paid by
+ *  Priya Sharma", or on a refund "Given back to Priya Sharma". Null where they paid for
+ *  themselves, and on a sale. */
+export function receiptPayer(receipt) {
+  const label = receipt.kind === 'refund' ? 'Given back to' : 'Paid by';
+  if (receipt.paidByDeleted === true) return { label, name: 'A deleted member' };
+  if (receipt.paidBy === null || receipt.paidBy === undefined) return null;
+  const name = receipt.paidBy.trim() === '' ? 'No name on their record' : receipt.paidBy;
+  return { label, name };
+}
+
 /** "15 Oct 2026". */
 export function receiptDay(receipt) {
   return shortDay(receipt.on);
@@ -177,10 +188,11 @@ export function receiptPrintHtml(receipt) {
     .join('');
   const cancelled = cancelledLine(receipt);
   const notes = receiptNotes(receipt);
+  const payer = receiptPayer(receipt);
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${e(`${receiptTitle(receipt)} · ${receipt.gym.name}`)}</title><style>${PAPER_CSS}</style></head><body><div class="r">
 <div class="head"><div class="gym">${e(receipt.gym.name)}</div>${receipt.gym.address === null ? '' : `<div class="addr">${e(receipt.gym.address)}</div>`}<div class="kind">${receipt.kind === 'refund' ? 'Refund receipt' : 'Receipt'}</div></div>
 ${cancelled === null ? '' : `<div class="cancel">${e(cancelled)}</div>`}
-<table class="meta"><tr><td>Receipt no.</td><td>${e(String(receipt.number))}</td></tr><tr><td>Date</td><td>${e(receiptDay(receipt))}</td></tr><tr><td>For</td><td>${e(receiptPerson(receipt))}</td></tr></table>
+<table class="meta"><tr><td>Receipt no.</td><td>${e(String(receipt.number))}</td></tr><tr><td>Date</td><td>${e(receiptDay(receipt))}</td></tr><tr><td>For</td><td>${e(receiptPerson(receipt))}</td></tr>${payer === null ? '' : `<tr><td>${e(payer.label)}</td><td>${e(payer.name)}</td></tr>`}</table>
 <table class="items"><thead><tr><th>Description</th><th class="amt">Amount</th></tr></thead><tbody>${rows}</tbody></table>
 ${notes.length === 0 ? '' : `<div class="notes">${notes.map((n) => `<p>${e(n)}</p>`).join('')}</div>`}
 <div class="foot">Thank you.</div>
