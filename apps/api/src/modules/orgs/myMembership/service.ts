@@ -85,8 +85,8 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
   };
 }
 
-/** A membership whose money is somebody else's to read: its dates, and nothing owed or paid. */
-const datesOnly = (m: MyMembership): MyMembership => ({ ...m, owed: null, payments: [], olderPeriodsNotShown: 0, fees: [] });
+/** A membership whose money is somebody else's to read: its dates, and no price, nothing owed or paid. */
+const datesOnly = (m: MyMembership): MyMembership => ({ ...m, priceMinor: null, owed: null, payments: [], olderPeriodsNotShown: 0, fees: [] });
 
 /** The lines of each sale under its one receipt, newest sale first, as `purchasesOf` reads them. */
 function purchasesFrom(lines: readonly SaleRow[]): MyPurchase[] {
@@ -146,8 +146,9 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
 
 /** One receipt, where it is the reader's to read: a desk sale of their own record; a
  *  membership's of their own record while nobody pays for them, or of somebody they pay for.
- *  404 alike for every other and for one the gym does not have, so a member learns nothing
- *  of anybody else's. */
+ *  404 alike for every other, for one staff voided (the lists leave those out too) and for one
+ *  the gym does not have, so a member learns nothing of anybody else's. The member of staff who
+ *  took it is not named. */
 export async function getMyReceipt(deps: MyMembershipDeps, userId: string, gymId: string, number: number, limit: Limit): Promise<Receipt | null> {
   const reader = await readerOr404(deps, gymId, userId);
   if (!(await limit())) return null;
@@ -164,6 +165,6 @@ export async function getMyReceipt(deps: MyMembershipDeps, userId: string, gymId
         : (await paidForBy(deps.sql, gymId, own)).some((p) => p.entryId === found.entryId);
   if (!theirs) throw missing;
   const [row, gym] = await Promise.all([receipts.readReceipt(deps.sql, gymId, number), receipts.gymOnReceipt(deps.sql, gymId)]);
-  if (row === null || gym === null) throw missing;
-  return receiptSchema.parse({ ...row, gym });
+  if (row === null || gym === null || row.cancelled) throw missing;
+  return receiptSchema.parse({ ...row, by: null, gym });
 }

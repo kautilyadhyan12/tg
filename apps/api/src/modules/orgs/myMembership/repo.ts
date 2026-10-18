@@ -46,9 +46,8 @@ export async function receiptEntry(sql: Sql, gymId: string, number: number): Pro
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE r.gym_id = ${gymId} AND r.receipt_number = ${number}`;
-  // A sale of several lines is one receipt on several rows, all for one person.
-  const owners = new Set(rows.map((r) => `${r.of}:${r.entry_id ?? ""}`));
-  if (owners.size > 1) throw new Error("one receipt number is on two rows of different people");
+  // A sale of several lines is one receipt on several rows, all for one person; a number is
+  // never on two tables' rows (`nextReceipt`, and `readReceipt`'s own check).
   const row = rows[0];
   return row === undefined || row.entry_id === null ? null : { entryId: row.entry_id, of: row.of };
 }

@@ -188,7 +188,7 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
   const refundPayment = async (gym: Gym, entryId: string, membershipId: string, paymentId: string, amountMinor: number): Promise<number> => {
     const res = await inject("POST", `${heldUrl(gym, entryId)}/${membershipId}/payments/${paymentId}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor, method: "cash", reason: "paid_twice" });
     expect(res.statusCode, res.body).toBe(200);
-    const [row] = await sql<{ receipt_number: number }[]>`SELECT receipt_number FROM gym_member_refunds WHERE gym_id = ${gym.id} AND payment_id = ${paymentId} ORDER BY created_at DESC LIMIT 1`;
+    const [row] = await sql<{ receipt_number: number }[]>`SELECT receipt_number FROM gym_member_refunds WHERE gym_id = ${gym.id} AND payment_id = ${paymentId} ORDER BY receipt_number DESC LIMIT 1`;
     if (row === undefined) throw new Error("no refund");
     return row.receipt_number;
   };
@@ -327,7 +327,28 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     const aaravBought = await sell(gym, aarav.entryId, 1);
     const his = await mine(gym, aarav);
     expect(his.paidBy).toBe("Priya Sharma");
-    expect(his.memberships.map((m) => [m.id, m.owed, m.payments, m.fees])).toEqual([[aaravHeld, null, [], []]]);
+    // His membership carries its dates alone: no price, nothing owed, no payment, no fee.
+    expect(his.memberships).toEqual([
+      {
+        id: aaravHeld,
+        name: "Thirty days",
+        kind: "one_time",
+        priceMinor: null,
+        currency: "INR",
+        status: "active",
+        startsOn: today,
+        fromList: false,
+        endsOn: addDays(today, 29),
+        renewsOn: null,
+        frozenOn: null,
+        classesLeft: null,
+        packClasses: null,
+        owed: null,
+        payments: [],
+        olderPeriodsNotShown: 0,
+        fees: [],
+      },
+    ]);
     expect(numbersIn(his)).toEqual([aaravBought.receipt]);
     expect((await myReceipt(gym, aarav, aaravPaid.receipt)).statusCode).toBe(404);
     expect((await myReceipt(gym, aarav, aaravBought.receipt)).statusCode).toBe(200);
@@ -389,9 +410,19 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     const bought = await sell(gym, maya.entryId, 2);
     const waterBack = await inject("POST", `/v1/orgs/${gym.id}/register/sales/${bought.id}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 250, method: "cash", reason: "returned", restock: 0 });
     expect(waterBack.statusCode, waterBack.body).toBe(201);
-    const [waterRefund] = await sql<{ receipt_number: number }[]>`SELECT receipt_number FROM gym_sale_refunds WHERE sale_id = ${bought.id}`;
+    const [waterRefund] = await sql<{ receipt_number: number }[]>`SELECT receipt_number FROM gym_sale_refunds WHERE sale_id = ${bought.id} ORDER BY receipt_number LIMIT 1`;
     const mistake = await sell(gym, maya.entryId, 1);
     expect((await inject("POST", `/v1/orgs/${gym.id}/register/sales/${mistake.id}/void`, gym.owner.cookies, { reason: "mistake" })).statusCode).toBe(200);
+    // A second refund of each, both voided by staff: counted in nothing, sent nowhere.
+    const wrongBack = await refundPayment(gym, maya.entryId, held, second.id, 200);
+    const [wrongRow] = await sql<{ id: string }[]>`SELECT id FROM gym_member_refunds WHERE gym_id = ${gym.id} AND receipt_number = ${wrongBack}`;
+    const unBack = await inject("POST", `${heldUrl(gym, maya.entryId)}/${held}/payments/${second.id}/refunds/${wrongRow?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
+    expect(unBack.statusCode, unBack.body).toBe(200);
+    const waterAgain = await inject("POST", `/v1/orgs/${gym.id}/register/sales/${bought.id}/refunds`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 250, method: "cash", reason: "returned", restock: 0 });
+    expect(waterAgain.statusCode, waterAgain.body).toBe(201);
+    const [waterAgainRow] = await sql<{ id: string; receipt_number: number }[]>`SELECT id, receipt_number FROM gym_sale_refunds WHERE sale_id = ${bought.id} ORDER BY receipt_number DESC LIMIT 1`;
+    const unWater = await inject("POST", `/v1/orgs/${gym.id}/register/sales/${bought.id}/refunds/${waterAgainRow?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
+    expect(unWater.statusCode, unWater.body).toBe(200);
 
     const answer = await mine(gym, maya);
     const m = answer.memberships[0];
@@ -408,8 +439,19 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect(numbersIn(answer)).not.toContain(first.receipt);
     expect(numbersIn(answer)).not.toContain(mistake.receipt);
 
-    // Each of her receipts opens, the refunds' too.
-    for (const number of numbersIn(answer)) expect((await myReceipt(gym, maya, number)).statusCode, String(number)).toBe(200);
+    // Each of her receipts opens, the refunds' too, naming no member of staff.
+    for (const number of numbersIn(answer)) {
+      const res = await myReceipt(gym, maya, number);
+      expect(res.statusCode, String(number)).toBe(200);
+      expect(res.json<Receipt>().by, String(number)).toBeNull();
+      expect(res.body).not.toContain("Owner");
+    }
+    // What staff voided does not open by its number either.
+    for (const number of [first.receipt, mistake.receipt, wrongBack, waterAgainRow?.receipt_number ?? 0]) {
+      const res = await myReceipt(gym, maya, number);
+      expect(res.statusCode, String(number)).toBe(404);
+      expect(errorOf(res)).toBe("receipt_not_found");
+    }
     expect(((await myReceipt(gym, maya, back)).json<Receipt>()).kind).toBe("refund");
   });
 
@@ -444,6 +486,23 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect(after.find((f) => f.forName === "Morning yoga")).toMatchObject({ fee: "late_cancel", amountMinor: 200, state: "paid", receiptNumber: feeReceipt?.receipt_number });
     expect(after.find((f) => f.forName === "Spin")).toMatchObject({ state: "waived", receiptNumber: null });
     expect((await myReceipt(gym, maya, feeReceipt?.receipt_number ?? 0)).statusCode).toBe(200);
+  });
+
+  it("an archived gym answers nobody, and a member past their limit is told to wait — a stranger still 404", async () => {
+    const gym = await makeGym("Mine Limit House");
+    const maya = await member(gym, "Maya Rao");
+    const paid = await pay(gym, maya.entryId, await give(gym, maya.entryId, 0), 3000);
+    await redis.setex(`rl:orgs_my_membership_read:id:${maya.userId}`, 3600, "600");
+    expect((await inject("GET", mineUrl(gym), maya.cookies)).statusCode).toBe(429);
+    expect((await myReceipt(gym, maya, paid.receipt)).statusCode).toBe(429);
+    const stranger = await signedIn("Not A Member");
+    await redis.setex(`rl:orgs_my_membership_read:id:${stranger.userId}`, 3600, "600");
+    expect((await inject("GET", mineUrl(gym), stranger.cookies)).statusCode).toBe(404);
+    await redis.del(`rl:orgs_my_membership_read:id:${maya.userId}`);
+    expect((await inject("GET", mineUrl(gym), maya.cookies)).statusCode).toBe(200);
+    await sql`UPDATE gyms SET status = 'archived' WHERE id = ${gym.id}`;
+    expect((await inject("GET", mineUrl(gym), maya.cookies)).statusCode).toBe(404);
+    expect((await myReceipt(gym, maya, paid.receipt)).statusCode).toBe(404);
   });
 
   it("refuses a malformed gym or receipt number with 400", async () => {

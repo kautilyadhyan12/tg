@@ -57,7 +57,8 @@ export const myMembershipSchema = z
     id: z.string().uuid(),
     name: z.string(),
     kind: membershipKindSchema,
-    priceMinor: minorSchema,
+    /** Null where somebody else pays for it (`paidBy`): the price is theirs to read. */
+    priceMinor: minorSchema.nullable(),
     currency: currencySchema,
     status: heldMembershipShownSchema,
     startsOn: daySchema,
@@ -108,8 +109,9 @@ export const myMembershipResponseSchema = z
     today: daySchema,
     record: z.enum(["own", "none", "shared"]),
     /** Who pays for them (18i), by the gym's list now; null for nobody. While somebody does,
-     *  their memberships' bills, payments and fees are the payer's to read: each membership
-     *  here then carries its dates alone, with `owed` null and no payments or fees. */
+     *  their memberships' price, bills, payments and fees are the payer's to read: each
+     *  membership here then carries its dates alone, with `priceMinor` and `owed` null and no
+     *  payments or fees. */
     paidBy: z.string().nullable(),
     memberships: z.array(myMembershipSchema),
     /** The people the reader pays for, in the gym's list order; empty for nobody. */
