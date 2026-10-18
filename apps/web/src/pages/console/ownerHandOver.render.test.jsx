@@ -39,7 +39,8 @@ const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Members = (await import('./Members')).default;
 const CoOwnerRequest = (await import('../../components/console/CoOwnerRequest')).default;
 const { StaffPersonPanel } = await import('./MembersStaffPanels');
-const { orgWords } = await import('./consoleView');
+const { formatJoinedAt, orgWords } = await import('./consoleView');
+const PAID_UNTIL = '2026-11-01T00:00:00.000Z';
 
 const ORG = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -176,13 +177,13 @@ describe('Make owner', () => {
   });
 
   it('a plan paid through Paddle: the box says it stops renewing, paid until a day, and the new owner then chooses one (4b-iii-a)', async () => {
-    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, paidUntil: '2026-11-01T00:00:00.000Z' } });
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, paidUntil: PAID_UNTIL } });
     drawStaff();
     const panel = await openPerson('u3', 'Cora Lim');
     fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
     expect(
       within(panel.getByTestId('staff-owner')).getByText(
-        "Your plan stops renewing, so you won't be charged again. It stays paid until 1 Nov 2026; then Cora Lim chooses their own plan.",
+        `Your plan stops renewing, so you won't be charged again. It stays paid until ${formatJoinedAt(PAID_UNTIL)}; then Cora Lim chooses their own plan.`,
       ),
     ).toBeTruthy();
   });
@@ -257,12 +258,12 @@ describe('the co-owner asked, on Overview', () => {
   });
 
   it("a plan paid through Paddle: they're told it stops renewing, paid until a day, and they then choose their own (4b-iii-a)", async () => {
-    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, paidUntil: '2026-11-01T00:00:00.000Z' } } });
+    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, paidUntil: PAID_UNTIL } } });
     draw();
     const box = within(await screen.findByTestId('owner-request'));
     expect(
       box.getByText(
-        /Kd Owner stays on as a co-owner\. Their plan stops renewing and stays paid until 1 Nov 2026; then you choose your own plan and pay with your own card\. The request works until/,
+        `As the owner you can also add and remove co-owners. Kd Owner stays on as a co-owner. Their plan stops renewing and stays paid until ${formatJoinedAt(PAID_UNTIL)}; then you choose your own plan and pay with your own card. The request works until ${formatJoinedAt(UNTIL)}.`,
       ),
     ).toBeTruthy();
     expect(box.getByRole('button', { name: 'Accept' })).toBeTruthy();
