@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Members & staff — proposal: Filter, from the right, the list updates behind it</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1000px">
+<dc-import name="MembersNew" look="{{lookName}}" hint-size="1440px,1718px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 520px">
+<div class="dw-h">
+<h2 class="h2" style="font-size: 22px; line-height: 28px">Filter</h2>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b stack" style="gap: 24px">
+<div class="stack-s"><span class="flabel">App</span><div class="row-s wrap"><span class="chip">Not in the app <span class="n">20</span></span><span class="chip">Not invited yet <span class="n">19</span></span></div></div>
+<div class="stack-s"><span class="flabel">Status</span><div class="row-s wrap"><span class="chip">Active <span class="n">14</span></span><span class="chip">No status <span class="n">6</span></span></div></div>
+<div class="stack-s"><span class="flabel">Membership</span><div class="row-s wrap"><span class="chip">Annual <span class="n">2</span></span><span class="chip">Gold Monthly <span class="n">7</span></span><span class="chip">Silver Monthly <span class="n">5</span></span><span class="chip">No membership <span class="n">6</span></span></div></div>
+<div class="stack-s"><span class="flabel">Payment status</span><div class="row-s wrap"><span class="chip chip-on">Payment due <span class="n">5</span></span><span class="chip">Paid <span class="n">9</span></span><span class="chip">No payment status <span class="n">6</span></span></div></div>
+<div class="stack-s"><span class="flabel">Tag</span><div class="row-s wrap"><span class="chip">Morning crowd <span class="n">2</span></span><span class="chip">Wants PT <span class="n">1</span></span></div><span class="btn btn-s btn-sm" style="align-self: flex-start">Manage tags</span></div>
+</div>
+<div class="dw-f"><span class="btn btn-p">Show 5 members</span><span class="btn btn-s">Clear</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

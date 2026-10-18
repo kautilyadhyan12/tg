@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Record a payment — opens under its button</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1260px">
+<dc-import name="PersonArnav" look="{{lookName}}" hint-size="1440px,1613px"></dc-import>
+<div class="pop pop-r" style="left: 905px; top: 752px; width: 440px; padding: 22px">
+<div class="row between top"><div class="stack-2"><h3 class="h2">Record a payment</h3><span class="small">Arnav Gupta's Silver Monthly · 3 Oct – 2 Nov 2026</span></div><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="field"><span class="flabel">Amount paid (INR)</span><div class="input input-on"><span class="prefix">₹</span><span class="num">1,800.00</span></div><span class="hint">₹1,800.00 is left to pay for 3 October to 2 November 2026.</span></div>
+<div class="field"><span class="flabel">How they paid</span><div class="seg seg-w"><span class="on">Cash</span><span>Card at the desk</span><span>Bank transfer</span></div></div>
+<div class="callout callout-plain" style="padding: 10px 12px"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 16v-4M12 8h.01"/></svg><p class="small" style="color: var(--t2)">This only writes it in your records: no money is taken. The receipt says Meera Pillai paid.</p></div>
+<div class="row-s"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Record payment</span><span class="btn btn-q">Cancel</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1260}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

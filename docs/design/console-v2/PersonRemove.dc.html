@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>People questions — invite, remove, delete</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.dlg{background:var(--sheet);border:1px solid var(--card-line);border-radius:20px;box-shadow:var(--pop);padding:26px;display:flex;flex-direction:column;gap:18px}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 48px 56px 64px">
+<div class="stack-l" style="max-width: 1328px; margin: 0 auto">
+<div class="stack-xs"><h1 class="h1">People questions</h1><p class="sub">Inviting, removing and deleting ask first and name who changes, who doesn't, and why. The safe answer is always there: Cancel, Back or Don't.</p></div>
+<div class="g3" style="gap: 28px; align-items: start">
+
+<div class="dlg">
+<div style="width: 44px; height: 44px; border-radius: 12px; background: var(--soft); color: var(--soft-t); display: flex; align-items: center; justify-content: center"><svg class="ic ic-l" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-9 5.7a2 2 0 0 1-2 0L2 7"/></svg></div>
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Invite Maya Patel to the app?</h2><p class="sub">One email goes to maya.patel@gmail.com with a link to the app.</p></div>
+<div class="row-s"><span class="btn btn-p">Send invitation</span><span class="btn btn-q">Cancel</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Send Maya Patel's invitation again?</h2><p class="sub">Only when they ask for it, for example when they can't find the email. It goes to maya.patel@gmail.com. An invitation can be sent again 3 times in 30 days.</p></div>
+<div class="row-s"><span class="btn btn-p">Send again</span><span class="btn btn-q">Back</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Invite Riya Desai again?</h2><p class="sub">You removed Riya Desai from the app on 3 Sep 2026. They'll get one invitation email at riya.desai@gmail.com.</p></div>
+<div class="row-s"><span class="btn btn-p">Invite again</span><span class="btn btn-q">Back</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Remove Maya Patel?</h2><p class="sub">They'll be moved to past members.</p></div>
+<div class="stack-xs">
+<div class="row top"><svg class="ic bad" viewBox="0 0 24 24" style="margin-top: 2px"><path d="M18 6L6 18M6 6l12 12"/></svg><p class="body">Their pending invitation will be cancelled.</p></div>
+<div class="row top"><svg class="ic good" viewBox="0 0 24 24" style="margin-top: 2px"><path d="M20 6L9 17l-5-5"/></svg><p class="body">Their details are kept, and you can put them back at any time.</p></div>
+</div>
+<div class="row-s"><span class="btn btn-ds">Remove</span><span class="btn btn-s">Cancel</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Remove Leela Menon?</h2><p class="sub">2 personal training sessions will be cancelled.</p></div>
+<div class="raise" style="padding: 4px 14px">
+<div class="li" style="padding: 10px 0"><span class="body grow">With Kiran Das</span><span class="small">Tue 20 Oct · 08:00</span></div>
+<div class="li" style="padding: 10px 0"><span class="body grow">With Kiran Das</span><span class="small">Fri 23 Oct · 08:00</span></div>
+</div>
+<div class="callout" style="padding: 10px 12px"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M21.7 18l-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3M12 9v4M12 17h.01"/></svg><p class="small" style="color: var(--t1)">The app doesn't tell anybody yet. Let them know yourself.</p></div>
+<div class="row-s"><span class="btn btn-ds">Remove and cancel 2 sessions</span><span class="btn btn-s">Don't remove</span></div>
+</div>
+
+<div class="dlg" style="border-color: var(--bad-line)">
+<div style="width: 44px; height: 44px; border-radius: 12px; background: var(--bad-bg); color: var(--bad); display: flex; align-items: center; justify-content: center"><svg class="ic ic-l" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></div>
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Delete Riya Desai permanently?</h2><p class="sub">Their details go for good. Payments they made stay in your takings and reports, as "A deleted member".</p></div>
+<div class="row-s"><span class="btn btn-ds">Delete permanently</span><span class="btn btn-s">Don't delete</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Remove Ravi's app access?</h2><p class="sub">Ravi uses the app as Riya Desai. If Ravi isn't Riya Desai, remove their access to your gym in the app. Riya Desai stays on your list.</p></div>
+<div class="row-s"><span class="btn btn-ds">Remove access</span><span class="btn btn-s">Cancel</span></div>
+</div>
+
+<div class="dlg" style="grid-column: span 2">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Share the invitation</h2><p class="sub">Send these words to Maya Patel by WhatsApp, text or your own email. The link only lets them in when they sign in with maya.patel@gmail.com.</p></div>
+<div class="area" style="min-height: 0; color: var(--t2)">Hi Maya, Northside Strength is on AI Home Gym. Join us in the app: [your gym's join link] — sign in with maya.patel@gmail.com.</div>
+<div class="row-s"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2zM4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>Copy</span><span class="btn btn-q">Back</span></div>
+</div>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

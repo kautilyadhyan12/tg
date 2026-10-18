@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A staff invitation, and the sign-in code</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.otp{width:52px;height:60px;border-radius:12px;border:1px solid var(--input-line);background:var(--input);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 64px 56px">
+<div class="g2" style="max-width: 1240px; margin: 0 auto; gap: 48px; align-items: start">
+<div class="stack-m">
+<p class="lbl">The link in a staff invitation email</p>
+<div class="card" style="padding: 40px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 22px">
+<div style="width: 64px; height: 64px; border-radius: 18px; background: var(--soft); color: var(--soft-t); display: flex; align-items: center; justify-content: center"><svg class="ic ic-xl" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M19 8v6M22 11h-6"/></svg></div>
+<div class="stack-xs" style="align-items: center"><h1 class="h1s">You're invited to help run a gym</h1><p class="sub" style="max-width: 400px">Sign in with the email address the invitation was sent to. Your invitation will be waiting.</p></div>
+<span class="btn btn-p btn-lg" style="min-width: 220px">Sign in</span>
+</div>
+</div>
+<div class="stack-m">
+<p class="lbl">After Continue with email: the code</p>
+<div class="card stack-l" style="padding: 40px">
+<div class="stack-xs"><h2 class="h1s">Check your email</h2><p class="sub">We sent a 6-digit code to arjun.mehta@gmail.com.</p></div>
+<div class="field"><span class="flabel">6-digit code</span><div class="row-s"><span class="otp" style="border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,138,31,.22)">4</span><span class="otp">8</span><span class="otp">1</span><span class="otp t3" style="font-weight: 400">·</span><span class="otp t3" style="font-weight: 400">·</span><span class="otp t3" style="font-weight: 400">·</span></div></div>
+<span class="btn btn-p btn-lg btn-w">Continue</span>
+<div class="row between"><span class="small">Resend code in 42s</span><a class="s14 w6">Use a different email</a></div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":700}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

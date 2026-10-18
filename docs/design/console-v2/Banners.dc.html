@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The banner above every page</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.bn{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:14px;border:1px solid transparent}
+.bn .ic{flex-shrink:0}
+.bn-bad{background:var(--bad-bg);border-color:var(--bad-line)}
+.bn-bad>.ic{color:var(--bad)}
+.bn-warn{background:var(--warn-bg);border-color:rgba(242,195,91,.3)}
+.bn-warn>.ic{color:var(--warn)}
+.bn-plain{background:var(--card);border-color:var(--card-line)}
+.bn-plain>.ic{color:var(--t3)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 48px 56px 64px">
+<div class="stack-l" style="max-width: 1180px; margin: 0 auto">
+<div class="stack-xs"><h1 class="h1">The banner above every page</h1><p class="sub">One at a time, the most serious first. It sits at the top of the page, under nothing, and its button opens the exact place to fix it.</p></div>
+
+<div class="stack-s">
+<p class="lbl">1 · No plan · red, can't be closed</p>
+<div class="bn bn-bad"><svg class="ic" viewBox="0 0 24 24"><path d="M21.7 18l-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3M12 9v4M12 17h.01"/></svg><p class="body grow">This gym has no plan. Nothing here can be changed, and your members get the free app only.</p><span class="btn btn-ds btn-sm">Open Plan</span></div>
+</div>
+
+<div class="stack-s">
+<p class="lbl">1 · A payment is overdue · red, can't be closed</p>
+<div class="bn bn-bad"><svg class="ic" viewBox="0 0 24 24"><path d="M21.7 18l-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3M12 9v4M12 17h.01"/></svg><p class="body grow">A payment for your gym is overdue. Nothing here can be changed and your members get the free app only until it is paid. Press Pay now to pay it; once it's paid, everything opens again by itself.</p><span class="btn btn-ds btn-sm">Open Plan</span></div>
+</div>
+
+<div class="stack-s">
+<p class="lbl">2 · A payment didn't go through · amber</p>
+<div class="bn bn-warn"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20"/></svg><p class="body grow">A payment for your gym didn't go through. Razorpay tries again by itself, or you can pay now under Plan on the Overview. Your members keep everything for 2 days after a failed payment.</p><span class="btn btn-s btn-sm">Open Plan</span></div>
+</div>
+
+<div class="stack-s">
+<p class="lbl">3 · The trial ends soon · amber, the last 3 days</p>
+<div class="bn bn-warn"><svg class="ic" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 6v6l4 2"/></svg><p class="body grow">Trial ends 26 Oct. Your members keep your gym's features only while a plan is active. To keep them, choose a plan under Plan on the Overview: you pay today and get its full size at once.</p><span class="btn btn-s btn-sm">Open Plan</span></div>
+</div>
+
+<div class="stack-s">
+<p class="lbl">4 · Nearly full · amber, at 90% of places</p>
+<div class="bn bn-warn"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><p class="body grow">182 of 200 members. Press Change size under Plan on the Overview.</p><span class="btn btn-s btn-sm">Open Plan</span></div>
+</div>
+
+<div class="stack-s">
+<p class="lbl">5 · Free trial days left · plain, closes until tomorrow</p>
+<div class="bn bn-plain"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg><p class="body grow">Free trial — 8 days left.</p><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Dismiss until tomorrow"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+</div>
+
+<div class="stack-s">
+<p class="lbl">Where it sits</p>
+<div class="card-0" style="display: flex; height: 260px">
+<div style="width: 180px; background: var(--rail-bg); border-right: 1px solid var(--rail-line); padding: 14px; display: flex; flex-direction: column; gap: 10px"><div style="height: 34px; border-radius: 10px; background: var(--rail-card)"></div><div style="height: 12px; width: 70%; border-radius: 6px; background: var(--rail-on)"></div><div style="height: 12px; width: 60%; border-radius: 6px; background: var(--rail-card)"></div><div style="height: 12px; width: 75%; border-radius: 6px; background: var(--rail-card)"></div><div style="height: 12px; width: 55%; border-radius: 6px; background: var(--rail-card)"></div></div>
+<div class="grow" style="padding: 18px 24px; display: flex; flex-direction: column; gap: 14px">
+<div class="bn bn-warn" style="padding: 10px 14px"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 6v6l4 2"/></svg><p class="s14 grow">Trial ends 26 Oct. …</p><span class="btn btn-s btn-sm">Open Plan</span></div>
+<div style="height: 18px; width: 200px; border-radius: 6px; background: var(--t2); opacity: .6"></div>
+<div class="g3s" style="flex: 1"><div style="border-radius: 12px; background: var(--card); border: 1px solid var(--card-line)"></div><div style="border-radius: 12px; background: var(--card); border: 1px solid var(--card-line)"></div><div style="border-radius: 12px; background: var(--card); border: 1px solid var(--card-line)"></div></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

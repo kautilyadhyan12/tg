@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edit a member's details — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1000px">
+<dc-import name="PersonMaya" look="{{lookName}}" hint-size="1440px,1488px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer">
+<div class="dw-h">
+<div class="row" style="gap: 14px"><div class="av">MP</div><div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Edit Maya Patel</h2><span class="small">Nothing changes until you press Save.</span></div></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b">
+<div class="form">
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">Name and contact</h3><p class="small">An email address or a phone number is needed to tell people apart.</p></div>
+<div class="field"><span class="flabel">Name</span><div class="input">Maya Patel</div></div>
+<div class="frow">
+<div class="field"><span class="flabel">Email</span><div class="input">maya.patel@gmail.com</div></div>
+<div class="field"><span class="flabel">Phone</span><div class="input num">+91 98201 44521</div></div>
+</div>
+<div class="field" style="max-width: 50%"><span class="flabel">Member number</span><div class="input num">1</div></div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">Dates</h3></div>
+<div class="frow">
+<div class="field"><span class="flabel">Join date <span class="opt">(optional)</span></span><div class="input select"><span class="phd">Not set</span><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg></div></div>
+<div class="field"><span class="flabel">Date of birth <span class="opt">(optional)</span></span><div class="input select"><span>Sat 12 Mar 1994</span><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg></div></div>
+</div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">Status, payment and renewal</h3></div>
+<div class="callout callout-plain" style="align-items: center"><svg class="ic" viewBox="0 0 24 24" style="margin-top: 0"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 16v-4M12 8h.01"/></svg><p class="sub grow">These come from Maya Patel's memberships. Change them under Memberships.</p><span class="btn btn-s btn-sm">Go to Memberships</span></div>
+</div>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Save</span><span class="btn btn-q">Cancel</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

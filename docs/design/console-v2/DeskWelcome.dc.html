@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Front desk — checked in</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="width: 1180px; height: 820px; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(circle at 50% 45%, var(--good-bg), var(--page) 62%)">
+<div class="row between" style="padding: 24px 32px; border-bottom: 1px solid var(--line)">
+<div class="row-m"><div class="rail-logo" style="width: 48px; height: 48px; border-radius: 14px"><svg class="ic ic-l" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="stack-2"><span class="h2" style="font-size: 22px">Northside Strength</span><span class="small">Check-in · Front desk</span></div></div>
+<div class="row-s"><span class="btn btn-s btn-lg"><svg class="ic" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Turn sound off</span><span class="btn btn-s btn-lg"><svg class="ic" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3zM9 13a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg>Use the camera</span></div>
+</div>
+<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; text-align: center">
+<div style="width: 168px; height: 168px; border-radius: 999px; background: var(--good); color: #062014; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 16px rgba(70,217,147,.12)"><svg class="ic" viewBox="0 0 24 24" style="width: 92px; height: 92px; stroke-width: 2.6"><path d="M20 6L9 17l-5-5"/></svg></div>
+<div class="stack-xs"><span class="w7 good" style="font-size: 26px; letter-spacing: .02em">Checked in</span><span class="w7" style="font-size: 64px; line-height: 72px; font-stretch: 108%; letter-spacing: -.01em">Maya Patel</span></div>
+</div>
+<div class="row" style="padding: 20px 32px 26px; border-top: 1px solid var(--line); justify-content: center">
+<span class="small">Scanner</span>
+<div class="input input-on" style="width: 380px; height: 40px"><span class="phd s14">Scan a pass or key tag</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

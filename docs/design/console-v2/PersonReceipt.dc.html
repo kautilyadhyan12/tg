@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A receipt — opens in the middle, ready to print</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.paper{background:#FFFFFF;color:#1B1815;border-radius:14px;padding:26px 28px;display:flex;flex-direction:column;gap:14px}
+.paper .pt3{color:#6B645C}
+.paper .phr{height:1px;background:#E4DED6}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1080px">
+<dc-import name="PersonMaya" look="{{lookName}}" hint-size="1440px,1488px"></dc-import>
+<div class="scrim"></div>
+<div class="dialog" style="width: 560px; padding: 24px; gap: 18px">
+<div class="row between"><h2 class="h2">Receipt #12</h2><span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="paper">
+<div class="row between top"><div class="stack-2"><span class="w7" style="font-size: 18px; font-stretch: 108%">Northside Strength</span><span class="s13 pt3">Pune</span></div><div class="stack-2 r"><span class="s14 w6">Receipt #12</span><span class="s13 pt3">18 October 2026</span></div></div>
+<div class="phr"></div>
+<div class="row between"><span class="s14 pt3">For</span><span class="s14 w6">Maya Patel</span></div>
+<div class="phr"></div>
+<div class="row between top"><div class="stack-2"><span class="s15 w6">Gold Monthly</span><span class="s13 pt3">28 Sep – 27 Oct 2026</span></div><span class="s15 w6 num">₹2,500.00</span></div>
+<div class="row between"><span class="s13 pt3">Includes GST 18%</span><span class="s13 pt3 num">₹381.36</span></div>
+<div class="phr"></div>
+<div class="row between"><span class="s15 w7">Paid</span><span class="w7 num" style="font-size: 20px">₹2,500.00</span></div>
+<span class="s13 pt3">Bank transfer · recorded by Arjun Mehta</span>
+</div>
+<div class="callout" style="flex-direction: column; gap: 12px">
+<div class="row top"><svg class="ic warn" viewBox="0 0 24 24" style="margin-top: 2px"><path d="M21.7 18l-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3M12 9v4M12 17h.01"/></svg><p class="body">Your gym's address is not on its receipts yet.</p></div>
+<div class="row-s" style="width: 100%"><div class="input grow" style="background: var(--card)"><span class="phd">Postal address</span></div><span class="btn btn-s">Save address</span></div>
+</div>
+<div class="row-s"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>Print</span><span class="btn btn-q">Close</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

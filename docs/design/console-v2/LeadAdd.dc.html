@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a lead — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1000px">
+<dc-import name="Leads" look="{{lookName}}" hint-size="1440px,1000px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 600px">
+<div class="dw-h">
+<div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Add lead</h2></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b">
+<div class="form">
+<div class="fgroup">
+<div class="field"><span class="flabel">Name</span><div class="input input-on"><span class="phd">Their name</span></div></div>
+<div class="frow">
+<div class="field"><span class="flabel">Email</span><div class="input"><span class="phd">name@gmail.com</span></div></div>
+<div class="field"><span class="flabel">Phone</span><div class="input"><span class="phd">Optional</span></div></div>
+</div>
+<div class="field"><span class="flabel">Heard of you from</span><div class="row-s wrap"><span class="chip">Walked in</span><span class="chip">Website</span><span class="chip">Social media</span><span class="chip">A friend</span><span class="chip">Other</span></div></div>
+</div>
+<div class="fgroup">
+<div class="check" style="opacity: .5"><span class="box"></span><div class="stack-2"><span class="body w6">Happy to hear from us by email</span><span class="small">Add their email address to ask.</span></div></div>
+<div class="field"><span class="flabel">Notes <span class="opt">(optional)</span></span><div class="area" style="min-height: 80px"><span class="phd t3">What they asked about, when to call back</span></div></div>
+</div>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Add lead</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>
