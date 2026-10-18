@@ -214,13 +214,15 @@ function viewOf(row: { id: string; membership: HeldMembership }, bills: readonly
   return owed === undefined ? view : { ...view, payment: { state: "due", since: owed.dueOn } };
 }
 
-async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean): Promise<HeldMembershipsResponse> {
+/** `offers`: what the Add form fills in (discounts and Refer a friend's gifts), read for
+ *  staff who take payments and never for the member's own view (`readOwnHeld`). */
+async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: string, canBill: boolean, offers = canBill): Promise<HeldMembershipsResponse> {
   // A discount and its promo code are read and used by whoever takes payments, as on Sell.
   const [list, offered, friendGift] = await Promise.all([
     repo.readHeld(deps.sql, gymId, entryId),
-    canBill ? membershipDiscounts(deps.sql, gymId) : [],
+    offers ? membershipDiscounts(deps.sql, gymId) : [],
     // Refer a friend's gift, for the friend it is for (20e-ii-b-i): filled in on Add.
-    canBill ? friendGiftOffer(deps.sql, gymId, entryId, today) : null,
+    offers ? friendGiftOffer(deps.sql, gymId, entryId, today) : null,
   ]);
   if (list === null) throw notFound();
   // A member's own Refer a friend gift (20e-ii-b-ii-a): what it took off a bill, and the one
@@ -229,8 +231,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // and the page says both (round one, L3).
   const [gifts, memberGift, memberGiftAtSell, freeDays] = await Promise.all([
     canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string; friendName: string | null }>(),
-    canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "membership") : null,
-    canBill && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "products") : null,
+    offers && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "membership") : null,
+    offers && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "products") : null,
     // Refer a friend's free days on each (20e-ii-b-ii-b): why its dates moved.
     giftDaysOn(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)),
   ]);
@@ -395,6 +397,12 @@ export async function getHeldMemberships(
 ): Promise<HeldMembershipsResponse> {
   const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   return await readOr404(deps, gymId, entryId, dayInTz(deps.now(), org.timezone), privileges.includes(BILLING));
+}
+
+/** One record's memberships with their bills, as staff who take payments read them, for the
+ *  member's own view (18j), which is the caller's to check is theirs. */
+export async function readOwnHeld(deps: HeldDeps, gymId: string, entryId: string, today: string): Promise<HeldMembershipsResponse> {
+  return await readOr404(deps, gymId, entryId, today, true, false);
 }
 
 export async function giveHeldMembership(

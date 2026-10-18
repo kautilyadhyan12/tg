@@ -35,6 +35,7 @@ export * from "./visibleText.js";
 export * from "./heldMemberships.js";
 export * from "./heldOnList.js";
 export * from "./memberBills.js";
+export * from "./myMembership.js";
 export * from "./receipts.js";
 export * from "./memberBillRules.js";
 export * from "./ptSessionsEnding.js";
