@@ -92,6 +92,13 @@ export const myPurchaseSchema = z
   .strict();
 export type MyPurchase = z.infer<typeof myPurchaseSchema>;
 
+/** Somebody the reader pays for (18i; Kd 2026-10-18): their memberships' money, and nothing
+ *  else of theirs (never their visits, bookings or workouts). */
+export const myPaysForSchema = z
+  .object({ name: z.string(), memberships: z.array(myMembershipSchema), earlierNotShown: z.number().int().min(0) })
+  .strict();
+export type MyPaysFor = z.infer<typeof myPaysForSchema>;
+
 /** `record`: "own" where the reader's account alone holds a record of the gym; "none" where
  *  staff have not linked them to one; "shared" where two accounts hold it. Only "own" carries
  *  money. */
@@ -100,9 +107,13 @@ export const myMembershipResponseSchema = z
     gym: z.object({ name: z.string() }).strict(),
     today: daySchema,
     record: z.enum(["own", "none", "shared"]),
-    /** Who pays for them (18i), by the gym's list now; null for nobody. */
+    /** Who pays for them (18i), by the gym's list now; null for nobody. While somebody does,
+     *  their memberships' bills, payments and fees are the payer's to read: each membership
+     *  here then carries its dates alone, with `owed` null and no payments or fees. */
     paidBy: z.string().nullable(),
     memberships: z.array(myMembershipSchema),
+    /** The people the reader pays for, in the gym's list order; empty for nobody. */
+    paysFor: z.array(myPaysForSchema),
     earlierNotShown: z.number().int().min(0),
     purchases: z.array(myPurchaseSchema),
     purchasesNotShown: z.number().int().min(0),

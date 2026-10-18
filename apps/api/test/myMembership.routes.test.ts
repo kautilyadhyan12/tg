@@ -2,8 +2,8 @@
 // Postgres with the real routes (spec Part 3 §14.2; ROADMAP 18j). DATABASE_URL-gated.
 //
 // The worst thing this job could do to a real person: show a member somebody else's bills,
-// payments or receipts — another member's at the same gym, another gym's, or a household's
-// shared record. That is the first test.
+// payments or receipts — another member's at the same gym, another gym's, a household's
+// shared record's, or those of somebody they no longer pay for. That is the first test.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -94,7 +94,7 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const inject = (method: "GET" | "POST" | "PUT", path: string, cookies: Cookies, payload?: unknown) =>
+  const inject = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
     api().inject({
       method,
       url: path,
@@ -240,7 +240,7 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     await sql.end({ timeout: 5 });
   }, T);
 
-  it("THE WORST THING: a member reads their own bills, payments and receipts and nobody else's — never another member's, another gym's, a shared record's, or a payer's", async () => {
+  it("THE WORST THING: a member reads their own bills, payments and receipts and nobody else's — never another member's, another gym's, a shared record's, or somebody they no longer pay for", async () => {
     const gym = await makeGym("Mine Iron House");
     const next = await makeGym("Mine Next Door");
 
@@ -316,18 +316,41 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect((await inject("GET", mineUrl(gym), maya.cookies)).statusCode).toBe(404);
     expect((await myReceipt(gym, maya, mayaPaid.receipt)).statusCode).toBe(404);
 
-    // A payer (18i): Priya pays for Aarav. Aarav's page names her; Priya's holds her own alone.
+    // A payer (18i; Kd 2026-10-18): Priya pays for Aarav. His memberships' money is hers to
+    // read and not his; his desk purchase stays his; nobody else's reaches her.
     const priya = await member(gym, "Priya Sharma");
     const aarav = await member(gym, "Aarav Sharma");
-    expect((await inject("PUT", `/v1/orgs/${gym.id}/member-list/entries/${aarav.entryId}/payer`, gym.owner.cookies, { payerEntryId: priya.entryId })).statusCode).toBe(200);
-    const aaravPaid = await pay(gym, aarav.entryId, await give(gym, aarav.entryId, 0), 3000);
+    const payerUrl = `/v1/orgs/${gym.id}/member-list/entries/${aarav.entryId}/payer`;
+    expect((await inject("PUT", payerUrl, gym.owner.cookies, { payerEntryId: priya.entryId })).statusCode).toBe(200);
+    const aaravHeld = await give(gym, aarav.entryId, 0);
+    const aaravPaid = await pay(gym, aarav.entryId, aaravHeld, 3000);
+    const aaravBought = await sell(gym, aarav.entryId, 1);
     const his = await mine(gym, aarav);
     expect(his.paidBy).toBe("Priya Sharma");
-    expect(numbersIn(his)).toEqual([aaravPaid.receipt]);
+    expect(his.memberships.map((m) => [m.id, m.owed, m.payments, m.fees])).toEqual([[aaravHeld, null, [], []]]);
+    expect(numbersIn(his)).toEqual([aaravBought.receipt]);
+    expect((await myReceipt(gym, aarav, aaravPaid.receipt)).statusCode).toBe(404);
+    expect((await myReceipt(gym, aarav, aaravBought.receipt)).statusCode).toBe(200);
     const priyas = await mine(gym, priya);
     expect(priyas.paidBy).toBeNull();
     expect(numbersIn(priyas)).toEqual([]);
+    expect(priyas.paysFor.map((p) => [p.name, p.memberships.map((m) => m.id), p.memberships.flatMap((m) => m.payments.map((x) => x.receiptNumber))])).toEqual([
+      ["Aarav Sharma", [aaravHeld], [aaravPaid.receipt]],
+    ]);
+    expect(JSON.stringify(priyas)).not.toContain("Ravi");
+    expect((await myReceipt(gym, priya, aaravPaid.receipt)).statusCode).toBe(200);
+    expect((await myReceipt(gym, priya, aaravBought.receipt)).statusCode).toBe(404);
+    expect((await myReceipt(gym, priya, raviPaid.receipt)).statusCode).toBe(404);
+    // Another gym's Priya pays for nobody here.
+    expect((await mine(next, otherMaya)).paysFor).toEqual([]);
+    // The gym removes Priya as payer: she reads none of it, and Aarav reads his own again.
+    expect((await inject("DELETE", payerUrl, gym.owner.cookies)).statusCode).toBe(200);
+    expect((await mine(gym, priya)).paysFor).toEqual([]);
     expect((await myReceipt(gym, priya, aaravPaid.receipt)).statusCode).toBe(404);
+    const back = await mine(gym, aarav);
+    expect(back.paidBy).toBeNull();
+    expect(numbersIn(back)).toEqual([aaravPaid.receipt, aaravBought.receipt].sort((x, y) => x - y));
+    expect((await myReceipt(gym, aarav, aaravPaid.receipt)).statusCode).toBe(200);
     // Ravi's own answer is still only Ravi's.
     expect(numbersIn(await mine(gym, ravi))).toEqual([raviPaid.receipt, raviBought.receipt].sort((a, b) => a - b));
   });
@@ -338,7 +361,7 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
 
     // Nothing yet.
     const empty = await mine(gym, maya);
-    expect(empty).toMatchObject({ gym: { name: "Mine Second House" }, today, record: "own", paidBy: null, memberships: [], purchases: [], earlierNotShown: 0, purchasesNotShown: 0 });
+    expect(empty).toMatchObject({ gym: { name: "Mine Second House" }, today, record: "own", paidBy: null, memberships: [], paysFor: [], purchases: [], earlierNotShown: 0, purchasesNotShown: 0 });
 
     // Thirty days from eight days ago, nothing paid: owed since its first day.
     const held = await give(gym, maya.entryId, -8);

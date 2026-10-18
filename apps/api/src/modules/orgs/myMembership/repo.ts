@@ -24,29 +24,31 @@ export async function readerOf(sql: Sql, gymId: string, userId: string): Promise
   return row === undefined ? null : { gymName: row.name, timezone: row.timezone, entryId: row.entry_id, holders: row.holders };
 }
 
-/** The record a receipt of the gym is for: the person sold to, or whose membership a payment
- *  or a refund was on. Null where the gym has no receipt by that number, or its person is gone. */
-export async function receiptEntry(sql: Sql, gymId: string, number: number): Promise<string | null> {
-  const rows = await sql<{ entry_id: string | null }[]>`
-    SELECT s.entry_id FROM gym_sales s
+/** The record a receipt of the gym is for, and whether it is a desk sale's (a sale or its
+ *  refund) or a membership's (a payment or a refund on one). Null where the gym has no
+ *  receipt by that number, or its person is gone. */
+export async function receiptEntry(sql: Sql, gymId: string, number: number): Promise<{ entryId: string; of: "sale" | "membership" } | null> {
+  const rows = await sql<{ entry_id: string | null; of: "sale" | "membership" }[]>`
+    SELECT s.entry_id, 'sale' AS of FROM gym_sales s
     WHERE s.gym_id = ${gymId} AND s.receipt_number = ${number}
     UNION ALL
-    SELECT s.entry_id FROM gym_sale_refunds f
+    SELECT s.entry_id, 'sale' AS of FROM gym_sale_refunds f
     JOIN gym_sales s ON s.gym_id = f.gym_id AND s.id = f.sale_id
     WHERE f.gym_id = ${gymId} AND f.receipt_number = ${number}
     UNION ALL
-    SELECT h.entry_id FROM gym_member_payments p
+    SELECT h.entry_id, 'membership' AS of FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE p.gym_id = ${gymId} AND p.receipt_number = ${number}
     UNION ALL
-    SELECT h.entry_id FROM gym_member_refunds r
+    SELECT h.entry_id, 'membership' AS of FROM gym_member_refunds r
     JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE r.gym_id = ${gymId} AND r.receipt_number = ${number}`;
   // A sale of several lines is one receipt on several rows, all for one person.
-  const owners = new Set(rows.map((r) => r.entry_id));
-  if (owners.size > 1) throw new Error("one receipt number is on two people's rows");
-  return rows[0]?.entry_id ?? null;
+  const owners = new Set(rows.map((r) => `${r.of}:${r.entry_id ?? ""}`));
+  if (owners.size > 1) throw new Error("one receipt number is on two rows of different people");
+  const row = rows[0];
+  return row === undefined || row.entry_id === null ? null : { entryId: row.entry_id, of: row.of };
 }

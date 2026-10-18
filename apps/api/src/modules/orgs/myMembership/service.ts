@@ -4,6 +4,11 @@
 // `holders` of 1), the rule the overdue messages follow: a record two accounts share shows
 // its money to neither. A stranger to the gym gets 404, as every member route answers.
 //
+// A payer (18i; Kd 2026-10-18, "i agree"): while the gym's list says Priya pays for Aarav,
+// his memberships' bills, payments, fees and their receipts are hers to read and not his;
+// he reads his memberships' dates and "Paid by Priya Sharma". What he bought at the desk
+// stays his, since whoever stands at the desk pays there. A payer removed reads none of it.
+//
 // The memberships and bills are the person's page's own read (`readOwnHeld`), so the app and
 // the console never give two answers; what staff did and can do is left out here.
 import {
@@ -21,7 +26,7 @@ import type { Sql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError } from "../service.js";
 import { readOwnHeld } from "../memberships/heldService.js";
-import { payerOf } from "../payers/repo.js";
+import { paidForBy, payerOf } from "../payers/repo.js";
 import { purchasesOf, type SaleRow } from "../register/repo.js";
 import * as receipts from "../receipts/repo.js";
 import * as repo from "./repo.js";
@@ -80,6 +85,9 @@ function membershipOf(m: HeldMembershipItem): MyMembership {
   };
 }
 
+/** A membership whose money is somebody else's to read: its dates, and nothing owed or paid. */
+const datesOnly = (m: MyMembership): MyMembership => ({ ...m, owed: null, payments: [], olderPeriodsNotShown: 0, fees: [] });
+
 /** The lines of each sale under its one receipt, newest sale first, as `purchasesOf` reads them. */
 function purchasesFrom(lines: readonly SaleRow[]): MyPurchase[] {
   const sales = new Map<number, SaleRow[]>();
@@ -107,34 +115,54 @@ export async function getMyMembership(deps: MyMembershipDeps, userId: string, gy
   const reader = await readerOr404(deps, gymId, userId);
   if (!(await limit())) return null;
   const today = dayInTz(deps.now(), reader.timezone);
-  const empty = { gym: { name: reader.gymName }, today, paidBy: null, memberships: [], earlierNotShown: 0, purchases: [], purchasesNotShown: 0 };
+  const empty = { gym: { name: reader.gymName }, today, paidBy: null, memberships: [], paysFor: [], earlierNotShown: 0, purchases: [], purchasesNotShown: 0 };
   if (reader.own === null) return myMembershipResponseSchema.parse({ ...empty, record: reader.entryId === null ? "none" : "shared" });
-  const [held, bought, payer] = await Promise.all([
+  const [held, bought, payer, paidFor] = await Promise.all([
     readOwnHeld(deps, gymId, reader.own, today),
     purchasesOf(deps.sql, gymId, reader.own, PURCHASES_SHOWN, true),
     payerOf(deps.sql, gymId, reader.own),
+    paidForBy(deps.sql, gymId, reader.own),
   ]);
+  // Ten at most (`PAYS_FOR_MAX`), each the person's page's own read.
+  const paysFor = await Promise.all(
+    paidFor.map(async (p) => {
+      const theirs = await readOwnHeld(deps, gymId, p.entryId, today);
+      return { name: p.name, memberships: theirs.memberships.map(membershipOf), earlierNotShown: theirs.earlierNotShown };
+    }),
+  );
   const purchases = purchasesFrom(bought?.sales ?? []);
+  const own = held.memberships.map(membershipOf);
   return myMembershipResponseSchema.parse({
     ...empty,
     record: "own",
     paidBy: payer?.name ?? null,
-    memberships: held.memberships.map(membershipOf),
+    memberships: payer === null ? own : own.map(datesOnly),
+    paysFor,
     earlierNotShown: held.earlierNotShown,
     purchases,
     purchasesNotShown: Math.max(0, (bought?.total ?? 0) - purchases.length),
   });
 }
 
-/** One receipt, where it is for the reader's own record; 404 alike for one that is not and
- *  one the gym does not have, so a member learns nothing of anybody else's. */
+/** One receipt, where it is the reader's to read: a desk sale of their own record; a
+ *  membership's of their own record while nobody pays for them, or of somebody they pay for.
+ *  404 alike for every other and for one the gym does not have, so a member learns nothing
+ *  of anybody else's. */
 export async function getMyReceipt(deps: MyMembershipDeps, userId: string, gymId: string, number: number, limit: Limit): Promise<Receipt | null> {
   const reader = await readerOr404(deps, gymId, userId);
   if (!(await limit())) return null;
   const missing = new OrgsError(404, "receipt_not_found", RECEIPT_WORDS.receipt_not_found);
   if (reader.own === null) throw missing;
-  const entryId = await repo.receiptEntry(deps.sql, gymId, number);
-  if (entryId !== reader.own) throw missing;
+  const own = reader.own;
+  const found = await repo.receiptEntry(deps.sql, gymId, number);
+  if (found === null) throw missing;
+  const theirs =
+    found.of === "sale"
+      ? found.entryId === own
+      : found.entryId === own
+        ? (await payerOf(deps.sql, gymId, own)) === null
+        : (await paidForBy(deps.sql, gymId, own)).some((p) => p.entryId === found.entryId);
+  if (!theirs) throw missing;
   const [row, gym] = await Promise.all([receipts.readReceipt(deps.sql, gymId, number), receipts.gymOnReceipt(deps.sql, gymId)]);
   if (row === null || gym === null) throw missing;
   return receiptSchema.parse({ ...row, gym });
