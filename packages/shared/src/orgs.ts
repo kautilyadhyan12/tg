@@ -2144,15 +2144,19 @@ export const orgStaffSchema = z.object({
   coOwner: z.boolean().optional(),
   /** The owner has asked them to be a co-owner and they have not answered: when it ends. */
   coOwnerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
-  /** The owner has asked this co-owner to be the owner and they have not answered (4b-ii). */
-  ownerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
+  /** The owner has asked this co-owner to be the owner and they have not answered (4b-ii).
+   *  `addingCard`: they pressed Accept and Paddle's card window is open for them (4b-iii-a). */
+  ownerRequest: z.object({ expiresAt: z.string().datetime(), addingCard: z.boolean().optional() }).nullable().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 
 export const orgStaffResponseSchema = z.object({
   staff: z.array(orgStaffSchema),
-  /** The gym is on a paid plan, so it cannot be handed over here (4b-ii; 4b-iii moves who pays). */
+  /** The gym's plan stops a hand-over for now (4b-ii); `paidPlanNote` says why. */
   paidPlan: z.boolean().optional(),
+  paidPlanNote: z.string().max(200).nullable().optional(),
+  /** The gym pays through Paddle: the new owner adds their card and pays from then (4b-iii-a). */
+  cardNeeded: z.boolean().optional(),
 });
 export type OrgStaffResponse = z.infer<typeof orgStaffResponseSchema>;
 

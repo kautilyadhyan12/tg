@@ -10,6 +10,7 @@
 //   GET    /v1/orgs/:gymId/owner-request                       the caller's own, waiting here
 //   POST   /v1/orgs/:gymId/owner-request/:requestId/accept     the co-owner asked
 //   POST   /v1/orgs/:gymId/owner-request/:requestId/decline
+//   POST   /v1/orgs/:gymId/owner-request/:requestId/card      Paddle's window saved their card (4b-iii-a)
 // Who may is the service's: the owner by the gym's own owner id, the person asked by theirs.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
@@ -102,4 +103,12 @@ export function registerCoOwnerRoutes(app: FastifyInstance, deps: Omit<service.C
       return reply.status(200).send(await service.answerOwnerRequest(coOwnerDeps, callerId(req), params.gymId, params.requestId, answer === "accept"));
     });
   }
+
+  // Asked about once a second while Paddle confirms the card, then not again.
+  const cardLimit = createDualRateLimit({ name: "owner_request_card", max: 120, ipMax: 1200, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  app.post("/v1/orgs/:gymId/owner-request/:requestId/card", { preHandler: [app.authenticate, cardLimit] }, async (req, reply) => {
+    const params = parseOr400(coOwnerRequestParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.ownerCardSaved(coOwnerDeps, callerId(req), params.gymId, params.requestId));
+  });
 }

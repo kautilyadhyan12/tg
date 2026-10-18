@@ -27,6 +27,7 @@
 // account, and a cancel kept by us and sent to Razorpay in the hours before the paid month
 // ends, since Razorpay cannot take one back.
 import {
+  OWNER_REQUEST_WORDS,
   PAID_PLAN_GRACE_DAYS,
   payerEmailSchema,
   PLAN_CANCEL_DECIDE_HOURS,
@@ -48,6 +49,7 @@ import type { EmailTransport } from "../../email/resend.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
+import { payerChanging } from "../orgs/coOwners/repo.js";
 import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
 import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
@@ -511,6 +513,9 @@ export async function openBillingPortal(
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const plan = await repo.managedPlanFor(deps.sql, input.gymId);
   if (plan === null) throw new OrgsError(404, "no_paid_plan", "This plan isn't paid through us, so there's nothing to manage here.");
+  // Handed over (4b-iii-a): Paddle's page signs in as the plan's payer, who is changing. Opened
+  // now it would show the old owner's account to the new one, or let a card be saved on the way.
+  if (await payerChanging(deps.sql, input.gymId)) throw new OrgsError(409, "payer_moving", OWNER_REQUEST_WORDS.payer_moving);
   // Paddle's page shows everything its customer pays for: it opens only for somebody
   // who manages the billing of every gym that customer pays for. Paddle keeps one customer
   // per email and the window is filled in with the owner's (1e), so an owner's gyms share one.

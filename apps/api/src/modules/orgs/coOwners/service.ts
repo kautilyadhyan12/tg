@@ -16,6 +16,7 @@ import {
   type CancelOwnerRequestResponse,
   type MyCoOwnerRequestResponse,
   type MyOwnerRequestResponse,
+  type OwnerCardResponse,
   type SendCoOwnerRequestResponse,
   type SendOwnerRequestResponse,
 } from "@app/shared";
@@ -26,6 +27,7 @@ import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requir
 import { emailHmac } from "../invites/address.js";
 import { suppressionsFor } from "../invites/repo.js";
 import type { CoOwnerEmailSender } from "./email.js";
+import { openCardWindow, pointBack, settleCard } from "./paidHandOver.js";
 import * as repo from "./repo.js";
 
 export interface CoOwnerDeps {
@@ -135,6 +137,9 @@ export async function answerCoOwnerRequest(
 
 const notOwner = (): OrgsError => new OrgsError(403, "owner_only", OWNER_REQUEST_WORDS.owner_only);
 const paidPlan = (): OrgsError => new OrgsError(409, "paid_plan", OWNER_REQUEST_WORDS.paid_plan);
+const planRefusal = (kind: "paid_plan" | "plan_overdue" | "plan_ending"): OrgsError => new OrgsError(409, kind, OWNER_REQUEST_WORDS[kind]);
+const cardUnavailable = (): OrgsError => new OrgsError(503, "card_unavailable", OWNER_REQUEST_WORDS.card_unavailable);
+const requestGone = (): OrgsError => new OrgsError(409, "request_gone", OWNER_REQUEST_WORDS.request_gone);
 
 export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, gymId: string, userId: string): Promise<SendOwnerRequestResponse> {
   // Not the read-only gate a co-owner request has: a gym past its trial with no plan is handed
@@ -149,7 +154,9 @@ export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, g
     case "not_co_owner":
       throw new OrgsError(409, "not_co_owner", OWNER_REQUEST_WORDS.not_co_owner);
     case "paid_plan":
-      throw paidPlan();
+    case "plan_overdue":
+    case "plan_ending":
+      throw planRefusal(outcome.kind);
     case "already_requested":
       throw new OrgsError(409, "already_requested", OWNER_REQUEST_WORDS.already_requested);
     case "sent":
@@ -178,22 +185,45 @@ export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, g
 
 export async function cancelOwnerRequest(deps: CoOwnerDeps, actorUserId: string, gymId: string, userId: string): Promise<CancelOwnerRequestResponse> {
   await requirePrivilege(deps, gymId, actorUserId, "staff.manage");
-  const outcome = await repo.cancelOwnerRequest(deps.sql, { gymId, userId, actorUserId, now: deps.now() });
-  switch (outcome.kind) {
-    case "owner_only":
-      throw notOwner();
-    case "no_request":
-      throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.no_request);
-    case "cancelled":
-      return { status: "cancelled" };
+  // A card window open for them is pointed back at the plan's payer first, so Paddle refuses
+  // it even in a tab still open; Accept pressed meanwhile opens it again, and it goes round.
+  for (let tries = 0; tries < 3; tries++) {
+    const window = (await repo.gymOwnerId(deps.sql, gymId)) === actorUserId ? await repo.openCardWindowTo(deps.sql, gymId, userId) : null;
+    if (window !== null) {
+      const paddle = deps.billing?.paddle ?? null;
+      if (deps.billing === null || paddle === null) throw cardUnavailable();
+      const back = await pointBack(deps.billing, paddle, window);
+      if (back === "retry") throw cardUnavailable();
+      if (back === "saved") {
+        // Their card was saved before Cancel: the hand-over went through.
+        if ((await settleCard(deps.billing, window, defaultPrivilegesFor("owner"))) === "accepted") {
+          throw new OrgsError(409, "card_saved", OWNER_REQUEST_WORDS.card_saved);
+        }
+        throw cardUnavailable();
+      }
+    }
+    const outcome = await repo.cancelOwnerRequest(deps.sql, { gymId, userId, actorUserId, now: deps.now(), cardOpenedAt: window?.openedAt ?? null });
+    switch (outcome.kind) {
+      case "owner_only":
+        throw notOwner();
+      case "no_request":
+        throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.no_request);
+      case "cancelled":
+        return { status: "cancelled" };
+      case "card_reopened":
+        continue;
+    }
   }
+  throw cardUnavailable();
 }
 
 export async function myOwnerRequest(deps: CoOwnerDeps, userId: string, gymId: string): Promise<MyOwnerRequestResponse> {
   await requireStaff(deps, gymId, userId);
   const request = await repo.myOwnerRequest(deps.sql, { gymId, userId, now: deps.now() });
+  if (request === null) return { request: null };
+  const plan = await repo.gymHandOverPlan(deps.sql, gymId);
   return {
-    request: request === null ? null : { id: request.id, ownerName: request.ownerName.trim(), expiresAt: request.expiresAt.toISOString() },
+    request: { id: request.id, ownerName: request.ownerName.trim(), expiresAt: request.expiresAt.toISOString(), cardNeeded: plan.kind === "paddle" },
   };
 }
 
@@ -217,9 +247,27 @@ export async function answerOwnerRequest(
     case "not_found":
       throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.request_gone);
     case "request_gone":
-      throw new OrgsError(409, "request_gone", OWNER_REQUEST_WORDS.request_gone);
+      throw requestGone();
     case "paid_plan":
       throw paidPlan();
+    case "plan_overdue":
+    case "plan_ending":
+      throw planRefusal(outcome.kind);
+    case "card_needed": {
+      if (deps.billing === null) throw cardUnavailable();
+      const opened = await openCardWindow(deps.billing, { gymId, requestId, userId, subscriptionRef: outcome.subscriptionRef, email: outcome.email, stored: outcome.stored });
+      switch (opened.kind) {
+        case "opened":
+          return { status: "card_needed", card: opened.card };
+        case "request_gone":
+          throw requestGone();
+        case "email_unusable":
+          throw new OrgsError(409, "email_unusable", OWNER_REQUEST_WORDS.email_unusable);
+        case "unavailable":
+          throw cardUnavailable();
+      }
+      break;
+    }
     case "accepted":
       // After the hand-over is saved: the old owner's payment windows can no longer be paid.
       if (deps.billing !== null) await closeSuperseded(deps.billing, outcome.closed);
@@ -227,4 +275,18 @@ export async function answerOwnerRequest(
     case "declined":
       return { status: "declined" };
   }
+  throw cardUnavailable();
+}
+
+/** Paddle's window said the card was saved: the gym is theirs once Paddle confirms it. Asked
+ *  by the person the request was sent to and nobody else; the worker asks too. */
+export async function ownerCardSaved(deps: CoOwnerDeps, userId: string, gymId: string, requestId: string): Promise<OwnerCardResponse> {
+  await requireStaff(deps, gymId, userId);
+  const window = await repo.cardWindowOf(deps.sql, { gymId, requestId, userId });
+  if (window === null) throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.request_gone);
+  if (window.state !== "pending" && window.state !== "accepted") throw requestGone();
+  if (deps.billing === null) return { status: "waiting" };
+  const outcome = await settleCard(deps.billing, window, defaultPrivilegesFor("owner"));
+  if (outcome === "request_gone") throw requestGone();
+  return { status: outcome };
 }

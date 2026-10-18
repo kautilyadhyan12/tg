@@ -2,6 +2,8 @@
 // subscription, and the subscription is fetched from its provider and written through the
 // one rule (`applyPaddleSubscription`, `applyRazorpaySubscription`). Safe to run twice: the
 // rule ignores a record it already holds, and every event is leased and finished by its lease.
+import { settleOwnerCards, type OwnerCardsRun } from "../orgs/coOwners/paidHandOver.js";
+import { defaultPrivilegesFor } from "../orgs/service.js";
 import * as webhooks from "../webhooks/repo.js";
 import * as repo from "./repo.js";
 import {
@@ -43,6 +45,9 @@ export interface PaddleEventsRun {
   trialCheckoutsClosed: number;
   /** Smaller sizes decided this run: made at Paddle, still waiting, or not made; warnings sent. */
   pendingSizes: PendingSizesRun;
+  /** Gyms handed over whose new owner's card was saved, card windows pointed back, and ones
+   *  still open (4b-iii-a). */
+  ownerCards: OwnerCardsRun;
 }
 
 export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEventsRun> {
@@ -56,6 +61,7 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
     gracesEnded: 0,
     trialCheckoutsClosed: 0,
     pendingSizes: { applied: 0, waiting: 0, kept: 0, warned: 0 },
+    ownerCards: { handedOver: 0, closed: 0, waiting: 0 },
   };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDuePaddleEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
@@ -89,6 +95,8 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
   run.trialCheckoutsClosed = await closeStaleTrialCheckouts(deps);
   // After the events, so Paddle's latest record of each plan is written first.
   run.pendingSizes = await applyPendingSizes(deps);
+  // A closed tab or a lost answer leaves a hand-over's card window to the worker.
+  run.ownerCards = await settleOwnerCards(deps, defaultPrivilegesFor("owner"));
   const keepSince = new Date(deps.now().getTime() - PADDLE_EVENTS.keepDays * 24 * 60 * 60 * 1000);
   run.forgotten = await webhooks.forgetOldPaddleEvents(deps.sql, keepSince, 1000);
   return run;

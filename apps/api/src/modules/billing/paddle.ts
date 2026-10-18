@@ -7,8 +7,11 @@
 // Paddle's own page (1c-i); without it Paddle answers 403 and the button says paying
 // online isn't available (found on Kd's sandbox key, 2026-09-24). A size change (1c-ii)
 // needs `subscription.write`, and placing a new plan `customer.read` (who paid; Kd's sandbox key
-// has it, 2026-10-01).
+// has it, 2026-10-01). Handing a paid gym over (4b-iii-a) needs `customer.write` and
+// `address.write` too: Kd's sandbox key had neither on 2026-10-18.
 import {
+  paddleAddressIdSchema,
+  paddleAddressSchema,
   paddleAdjustmentSchema,
   paddleCustomerIdSchema,
   paddleCustomerSchema,
@@ -24,6 +27,7 @@ import {
   paddleSubscriptionSchema,
   paddleTransactionIdSchema,
   paddleTransactionSchema,
+  type PaddleAddress,
   type PaddleCustomer,
   type PaddlePortalSession,
   type PaddlePrice,
@@ -71,6 +75,21 @@ export interface PaddleApi {
   moveTrialEnd(subscriptionId: string, at: string): Promise<PaddleResult<PaddleSubscription>>;
   /** End a subscription's trial now: Paddle charges the first payment at once. */
   activateTrial(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
+
+  // A gym handed over (4b-iii-a). Making a customer or an address needs the key's
+  // `customer.write` and `address.write`.
+  /** Paddle's customer with exactly this email, or null when there is none. */
+  findCustomerByEmail(email: string): Promise<PaddleResult<PaddleCustomer | null>>;
+  createCustomer(email: string): Promise<PaddleResult<PaddleCustomer>>;
+  getAddress(customerId: string, addressId: string): Promise<PaddleResult<PaddleAddress>>;
+  createAddress(customerId: string, input: { countryCode: string; postalCode: string | null }): Promise<PaddleResult<PaddleAddress>>;
+  /** The plan's card window: Paddle's transaction that saves a new card on the subscription.
+   *  Paddle keeps one open a subscription and answers it again until it is used. */
+  getCardWindow(subscriptionId: string): Promise<PaddleResult<PaddleTransaction>>;
+  /** Whose card a card window saves. Pointed at somebody else, a window already open is refused. */
+  setTransactionPayer(transactionId: string, customerId: string, addressId: string): Promise<PaddleResult<PaddleTransaction>>;
+  /** Who a subscription's charges and receipts go to; it keeps charging the card saved on it. */
+  setSubscriptionPayer(subscriptionId: string, customerId: string, addressId: string): Promise<PaddleResult<PaddleSubscription>>;
 }
 
 /** The catalogue calls `tools/paddle-prices.ts` makes. */
@@ -253,6 +272,49 @@ export function createPaddleApi(opts: {
       const path = subPath(subscriptionId);
       if (path === null) return { kind: "not_found" };
       return unwrap(await call("POST", `${path}/activate`, paddleEnvelope(paddleSubscriptionSchema)));
+    },
+    async findCustomerByEmail(email) {
+      const query = new URLSearchParams({ email, per_page: "10" });
+      const listed = unwrap(await call("GET", `/customers?${query.toString()}`, paddleListEnvelope(paddleCustomerSchema)));
+      if (listed.kind !== "ok") return listed;
+      // Paddle matches the address exactly; compared again here, ignoring case as it does.
+      const wanted = email.trim().toLowerCase();
+      return { kind: "ok", value: listed.value.find((c) => c.email.trim().toLowerCase() === wanted) ?? null };
+    },
+    async createCustomer(email) {
+      return unwrap(await call("POST", "/customers", paddleEnvelope(paddleCustomerSchema), { email }));
+    },
+    async getAddress(customerId, addressId) {
+      if (!paddleCustomerIdSchema.safeParse(customerId).success || !paddleAddressIdSchema.safeParse(addressId).success) return { kind: "not_found" };
+      return unwrap(await call("GET", `/customers/${customerId}/addresses/${addressId}`, paddleEnvelope(paddleAddressSchema)));
+    },
+    async createAddress(customerId, input) {
+      if (!paddleCustomerIdSchema.safeParse(customerId).success) return { kind: "not_found" };
+      return unwrap(
+        await call("POST", `/customers/${customerId}/addresses`, paddleEnvelope(paddleAddressSchema), {
+          country_code: input.countryCode,
+          ...(input.postalCode === null ? {} : { postal_code: input.postalCode }),
+        }),
+      );
+    },
+    async getCardWindow(subscriptionId) {
+      const path = subPath(subscriptionId);
+      if (path === null) return { kind: "not_found" };
+      return unwrap(await call("GET", `${path}/update-payment-method-transaction`, paddleEnvelope(paddleTransactionSchema)));
+    },
+    async setTransactionPayer(transactionId, customerId, addressId) {
+      const path = txnPath(transactionId);
+      if (path === null || !paddleCustomerIdSchema.safeParse(customerId).success || !paddleAddressIdSchema.safeParse(addressId).success) {
+        return { kind: "not_found" };
+      }
+      return unwrap(await call("PATCH", path, paddleEnvelope(paddleTransactionSchema), { customer_id: customerId, address_id: addressId }));
+    },
+    async setSubscriptionPayer(subscriptionId, customerId, addressId) {
+      const path = subPath(subscriptionId);
+      if (path === null || !paddleCustomerIdSchema.safeParse(customerId).success || !paddleAddressIdSchema.safeParse(addressId).success) {
+        return { kind: "not_found" };
+      }
+      return unwrap(await call("PATCH", path, paddleEnvelope(paddleSubscriptionSchema), { customer_id: customerId, address_id: addressId }));
     },
     async getPrice(id) {
       if (!/^pri_[a-z\d]{26}$/.test(id)) return { kind: "not_found" };

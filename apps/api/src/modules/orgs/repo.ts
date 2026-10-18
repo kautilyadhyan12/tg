@@ -2951,7 +2951,9 @@ export type RemoveMemberOutcome =
   /** "Also remove from staff" for the owner: the owner leaves through a hand-over (4b-ii). */
   | { kind: "owner_stays_owner" }
   /** An owner's row the caller may not touch: only the owner removes a co-owner (4b-i). */
-  | { kind: "owner_row_locked" };
+  | { kind: "owner_row_locked" }
+  /** A co-owner adding their card to become the owner (4b-iii-a): Cancel request first. */
+  | { kind: "adding_card" };
 
 /** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
  *  retained)".
@@ -3025,6 +3027,7 @@ export async function removeMember(
       if (staff.role === "owner") {
         const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId, selfMay: true });
         if (refusal !== null && !(refusal === "main_owner" && input.userId === input.actorUserId)) return { kind: "owner_row_locked" };
+        if (input.alsoStaff && (await cardWindowOpen(tx, input.gymId, input.userId))) return { kind: "adding_card" };
       }
       if (input.alsoStaff && staff.owns) return { kind: "owner_stays_owner" };
     }
@@ -3880,12 +3883,24 @@ export type UpdateStaffOutcome =
   | { kind: "unchanged"; staff: StaffRow }
   | { kind: "not_staff" }
   | { kind: "is_owner" }
-  | { kind: "owner_row_locked" };
+  | { kind: "owner_row_locked" }
+  | { kind: "adding_card" };
 
 /** WHO MAY TOUCH AN OWNER'S ROW (ROADMAP 4b-i, Kd 2026-10-16): only the gym's own owner,
  *  and only a co-owner's. The owner's own row is changed by nobody, and a co-owner holds
  *  `staff.manage` but cannot change, tick or remove the owner or another co-owner.
  *  Written once and asked by all three doors (role, ticks, remove), in their transaction. */
+/** A card window open for this co-owner (4b-iii-a): their role and their staff place wait
+ *  until the owner cancels the hand-over, which points the window back first. Written out here
+ *  rather than imported, so this file does not import the co-owners' repo that imports it. */
+async function cardWindowOpen(tx: TransactionSql, gymId: string, userId: string): Promise<boolean> {
+  const rows = await tx`
+    SELECT 1 FROM gym_owner_requests
+    WHERE gym_id = ${gymId} AND user_id = ${userId} AND state = 'pending'
+      AND card_txn_ref IS NOT NULL AND card_closed_at IS NULL`;
+  return rows.length > 0;
+}
+
 async function ownerRowRefusal(
   tx: TransactionSql,
   input: { gymId: string; targetUserId: string; actorUserId: string; selfMay?: boolean },
@@ -3941,6 +3956,7 @@ export async function updateStaffRole(
       const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId });
       if (refusal === "main_owner") return { kind: "is_owner" };
       if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
+      if (await cardWindowOpen(tx, input.gymId, input.userId)) return { kind: "adding_card" };
     }
 
     // The same role under the same name. A gym's own role is a trainer's underneath, so
@@ -4138,7 +4154,8 @@ export type RemoveStaffOutcome =
   | { kind: "removed" }
   | { kind: "not_staff" }
   | { kind: "last_owner" }
-  | { kind: "owner_row_locked" };
+  | { kind: "owner_row_locked" }
+  | { kind: "adding_card" };
 
 /** Take somebody off staff. **They stay a MEMBER** — the two are different
  *  relationships and Kd was shown that before approving: this takes away the
@@ -4206,6 +4223,7 @@ export async function removeStaff(
       const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId, selfMay: true });
       if (refusal === "main_owner") return { kind: "last_owner" };
       if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
+      if (await cardWindowOpen(tx, input.gymId, input.userId)) return { kind: "adding_card" };
     }
     if (role === "owner") {
       const otherOwners = await tx<{ n: number }[]>`

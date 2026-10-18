@@ -13,6 +13,7 @@ export const paddleTransactionIdSchema = paddleId("txn");
 export const paddlePriceIdSchema = paddleId("pri");
 export const paddleProductIdSchema = paddleId("pro");
 export const paddleCustomerIdSchema = paddleId("ctm");
+export const paddleAddressIdSchema = paddleId("add");
 
 // ── The console ──────────────────────────────────────────────────────────────
 
@@ -183,11 +184,22 @@ export const paddleCustomerSchema = z.object({
 });
 export type PaddleCustomer = z.infer<typeof paddleCustomerSchema>;
 
+/** A customer's address (`/customers/{id}/addresses`): where Paddle works out tax. Only the
+ *  country and postcode are read; Paddle's card window asks for nothing more. */
+export const paddleAddressSchema = z.object({
+  id: paddleAddressIdSchema,
+  country_code: z.string().regex(/^[A-Z]{2}$/),
+  postal_code: z.string().max(40).nullable().optional(),
+});
+export type PaddleAddress = z.infer<typeof paddleAddressSchema>;
+
 /** A subscription (`GET /subscriptions/{id}`). */
 export const paddleSubscriptionSchema = z.object({
   id: paddleSubscriptionIdSchema,
   status: z.enum(["active", "canceled", "past_due", "paused", "trialing"]),
   customer_id: paddleCustomerIdSchema.nullable(),
+  /** The payer's address; moved with the payer when a gym is handed over (4b-iii-a). */
+  address_id: paddleAddressIdSchema.nullable().optional(),
   /** A discount on it. Our server never gives one. */
   discount: z.object({ id: z.string().max(60) }).passthrough().nullable().optional(),
   currency_code: z.string().length(3),
@@ -224,6 +236,9 @@ export const paddleTransactionSchema = z.object({
   status: z.enum(["draft", "ready", "billed", "paid", "completed", "canceled", "past_due"]),
   subscription_id: paddleSubscriptionIdSchema.nullable(),
   origin: z.string().max(60),
+  /** Whose it is; for a card window (`subscription_payment_method_change`), whose card it saves. */
+  customer_id: paddleCustomerIdSchema.nullable().optional(),
+  address_id: paddleAddressIdSchema.nullable().optional(),
   currency_code: z.string().length(3),
   items: z
     .array(
