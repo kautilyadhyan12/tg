@@ -27,7 +27,10 @@ const KINDS = {
     testId: 'owner-request',
     title: (gym) => `Be the owner of ${gym}`,
     asked: 'asked you to be the owner.',
-    what: (who) => `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.`,
+    what: (who, request) =>
+      request?.paidUntil
+        ? `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner. Their plan stops renewing and stays paid until ${formatJoinedAt(request.paidUntil)}; then you choose your own plan and pay with your own card.`
+        : `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.`,
     yes: (gym) => `You're now the owner of ${gym}.`,
   },
 };
@@ -97,7 +100,7 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
         </div>
       </div>
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        {words.what(request.ownerName || 'The owner')} The request works until {formatJoinedAt(request.expiresAt)}.
+        {words.what(request.ownerName || 'The owner', request)} The request works until {formatJoinedAt(request.expiresAt)}.
       </p>
       {problem !== null ? (
         <p role="alert" className="text-xs" style={{ color: '#ef4444' }}>

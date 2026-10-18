@@ -175,6 +175,27 @@ describe('Make owner', () => {
     expect(orgService.askOwner).not.toHaveBeenCalled();
   });
 
+  it('a plan paid through Paddle: the box says it stops renewing, paid until a day, and the new owner then chooses one (4b-iii-a)', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, paidUntil: '2026-11-01T00:00:00.000Z' } });
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
+    expect(
+      within(panel.getByTestId('staff-owner')).getByText(
+        "Your plan stops renewing, so you won't be charged again. It stays paid until 1 Nov 2026; then Cora Lim chooses their own plan.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("a plan that stops a hand-over says the server's reason (4b-iii-a)", async () => {
+    const note = "A payment is overdue, so the owner can't be changed until it's paid.";
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA], true).data, paidPlanNote: note } });
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    expect(panel.getByText(note)).toBeTruthy();
+    expect(panel.getByRole('button', { name: 'Make owner' }).disabled).toBe(true);
+  });
+
   it('with another co-owner asked, it names them and opens their page to cancel it', async () => {
     orgService.getStaff.mockResolvedValue(staffAs('u1', [OWNER, CORA_ASKED, DAN, RITA]));
     drawStaff();
@@ -233,6 +254,18 @@ describe('the co-owner asked, on Overview', () => {
     expect(await screen.findByText("You're now the owner of Iron House.")).toBeTruthy();
     expect(orgService.answerOwnerRequest).toHaveBeenCalledWith(ORG.id, REQUEST.id, true);
     expect(onAccepted).toHaveBeenCalledTimes(1);
+  });
+
+  it("a plan paid through Paddle: they're told it stops renewing, paid until a day, and they then choose their own (4b-iii-a)", async () => {
+    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, paidUntil: '2026-11-01T00:00:00.000Z' } } });
+    draw();
+    const box = within(await screen.findByTestId('owner-request'));
+    expect(
+      box.getByText(
+        /Kd Owner stays on as a co-owner\. Their plan stops renewing and stays paid until 1 Nov 2026; then you choose your own plan and pay with your own card\. The request works until/,
+      ),
+    ).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Accept' })).toBeTruthy();
   });
 
   it('Decline says the owner can ask again, and changes nothing else', async () => {

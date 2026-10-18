@@ -147,8 +147,8 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 4b-i. [x] **Co-owners** — merged 2026-10-16 (PR #296).
      - 4b-ii. [x] **The owner hands the gym to a co-owner, who accepts** — merged 2026-10-17 (PR #312).
      - 4b-iii. **A paid gym handed over**: who pays moves at Paddle or Razorpay (split 2026-10-18 by provider, `rulings/2026-10-18-4b-iii-a.md`).
-      - 4b-iii-a. [ ] **A gym paying through Paddle**: the new owner adds their card on Accept and pays from then on.
-      - 4b-iii-b. [ ] **A gym paying through Razorpay**: Razorpay cannot move a plan to another customer.
+      - 4b-iii-a. [ ] **A gym paying through Paddle**: handed over at once; the old owner's plan stops renewing and the new owner then chooses their own.
+      - 4b-iii-b. [ ] **A gym paying through Razorpay**: the same rule as 4b-iii-a, through Razorpay's cancel.
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).

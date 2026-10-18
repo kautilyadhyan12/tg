@@ -389,6 +389,17 @@ export function planHeadline(sub, orgType) {
   return price === null ? size : `${size} · ${price} a month`;
 }
 
+/** A plan handed over with its gym (4b-iii-a): who paid for it, when it stops, and what to do
+ *  then. Null for any other plan. */
+export function handedOverText(sub) {
+  if (sub?.handedOverBy == null) return null;
+  const who = sub.handedOverBy.trim() || 'The last owner';
+  const date = trialEndDateLabel(sub.currentPeriodEnd);
+  return date === null
+    ? `${who} paid for this plan, and it doesn't renew. When it ends, choose your own plan and pay with your own card.`
+    : `${who} paid for this plan, and it stops on ${date}. Then choose your own plan and pay with your own card.`;
+}
+
 /** "Next payment $199 on 25 Oct" for a plan in good standing, "Ends 25 Oct" for one set to
  *  end; null when a smaller size is waiting (that line says what comes next) or there is no
  *  date. */
