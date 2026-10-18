@@ -49,7 +49,6 @@ import type { EmailTransport } from "../../email/resend.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
-import { payerChanging } from "../orgs/coOwners/repo.js";
 import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
 import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
 import type { Snapshot } from "./machine.js";
@@ -513,9 +512,9 @@ export async function openBillingPortal(
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const plan = await repo.managedPlanFor(deps.sql, input.gymId);
   if (plan === null) throw new OrgsError(404, "no_paid_plan", "This plan isn't paid through us, so there's nothing to manage here.");
-  // Handed over (4b-iii-a): Paddle's page signs in as the plan's payer, who is changing. Opened
-  // now it would show the old owner's account to the new one, or let a card be saved on the way.
-  if (await payerChanging(deps.sql, input.gymId)) throw new OrgsError(409, "payer_moving", OWNER_REQUEST_WORDS.payer_moving);
+  // Handed over (4b-iii-a): Paddle's page is the old owner's own account, with their card and
+  // invoices; and from it the plan could be kept, on their card, for a gym they gave away.
+  if (await repo.liveHandedOver(deps.sql, input.gymId)) throw new OrgsError(409, "handed_over_plan", OWNER_REQUEST_WORDS.handed_over_plan);
   // Paddle's page shows everything its customer pays for: it opens only for somebody
   // who manages the billing of every gym that customer pays for. Paddle keeps one customer
   // per email and the window is filled in with the owner's (1e), so an owner's gyms share one.
@@ -1219,6 +1218,36 @@ async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: Paddle
   }
   deps.log.info({ event: "billing.trial_activated", gymId }, "a Paddle trial ending within the hour was charged now");
   return await applyPaddleSubscription(deps, sub.id, false);
+}
+
+/** A plan handed to another owner stops renewing at Paddle (4b-iii-a): told until Paddle's own
+ *  record says it ends with its month, and told again if it is ever kept since. Answers
+ *  whether Paddle now says so. Safe to run any number of times. */
+export async function endHandedOverPlan(deps: BillingDeps, input: { gymId: string; subscriptionRef: string }): Promise<boolean> {
+  const paddle = deps.paddle;
+  if (paddle === null) return false;
+  const current = await paddle.api.getSubscription(input.subscriptionRef);
+  if (current.kind !== "ok") return false;
+  if (current.value.status === "canceled") return true;
+  if (current.value.scheduled_change?.action !== "cancel") {
+    const ended = await paddle.api.cancelAtPeriodEnd(input.subscriptionRef);
+    if (ended.kind !== "ok" || ended.value.scheduled_change?.action !== "cancel") {
+      const refusal = ended.kind === "refused" ? { status: ended.status, code: ended.code } : {};
+      deps.log.error({ event: "billing.handed_over_not_ended", gymId: input.gymId, result: ended.kind, ...refusal }, "a handed-over plan is not yet set to end at Paddle; retrying");
+      return false;
+    }
+  }
+  await repo.markHandedOverEndSent(deps.sql, { ...input, now: deps.now() });
+  return true;
+}
+
+/** The worker's minute: every handed-over plan Paddle has not confirmed ends with its month. */
+export async function endHandedOverPlans(deps: BillingDeps): Promise<number> {
+  let ended = 0;
+  for (const plan of await repo.handedOverPlansToEnd(deps.sql, 50)) {
+    if (await endHandedOverPlan(deps, plan)) ended += 1;
+  }
+  return ended;
 }
 
 /** Cancel at Paddle the trial checkouts whose gym's own trial has ended, so their window can

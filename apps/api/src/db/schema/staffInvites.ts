@@ -177,28 +177,10 @@ export const gymOwnerRequests = pgTable(
     answeredAt: timestamp("answered_at", { withTimezone: true }),
     /** When its email went: one person is emailed at most once a day by these requests. */
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
-    // A gym paying through Paddle (4b-iii-a): Paddle's card window Accept opened for the person
-    // asked, the plan it is for, and that person's Paddle customer and address.
-    cardSubscriptionRef: text("card_subscription_ref"),
-    cardTxnRef: text("card_txn_ref"),
-    cardCustomerRef: text("card_customer_ref"),
-    cardAddressRef: text("card_address_ref"),
-    cardOpenedAt: timestamp("card_opened_at", { withTimezone: true }),
-    /** Pointed back at the plan's own payer, or found saved: nothing left to do with it. */
-    cardClosedAt: timestamp("card_closed_at", { withTimezone: true }),
-    /** After the hand-over: Paddle's payer is the new owner. */
-    payerMovedAt: timestamp("payer_moved_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("gym_owner_requests_pending_uq").on(t.gymId).where(sql`${t.state} = 'pending'`),
     index("gym_owner_requests_user_idx").on(t.userId).where(sql`${t.state} = 'pending'`),
-    index("gym_owner_requests_card_work_idx")
-      .on(t.cardOpenedAt)
-      .where(sql`${t.cardTxnRef} IS NOT NULL AND (${t.cardClosedAt} IS NULL OR (${t.state} = 'accepted' AND ${t.payerMovedAt} IS NULL))`),
-    check(
-      "gym_owner_requests_card_check",
-      sql`(${t.cardTxnRef} IS NULL AND ${t.cardSubscriptionRef} IS NULL AND ${t.cardCustomerRef} IS NULL AND ${t.cardAddressRef} IS NULL AND ${t.cardOpenedAt} IS NULL AND ${t.cardClosedAt} IS NULL AND ${t.payerMovedAt} IS NULL) OR (${t.cardTxnRef} IS NOT NULL AND ${t.cardSubscriptionRef} IS NOT NULL AND ${t.cardCustomerRef} IS NOT NULL AND ${t.cardAddressRef} IS NOT NULL AND ${t.cardOpenedAt} IS NOT NULL)`,
-    ),
     check("gym_owner_requests_state_check", sql`${t.state} IN ('pending','accepted','declined','cancelled','expired')`),
     check("gym_owner_requests_answered_check", sql`(${t.state} = 'pending') = (${t.answeredAt} IS NULL)`),
     check("gym_owner_requests_expires_check", sql`${t.expiresAt} > ${t.createdAt}`),

@@ -602,7 +602,7 @@ if (paddle !== null || razorpay !== null) {
         const startedAt = Date.now();
         const run = await processPaddleEvents(deps);
         const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned + run.ownerCards.handedOver + run.ownerCards.closed > 0) {
+        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned + run.handedOverEnded > 0) {
           log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
         }
       }

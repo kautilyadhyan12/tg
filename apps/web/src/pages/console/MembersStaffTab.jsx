@@ -121,9 +121,8 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
 // `inviting`: whether the Invite staff form is open. The Members page keeps it, because
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
 export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null }) {
-  // `paidPlan`: the gym's plan stops a hand-over for now, `paidPlanNote` says why (4b-ii);
-  // `cardNeeded`: it pays through Paddle, so the new owner adds their card (4b-iii-a).
-  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, cardNeeded: false });
+  // `paidPlan`: the gym is on a paid plan, so it is not handed over (4b-ii).
+  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
   const [invites, setInvites] = useState({ loading: true, error: null, list: [] });
@@ -168,15 +167,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       return null;
     }
     const list = staffAnswer.value.data?.staff ?? [];
-    const answer = staffAnswer.value.data;
-    setStaff({
-      loading: false,
-      error: null,
-      list,
-      paidPlan: answer?.paidPlan === true,
-      paidPlanNote: answer?.paidPlanNote ?? null,
-      cardNeeded: answer?.cardNeeded === true,
-    });
+    setStaff({ loading: false, error: null, list, paidPlan: staffAnswer.value.data?.paidPlan === true });
     return list;
   }, [gymId]);
 
@@ -562,8 +553,6 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           onCancelCoOwner={() => void cancelCoOwner(open)}
           staff={staff.list}
           paidPlan={staff.paidPlan}
-          paidPlanNote={staff.paidPlanNote}
-          cardNeeded={staff.cardNeeded}
           ownerNote={ownerNote !== null && ownerNote.who === open.userId ? ownerNote.message : null}
           onAskOwner={() => void askOwner(open)}
           onCancelOwner={() => void cancelOwner(open)}

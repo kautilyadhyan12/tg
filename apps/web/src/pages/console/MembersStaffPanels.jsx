@@ -654,9 +654,8 @@ function CoOwnerSection({ person, gymName, view, off, note, error, onAsk, onCanc
 
 /** Make owner (ROADMAP 4b-ii): the owner asks a co-owner to take the gym over, and they
  *  answer on their own Overview. Asks first, naming who changes and how; once sent, says it
- *  is waiting and when it ends, with Cancel request. A gym paying through Paddle (4b-iii-a):
- *  the box says the new owner pays from then on, and the wait says when they are adding a card. */
-function OwnerSection({ person, gymName, words, view, paidPlanNote = null, cardNeeded = false, off, note, error, onAsk, onCancel, onOpen }) {
+ *  is waiting and when it ends, with Cancel request. */
+function OwnerSection({ person, gymName, words, view, off, note, error, onAsk, onCancel, onOpen }) {
   const [asking, setAsking] = useState(false);
   const question = useInView(asking);
   const name = person.displayName;
@@ -666,9 +665,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, cardN
       {view.kind === 'waiting' ? (
         <div className="flex flex-col gap-3">
           <p className="c-s14 c-t1 m-0">
-            {view.addingCard
-              ? `${name} pressed Accept and is adding their card. ${gymName} moves to them once it's saved. The request ends on ${formatJoinedAt(view.until)}.`
-              : `You asked ${name} to be the owner. Waiting for them to accept. The request ends on ${formatJoinedAt(view.until)}.`}
+            You asked {name} to be the owner. Waiting for them to accept. The request ends on {formatJoinedAt(view.until)}.
           </p>
           <button type="button" onClick={onCancel} disabled={off} className="c-btn c-btn-s c-btn-sm self-start">
             Cancel request
@@ -676,7 +673,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, cardN
         </div>
       ) : view.kind === 'paid' ? (
         <div className="flex flex-col gap-3">
-          <p className="c-s14 c-t2 m-0">{paidPlanNote ?? `This ${words.it} is on a paid plan, so it can't be handed over.`}</p>
+          <p className="c-s14 c-t2 m-0">This {words.it} is on a paid plan, so it can&apos;t be handed over.</p>
           <button type="button" disabled className="c-btn c-btn-soft c-btn-sm self-start">
             Make owner
           </button>
@@ -700,12 +697,10 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, cardN
       ) : (
         <div ref={question} className="flex flex-col gap-3">
           <p className="c-s14 c-t1 m-0">
-            Make {name} the owner of {gymName}? We&apos;ll email them, and they become the owner when they press Accept
-            {cardNeeded ? ' and add their card' : ''}.
+            Make {name} the owner of {gymName}? We&apos;ll email them, and they become the owner when they press Accept.
           </p>
           <ul className="c-s14 c-t2 m-0 pl-5 flex flex-col gap-1">
             <li>{name} becomes the owner and can add or remove co-owners, including you.</li>
-            {cardNeeded ? <li>{name} pays for the plan from then on, with their own card. You won&apos;t be charged again.</li> : null}
             <li>You stay on as a co-owner and can still do everything else.</li>
             <li>Handing over doesn&apos;t give you a new free trial.</li>
           </ul>
@@ -738,7 +733,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, cardN
   );
 }
 
-export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, staff = [], paidPlan = false, paidPlanNote = null, cardNeeded = false, readOnly, busy, error, coOwnerNote = null, ownerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onAskOwner = () => undefined, onCancelOwner = () => undefined, onOpenPerson = () => undefined, onSeeActivity = null }) {
+export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, staff = [], paidPlan = false, readOnly, busy, error, coOwnerNote = null, ownerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onAskOwner = () => undefined, onCancelOwner = () => undefined, onOpenPerson = () => undefined, onSeeActivity = null }) {
   const coOwner = coOwnerView(person, viewerIsOwner);
   const owner = ownerView(person, viewerIsOwner, staff, paidPlan);
   const off = busy || readOnly;
@@ -782,8 +777,6 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
           gymName={gymName}
           words={words}
           view={owner}
-          paidPlanNote={paidPlanNote}
-          cardNeeded={cardNeeded}
           // A gym with no plan can still be handed over: only a change on its way greys it.
           off={busy}
           note={ownerNote}

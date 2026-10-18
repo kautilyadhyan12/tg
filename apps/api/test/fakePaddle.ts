@@ -3,7 +3,7 @@
 // window, a trialing one) the way a completed checkout does, the customer portal's
 // sessions, and a subscription's price previewed and changed (1c-ii).
 import { randomBytes } from "node:crypto";
-import type { PaddleAddress, PaddleCustomer, PaddlePortalSession, PaddlePrice, PaddleSubscription, PaddleSubscriptionPreview, PaddleTransaction } from "@app/shared";
+import type { PaddleCustomer, PaddlePortalSession, PaddlePrice, PaddleSubscription, PaddleSubscriptionPreview, PaddleTransaction } from "@app/shared";
 import type { PaddleApi, PaddleResult, ProrationMode } from "../src/modules/billing/paddle.js";
 
 /** A trial window as our server made one before 2f-i (1c-ii): a price of its own, the plan's
@@ -75,116 +75,6 @@ export class FakePaddle implements PaddleApi {
   /** Refuse the next trial's charge-now, as a declined card would. */
   refuseNextActivation = false;
   static readonly PRODUCT = "pro_" + "0".repeat(26);
-
-  // A gym handed over (4b-iii-a), as Kd's sandbox answered on 2026-10-18.
-  addresses = new Map<string, { customerId: string; country: string; postal: string | null }>();
-  /** Each subscription's card window, kept until it is used. */
-  cardWindows = new Map<string, string>();
-  /** Whose card each subscription charges: the customer whose window saved it. */
-  cardOf = new Map<string, string>();
-  /** Who each window was filled in for when its person opened it (`openCardWindow`). */
-  private openedFor = new Map<string, string | null>();
-  /** Every payer set on a subscription. */
-  payerMoves: { subscriptionId: string; customerId: string; addressId: string }[] = [];
-  /** A key without `customer.write`/`address.write`, as Kd's was on 2026-10-18. */
-  noCustomerWrite = false;
-  /** Answer this many payer moves with a 503, moving nothing. */
-  payerMoveFailures = 0;
-
-  private address(customerId: string, country = "US", postal: string | null = "10001"): string {
-    const id = paddleId("add");
-    this.addresses.set(id, { customerId, country, postal });
-    return id;
-  }
-
-  findCustomerByEmail(email: string) {
-    const id = this.customersByEmail.get(email.trim().toLowerCase());
-    return Promise.resolve<PaddleResult<PaddleCustomer | null>>(this.ok(id === undefined ? null : { id, email }));
-  }
-  createCustomer(email: string) {
-    if (this.down) return Promise.resolve<PaddleResult<PaddleCustomer>>({ kind: "unavailable", status: 503 });
-    if (this.noCustomerWrite) return Promise.resolve<PaddleResult<PaddleCustomer>>({ kind: "refused", status: 403, code: "forbidden" });
-    if (this.customersByEmail.has(email.toLowerCase())) {
-      return Promise.resolve<PaddleResult<PaddleCustomer>>({ kind: "refused", status: 409, code: "customer_already_exists" });
-    }
-    const id = paddleId("ctm");
-    this.customersByEmail.set(email.toLowerCase(), id);
-    this.customers.set(id, { email, gymId: null });
-    return Promise.resolve(this.ok({ id, email }));
-  }
-  getAddress(customerId: string, addressId: string) {
-    const found = this.addresses.get(addressId);
-    if (found === undefined || found.customerId !== customerId) return Promise.resolve<PaddleResult<PaddleAddress>>({ kind: "not_found" });
-    return Promise.resolve(this.ok({ id: addressId, country_code: found.country, postal_code: found.postal }));
-  }
-  createAddress(customerId: string, input: { countryCode: string; postalCode: string | null }) {
-    if (this.down) return Promise.resolve<PaddleResult<PaddleAddress>>({ kind: "unavailable", status: 503 });
-    if (this.noCustomerWrite) return Promise.resolve<PaddleResult<PaddleAddress>>({ kind: "refused", status: 403, code: "forbidden" });
-    const id = this.address(customerId, input.countryCode, input.postalCode);
-    return Promise.resolve(this.ok({ id, country_code: input.countryCode, postal_code: input.postalCode }));
-  }
-  getCardWindow(subscriptionId: string) {
-    const sub = this.subs.get(subscriptionId);
-    if (sub === undefined) return Promise.resolve<PaddleResult<PaddleTransaction>>({ kind: "not_found" });
-    const kept = this.cardWindows.get(subscriptionId);
-    const open = kept === undefined ? undefined : this.txns.get(kept);
-    if (open !== undefined && open.status === "ready") return Promise.resolve(this.ok(open));
-    const txn: PaddleTransaction = {
-      id: paddleId("txn"),
-      status: "ready",
-      subscription_id: subscriptionId,
-      origin: "subscription_payment_method_change",
-      customer_id: sub.customer_id,
-      address_id: sub.address_id ?? null,
-      currency_code: sub.currency_code,
-      items: [],
-      details: { totals: { grand_total: "0" } },
-    };
-    this.txns.set(txn.id, txn);
-    this.cardWindows.set(subscriptionId, txn.id);
-    return Promise.resolve(this.ok(txn));
-  }
-  setTransactionPayer(transactionId: string, customerId: string, addressId: string) {
-    if (this.down) return Promise.resolve<PaddleResult<PaddleTransaction>>({ kind: "unavailable", status: 503 });
-    const txn = this.txns.get(transactionId);
-    if (txn === undefined) return Promise.resolve<PaddleResult<PaddleTransaction>>({ kind: "not_found" });
-    if (txn.status !== "ready") return Promise.resolve<PaddleResult<PaddleTransaction>>({ kind: "refused", status: 400, code: "transaction_immutable" });
-    const changed = { ...txn, customer_id: customerId, address_id: addressId };
-    this.txns.set(transactionId, changed);
-    return Promise.resolve(this.ok(changed));
-  }
-  setSubscriptionPayer(subscriptionId: string, customerId: string, addressId: string) {
-    if (this.payerMoveFailures > 0) {
-      this.payerMoveFailures -= 1;
-      return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "unavailable", status: 503 });
-    }
-    if (!this.subs.has(subscriptionId)) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
-    this.payerMoves.push({ subscriptionId, customerId, addressId });
-    this.update(subscriptionId, { customer_id: customerId, address_id: addressId });
-    const sub = this.subs.get(subscriptionId);
-    return Promise.resolve<PaddleResult<PaddleSubscription>>(sub === undefined ? { kind: "not_found" } : { kind: "ok", value: sub });
-  }
-
-  /** The person opens the card window in their browser: Paddle reads whose it is then. */
-  openCardWindow(transactionId: string): void {
-    this.openedFor.set(transactionId, this.txns.get(transactionId)?.customer_id ?? null);
-  }
-  /** They type a card and press its button. Paddle refuses a window pointed at somebody else
-   *  since it was opened (measured on Kd's sandbox); otherwise the card pays the plan from then. */
-  saveCard(transactionId: string): boolean {
-    const txn = this.txns.get(transactionId);
-    if (txn === undefined || txn.status !== "ready" || txn.subscription_id === null) return false;
-    const opened = this.openedFor.get(transactionId);
-    if (opened !== undefined && opened !== (txn.customer_id ?? null)) return false;
-    this.txns.set(transactionId, { ...txn, status: "completed" });
-    this.cardOf.set(txn.subscription_id, txn.customer_id ?? "");
-    return true;
-  }
-  /** The next renewal: whose card is charged, and who the receipt goes to. */
-  renewal(subscriptionId: string): { card: string | null; receipt: string | null } {
-    const sub = this.subs.get(subscriptionId);
-    return { card: this.cardOf.get(subscriptionId) ?? sub?.customer_id ?? null, receipt: sub?.customer_id ?? null };
-  }
 
   constructor(private readonly prices: Record<string, { amount: string; currency: string }>) {}
 
@@ -403,6 +293,26 @@ export class FakePaddle implements PaddleApi {
     return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
   }
 
+  /** Subscriptions told to end with their month, and answers to drop first (a 503). */
+  endsAtPeriodEnd: string[] = [];
+  periodEndFailures = 0;
+  cancelAtPeriodEnd(subscriptionId: string) {
+    if (this.periodEndFailures > 0) {
+      this.periodEndFailures -= 1;
+      return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "unavailable", status: 503 });
+    }
+    const sub = this.subs.get(subscriptionId);
+    if (sub === undefined) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
+    this.endsAtPeriodEnd.push(subscriptionId);
+    const at = sub.current_billing_period?.ends_at ?? sub.next_billed_at ?? new Date(this.clock).toISOString();
+    this.update(subscriptionId, { scheduled_change: { action: "cancel", effective_at: at } });
+    return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
+  }
+  /** Does the subscription charge again at its next date? Not once it is set to end. */
+  renews(subscriptionId: string): boolean {
+    return this.subs.get(subscriptionId)?.scheduled_change?.action !== "cancel";
+  }
+
   tick(): string {
     this.clock += 1000;
     return new Date(this.clock).toISOString();
@@ -431,7 +341,6 @@ export class FakePaddle implements PaddleApi {
       id: subId,
       status: trialEnd === null ? "active" : "trialing",
       customer_id: customerId,
-      address_id: this.address(customerId),
       currency_code: txn.currency_code,
       updated_at: this.tick(),
       canceled_at: null,

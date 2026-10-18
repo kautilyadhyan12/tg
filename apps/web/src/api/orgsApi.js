@@ -149,7 +149,6 @@ import {
   cancelOwnerRequestResponseSchema,
   myOwnerRequestResponseSchema,
   answerOwnerRequestResponseSchema,
-  ownerCardResponseSchema,
   ptAppointmentResponseSchema,
   ptPeopleResponseSchema,
   ptTrainersResponseSchema,
@@ -1612,20 +1611,6 @@ export const orgService = {
       answerOwnerRequestResponseSchema,
       'your answer',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request/${encodeURIComponent(requestId)}/${accept ? 'accept' : 'decline'}`, {}),
-    ),
-  /** Paddle's window closed without a card (4b-iii-a): the server shuts it at once. */
-  ownerCardClosed: (gymId, requestId) =>
-    readThrough(
-      ownerCardResponseSchema,
-      'your card',
-      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request/${encodeURIComponent(requestId)}/card`),
-    ),
-  /** Paddle's window saved their card (4b-iii-a): `accepted` once the gym is theirs. */
-  ownerCardSaved: (gymId, requestId) =>
-    readThrough(
-      ownerCardResponseSchema,
-      'your card',
-      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request/${encodeURIComponent(requestId)}/card`, {}),
     ),
 
   /** The gym's membership types (Part 3 §13.1): what it sells and what each costs.

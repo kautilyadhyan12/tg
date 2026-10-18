@@ -510,6 +510,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_current_period_end: Date | null;
       sub_cancel_at_period_end: boolean | null;
       sub_cancel_sent_at: Date | null;
+      sub_handed_over_by: string | null;
       sub_provider: string | null;
       sub_pending_seat_cap: number | null;
       sub_pending_price_minor: number | null;
@@ -555,6 +556,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.current_period_end AS sub_current_period_end,
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
            sub.cancel_sent_at AS sub_cancel_sent_at,
+           sub.handed_over_by AS sub_handed_over_by,
            sub.provider AS sub_provider,
            sub.pending_seat_cap AS sub_pending_seat_cap,
            sub.pending_price_minor AS sub_pending_price_minor,
@@ -723,7 +725,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       SELECT su.status, su.trial_ends_at,
              LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
              p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
-             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider,
+             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider, CASE WHEN su.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = su.handed_over_from), '') END AS handed_over_by,
              ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -769,6 +771,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             current_period_end: r.sub_current_period_end,
             cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
             cancel_sent_at: r.sub_cancel_sent_at,
+            handed_over_by: r.sub_handed_over_by,
             provider: r.sub_provider ?? "none",
             pending_seat_cap: r.sub_pending_seat_cap,
             pending_price_minor: r.sub_pending_price_minor,
@@ -1821,6 +1824,9 @@ export interface GymSubscriptionRow {
   cancelSentAt: Date | null;
   /** Who charges for it: `paddle` for a plan the gym paid for, `none` for its own free trial. */
   provider: string;
+  /** Handed to another owner (4b-iii-a): the old owner who paid for it, by name ("" when they
+   *  have none); it stops with its paid month. Null otherwise. */
+  handedOverBy: string | null;
   /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
   trialSeatCap: number | null;
   /** A smaller size waiting, due at `from` (the end of the month paid). */
@@ -2378,6 +2384,8 @@ interface RawGymSubscription {
   cancel_at_period_end: boolean;
   cancel_sent_at: Date | null;
   provider: string;
+  /** Handed to another owner (4b-iii-a): who paid for it, by the name they go by; absent or null otherwise. */
+  handed_over_by?: string | null;
   pending_seat_cap: number | null;
   pending_price_minor: number | null;
   pending_from: Date | null;
@@ -2400,6 +2408,7 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
     cancelAtPeriodEnd: raw.cancel_at_period_end,
     cancelSentAt: raw.cancel_sent_at,
     provider: raw.provider,
+    handedOverBy: raw.handed_over_by ?? null,
     trialSeatCap: raw.trial_seat_cap,
     pending:
       raw.pending_from === null || raw.pending_price_minor === null || raw.pending_seat_cap === null
@@ -2419,7 +2428,7 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
     SELECT s.status, s.trial_ends_at,
            LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
            p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
-           s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider,
+           s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider, CASE WHEN s.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = s.handed_over_from), '') END AS handed_over_by,
            ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -2951,9 +2960,7 @@ export type RemoveMemberOutcome =
   /** "Also remove from staff" for the owner: the owner leaves through a hand-over (4b-ii). */
   | { kind: "owner_stays_owner" }
   /** An owner's row the caller may not touch: only the owner removes a co-owner (4b-i). */
-  | { kind: "owner_row_locked" }
-  /** A co-owner adding their card to become the owner (4b-iii-a): Cancel request first. */
-  | { kind: "adding_card" };
+  | { kind: "owner_row_locked" };
 
 /** PART 3 §4.3's REMOVE — "sets `removed_at` (seat freed instantly; history
  *  retained)".
@@ -3027,7 +3034,6 @@ export async function removeMember(
       if (staff.role === "owner") {
         const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId, selfMay: true });
         if (refusal !== null && !(refusal === "main_owner" && input.userId === input.actorUserId)) return { kind: "owner_row_locked" };
-        if (input.alsoStaff && (await cardWindowOpen(tx, input.gymId, input.userId))) return { kind: "adding_card" };
       }
       if (input.alsoStaff && staff.owns) return { kind: "owner_stays_owner" };
     }
@@ -3883,24 +3889,12 @@ export type UpdateStaffOutcome =
   | { kind: "unchanged"; staff: StaffRow }
   | { kind: "not_staff" }
   | { kind: "is_owner" }
-  | { kind: "owner_row_locked" }
-  | { kind: "adding_card" };
+  | { kind: "owner_row_locked" };
 
 /** WHO MAY TOUCH AN OWNER'S ROW (ROADMAP 4b-i, Kd 2026-10-16): only the gym's own owner,
  *  and only a co-owner's. The owner's own row is changed by nobody, and a co-owner holds
  *  `staff.manage` but cannot change, tick or remove the owner or another co-owner.
  *  Written once and asked by all three doors (role, ticks, remove), in their transaction. */
-/** A card window open for this co-owner (4b-iii-a): their role and their staff place wait
- *  until the owner cancels the hand-over, which points the window back first. Written out here
- *  rather than imported, so this file does not import the co-owners' repo that imports it. */
-async function cardWindowOpen(tx: TransactionSql, gymId: string, userId: string): Promise<boolean> {
-  const rows = await tx`
-    SELECT 1 FROM gym_owner_requests
-    WHERE gym_id = ${gymId} AND user_id = ${userId} AND state = 'pending'
-      AND card_txn_ref IS NOT NULL AND card_closed_at IS NULL`;
-  return rows.length > 0;
-}
-
 async function ownerRowRefusal(
   tx: TransactionSql,
   input: { gymId: string; targetUserId: string; actorUserId: string; selfMay?: boolean },
@@ -3956,7 +3950,6 @@ export async function updateStaffRole(
       const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId });
       if (refusal === "main_owner") return { kind: "is_owner" };
       if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
-      if (await cardWindowOpen(tx, input.gymId, input.userId)) return { kind: "adding_card" };
     }
 
     // The same role under the same name. A gym's own role is a trainer's underneath, so
@@ -4154,8 +4147,7 @@ export type RemoveStaffOutcome =
   | { kind: "removed" }
   | { kind: "not_staff" }
   | { kind: "last_owner" }
-  | { kind: "owner_row_locked" }
-  | { kind: "adding_card" };
+  | { kind: "owner_row_locked" };
 
 /** Take somebody off staff. **They stay a MEMBER** — the two are different
  *  relationships and Kd was shown that before approving: this takes away the
@@ -4223,7 +4215,6 @@ export async function removeStaff(
       const refusal = await ownerRowRefusal(tx, { gymId: input.gymId, targetUserId: input.userId, actorUserId: input.actorUserId, selfMay: true });
       if (refusal === "main_owner") return { kind: "last_owner" };
       if (refusal === "owner_row_locked") return { kind: "owner_row_locked" };
-      if (await cardWindowOpen(tx, input.gymId, input.userId)) return { kind: "adding_card" };
     }
     if (role === "owner") {
       const otherOwners = await tx<{ n: number }[]>`

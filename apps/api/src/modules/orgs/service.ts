@@ -1352,6 +1352,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
         : null,
     subscribed,
     paidThrough,
+    handedOverBy: paid ? row.handedOverBy : null,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
     nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
     pendingSize:
@@ -2090,8 +2091,6 @@ export async function removeOrgMember(
       throw new OrgsError(403, "staff_owner_only", "Only the owner can remove staff from the app.");
     case "owner_row_locked":
       throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
-    case "adding_card":
-      throw new OrgsError(409, "adding_card", OWNER_REQUEST_WORDS.adding_card);
     case "owner_stays_owner":
       throw new OrgsError(
         409,
@@ -2143,10 +2142,10 @@ export async function listOrgStaff(
   const now = deps.now?.() ?? new Date();
   const asked = await coOwnerRepo.waitingRequests(deps.sql, gymId, now);
   // The co-owner asked to be the owner (4b-ii), and what the gym's plan means for a hand-over:
-  // stopped for now, with why, or one where the new owner adds their card (4b-iii-a).
+  // stopped for now, with why, or a Paddle plan that stops renewing and stays paid until a day.
   const toOwner = await coOwnerRepo.waitingOwnerRequest(deps.sql, gymId, now);
   const plan = await coOwnerRepo.gymHandOverPlan(deps.sql, gymId);
-  const paidPlan = plan.kind !== "none" && plan.kind !== "paddle";
+  const paidPlan = plan.kind === "paid_plan" || plan.kind === "plan_overdue";
   // Whose current list record is certainly theirs: removing them from the app moves it
   // to past members, and the Staff tab's box says so (4a-ii round one, L5).
   const members = rows.filter((r) => r.isMember).map((r) => r.userId);
@@ -2167,12 +2166,12 @@ export async function listOrgStaff(
         ...toOrgStaff(r, userId),
         movesRecord: onList.has(r.userId),
         coOwnerRequest: until === undefined ? null : { expiresAt: until.toISOString() },
-        ownerRequest: toOwner?.userId === r.userId ? { expiresAt: toOwner.expiresAt.toISOString(), addingCard: toOwner.addingCard } : null,
+        ownerRequest: toOwner?.userId === r.userId ? { expiresAt: toOwner.expiresAt.toISOString() } : null,
       };
     }),
     paidPlan,
-    paidPlanNote: plan.kind === "none" || plan.kind === "paddle" ? null : OWNER_REQUEST_WORDS[plan.kind],
-    cardNeeded: plan.kind === "paddle",
+    paidPlanNote: plan.kind === "paid_plan" || plan.kind === "plan_overdue" ? OWNER_REQUEST_WORDS[plan.kind] : null,
+    paidUntil: plan.kind === "paddle" ? (plan.paidUntil?.toISOString() ?? null) : null,
   });
 }
 
@@ -2291,8 +2290,6 @@ export async function updateOrgStaffRole(
       );
     case "owner_row_locked":
       throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
-    case "adding_card":
-      throw new OrgsError(409, "adding_card", OWNER_REQUEST_WORDS.adding_card);
     default:
       return assertNever(outcome);
   }
@@ -2470,8 +2467,6 @@ export async function removeOrgStaff(
       throw new OrgsError(409, "last_owner", `The ${orgWords(org.orgType).it}'s owner can't be removed from staff.`);
     case "owner_row_locked":
       throw new OrgsError(409, "owner_row_locked", CO_OWNER_WORDS.owner_row_locked);
-    case "adding_card":
-      throw new OrgsError(409, "adding_card", OWNER_REQUEST_WORDS.adding_card);
     default:
       return assertNever(outcome);
   }

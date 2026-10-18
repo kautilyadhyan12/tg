@@ -567,6 +567,10 @@ export const orgSubscriptionSchema = z.object({
    *  (`PLAN_CANCEL_DECIDE_HOURS` before `currentPeriodEnd`); after it the cancel is with
    *  Razorpay, which cannot take it back. Null otherwise. */
   keepUntil: z.string().nullable().default(null),
+  /** Handed to another owner (4b-iii-a): the old owner who paid for it, by name ("" when they
+   *  have none). It stops renewing and stays paid until `currentPeriodEnd`; the new owner then
+   *  chooses their own plan. Null otherwise. */
+  handedOverBy: z.string().nullable().default(null),
   /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). In a trial this
    *  is only a paid trial made before 2026-09-30: its card saved and the first payment taken when
    *  the trial ends (`currentPeriodEnd`), `priceLabel` the plan's price. Paying now ends the
@@ -2144,9 +2148,8 @@ export const orgStaffSchema = z.object({
   coOwner: z.boolean().optional(),
   /** The owner has asked them to be a co-owner and they have not answered: when it ends. */
   coOwnerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
-  /** The owner has asked this co-owner to be the owner and they have not answered (4b-ii).
-   *  `addingCard`: they pressed Accept and Paddle's card window is open for them (4b-iii-a). */
-  ownerRequest: z.object({ expiresAt: z.string().datetime(), addingCard: z.boolean().optional() }).nullable().optional(),
+  /** The owner has asked this co-owner to be the owner and they have not answered (4b-ii). */
+  ownerRequest: z.object({ expiresAt: z.string().datetime() }).nullable().optional(),
 });
 export type OrgStaff = z.infer<typeof orgStaffSchema>;
 
@@ -2155,8 +2158,9 @@ export const orgStaffResponseSchema = z.object({
   /** The gym's plan stops a hand-over for now (4b-ii); `paidPlanNote` says why. */
   paidPlan: z.boolean().optional(),
   paidPlanNote: z.string().max(200).nullable().optional(),
-  /** The gym pays through Paddle: the new owner adds their card and pays from then (4b-iii-a). */
-  cardNeeded: z.boolean().optional(),
+  /** A plan paid through Paddle: handed over, it stops renewing and stays paid until this day,
+   *  when the new owner chooses their own plan (4b-iii-a). Null otherwise. */
+  paidUntil: z.string().datetime().nullable().optional(),
 });
 export type OrgStaffResponse = z.infer<typeof orgStaffResponseSchema>;
 
