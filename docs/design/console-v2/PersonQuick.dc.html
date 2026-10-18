@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quick boxes on a member's page</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 48px 56px 64px">
+<div class="stack-l" style="max-width: 1328px; margin: 0 auto">
+<div class="stack-xs"><h1 class="h1">Quick boxes on a member's page</h1><p class="sub">Each one floats under the button that opened it. Nothing on the page moves, and Escape or Cancel closes it.</p></div>
+<div class="g2" style="gap: 40px; align-items: start">
+
+<div class="stack-m">
+<p class="lbl">More, beside Edit</p>
+<div class="row-s end" style="width: 420px"><span class="btn btn-s">Edit</span><span class="btn btn-s" style="border-color: var(--accent)">More<svg class="ic" viewBox="0 0 24 24" style="stroke-width: 3"><path d="M12 12h.01M19 12h.01M5 12h.01"/></svg></span></div>
+<div class="menu-pop" style="position: relative; width: 340px; margin-left: 80px">
+<div class="mi"><svg class="ic" viewBox="0 0 24 24"><path d="M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2zM4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><div class="stack-2"><span class="body w6">Share the invitation</span><span class="small">Its words and link, to send yourself</span></div></div>
+<div class="mi"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 21V9a9 9 0 0 0 9 9"/></svg><div class="stack-2"><span class="body w6">Merge duplicate</span><span class="small">When this person is on your list twice</span></div></div>
+<div class="hr" style="margin: 6px 8px"></div>
+<div class="mi"><svg class="ic bad" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 11h-6"/></svg><div class="stack-2"><span class="body w6 bad">Remove</span><span class="small">When they have left your gym</span></div></div>
+</div>
+<p class="small" style="max-width: 460px">Remove moves to the bottom, under a line, in red: the one that takes something away is last and apart.</p>
+</div>
+
+<div class="stack-m">
+<p class="lbl">Add tag</p>
+<span class="btn btn-s btn-sm" style="align-self: flex-start; border-color: var(--accent)"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Add tag</span>
+<div class="pop" style="position: relative; width: 400px">
+<div class="field"><span class="flabel">Pick one of your tags</span><div class="row-s wrap"><span class="chip">Evening crowd</span><span class="chip chip-on">Student</span><span class="chip">VIP</span><span class="chip">Beginner</span></div></div>
+<div class="field"><span class="flabel">Or make a new tag</span><div class="input"><span class="phd">Such as VIP or Beginner</span></div><span class="hint">30 characters at most.</span></div>
+<div class="row-s"><span class="btn btn-p btn-sm">Add tag</span><span class="btn btn-q btn-sm">Cancel</span></div>
+</div>
+</div>
+
+<div class="stack-m">
+<p class="lbl">Choose who pays</p>
+<span class="btn btn-s" style="align-self: flex-start; border-color: var(--accent)">Choose who pays</span>
+<div class="pop" style="position: relative; width: 440px">
+<div class="field"><span class="flabel">Find who pays, by name or member number</span><div class="input input-on"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0M21 21l-4.3-4.3"/></svg><span>Mee</span></div></div>
+<div class="stack-2" style="margin: -4px -8px">
+<div class="mi mi-on" style="align-items: center"><div class="av av-sm">MP</div><div class="stack-2 grow"><span class="body w6">Meera Pillai</span><span class="small">No. 14 · meera.pillai@gmail.com</span></div><svg class="ic t3" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+<div class="mi" style="align-items: center"><div class="av av-sm">MK</div><div class="stack-2 grow"><span class="body w6">Meet Kulkarni</span><span class="small">No. 22 · Past member</span></div><svg class="ic t3" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></div>
+</div>
+<span class="btn btn-q btn-sm" style="align-self: flex-start">Back</span>
+</div>
+<div class="pop" style="position: relative; width: 440px">
+<div class="stack-2"><h3 class="h3">Meera Pillai pays for Maya Patel?</h3><p class="small" style="color: var(--t2)">From now on, Maya Patel's bills, receipts and overdue messages go to Meera Pillai.</p></div>
+<div class="row-s"><span class="btn btn-p btn-sm">Save</span><span class="btn btn-q btn-sm">Back</span></div>
+</div>
+</div>
+
+<div class="stack-m">
+<p class="lbl">A payment's ⋯</p>
+<div class="payline" style="max-width: 560px; margin-top: 0"><svg class="ic good" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg><div class="stack-2 grow"><span class="body num">₹2,500.00 paid by bank transfer</span><span class="small">18 Oct 2026 · recorded by Arjun Mehta</span></div><span class="btn btn-s btn-sm">View receipt</span><span class="icon-btn icon-btn-sm" style="border-color: var(--accent)" aria-label="More for this payment"><svg class="ic ic-s" viewBox="0 0 24 24" style="stroke-width: 3"><path d="M12 12h.01M19 12h.01M5 12h.01"/></svg></span></div>
+<div class="menu-pop" style="position: relative; width: 340px; margin-left: 220px">
+<div class="mi"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><div class="stack-2"><span class="body w6">Note a refund</span><span class="small">You gave some or all of it back.</span></div></div>
+<div class="hr" style="margin: 6px 8px"></div>
+<div class="mi"><svg class="ic bad" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M4.9 4.9l14.2 14.2"/></svg><div class="stack-2"><span class="body w6 bad">Void payment</span><span class="small">It was recorded by mistake. The bill is owed again.</span></div></div>
+</div>
+</div>
+
+<div class="stack-m">
+<p class="lbl">Taking a tag off</p>
+<div class="row-s"><span class="pill-x" style="border-color: var(--accent)">Wants PT<svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="pop" style="position: relative; width: 380px">
+<p class="body">Take the tag <b>Wants PT</b> off Maya Patel? It stays one of your tags.</p>
+<div class="row-s"><span class="btn btn-s btn-sm">Take it off</span><span class="btn btn-q btn-sm">Keep it</span></div>
+</div>
+</div>
+
+<div class="stack-m">
+<p class="lbl">Deleting a note</p>
+<div class="li top" style="max-width: 560px; border-bottom: 0"><div class="av av-sm">AM</div><div class="stack-2 grow"><p class="body">Asked about the annual plan; call back after Diwali.</p><span class="small">Arjun Mehta · 18 October 2026</span></div><span class="btn btn-q btn-sm" style="color: var(--bad)">Delete</span></div>
+<div class="pop pop-r" style="position: relative; width: 380px; margin-left: 180px">
+<p class="body">Delete this note? It can't be brought back.</p>
+<div class="row-s"><span class="btn btn-d btn-sm">Delete note</span><span class="btn btn-q btn-sm">Keep it</span></div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

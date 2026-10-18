@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a membership type — a page of its own, in steps</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+<div class="rail">
+<div class="rail-gym"><div class="rail-logo"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="grow"><div class="rail-name ell">Northside Strength</div><div class="rail-meta">Pune · Gym</div></div><svg class="ic ic-s" viewBox="0 0 24 24" style="color: var(--rail-t3)"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg></div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/></svg>Overview</a>
+<div class="rail-grp">Today</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"/></svg>Attendance</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"/></svg>Classes</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"/></svg>Personal training</a>
+<div class="rail-grp">People</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Members &amp; staff</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"/></svg>Leads</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"/></svg>At risk</a>
+<div class="rail-grp">Money</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg>Sell</a>
+<a class="ni ni-on"><svg class="ic" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"/></svg>Memberships</a>
+<div class="rail-grp">Community</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Updates</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Events</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M7.2 15L2.7 7.1a2 2 0 0 1 .1-2.2l1.6-2.1A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.1a2 2 0 0 1 .1 2.2L16.8 15M11 12L5.1 2.2M13 12l5.9-9.8M8 7h8M7 17a5 5 0 1 0 10 0a5 5 0 1 0-10 0"/></svg>Challenges</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>Leaderboard</a>
+<div class="rail-grp">Manage</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>Reports</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg>Settings</a>
+<div class="rail-foot">
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Your organisations</a>
+<div class="seg-rail"><span>Light</span><span class="on">Dark</span><span>Auto</span></div>
+<div class="rail-me"><span class="rail-av">AM</span><div class="grow"><div class="rail-name s14 ell">Arjun Mehta</div><div class="rail-meta">Owner</div></div><span class="icon-btn icon-btn-sm icon-btn-q" style="color: var(--rail-t3)" aria-label="Sign out"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
+</div>
+</div>
+<div class="main">
+<div class="page">
+<a class="crumb"><svg class="ic" viewBox="0 0 24 24"><path d="M12 19l-7-7 7-7M19 12H5"/></svg>Memberships</a>
+<div class="ph"><div class="ph-t"><h1 class="h1">Add a membership type</h1><p class="sub">Give it your name and price, then say how it is paid and what it includes.</p></div></div>
+<div class="cols" style="grid-template-columns: minmax(0,1fr) 340px">
+<div class="stack">
+<div class="card" style="padding: 28px">
+<div class="row-s" style="margin-bottom: 20px"><span class="guide-n">1</span><h2 class="h2">Name it</h2></div>
+<div class="stack" style="gap: 20px">
+<div class="field"><span class="flabel">Name</span><div class="input input-on">Gold Monthly</div></div>
+<div class="field"><span class="flabel">Description <span class="opt">(optional)</span></span><div class="input"><span class="phd">For example: All classes and open gym</span></div></div>
+</div>
+</div>
+<div class="card" style="padding: 28px">
+<div class="row-s" style="margin-bottom: 20px"><span class="guide-n">2</span><h2 class="h2">How is it paid?</h2></div>
+<div class="g3s" style="gap: 10px">
+<div class="rcard rcard-on"><span class="radio radio-on"></span><div class="stack-2"><span class="rt">Recurring</span><span class="rs">Charged every week, month or year until it is cancelled.</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="stack-2"><span class="rt">One-time payment</span><span class="rs">Paid once. Lasts a set time, then ends.</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="stack-2"><span class="rt">Class pack</span><span class="rs">Paid once. A number of classes to use within a set time.</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="stack-2"><span class="rt">Day pass</span><span class="rs">Paid once. One visit, on the day.</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="stack-2"><span class="rt">Trial</span><span class="rs">A short first membership, free or paid.</span></div></div>
+</div>
+<p class="small" style="margin-top: 14px">This can't be changed once it is saved. To sell it another way later, archive this one and add a new one.</p>
+</div>
+<div class="card" style="padding: 28px">
+<div class="row-s" style="margin-bottom: 20px"><span class="guide-n">3</span><h2 class="h2">Price and how often</h2></div>
+<div class="stack" style="gap: 20px">
+<div class="frow">
+<div class="field"><span class="flabel">Price</span><div class="input"><span class="prefix">₹</span><span class="num">2,500.00</span></div><span class="hint">0 means free.</span></div>
+<div class="field"><span class="flabel">Tax</span><div class="input select"><span>GST 18%</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><a class="s13 w6">Add a tax rate</a></div>
+</div>
+<div class="field"><span class="flabel">Charged every</span><div class="row-s"><div class="input" style="width: 90px"><span class="num">1</span></div><div class="input select" style="width: 200px"><span>month</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div></div>
+</div>
+</div>
+<div class="card" style="padding: 28px">
+<div class="row-s" style="margin-bottom: 20px"><span class="guide-n">4</span><h2 class="h2">What it includes</h2></div>
+<div class="stack" style="gap: 22px">
+<div class="field"><span class="flabel">Classes</span><div class="seg seg-w"><span class="on">Unlimited classes</span><span>A limit on classes</span><span>No classes, gym only</span></div></div>
+<div class="field"><span class="flabel">Which classes</span><div class="seg seg-w"><span class="on">Every class</span><span>Only the classes I tick</span></div></div>
+<div class="check"><span class="box"></span><div class="stack-2"><span class="body w6">Includes personal training</span><span class="small">Sessions with a coach can be booked on this membership.</span></div></div>
+</div>
+</div>
+<div class="row-s"><span class="btn btn-p btn-lg"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Add membership type</span><span class="btn btn-q">Cancel</span></div>
+</div>
+<div class="card stack-m" style="position: sticky; top: 24px; border-color: rgba(255,138,31,.3)">
+<span class="lbl">You're adding</span>
+<div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Gold Monthly</h2><span class="tag tag-plain" style="align-self: flex-start">Recurring</span></div>
+<div class="stack-2"><span class="big" style="font-size: 34px; line-height: 40px">₹2,500.00</span><span class="small">every month · includes GST 18%</span></div>
+<div class="hr"></div>
+<div class="stack-xs">
+<div class="row-s"><svg class="ic good" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg><span class="sub">Unlimited classes</span></div>
+<div class="row-s"><svg class="ic good" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg><span class="sub">Every class</span></div>
+<div class="row-s"><svg class="ic t3" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg><span class="sub">No personal training</span></div>
+</div>
+<p class="small">This is how it reads when you give it to a member and in their app.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

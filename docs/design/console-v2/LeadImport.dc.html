@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Import leads — after a file is read</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1260px">
+<dc-import name="Leads" look="{{lookName}}" hint-size="1440px,1000px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 680px">
+<div class="dw-h">
+<div class="row" style="gap: 14px"><span class="icon-btn" style="background: var(--raise); pointer-events: none"><svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h2M14 13h2M8 17h2M14 17h2"/></svg></span><div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Import leads</h2><span class="small">enquiries-october.xlsx</span></div></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b stack" style="gap: 24px">
+
+<div class="card-0">
+<div class="card-hp" style="padding: 16px 20px; background: var(--good-bg); border-bottom-color: transparent"><div class="row-s"><svg class="ic" viewBox="0 0 24 24" style="color: var(--good)"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4L12 14l-3-3"/></svg><h3 class="h3">42 people will be added to your leads</h3></div></div>
+<div style="padding: 4px 20px 12px">
+<div class="li"><div class="stack-2 grow"><span class="body w6">Ritika Shah</span><span class="small">ritika.s@gmail.com · 98200 11223</span></div><span class="small">Social media · Instagram</span></div>
+<div class="li"><div class="stack-2 grow"><span class="body w6">Varun Iyer</span><span class="small">varun.iyer@gmail.com</span></div><span class="small">Website</span></div>
+<div class="li"><div class="stack-2 grow"><span class="body w6">Neha Kulkarni</span><span class="small">98901 44521</span></div><span class="small">A friend</span></div>
+<div class="li"><div class="stack-2 grow"><span class="body w6">Imran Sheikh</span><span class="small">imran.sheikh@gmail.com · 99230 67112</span></div><span class="small">Walked in</span></div>
+<div class="li"><div class="stack-2 grow"><span class="body w6">Tanvi Desai</span><span class="small">tanvi.desai@gmail.com</span></div><span class="small">Social media · Facebook</span></div>
+<div style="padding-top: 12px"><a class="s14 w6">See all 42</a></div>
+</div>
+</div>
+
+<div class="card-0">
+<div class="card-hp" style="padding: 16px 20px"><div class="row-s"><svg class="ic warn" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 8v4M12 16h.01"/></svg><h3 class="h3">Not added (3)</h3></div></div>
+<div style="padding: 4px 20px 8px">
+<div class="li"><span class="body w6 grow">Ananya Iyer</span><span class="small">Already a member</span></div>
+<div class="li"><span class="body w6 grow">Kavya Rao</span><span class="small">Already one of your leads — left as they are</span></div>
+<div class="li"><span class="body w6 grow">Row 31</span><span class="small">No name</span></div>
+</div>
+</div>
+
+<div class="stack" style="gap: 10px">
+<div class="row between"><h3 class="h3">Your columns</h3><a class="s14 w6">Change</a></div>
+<div class="well stack" style="gap: 8px">
+<p class="s14" style="color: var(--t2)"><span class="w6 t1">Read:</span> Full name, E-mail, Mobile, Source, Comments</p>
+<p class="s14" style="color: var(--t2)"><span class="w6 t1">Not used:</span> Enquiry date</p>
+<p class="s14" style="color: var(--t2)"><span class="w6 t1">Left out:</span> Aadhaar no. (we never keep ID numbers)</p>
+</div>
+</div>
+
+<div class="callout callout-info"><svg class="ic" viewBox="0 0 24 24"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 16v-4M12 8h.01"/></svg><p class="s14">Nobody will be emailed. “Happy to hear from us” starts unticked on each of them, because a file can't show they agreed to emails. Tick it on a lead when they do.</p></div>
+
+<div class="check" style="padding: 14px 16px; border-radius: 12px; border: 1px solid var(--ctl-line)"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="body w5">These people asked Northside Strength about joining, and I have permission to store their details.</span></div>
+</div>
+<div class="dw-f"><span class="btn btn-p">Add 42 leads</span><span class="btn btn-s">Choose another file</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1260}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

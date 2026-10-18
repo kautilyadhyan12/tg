@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create your organisation</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.tcard{display:flex;flex-direction:column;gap:4px;padding:16px;border-radius:14px;border:1px solid var(--ctl-line);min-height:92px}
+.tcard-on{border-color:var(--accent);background:var(--soft)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell" style="min-height: 900px">
+<div class="rail">
+<div class="rail-gym"><div class="rail-logo"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="grow"><div class="rail-name">Gym console</div><div class="rail-meta">Choose an organisation</div></div></div>
+<div class="rail-foot">
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Your organisations</a>
+<div class="seg-rail"><span>Light</span><span class="on">Dark</span><span>Auto</span></div>
+<div class="rail-me"><span class="rail-av">AM</span><div class="grow"><div class="rail-name s14 ell">Arjun Mehta</div><div class="rail-meta">arjun.mehta@gmail.com</div></div><span class="icon-btn icon-btn-sm icon-btn-q" style="color: var(--rail-t3)" aria-label="Sign out"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
+</div>
+</div>
+<div class="main">
+<div class="page">
+<a class="crumb"><svg class="ic" viewBox="0 0 24 24"><path d="M12 19l-7-7 7-7M19 12H5"/></svg>Your organisations</a>
+<div class="ph"><div class="ph-t"><h1 class="h1">Create your organisation</h1><p class="sub">Then you can bring your members in: import your list, or add people one at a time.</p></div></div>
+<div class="cols" style="grid-template-columns: minmax(0,1fr) 340px">
+<div class="card" style="padding: 32px">
+<div class="form">
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">1 · What is it?</h3></div>
+<div class="g3s" style="gap: 10px">
+<div class="tcard tcard-on"><div class="row between"><span class="body w6">Gym</span><span class="radio radio-on"></span></div><span class="small" style="color: var(--t2)">A gym or fitness centre with members</span></div>
+<div class="tcard"><div class="row between"><span class="body w6">Boutique studio</span><span class="radio"></span></div><span class="small">Small group classes with clients</span></div>
+<div class="tcard"><div class="row between"><span class="body w6">CrossFit box</span><span class="radio"></span></div><span class="small">Coached classes with members</span></div>
+<div class="tcard"><div class="row between"><span class="body w6">Yoga studio</span><span class="radio"></span></div><span class="small">Yoga classes with members</span></div>
+<div class="tcard"><div class="row between"><span class="body w6">Pilates studio</span><span class="radio"></span></div><span class="small">Mat and reformer classes with clients</span></div>
+</div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">2 · About it</h3></div>
+<div class="field"><span class="flabel">Gym name</span><div class="input input-on">Iron House</div></div>
+<div class="frow">
+<div class="field"><span class="flabel">City <span class="opt">(optional)</span></span><div class="input">Pune</div></div>
+<div class="field"><span class="flabel">Country</span><div class="input select"><span>India</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><span class="hint">This decides the currency you are billed in.</span></div>
+</div>
+<div class="frow">
+<div class="field"><span class="flabel">Time zone</span><div class="input select"><span>Asia/Kolkata</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div><span class="hint">Your daily figures use this.</span></div>
+<div class="field"><span class="flabel">Mobile number for payments</span><div class="input"><span class="prefix">+91</span><span class="phd">98765 43210</span></div><span class="hint">Yours, as the owner: Razorpay uses it for messages about your payments.</span></div>
+</div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">3 · Do you train here too?</h3></div>
+<div class="g2s" style="gap: 10px">
+<div class="tcard"><div class="row between"><span class="body w6">Yes, I train here too</span><span class="radio"></span></div><span class="small">You get the member app on your phone. It takes one of your members' places, like any member.</span></div>
+<div class="tcard tcard-on"><div class="row between"><span class="body w6">No, I only run it</span><span class="radio radio-on"></span></div><span class="small" style="color: var(--t2)">You get the console only. You can add yourself later from Members.</span></div>
+</div>
+</div>
+<div class="row-s" style="border-top: 1px solid var(--line); padding-top: 24px"><span class="btn btn-p btn-lg">Create</span><span class="btn btn-q">Cancel</span></div>
+</div>
+</div>
+<div class="stack">
+<div class="card stack-m">
+<h3 class="h3">After you press Create</h3>
+<div class="row top"><span class="guide-n">1</span><p class="sub">Your Overview opens, with seven steps to set your gym up.</p></div>
+<div class="row top"><span class="guide-n">2</span><p class="sub">Start your free trial: 10 days, for up to 100 members, no card needed.</p></div>
+<div class="row top"><span class="guide-n">3</span><p class="sub">Bring your members in, then invite them to the app.</p></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

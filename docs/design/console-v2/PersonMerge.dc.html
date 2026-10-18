@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Merge a duplicate — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.cmp{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,1fr);gap:0}
+.cmp>div{padding:11px 14px;border-bottom:1px solid var(--line);font-size:14.5px;line-height:20px;min-width:0;overflow-wrap:anywhere}
+.cmp .k{color:var(--t3);font-size:14px}
+.cmp .d{background:var(--warn-bg)}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1160px">
+<dc-import name="PersonMaya" look="{{lookName}}" hint-size="1440px,1488px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 780px">
+<div class="dw-h">
+<div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Merge duplicate</h2><span class="small">The two records become one. Choose the one to keep; nothing changes until you press Merge.</span></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b stack" style="gap: 20px">
+<div class="row-s"><span class="tag tag-warn">3 of 11 details differ</span><span class="small">Shaded rows are different.</span></div>
+<div class="card-0">
+<div class="cmp">
+<div class="k" style="background: var(--raise)"></div>
+<div style="background: var(--raise)"><div class="row-s"><span class="radio radio-on"></span><span class="w6">Keeping</span></div></div>
+<div style="background: var(--raise)"><div class="row-s"><span class="radio"></span><span class="t3">Keep this one</span></div></div>
+<div class="k">Name</div><div>Maya Patel</div><div>Maya Patel</div>
+<div class="k">Email</div><div class="d">maya.patel@gmail.com</div><div class="d">maya.p@yahoo.com</div>
+<div class="k">Phone</div><div class="num">+91 98201 44521</div><div class="num">+91 98201 44521</div>
+<div class="k">Member number</div><div class="d num">1</div><div class="d num">23</div>
+<div class="k">Membership</div><div>Gold Monthly</div><div class="t3">—</div>
+<div class="k">Join date</div><div class="d t3">Not set</div><div class="d">2 Oct 2026</div>
+<div class="k">Date of birth</div><div>12 Mar 1994</div><div>12 Mar 1994</div>
+<div class="k" style="border-bottom: 0">Tags</div><div style="border-bottom: 0">Morning crowd, Wants PT</div><div style="border-bottom: 0" class="t3">—</div>
+</div>
+</div>
+<div class="raise stack-s" style="padding: 18px 20px">
+<h3 class="h3">After the merge</h3>
+<div class="row between"><span class="sub">Email</span><span class="body">maya.patel@gmail.com</span></div>
+<div class="row between"><span class="sub">Member number</span><span class="body num">1</span></div>
+<div class="row between"><span class="sub">Join date</span><span class="row-s"><span class="body">2 Oct 2026</span><span class="tag tag-plain">from the other record</span></span></div>
+<p class="small">Their memberships stay as they are. Not kept from the record removed: maya.p@yahoo.com, member number 23.</p>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 21V9a9 9 0 0 0 9 9"/></svg>Merge</span><span class="btn btn-s">Different people</span><span class="btn btn-q" style="margin-left: auto">Back</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

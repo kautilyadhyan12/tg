@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Money questions — each asks first, in the middle</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.dlg{background:var(--sheet);border:1px solid var(--card-line);border-radius:20px;box-shadow:var(--pop);padding:26px;display:flex;flex-direction:column;gap:18px}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 48px 56px 64px; background: linear-gradient(180deg, var(--page), var(--page))">
+<div class="stack-l" style="max-width: 1328px; margin: 0 auto">
+<div class="stack-xs"><h1 class="h1">Money questions</h1><p class="sub">Anything that gives money back, takes a payment away or stops a membership asks first, in the middle of the screen, and says exactly what happens.</p></div>
+<div class="g2" style="gap: 32px; align-items: start">
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Note a refund for Maya Patel's Gold Monthly</h2><p class="sub">It only writes the refund in your records: give the money back yourself.</p></div>
+<div class="frow">
+<div class="field"><span class="flabel">Amount given back (INR)</span><div class="input"><span class="prefix">₹</span><span class="num">2,500.00</span></div></div>
+<div class="field"><span class="flabel">How you gave it back</span><div class="input select"><span>Bank transfer</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div>
+</div>
+<div class="field"><span class="flabel">Why it was refunded</span><div class="g2s" style="gap: 8px">
+<div class="rcard" style="padding: 10px 12px"><span class="radio"></span><span class="rt" style="font-weight: 500">Paid twice</span></div>
+<div class="rcard rcard-on" style="padding: 10px 12px"><span class="radio radio-on"></span><span class="rt" style="font-weight: 500">Charged too much</span></div>
+<div class="rcard" style="padding: 10px 12px"><span class="radio"></span><span class="rt" style="font-weight: 500">Leaving or cancelled</span></div>
+<div class="rcard" style="padding: 10px 12px"><span class="radio"></span><span class="rt" style="font-weight: 500">Something else</span></div>
+</div></div>
+<div class="row-s"><span class="btn btn-p">Note refund</span><span class="btn btn-q">Back</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Void the ₹2,500.00 payment recorded on 18 Oct 2026?</h2><p class="sub">For Maya Patel's Gold Monthly. It was recorded by mistake, so the bill is owed again.</p></div>
+<div class="field"><span class="flabel">Why are you voiding it?</span><div class="g2s" style="gap: 8px">
+<div class="rcard rcard-on" style="padding: 10px 12px"><span class="radio radio-on"></span><span class="rt" style="font-weight: 500">Recorded by mistake</span></div>
+<div class="rcard" style="padding: 10px 12px"><span class="radio"></span><span class="rt" style="font-weight: 500">Wrong amount</span></div>
+<div class="rcard" style="padding: 10px 12px"><span class="radio"></span><span class="rt" style="font-weight: 500">Wrong person</span></div>
+<div class="rcard" style="padding: 10px 12px"><span class="radio"></span><span class="rt" style="font-weight: 500">Something else</span></div>
+</div></div>
+<div class="row-s"><span class="btn btn-ds">Void payment</span><span class="btn btn-s">Keep it</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Maya Patel has 2 classes booked with Gold Monthly</h2><p class="sub">Cancelling today ends these bookings too.</p></div>
+<div class="raise stack-xs" style="padding: 6px 14px">
+<div class="li" style="padding: 10px 0"><span class="dot" style="background: var(--cl-teal)"></span><span class="body grow">Yoga Flow</span><span class="small">Mon 19 Oct · 06:30</span></div>
+<div class="li" style="padding: 10px 0"><span class="dot" style="background: var(--cl-orange)"></span><span class="body grow">Strength 101</span><span class="small">Wed 21 Oct · 07:00</span></div>
+</div>
+<div class="callout" style="padding: 10px 12px"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M21.7 18l-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3M12 9v4M12 17h.01"/></svg><p class="small" style="color: var(--t1)">The app doesn't tell them yet. Let them know yourself.</p></div>
+<div class="row-s"><span class="btn btn-ds">Cancel today and end 2 bookings</span><span class="btn btn-s">Keep it</span></div>
+</div>
+
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2" style="font-size: 20px">Refund sale: 2 × Protein bar</h2><p class="sub">This only writes the refund in your records: give the money back yourself.</p></div>
+<div class="frow">
+<div class="field"><span class="flabel">Amount given back (INR)</span><div class="input"><span class="prefix">₹</span><span class="num">240.00</span></div></div>
+<div class="field"><span class="flabel">How you gave it back</span><div class="input select"><span>Cash</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div>
+</div>
+<div class="frow">
+<div class="field"><span class="flabel">Why it was refunded</span><div class="input select"><span>Brought back</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div>
+<div class="field"><span class="flabel">How many went back on the shelf</span><div class="seg seg-w"><span>None</span><span>1</span><span class="on">2</span></div></div>
+</div>
+<div class="row-s"><span class="btn btn-p">Note refund</span><span class="btn btn-q">Back</span></div>
+</div>
+
+<div class="stack" style="gap: 32px">
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2">Void this ₹1,800.00 bill for Arnav Gupta's Silver Monthly?</h2><p class="sub">Nothing is owed for these days.</p></div>
+<div class="row-s wrap"><span class="chip chip-on">Billed by mistake</span><span class="chip">Not charging for this one</span><span class="chip">Something else</span></div>
+<div class="row-s"><span class="btn btn-ds">Void bill</span><span class="btn btn-s">Keep it</span></div>
+</div>
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2">Waive Arnav Gupta's late cancel fee of ₹200.00?</h2><p class="sub">It stays on their bills as Waived.</p></div>
+<div class="row-s"><span class="btn btn-p">Waive fee</span><span class="btn btn-s">Keep it</span></div>
+</div>
+</div>
+
+<div class="stack" style="gap: 32px">
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2">Unfreeze Maya Patel's Gold Monthly?</h2><p class="sub">It runs again from today. The 3 days it was frozen are added back.</p></div>
+<div class="row-s"><span class="btn btn-p">Unfreeze</span><span class="btn btn-q">Back</span></div>
+</div>
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2">Take back the last payment noted for Maya Patel's Gold Monthly?</h2><p class="sub">From Undo mark paid, under the membership.</p></div>
+<div class="row-s"><span class="btn btn-s">Take it back</span><span class="btn btn-q">Back</span></div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

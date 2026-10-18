@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in — the gym door</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.door{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:14px;border:1px solid var(--ctl-line)}
+.door-on{border-color:var(--accent);background:var(--soft)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; display: flex">
+<div style="flex: 1 1 50%; display: flex; align-items: center; justify-content: center; padding: 56px 48px">
+<div class="stack-l" style="width: 100%; max-width: 420px">
+<div class="row-s"><div class="rail-logo" style="width: 40px; height: 40px; border-radius: 12px; background: var(--accent); color: var(--on-accent)"><svg class="ic" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"/></svg></div><span class="h3" style="font-size: 17px">AI Home Gym</span></div>
+<div class="stack-xs"><h1 class="h1" style="font-size: 38px; line-height: 46px">Get started.</h1><p class="sub">Sign in to manage your gym or studio</p></div>
+<div class="field"><span class="flabel">I'm here to</span>
+<div class="g2s" style="gap: 10px">
+<div class="door"><span class="body w6">Train</span><span class="small">Use the member app</span></div>
+<div class="door door-on"><span class="body w6">Manage my gym or studio</span><span class="small" style="color: var(--t2)">Open the gym console</span></div>
+</div></div>
+<div class="stack-m">
+<div class="field"><span class="flabel">Email</span><div class="input input-on" style="height: 50px"><span class="phd">you@example.com</span></div></div>
+<span class="btn btn-p btn-lg btn-w"><svg class="ic" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-9 5.7a2 2 0 0 1-2 0L2 7"/></svg>Continue with email</span>
+<p class="small" style="text-align: center">We'll email you a 6-digit code. No password needed.</p>
+</div>
+<div class="row-m"><div class="hr grow"></div><span class="small">or</span><div class="hr grow"></div></div>
+<span class="btn btn-s btn-lg btn-w"><svg viewBox="0 0 24 24" style="width: 18px; height: 18px" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.6 2.3 2.3 6.6 2.3 12s4.3 9.7 9.7 9.7c5.6 0 9.3-3.9 9.3-9.5 0-.6-.1-1.1-.2-1.6H12z"/></svg>Continue with Google</span>
+<p class="small" style="text-align: center">By continuing you agree to our <a>Terms</a> and <a>Privacy Policy</a></p>
+</div>
+</div>
+<div style="flex: 1 1 50%; padding: 20px">
+<div style="height: 100%; min-height: 860px; border-radius: 24px; background: var(--raise); border: 1px solid var(--raise-line); position: relative; overflow: hidden; display: flex; align-items: flex-end; padding: 32px">
+<div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--t3); flex-direction: column; gap: 10px"><svg class="ic ic-xl" viewBox="0 0 24 24"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg><span class="small">[The gym photo, as today]</span></div>
+<div class="card" style="position: relative; max-width: 440px; background: rgba(21,19,17,.88)">
+<span class="lbl" style="color: var(--soft-t)">For gyms and studios</span>
+<p class="h2" style="margin-top: 8px">Members, classes, the front desk and money, in one place.</p>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>
