@@ -11,6 +11,7 @@
 //   POST   /v1/orgs/:gymId/owner-request/:requestId/accept     the co-owner asked
 //   POST   /v1/orgs/:gymId/owner-request/:requestId/decline
 //   POST   /v1/orgs/:gymId/owner-request/:requestId/card      Paddle's window saved their card (4b-iii-a)
+//   DELETE /v1/orgs/:gymId/owner-request/:requestId/card      it closed without one: pointed back at once
 // Who may is the service's: the owner by the gym's own owner id, the person asked by theirs.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
@@ -110,5 +111,10 @@ export function registerCoOwnerRoutes(app: FastifyInstance, deps: Omit<service.C
     const params = parseOr400(coOwnerRequestParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await service.ownerCardSaved(coOwnerDeps, callerId(req), params.gymId, params.requestId));
+  });
+  app.delete("/v1/orgs/:gymId/owner-request/:requestId/card", { preHandler: [app.authenticate, cardLimit] }, async (req, reply) => {
+    const params = parseOr400(coOwnerRequestParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await service.ownerCardClosed(coOwnerDeps, callerId(req), params.gymId, params.requestId));
   });
 }

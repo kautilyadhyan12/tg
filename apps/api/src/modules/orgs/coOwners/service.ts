@@ -27,7 +27,7 @@ import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requir
 import { emailHmac } from "../invites/address.js";
 import { suppressionsFor } from "../invites/repo.js";
 import type { CoOwnerEmailSender } from "./email.js";
-import { openCardWindow, pointBack, settleCard } from "./paidHandOver.js";
+import { closeCardWindowNow, openCardWindow, pointBack, settleCard } from "./paidHandOver.js";
 import * as repo from "./repo.js";
 
 export interface CoOwnerDeps {
@@ -157,6 +157,8 @@ export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, g
     case "plan_overdue":
     case "plan_ending":
       throw planRefusal(outcome.kind);
+    case "payer_moving":
+      throw new OrgsError(409, "payer_moving", OWNER_REQUEST_WORDS.payer_moving);
     case "already_requested":
       throw new OrgsError(409, "already_requested", OWNER_REQUEST_WORDS.already_requested);
     case "sent":
@@ -235,6 +237,19 @@ export async function answerOwnerRequest(
   accept: boolean,
 ): Promise<AnswerOwnerRequestResponse> {
   await requireStaff(deps, gymId, userId);
+  // Decline with a card window open: pointed back first, as Cancel does, so a tab still open
+  // cannot save their card on the plan afterwards. A card already saved means they accepted.
+  const window = accept ? null : await repo.openCardWindowTo(deps.sql, gymId, userId);
+  if (window !== null && window.requestId === requestId) {
+    const paddle = deps.billing?.paddle ?? null;
+    if (deps.billing === null || paddle === null) throw cardUnavailable();
+    const back = await pointBack(deps.billing, paddle, window);
+    if (back === "retry") throw cardUnavailable();
+    if (back === "saved") {
+      if ((await settleCard(deps.billing, window, defaultPrivilegesFor("owner"))) === "accepted") return { status: "accepted" };
+      throw cardUnavailable();
+    }
+  }
   const outcome = await repo.answerOwnerRequest(deps.sql, {
     gymId,
     requestId,
@@ -242,6 +257,7 @@ export async function answerOwnerRequest(
     accept,
     ownerPrivileges: defaultPrivilegesFor("owner"),
     now: deps.now(),
+    cardOpenedAt: window?.openedAt ?? null,
   });
   switch (outcome.kind) {
     case "not_found":
@@ -288,5 +304,17 @@ export async function ownerCardSaved(deps: CoOwnerDeps, userId: string, gymId: s
   if (deps.billing === null) return { status: "waiting" };
   const outcome = await settleCard(deps.billing, window, defaultPrivilegesFor("owner"));
   if (outcome === "request_gone") throw requestGone();
+  return { status: outcome };
+}
+
+/** Paddle's window closed without a card: the person asked says so, and the window is pointed
+ *  back at the plan's payer at once. */
+export async function ownerCardClosed(deps: CoOwnerDeps, userId: string, gymId: string, requestId: string): Promise<OwnerCardResponse> {
+  await requireStaff(deps, gymId, userId);
+  const window = await repo.cardWindowOf(deps.sql, { gymId, requestId, userId });
+  if (window === null) throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.request_gone);
+  if (deps.billing === null) throw cardUnavailable();
+  const outcome = await closeCardWindowNow(deps.billing, window, defaultPrivilegesFor("owner"));
+  if (outcome === "retry") throw cardUnavailable();
   return { status: outcome };
 }

@@ -1613,6 +1613,13 @@ export const orgService = {
       'your answer',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request/${encodeURIComponent(requestId)}/${accept ? 'accept' : 'decline'}`, {}),
     ),
+  /** Paddle's window closed without a card (4b-iii-a): the server shuts it at once. */
+  ownerCardClosed: (gymId, requestId) =>
+    readThrough(
+      ownerCardResponseSchema,
+      'your card',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/owner-request/${encodeURIComponent(requestId)}/card`),
+    ),
   /** Paddle's window saved their card (4b-iii-a): `accepted` once the gym is theirs. */
   ownerCardSaved: (gymId, requestId) =>
     readThrough(

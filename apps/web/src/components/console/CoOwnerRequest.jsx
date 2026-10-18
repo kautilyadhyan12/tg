@@ -130,6 +130,18 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
         } else if (event.type === 'closed' && !confirming.current) {
           setBusy(null);
           setProblem(cardWords.notSaved);
+          // The window is shut at Paddle at once, so it is never left open for anybody else's
+          // card; a card saved after all makes the gym theirs, said here as the server says it.
+          orgService
+            .ownerCardClosed(gymId, requestId)
+            .then((res) => {
+              if (!mounted.current || res.data?.status !== 'accepted') return;
+              setProblem(null);
+              setDone(cardWords.yes(gymName));
+              setRequest(null);
+              onAccepted?.();
+            })
+            .catch(() => undefined);
         }
       },
     });

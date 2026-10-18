@@ -368,6 +368,125 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     }, TEST_TIMEOUT_MS);
   });
 
+  // Round one's findings: each ran red on the code before its fix.
+  describe("round one", () => {
+    it("a plan set to end, or whose grace ended, after Accept still goes to the person whose card now pays it", async () => {
+      for (const change of ["ending", "grace"] as const) {
+        const gym = await makePaidGym("Kd");
+        const cora = await makeCoOwner(gym, "Cora");
+        expect((await ask(gym, cora)).statusCode).toBe(201);
+        const requestId = await requestIdFor(gym, cora);
+        const txn = await acceptToWindow(gym, requestId, cora);
+        if (change === "ending") {
+          await sql`UPDATE subscriptions SET cancel_at_period_end = true WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+        } else {
+          await sql`UPDATE subscriptions SET status = 'expired', ended_at = now(), past_due_since = now(), cancel_reason = 'grace_expired' WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+        }
+        expect(paddle.saveCard(txn)).toBe(true);
+        const res = await cardSaved(gym, requestId, cora);
+        expect(res.statusCode, `${change}: ${res.body}`).toBe(200);
+        expect(await ownerOf(gym)).toBe(cora.userId);
+        expect(paddle.renewal(gym.sub)).toEqual({ card: customerOf(cora), receipt: customerOf(cora) });
+      }
+    }, TEST_TIMEOUT_MS);
+
+    it("Decline shuts the card window at once: a tab still open is refused before the worker's minute", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      const requestId = await requestIdFor(gym, cora);
+      const txn = await acceptToWindow(gym, requestId, cora);
+      const declined = await send("POST", `/v1/orgs/${gym.id}/owner-request/${requestId}/decline`, cora);
+      expect(declined.statusCode, declined.body).toBe(200);
+      expect(paddle.saveCard(txn)).toBe(false);
+      expect(paddle.renewal(gym.sub)).toEqual({ card: gym.payer, receipt: gym.payer });
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+    }, TEST_TIMEOUT_MS);
+
+    it("a second hand-over waits until the first one's payer has moved, and the payer ends with the last owner", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      const dan = await makeCoOwner(gym, "Dan");
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      const first = await requestIdFor(gym, cora);
+      expect(paddle.saveCard(await acceptToWindow(gym, first, cora))).toBe(true);
+      paddle.payerMoveFailures = 1;
+      expect(ownerCardResponseSchema.parse(JSON.parse((await cardSaved(gym, first, cora)).body)).status).toBe("accepted");
+      const asCora = { ...gym, owner: cora };
+      const early = await ask(asCora, dan);
+      expect(early.statusCode).toBe(409);
+      expect(errorOf(early)).toBe("payer_moving");
+
+      await worker();
+      expect((await ask(asCora, dan)).statusCode).toBe(201);
+      const second = await requestIdFor(gym, dan);
+      expect(paddle.saveCard(await acceptToWindow(gym, second, dan))).toBe(true);
+      expect(ownerCardResponseSchema.parse(JSON.parse((await cardSaved(gym, second, dan)).body)).status).toBe("accepted");
+      await worker();
+      expect(await ownerOf(gym)).toBe(dan.userId);
+      expect(paddle.renewal(gym.sub)).toEqual({ card: customerOf(dan), receipt: customerOf(dan) });
+      const row = await sql<{ provider_customer_ref: string }[]>`
+        SELECT provider_customer_ref FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider_ref = ${gym.sub}`;
+      expect(row[0]?.provider_customer_ref).toBe(customerOf(dan));
+    }, TEST_TIMEOUT_MS);
+
+    it("the old owner's payment windows still open are cancelled at Paddle when the gym moves", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await sql`
+        INSERT INTO billing_checkouts (gym_id, plan_id, created_by, idempotency_key, provider, state, provider_ref, created_at)
+        VALUES (${gym.id}, (SELECT id FROM plans WHERE code = ${PLAN}), ${gym.owner.userId}, ${"old-" + gym.id}, 'paddle', 'open', ${"txn_old_" + gym.id}, now())`;
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      const requestId = await requestIdFor(gym, cora);
+      expect(paddle.saveCard(await acceptToWindow(gym, requestId, cora))).toBe(true);
+      expect(ownerCardResponseSchema.parse(JSON.parse((await cardSaved(gym, requestId, cora)).body)).status).toBe("accepted");
+      expect(paddle.cancelledTxns).toContain("txn_old_" + gym.id);
+    }, TEST_TIMEOUT_MS);
+
+    it("the card window points at the new owner only while they use it: closed, or past its 30 minutes, it is shut and Accept opens it again", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      const stranger = (await makePaidGym("Stranger")).owner;
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      const requestId = await requestIdFor(gym, cora);
+
+      // Closed without a card: the page says so, and the window is the plan's payer's again.
+      const first = await acceptToWindow(gym, requestId, cora);
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/owner-request/${requestId}/card`, stranger)).statusCode).toBe(404);
+      const closed = await send("DELETE", `/v1/orgs/${gym.id}/owner-request/${requestId}/card`, cora);
+      expect(closed.statusCode, closed.body).toBe(200);
+      expect(ownerCardResponseSchema.parse(JSON.parse(closed.body)).status).toBe("closed");
+      expect(paddle.txns.get(first)?.customer_id).toBe(gym.payer);
+      expect(paddle.saveCard(first)).toBe(false);
+      expect((await mineAt(gym, cora))?.id).toBe(requestId);
+
+      // Left open past its time: the worker shuts it, and the request still waits.
+      const second = await acceptToWindow(gym, requestId, cora);
+      await sql`UPDATE gym_owner_requests SET card_opened_at = now() - interval '31 minutes' WHERE id = ${requestId}`;
+      await worker();
+      expect(paddle.saveCard(second)).toBe(false);
+      expect((await mineAt(gym, cora))?.id).toBe(requestId);
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+
+      // Accept again: open once more, and the card saved hands the gym over.
+      const third = await acceptToWindow(gym, requestId, cora);
+      expect(paddle.saveCard(third)).toBe(true);
+      expect(ownerCardResponseSchema.parse(JSON.parse((await cardSaved(gym, requestId, cora)).body)).status).toBe("accepted");
+      expect(await ownerOf(gym)).toBe(cora.userId);
+    }, TEST_TIMEOUT_MS);
+
+    it("a request past its date with its window still open shows as waiting, not as Make owner", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      const requestId = await requestIdFor(gym, cora);
+      await acceptToWindow(gym, requestId, cora);
+      await sql`UPDATE gym_owner_requests SET created_at = now() - interval '8 days', expires_at = now() - interval '1 day' WHERE id = ${requestId}`;
+      const row = (await staffList(gym, gym.owner)).staff.find((p) => p.userId === cora.userId);
+      expect(row?.ownerRequest?.addingCard).toBe(true);
+    }, TEST_TIMEOUT_MS);
+  });
+
   describe("the plan's state", () => {
     it("money owed, a plan set to end, or Razorpay stops a hand-over, and the Staff tab says why", async () => {
       const overdue = await makePaidGym("Kd");
@@ -400,7 +519,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       expect(tabFine.cardNeeded).toBe(true);
     }, TEST_TIMEOUT_MS);
 
-    it("a plan that goes past due before the card is saved still moves: the card window pays what is owed", async () => {
+    it("a plan that goes past due before the card is saved still moves to the person whose card now pays it", async () => {
       const gym = await makePaidGym("Kd");
       const cora = await makeCoOwner(gym, "Cora");
       expect((await ask(gym, cora)).statusCode).toBe(201);

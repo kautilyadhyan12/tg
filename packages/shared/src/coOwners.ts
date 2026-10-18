@@ -110,8 +110,14 @@ export const answerOwnerRequestResponseSchema = z.union([
 export type AnswerOwnerRequestResponse = z.infer<typeof answerOwnerRequestResponseSchema>;
 
 /** After Paddle's window says the card was saved: `accepted` once the gym is theirs, `waiting`
- *  while Paddle has not confirmed it yet (ask again in a moment). */
-export const ownerCardResponseSchema = z.object({ status: z.enum(["accepted", "waiting"]) });
+ *  while Paddle has not confirmed it yet (ask again in a moment). After it closed without a card:
+ *  `closed` (Paddle refuses that window from now on), or `accepted` if a card was saved after all. */
+export const ownerCardResponseSchema = z.object({ status: z.enum(["accepted", "waiting", "closed"]) });
+
+/** How long a card window stays pointed at the person accepting: past it, the worker points it
+ *  back at the plan's payer and they press Accept again. Paddle keeps one window a plan, which
+ *  a Paddle page the old owner opened earlier might use: open only while it is in use. */
+export const OWNER_CARD_WINDOW_MINUTES = 30;
 export type OwnerCardResponse = z.infer<typeof ownerCardResponseSchema>;
 
 /** What the server says when it refuses a hand-over, in the words the console shows. */

@@ -27,6 +27,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       getMyOwnerRequest: vi.fn(),
       answerOwnerRequest: vi.fn(),
       ownerCardSaved: vi.fn(),
+      ownerCardClosed: vi.fn(),
     },
   };
 });
@@ -76,6 +77,7 @@ const openPerson = async (id, name) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  orgService.ownerCardClosed.mockResolvedValue({ data: { status: 'closed' } });
   resetConsoleOrgs();
   orgService.getMine.mockResolvedValue({ data: { orgs: [ORG] } });
   orgService.getMembers.mockResolvedValue({ data: { items: [], nextCursor: null } });
@@ -115,7 +117,7 @@ describe('the owner, on a co-owner of a gym paying through Paddle', () => {
     orgService.getStaff.mockResolvedValue(staffAs([OWNER, { ...CORA, ownerRequest: { expiresAt: UNTIL, addingCard: true } }], { cardNeeded: true }));
     drawStaff();
     const panel = await openPerson('u3', 'Cora Lim');
-    expect(panel.getByText("Cora Lim accepted and is adding their card. Iron House moves to them once it's saved.")).toBeTruthy();
+    expect(panel.getByText("Cora Lim pressed Accept and is adding their card. Iron House moves to them once it's saved. The request ends on 24 Oct 2026.")).toBeTruthy();
     expect(panel.getByRole('button', { name: 'Cancel request' })).toBeTruthy();
   });
 
@@ -160,6 +162,8 @@ describe('the co-owner asked, on Overview, for a gym paying through Paddle', () 
     expect(await screen.findByText("Your card wasn't saved, so nothing has changed. Press Accept and add your card to try again.")).toBeTruthy();
     expect(screen.queryByText(/You're now the owner/)).toBeNull();
     expect(orgService.ownerCardSaved).not.toHaveBeenCalled();
+    // The server is told at once, so the window is shut at Paddle.
+    expect(orgService.ownerCardClosed).toHaveBeenCalledWith(ORG.id, REQUEST.id);
     expect(onAccepted).not.toHaveBeenCalled();
     expect(box.getByRole('button', { name: 'Accept and add your card' }).disabled).toBe(false);
   });
@@ -171,6 +175,7 @@ describe('the co-owner asked, on Overview, for a gym paying through Paddle', () 
     // Paddle closes its window after the card is saved: that is not "not saved".
     await fire({ type: 'closed' });
     expect(screen.queryByText(/Your card wasn't saved/)).toBeNull();
+    expect(orgService.ownerCardClosed).not.toHaveBeenCalled();
     expect(await screen.findByText("You're now the owner of Iron House. Your card pays for the plan from now on.", undefined, { timeout: 5000 })).toBeTruthy();
     expect(orgService.ownerCardSaved).toHaveBeenCalledWith(ORG.id, REQUEST.id);
     expect(onAccepted).toHaveBeenCalledTimes(1);

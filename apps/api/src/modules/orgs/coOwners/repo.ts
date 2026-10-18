@@ -299,7 +299,9 @@ export async function waitingOwnerRequest(sql: Sql, gymId: string, now: Date): P
   const rows = await sql<{ user_id: string; expires_at: Date; adding_card: boolean }[]>`
     SELECT r.user_id, r.expires_at, (r.card_txn_ref IS NOT NULL AND r.card_closed_at IS NULL) AS adding_card
     FROM gym_owner_requests r JOIN gyms g ON g.id = r.gym_id
-    WHERE r.gym_id = ${gymId} AND r.state = 'pending' AND r.expires_at > ${now}
+    WHERE r.gym_id = ${gymId} AND r.state = 'pending'
+      -- Past its date with its card window still open: waiting until the worker shuts the window.
+      AND (r.expires_at > ${now} OR (r.card_txn_ref IS NOT NULL AND r.card_closed_at IS NULL))
       AND r.requested_by = g.owner_user_id
       AND EXISTS (SELECT 1 FROM gym_staff s
                   WHERE s.gym_id = r.gym_id AND s.user_id = r.user_id AND s.created_at = r.staff_since
@@ -320,7 +322,7 @@ export async function cardWindowOpenFor(tx: Sql | TransactionSql, gymId: string,
 
 /** The plan's payer is changing at Paddle: a card window open for the person asked, or a
  *  hand-over whose payer has not moved yet. Paddle's own page waits until it is done. */
-export async function payerChanging(sql: Sql, gymId: string): Promise<boolean> {
+export async function payerChanging(sql: Sql | TransactionSql, gymId: string): Promise<boolean> {
   const rows = await sql`
     SELECT 1 FROM gym_owner_requests
     WHERE gym_id = ${gymId} AND card_txn_ref IS NOT NULL
@@ -353,6 +355,8 @@ export type SendOwnerOutcome =
   | { kind: "paid_plan" }
   | { kind: "plan_overdue" }
   | { kind: "plan_ending" }
+  /** The last hand-over's payer is still moving at Paddle (or a card window is open). */
+  | { kind: "payer_moving" }
   | { kind: "already_requested" };
 
 export async function sendOwnerRequest(
@@ -376,6 +380,9 @@ export async function sendOwnerRequest(
     if (target.role !== "owner" || input.userId === gym.owner_user_id) return { kind: "not_co_owner" };
     const plan = await planForHandOver(tx, input.gymId);
     if (plan.kind !== "none" && plan.kind !== "paddle") return { kind: plan.kind };
+    // A second hand-over waits until the last one's payer has moved: its retry would otherwise
+    // move the payer back to the person in the middle.
+    if (await payerChanging(tx, input.gymId)) return { kind: "payer_moving" };
 
     await endStaleOwnerRequest(tx, input.gymId, input.now);
     const waiting = await tx`SELECT 1 FROM gym_owner_requests WHERE gym_id = ${input.gymId} AND state = 'pending'`;
@@ -489,7 +496,8 @@ export async function cardWork(sql: Sql, limit: number): Promise<CardWindowRow[]
   const rows = await sql<RawCardWindow[]>`
     SELECT id, gym_id, user_id, state, card_subscription_ref, card_txn_ref, card_customer_ref, card_address_ref, card_opened_at, card_closed_at, payer_moved_at FROM gym_owner_requests
     WHERE card_txn_ref IS NOT NULL AND (card_closed_at IS NULL OR (state = 'accepted' AND payer_moved_at IS NULL))
-    ORDER BY card_opened_at
+    -- In no fixed order: a row Paddle keeps refusing never holds the others back.
+    ORDER BY random()
     LIMIT ${limit}`;
   return rows.flatMap((r) => {
     const row = toCardWindow(r);
@@ -594,7 +602,16 @@ async function standingRequest(
  *  Paddle moves nothing here, and is answered `card_needed`. */
 export async function answerOwnerRequest(
   sql: Sql,
-  input: { gymId: string; requestId: string; userId: string; accept: boolean; ownerPrivileges: readonly string[]; now: Date },
+  input: {
+    gymId: string;
+    requestId: string;
+    userId: string;
+    accept: boolean;
+    ownerPrivileges: readonly string[];
+    now: Date;
+    /** Decline: the card window the service pointed back first, as it stood then. */
+    cardOpenedAt?: Date | null;
+  },
 ): Promise<AnswerOwnerOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
@@ -621,8 +638,14 @@ export async function answerOwnerRequest(
     }
 
     if (!input.accept) {
-      // A card window still open is pointed back by the worker, as for any request that ended.
-      await tx`UPDATE gym_owner_requests SET state = 'declined', answered_at = ${input.now} WHERE id = ${input.requestId}`;
+      // The service pointed an open card window back first; one opened again since is left
+      // open for the worker, which points it back before anything else.
+      await tx`
+        UPDATE gym_owner_requests
+        SET state = 'declined', answered_at = ${input.now},
+            card_closed_at = CASE WHEN card_txn_ref IS NOT NULL AND card_closed_at IS NULL AND card_opened_at = ${input.cardOpenedAt ?? null}::timestamptz
+                                  THEN ${input.now}::timestamptz ELSE card_closed_at END
+        WHERE id = ${input.requestId}`;
       await insertAudit(tx, {
         actorUserId: input.userId,
         gymId: input.gymId,
@@ -646,7 +669,7 @@ export async function answerOwnerRequest(
       const people = await tx<{ email: string | null; country: string | null }[]>`
         SELECT u.email, g.country FROM users u, gyms g WHERE u.id = ${input.userId} AND g.id = ${input.gymId}`;
       const stored =
-        request.card_customer_ref !== null && request.card_address_ref !== null && request.card_closed_at === null
+        request.card_customer_ref !== null && request.card_address_ref !== null
           ? { customerRef: request.card_customer_ref, addressRef: request.card_address_ref }
           : null;
       return { kind: "card_needed", subscriptionRef: plan.subscriptionRef, email: people[0]?.email ?? null, country: people[0]?.country ?? null, stored };
@@ -741,7 +764,8 @@ export async function storeCardWindow(
 }
 
 export type FinishCardOutcome =
-  | { kind: "accepted" }
+  /** `closed`: the payment windows the hand-over closed, to cancel at their payment company. */
+  | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[] }
   /** Already the owner by this request: nothing to do. */
   | { kind: "already" }
   /** The card was saved, but the request no longer stands: nobody moved. */
@@ -772,28 +796,22 @@ export async function finishCardHandOver(
       return { kind: "request_gone" };
     }
     const standing = await standingRequest(tx, input);
-    const plan = await planForHandOver(tx, input.gymId);
-    const samePlan =
-      (plan.kind === "paddle" && plan.subscriptionRef === request.card_subscription_ref) ||
-      // The card window also pays what is owed: a plan past due meanwhile is still the plan.
-      (plan.kind === "plan_overdue" && (await livePaddleRef(tx, input.gymId)) === request.card_subscription_ref);
-    if (standing === null || !samePlan) {
+    // Paddle has saved their card on this subscription, so it now charges them: while the gym
+    // still holds it in any state Paddle can charge (set to end since, past due, its grace
+    // ended), the gym is theirs. Only a different plan, or the request no longer standing, stops it.
+    const samePlan = await tx`
+      SELECT 1 FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'paddle' AND provider_ref = ${request.card_subscription_ref}
+        AND (status IN ('trialing','active','past_due') OR (status = 'expired' AND cancel_reason = ${GRACE_EXPIRED}))`;
+    if (standing === null || samePlan.length === 0) {
       await tx`
         UPDATE gym_owner_requests SET state = 'cancelled', answered_at = ${input.now}, card_closed_at = ${input.now}
         WHERE id = ${input.requestId}`;
       return { kind: "request_gone" };
     }
-    await moveOwner(tx, { ...input, oldOwner: standing.owner, paid: { subscriptionRef: request.card_subscription_ref } });
-    return { kind: "accepted" };
+    const closed = await moveOwner(tx, { ...input, oldOwner: standing.owner, paid: { subscriptionRef: request.card_subscription_ref } });
+    return { kind: "accepted", closed };
   });
-}
-
-async function livePaddleRef(tx: TransactionSql, gymId: string): Promise<string | null> {
-  const rows = await tx<{ provider_ref: string | null }[]>`
-    SELECT provider_ref FROM subscriptions
-    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider = 'paddle' AND status IN ('trialing','active','past_due')
-    ORDER BY created_at DESC LIMIT 1`;
-  return rows[0]?.provider_ref ?? null;
 }
 
 /** A card window pointed back at the plan's own payer, or found saved: nothing left to do. A
@@ -825,6 +843,11 @@ export async function cardRequestEnded(sql: Sql, input: { gymId: string; request
 /** Paddle's payer moved: the gym's plan row names the new owner's customer, which Paddle's own
  *  page then signs in as. Written here, not left to the next record from Paddle: the plan rule
  *  treats a change of payer alone as no change, and keeps the old one (found in the sandbox walk). */
+/** Nothing left to move: the gym has another owner since, or Paddle no longer has the plan. */
+export async function endPayerMove(sql: Sql, input: { requestId: string; now: Date }): Promise<void> {
+  await sql`UPDATE gym_owner_requests SET payer_moved_at = ${input.now} WHERE id = ${input.requestId} AND payer_moved_at IS NULL`;
+}
+
 export async function markPayerMoved(sql: Sql, input: { requestId: string; gymId: string; subscriptionRef: string; customerRef: string; now: Date }): Promise<void> {
   await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);

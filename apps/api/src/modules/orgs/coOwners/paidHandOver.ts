@@ -13,8 +13,8 @@
 // longer wanted is pointed back at the plan's payer before its request ends, and the worker
 // finishes whatever a closed tab or a lost answer left.
 import type { OwnerCardWindow } from "@app/shared";
-import { payerEmailSchema } from "@app/shared";
-import type { BillingDeps, PaddleSettings } from "../../billing/service.js";
+import { OWNER_CARD_WINDOW_MINUTES, payerEmailSchema } from "@app/shared";
+import { closeSuperseded, type BillingDeps, type PaddleSettings } from "../../billing/service.js";
 import type { PaddleResult } from "../../billing/paddle.js";
 import * as repo from "./repo.js";
 
@@ -84,7 +84,11 @@ export async function openCardWindow(
   });
   if (stored.kind === "request_gone") {
     // Ended while Paddle was asked: the window goes back to the plan's own payer at once.
-    await pointBack(deps, paddle, { txnRef: window.value.id, subscriptionRef: input.subscriptionRef });
+    const back = await pointBack(deps, paddle, { txnRef: window.value.id, subscriptionRef: input.subscriptionRef });
+    if (back !== "closed") {
+      // No row keeps this window, so nothing retries it: said loudly, to be put right by hand.
+      deps.log.error({ event: "hand_over.card_window_left_open", gymId: input.gymId, result: back }, "a hand-over's card window was not pointed back after its request ended");
+    }
     return { kind: "request_gone" };
   }
   if (stored.replaced !== null) await pointBack(deps, paddle, { txnRef: stored.replaced, subscriptionRef: input.subscriptionRef });
@@ -178,6 +182,8 @@ export async function settleCard(
     deps.log.error({ event: "hand_over.card_saved_without_hand_over", gymId: window.gymId }, "a card was saved for a hand-over that no longer stands");
     return "request_gone";
   }
+  // The old owner's payment windows the hand-over closed can no longer be paid.
+  if (finished.kind === "accepted") await closeSuperseded(deps, finished.closed);
   await movePayer(deps, paddle, { ...window, state: "accepted" });
   return "accepted";
 }
@@ -185,7 +191,18 @@ export async function settleCard(
 /** After the hand-over: the plan's charges and receipts go to the new owner. */
 async function movePayer(deps: BillingDeps, paddle: PaddleSettings, window: repo.CardWindowRow): Promise<void> {
   if (window.payerMovedAt !== null) return;
+  // Only the gym's owner as it is now pays: a later hand-over's payer is never moved back.
+  if ((await repo.gymOwnerId(deps.sql, window.gymId)) !== window.userId) {
+    deps.log.warn({ event: "hand_over.payer_move_dropped", gymId: window.gymId }, "a hand-over's payer was not moved: the gym has another owner since");
+    await repo.endPayerMove(deps.sql, { requestId: window.requestId, now: deps.now() });
+    return;
+  }
   const moved = await paddle.api.setSubscriptionPayer(window.subscriptionRef, window.customerRef, window.addressRef);
+  if (moved.kind === "not_found") {
+    deps.log.error({ event: "hand_over.payer_plan_gone", gymId: window.gymId }, "a handed-over plan is no longer at Paddle; nothing to move");
+    await repo.endPayerMove(deps.sql, { requestId: window.requestId, now: deps.now() });
+    return;
+  }
   if (moved.kind !== "ok" || moved.value.customer_id !== window.customerRef) {
     deps.log.warn({ event: "hand_over.payer_not_moved", gymId: window.gymId, result: moved.kind }, "a handed-over plan's payer did not move yet; retrying");
     return;
@@ -197,6 +214,19 @@ async function movePayer(deps: BillingDeps, paddle: PaddleSettings, window: repo
     customerRef: window.customerRef,
     now: deps.now(),
   });
+}
+
+/** Paddle's window closed without a card: pointed back at once, so it is open only while in use.
+ *  A card saved after all hands the gym over, as the card says. */
+export async function closeCardWindowNow(deps: BillingDeps, window: repo.CardWindowRow, ownerPrivileges: readonly string[]): Promise<"closed" | "accepted" | "retry"> {
+  const paddle = deps.paddle;
+  if (paddle === null) return "retry";
+  if (window.state !== "pending" || window.closedAt !== null) return "closed";
+  const back = await pointBack(deps, paddle, window);
+  if (back === "retry") return "retry";
+  if (back === "saved") return (await settleCard(deps, window, ownerPrivileges)) === "accepted" ? "accepted" : "retry";
+  await repo.closeCardWindow(deps.sql, { requestId: window.requestId, gymId: window.gymId, openedAt: window.openedAt, now: deps.now() });
+  return "closed";
 }
 
 export interface OwnerCardsRun {
@@ -218,8 +248,12 @@ export async function settleOwnerCards(deps: BillingDeps, ownerPrivileges: reado
       continue;
     }
     if (outcome === "request_gone") continue;
+    // A window open past its time is pointed back too; its request still waits for Accept.
+    const stale = deps.now().getTime() - window.openedAt.getTime() > OWNER_CARD_WINDOW_MINUTES * 60_000;
     const ended =
-      window.state !== "pending" || (await repo.cardRequestEnded(deps.sql, { gymId: window.gymId, requestId: window.requestId, userId: window.userId, now: deps.now() }));
+      window.state !== "pending" ||
+      stale ||
+      (await repo.cardRequestEnded(deps.sql, { gymId: window.gymId, requestId: window.requestId, userId: window.userId, now: deps.now() }));
     if (!ended) {
       run.waiting += 1;
       continue;

@@ -667,7 +667,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, cardN
         <div className="flex flex-col gap-3">
           <p className="c-s14 c-t1 m-0">
             {view.addingCard
-              ? `${name} accepted and is adding their card. ${gymName} moves to them once it's saved.`
+              ? `${name} pressed Accept and is adding their card. ${gymName} moves to them once it's saved. The request ends on ${formatJoinedAt(view.until)}.`
               : `You asked ${name} to be the owner. Waiting for them to accept. The request ends on ${formatJoinedAt(view.until)}.`}
           </p>
           <button type="button" onClick={onCancel} disabled={off} className="c-btn c-btn-s c-btn-sm self-start">
