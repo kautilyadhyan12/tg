@@ -86,8 +86,8 @@ const pay = (s: Said): string => {
   const amount = money(s, "amountMinor");
   return amount === null ? "a payment" : `a payment of ${amount}`;
 };
-/** " for Aarav Sharma", where somebody else on the list paid for them (18i): the payer by
- *  the name their record had then, the person by the name it has now. */
+/** "Priya Sharma for Aarav Sharma", where somebody else on the list paid for them (18i): both
+ *  as their records are named now; a payer's record that is gone reads as nobody on the list. */
 const payerOf = (s: Said): string => s.payer ?? `a ${s.words.person} no longer on your list`;
 const fromWhom = (s: Said): string => (text(s, "paidByEntryId") === null ? person(s) : `${payerOf(s)} for ${person(s)}`);
 const methodWords = (s: Said): string => {
