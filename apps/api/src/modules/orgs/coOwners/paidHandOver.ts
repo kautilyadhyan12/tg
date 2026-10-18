@@ -14,7 +14,7 @@
 // finishes whatever a closed tab or a lost answer left.
 import type { OwnerCardWindow } from "@app/shared";
 import { payerEmailSchema } from "@app/shared";
-import { applyPaddleSubscription, type BillingDeps, type PaddleSettings } from "../../billing/service.js";
+import type { BillingDeps, PaddleSettings } from "../../billing/service.js";
 import type { PaddleResult } from "../../billing/paddle.js";
 import * as repo from "./repo.js";
 
@@ -190,9 +190,13 @@ async function movePayer(deps: BillingDeps, paddle: PaddleSettings, window: repo
     deps.log.warn({ event: "hand_over.payer_not_moved", gymId: window.gymId, result: moved.kind }, "a handed-over plan's payer did not move yet; retrying");
     return;
   }
-  await repo.markPayerMoved(deps.sql, { requestId: window.requestId, now: deps.now() });
-  // The gym's row takes Paddle's payer from Paddle, as every change to a plan does.
-  await applyPaddleSubscription(deps, window.subscriptionRef, false);
+  await repo.markPayerMoved(deps.sql, {
+    requestId: window.requestId,
+    gymId: window.gymId,
+    subscriptionRef: window.subscriptionRef,
+    customerRef: window.customerRef,
+    now: deps.now(),
+  });
 }
 
 export interface OwnerCardsRun {

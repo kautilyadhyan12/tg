@@ -140,9 +140,12 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     const payer = paddle.subs.get(sub)?.customer_id ?? null;
     if (payer === null) throw new Error("the fake's subscription has no customer");
     paddle.cardOf.set(sub, payer);
+    // The row as Paddle's own record wrote it: the same month, so a change of payer is the only
+    // change (the sandbox walk found a payer-only change left out of the row).
+    const period = paddle.subs.get(sub)?.current_billing_period?.ends_at ?? null;
     await sql`
-      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, provider_customer_ref, current_period_end)
-      VALUES ('gym', ${org.id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'paddle', ${sub}, ${payer}, now() + interval '30 days')`;
+      INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, provider_customer_ref, current_period_end, provider_updated_at)
+      VALUES ('gym', ${org.id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'paddle', ${sub}, ${payer}, ${period}, ${paddle.subs.get(sub)?.updated_at ?? null})`;
     return { id: org.id, owner, sub, payer };
   };
   const makeStaff = async (gym: Gym, name: string, role: OrgRole = "manager"): Promise<User> => {

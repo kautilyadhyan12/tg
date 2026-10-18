@@ -822,6 +822,15 @@ export async function cardRequestEnded(sql: Sql, input: { gymId: string; request
   });
 }
 
-export async function markPayerMoved(sql: Sql, input: { requestId: string; now: Date }): Promise<void> {
-  await sql`UPDATE gym_owner_requests SET payer_moved_at = ${input.now} WHERE id = ${input.requestId} AND payer_moved_at IS NULL`;
+/** Paddle's payer moved: the gym's plan row names the new owner's customer, which Paddle's own
+ *  page then signs in as. Written here, not left to the next record from Paddle: the plan rule
+ *  treats a change of payer alone as no change, and keeps the old one (found in the sandbox walk). */
+export async function markPayerMoved(sql: Sql, input: { requestId: string; gymId: string; subscriptionRef: string; customerRef: string; now: Date }): Promise<void> {
+  await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    await tx`
+      UPDATE subscriptions SET provider_customer_ref = ${input.customerRef}
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'paddle' AND provider_ref = ${input.subscriptionRef}`;
+    await tx`UPDATE gym_owner_requests SET payer_moved_at = ${input.now} WHERE id = ${input.requestId} AND payer_moved_at IS NULL`;
+  });
 }
