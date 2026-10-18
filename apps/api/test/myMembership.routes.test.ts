@@ -500,6 +500,12 @@ d("my membership: a member's own memberships, payments and receipts (real Postgr
     expect((await inject("GET", mineUrl(gym), stranger.cookies)).statusCode).toBe(404);
     await redis.del(`rl:orgs_my_membership_read:id:${maya.userId}`);
     expect((await inject("GET", mineUrl(gym), maya.cookies)).statusCode).toBe(200);
+    // An account deleted while still signed in reads nothing.
+    const ravi = await member(gym, "Ravi Kumar");
+    const raviPaid = await pay(gym, ravi.entryId, await give(gym, ravi.entryId, 0), 3000);
+    await sql`UPDATE users SET status = 'deleted' WHERE id = ${ravi.userId}`;
+    expect([401, 404]).toContain((await inject("GET", mineUrl(gym), ravi.cookies)).statusCode);
+    expect([401, 404]).toContain((await myReceipt(gym, ravi, raviPaid.receipt)).statusCode);
     await sql`UPDATE gyms SET status = 'archived' WHERE id = ${gym.id}`;
     expect((await inject("GET", mineUrl(gym), maya.cookies)).statusCode).toBe(404);
     expect((await myReceipt(gym, maya, paid.receipt)).statusCode).toBe(404);
