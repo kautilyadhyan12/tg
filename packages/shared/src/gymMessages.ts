@@ -467,7 +467,7 @@ export function dayInWords(day: string | null): string | null {
 /** How an overdue notice names somebody the reader pays for (18i): the name on the gym's
  *  list, or its first word where that is long, so three names always fit the message. */
 export function paidForName(fullName: string): string {
-  const name = fullName.trim().replace(/s+/g, " ");
+  const name = fullName.trim().replace(/\s+/g, " ");
   if (name.length > 0 && name.length <= 40) return name;
   return greetingName(name) ?? "somebody you pay for";
 }
