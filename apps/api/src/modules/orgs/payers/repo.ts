@@ -1,7 +1,7 @@
 // WHO PAYS FOR WHOM ON A GYM'S LIST (spec Part 3 §14.2; ROADMAP 18i). Every statement
 // names the gym, and both records of a link are the gym's own (the table's two keys).
 import type { Sql, TransactionSql } from "postgres";
-import type { MemberPayerPerson } from "@app/shared";
+import { PAYS_FOR_MAX, type MemberPayerPerson } from "@app/shared";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -9,8 +9,22 @@ interface PersonRow {
   entry_id: string;
   full_name: string;
   past: boolean;
+  in_app: boolean;
 }
-const personOf = (row: PersonRow): MemberPayerPerson => ({ entryId: row.entry_id, name: row.full_name, past: row.past });
+const personOf = (row: PersonRow): MemberPayerPerson => ({ entryId: row.entry_id, name: row.full_name, past: row.past, inApp: row.in_app });
+
+/** The record `e` has exactly one live app account: the one the morning's messages go to
+ *  (`soloHolders`). None, or two sharing it, is told nothing. */
+const IN_APP = (sql: SqlOrTx) => sql`
+  (SELECT count(*) FROM gym_members m JOIN users u ON u.id = m.user_id AND u.status = 'active'
+   WHERE m.gym_id = e.gym_id AND m.entry_id = e.id AND m.removed_at IS NULL) = 1`;
+
+/** Whether this record has one app account of its own. */
+export async function inApp(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
+  const [row] = await sql<{ in_app: boolean }[]>`
+    SELECT ${IN_APP(sql)} AS in_app FROM gym_member_list_entries e WHERE e.gym_id = ${gymId} AND e.id = ${entryId}`;
+  return row?.in_app ?? false;
+}
 
 /** Is this record on the gym's list, current or past? */
 export async function entryExists(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
@@ -21,7 +35,7 @@ export async function entryExists(sql: SqlOrTx, gymId: string, entryId: string):
 /** Who pays for this record, if anybody. */
 export async function payerOf(sql: SqlOrTx, gymId: string, entryId: string): Promise<MemberPayerPerson | null> {
   const [row] = await sql<PersonRow[]>`
-    SELECT e.id AS entry_id, e.full_name, (e.former_at IS NOT NULL) AS past
+    SELECT e.id AS entry_id, e.full_name, (e.former_at IS NOT NULL) AS past, ${IN_APP(sql)} AS in_app
     FROM gym_member_payers l
     JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.payer_entry_id
     WHERE l.gym_id = ${gymId} AND l.entry_id = ${entryId}`;
@@ -31,7 +45,7 @@ export async function payerOf(sql: SqlOrTx, gymId: string, entryId: string): Pro
 /** Whom this record pays for, in the order the gym's list holds them. */
 export async function paidForBy(sql: SqlOrTx, gymId: string, payerEntryId: string): Promise<MemberPayerPerson[]> {
   const rows = await sql<PersonRow[]>`
-    SELECT e.id AS entry_id, e.full_name, (e.former_at IS NOT NULL) AS past
+    SELECT e.id AS entry_id, e.full_name, (e.former_at IS NOT NULL) AS past, ${IN_APP(sql)} AS in_app
     FROM gym_member_payers l
     JOIN gym_member_list_entries e ON e.gym_id = l.gym_id AND e.id = l.entry_id
     WHERE l.gym_id = ${gymId} AND l.payer_entry_id = ${payerEntryId}
@@ -63,7 +77,7 @@ export async function movePayerLinks(
   gymId: string,
   goneId: string,
   keepId: string,
-): Promise<"merge_two_payers" | "merge_payer_and_paid_for" | null> {
+): Promise<"merge_two_payers" | "merge_payer_and_paid_for" | "merge_pays_for_full" | null> {
   await tx`
     DELETE FROM gym_member_payers
     WHERE gym_id = ${gymId}
@@ -79,6 +93,8 @@ export async function movePayerLinks(
     await tx`DELETE FROM gym_member_payers WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
   } else if (state.gone_payer !== null && state.keep_payer !== null) return "merge_two_payers";
   if ((state.gone_payer !== null || state.keep_payer !== null) && (state.gone_pays || state.keep_pays)) return "merge_payer_and_paid_for";
+  // The kept record would pay for both families: never more than one person may.
+  if ((await paysForCount(tx, gymId, goneId)) + (await paysForCount(tx, gymId, keepId)) > PAYS_FOR_MAX) return "merge_pays_for_full";
   await tx`UPDATE gym_member_payers SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
   await tx`UPDATE gym_member_payers SET payer_entry_id = ${keepId} WHERE gym_id = ${gymId} AND payer_entry_id = ${goneId}`;
   // What the record not kept paid for others is the kept one's, under the name it had then.

@@ -14,23 +14,28 @@ export function payerLine(answer, name) {
   return `${who} pays their own bills.`;
 }
 
+/** Who is told in the app when a payment is overdue: the payer where their record has one app
+ *  account of its own, and otherwise nobody, the person paid for included (round one, High 3). */
+const toldLine = (payer, inApp) =>
+  inApp ? `${payer} is told in the app when a payment is overdue.` : `Neither of them is told in the app when a payment is overdue: ${payer} has no app account of their own.`;
+
 /** What it means, said once under the line where somebody else pays. */
 export function payerMeans(answer, name) {
   if (answer.paidBy === null) return null;
   const payer = nameOf(answer.paidBy.name);
-  return `Take the money from ${payer}. Receipts name them, and they are told in the app when a payment is overdue. ${nameOf(name)} keeps their own memberships, bookings and pass.`;
+  return `Take the money from ${payer}, and receipts name them. ${toldLine(payer, answer.paidBy.inApp)} ${nameOf(name)} keeps their own memberships, bookings and pass.`;
 }
 
 /** Said to staff who may not change it, so the box is never a dead end. */
 export const PAYER_ASK_LINE = 'Only staff who record payments can change who pays.';
 
 /** The box Save opens, naming who changes and who does not, before anything is written. */
-export function setPayerWords(payerName, personName) {
+export function setPayerWords(payerName, personName, payerInApp) {
   const payer = nameOf(payerName);
   const person = nameOf(personName);
   return {
     question: `${payer} pays for ${person}?`,
-    detail: `From now on, ${person}'s bills, receipts and overdue messages go to ${payer}. ${person} keeps their own memberships, bookings and pass.`,
+    detail: `From now on, ${person}'s bills and receipts go to ${payer}. ${toldLine(payer, payerInApp)} ${person} keeps their own memberships, bookings and pass.`,
     button: 'Save',
     done: `${payer} now pays for ${person}.`,
   };

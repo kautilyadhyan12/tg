@@ -229,8 +229,14 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `Waived ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}`;
   },
   "org.member_fee_payment_voided": (s) => `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
-  "org.member_payer_set": (s) => `Changed who pays for ${person(s)}`,
-  "org.member_payer_removed": (s) => `Set ${person(s)} to pay for themselves`,
+  "org.member_payer_set": (s) => {
+    const payer = text(s, "payerName");
+    return payer === null ? `Changed who pays for ${person(s)}` : `Set ${payer} to pay for ${person(s)}`;
+  },
+  "org.member_payer_removed": (s) => {
+    const payer = text(s, "previousPayerName");
+    return payer === null ? `Set ${person(s)} to pay for themselves` : `Stopped ${payer} paying for ${person(s)}`;
+  },
   "org.product_created": (s) => {
     const price = money(s, "priceMinor");
     return `Added the product${quoted(text(s, "name"))}${price === null ? "" : ` at ${price}`}`;

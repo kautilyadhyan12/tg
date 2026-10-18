@@ -10,12 +10,15 @@ import { z } from "zod";
 /** The most people one record pays for: a family, never a list. */
 export const PAYS_FOR_MAX = 10;
 
-/** A record as the box names it. `past`: off the gym's list (a past member). */
+/** A record as the box names it. `past`: off the gym's list (a past member). `inApp`: one
+ *  app account of its own, so a payment overdue can be told to it in the app; a record nobody
+ *  in the app holds, or that two accounts share, is told nothing. */
 export const memberPayerPersonSchema = z
   .object({
     entryId: z.string().uuid(),
     name: z.string(),
     past: z.boolean(),
+    inApp: z.boolean(),
   })
   .strict();
 export type MemberPayerPerson = z.infer<typeof memberPayerPersonSchema>;
@@ -27,6 +30,8 @@ export const memberPayersResponseSchema = z
   .object({
     paidBy: memberPayerPersonSchema.nullable(),
     paysFor: z.array(memberPayerPersonSchema).max(PAYS_FOR_MAX),
+    /** This record has one app account of its own (`inApp` above). */
+    selfInApp: z.boolean(),
     canChange: z.boolean(),
   })
   .strict();
@@ -44,4 +49,5 @@ export const MEMBER_PAYER_WORDS = {
   pays_for_full: `That person already pays for ${String(PAYS_FOR_MAX)} people, the most one person can.`,
   merge_two_payers: "Both records have somebody who pays for them. Remove one of the two, then merge.",
   merge_payer_and_paid_for: "One record pays for others and the other is paid for. Remove one of the two, then merge.",
+  merge_pays_for_full: `Together these records pay for more than ${String(PAYS_FOR_MAX)} people, the most one person can. Remove some of them first, then merge.`,
 } as const;

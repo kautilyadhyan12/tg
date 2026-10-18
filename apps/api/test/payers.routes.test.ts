@@ -272,7 +272,8 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect((await sql`SELECT 1 FROM gym_member_payers WHERE gym_id IN (${gym.id}, ${next.id})`).length).toBe(0);
 
     const answer = await linked(gym, aarav.entryId, priya.entryId);
-    expect(answer.paidBy).toEqual({ entryId: priya.entryId, name: "Priya Sharma", past: false });
+    expect(answer.paidBy).toEqual({ entryId: priya.entryId, name: "Priya Sharma", past: false, inApp: true });
+    expect(answer.selfInApp).toBe(true);
     expect((await payersOf(gym, priya.entryId)).paysFor.map((p) => p.name)).toEqual(["Aarav Sharma"]);
 
     // Aarav's thirty days began eight days ago, unpaid: his bill is late. Ravi's too, his own.
@@ -286,6 +287,23 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     );
     expect(told.find((r) => r.user_id === ravi.userId)?.body).toBe("Hi Ravi, your payment to Payers Iron House is overdue. Please get in touch so we can sort it out.");
     expect(await overdueTo(next)).toEqual([]);
+
+    // A payer whose record two app accounts share (a family on one email) is nobody's to tell:
+    // neither account hears about Rhea's bill, and nor does Rhea.
+    const sanjay = await member(gym, "Sanjay Das");
+    const sanjaysWife = await account("Sunita Das");
+    await sql`INSERT INTO gym_members (gym_id, user_id, entry_id, joined_at) VALUES (${gym.id}, ${sanjaysWife.userId}, ${sanjay.entryId}, now() - interval '60 days')`;
+    const rhea = await member(gym, "Rhea Das");
+    expect((await linked(gym, rhea.entryId, sanjay.entryId)).paidBy).toMatchObject({ name: "Sanjay Das", inApp: false });
+    await give(gym, rhea.entryId, -8);
+    await sql`DELETE FROM gym_member_messages WHERE gym_id = ${gym.id}`;
+    await run([gym]);
+    const shared = (await overdueTo(gym)).map((r) => r.user_id);
+    expect(shared).not.toContain(sanjay.userId);
+    expect(shared).not.toContain(sanjaysWife.userId);
+    expect(shared).not.toContain(rhea.userId);
+    // Rhea stays linked: every later run below proves the same again.
+    await sql`DELETE FROM gym_member_messages WHERE gym_id = ${gym.id}`;
 
     // The desk takes Priya's money: the payment names her, and so does its receipt.
     const part = await pay(gym, aarav.entryId, aaravHeld, 1000);
@@ -328,8 +346,9 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
   it("one notice names everybody whose payment is late, the payer's own first as \"you\"; a payer with no app account is told nothing, and nor is the person", async () => {
     const gym = await makeGym("Payers Family Gym");
     await takesPayments(gym);
-    const meena = await member(gym, "Meena Iyer");
-    const kids = [await member(gym, "Kavya Iyer"), await member(gym, "Arjun Iyer"), await member(gym, "Dev Iyer"), await member(gym, "Isha Iyer")];
+    const meena = await member(gym, "Meena Das");
+    // Names with a small s, which round one found the notice dropping ("Ravi Das" read "Ravi Da ").
+    const kids = [await member(gym, "Kavya Das"), await member(gym, "Arjun Das"), await member(gym, "Dev  Das"), await member(gym, "Isha Das")];
     for (const kid of kids) {
       await linked(gym, kid.entryId, meena.entryId);
       await give(gym, kid.entryId, -8);
@@ -338,14 +357,15 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     // Paper-only: on the list with nobody in the app, paying for somebody who is.
     const paperDad = await record(gym, "Suresh Rao");
     const son = await member(gym, "Nikhil Rao");
-    await linked(gym, son.entryId, paperDad);
+    expect((await linked(gym, son.entryId, paperDad)).paidBy).toMatchObject({ name: "Suresh Rao", inApp: false });
+    expect((await payersOf(gym, paperDad)).selfInApp).toBe(false);
     await give(gym, son.entryId, -8);
 
     await run([gym]);
     const told = await overdueTo(gym);
     expect(told.map((r) => r.user_id)).toEqual([meena.userId]);
     expect(told[0]?.body).toBe(
-      "Hi Meena, the payments to Payers Family Gym for you, Arjun Iyer, Dev Iyer and 2 more are overdue. Please get in touch so we can sort it out.",
+      "Hi Meena, the payments to Payers Family Gym for you, Arjun Das, Dev Das and 2 more are overdue. Please get in touch so we can sort it out.",
     );
   });
 
@@ -377,8 +397,16 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect((await linked(gym, kid, dad)).paidBy?.entryId).toBe(dad);
     expect((await payersOf(gym, mum)).paysFor).toEqual([]);
     expect(await notes("org.member_payer_set")).toBe(2);
+    // Staff activity names who pays now, and who did before (round one, Low 4).
+    const said = async (action: string) => {
+      const [row] = await sql<{ meta: Record<string, unknown> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = ${action} ORDER BY at DESC, id DESC LIMIT 1`;
+      return STAFF_LINES[action]?.({ meta: row?.meta ?? {}, about: "Tara Das", words: { person: "member", people: "members" } as never, currency: "INR" });
+    };
+    expect(await said("org.member_payer_set")).toBe("Set Rohan Das to pay for Tara Das");
     for (let i = 0; i < 2; i++) expect((await inject("DELETE", payerUrl(gym, kid), gym.owner.cookies)).statusCode).toBe(200);
     expect(await notes("org.member_payer_removed")).toBe(1);
+    expect(await said("org.member_payer_removed")).toBe("Stopped Rohan Das paying for Tara Das");
 
     // Ten at most.
     for (let i = 0; i < PAYS_FOR_MAX; i++) await linked(gym, await record(gym, `Child ${String(i)}`), mum);
@@ -503,6 +531,23 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     const mixed = await merge(payerB, b);
     expect([mixed.statusCode, errorOf(mixed)]).toEqual([409, "merge_payer_and_paid_for"]);
     expect((await payersOf(gym, kid)).paidBy?.entryId).toBe(payerB);
+
+    // Two records of one payer, each paying for six: joined they would pay for twelve, past the
+    // ten one person may (round one, High 2). Refused, and both families stay as they were.
+    const umaOne = await record(gym, "Uma Rao");
+    const umaTwo = await record(gym, "Uma Rao");
+    for (let i = 0; i < 6; i++) {
+      await linked(gym, await record(gym, `First Child ${String(i)}`), umaOne);
+      await linked(gym, await record(gym, `Second Child ${String(i)}`), umaTwo);
+    }
+    const tooMany = await merge(umaOne, umaTwo);
+    expect([tooMany.statusCode, errorOf(tooMany)]).toEqual([409, "merge_pays_for_full"]);
+    expect((await payersOf(gym, umaOne)).paysFor).toHaveLength(6);
+    expect((await payersOf(gym, umaTwo)).paysFor).toHaveLength(6);
+    // Ten together is the most: a join that comes to exactly ten goes through.
+    for (let i = 0; i < 2; i++) await inject("DELETE", payerUrl(gym, (await payersOf(gym, umaOne)).paysFor[0]?.entryId ?? ""), gym.owner.cookies);
+    expect((await merge(umaOne, umaTwo)).statusCode).toBe(200);
+    expect((await payersOf(gym, umaTwo)).paysFor).toHaveLength(PAYS_FOR_MAX);
   });
 
   it("two staff at the same instant: two records naming each other as payer make one link, never two; the tenth and eleventh place at once fill one", async () => {

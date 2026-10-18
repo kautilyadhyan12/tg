@@ -26,8 +26,8 @@ const BILLING = "billing.members";
 const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
 
 async function read(sql: Sql, gymId: string, entryId: string, canChange: boolean): Promise<MemberPayersResponse> {
-  const [paidBy, paysFor] = await Promise.all([repo.payerOf(sql, gymId, entryId), repo.paidForBy(sql, gymId, entryId)]);
-  return memberPayersResponseSchema.parse({ paidBy, paysFor, canChange });
+  const [paidBy, paysFor, selfInApp] = await Promise.all([repo.payerOf(sql, gymId, entryId), repo.paidForBy(sql, gymId, entryId), repo.inApp(sql, gymId, entryId)]);
+  return memberPayersResponseSchema.parse({ paidBy, paysFor, selfInApp, canChange });
 }
 
 export async function getPayers(deps: PayersDeps, userId: string, gymId: string, entryId: string): Promise<MemberPayersResponse> {
@@ -51,13 +51,15 @@ export async function setPayer(deps: PayersDeps, userId: string, gymId: string, 
     if (before?.entryId === payerEntryId) return;
     if ((await repo.paysForCount(tx, gymId, payerEntryId)) >= PAYS_FOR_MAX) throw new OrgsError(409, "pays_for_full", MEMBER_PAYER_WORDS.pays_for_full);
     await repo.setPayer(tx, gymId, entryId, payerEntryId, userId);
+    const payer = await repo.payerOf(tx, gymId, entryId);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
       action: "org.member_payer_set",
       targetType: "member_list_entry",
       targetId: entryId,
-      meta: { payerEntryId, previousPayerEntryId: before?.entryId ?? null },
+      // The names as they are now, so Staff activity can say who pays (round one, Low 4).
+      meta: { payerEntryId, payerName: payer?.name ?? "", previousPayerEntryId: before?.entryId ?? null, previousPayerName: before?.name ?? null },
     });
   });
   return await read(deps.sql, gymId, entryId, true);
@@ -77,7 +79,7 @@ export async function removePayer(deps: PayersDeps, userId: string, gymId: strin
       action: "org.member_payer_removed",
       targetType: "member_list_entry",
       targetId: entryId,
-      meta: { previousPayerEntryId: before.entryId },
+      meta: { previousPayerEntryId: before.entryId, previousPayerName: before.name },
     });
   });
   return await read(deps.sql, gymId, entryId, true);

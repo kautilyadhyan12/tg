@@ -81,8 +81,8 @@ function held(n, startsOn) {
 const heldAnswer = (memberships) => ({
   data: heldMembershipsResponseSchema.parse({ today: TODAY, past: false, memberships, earlierNotShown: 0, types: [GOLD], listed: null, canBill: true, discounts: [], taxIncluded: false }),
 });
-const person = (entryId, name, past = false) => ({ entryId, name, past });
-const payers = (over = {}) => ({ data: memberPayersResponseSchema.parse({ paidBy: null, paysFor: [], canChange: true, ...over }) });
+const person = (entryId, name, past = false, inApp = true) => ({ entryId, name, past, inApp });
+const payers = (over = {}) => ({ data: memberPayersResponseSchema.parse({ paidBy: null, paysFor: [], selfInApp: true, canChange: true, ...over }) });
 
 const listChanged = vi.fn();
 const draw = (entryId, name, gym = IRON) => (
@@ -142,15 +142,26 @@ describe('Who pays', () => {
     expect(link.getAttribute('href')).toBe(`/console/iron-temple/members?person=${PRIYA}`);
     expect(
       within(box()).getByText(
-        'Take the money from Priya Sharma. Receipts name them, and they are told in the app when a payment is overdue. Aarav Sharma keeps their own memberships, bookings and pass.',
+        'Take the money from Priya Sharma, and receipts name them. Priya Sharma is told in the app when a payment is overdue. Aarav Sharma keeps their own memberships, bookings and pass.',
       ),
     ).toBeTruthy();
     expect(within(box()).getByRole('button', { name: 'Change who pays' })).toBeTruthy();
     expect(within(box()).queryByRole('button', { name: 'Add someone they pay for' })).toBeNull();
   });
 
+  it("a payer with no app account of their own: the box says neither of them is told in the app (round one, High 3)", async () => {
+    orgService.getPayers.mockResolvedValue(payers({ paidBy: person(PRIYA, 'Priya Sharma', false, false) }));
+    render(draw(AARAV, 'Aarav Sharma'));
+    expect(
+      await within(await screen.findByTestId('who-pays')).findByText(
+        'Take the money from Priya Sharma, and receipts name them. Neither of them is told in the app when a payment is overdue: Priya Sharma has no app account of their own. Aarav Sharma keeps their own memberships, bookings and pass.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('Choose who pays: found by name, asked first in a box that names who changes, then said where it was pressed', async () => {
-    orgService.getPayers.mockResolvedValue(payers());
+    // Aarav's own answer, and Priya's when she is picked: she has no app account of her own.
+    orgService.getPayers.mockImplementation((_gym, entryId) => Promise.resolve(entryId === PRIYA ? payers({ selfInApp: false }) : payers()));
     registerService.findPeople.mockResolvedValue([
       { entryId: AARAV, name: 'Aarav Sharma', email: null, memberNumber: null, past: false },
       { entryId: PRIYA, name: 'Priya Sharma', email: 'priya@gmail.com', memberNumber: '104', past: false },
@@ -163,9 +174,14 @@ describe('Who pays', () => {
     const found = await screen.findByRole('list', { name: 'People found' });
     expect(within(found).getAllByRole('button').map((b) => b.textContent)).toEqual(['Priya Sharma · No. 104 · priya@gmail.com']);
     fireEvent.click(within(found).getByRole('button'));
-    const ask = screen.getByTestId('payer-ask');
+    const ask = await screen.findByTestId('payer-ask');
     expect(within(ask).getByText('Priya Sharma pays for Aarav Sharma?')).toBeTruthy();
-    expect(within(ask).getByText("From now on, Aarav Sharma's bills, receipts and overdue messages go to Priya Sharma. Aarav Sharma keeps their own memberships, bookings and pass.")).toBeTruthy();
+    expect(
+      within(ask).getByText(
+        "From now on, Aarav Sharma's bills and receipts go to Priya Sharma. Neither of them is told in the app when a payment is overdue: Priya Sharma has no app account of their own. Aarav Sharma keeps their own memberships, bookings and pass.",
+      ),
+    ).toBeTruthy();
+    expect(orgService.getPayers).toHaveBeenCalledWith(GYM, PRIYA);
     expect(orgService.setPayer).not.toHaveBeenCalled();
     orgService.setPayer.mockResolvedValue(payers({ paidBy: person(PRIYA, 'Priya Sharma') }));
     fireEvent.click(within(ask).getByRole('button', { name: 'Save' }));

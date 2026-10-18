@@ -520,6 +520,8 @@ export default function Members() {
       (was) => {
         const params = new URLSearchParams(was);
         params.delete('person');
+        // A person's page opens on Your list alone: the In the app, Staff and Staff activity
+        // tabs draw no list to open it over, so the address goes back to Your list.
         params.delete('view');
         return params;
       },

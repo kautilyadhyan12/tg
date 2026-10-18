@@ -336,6 +336,25 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
     }
   };
 
+  /** Somebody picked: the box asks first. Picked as the payer, their own record is read, so the
+   *  box can say whether they are told in the app. */
+  const pickFor = async (mode, person) => {
+    if (mode !== 'payer') {
+      setOpen({ kind: 'confirm', mode, person, payerInApp: null });
+      return;
+    }
+    setBusy(true);
+    setRefusal(null);
+    try {
+      const theirs = await orgService.getPayers(gymId, person.entryId);
+      setOpen({ kind: 'confirm', mode, person, payerInApp: theirs.data.selfInApp });
+    } catch (err) {
+      setRefusal(errorText(err, "We couldn't read that person. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (state.entryId !== entryId) return null;
   const who = name && name.trim() !== '' ? name : 'this person';
   const answer = state.answer;
@@ -446,7 +465,12 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
 
       {open?.kind === 'find' ? (
         <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="payer-find">
-          <FindPerson gymId={gymId} label={findLabel(open.mode)} notId={entryId} disabled={busy} onPick={(p) => setOpen({ kind: 'confirm', mode: open.mode, person: p })} />
+          <FindPerson gymId={gymId} label={findLabel(open.mode)} notId={entryId} disabled={busy} onPick={(p) => void pickFor(open.mode, p)} />
+          {refusal !== null ? (
+            <p className="c-s14 m-0" style={{ color: 'var(--bad)' }} role="alert">
+              {refusal}
+            </p>
+          ) : null}
           <button type="button" className={`${PLAIN} self-start`} onClick={close}>
             Back
           </button>
@@ -454,20 +478,20 @@ export default function MemberPayer({ gymId, gym, entryId, name, readOnly, onCha
       ) : null}
       {open?.kind === 'confirm' && open.mode === 'payer' ? (
         <AskBox
-          words={setPayerWords(open.person.name, who)}
+          words={setPayerWords(open.person.name, who, open.payerInApp)}
           busy={busy}
           refusal={refusal}
           onBack={close}
-          onYes={() => void change(() => orgService.setPayer(gymId, entryId, open.person.entryId), setPayerWords(open.person.name, who).done)}
+          onYes={() => void change(() => orgService.setPayer(gymId, entryId, open.person.entryId), setPayerWords(open.person.name, who, open.payerInApp).done)}
         />
       ) : null}
       {open?.kind === 'confirm' && open.mode === 'paysFor' ? (
         <AskBox
-          words={setPayerWords(who, open.person.name)}
+          words={setPayerWords(who, open.person.name, answer.selfInApp)}
           busy={busy}
           refusal={refusal}
           onBack={close}
-          onYes={() => void change(() => orgService.setPayer(gymId, open.person.entryId, entryId), setPayerWords(who, open.person.name).done, true)}
+          onYes={() => void change(() => orgService.setPayer(gymId, open.person.entryId, entryId), setPayerWords(who, open.person.name, answer.selfInApp).done, true)}
         />
       ) : null}
       {open?.kind === 'remove' && answer.paidBy !== null ? (
