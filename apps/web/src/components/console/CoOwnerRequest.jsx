@@ -156,9 +156,12 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
         await openCard(request.id, res.data.card, words.card);
         return;
       }
-      setDone(accept ? words.yes(gymName) : `You said no. ${request.ownerName || 'The owner'} can ask you again.`);
+      // What the server did, not what was pressed: Decline after their card was saved is a yes.
+      const accepted = res.data?.status === 'accepted';
+      const yes = request.cardNeeded === true && words.card ? words.card.yes : words.yes;
+      setDone(accepted ? yes(gymName) : `You said no. ${request.ownerName || 'The owner'} can ask you again.`);
       setRequest(null);
-      if (accept) onAccepted?.();
+      if (accepted) onAccepted?.();
       setBusy(null);
     } catch (err) {
       setProblem(errorText(err, "We couldn't send your answer. Please try again."));

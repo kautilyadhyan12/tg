@@ -181,6 +181,16 @@ describe('the co-owner asked, on Overview, for a gym paying through Paddle', () 
     expect(onAccepted).toHaveBeenCalledTimes(1);
   });
 
+  it('Decline answered as a yes, because their card was saved in another tab, says they are the owner', async () => {
+    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: REQUEST } });
+    orgService.answerOwnerRequest.mockResolvedValue({ data: { status: 'accepted' } });
+    const onAccepted = draw();
+    fireEvent.click(within(await screen.findByTestId('owner-request')).getByRole('button', { name: 'Decline' }));
+    expect(await screen.findByText("You're now the owner of Iron House. Your card pays for the plan from now on.")).toBeTruthy();
+    expect(screen.queryByText(/You said no/)).toBeNull();
+    expect(onAccepted).toHaveBeenCalledTimes(1);
+  });
+
   it("a request that ended while the card was saved says the server's sentence, not that they are the owner", async () => {
     orgService.ownerCardSaved.mockRejectedValue({ response: { status: 409, data: { error: 'request_gone', message: 'This request has ended.', requestId: 'r' } } });
     const { onAccepted, fire } = await acceptToWindow();
