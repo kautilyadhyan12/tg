@@ -755,7 +755,7 @@ export async function giveHeld(
             amountMinor: String(firstBill.amountMinor),
             currency: type.currency,
             method: input.method,
-            ...(recorded.paidByName === null ? {} : { paidBy: recorded.paidByName }),
+            ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
           },
         });
       }

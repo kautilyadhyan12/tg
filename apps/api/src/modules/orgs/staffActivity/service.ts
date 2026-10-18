@@ -75,6 +75,13 @@ function subjectOf(note: repo.NoteRow): { kind: repo.SubjectKind; id: string } |
   }
 }
 
+/** The payer's record a note names (18i): who paid a payment, who was set to pay, or who stopped. */
+function payerOf(note: repo.NoteRow): string | null {
+  const key = note.action === "org.member_payer_removed" ? "previousPayerEntryId" : note.action === "org.member_payer_set" ? "payerEntryId" : "paidByEntryId";
+  const id = note.meta[key];
+  return typeof id === "string" ? id : null;
+}
+
 /** A changed class can name its weekly slot rather than the one class. */
 const alsoAsked = (s: { kind: repo.SubjectKind; id: string }): { kind: repo.SubjectKind; id: string } | null =>
   s.kind === "session" ? { kind: "schedule", id: s.id } : null;
@@ -123,6 +130,8 @@ export async function getStaffActivity(deps: StaffActivityDeps, org: OrgRow, que
     const subject = subjectOf(note);
     ask(subject);
     if (subject !== null) ask(alsoAsked(subject));
+    const payer = payerOf(note);
+    if (payer !== null) ask({ kind: "entry", id: payer });
   }
   const formerStaff = workers.filter((w) => !w.current).map((w) => w.userId);
   const names = ids.size === 0 ? new Map<string, string>() : await repo.readNames(deps.sql, org.id, ids, formerStaff);
@@ -133,7 +142,9 @@ export async function getStaffActivity(deps: StaffActivityDeps, org: OrgRow, que
     const second = subject === null ? null : alsoAsked(subject);
     const about = subject === null ? null : (names.get(`${subject.kind}:${subject.id}`) ?? (second === null ? null : (names.get(`${second.kind}:${second.id}`) ?? null)));
     const say = STAFF_LINES[note.action];
-    const line = say === undefined ? "Made a change" : say({ meta: note.meta, about, words, currency: org.currencyDisplay });
+    const payer = payerOf(note);
+    const payerName = payer === null ? null : (names.get(`entry:${payer}`) ?? null);
+    const line = say === undefined ? "Made a change" : say({ meta: note.meta, about, words, currency: org.currencyDisplay, payer: payerName });
     return { id: note.id, day: note.day, minute: note.minute, workerId: note.actorId, worker: note.actorName, line };
   });
 

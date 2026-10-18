@@ -496,9 +496,10 @@ export interface NewPayment {
  *
  *  Who paid is read here, in the same statement, for every way a payment is recorded: the
  *  record that pays for the bill's person at this moment (18i), by the name it has now, or
- *  nobody. `paidByName` is that name, for the caller's note. */
-export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date): Promise<{ id: string; paidByName: string | null } | null> {
-  const [row] = await tx<{ id: string; paid_by_name: string | null }[]>`
+ *  nobody. `paidByEntryId` is that record, for the caller's note, which keeps an id and never a name:
+ *  Staff activity looks the name up when it is read, so a record deleted for good is named by none. */
+export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date): Promise<{ id: string; paidByEntryId: string | null } | null> {
+  const [row] = await tx<{ id: string; paid_by_entry_id: string | null }[]>`
     WITH n AS (${nextReceipt(tx, p.gymId)}),
          payer AS (
            SELECT pe.id, pe.full_name
@@ -514,8 +515,8 @@ export async function insertPayment(tx: TransactionSql, p: NewPayment, now: Date
            (SELECT full_name FROM payer), (SELECT id FROM payer)
     FROM n
     ON CONFLICT DO NOTHING
-    RETURNING id, paid_by_name`;
-  return row === undefined ? null : { id: row.id, paidByName: row.paid_by_name };
+    RETURNING id, paid_by_entry_id`;
+  return row === undefined ? null : { id: row.id, paidByEntryId: row.paid_by_entry_id };
 }
 
 export interface DayPaymentRow {

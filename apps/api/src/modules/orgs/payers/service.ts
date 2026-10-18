@@ -51,15 +51,15 @@ export async function setPayer(deps: PayersDeps, userId: string, gymId: string, 
     if (before?.entryId === payerEntryId) return;
     if ((await repo.paysForCount(tx, gymId, payerEntryId)) >= PAYS_FOR_MAX) throw new OrgsError(409, "pays_for_full", MEMBER_PAYER_WORDS.pays_for_full);
     await repo.setPayer(tx, gymId, entryId, payerEntryId, userId);
-    const payer = await repo.payerOf(tx, gymId, entryId);
     await insertAudit(tx, {
       actorUserId: userId,
       gymId,
       action: "org.member_payer_set",
       targetType: "member_list_entry",
       targetId: entryId,
-      // The names as they are now, so Staff activity can say who pays (round one, Low 4).
-      meta: { payerEntryId, payerName: payer?.name ?? "", previousPayerEntryId: before?.entryId ?? null, previousPayerName: before?.name ?? null },
+      // Ids, never names: Staff activity looks the payer up as it is read, so a record deleted
+      // for good is named by no note.
+      meta: { payerEntryId, previousPayerEntryId: before?.entryId ?? null },
     });
   });
   return await read(deps.sql, gymId, entryId, true);
@@ -79,7 +79,7 @@ export async function removePayer(deps: PayersDeps, userId: string, gymId: strin
       action: "org.member_payer_removed",
       targetType: "member_list_entry",
       targetId: entryId,
-      meta: { previousPayerEntryId: before.entryId, previousPayerName: before.name },
+      meta: { previousPayerEntryId: before.entryId },
     });
   });
   return await read(deps.sql, gymId, entryId, true);

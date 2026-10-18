@@ -14,7 +14,6 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { sendDueMessages } from "../src/modules/orgs/messages/send.js";
 import { linesPage } from "../src/modules/orgs/paymentsDownload/repo.js";
-import { STAFF_LINES } from "../src/modules/orgs/staffActivity/words.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -211,6 +210,13 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     return JSON.parse(res.body) as Receipt;
   };
 
+  /** Staff activity's lines, read by the real route as the owner reads them. */
+  const activityOf = async (gym: Gym): Promise<string[]> => {
+    const res = await inject("GET", `/v1/orgs/${gym.id}/staff-activity`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    return (JSON.parse(res.body) as { lines: { line: string }[] }).lines.map((l) => l.line);
+  };
+
   const log = { info: () => undefined, error: () => undefined };
   /** A run of the sender that reads everybody, at noon `n` days from today. */
   const run = async (gyms: readonly Gym[], n = 0) => {
@@ -338,6 +344,14 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect((await payersOf(gym, aarav.entryId)).paidBy).toBeNull();
     expect(await receipt(gym, part.receipt)).toMatchObject({ person: "Aarav Sharma", paidBy: null, paidByDeleted: true });
     expect((await sql`SELECT 1 FROM gym_member_payments WHERE gym_id = ${gym.id} AND paid_by_name = 'Priya Sharma'`).length).toBe(0);
+    // Nor does any note the server keeps, nor Staff activity read now (the re-check's High):
+    // her payment, her setting as payer and her removal read as somebody no longer on the list.
+    expect((await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND meta::text LIKE '%Priya Sharma%'`).length).toBe(0);
+    const lines = await activityOf(gym);
+    // Every line about paying; "Removed Priya Sharma from the app" is her app account's, which she still has.
+    expect(lines.filter((l) => /pay/i.test(l) && l.includes("Priya"))).toEqual([]);
+    expect(lines).toContain("Recorded a payment of ₹10.00 from a member no longer on your list for Aarav Sharma (Cash)");
+    expect(lines).toContain("Stopped a member no longer on your list paying for Aarav Sharma");
     await sql`DELETE FROM gym_member_messages WHERE gym_id = ${gym.id}`;
     await run([gym], 2);
     expect((await overdueTo(gym)).map((r) => r.user_id)).toEqual([aarav.userId]);
@@ -397,16 +411,12 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
     expect((await linked(gym, kid, dad)).paidBy?.entryId).toBe(dad);
     expect((await payersOf(gym, mum)).paysFor).toEqual([]);
     expect(await notes("org.member_payer_set")).toBe(2);
-    // Staff activity names who pays now, and who did before (round one, Low 4).
-    const said = async (action: string) => {
-      const [row] = await sql<{ meta: Record<string, unknown> }[]>`
-        SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = ${action} ORDER BY at DESC, id DESC LIMIT 1`;
-      return STAFF_LINES[action]?.({ meta: row?.meta ?? {}, about: "Tara Das", words: { person: "member", people: "members" } as never, currency: "INR" });
-    };
-    expect(await said("org.member_payer_set")).toBe("Set Rohan Das to pay for Tara Das");
     for (let i = 0; i < 2; i++) expect((await inject("DELETE", payerUrl(gym, kid), gym.owner.cookies)).statusCode).toBe(200);
     expect(await notes("org.member_payer_removed")).toBe(1);
-    expect(await said("org.member_payer_removed")).toBe("Stopped Rohan Das paying for Tara Das");
+    // Staff activity, read as the owner reads it, names who pays and who did before (round one, Low 4).
+    expect(await activityOf(gym)).toEqual(
+      expect.arrayContaining(["Set Anita Das to pay for Tara Das", "Set Rohan Das to pay for Tara Das", "Stopped Rohan Das paying for Tara Das"]),
+    );
 
     // Ten at most.
     for (let i = 0; i < PAYS_FOR_MAX; i++) await linked(gym, await record(gym, `Child ${String(i)}`), mum);
@@ -479,10 +489,10 @@ d("family plans: one person pays for others (real Postgres)", { timeout: T }, ()
       ["refund", "Zoya Khan", "Farah Khan"],
     ]);
 
-    const [note] = await sql<{ meta: Record<string, unknown> }[]>`
-      SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_payment_recorded' ORDER BY at DESC, id DESC LIMIT 1`;
-    const sentence = STAFF_LINES["org.member_payment_recorded"]?.({ meta: note?.meta ?? {}, about: "Zoya Khan", words: { person: "member", people: "members" } as never, currency: "INR" });
-    expect(sentence).toBe("Recorded a payment of ₹30.00 from Farah Khan for Zoya Khan (Cash)");
+    // Staff activity names people as their records are named now, as it names everybody.
+    expect(await activityOf(gym)).toEqual(
+      expect.arrayContaining(["Recorded a payment of ₹30.00 from Farah Siddiqui for Zoya Khan (Cash)", "Recorded a payment of ₹5.00 from Farah Siddiqui for Zoya Khan for a no-show fee (Cash)"]),
+    );
   });
 
   it("two records of one person joined: the link moves to the kept one, a link between the two goes, and a join that would leave somebody with two payers, or a payer who is paid for, is refused", async () => {

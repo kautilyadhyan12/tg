@@ -175,7 +175,7 @@ export async function recordPayment(
         currency: bill.currency,
         method: input.method,
         billSettled: String(paid.status === "paid"),
-        ...(recorded.paidByName === null ? {} : { paidBy: recorded.paidByName }),
+        ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
       },
     });
     return { kind: "ok" };

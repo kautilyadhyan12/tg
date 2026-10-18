@@ -15,6 +15,9 @@ export interface Said {
   words: OrgWords;
   /** The gym's currency, for a price note written without one. */
   currency: string;
+  /** Who paid, or who pays, where the note names a payer's record (18i), looked up at this gym as
+   *  `about` is: null when that record no longer exists. */
+  payer?: string | null;
 }
 
 const text = (s: Said, key: string): string | null => {
@@ -85,10 +88,8 @@ const pay = (s: Said): string => {
 };
 /** " for Aarav Sharma", where somebody else on the list paid for them (18i): the payer by
  *  the name their record had then, the person by the name it has now. */
-const fromWhom = (s: Said): string => {
-  const payer = text(s, "paidBy");
-  return payer === null ? person(s) : `${payer} for ${person(s)}`;
-};
+const payerOf = (s: Said): string => s.payer ?? `a ${s.words.person} no longer on your list`;
+const fromWhom = (s: Said): string => (text(s, "paidByEntryId") === null ? person(s) : `${payerOf(s)} for ${person(s)}`);
 const methodWords = (s: Said): string => {
   const method = text(s, "method");
   const said = method === null ? undefined : (MEMBER_PAYMENT_METHOD_WORDS as Readonly<Record<string, string>>)[method];
@@ -229,14 +230,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `Waived ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}`;
   },
   "org.member_fee_payment_voided": (s) => `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
-  "org.member_payer_set": (s) => {
-    const payer = text(s, "payerName");
-    return payer === null ? `Changed who pays for ${person(s)}` : `Set ${payer} to pay for ${person(s)}`;
-  },
-  "org.member_payer_removed": (s) => {
-    const payer = text(s, "previousPayerName");
-    return payer === null ? `Set ${person(s)} to pay for themselves` : `Stopped ${payer} paying for ${person(s)}`;
-  },
+  "org.member_payer_set": (s) => `Set ${payerOf(s)} to pay for ${person(s)}`,
+  "org.member_payer_removed": (s) => `Stopped ${payerOf(s)} paying for ${person(s)}`,
   "org.product_created": (s) => {
     const price = money(s, "priceMinor");
     return `Added the product${quoted(text(s, "name"))}${price === null ? "" : ` at ${price}`}`;

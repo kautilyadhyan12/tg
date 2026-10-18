@@ -515,7 +515,7 @@ export async function recordFeePayment(
         amountMinor: String(fee.amount_minor),
         currency: fee.currency,
         method: input.method,
-        ...(recorded.paidByName === null ? {} : { paidBy: recorded.paidByName }),
+        ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
       },
     });
     return { kind: "ok" };
