@@ -7,3 +7,4 @@
 - **Researched (sources in the terminal's report, read 2026-10-18):** no camera fitness product publishes how it keeps one person in a crowd; ML Kit pose is one person only; MediaPipe's pose model card lists several people as out of scope for one pose; the cheapest ElevenLabs plan that allows use in an app is Starter, $6 a month (their pricing page).
 - **Open:** Kd's merge of this pull request. The voice scripts come with item 53 (the shared lines) and with each exercise.
 - **Next:** exercise folder 1, item 50 (its first part the true proportions); exercise folder 2, item 60. Each with "Build the next thing", from a fresh branch of `origin/master`.
+- **Merged 2026-10-18** (pull request #314) on Kd's *"merge"*; its checks green (the secrets scan; the code checks skip a change with no code).
