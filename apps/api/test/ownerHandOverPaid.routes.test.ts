@@ -272,6 +272,24 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       expect(await ownerOf(gym)).toBe(gym.owner.userId);
     }, TEST_TIMEOUT_MS);
 
+    it("a card saved on the window for anybody but the new owner hands nothing over", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      const requestId = await requestIdFor(gym, cora);
+      const txn = await acceptToWindow(gym, requestId, cora);
+      // The window is pointed at the old owner again (their own Paddle page, or a Cancel at
+      // Paddle the server did not hear about), and a card is saved on it there.
+      const window = paddle.txns.get(txn);
+      if (window === undefined) throw new Error("no window");
+      paddle.txns.set(txn, { ...window, customer_id: gym.payer });
+      paddle.complete(txn);
+      expect(ownerCardResponseSchema.parse(JSON.parse((await cardSaved(gym, requestId, cora)).body)).status).toBe("waiting");
+      await worker();
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+      expect(paddle.renewal(gym.sub).receipt).toBe(gym.payer);
+    }, TEST_TIMEOUT_MS);
+
     it("nobody but the person asked can press their Accept or say their card was saved", async () => {
       const gym = await makePaidGym("Kd");
       const cora = await makeCoOwner(gym, "Cora");
