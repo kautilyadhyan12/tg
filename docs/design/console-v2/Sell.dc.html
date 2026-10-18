@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sell — the register</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%">
+<div class="shell">
+<div class="rail">
+<div class="rail-gym"><div class="rail-logo"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="grow"><div class="rail-name ell">Northside Strength</div><div class="rail-meta">Pune · Gym</div></div><svg class="ic ic-s" viewBox="0 0 24 24" style="color: var(--rail-t3)"><path d="M7 15l5 5 5-5M7 9l5-5 5 5"/></svg></div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 12h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM4 16h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z"/></svg>Overview</a>
+<div class="rail-grp">Today</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 14l2 2 4-4"/></svg>Attendance</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5M16 2v4M8 2v4M3 10h5M10 16a6 6 0 1 0 12 0a6 6 0 1 0-12 0M16 14v2.2l1.5 1.3"/></svg>Classes</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7"/></svg>Personal training</a>
+<div class="rail-grp">People</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Members &amp; staff</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.3 15H7a4 4 0 0 0-4 4v2M14 17a3 3 0 1 0 6 0a3 3 0 1 0-6 0M21 21l-1.9-1.9"/></svg>Leads</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M22 17l-8.5-8.5-5 5L2 7M16 17h6v-6"/></svg>At risk</a>
+<div class="rail-grp">Money</div>
+<a class="ni ni-on"><svg class="ic" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg>Sell</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4zM7 7.5h.01"/></svg>Memberships</a>
+<div class="rail-grp">Community</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Updates</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>Events</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M7.2 15L2.7 7.1a2 2 0 0 1 .1-2.2l1.6-2.1A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.1a2 2 0 0 1 .1 2.2L16.8 15M11 12L5.1 2.2M13 12l5.9-9.8M8 7h8M7 17a5 5 0 1 0 10 0a5 5 0 1 0-10 0"/></svg>Challenges</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.7V17c0 .6-.5 1-1 1.2C7.9 18.8 7 20.2 7 22M14 14.7V17c0 .6.5 1 1 1.2 1.1.6 2 2 2 3.8M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>Leaderboard</a>
+<div class="rail-grp">Manage</div>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>Reports</a>
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg>Settings</a>
+<div class="rail-foot">
+<a class="ni"><svg class="ic" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg>Your organisations</a>
+<div class="seg-rail"><span>Light</span><span class="on">Dark</span><span>Auto</span></div>
+<div class="rail-me"><span class="rail-av">AM</span><div class="grow"><div class="rail-name s14 ell">Arjun Mehta</div><div class="rail-meta">Owner</div></div><span class="icon-btn icon-btn-sm icon-btn-q" style="color: var(--rail-t3)" aria-label="Sign out"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span></div>
+</div>
+</div>
+
+<div class="main">
+<div class="page">
+<div class="ph"><div class="ph-t"><h1 class="h1">Sell</h1><p class="sub">Record what Northside Strength sells at the desk.</p></div></div>
+<div class="tabs"><span class="tab tab-on">Register</span><span class="tab">Products <span class="n">3</span></span><span class="tab">Tax</span><span class="tab">Discounts</span></div>
+
+<div class="cols" style="grid-template-columns: minmax(0,1fr) 380px">
+<div class="card" style="padding: 26px">
+<div class="row between" style="margin-bottom: 20px"><h2 class="h2">New sale</h2><span class="small">Take the money yourself: the app does not charge anybody.</span></div>
+<div class="form" style="gap: 26px">
+<div class="field"><span class="flabel">Add a product</span>
+<div class="g3s" style="gap: 10px">
+<div class="rcard rcard-on" style="flex-direction: column; gap: 2px; padding: 14px"><div class="row between" style="width: 100%"><span class="rt">Protein bar</span><span class="tag tag-soft">2 in sale</span></div><span class="rs num">₹120.00</span></div>
+<div class="rcard" style="flex-direction: column; gap: 2px; padding: 14px"><span class="rt">Water bottle</span><span class="rs num">₹30.00</span></div>
+<div class="rcard" style="flex-direction: column; gap: 2px; padding: 14px"><span class="rt">Shaker</span><span class="rs num">₹450.00 · 20 left</span></div>
+</div></div>
+<div class="field"><span class="flabel">In this sale</span>
+<div class="raise row between" style="padding: 12px 14px">
+<div class="stack-2"><span class="body w6">Protein bar</span><span class="small">₹120.00 each · No discount applies to this product today</span></div>
+<div class="row-m"><div class="row-s" style="border: 1px solid var(--ctl-line); border-radius: 10px; padding: 2px"><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="One fewer"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></span><span class="body w7 num" style="min-width: 18px; text-align: center">2</span><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="One more"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg></span></div><span class="body w6 num" style="min-width: 80px; text-align: right">₹240.00</span><span class="btn btn-q btn-sm">Remove</span></div>
+</div></div>
+<div class="field"><span class="flabel">Who is buying?</span><div class="seg seg-w"><span class="on">Walk-in (not on your list)</span><span>A member</span></div></div>
+<div class="field"><span class="flabel">How did they pay?</span><div class="seg seg-w"><span class="on">Cash</span><span>Card at the desk</span><span>Bank transfer</span></div></div>
+<div class="row between" style="border-top: 1px solid var(--line); padding-top: 20px">
+<div class="stack-2"><span class="small">Total · no tax on these products</span><span class="big" style="font-size: 34px; line-height: 40px">₹240.00</span></div>
+<span class="btn btn-p btn-xl"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Take payment · ₹240.00</span>
+</div>
+</div>
+</div>
+
+<div class="stack">
+<div class="card">
+<div class="kpi"><span class="k">Taken today · Sun 18 Oct</span><span class="big">₹64,370</span><span class="f">From 2 sales and 9 membership payments</span></div>
+<div class="stack-xs" style="margin-top: 16px">
+<div class="row between"><span class="sub">Cash</span><span class="body num">₹3,870.00</span></div>
+<div class="row between"><span class="sub">Card at the desk</span><span class="body num">₹5,000.00</span></div>
+<div class="row between"><span class="sub">Bank transfer</span><span class="body num">₹55,500.00</span></div>
+</div>
+<span class="btn btn-s btn-sm" style="margin-top: 16px"><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg>See another day's sales</span>
+</div>
+<div class="card">
+<div class="card-h" style="margin-bottom: 8px"><h2 class="h2">Sell a membership</h2></div>
+<p class="small" style="margin-bottom: 12px">Memberships are sold on the member's own page. Find them to open it with Add membership ready.</p>
+<div class="input"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0M21 21l-4.3-4.3"/></svg><span class="phd">Who is it for? Name or member number</span></div>
+</div>
+</div>
+</div>
+
+<div class="card-0" style="margin-top: 24px">
+<div class="card-hp"><div class="stack-2"><h2 class="h2">Today's sales</h2><span class="small">To void or refund a membership payment, open the member's page.</span></div><span class="small">11 today</span></div>
+<div class="thead" style="grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 150px 70px 120px 120px"><span>What</span><span>Who</span><span>How they paid</span><span>Time</span><span class="r">Amount</span><span></span></div>
+<div class="trow" style="grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 150px 70px 120px 120px"><span class="body w6">1 × Water bottle</span><span class="sub">Walk-in</span><span class="sub">Cash</span><span class="small num">11:18</span><span class="body w6 num r">₹30.00</span><div class="row-s end"><span class="btn btn-s btn-sm">Receipt</span><span class="icon-btn icon-btn-sm" aria-label="More for this sale"><svg class="ic ic-s" viewBox="0 0 24 24" style="stroke-width: 3"><path d="M12 12h.01M19 12h.01M5 12h.01"/></svg></span></div></div>
+<div class="trow" style="grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 150px 70px 120px 120px"><span class="body w6">2 × Protein bar</span><a class="body w6">Maya Patel</a><span class="sub">Cash</span><span class="small num">11:18</span><span class="body w6 num r">₹240.00</span><div class="row-s end"><span class="btn btn-s btn-sm">Receipt</span><span class="icon-btn icon-btn-sm" aria-label="More for this sale"><svg class="ic ic-s" viewBox="0 0 24 24" style="stroke-width: 3"><path d="M12 12h.01M19 12h.01M5 12h.01"/></svg></span></div></div>
+<div class="trow" style="grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 150px 70px 120px 120px"><div class="row-s"><span class="body w6">Gold Monthly</span><span class="tag tag-plain">Membership</span></div><a class="body w6">Leela Menon</a><span class="sub">Card at the desk</span><span class="small num">11:18</span><span class="body w6 num r">₹2,500.00</span><div class="row-s end"><span class="btn btn-s btn-sm">Receipt</span></div></div>
+<div class="trow" style="grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 150px 70px 120px 120px"><div class="row-s"><span class="body w6">Annual</span><span class="tag tag-plain">Membership</span></div><a class="body w6">Zoya Khan</a><span class="sub">Bank transfer</span><span class="small num">11:18</span><span class="body w6 num r">₹24,000.00</span><div class="row-s end"><span class="btn btn-s btn-sm">Receipt</span></div></div>
+<div class="trow" style="grid-template-columns: minmax(0,1.4fr) minmax(0,1fr) 150px 70px 120px 120px"><div class="row-s"><span class="body w6">Gold Monthly</span><span class="tag tag-plain">Membership</span></div><a class="body w6">Meera Pillai</a><span class="sub">Bank transfer</span><span class="small num">11:18</span><span class="body w6 num r">₹2,500.00</span><div class="row-s end"><span class="btn btn-s btn-sm">Receipt</span></div></div>
+<div class="card-bp row between" style="padding-top: 14px; padding-bottom: 14px"><span class="small">Showing 5 of 11</span><span class="btn btn-s btn-sm">Show all 11</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

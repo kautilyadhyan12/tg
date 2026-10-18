@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>What is wrong today</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.shot{height:360px;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--card-line);display:flex;align-items:flex-start;justify-content:center}
+.shot img{width:100%;height:100%;object-fit:cover;object-position:top left;display:block}
+.shot.tall img{width:auto;object-fit:contain;object-position:top center}
+.fix{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:650;color:var(--good);background:var(--good-bg);border-radius:999px;height:26px;padding:0 10px}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 56px 64px 96px">
+<div class="stack-xl" style="max-width: 1312px; margin: 0 auto">
+<div class="stack-m">
+<span class="tag tag-warn" style="align-self: flex-start">Before</span>
+<h1 class="h1">What is wrong today</h1>
+<p class="sub" style="max-width: 860px">Real pictures of the app as it is now, taken on 18 October 2026 with the demo gym. Each problem is fixed on the pages that follow; the green line under each one says where.</p>
+</div>
+<div class="g2s" style="gap: 28px">
+<div class="card stack" style="gap: 16px">
+<div class="shot"><img src="/_blob/7d4766b13ef727d8083677b49929763a" alt="Today's member page: a narrow panel over the members list"></div>
+<div class="stack-xs"><h2 class="h3" style="font-size: 18px">A person's page is a strip in the corner</h2><p class="s14" style="color: var(--t2)">Press a name and a narrow panel opens over the list. Everything about them squeezes into it, the list stays half-visible behind it, and the menu beside it is one flat list of 16.</p></div>
+<span class="fix"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Fixed on page 2 · A member's page is a whole page</span>
+</div>
+<div class="card stack" style="gap: 16px">
+<div class="shot"><img src="/_blob/3bc9f101982084cae9948bca8a84b344" alt="Today's Record a payment form opened inside the member panel"></div>
+<div class="stack-xs"><h2 class="h3" style="font-size: 18px">Forms open inside the page and push it down</h2><p class="s14" style="color: var(--t2)">Record a payment appears in the middle of Memberships, between the bill and Who pays, and everything under it moves. Buttons of equal weight sit side by side, so the eye has nowhere to start.</p></div>
+<span class="fix"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Fixed on page 2 · Record a payment opens under its button</span>
+</div>
+<div class="card stack" style="gap: 16px">
+<div class="shot tall"><img src="/_blob/d23900372a5e92045824b405b9b09000" alt="Today's Settings page with Automatic messages open, shrunk to fit"></div>
+<div class="stack-xs"><h2 class="h3" style="font-size: 18px">Some pages are one very long column</h2><p class="s14" style="color: var(--t2)">This is the whole Settings page with Automatic messages open, shrunk to fit: every message is fully open at once, and the ten sections are boxes stacked one under another.</p></div>
+<span class="fix"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Fixed on page 10 · Settings gets a side list, one section at a time</span>
+</div>
+<div class="card stack" style="gap: 16px">
+<div class="shot" style="background: #0C0B0A"><img src="/_blob/61db38fac35fa80d0dcc9209c3b21f15" alt="Today's More menu on a phone, with the account box behind the bottom tabs" style="width: auto; object-fit: contain; object-position: top center"></div>
+<div class="stack-xs"><h2 class="h3" style="font-size: 18px">On a phone, your name and Sign out hide behind the tabs</h2><p class="s14" style="color: var(--t2)">The More list runs under the bottom tabs, so the box with your name and Sign out sits behind them.</p></div>
+<span class="fix"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Fixed on page 11 · More on a phone, grouped, nothing behind the tabs</span>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1260}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

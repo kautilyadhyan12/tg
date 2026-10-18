@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plan boxes — choose a plan, change size, the plan card</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.dlg{background:var(--sheet);border:1px solid var(--card-line);border-radius:20px;box-shadow:var(--pop);padding:28px;display:flex;flex-direction:column;gap:18px}
+.prow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:12px;border:1px solid var(--ctl-line)}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 48px 56px 64px">
+<div class="stack-l" style="max-width: 1328px; margin: 0 auto">
+<div class="stack-xs"><h1 class="h1">Your gym's plan</h1><p class="sub">The plan card on Overview, and the two boxes it opens. Prices are the rupee price list; every button is today's.</p></div>
+<div class="g2" style="gap: 32px; align-items: start">
+
+<div class="dlg">
+<div class="row between top"><div class="stack-xs"><h2 class="h2" style="font-size: 22px; line-height: 28px">Choose your gym's plan</h2><p class="sub">You pay today and get the size you choose at once. Your free trial ends then.</p></div><span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="stack-xs">
+<div class="prow"><span class="body w6">Up to 200 members</span><div class="row-m"><span class="body w7 num">₹7,500 a month</span><span class="btn btn-s btn-sm">Subscribe and pay today</span></div></div>
+<div class="prow"><span class="body w6">Up to 500 members</span><div class="row-m"><span class="body w7 num">₹12,500 a month</span><span class="btn btn-s btn-sm">Subscribe and pay today</span></div></div>
+<div class="prow"><span class="body w6">Up to 1,000 members</span><div class="row-m"><span class="body w7 num">₹19,000 a month</span><span class="btn btn-s btn-sm">Subscribe and pay today</span></div></div>
+<div class="prow"><span class="body w6">Up to 1,500 members</span><div class="row-m"><span class="body w7 num">₹26,500 a month</span><span class="btn btn-s btn-sm">Subscribe and pay today</span></div></div>
+<div class="prow"><span class="body w6">Up to 2,000 members</span><div class="row-m"><span class="body w7 num">₹36,500 a month</span><span class="btn btn-s btn-sm">Subscribe and pay today</span></div></div>
+</div>
+<p class="small">Prices are a month, with no GST added.</p>
+</div>
+
+<div class="stack" style="gap: 32px">
+<div class="dlg">
+<div class="row between top"><div class="stack-xs"><h2 class="h2" style="font-size: 22px; line-height: 28px">Change size</h2><p class="sub">Bigger sizes start today: you pay the difference for this month. Smaller sizes start on 1 Nov.</p></div><span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="stack-xs">
+<div class="prow"><div class="stack-2"><span class="body w6">Up to 500 members</span><span class="small">From 1 Nov · nothing to pay now</span></div><span class="btn btn-s btn-sm">Choose</span></div>
+<div class="prow" style="background: var(--raise)"><div class="stack-2"><span class="body w6">Up to 1,000 members</span><span class="small">Your size</span></div><span class="tag tag-plain">Current</span></div>
+<div class="prow" style="border-color: var(--accent); background: var(--soft)"><div class="stack-2"><span class="body w6">Up to 1,500 members</span><span class="small">Pay the difference now</span></div><span class="tag tag-soft">Chosen</span></div>
+</div>
+<div class="raise"><p class="body">You pay <b class="num">₹3,600</b> now (₹3,051 plus ₹549 tax) for the rest of this month, then ₹26,500 a month.</p></div>
+<div class="row-s"><span class="btn btn-p">Continue to Razorpay</span><span class="btn btn-q">Back</span></div>
+</div>
+</div>
+
+<div class="card" style="padding: 28px">
+<div class="row between top" style="margin-bottom: 16px"><div class="stack-2"><span class="lbl">Plan · on Overview</span><h2 class="h2" style="font-size: 22px; line-height: 28px">Up to 1,000 members · ₹19,000 a month</h2></div><span class="tag tag-good">Active</span></div>
+<div class="g2s" style="gap: 12px; margin-bottom: 16px">
+<div class="well stack-2"><span class="lbl">Next payment</span><span class="body w6 num">₹19,000 on 1 Nov</span></div>
+<div class="well stack-2"><span class="lbl">Members</span><span class="body w6 num">640 of 1,000</span><div class="bar" style="margin-top: 6px"><i style="width: 64%"></i></div></div>
+</div>
+<p class="small" style="margin-bottom: 18px">Paid through Razorpay, which emails you about each payment.</p>
+<div class="row between wrap" style="gap: 12px"><div class="row-s"><span class="btn btn-s">Change size</span><span class="btn btn-s">Pay now</span><span class="btn btn-s">Update payment method</span></div><span class="btn btn-dq">Cancel plan</span></div>
+</div>
+
+<div class="stack" style="gap: 32px">
+<div class="dlg">
+<div class="stack-xs"><h2 class="h2">You asked to move to 500 members on 1 Nov, but you have 640. What would you like to do?</h2></div>
+<div class="stack-xs">
+<span class="btn btn-s" style="justify-content: flex-start">Remove 140 members</span>
+<span class="btn btn-s" style="justify-content: flex-start">Move to 1,000 instead (₹19,000 a month)</span>
+<span class="btn btn-s" style="justify-content: flex-start">Stay on 1,000 (₹19,000 a month)</span>
+</div>
+<p class="small">If you don't choose, you'll stay on 1,000 members.</p>
+</div>
+<div class="card row top" style="gap: 16px; border-color: rgba(143,184,255,.35)">
+<div style="width: 44px; height: 44px; border-radius: 12px; background: var(--info-bg); color: var(--info); display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg class="ic ic-l" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6zM9 12l2 2 4-4"/></svg></div>
+<div class="stack-s grow"><div class="stack-2"><h3 class="h2">Be a co-owner of Northside Strength</h3><p class="sub">Arjun Mehta asked you to be a co-owner. A co-owner can do everything in the console, including staff, billing and settings, except add, change or remove co-owners. The request works until 25 Oct.</p></div><div class="row-s"><span class="btn btn-p">Accept</span><span class="btn btn-s">Decline</span></div></div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

@@ -234,6 +234,10 @@ to you, never a public shaming.
 
 ### 5.1 Card generator
 
+**Brought before launch 2026-10-18 (Kd; ROADMAP Stage 5 item 39, Part 2 §11.8):** the
+person's own photo with the stats drawn on it, after a workout, a meal photo or a run,
+made on the phone and sent through the phone's own share menu.
+
 Server-side worker renders PNG (1080×1920 story + 1080×1080 square) from
 templates: **workout summary** (exercises, reps, Form Score, streak) ·
 **PR card** · **streak milestone** · **challenge complete** · **program

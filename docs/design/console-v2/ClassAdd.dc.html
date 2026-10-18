@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a class — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.sw8{width:36px;height:36px;border-radius:999px;display:flex;align-items:center;justify-content:center}
+.sw8-on{box-shadow:0 0 0 3px var(--sheet),0 0 0 5px var(--t1)}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1087px">
+<dc-import name="Classes" look="{{lookName}}" hint-size="1440px,1087px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer">
+<div class="dw-h">
+<div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Add a class</h2><span class="small">Then add its time slots: the days and times it runs.</span></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b">
+<div class="form">
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">The class</h3></div>
+<div class="field"><span class="flabel">Name</span><div class="input input-on">Sunrise Yoga</div></div>
+<div class="field"><span class="flabel">Description <span class="opt">(optional)</span></span><div class="area" style="min-height: 76px"><span class="phd t3">What happens in it, who it suits</span></div></div>
+<div class="check"><span class="box"></span><div class="stack-2"><span class="body w6">Open gym</span><span class="small">Not a taught class</span></div></div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">Each time it runs</h3><p class="small">A new time slot starts with these. Each time slot can change them.</p></div>
+<div class="frow">
+<div class="field"><span class="flabel">Length</span><div class="input"><span class="num">60</span><span class="t3" style="margin-left: auto">minutes</span></div></div>
+<div class="field"><span class="flabel">Coach <span class="opt">(optional)</span></span><div class="input select"><span>No coach</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div>
+</div>
+<div class="frow" style="align-items: end">
+<div class="field"><span class="flabel">Class size</span><div class="input"><span class="num">20</span><span class="t3" style="margin-left: auto">places</span></div></div>
+<div class="check" style="padding-bottom: 12px"><span class="box"></span><span class="body w5">No limit</span></div>
+</div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">Colour on the calendar</h3></div>
+<div class="row" style="gap: 14px">
+<span class="sw8 sw8-on" style="background: var(--cl-orange)" aria-label="Orange"></span>
+<span class="sw8" style="background: var(--cl-blue)" aria-label="Blue"></span>
+<span class="sw8" style="background: var(--cl-green)" aria-label="Green"></span>
+<span class="sw8" style="background: var(--cl-purple)" aria-label="Purple"></span>
+<span class="sw8" style="background: var(--cl-red)" aria-label="Red"></span>
+<span class="sw8" style="background: var(--cl-teal)" aria-label="Teal"></span>
+<span class="sw8" style="background: var(--cl-amber)" aria-label="Amber"></span>
+<span class="sw8" style="background: var(--cl-slate)" aria-label="Slate"></span>
+</div>
+</div>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Add class</span><span class="btn btn-q">Close</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1087}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

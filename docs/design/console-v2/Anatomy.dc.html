@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One page, explained</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.mk{position:absolute;width:30px;height:30px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px rgba(0,0,0,.45);z-index:3}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="min-height: 100%; padding: 56px 56px 80px">
+<div class="stack-xl">
+<div class="stack-m"><span class="tag tag-soft" style="align-self: flex-start">How to read the new pages</span><h1 class="h1">One page, explained</h1><p class="sub" style="max-width: 860px">A member's page, with the reason each part sits where it does. Every other page follows the same rules.</p></div>
+<div class="row" style="gap: 40px; align-items: flex-start">
+<div style="position: relative; width: 893px; height: 923px; flex-shrink: 0; border-radius: 14px; overflow: hidden; border: 1px solid var(--card-line)">
+<div style="width: 1440px; height: 1488px; transform: scale(0.62); transform-origin: top left; pointer-events: none">
+<dc-import name="PersonMaya" look="{{lookName}}" hint-size="1440px,1488px"></dc-import>
+</div>
+<span class="mk" style="left: 197px; top: 52px">1</span>
+<span class="mk" style="left: 611px; top: 63px">2</span>
+<span class="mk" style="left: 165px; top: 16px">3</span>
+<span class="mk" style="left: 174px; top: 171px">4</span>
+<span class="mk" style="left: 399px; top: 174px">5</span>
+<span class="mk" style="left: 837px; top: 242px">6</span>
+<span class="mk" style="left: 851px; top: 317px">7</span>
+<span class="mk" style="left: 410px; top: 320px">8</span>
+</div>
+<div class="stack" style="gap: 22px; min-width: 0">
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">1</span><div class="stack-2"><span class="body w6">Who and what state, first</span><span class="s14" style="color: var(--t2)">Name, then Active, the membership and Paid until 27 Oct, in the top left where the eye lands first. A problem shows here in red: Overdue since 3 Oct.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">2</span><div class="stack-2"><span class="body w6">One main button</span><span class="s14" style="color: var(--t2)">Invite to app is the next step, so it is the only orange one. Edit and More are outlined, so the eye is never pulled two ways.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">3</span><div class="stack-2"><span class="body w6">Back where you came from</span><span class="s14" style="color: var(--t2)">A whole page has a way back to the list, the same place every time.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">4</span><div class="stack-2"><span class="body w6">Who they are, on the left</span><span class="s14" style="color: var(--t2)">Contact, tags, app and waiver: the things you look up. Each box has its own heading, so nothing runs into the next.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">5</span><div class="stack-2"><span class="body w6">Memberships and money, in the middle</span><span class="s14" style="color: var(--t2)">The widest column holds what changes most: memberships, bills, who pays and notes.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">6</span><div class="stack-2"><span class="body w6">Status in a colour, with the word</span><span class="s14" style="color: var(--t2)">Green means fine, amber look at this, red a problem; the word always sits beside the colour.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">7</span><div class="stack-2"><span class="body w6">Red is last, and apart</span><span class="s14" style="color: var(--t2)">Cancel membership sits at the far right, away from the everyday buttons, and asks first.</span></div></div>
+<div class="row" style="gap: 14px; align-items: flex-start"><span class="mk" style="position: static; flex-shrink: 0">8</span><div class="stack-2"><span class="body w6">Everyday actions together</span><span class="s14" style="color: var(--t2)">Record payment early and Freeze sit together under the membership they change.</span></div></div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

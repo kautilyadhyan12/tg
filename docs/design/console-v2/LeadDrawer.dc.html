@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One lead — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1400px">
+<dc-import name="Leads" look="{{lookName}}" hint-size="1440px,1000px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 640px">
+<div class="dw-h">
+<div class="row" style="gap: 14px"><div class="av">KR</div><div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Kavya Rao</h2><span class="small">Added today · Website</span></div></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b">
+<div class="form" style="gap: 28px">
+<div class="field"><span class="flabel">Status</span><div class="seg seg-w"><span class="on">New</span><span>Contacted</span><span>On trial</span><span>Lost</span><span>Joined</span></div></div>
+<div class="stack" style="gap: 10px">
+<span class="flabel">Messages from your page</span>
+<div class="well stack" style="gap: 6px; background: transparent; border: 1px solid var(--card-line)">
+<span class="s13 t3">Today</span>
+<span class="s14 w6">Kavya Rao · kavya.rao@gmail.com · +91 98431 14834</span>
+<p class="body">Do you have a trial week? I can come in the mornings before work.</p>
+<span class="s13" style="color: var(--t2)">Heard of you from: Website</span>
+<span class="s13" style="color: var(--t2)">Happy to hear from you by email</span>
+</div>
+</div>
+<div class="callout" style="flex-direction: column; gap: 12px">
+<div class="row-s"><svg class="ic warn" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-9 5.7a2 2 0 0 1-2 0L2 7"/></svg><span class="body w6">Email 1 of 3 is due today</span></div>
+<div class="row-s"><span class="btn btn-p btn-sm"><svg class="ic" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-9 5.7a2 2 0 0 1-2 0L2 7"/></svg>Email Kavya</span><span class="btn btn-s btn-sm">Mark email 1 as sent</span></div>
+<p class="hint" style="color: var(--t2)">Opens your own email with the message written. Send it from there, then mark it as sent.</p>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">Details</h3></div>
+<div class="field"><span class="flabel">Name</span><div class="input">Kavya Rao</div></div>
+<div class="frow">
+<div class="field"><span class="flabel">Email</span><div class="input">kavya.rao@gmail.com</div></div>
+<div class="field"><span class="flabel">Phone</span><div class="input input-on num">+91 98431 14834</div></div>
+</div>
+<div class="field"><span class="flabel">Heard of you from</span><div class="row-s wrap"><span class="chip">Walked in</span><span class="chip chip-on">Website</span><span class="chip">Social media</span><span class="chip">A friend</span><span class="chip">Other</span></div></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><div class="stack-2"><span class="body w6">Happy to hear from us by email</span><span class="small">Tick only if they said yes. They're due 3 follow-up emails over a week.</span></div></div>
+</div>
+<div class="fgroup">
+<div class="field"><span class="flabel">Notes</span><div class="area" style="min-height: 80px">Wants a trial week. Call back Thursday morning.</div></div>
+<span class="btn btn-s btn-sm" style="align-self: flex-start">Save notes</span>
+</div>
+<div class="row between" style="padding-top: 4px">
+<span class="btn btn-soft"><svg class="ic" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M16 11l2 2 4-4"/></svg>Joined · add to your members</span>
+<span class="btn btn-dq">Delete lead</span>
+</div>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p">Save</span><span class="btn btn-s">Cancel</span><span class="unsaved">You have changes that aren't saved.</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

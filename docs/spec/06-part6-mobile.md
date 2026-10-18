@@ -199,6 +199,9 @@ ms/frame keeps the thread breathing at 20 Hz with 10× headroom.
 
 ### 3.5 Device matrix & support floor
 
+**Not the target since 2026-10-18 (Kd; Part 2 §11.8): today's ordinary phones, measured
+on his own (Stage 5 item 51).**
+
 Test trio: your Android · one ₹10–12k 4 GB device (Redmi/Realme class —
 **the pilot gym's median phone**; buy one, it's the most valuable ₹11k in
 this project) · one Android 10 / 3 GB floor unit. Support floor: Android

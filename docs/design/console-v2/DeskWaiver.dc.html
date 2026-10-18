@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Front desk — the camera open</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+.corner{position:absolute;width:44px;height:44px;border-color:var(--accent);border-style:solid;border-width:0}
+</style>
+</helmet>
+<div class="app t-dark {{look}}" style="width: 1180px; height: 820px; display: flex; flex-direction: column; overflow: hidden">
+<div class="row between" style="padding: 24px 32px; border-bottom: 1px solid var(--line)">
+<div class="row-m"><div class="rail-logo" style="width: 48px; height: 48px; border-radius: 14px"><svg class="ic ic-l" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div><div class="stack-2"><span class="h2" style="font-size: 22px">Northside Strength</span><span class="small">Check-in · Front desk</span></div></div>
+<div class="row-s"><span class="btn btn-s btn-lg"><svg class="ic" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>Turn sound off</span><span class="btn btn-soft btn-lg"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>Close the camera</span></div>
+</div>
+<div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px">
+<div style="position: relative; width: 640px; height: 400px; border-radius: 24px; background: linear-gradient(160deg, #1A1714, #0E0C0A); border: 1px solid var(--card-line); overflow: hidden; display: flex; align-items: center; justify-content: center">
+<div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--t3); gap: 10px; flex-direction: column"><svg class="ic ic-xl" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3zM9 13a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg><span class="small">[The camera picture]</span></div>
+<div style="position: relative; width: 260px; height: 260px">
+<div class="corner" style="top: 0; left: 0; border-top-width: 5px; border-left-width: 5px; border-top-left-radius: 18px"></div>
+<div class="corner" style="top: 0; right: 0; border-top-width: 5px; border-right-width: 5px; border-top-right-radius: 18px"></div>
+<div class="corner" style="bottom: 0; left: 0; border-bottom-width: 5px; border-left-width: 5px; border-bottom-left-radius: 18px"></div>
+<div class="corner" style="bottom: 0; right: 0; border-bottom-width: 5px; border-right-width: 5px; border-bottom-right-radius: 18px"></div>
+</div>
+</div>
+<span class="w6" style="font-size: 26px; line-height: 34px">Hold the pass up to the camera and keep it still.</span>
+</div>
+<div class="row" style="padding: 20px 32px 26px; border-top: 1px solid var(--line); justify-content: center">
+<span class="small">Scanner</span>
+<div class="input" style="width: 380px; height: 40px"><span class="phd s14">Scan a pass or key tag</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return { look: (this.props.look ?? 'Dark') === 'Light' ? 't-light' : '' };
+}
+}
+</script>
+</body>
+</html>

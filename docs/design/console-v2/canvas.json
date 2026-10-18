@@ -1,0 +1,1105 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-18T06:16:37Z"
+  },
+  "title": "Gym console redesign — October",
+  "launch": {
+    "view": "canvas",
+    "page": "start"
+  },
+  "pages": [
+    {
+      "id": "start",
+      "name": "1 Read me first"
+    },
+    {
+      "id": "person",
+      "name": "2 A member's page"
+    },
+    {
+      "id": "home",
+      "name": "3 Overview & getting in"
+    },
+    {
+      "id": "desk",
+      "name": "4 Attendance & front desk"
+    },
+    {
+      "id": "classes",
+      "name": "5 Classes & training"
+    },
+    {
+      "id": "money",
+      "name": "6 Sell & memberships"
+    },
+    {
+      "id": "leads",
+      "name": "7 Leads & at risk"
+    },
+    {
+      "id": "community",
+      "name": "8 Community"
+    },
+    {
+      "id": "reports",
+      "name": "9 Reports"
+    },
+    {
+      "id": "settings",
+      "name": "10 Settings"
+    },
+    {
+      "id": "phone",
+      "name": "11 On a phone"
+    },
+    {
+      "id": "members",
+      "name": "12 Members & staff (your choice)"
+    }
+  ],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 4952,
+      "page": "start",
+      "title": "The rules every page follows",
+      "expand": "fill"
+    },
+    "Before.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1464,
+      "page": "start",
+      "title": "What is wrong today — real pictures",
+      "expand": "fill"
+    },
+    "Anatomy.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1225,
+      "page": "start",
+      "title": "One page, explained",
+      "expand": "fill"
+    },
+    "PersonMaya.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1488,
+      "page": "person",
+      "title": "A member's page — paid up (Maya)",
+      "expand": "fill"
+    },
+    "PersonArnav.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1613,
+      "page": "person",
+      "title": "Payment overdue, paid by a parent (Arnav)",
+      "expand": "fill"
+    },
+    "PersonMeera.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1502,
+      "page": "person",
+      "title": "Pays for her family (Meera)",
+      "expand": "fill"
+    },
+    "PersonDev.dc.html": {
+      "x": 0,
+      "y": 2000,
+      "w": 1440,
+      "h": 1546,
+      "page": "person",
+      "title": "Nothing set up yet (Dev)",
+      "expand": "fill"
+    },
+    "PersonLight.dc.html": {
+      "x": 1520,
+      "y": 2000,
+      "w": 1440,
+      "h": 1488,
+      "page": "person",
+      "title": "The same page in the light look"
+    },
+    "AddMember.dc.html": {
+      "x": 3040,
+      "y": 2000,
+      "w": 1440,
+      "h": 1240,
+      "page": "person",
+      "title": "Add member"
+    },
+    "PersonEdit.dc.html": {
+      "x": 0,
+      "y": 4000,
+      "w": 1440,
+      "h": 1000,
+      "page": "person",
+      "title": "Edit their details"
+    },
+    "PersonAddMembership.dc.html": {
+      "x": 1520,
+      "y": 4000,
+      "w": 1440,
+      "h": 1320,
+      "page": "person",
+      "title": "Add a membership"
+    },
+    "PersonRecordPayment.dc.html": {
+      "x": 3040,
+      "y": 4000,
+      "w": 1440,
+      "h": 1260,
+      "page": "person",
+      "title": "Record a payment"
+    },
+    "PersonQuick.dc.html": {
+      "x": 0,
+      "y": 6000,
+      "w": 1440,
+      "h": 1468,
+      "page": "person",
+      "title": "Quick boxes: More, tags, who pays, a payment"
+    },
+    "PersonCancel.dc.html": {
+      "x": 1520,
+      "y": 6000,
+      "w": 1440,
+      "h": 1000,
+      "page": "person",
+      "title": "Cancel a membership"
+    },
+    "PersonFreeze.dc.html": {
+      "x": 3040,
+      "y": 6000,
+      "w": 1440,
+      "h": 1000,
+      "page": "person",
+      "title": "Freeze a membership"
+    },
+    "PersonRefund.dc.html": {
+      "x": 0,
+      "y": 8000,
+      "w": 1440,
+      "h": 1447,
+      "page": "person",
+      "title": "Money questions: refund, void, waive, unfreeze"
+    },
+    "PersonReceipt.dc.html": {
+      "x": 1520,
+      "y": 8000,
+      "w": 1440,
+      "h": 1080,
+      "page": "person",
+      "title": "A receipt"
+    },
+    "PersonRemove.dc.html": {
+      "x": 3040,
+      "y": 8000,
+      "w": 1440,
+      "h": 1155,
+      "page": "person",
+      "title": "People questions: invite, remove, delete"
+    },
+    "PersonMerge.dc.html": {
+      "x": 0,
+      "y": 10000,
+      "w": 1440,
+      "h": 1160,
+      "page": "person",
+      "title": "Merge a duplicate"
+    },
+    "Overview.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1525,
+      "page": "home",
+      "title": "Overview — a gym in use",
+      "expand": "fill"
+    },
+    "OverviewNew.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1115,
+      "page": "home",
+      "title": "Overview — a gym made today",
+      "expand": "fill"
+    },
+    "OverviewPlan.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1316,
+      "page": "home",
+      "title": "Your gym's plan: choose a plan, change size, the plan card"
+    },
+    "Orgs.dc.html": {
+      "x": 0,
+      "y": 2000,
+      "w": 1440,
+      "h": 900,
+      "page": "home",
+      "title": "Your organisations",
+      "expand": "fill"
+    },
+    "CreateGym.dc.html": {
+      "x": 1520,
+      "y": 2000,
+      "w": 1440,
+      "h": 1269,
+      "page": "home",
+      "title": "Create your organisation",
+      "expand": "fill"
+    },
+    "GymReady.dc.html": {
+      "x": 3040,
+      "y": 2000,
+      "w": 1440,
+      "h": 1000,
+      "page": "home",
+      "title": "Start your free trial — opens over a new gym"
+    },
+    "SignIn.dc.html": {
+      "x": 0,
+      "y": 4000,
+      "w": 1440,
+      "h": 900,
+      "page": "home",
+      "title": "Sign in",
+      "expand": "fill"
+    },
+    "StaffInvite.dc.html": {
+      "x": 1520,
+      "y": 4000,
+      "w": 1440,
+      "h": 900,
+      "page": "home",
+      "title": "A staff invitation, and the sign-in code",
+      "expand": "fill"
+    },
+    "OverviewLight.dc.html": {
+      "x": 3040,
+      "y": 4000,
+      "w": 1440,
+      "h": 1525,
+      "page": "home",
+      "title": "Overview in the light look"
+    },
+    "Attendance.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "desk",
+      "title": "Attendance — one list, a day at a time",
+      "expand": "fill"
+    },
+    "AttendanceSearch.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "desk",
+      "title": "Checking someone in by name"
+    },
+    "Desk.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1180,
+      "h": 820,
+      "page": "desk",
+      "title": "Front desk tablet — ready"
+    },
+    "DeskWelcome.dc.html": {
+      "x": 0,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "page": "desk",
+      "title": "Front desk — checked in"
+    },
+    "DeskRefused.dc.html": {
+      "x": 1260,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "page": "desk",
+      "title": "Front desk — please see a member of staff"
+    },
+    "DeskWaiver.dc.html": {
+      "x": 2520,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "page": "desk",
+      "title": "Front desk — the camera open"
+    },
+    "DeskSetup.dc.html": {
+      "x": 3780,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "page": "desk",
+      "title": "Front desk — setting it up"
+    },
+    "Classes.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "classes",
+      "title": "Classes",
+      "expand": "fill"
+    },
+    "ClassesCalendar.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1327,
+      "page": "classes",
+      "title": "Calendar — the week at a glance",
+      "expand": "fill"
+    },
+    "ClassSession.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1150,
+      "page": "classes",
+      "title": "One class on one day"
+    },
+    "ClassAdd.dc.html": {
+      "x": 0,
+      "y": 1800,
+      "w": 1440,
+      "h": 1087,
+      "page": "classes",
+      "title": "Add a class"
+    },
+    "ClassTimeSlot.dc.html": {
+      "x": 1520,
+      "y": 1800,
+      "w": 1440,
+      "h": 1087,
+      "page": "classes",
+      "title": "Add a time slot"
+    },
+    "PT.dc.html": {
+      "x": 3040,
+      "y": 1800,
+      "w": 1440,
+      "h": 1087,
+      "page": "classes",
+      "title": "Personal training",
+      "expand": "fill"
+    },
+    "PTBook.dc.html": {
+      "x": 0,
+      "y": 3600,
+      "w": 1440,
+      "h": 1250,
+      "page": "classes",
+      "title": "Book a session — opens under the time pressed"
+    },
+    "PTHours.dc.html": {
+      "x": 1520,
+      "y": 3600,
+      "w": 1440,
+      "h": 1180,
+      "page": "classes",
+      "title": "A coach's hours"
+    },
+    "Sell.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1410,
+      "page": "money",
+      "title": "Sell — the register",
+      "expand": "fill"
+    },
+    "SellMember.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1410,
+      "page": "money",
+      "title": "A sale recorded, and a sale's ⋯"
+    },
+    "SellProducts.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 960,
+      "page": "money",
+      "title": "Products, and adding one"
+    },
+    "SellTax.dc.html": {
+      "x": 0,
+      "y": 1700,
+      "w": 1440,
+      "h": 900,
+      "page": "money",
+      "title": "Tax"
+    },
+    "Memberships.dc.html": {
+      "x": 1520,
+      "y": 1700,
+      "w": 1440,
+      "h": 1087,
+      "page": "money",
+      "title": "Memberships — your price list",
+      "expand": "fill"
+    },
+    "MembershipAdd.dc.html": {
+      "x": 3040,
+      "y": 1700,
+      "w": 1440,
+      "h": 1614,
+      "page": "money",
+      "title": "Add a membership type",
+      "expand": "fill"
+    },
+    "MembershipsBills.dc.html": {
+      "x": 0,
+      "y": 3500,
+      "w": 1440,
+      "h": 1220,
+      "page": "money",
+      "title": "Discounts, and adding one"
+    },
+    "Leads.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "leads",
+      "title": "Leads",
+      "expand": "fill"
+    },
+    "LeadDrawer.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1400,
+      "page": "leads",
+      "title": "One lead"
+    },
+    "LeadAdd.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1000,
+      "page": "leads",
+      "title": "Add lead"
+    },
+    "GymPage.dc.html": {
+      "x": 1520,
+      "y": 1700,
+      "w": 1440,
+      "h": 1900,
+      "page": "leads",
+      "title": "Your gym page"
+    },
+    "AtRisk.dc.html": {
+      "x": 3040,
+      "y": 1700,
+      "w": 1440,
+      "h": 1336,
+      "page": "leads",
+      "title": "At risk",
+      "expand": "fill"
+    },
+    "Updates.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1865,
+      "page": "community",
+      "title": "Updates",
+      "expand": "fill"
+    },
+    "Events.dc.html": {
+      "x": 0,
+      "y": 2165,
+      "w": 1440,
+      "h": 1339,
+      "page": "community",
+      "title": "Events",
+      "expand": "fill"
+    },
+    "EventAdd.dc.html": {
+      "x": 1520,
+      "y": 2165,
+      "w": 1440,
+      "h": 1100,
+      "page": "community",
+      "title": "Add an event"
+    },
+    "Challenges.dc.html": {
+      "x": 0,
+      "y": 3804,
+      "w": 1440,
+      "h": 1087,
+      "page": "community",
+      "title": "Challenges",
+      "expand": "fill"
+    },
+    "ChallengeAdd.dc.html": {
+      "x": 3040,
+      "y": 3804,
+      "w": 1440,
+      "h": 2230,
+      "page": "community",
+      "title": "Add a challenge"
+    },
+    "Leaderboard.dc.html": {
+      "x": 0,
+      "y": 6334,
+      "w": 1440,
+      "h": 1087,
+      "page": "community",
+      "title": "Leaderboard",
+      "expand": "fill"
+    },
+    "Reports.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 2427,
+      "page": "reports",
+      "title": "Reports — members, leads, attendance, classes",
+      "expand": "fill"
+    },
+    "ReportsMoney.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1759,
+      "page": "reports",
+      "title": "Reports — money, with Download payments open",
+      "expand": "fill"
+    },
+    "Settings.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "settings",
+      "title": "Settings — Gym details"
+    },
+    "SettingsHours.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1418,
+      "page": "settings",
+      "title": "When we’re open"
+    },
+    "SettingsMessages.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 1988,
+      "page": "settings",
+      "title": "Automatic messages"
+    },
+    "SettingsBooking.dc.html": {
+      "x": 1520,
+      "y": 2288,
+      "w": 1440,
+      "h": 1930,
+      "page": "settings",
+      "title": "Booking rules"
+    },
+    "SettingsDesk.dc.html": {
+      "x": 3040,
+      "y": 2288,
+      "w": 1440,
+      "h": 1087,
+      "page": "settings",
+      "title": "Check-in devices"
+    },
+    "SettingsWaiver.dc.html": {
+      "x": 0,
+      "y": 4518,
+      "w": 1440,
+      "h": 1087,
+      "page": "settings",
+      "title": "Waiver"
+    },
+    "SettingsReach.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "settings",
+      "title": "How members reach you"
+    },
+    "SettingsReferral.dc.html": {
+      "x": 0,
+      "y": 2288,
+      "w": 1440,
+      "h": 1087,
+      "page": "settings",
+      "title": "Refer a friend"
+    },
+    "SettingsFollowUp.dc.html": {
+      "x": 1520,
+      "y": 4518,
+      "w": 1440,
+      "h": 1087,
+      "page": "settings",
+      "title": "Follow-up emails to leads"
+    },
+    "PhoneOverview.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 960,
+      "page": "phone",
+      "title": "Overview"
+    },
+    "PhonePerson.dc.html": {
+      "x": 510,
+      "y": 0,
+      "w": 390,
+      "h": 1644,
+      "page": "phone",
+      "title": "A member’s page"
+    },
+    "PhoneRecordPayment.dc.html": {
+      "x": 1020,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "phone",
+      "title": "Record a payment (sheet)"
+    },
+    "PhoneForm.dc.html": {
+      "x": 1530,
+      "y": 0,
+      "w": 390,
+      "h": 1400,
+      "page": "phone",
+      "title": "Add member"
+    },
+    "PhoneAttendance.dc.html": {
+      "x": 2040,
+      "y": 0,
+      "w": 390,
+      "h": 1100,
+      "page": "phone",
+      "title": "Attendance"
+    },
+    "PhoneSell.dc.html": {
+      "x": 2550,
+      "y": 0,
+      "w": 390,
+      "h": 1237,
+      "page": "phone",
+      "title": "Sell"
+    },
+    "PhoneClasses.dc.html": {
+      "x": 3060,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "page": "phone",
+      "title": "Classes — calendar"
+    },
+    "PhoneMore.dc.html": {
+      "x": 3570,
+      "y": 0,
+      "w": 390,
+      "h": 1270,
+      "page": "phone",
+      "title": "More"
+    },
+    "PersonPast.dc.html": {
+      "x": 1520,
+      "y": 10000,
+      "w": 1440,
+      "h": 1376,
+      "page": "person",
+      "title": "A past member who is still in the app (Riya)",
+      "expand": "fill"
+    },
+    "MembersRef.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1087,
+      "page": "members",
+      "title": "Today, kept as it is (for comparing)",
+      "expand": "fill"
+    },
+    "Banners.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 1284,
+      "page": "home",
+      "title": "The banner above every page",
+      "expand": "fill"
+    },
+    "PTTimeOff.dc.html": {
+      "x": 3040,
+      "y": 3600,
+      "w": 1440,
+      "h": 1180,
+      "page": "classes",
+      "title": "A coach's time off"
+    },
+    "LeadImport.dc.html": {
+      "x": 0,
+      "y": 1700,
+      "w": 1440,
+      "h": 1260,
+      "page": "leads",
+      "title": "Import leads — after the file is read"
+    },
+    "AtRiskNew.dc.html": {
+      "x": 3040,
+      "y": 3236,
+      "w": 1440,
+      "h": 1087,
+      "page": "leads",
+      "title": "At risk — a gym in its first two weeks of check-ins"
+    },
+    "UpdatesPerson.dc.html": {
+      "w": 1440,
+      "page": "community",
+      "x": 1520,
+      "y": 0,
+      "h": 1100,
+      "title": "One member’s posts (their name pressed)"
+    },
+    "UpdatesRemove.dc.html": {
+      "w": 1440,
+      "page": "community",
+      "x": 3040,
+      "y": 0,
+      "h": 1000,
+      "title": "Remove a post"
+    },
+    "UpdatesStop.dc.html": {
+      "w": 1440,
+      "page": "community",
+      "x": 4560,
+      "y": 0,
+      "h": 1000,
+      "title": "Stop someone posting"
+    },
+    "EventCancel.dc.html": {
+      "w": 1440,
+      "page": "community",
+      "x": 3040,
+      "y": 2165,
+      "h": 1000,
+      "title": "Cancel an event"
+    },
+    "ChallengeDetail.dc.html": {
+      "w": 1440,
+      "page": "community",
+      "x": 1520,
+      "y": 3804,
+      "h": 1261,
+      "title": "One challenge, opened"
+    },
+    "LeaderboardPerson.dc.html": {
+      "w": 1440,
+      "page": "community",
+      "x": 1520,
+      "y": 6334,
+      "h": 1100,
+      "title": "One person on the board"
+    },
+    "SettingsWho.dc.html": {
+      "w": 1440,
+      "page": "settings",
+      "x": 4560,
+      "y": 2288,
+      "h": 1087,
+      "title": "Who can check in"
+    },
+    "MembersNew.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1718,
+      "page": "members",
+      "title": "Proposal · Your list"
+    },
+    "MembersNewSelected.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1790,
+      "page": "members",
+      "title": "Proposal · people ticked, one action bar"
+    },
+    "MembersNewMessage.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 1000,
+      "page": "members",
+      "title": "Proposal · Send message names who gets it"
+    },
+    "MembersNewFilter.dc.html": {
+      "x": 0,
+      "y": 2100,
+      "w": 1440,
+      "h": 1000,
+      "page": "members",
+      "title": "Proposal · Filter from the right"
+    },
+    "MembersNewApp.dc.html": {
+      "x": 1520,
+      "y": 2100,
+      "w": 1440,
+      "h": 1087,
+      "page": "members",
+      "title": "Proposal · In the app, and people waiting to join"
+    },
+    "MembersNewStaff.dc.html": {
+      "x": 3040,
+      "y": 2100,
+      "w": 1440,
+      "h": 1087,
+      "page": "members",
+      "title": "Proposal · Staff"
+    },
+    "MembersNewStaffPerson.dc.html": {
+      "x": 4560,
+      "y": 2100,
+      "w": 1440,
+      "h": 1260,
+      "page": "members",
+      "title": "Proposal · one person on the staff"
+    },
+    "MembersNewPhone.dc.html": {
+      "x": 0,
+      "y": 3660,
+      "w": 390,
+      "h": 1180,
+      "page": "members",
+      "title": "Proposal · on a phone"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Before.dc.html",
+    "Anatomy.dc.html",
+    "PersonMaya.dc.html",
+    "PersonArnav.dc.html",
+    "PersonMeera.dc.html",
+    "PersonDev.dc.html",
+    "PersonLight.dc.html",
+    "AddMember.dc.html",
+    "PersonEdit.dc.html",
+    "PersonAddMembership.dc.html",
+    "PersonRecordPayment.dc.html",
+    "PersonQuick.dc.html",
+    "PersonCancel.dc.html",
+    "PersonFreeze.dc.html",
+    "PersonRefund.dc.html",
+    "PersonReceipt.dc.html",
+    "PersonRemove.dc.html",
+    "PersonMerge.dc.html",
+    "PersonPast.dc.html",
+    "Overview.dc.html",
+    "OverviewNew.dc.html",
+    "OverviewPlan.dc.html",
+    "Banners.dc.html",
+    "Orgs.dc.html",
+    "CreateGym.dc.html",
+    "GymReady.dc.html",
+    "SignIn.dc.html",
+    "StaffInvite.dc.html",
+    "OverviewLight.dc.html",
+    "Attendance.dc.html",
+    "AttendanceSearch.dc.html",
+    "Desk.dc.html",
+    "DeskWelcome.dc.html",
+    "DeskRefused.dc.html",
+    "DeskWaiver.dc.html",
+    "DeskSetup.dc.html",
+    "Classes.dc.html",
+    "ClassesCalendar.dc.html",
+    "ClassSession.dc.html",
+    "ClassAdd.dc.html",
+    "ClassTimeSlot.dc.html",
+    "PT.dc.html",
+    "PTBook.dc.html",
+    "PTHours.dc.html",
+    "PTTimeOff.dc.html",
+    "Sell.dc.html",
+    "SellMember.dc.html",
+    "SellProducts.dc.html",
+    "SellTax.dc.html",
+    "Memberships.dc.html",
+    "MembershipAdd.dc.html",
+    "MembershipsBills.dc.html",
+    "Leads.dc.html",
+    "LeadDrawer.dc.html",
+    "LeadAdd.dc.html",
+    "LeadImport.dc.html",
+    "GymPage.dc.html",
+    "AtRisk.dc.html",
+    "AtRiskNew.dc.html",
+    "Updates.dc.html",
+    "UpdatesPerson.dc.html",
+    "UpdatesRemove.dc.html",
+    "UpdatesStop.dc.html",
+    "Events.dc.html",
+    "EventAdd.dc.html",
+    "EventCancel.dc.html",
+    "Challenges.dc.html",
+    "ChallengeDetail.dc.html",
+    "ChallengeAdd.dc.html",
+    "Leaderboard.dc.html",
+    "LeaderboardPerson.dc.html",
+    "Reports.dc.html",
+    "ReportsMoney.dc.html",
+    "Settings.dc.html",
+    "SettingsHours.dc.html",
+    "SettingsReach.dc.html",
+    "SettingsMessages.dc.html",
+    "SettingsReferral.dc.html",
+    "SettingsBooking.dc.html",
+    "SettingsDesk.dc.html",
+    "SettingsWho.dc.html",
+    "SettingsWaiver.dc.html",
+    "SettingsFollowUp.dc.html",
+    "PhoneOverview.dc.html",
+    "PhonePerson.dc.html",
+    "PhoneRecordPayment.dc.html",
+    "PhoneForm.dc.html",
+    "PhoneAttendance.dc.html",
+    "PhoneSell.dc.html",
+    "PhoneClasses.dc.html",
+    "PhoneMore.dc.html",
+    "MembersRef.dc.html",
+    "MembersNew.dc.html",
+    "MembersNewSelected.dc.html",
+    "MembersNewMessage.dc.html",
+    "MembersNewFilter.dc.html",
+    "MembersNewApp.dc.html",
+    "MembersNewStaff.dc.html",
+    "MembersNewStaffPerson.dc.html",
+    "MembersNewPhone.dc.html"
+  ],
+  "notes": {
+    "t-start": {
+      "x": 0,
+      "y": -300,
+      "text": "Read me first: the rules, what is wrong today, one page explained",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "start"
+    },
+    "t-person": {
+      "x": 0,
+      "y": -300,
+      "text": "A member's page: a whole page, not a strip in the corner",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "person"
+    },
+    "t-home": {
+      "x": 0,
+      "y": -300,
+      "text": "Overview, your organisations, creating a gym, signing in",
+      "kind": "title1",
+      "maxW": 6000,
+      "page": "home"
+    },
+    "t-desk": {
+      "x": 0,
+      "y": -300,
+      "text": "Attendance, and the tablet at the front desk",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "desk"
+    },
+    "t-classes": {
+      "x": 0,
+      "y": -300,
+      "text": "Classes, the calendar and personal training",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "classes"
+    },
+    "t-money": {
+      "x": 0,
+      "y": -300,
+      "text": "Sell and Memberships",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "money"
+    },
+    "t-leads": {
+      "x": 0,
+      "y": -300,
+      "text": "Leads and At risk",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "leads"
+    },
+    "t-community": {
+      "x": 0,
+      "y": -300,
+      "text": "Updates, Events, Challenges, Leaderboard (the names are examples of members who use the app; your demo gym has nobody in the app yet)",
+      "kind": "title1",
+      "maxW": 6000,
+      "page": "community"
+    },
+    "t-reports": {
+      "x": 0,
+      "y": -300,
+      "text": "Reports: a side list, the figures first (Staff activity lives on Members & staff, which stays as it is)",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "reports"
+    },
+    "t-settings": {
+      "x": 0,
+      "y": -300,
+      "text": "Settings: a side list of its ten sections",
+      "kind": "title1",
+      "maxW": 4480,
+      "page": "settings"
+    },
+    "t-phone": {
+      "x": 0,
+      "y": -300,
+      "text": "The same pages on a phone",
+      "kind": "title1",
+      "maxW": 4080,
+      "page": "phone"
+    },
+    "t-members": {
+      "x": 0,
+      "y": -300,
+      "text": "Members & staff: the new design you chose on 18 October (it changes the look only). Today’s page is on the left for comparing",
+      "kind": "title1",
+      "maxW": 6000,
+      "page": "members"
+    }
+  },
+  "designSystems": []
+}

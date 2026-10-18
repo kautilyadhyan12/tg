@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Book a personal training session — opens under the time pressed</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1250px">
+<dc-import name="PT" look="{{lookName}}" hint-size="1440px,1087px"></dc-import>
+<div class="pop pop-mid" style="left: 872px; top: 640px; width: 440px; padding: 22px">
+<div class="row between top"><div class="stack-2"><h3 class="h2">Book Kiran Das</h3><span class="small">Tue 20 Oct · 09:00 – 10:00</span></div><span class="icon-btn icon-btn-sm icon-btn-q" aria-label="Close"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="field"><span class="flabel">Who is it for?</span><div class="input input-on"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11a8 8 0 1 0 16 0a8 8 0 1 0-16 0M21 21l-4.3-4.3"/></svg><span class="phd">Search by name or email</span></div></div>
+<span class="lbl">Your members, people with personal training first</span>
+<div class="stack-2" style="margin: -6px -8px">
+<div class="mi mi-on" style="align-items: center; border: 1px solid var(--accent); background: var(--soft)"><div class="av av-sm">LM</div><div class="stack-2 grow"><span class="body w6">Leela Menon</span><span class="small">Gold Monthly + PT · 3 of 4 sessions left this month</span></div><span class="tag tag-soft">Picked</span></div>
+<div class="mi" style="align-items: center"><div class="av av-sm">MP</div><div class="stack-2 grow"><span class="body w6">Maya Patel</span><span class="small">10-class pack + PT</span></div><span class="btn btn-s btn-sm">Pick</span></div>
+<div class="mi" style="align-items: center; opacity: .55"><div class="av av-sm">AG</div><div class="stack-2 grow"><span class="body w6">Arnav Gupta</span><span class="small">No membership that includes personal training</span></div></div>
+</div>
+<div class="raise"><p class="body">Leela Menon will be booked with Kiran Das on Tue 20 Oct, 09:00 – 10:00. It uses 1 of their sessions.</p></div>
+<div class="row-s"><span class="btn btn-p">Book session</span><span class="btn btn-q">Pick someone else</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1250}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

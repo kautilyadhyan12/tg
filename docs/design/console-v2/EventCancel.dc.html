@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cancel an event — asks in the middle</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1000px">
+<dc-import name="Events" look="{{lookName}}" hint-size="1440px,1339px"></dc-import>
+<div class="scrim"></div>
+<div class="dialog" style="width: 560px; padding: 30px">
+<div class="row between top"><div class="stack-xs"><h2 class="h2" style="font-size: 22px; line-height: 28px">Cancel Deadlift clinic?</h2><p class="sub">Your members still see it on their Events list, marked Cancelled, until Sat 24 Oct.</p></div><span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+<div class="stack-s">
+<div class="row" style="gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: var(--raise)"><svg class="ic" viewBox="0 0 24 24" style="color: var(--t2); flex-shrink: 0; margin-top: 2px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M5 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><div class="stack-2"><span class="s14 w6">10 people said they're coming</span><span class="s14" style="color: var(--t2)">Leela Menon, Kabir Shah, Maya Patel and 7 more</span></div></div>
+<div class="row" style="gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: var(--raise)"><svg class="ic" viewBox="0 0 24 24" style="color: var(--t2); flex-shrink: 0; margin-top: 2px"><path d="M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 6v6l4 2"/></svg><span class="s14 w6">2 people are on the waitlist.</span></div>
+</div>
+<div class="callout"><svg class="ic" viewBox="0 0 24 24"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></svg><p class="s14">The app doesn't tell them yet, so let them know yourself. They keep their places if you un-cancel. Nobody is emailed. You can un-cancel it until then.</p></div>
+<div class="row-s" style="justify-content: flex-end"><span class="btn btn-s">Keep it</span><span class="btn btn-d">Cancel event</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

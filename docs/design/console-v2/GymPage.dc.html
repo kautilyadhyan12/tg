@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your gym page — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1900px">
+<dc-import name="Leads" look="{{lookName}}" hint-size="1440px,1000px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 720px">
+<div class="dw-h">
+<div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Your gym page</h2><span class="small">A page anyone can open from your link. People who send its form are added to your leads.</span></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b">
+<div class="form">
+<div class="fgroup">
+<div class="row between" style="padding: 14px 16px; border-radius: 12px; background: var(--good-bg)">
+<div class="check"><span class="sw sw-on" style="margin-top: 0"></span><div class="stack-2"><span class="body w6">Show my page</span><span class="small" style="color: var(--t2)">Anyone with the link can see it and send you a message.</span></div></div>
+<span class="tag tag-good"><span class="dot" style="background: var(--good)"></span>On</span>
+</div>
+<div class="field"><span class="flabel">Link to your page</span>
+<div class="row-s"><div class="input grow" style="color: var(--t2)">…/gyms/northside-strength</div><span class="btn btn-s" style="height: 44px"><svg class="ic" viewBox="0 0 24 24"><path d="M10 2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/></svg>Copy link</span><span class="btn btn-s" style="height: 44px"><svg class="ic" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Open</span></div>
+<span class="hint">Put it in your Instagram bio, a WhatsApp message or on your website.</span></div>
+</div>
+
+<div class="fgroup">
+<div class="field"><span class="flabel">About us</span><div class="area" style="min-height: 112px">Strength and conditioning in Baner, Pune. Coached classes every morning and evening, a full free-weights floor, and personal training.</div><span class="hint">132 of 1,000 characters</span></div>
+</div>
+
+<div class="fgroup">
+<div class="fgroup-h"><span class="flabel">Photos</span><span class="hint">Show people your gym: the floor, the equipment, the changing rooms. The main photo is the big one at the top of your page. Tap a photo to see it full size.</span></div>
+<div class="g3s" style="gap: 14px">
+<div class="stack-s">
+<div style="aspect-ratio: 4 / 3; border-radius: 12px; background: linear-gradient(140deg, #3A2E24, #1C1814); position: relative; display: flex; align-items: center; justify-content: center; color: var(--t3)"><svg class="ic" viewBox="0 0 24 24" style="width: 28px; height: 28px"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg><span class="tag tag-soft" style="position: absolute; left: 8px; top: 8px">Main photo</span></div>
+<div class="row between"><span class="s13 w6 row-s" style="color: var(--t2); gap: 5px"><svg class="ic ic-s" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>The main photo</span><a class="s13 w6" style="color: var(--t2)">Remove</a></div>
+</div>
+<div class="stack-s">
+<div style="aspect-ratio: 4 / 3; border-radius: 12px; background: linear-gradient(140deg, #2B2621, #171412); display: flex; align-items: center; justify-content: center; color: var(--t3)"><svg class="ic" viewBox="0 0 24 24" style="width: 28px; height: 28px"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></div>
+<div class="row between"><a class="s13 w6">Make main photo</a><a class="s13 w6" style="color: var(--t2)">Remove</a></div>
+</div>
+<div class="stack-s">
+<div style="aspect-ratio: 4 / 3; border-radius: 12px; background: linear-gradient(140deg, #2F2823, #191614); position: relative; display: flex; align-items: center; justify-content: center; color: var(--t3)"><svg class="ic" viewBox="0 0 24 24" style="width: 28px; height: 28px"><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg><span class="tag tag-plain" style="position: absolute; right: 8px; top: 8px">Not saved</span></div>
+<div class="row between"><a class="s13 w6">Make main photo</a><a class="s13 w6" style="color: var(--t2)">Remove</a></div>
+</div>
+</div>
+<div class="row-s"><span class="btn btn-s btn-sm"><svg class="ic" viewBox="0 0 24 24"><path d="M5 3h9M3 5v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9M7 9a2 2 0 1 0 4 0a2 2 0 1 0-4 0M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21M19 2v6M16 5h6"/></svg>Add photos</span><span class="hint">3 of 10 photos</span></div>
+</div>
+
+<div class="fgroup">
+<span class="flabel">Facilities</span>
+<div class="g3s" style="gap: 20px">
+<div class="stack" style="gap: 12px"><span class="lbl">Training</span>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Free weights</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Weight machines</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Cardio machines</span></div>
+<div class="check"><span class="box"></span><span class="s14">Functional training area</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Group classes</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Personal training</span></div>
+<div class="check"><span class="box"></span><span class="s14">Studio for yoga or pilates</span></div>
+<div class="check"><span class="box"></span><span class="s14">Swimming pool</span></div>
+</div>
+<div class="stack" style="gap: 12px"><span class="lbl">Comfort</span>
+<div class="check"><span class="box"></span><span class="s14">Sauna or steam room</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Changing rooms</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Showers</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Lockers</span></div>
+<div class="check"><span class="box"></span><span class="s14">Towels</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Drinking water</span></div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Air conditioning</span></div>
+<div class="check"><span class="box"></span><span class="s14">Wi-Fi</span></div>
+<div class="check"><span class="box"></span><span class="s14">Café or juice bar</span></div>
+</div>
+<div class="stack" style="gap: 12px"><span class="lbl">Access and more</span>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Parking</span></div>
+<div class="check"><span class="box"></span><span class="s14">Women-only area</span></div>
+<div class="check"><span class="box"></span><span class="s14">Wheelchair access</span></div>
+<div class="check"><span class="box"></span><span class="s14">Childcare</span></div>
+<span class="lbl" style="margin-top: 8px">Your own</span>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><span class="s14">Turf track</span></div>
+</div>
+</div>
+<div class="row-s"><div class="input grow" style="height: 40px"><span class="phd s14">Add a facility, e.g. Boxing ring</span></div><span class="btn btn-s btn-sm" style="height: 40px"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Add</span></div>
+</div>
+
+<div class="fgroup">
+<div class="row between" style="gap: 20px"><div class="stack-2"><span class="flabel">Opening hours</span><span class="small" style="color: var(--t2)">Your page also shows your opening hours, and on a day you close, that day's closure note.</span></div><span class="btn btn-s btn-sm" style="flex-shrink: 0">Change opening hours</span></div>
+</div>
+
+<div class="fgroup">
+<div class="field"><span class="flabel">Show the form on your own website</span>
+<div class="area" style="min-height: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 19px; color: var(--t2); overflow-wrap: anywhere">&lt;iframe src="…/gyms/northside-strength?embed=1" title="Get in touch with Northside Strength" width="100%" height="900" style="border:0;max-width:560px" loading="lazy"&gt;&lt;/iframe&gt;</div>
+<div class="row-s"><span class="btn btn-s btn-sm"><svg class="ic" viewBox="0 0 24 24"><path d="M10 2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/></svg>Copy code</span></div>
+<span class="hint">Paste it into your website where the form should appear. Website builders such as Wix, Squarespace and WordPress have an “Embed” or “HTML” block for this. The form works only while your page is on.</span></div>
+</div>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p">Save</span><span class="btn btn-s">Cancel</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a membership — slides in from the right</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1320px">
+<dc-import name="PersonMaya" look="{{lookName}}" hint-size="1440px,1488px"></dc-import>
+<div class="scrim"></div>
+<div class="drawer" style="width: 640px">
+<div class="dw-h">
+<div class="stack-2"><h2 class="h2" style="font-size: 22px; line-height: 28px">Add a membership for Maya Patel</h2><span class="small">Nothing is added until you press Add membership.</span></div>
+<span class="icon-btn icon-btn-q" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+</div>
+<div class="dw-b">
+<div class="form">
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">1 · Which membership</h3></div>
+<div class="stack-xs">
+<div class="rcard rcard-on"><span class="radio radio-on"></span><div class="grow row between"><div class="stack-2"><span class="rt">Gold Monthly</span><span class="rs">Every month · unlimited classes</span></div><span class="body w6 num">₹2,500.00</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="grow row between"><div class="stack-2"><span class="rt">Silver Monthly</span><span class="rs">Every month · unlimited classes</span></div><span class="body w6 num">₹1,800.00</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="grow row between"><div class="stack-2"><span class="rt">Annual</span><span class="rs">Every year · unlimited classes</span></div><span class="body w6 num">₹24,000.00</span></div></div>
+<div class="rcard"><span class="radio"></span><div class="grow row between"><div class="stack-2"><span class="rt">10-class pack</span><span class="rs">10 classes, used within 60 days</span></div><span class="body w6 num">₹3,000.00</span></div></div>
+</div>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">2 · When it starts</h3></div>
+<div class="frow">
+<div class="field"><span class="flabel">Start date</span><div class="input select"><span>Sun 18 Oct 2026</span><svg class="ic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/></svg></div></div>
+</div>
+<p class="small" style="margin-top: -8px">Starts 18 Oct 2026 · Renews 18 Nov 2026</p>
+</div>
+<div class="fgroup">
+<div class="fgroup-h"><h3 class="h3">3 · Price and payment</h3></div>
+<div class="frow">
+<div class="field"><span class="flabel">Discount <span class="opt">(optional)</span></span><div class="input select"><span>No discount</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div></div>
+<div class="field"><span class="flabel">Promo code <span class="opt">(optional)</span></span><div class="row-s"><div class="input grow"><span class="phd">Type the code</span></div><span class="btn btn-s">Apply</span></div></div>
+</div>
+<div class="check"><span class="box box-on"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span><div class="stack-2"><span class="body w6">They have paid the ₹2,500.00</span><span class="small">Leave it unticked if they still owe it. You can record the payment later.</span></div></div>
+<div class="field"><span class="flabel">How they paid</span><div class="seg seg-w"><span class="on">Cash</span><span>Card at the desk</span><span>Bank transfer</span></div></div>
+<div class="raise stack-xs" style="padding: 16px 18px">
+<div class="row between"><span class="sub">Price</span><span class="body num">₹2,500.00</span></div>
+<div class="row between"><span class="sub">Includes GST 18%</span><span class="body num">₹381.36</span></div>
+<div class="hr" style="margin: 6px 0"></div>
+<div class="row between"><span class="body w7">Total</span><span class="mid" style="font-size: 22px">₹2,500.00</span></div>
+<p class="small">This is the first payment. Every payment after it is ₹2,500.00.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="dw-f"><span class="btn btn-p"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Add membership</span><span class="btn btn-q">Cancel</span></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>

@@ -6525,6 +6525,7 @@ R1–R8: R1 the menu, the font and the colours; then one page per job.
   `<!--RAIL:members-->` for the menu with Members lit (`none`: no gym, so "Gym console"
   where the gym's name goes and no pages) and `<!--TABBAR:members-->` for the phone's
   tabs; the light look of a page is the same file with `t-dark` changed to `t-light`.
+- **The second look's boards (2026-10-18): `docs/design/console-v2/` (§17.10). Where a page has both, the new board stands.**
 - Pictures of all 56 drawings, dark and light: `D:\Projects\ai-home-gym-design\2-all-pages\`
   on Kd's computer. The design canvas: https://claude.ai/artifact/1Rioe5nc9f132HarZ6x69y
   (Kd's; read it with the Artifact tool).
@@ -6734,6 +6735,57 @@ Inter v20, with Google's own character ranges), and their SIL Open Font License 
 come from github.com/google/fonts; both fetched 2026-09-26. They are kept in the app
 because a page that loads Google's fonts sends each visitor's internet address to Google,
 which Landgericht München I found a breach of the GDPR on 20 January 2022 (3 O 17493/20).
+
+### 17.10 The second look (Kd, 2026-10-18)
+
+Kd, 2026-10-18 (web folder 1, a planning terminal): every console page drawn again, so that
+no box, button or line of words piles on another, as designs he approves before anything is
+built (*"DO NOT CHANGE JUST GIVE ME THE DESGINS TO LOOK AT"*). Members & staff was first left
+out, then chosen too. Approved: *"excellent i ma really impressed"* · *"rest i agree"* ·
+*"i like your design just need this that is not chnaging functionaly and feature"*
+(`rulings/2026-10-18-console-redesign-v2.md`). Built as ROADMAP item 22's V jobs. Where this
+section and §17.2–§17.8 differ, this one stands; anything it does not mention stays as §17 says.
+
+- **The boards.** 101 boards on Kd's design canvas
+  (https://claude.ai/artifact/UXjYcm75LYDxVZSJP2ndv9, private to him), copied into
+  `docs/design/console-v2/`: one `Name.dc.html` a screen; `kit.css`, the tokens and building
+  blocks they share; `canvas.json`, the twelve pages and each board's title. The README there
+  names the V job of every board. The first page (`Main`, `Before`, `Anatomy`) holds the
+  rules, real pictures of what was wrong, and one page explained.
+- **Fourteen rules** (`Main`): 1 a person gets a whole page, not a strip in the corner ·
+  2 who and what state top left, the main button top right · 3 what belongs together sits
+  together: 8 pixels between a label and its box, 20 between boxes, 32 between groups ·
+  4 one orange button per box; a second important action pale orange, the rest outlined ·
+  5 red is last and kept apart, and asks first, naming who changes · 6 forms never push the
+  page around (below) · 7 fewer choices at once: the menu in five groups (Today, People,
+  Money, Community, Manage), long pages with tabs or a side list · 8 a summary first, detail
+  on a press · 9 one list for one thing, said once · 10 five text sizes (32 page title, 18 box
+  title, 15 words, 13 small print, 40 the number that matters), three greys, contrast 4.5 to 1
+  or more · 11 a status is a word in a colour · 12 on a phone every button at least 44 pixels
+  tall, quick forms rise from the bottom, the main button stays at the foot · 13 the words
+  follow the kind of business · 14 it looks new and works the same.
+- **Where a box opens.** Under its button for one to three questions. From the right for a
+  form of four fields or more: the panel scrolls as one page and only Save stays at its foot,
+  with "You have changes that aren't saved." while something is (Kd, 2026-10-16, a lead's
+  panel). In the middle for a question before a change to people or money, naming who
+  changes. A page of its own for a big setup (a membership type, a challenge, a new gym), in
+  numbered parts with a summary that fills in.
+- **Rule 13, the words.** Every word naming the place, its people or its staff comes from
+  `orgWords` (`packages/shared/src/orgWords.ts`), as the app already does: a gym's members
+  and trainers, a boutique studio's clients and coaches, a CrossFit box's members and coaches,
+  a yoga studio's members and trainers, a Pilates studio's clients and instructors. The boards
+  show a gym called Northside Strength; the owner's own name is used wherever they show it.
+- **Rule 14, looks only.** Every button and what it does, every field, message and question,
+  who can see and do what, and every rule and number the app works out stay. Only where things
+  sit, their size, colour and grouping, and where a box opens, change. Nothing is added and
+  nothing is taken away; the one-press picks above Members press the same choice in Filter.
+  What a board lacks and the page has is kept, drawn from the same blocks (§17.8).
+- **Demo data.** The boards use the demo gym's figures where they exist and examples where it
+  has none (the community pages show members using the app); a board's numbers are not facts
+  about any gym, and the page shows its own.
+- **A phone.** Each V job draws its pages on a phone too: the `Phone*` and `MembersNewPhone`
+  boards show Overview, a member's page, Record a payment, Add member, Attendance, Sell,
+  Classes, Members and More; other pages follow the same rules.
 
 ## 18. Members, redesigned (5b-v)
 

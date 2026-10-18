@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Start your gym's free trial — over a new gym's Overview</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./kit.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+body{margin:0;background:#0C0B0A}
+</style>
+</helmet>
+<div class="app t-dark {{look}} over" style="height: 1000px">
+<dc-import name="OverviewNew" look="{{lookName}}" hint-size="1440px,1200px"></dc-import>
+<div class="scrim"></div>
+<div class="dialog" style="width: 560px; padding: 36px; gap: 22px; text-align: center; align-items: center">
+<div style="width: 64px; height: 64px; border-radius: 18px; background: var(--soft); color: var(--soft-t); display: flex; align-items: center; justify-content: center"><svg class="ic ic-xl" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/></svg></div>
+<div class="stack-xs" style="align-items: center"><h2 class="h1s">Start your gym's free trial</h2><p class="sub" style="max-width: 420px">Your members get nothing extra for being in your gym until it is on a plan.</p></div>
+<div class="g3s" style="width: 100%; gap: 10px">
+<div class="well stack-2"><span class="mid">10</span><span class="small">days free</span></div>
+<div class="well stack-2"><span class="mid">100</span><span class="small">members</span></div>
+<div class="well stack-2"><span class="mid">No</span><span class="small">card needed</span></div>
+</div>
+<span class="btn btn-p btn-xl btn-w">Start your 10-day free trial</span>
+<div class="row-l" style="justify-content: center"><a class="s14 w6" style="color: var(--t2)">Your organisations</a><a class="s14 w6" style="color: var(--t2)">Sign out</a></div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"look":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const lookName = this.props.look ?? 'Dark';
+return { look: lookName === 'Light' ? 't-light' : '', lookName };
+}
+}
+</script>
+</body>
+</html>
