@@ -39,7 +39,8 @@ const { resetConsoleOrgs } = await import('./consoleOrgs');
 const Members = (await import('./Members')).default;
 const CoOwnerRequest = (await import('../../components/console/CoOwnerRequest')).default;
 const { StaffPersonPanel } = await import('./MembersStaffPanels');
-const { orgWords } = await import('./consoleView');
+const { formatJoinedAt, orgWords } = await import('./consoleView');
+const PAID_UNTIL = '2026-11-01T00:00:00.000Z';
 
 const ORG = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -175,6 +176,27 @@ describe('Make owner', () => {
     expect(orgService.askOwner).not.toHaveBeenCalled();
   });
 
+  it('a plan paid through Paddle: the box says it stops renewing, paid until a day, and the new owner then chooses one (4b-iii-a)', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, planStops: { until: PAID_UNTIL, trial: false } } });
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
+    expect(
+      within(panel.getByTestId('staff-owner')).getByText(
+        `Your plan stops renewing, so you won't be charged again. It stays paid until ${formatJoinedAt(PAID_UNTIL)}; then Cora Lim chooses their own plan.`,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("a plan that stops a hand-over says the server's reason (4b-iii-a)", async () => {
+    const note = "A payment is overdue, so the owner can't be changed until it's paid.";
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA], true).data, paidPlanNote: note } });
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    expect(panel.getByText(note)).toBeTruthy();
+    expect(panel.getByRole('button', { name: 'Make owner' }).disabled).toBe(true);
+  });
+
   it('with another co-owner asked, it names them and opens their page to cancel it', async () => {
     orgService.getStaff.mockResolvedValue(staffAs('u1', [OWNER, CORA_ASKED, DAN, RITA]));
     drawStaff();
@@ -233,6 +255,18 @@ describe('the co-owner asked, on Overview', () => {
     expect(await screen.findByText("You're now the owner of Iron House.")).toBeTruthy();
     expect(orgService.answerOwnerRequest).toHaveBeenCalledWith(ORG.id, REQUEST.id, true);
     expect(onAccepted).toHaveBeenCalledTimes(1);
+  });
+
+  it("a plan paid through Paddle: they're told it stops renewing, paid until a day, and they then choose their own (4b-iii-a)", async () => {
+    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, planStops: { until: PAID_UNTIL, trial: false } } } });
+    draw();
+    const box = within(await screen.findByTestId('owner-request'));
+    expect(
+      box.getByText(
+        `As the owner you can also add and remove co-owners. Kd Owner stays on as a co-owner. Their plan stops renewing and stays paid until ${formatJoinedAt(PAID_UNTIL)}; then you choose your own plan and pay with your own card. The request works until ${formatJoinedAt(UNTIL)}.`,
+      ),
+    ).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Accept' })).toBeTruthy();
   });
 
   it('Decline says the owner can ask again, and changes nothing else', async () => {

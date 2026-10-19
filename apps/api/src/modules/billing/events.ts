@@ -9,6 +9,7 @@ import {
   applyPendingSizes,
   applyRazorpaySubscription,
   closeStaleTrialCheckouts,
+  endHandedOverPlans,
   decideRazorpaySizes,
   endExpiredGraces,
   sendDueRazorpayCancels,
@@ -43,6 +44,8 @@ export interface PaddleEventsRun {
   trialCheckoutsClosed: number;
   /** Smaller sizes decided this run: made at Paddle, still waiting, or not made; warnings sent. */
   pendingSizes: PendingSizesRun;
+  /** Plans handed to another owner that Paddle now confirms end with their month (4b-iii-a). */
+  handedOverEnded: number;
 }
 
 export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEventsRun> {
@@ -56,6 +59,7 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
     gracesEnded: 0,
     trialCheckoutsClosed: 0,
     pendingSizes: { applied: 0, waiting: 0, kept: 0, warned: 0 },
+    handedOverEnded: 0,
   };
   for (let taken = 0; taken < PADDLE_EVENTS.perRun; taken++) {
     const event = await webhooks.claimDuePaddleEvent(deps.sql, deps.now(), PADDLE_EVENTS.leaseMs);
@@ -89,6 +93,8 @@ export async function processPaddleEvents(deps: BillingDeps): Promise<PaddleEven
   run.trialCheckoutsClosed = await closeStaleTrialCheckouts(deps);
   // After the events, so Paddle's latest record of each plan is written first.
   run.pendingSizes = await applyPendingSizes(deps);
+  // After the events: one that shows a handed-over plan kept again is set to end again here.
+  run.handedOverEnded = await endHandedOverPlans(deps);
   const keepSince = new Date(deps.now().getTime() - PADDLE_EVENTS.keepDays * 24 * 60 * 60 * 1000);
   run.forgotten = await webhooks.forgetOldPaddleEvents(deps.sql, keepSince, 1000);
   return run;

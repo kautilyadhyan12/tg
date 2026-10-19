@@ -293,6 +293,50 @@ export class FakePaddle implements PaddleApi {
     return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
   }
 
+  /** Subscriptions told to end with their month, and answers to drop first (a 503). */
+  endsAtPeriodEnd: string[] = [];
+  periodEndFailures = 0;
+  cancelAtPeriodEnd(subscriptionId: string) {
+    if (this.periodEndFailures > 0) {
+      this.periodEndFailures -= 1;
+      return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "unavailable", status: 503 });
+    }
+    const sub = this.subs.get(subscriptionId);
+    if (sub === undefined) return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "not_found" });
+    // A change already waiting locks it (measured on Kd's sandbox, 2026-10-18).
+    if (sub.scheduled_change !== null) {
+      return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "refused", status: 400, code: "subscription_locked_pending_changes" });
+    }
+    this.endsAtPeriodEnd.push(subscriptionId);
+    const at = sub.current_billing_period?.ends_at ?? sub.next_billed_at ?? new Date(this.clock).toISOString();
+    // Set to end, Paddle answers with no next charge (sandbox, 2026-10-19).
+    this.update(subscriptionId, { scheduled_change: { action: "cancel", effective_at: at }, next_billed_at: null });
+    return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
+  }
+  /** Paddle takes the next month: a completed charge billed `at`, and the month starting then. */
+  renew(subscriptionId: string, at: string, amount = "2900"): string {
+    const sub = this.subs.get(subscriptionId);
+    if (sub === undefined) throw new Error("no such subscription");
+    const id = paddleId("txn");
+    this.txns.set(id, {
+      id,
+      status: "completed",
+      subscription_id: subscriptionId,
+      origin: "subscription_recurring",
+      billed_at: at,
+      currency_code: sub.currency_code,
+      items: [],
+      details: { totals: { grand_total: amount } },
+    });
+    const end = new Date(Date.parse(at) + 30 * 24 * 60 * 60 * 1000).toISOString();
+    this.update(subscriptionId, { status: "active", current_billing_period: { starts_at: at, ends_at: end }, next_billed_at: end });
+    return id;
+  }
+  /** Does the subscription charge again at its next date? Not once it is set to end. */
+  renews(subscriptionId: string): boolean {
+    return this.subs.get(subscriptionId)?.scheduled_change?.action !== "cancel";
+  }
+
   tick(): string {
     this.clock += 1000;
     return new Date(this.clock).toISOString();

@@ -224,6 +224,9 @@ export const paddleTransactionSchema = z.object({
   status: z.enum(["draft", "ready", "billed", "paid", "completed", "canceled", "past_due"]),
   subscription_id: paddleSubscriptionIdSchema.nullable(),
   origin: z.string().max(60),
+  /** When it was billed: a renewal's month, after or before a hand-over (4b-iii-a). */
+  billed_at: instant.nullable().optional(),
+  created_at: instant.optional(),
   currency_code: z.string().length(3),
   items: z
     .array(

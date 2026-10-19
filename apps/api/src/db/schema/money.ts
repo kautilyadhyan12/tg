@@ -129,6 +129,11 @@ export const subscriptions = pgTable(
     /** Who started this free trial: the gym's owner then (4b-ii, migration `0139`, by a trigger).
      *  A gym handed over stays counted against them. */
     trialStartedBy: uuid("trial_started_by"),
+    /** Handed to another owner (4b-iii-a, migration `0141`): the plan stops renewing and stays
+     *  paid to the end of its month. Who paid for it, and when Paddle confirmed it ends. */
+    handedOverAt: timestamp("handed_over_at", { withTimezone: true }),
+    handedOverFrom: uuid("handed_over_from"),
+    handedOverEndSentAt: timestamp("handed_over_end_sent_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -162,6 +167,13 @@ export const subscriptions = pgTable(
     index("subscriptions_trial_device_idx").on(t.trialDeviceHash).where(sql`${t.trialDeviceHash} IS NOT NULL`),
     index("subscriptions_owner_idx").on(t.ownerType, t.ownerId),
     index("subscriptions_trial_started_by_idx").on(t.trialStartedBy).where(sql`${t.trialEndsAt} IS NOT NULL`),
+    index("subscriptions_handed_over_idx")
+      .on(t.handedOverAt)
+      .where(sql`${t.handedOverAt} IS NOT NULL AND ${t.status} IN ('trialing','active','past_due')`),
+    check(
+      "subscriptions_handed_over_check",
+      sql`${t.handedOverAt} IS NOT NULL OR (${t.handedOverFrom} IS NULL AND ${t.handedOverEndSentAt} IS NULL)`,
+    ),
     check(
       "subscriptions_trial_check_pairing_check",
       sql`(${t.trialCheck} IS NULL) = (${t.trialCheckGymId} IS NULL) AND (${t.trialCheck} IS NULL) = (${t.trialCheckedAt} IS NULL)`,

@@ -54,9 +54,13 @@ export const CO_OWNER_WORDS = {
 
 // ── The owner hands the gym to a co-owner (ROADMAP 4b-ii; rulings/2026-10-17-4b-ii.md) ──
 // The owner asks one of the gym's co-owners to be its owner; the person asked accepts or
-// declines. On Accept they are the owner and the old owner stays a co-owner. A gym on a paid
-// plan is not handed over here (4b-iii moves who pays). The free trial stays counted against
-// whoever started it.
+// declines. On Accept they are the owner and the old owner stays a co-owner. The free trial
+// stays counted against whoever started it.
+//
+// A gym paying through Paddle (4b-iii-a; Kd 2026-10-18): Accept hands it over at once, and the
+// old owner's plan stops renewing. It stays paid to the end of its month; then the new owner
+// chooses their own plan and pays in their own name. A plan paid through Razorpay, or one with
+// money owed, is not handed over yet.
 
 /** How long a request to be the owner waits for an answer. */
 export const OWNER_REQUEST_DAYS = 7;
@@ -80,6 +84,18 @@ export const myOwnerRequestResponseSchema = z.object({
       /** The owner who asked, by the name they go by; empty when they have none. */
       ownerName: z.string(),
       expiresAt: z.string().datetime(),
+      /** The gym's plan, paid by the owner, stops renewing on Accept: until when it is paid, and
+       *  whether it is a paid trial; then the new owner chooses their own (4b-iii-a). Null with
+       *  no such plan, or one already handed over to the owner by somebody else. */
+      planStops: z
+        .object({
+          /** When the paid month ends; null when Paddle gives no date. */
+          until: z.string().datetime().nullable(),
+          /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
+          trial: z.boolean(),
+        })
+        .nullable()
+        .optional(),
     })
     .nullable(),
 });
@@ -93,7 +109,11 @@ export const OWNER_REQUEST_WORDS = {
   owner_only: "Only the owner can choose a new owner.",
   not_staff: "That person isn't on your staff any more.",
   not_co_owner: "Only a co-owner can be made the owner. Make them a co-owner first.",
-  paid_plan: "While a paid plan is running, the owner can't be changed.",
+  paid_plan: "While a plan paid through Razorpay is running, the owner can't be changed yet.",
+  plan_overdue: "A payment is overdue, so the owner can't be changed until it's paid.",
+  plan_unclear: "This plan can't be handed over right now. Please write to support.",
+  plan_renewing: "The plan renews within the hour, so the owner can't be changed right now. Please try again once it has renewed.",
+  handed_over_plan: "This plan was paid by the last owner and stops when its paid month ends, so it can't be managed here. Choose your own plan when it ends.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
   no_request: "There's no request waiting.",
   request_gone: "This request has ended. Ask the owner to send it again if you still want to be the owner.",

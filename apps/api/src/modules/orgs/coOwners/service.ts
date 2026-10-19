@@ -20,12 +20,13 @@ import {
   type SendOwnerRequestResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
-import { closeSuperseded, type BillingDeps } from "../../billing/service.js";
+import { applyPaddleSubscription, closeSuperseded, endHandedOverPlan, type BillingDeps } from "../../billing/service.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
 import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
 import { emailHmac } from "../invites/address.js";
 import { suppressionsFor } from "../invites/repo.js";
 import type { CoOwnerEmailSender } from "./email.js";
+import { keepPaddleEvent } from "../../webhooks/repo.js";
 import * as repo from "./repo.js";
 
 export interface CoOwnerDeps {
@@ -134,7 +135,15 @@ export async function answerCoOwnerRequest(
 // through, and the repo refuses anybody who is not the gym's own owner by its owner id.
 
 const notOwner = (): OrgsError => new OrgsError(403, "owner_only", OWNER_REQUEST_WORDS.owner_only);
-const paidPlan = (): OrgsError => new OrgsError(409, "paid_plan", OWNER_REQUEST_WORDS.paid_plan);
+const planRefusal = (kind: "paid_plan" | "plan_overdue" | "plan_unclear" | "plan_renewing"): OrgsError =>
+  new OrgsError(409, kind, OWNER_REQUEST_WORDS[kind]);
+
+/** Tell Paddle the gym's handed-over plan ends with its month, now rather than at the worker's
+ *  next minute. A failure is logged and left to the worker. */
+async function endHandedOverPlans(billing: BillingDeps, gymId: string): Promise<void> {
+  const plan = await repo.handedOverPlanRef(billing.sql, gymId);
+  if (plan !== null) await endHandedOverPlan(billing, { gymId, ...plan });
+}
 
 export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, gymId: string, userId: string): Promise<SendOwnerRequestResponse> {
   // Not the read-only gate a co-owner request has: a gym past its trial with no plan is handed
@@ -149,7 +158,9 @@ export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, g
     case "not_co_owner":
       throw new OrgsError(409, "not_co_owner", OWNER_REQUEST_WORDS.not_co_owner);
     case "paid_plan":
-      throw paidPlan();
+    case "plan_overdue":
+    case "plan_unclear":
+      throw planRefusal(outcome.kind);
     case "already_requested":
       throw new OrgsError(409, "already_requested", OWNER_REQUEST_WORDS.already_requested);
     case "sent":
@@ -192,8 +203,15 @@ export async function cancelOwnerRequest(deps: CoOwnerDeps, actorUserId: string,
 export async function myOwnerRequest(deps: CoOwnerDeps, userId: string, gymId: string): Promise<MyOwnerRequestResponse> {
   await requireStaff(deps, gymId, userId);
   const request = await repo.myOwnerRequest(deps.sql, { gymId, userId, now: deps.now() });
+  if (request === null) return { request: null };
+  const plan = await repo.gymHandOverPlan(deps.sql, gymId);
   return {
-    request: request === null ? null : { id: request.id, ownerName: request.ownerName.trim(), expiresAt: request.expiresAt.toISOString() },
+    request: {
+      id: request.id,
+      ownerName: request.ownerName.trim(),
+      expiresAt: request.expiresAt.toISOString(),
+      planStops: repo.planStops(plan),
+    },
   };
 }
 
@@ -219,10 +237,25 @@ export async function answerOwnerRequest(
     case "request_gone":
       throw new OrgsError(409, "request_gone", OWNER_REQUEST_WORDS.request_gone);
     case "paid_plan":
-      throw paidPlan();
+    case "plan_overdue":
+    case "plan_unclear":
+    case "plan_renewing":
+      throw planRefusal(outcome.kind);
     case "accepted":
-      // After the hand-over is saved: the old owner's payment windows can no longer be paid.
-      if (deps.billing !== null) await closeSuperseded(deps.billing, outcome.closed);
+      // After the hand-over is saved: the old owner's payment windows can no longer be paid,
+      // and their plan stops renewing at Paddle (the worker tells Paddle again if this fails).
+      if (deps.billing !== null) {
+        await closeSuperseded(deps.billing, outcome.closed);
+        if (outcome.planEnds) await endHandedOverPlans(deps.billing, gymId);
+        // Handed back to its payer: the row takes Paddle's own record (renewing, or set to end).
+        // Paddle not answering: the worker reads it again, as it does an event from Paddle.
+        if (outcome.reread !== null && (await applyPaddleSubscription(deps.billing, outcome.reread, false)) === "retry") {
+          await keepPaddleEvent(deps.sql, {
+            eventId: `hand_back:${outcome.reread}:${String(deps.now().getTime())}`,
+            payload: { type: "hand_back.reread", subscriptionId: outcome.reread },
+          });
+        }
+      }
       return { status: "accepted" };
     case "declined":
       return { status: "declined" };
