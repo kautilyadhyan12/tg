@@ -59,6 +59,12 @@ function stepWords(step, orgSlug, orgType) {
         line: 'Add a tablet or computer at your front desk and open its link on it. People then scan their pass from the app, or their key tag, as they walk in.',
         actions: [{ label: 'Set up check-in', to: to('frontDesk') }],
       };
+    case 'payments':
+      return {
+        title: 'Take payments',
+        line: `Connect your Square account so your ${words.people} can pay you by card. Square pays the money into your bank account.`,
+        actions: [{ label: 'Connect Square', to: to('payments') }],
+      };
     default:
       return null;
   }
