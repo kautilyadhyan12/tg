@@ -784,15 +784,15 @@ export async function gymOwner(sql: SqlOrTx, gymId: string): Promise<{ userId: s
 /** The other gyms paid by this Paddle customer. Paddle keeps one customer per email and
  *  reuses it at checkout, and its portal signs in as the whole customer, so every one of
  *  these gyms' plans, invoices and card is on the page this gym's staff would open. */
-export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: string; gymId: string }): Promise<string[]> {
+export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: string; gymId: string; callerUserId: string }): Promise<string[]> {
   const rows = await sql<{ owner_id: string }[]>`
     SELECT DISTINCT owner_id FROM subscriptions
     WHERE provider = 'paddle' AND provider_customer_ref = ${input.customerRef}
       AND owner_type = 'gym' AND owner_id <> ${input.gymId}
       AND cancel_reason IS DISTINCT FROM 'duplicate'
-      -- A plan handed over with its gym is the payer's own and ends; one over is nothing to show.
-      AND handed_over_at IS NULL
-      AND (status IN ('trialing','active','past_due') OR cancel_reason = ${GRACE_EXPIRED})`;
+      -- A plan the caller paid for and handed over with its gym (4b-iii-a) is their own account:
+      -- not another gym's billing kept from them. For anybody else it is, as any other gym is.
+      AND handed_over_from IS DISTINCT FROM ${input.callerUserId}::uuid`;
   return rows.map((r) => r.owner_id);
 }
 

@@ -266,7 +266,15 @@ export async function answerRequest(
  *  ended, which Paddle may still collect on the old owner's card), or two plans at once. */
 export type HandOverPlan =
   | { kind: "none" }
-  | { kind: "paddle"; subscriptionId: string; paidUntil: Date | null; trial: boolean; handedOverFrom: string | null; handedOver: boolean }
+  | {
+      kind: "paddle";
+      subscriptionId: string;
+      subscriptionRef: string;
+      paidUntil: Date | null;
+      trial: boolean;
+      handedOverFrom: string | null;
+      handedOver: boolean;
+    }
   | { kind: "paid_plan" }
   | { kind: "plan_overdue" }
   | { kind: "plan_unclear" };
@@ -297,6 +305,7 @@ async function planForHandOver(tx: Sql | TransactionSql, gymId: string): Promise
   return {
     kind: "paddle",
     subscriptionId: live.id,
+    subscriptionRef: live.provider_ref,
     paidUntil: live.current_period_end,
     trial: live.status === "trialing",
     handedOverFrom: live.handed_over_from,
@@ -478,8 +487,9 @@ export type AnswerOwnerOutcome =
   /** The plan renews within the hour: asked again once it has; the request still waits. */
   | { kind: "plan_renewing" }
   /** `closed`: the payment windows Accept closed that the payment company holds, to cancel there.
-   *  `planEnds`: a Paddle plan the old owner paid was set to end here, for Paddle to be told. */
-  | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[]; planEnds: boolean };
+   *  `planEnds`: a Paddle plan the old owner paid was set to end here, for Paddle to be told.
+   *  `reread`: handed back to its payer, the plan to read again from Paddle. */
+  | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[]; planEnds: boolean; reread: string | null };
 
 /** Accept or Decline, by the person asked and nobody else: the request is found only with
  *  the caller's own id in the WHERE. Accepting asks again, under the gym's lock, everything
@@ -499,7 +509,7 @@ export async function answerOwnerRequest(
     const request = rows[0];
     if (request === undefined) return { kind: "not_found" };
     if (request.state === "accepted" && input.accept) {
-      return request.owner_user_id === input.userId ? { kind: "accepted", closed: [], planEnds: false } : { kind: "request_gone" };
+      return request.owner_user_id === input.userId ? { kind: "accepted", closed: [], planEnds: false, reread: null } : { kind: "request_gone" };
     }
     if (request.state !== "pending") return { kind: "request_gone" };
     if (request.expires_at.getTime() <= input.now.getTime()) {
@@ -562,7 +572,9 @@ export async function answerOwnerRequest(
         SET handed_over_at = CASE WHEN ${back} THEN NULL ELSE COALESCE(handed_over_at, ${input.now}) END,
             handed_over_from = CASE WHEN ${back} THEN NULL ELSE COALESCE(handed_over_from, ${oldOwner}::uuid) END,
             handed_over_end_sent_at = CASE WHEN ${back} THEN NULL ELSE handed_over_end_sent_at END,
-            cancel_at_period_end = true,
+            -- Handed back before Paddle confirmed it ends: Paddle still renews it, so it is not
+            -- shown as ending (read again from Paddle after this commits).
+            cancel_at_period_end = CASE WHEN ${back} AND handed_over_end_sent_at IS NULL THEN false ELSE true END,
             pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
             pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
         WHERE id = ${plan.subscriptionId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
@@ -603,7 +615,8 @@ export async function answerOwnerRequest(
     return {
       kind: "accepted",
       closed: closed.flatMap((c) => (c.provider_ref === null ? [] : [{ provider: c.provider, ref: c.provider_ref }])),
-      planEnds: plan.kind === "paddle",
+      planEnds: plan.kind === "paddle" && plan.handedOverFrom !== input.userId,
+      reread: plan.kind === "paddle" && plan.handedOverFrom === input.userId ? plan.subscriptionRef : null,
     };
   });
 }

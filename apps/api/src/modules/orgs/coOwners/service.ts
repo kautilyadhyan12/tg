@@ -20,7 +20,7 @@ import {
   type SendOwnerRequestResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
-import { closeSuperseded, endHandedOverPlan, type BillingDeps } from "../../billing/service.js";
+import { applyPaddleSubscription, closeSuperseded, endHandedOverPlan, type BillingDeps } from "../../billing/service.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
 import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
 import { emailHmac } from "../invites/address.js";
@@ -246,6 +246,8 @@ export async function answerOwnerRequest(
       if (deps.billing !== null) {
         await closeSuperseded(deps.billing, outcome.closed);
         if (outcome.planEnds) await endHandedOverPlans(deps.billing, gymId);
+        // Handed back to its payer: the row takes Paddle's own record (renewing, or set to end).
+        if (outcome.reread !== null) await applyPaddleSubscription(deps.billing, outcome.reread, false);
       }
       return { status: "accepted" };
     case "declined":

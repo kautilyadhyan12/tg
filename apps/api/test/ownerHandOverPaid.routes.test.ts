@@ -397,6 +397,58 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       expect(removed.statusCode, removed.body).toBe(200);
       const portal = await send("POST", `/v1/orgs/${second}/billing/portal`, gym.owner);
       expect(portal.statusCode, portal.body).toBe(200);
+      // Re-check F1: a billing manager of the second gym alone still does not open Ann's whole
+      // account, which shows the gym she gave away.
+      const mo = await makeStaff({ id: second, owner: gym.owner, sub: "" }, "Mo");
+      await sql`UPDATE gym_staff SET privileges = array_append(privileges, 'billing.manage') WHERE gym_id = ${second} AND user_id = ${mo.userId} AND NOT ('billing.manage' = ANY(privileges))`;
+      const moPortal = await send("POST", `/v1/orgs/${second}/billing/portal`, mo);
+      expect(moPortal.statusCode, moPortal.body).toBe(409);
+      expect(errorOf(moPortal)).toBe("shared_payer");
+    }, TEST_TIMEOUT_MS);
+
+    it("handed back before Paddle heard, the payer's plan reads as Paddle has it: renewing, not ending (re-check F2)", async () => {
+      const gym = await makePaidGym("Ann");
+      const bob = await makeCoOwner(gym, "Bob");
+      paddle.periodEndFailures = 1;
+      await handOver(gym, bob);
+      expect(paddle.renews(gym.sub)).toBe(true);
+      expect((await ask({ ...gym, owner: bob }, gym.owner, bob)).statusCode).toBe(201);
+      expect((await accept(gym, gym.owner)).statusCode).toBe(200);
+      expect(paddle.renews(gym.sub)).toBe(true);
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(false);
+      expect((await consolePlan(gym, gym.owner))?.cancelAtPeriodEnd).toBe(false);
+    }, TEST_TIMEOUT_MS);
+
+    it("a plan Paddle already ended, its event lost, is written onto the row, and the new owner can subscribe (re-check F3)", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await handOver(gym, cora);
+      paddle.update(gym.sub, { status: "canceled", canceled_at: new Date().toISOString() });
+      await sql`
+        UPDATE subscriptions SET status = 'expired', ended_at = now(), past_due_since = now() - interval '5 days', cancel_reason = 'grace_expired'
+        WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      await worker();
+      const row = await sql<{ cancel_reason: string | null }[]>`SELECT cancel_reason FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider_ref = ${gym.sub}`;
+      expect(row[0]?.cancel_reason).toBeNull();
+      const res = await send("POST", `/v1/orgs/${gym.id}/billing/checkout`, cora, { planCode: PLAN }, { "idempotency-key": `f3-${gym.id}` });
+      expect(res.statusCode, res.body).toBe(200);
+    }, TEST_TIMEOUT_MS);
+
+    it("a paid trial set to end that runs past the gym's own trial still ends at once (re-check, second review)", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      const trialEnd = new Date(Date.now() + 3 * DAY_MS).toISOString();
+      paddle.update(gym.sub, { status: "trialing", next_billed_at: trialEnd, current_billing_period: { starts_at: new Date(Date.now() - 5 * DAY_MS).toISOString(), ends_at: trialEnd } });
+      await sql`UPDATE subscriptions SET status = 'trialing', trial_ends_at = ${trialEnd}, current_period_end = ${trialEnd} WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      await handOver(gym, cora);
+      // The gym's own free trial ended an hour ago; the row has not yet heard the plan is set to end.
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, trial_ends_at, ended_at, cancel_reason)
+        VALUES ('gym', ${gym.id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'expired', 'none', now() - interval '1 hour', now() - interval '1 hour', 'trial_subscribed')`;
+      await sql`UPDATE subscriptions SET cancel_at_period_end = false WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider = 'paddle'`;
+      await applyPaddleSubscription(billing, gym.sub);
+      expect(paddle.cancelledSubs).toContain(gym.sub);
+      expect(paddle.activations).not.toContain(gym.sub);
     }, TEST_TIMEOUT_MS);
 
     it("a smaller size waiting is dropped with the hand-over: the plan has no next month", async () => {

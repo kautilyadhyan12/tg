@@ -519,7 +519,7 @@ export async function openBillingPortal(
   // Paddle's page shows everything its customer pays for: it opens only for somebody
   // who manages the billing of every gym that customer pays for. Paddle keeps one customer
   // per email and the window is filled in with the owner's (1e), so an owner's gyms share one.
-  const otherGyms = await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId });
+  const otherGyms = await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId, callerUserId: input.userId });
   for (const otherGymId of otherGyms) {
     if (!(await holdsPrivilege(deps, otherGymId, input.userId, "billing.manage"))) {
       throw new OrgsError(409, "shared_payer", await sharedPayerMessage(deps, input.gymId, otherGyms));
@@ -1183,9 +1183,6 @@ async function paidByOwner(deps: BillingDeps, paddle: PaddleSettings, sub: Paddl
  *  charged now, the day its window named, or cancelled if that charge is refused. Safe to
  *  run on every event: once Paddle's date is the gym's, nothing is asked. */
 async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: PaddleSubscription, gymId: string): Promise<ApplyResult> {
-  // Set to end (cancelled on Paddle's page, or handed over, 4b-iii-a): Paddle answers it with no
-  // next charge, and it is never charged or moved here.
-  if (sub.scheduled_change?.action === "cancel") return "applied";
   const ownEnd = (await repo.ownTrialEnd(deps.sql, gymId))?.getTime() ?? null;
   const paddleEnd = sub.next_billed_at === null || sub.next_billed_at === undefined ? null : Date.parse(sub.next_billed_at);
   const now = deps.now().getTime();
@@ -1203,6 +1200,9 @@ async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: Paddle
     return await applyPaddleSubscription(deps, sub.id, false);
   };
   if (ownEnd === null || ownEnd <= now) return await cancel("own_trial_ended");
+  // Set to end (cancelled on Paddle's page, or handed over, 4b-iii-a): Paddle answers it with no
+  // next charge, and it is never charged or moved here; it ends by itself.
+  if (sub.scheduled_change?.action === "cancel") return "applied";
 
   if (ownEnd - now >= TRIAL_MOVE_MIN_MS) {
     const moved = await paddle.api.moveTrialEnd(sub.id, new Date(ownEnd).toISOString());
@@ -1240,6 +1240,7 @@ export async function endHandedOverPlan(deps: BillingDeps, input: { gymId: strin
   if (current.kind !== "ok") return false;
   const sub = current.value;
   if (sub.status === "canceled") {
+    if ((await applyPaddleSubscription(deps, sub.id, false)) === "retry") return false;
     await repo.markHandedOverEndSent(deps.sql, { ...input, now: deps.now() });
     return true;
   }
