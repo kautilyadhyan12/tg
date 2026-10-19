@@ -15,6 +15,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { applyPaddleSubscription, endHandedOverPlans, endExpiredGraces, type BillingDeps } from "../src/modules/billing/service.js";
+import { processPaddleEvents } from "../src/modules/billing/events.js";
 import { FakePaddle } from "./fakePaddle.js";
 import { ROLE_PRIVILEGES, myOwnerRequestResponseSchema, orgStaffResponseSchema, type OrgRole } from "@app/shared";
 
@@ -92,6 +93,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     await sql`DELETE FROM users WHERE email LIKE 'handpd-t-%'`;
     await sql`DELETE FROM sign_in_codes WHERE email LIKE 'handpd-t-%'`;
     await sql`DELETE FROM plans WHERE code = ${PLAN}`;
+    await sql`DELETE FROM webhook_events WHERE provider = 'paddle' AND event_id LIKE 'hand_back:%'`;
   };
 
   const send = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, who: User, payload?: unknown, headers: Record<string, string> = {}) =>
@@ -417,6 +419,26 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       expect(paddle.renews(gym.sub)).toBe(true);
       expect((await planRow(gym))?.cancel_at_period_end).toBe(false);
       expect((await consolePlan(gym, gym.owner))?.cancelAtPeriodEnd).toBe(false);
+    }, TEST_TIMEOUT_MS);
+
+    it("handed back while Paddle is down, after it had set the plan to end, the worker reads it again (confirm's Low)", async () => {
+      const gym = await makePaidGym("Ann");
+      const bob = await makeCoOwner(gym, "Bob");
+      await handOver(gym, bob);
+      expect(paddle.renews(gym.sub)).toBe(false);
+      // The answer to the first Accept was lost: Paddle has it ending, the row never heard.
+      await sql`UPDATE subscriptions SET handed_over_end_sent_at = NULL WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      expect((await ask({ ...gym, owner: bob }, gym.owner, bob)).statusCode).toBe(201);
+      paddle.down = true;
+      try {
+        expect((await accept(gym, gym.owner)).statusCode).toBe(200);
+      } finally {
+        paddle.down = false;
+      }
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(false);
+      await processPaddleEvents(billing);
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(true);
+      expect((await consolePlan(gym, gym.owner))?.cancelAtPeriodEnd).toBe(true);
     }, TEST_TIMEOUT_MS);
 
     it("a plan Paddle already ended, its event lost, is written onto the row, and the new owner can subscribe (re-check F3)", async () => {

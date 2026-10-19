@@ -26,6 +26,7 @@ import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requir
 import { emailHmac } from "../invites/address.js";
 import { suppressionsFor } from "../invites/repo.js";
 import type { CoOwnerEmailSender } from "./email.js";
+import { keepPaddleEvent } from "../../webhooks/repo.js";
 import * as repo from "./repo.js";
 
 export interface CoOwnerDeps {
@@ -247,7 +248,13 @@ export async function answerOwnerRequest(
         await closeSuperseded(deps.billing, outcome.closed);
         if (outcome.planEnds) await endHandedOverPlans(deps.billing, gymId);
         // Handed back to its payer: the row takes Paddle's own record (renewing, or set to end).
-        if (outcome.reread !== null) await applyPaddleSubscription(deps.billing, outcome.reread, false);
+        // Paddle not answering: the worker reads it again, as it does an event from Paddle.
+        if (outcome.reread !== null && (await applyPaddleSubscription(deps.billing, outcome.reread, false)) === "retry") {
+          await keepPaddleEvent(deps.sql, {
+            eventId: `hand_back:${outcome.reread}:${String(deps.now().getTime())}`,
+            payload: { type: "hand_back.reread", subscriptionId: outcome.reread },
+          });
+        }
       }
       return { status: "accepted" };
     case "declined":
