@@ -511,6 +511,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_cancel_at_period_end: boolean | null;
       sub_cancel_sent_at: Date | null;
       sub_handed_over_by: string | null;
+      sub_handed_over_by_you: boolean | null;
       sub_provider: string | null;
       sub_pending_seat_cap: number | null;
       sub_pending_price_minor: number | null;
@@ -557,6 +558,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.cancel_at_period_end AS sub_cancel_at_period_end,
            sub.cancel_sent_at AS sub_cancel_sent_at,
            sub.handed_over_by AS sub_handed_over_by,
+           sub.handed_over_from = ${userId} AS sub_handed_over_by_you,
            sub.provider AS sub_provider,
            sub.pending_seat_cap AS sub_pending_seat_cap,
            sub.pending_price_minor AS sub_pending_price_minor,
@@ -725,7 +727,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       SELECT su.status, su.trial_ends_at,
              LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
              p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
-             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider, CASE WHEN su.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = su.handed_over_from), '') END AS handed_over_by,
+             su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider, su.handed_over_from, CASE WHEN su.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = su.handed_over_from), '') END AS handed_over_by,
              ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -772,6 +774,7 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             cancel_at_period_end: r.sub_cancel_at_period_end ?? false,
             cancel_sent_at: r.sub_cancel_sent_at,
             handed_over_by: r.sub_handed_over_by,
+            handed_over_by_you: r.sub_handed_over_by_you,
             provider: r.sub_provider ?? "none",
             pending_seat_cap: r.sub_pending_seat_cap,
             pending_price_minor: r.sub_pending_price_minor,
@@ -1827,6 +1830,8 @@ export interface GymSubscriptionRow {
   /** Handed to another owner (4b-iii-a): the old owner who paid for it, by name ("" when they
    *  have none); it stops with its paid month. Null otherwise. */
   handedOverBy: string | null;
+  /** The person reading paid for it. */
+  handedOverByYou: boolean;
   /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
   trialSeatCap: number | null;
   /** A smaller size waiting, due at `from` (the end of the month paid). */
@@ -2386,6 +2391,8 @@ interface RawGymSubscription {
   provider: string;
   /** Handed to another owner (4b-iii-a): who paid for it, by the name they go by; absent or null otherwise. */
   handed_over_by?: string | null;
+  /** The person reading is the one who paid for it; absent where no reader is known. */
+  handed_over_by_you?: boolean | null;
   pending_seat_cap: number | null;
   pending_price_minor: number | null;
   pending_from: Date | null;
@@ -2409,6 +2416,7 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
     cancelSentAt: raw.cancel_sent_at,
     provider: raw.provider,
     handedOverBy: raw.handed_over_by ?? null,
+    handedOverByYou: raw.handed_over_by_you === true,
     trialSeatCap: raw.trial_seat_cap,
     pending:
       raw.pending_from === null || raw.pending_price_minor === null || raw.pending_seat_cap === null

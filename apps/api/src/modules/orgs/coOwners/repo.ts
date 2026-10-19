@@ -260,36 +260,65 @@ export async function answerRequest(
 // is now, to somebody still a co-owner on the staff row they were asked on.
 
 /** What the gym's plan means for a hand-over. `paddle`: handed over, it stops renewing and
- *  stays paid until `paidUntil`. The others stop a hand-over for now: a plan paid through
- *  Razorpay (4b-iii-b), or money owed (a plan past due, or one whose grace ended, which Paddle
- *  may still collect on the old owner's card). */
+ *  stays paid until `paidUntil` (`trial`: a paid trial, nothing charged; `handedOverFrom`:
+ *  it was handed over before, by the person who paid it). The others stop a hand-over for now:
+ *  a plan paid through Razorpay (4b-iii-b), money owed (a plan past due, or one whose grace
+ *  ended, which Paddle may still collect on the old owner's card), or two plans at once. */
 export type HandOverPlan =
   | { kind: "none" }
-  | { kind: "paddle"; subscriptionId: string; paidUntil: Date | null }
+  | { kind: "paddle"; subscriptionId: string; paidUntil: Date | null; trial: boolean; handedOverFrom: string | null; handedOver: boolean }
   | { kind: "paid_plan" }
-  | { kind: "plan_overdue" };
+  | { kind: "plan_overdue" }
+  | { kind: "plan_unclear" };
+
+/** A plan renewing within this long is not handed over: Paddle refuses changes in the half hour
+ *  before a charge (`PADDLE_CHANGE_CUTOFF_MS`), so the old owner's card could still be taken. */
+export const HAND_OVER_RENEWAL_CUTOFF_MS = 60 * 60 * 1000;
 
 async function planForHandOver(tx: Sql | TransactionSql, gymId: string): Promise<HandOverPlan> {
-  const rows = await tx<{ id: string; provider: string; status: string; provider_ref: string | null; current_period_end: Date | null }[]>`
-    SELECT id, provider, status, provider_ref, current_period_end FROM subscriptions
+  const rows = await tx<{
+    id: string;
+    provider: string;
+    status: string;
+    provider_ref: string | null;
+    current_period_end: Date | null;
+    handed_over_at: Date | null;
+    handed_over_from: string | null;
+  }[]>`
+    SELECT id, provider, status, provider_ref, current_period_end, handed_over_at, handed_over_from FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider NOT IN ('none','pilot')
       AND (status IN ('trialing','active','past_due') OR (status = 'expired' AND cancel_reason = ${GRACE_EXPIRED}))`;
   if (rows.length === 0) return { kind: "none" };
-  if (rows.some((r) => r.provider !== "paddle")) return { kind: "paid_plan" };
+  if (rows.some((r) => r.provider === "razorpay")) return { kind: "paid_plan" };
   if (rows.some((r) => r.status === "past_due" || r.status === "expired")) return { kind: "plan_overdue" };
   const live = rows[0];
-  // One plan a gym; two at once is never handed over on a guess.
-  if (rows.length !== 1 || live === undefined || live.provider_ref === null) return { kind: "paid_plan" };
-  return { kind: "paddle", subscriptionId: live.id, paidUntil: live.current_period_end };
+  // One plan a gym, through Paddle; anything else is never handed over on a guess.
+  if (rows.length !== 1 || live === undefined || live.provider !== "paddle" || live.provider_ref === null) return { kind: "plan_unclear" };
+  return {
+    kind: "paddle",
+    subscriptionId: live.id,
+    paidUntil: live.current_period_end,
+    trial: live.status === "trialing",
+    handedOverFrom: live.handed_over_from,
+    handedOver: live.handed_over_at !== null,
+  };
 }
 
-/** The gym's live Paddle plan handed over from another owner, if any. */
-export async function handedOverPlanRef(sql: Sql, gymId: string): Promise<string | null> {
-  const rows = await sql<{ provider_ref: string }[]>`
-    SELECT provider_ref FROM subscriptions
+/** The gym's live Paddle plan handed over from another owner, if any, and when. */
+export async function handedOverPlanRef(sql: Sql, gymId: string): Promise<{ subscriptionRef: string; handedOverAt: Date } | null> {
+  const rows = await sql<{ provider_ref: string; handed_over_at: Date }[]>`
+    SELECT provider_ref, handed_over_at FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId} AND handed_over_at IS NOT NULL AND provider = 'paddle'
       AND provider_ref IS NOT NULL AND status IN ('trialing','active','past_due')`;
-  return rows[0]?.provider_ref ?? null;
+  const row = rows[0];
+  return row === undefined ? null : { subscriptionRef: row.provider_ref, handedOverAt: row.handed_over_at };
+}
+
+/** What the box before Make owner, and the request, say about the plan: a Paddle plan this owner
+ *  pays stops renewing on Accept. Null when there is none, or it is already handed over. */
+export function planStops(plan: HandOverPlan): { until: string | null; trial: boolean } | null {
+  if (plan.kind !== "paddle" || plan.handedOver) return null;
+  return { until: plan.paidUntil?.toISOString() ?? null, trial: plan.trial };
 }
 
 /** For the Staff tab and the Overview: what the gym's plan means for a hand-over. */
@@ -332,6 +361,7 @@ export type SendOwnerOutcome =
   | { kind: "not_co_owner" }
   | { kind: "paid_plan" }
   | { kind: "plan_overdue" }
+  | { kind: "plan_unclear" }
   | { kind: "already_requested" };
 
 export async function sendOwnerRequest(
@@ -354,7 +384,7 @@ export async function sendOwnerRequest(
     if (target === undefined) return { kind: "not_staff" };
     if (target.role !== "owner" || input.userId === gym.owner_user_id) return { kind: "not_co_owner" };
     const plan = await planForHandOver(tx, input.gymId);
-    if (plan.kind === "paid_plan" || plan.kind === "plan_overdue") return { kind: plan.kind };
+    if (plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear") return { kind: plan.kind };
 
     await endStaleOwnerRequest(tx, input.gymId, input.now);
     const waiting = await tx`SELECT 1 FROM gym_owner_requests WHERE gym_id = ${input.gymId} AND state = 'pending'`;
@@ -444,6 +474,9 @@ export type AnswerOwnerOutcome =
   | Exclude<AnswerOutcome, { kind: "accepted" }>
   | { kind: "paid_plan" }
   | { kind: "plan_overdue" }
+  | { kind: "plan_unclear" }
+  /** The plan renews within the hour: asked again once it has; the request still waits. */
+  | { kind: "plan_renewing" }
   /** `closed`: the payment windows Accept closed that the payment company holds, to cancel there.
    *  `planEnds`: a Paddle plan the old owner paid was set to end here, for Paddle to be told. */
   | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[]; planEnds: boolean };
@@ -500,9 +533,17 @@ export async function answerOwnerRequest(
       return { kind: "request_gone" };
     }
     const plan = await planForHandOver(tx, input.gymId);
-    if (plan.kind === "paid_plan" || plan.kind === "plan_overdue") {
+    if (plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear") {
       await tx`UPDATE gym_owner_requests SET state = 'cancelled', answered_at = ${input.now} WHERE id = ${input.requestId}`;
       return { kind: plan.kind };
+    }
+    if (
+      plan.kind === "paddle" &&
+      plan.paidUntil !== null &&
+      plan.paidUntil.getTime() - input.now.getTime() < HAND_OVER_RENEWAL_CUTOFF_MS &&
+      plan.paidUntil.getTime() > input.now.getTime() - HAND_OVER_RENEWAL_CUTOFF_MS
+    ) {
+      return { kind: "plan_renewing" };
     }
 
     const moved = await tx`
@@ -512,10 +553,18 @@ export async function answerOwnerRequest(
     if (moved.length !== 1) throw new Error("the gym's owner changed under its lock");
     // The old owner's Paddle plan stops renewing with the gym: paid to the end of its month, it
     // is never charged again. Paddle is told after this commits, and by the worker until it has.
+    // Handed on again, it stays the first payer's; handed back to them, it is theirs again, set
+    // to end, which their own Paddle page can undo. A smaller size waiting has no month to start.
     if (plan.kind === "paddle") {
+      const back = plan.handedOverFrom === input.userId;
       await tx`
         UPDATE subscriptions
-        SET handed_over_at = ${input.now}, handed_over_from = ${oldOwner}, handed_over_end_sent_at = NULL, cancel_at_period_end = true
+        SET handed_over_at = CASE WHEN ${back} THEN NULL ELSE COALESCE(handed_over_at, ${input.now}) END,
+            handed_over_from = CASE WHEN ${back} THEN NULL ELSE COALESCE(handed_over_from, ${oldOwner}::uuid) END,
+            handed_over_end_sent_at = CASE WHEN ${back} THEN NULL ELSE handed_over_end_sent_at END,
+            cancel_at_period_end = true,
+            pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
+            pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
         WHERE id = ${plan.subscriptionId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
     }
     // A payment window still open is closed, as a newer press closes it (`beginCheckout`): paid

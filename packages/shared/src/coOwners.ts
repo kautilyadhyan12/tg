@@ -84,9 +84,18 @@ export const myOwnerRequestResponseSchema = z.object({
       /** The owner who asked, by the name they go by; empty when they have none. */
       ownerName: z.string(),
       expiresAt: z.string().datetime(),
-      /** The gym's plan, paid by the owner, stops renewing on Accept and stays paid until this
-       *  day; then the new owner chooses their own (4b-iii-a). Null with no such plan. */
-      paidUntil: z.string().datetime().nullable().optional(),
+      /** The gym's plan, paid by the owner, stops renewing on Accept: until when it is paid, and
+       *  whether it is a paid trial; then the new owner chooses their own (4b-iii-a). Null with
+       *  no such plan, or one already handed over to the owner by somebody else. */
+      planStops: z
+        .object({
+          /** When the paid month ends; null when Paddle gives no date. */
+          until: z.string().datetime().nullable(),
+          /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
+          trial: z.boolean(),
+        })
+        .nullable()
+        .optional(),
     })
     .nullable(),
 });
@@ -102,6 +111,8 @@ export const OWNER_REQUEST_WORDS = {
   not_co_owner: "Only a co-owner can be made the owner. Make them a co-owner first.",
   paid_plan: "While a plan paid through Razorpay is running, the owner can't be changed yet.",
   plan_overdue: "A payment is overdue, so the owner can't be changed until it's paid.",
+  plan_unclear: "This plan can't be handed over right now. Please write to support.",
+  plan_renewing: "The plan renews within the hour, so the owner can't be changed right now. Please try again once it has renewed.",
   handed_over_plan: "This plan was paid by the last owner and stops when its paid month ends, so it can't be managed here. Choose your own plan when it ends.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
   no_request: "There's no request waiting.",

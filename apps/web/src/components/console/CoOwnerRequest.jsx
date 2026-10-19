@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2, ShieldCheck } from 'lucide-react';
 import { formatJoinedAt } from '../../pages/console/consoleView';
+import { planStopsForYou } from '../../pages/console/staffView';
 import { errorText, orgService } from '../../api/orgsApi';
 
 // "BE A CO-OWNER OF {GYM}" (ROADMAP 4b-i): the gym's owner asked the person reading this
@@ -27,10 +28,10 @@ const KINDS = {
     testId: 'owner-request',
     title: (gym) => `Be the owner of ${gym}`,
     asked: 'asked you to be the owner.',
-    what: (who, request) =>
-      request?.paidUntil
-        ? `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner. Their plan stops renewing and stays paid until ${formatJoinedAt(request.paidUntil)}; then you choose your own plan and pay with your own card.`
-        : `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.`,
+    what: (who, request) => {
+      const plan = planStopsForYou(request?.planStops);
+      return `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.${plan === null ? '' : ` ${plan}`}`;
+    },
     yes: (gym) => `You're now the owner of ${gym}.`,
   },
 };

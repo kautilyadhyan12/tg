@@ -14,7 +14,7 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { endHandedOverPlans, type BillingDeps } from "../src/modules/billing/service.js";
+import { applyPaddleSubscription, endHandedOverPlans, endExpiredGraces, type BillingDeps } from "../src/modules/billing/service.js";
 import { FakePaddle } from "./fakePaddle.js";
 import { ROLE_PRIVILEGES, myOwnerRequestResponseSchema, orgStaffResponseSchema, type OrgRole } from "@app/shared";
 
@@ -39,6 +39,7 @@ const TEST_TIMEOUT_MS = 120_000;
 const PLAN = "zz_hand_over_paddle";
 const PRICE = "pri_" + "h".repeat(26);
 const addr = (local: string) => `handpd-t-${local}@handpd-t.example.com`;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface User {
   userId: string;
@@ -79,6 +80,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     await sql`DELETE FROM gym_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_co_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM billing_refunds WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
@@ -128,6 +130,9 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     const made = await paddle.createTransaction({ priceId: PRICE, customData: { gym_id: org.id } });
     if (made.kind !== "ok") throw new Error("the fake did not make a transaction");
     const sub = paddle.pay(made.value.id, "api", true, owner.email);
+    const monthStart = new Date(Date.now() - 10 * DAY_MS).toISOString();
+    const monthEnd = new Date(Date.now() + 20 * DAY_MS).toISOString();
+    paddle.update(sub, { current_billing_period: { starts_at: monthStart, ends_at: monthEnd }, next_billed_at: monthEnd });
     const fake = paddle.subs.get(sub);
     await sql`
       INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, provider_customer_ref, current_period_end, provider_updated_at)
@@ -160,6 +165,8 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     const res = await accept(gym, to);
     expect(res.statusCode, res.body).toBe(200);
   };
+  const planRowRef = async (gym: Gym) =>
+    (await sql<{ provider_customer_ref: string }[]>`SELECT provider_customer_ref FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider_ref = ${gym.sub}`)[0] ?? { provider_customer_ref: "" };
   const ownerOf = async (gym: Gym) => (await sql<{ owner_user_id: string }[]>`SELECT owner_user_id FROM gyms WHERE id = ${gym.id}`)[0]?.owner_user_id;
   const planRow = async (gym: Gym) =>
     (
@@ -217,7 +224,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       // Before Accept: renewing, and the person asked is told until when it is paid.
       expect(paddle.renews(gym.sub)).toBe(true);
       const until = paddle.subs.get(gym.sub)?.current_billing_period?.ends_at ?? null;
-      expect((await mineAt(gym, cora))?.paidUntil).toBe(until === null ? null : new Date(until).toISOString());
+      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: until === null ? null : new Date(until).toISOString(), trial: false });
 
       const res = await accept(gym, cora);
       expect(res.statusCode, res.body).toBe(200);
@@ -254,8 +261,9 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       await handOver(gym, cora);
       expect(paddle.renews(gym.sub)).toBe(false);
       // The old owner keeps it on a Paddle page opened earlier; Paddle's event reaches the row.
-      paddle.update(gym.sub, { scheduled_change: null });
-      await sql`UPDATE subscriptions SET cancel_at_period_end = false WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      paddle.update(gym.sub, { scheduled_change: null, next_billed_at: paddle.subs.get(gym.sub)?.current_billing_period?.ends_at ?? null });
+      expect(await applyPaddleSubscription(billing, gym.sub)).toBe("applied");
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(false);
       expect(paddle.renews(gym.sub)).toBe(true);
       expect(await worker()).toBeGreaterThanOrEqual(1);
       expect(paddle.renews(gym.sub)).toBe(false);
@@ -272,6 +280,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
         expect(errorOf(portal)).toBe("handed_over_plan");
       }
       expect(paddle.portalCalls.filter((c) => c.subscriptionIds.includes(gym.sub))).toHaveLength(0);
+      await sql`UPDATE subscriptions SET cancel_at_period_end = false WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
       const size = await send("POST", `/v1/orgs/${gym.id}/billing/size/preview`, cora, { planCode: PLAN });
       expect(size.statusCode).toBe(409);
       expect(errorOf(size)).toBe("plan_ending");
@@ -285,6 +294,160 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       const res = await send("POST", `/v1/orgs/${gym.id}/billing/checkout`, cora, { planCode: PLAN }, { "idempotency-key": `k-${gym.id}` });
       expect(res.statusCode, res.body).toBe(200);
       expect((JSON.parse(res.body) as { email: string | null }).email).toBe(cora.email);
+    }, TEST_TIMEOUT_MS);
+  });
+
+  // Round one of the rework (reviews/4b-iii-a-8 and -8b): each ran red on the code before its fix.
+  describe("round one", () => {
+    it("a month Paddle took after the hand-over ends the plan at once and is owed back to the old owner", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      paddle.periodEndFailures = 1;
+      await handOver(gym, cora);
+      // Paddle renewed before it was told: the next month, on the old owner's card.
+      const renewal = paddle.renew(gym.sub, new Date(Date.now() + 5 * 60 * 1000).toISOString());
+      await worker();
+      expect(paddle.cancelledSubs).toContain(gym.sub);
+      const owed = await sql<{ transaction_ref: string }[]>`SELECT transaction_ref FROM billing_refunds WHERE gym_id = ${gym.id}`;
+      expect(owed.map((r) => r.transaction_ref)).toEqual([renewal]);
+      const row = await sql<{ status: string }[]>`SELECT status FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider_ref = ${gym.sub}`;
+      expect(row[0]?.status).toBe("expired");
+      expect(await ownerOf(gym)).toBe(cora.userId);
+    }, TEST_TIMEOUT_MS);
+
+    it("a payment failing on the old owner's card after the hand-over ends the plan at once, nothing owed back", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      paddle.periodEndFailures = 1;
+      await handOver(gym, cora);
+      paddle.update(gym.sub, { status: "past_due" });
+      await sql`UPDATE subscriptions SET status = 'past_due', past_due_since = now() WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      await worker();
+      expect(paddle.cancelledSubs).toContain(gym.sub);
+      expect((await sql`SELECT 1 FROM billing_refunds WHERE gym_id = ${gym.id}`).length).toBe(0);
+      // The new owner can choose their own plan, and never opens the old owner's account.
+      const portal = await send("POST", `/v1/orgs/${gym.id}/billing/portal`, cora);
+      expect(portal.statusCode).not.toBe(200);
+      const res = await send("POST", `/v1/orgs/${gym.id}/billing/checkout`, cora, { planCode: PLAN }, { "idempotency-key": `pd-${gym.id}` });
+      expect(res.statusCode, res.body).toBe(200);
+      expect((JSON.parse(res.body) as { email: string | null }).email).toBe(cora.email);
+    }, TEST_TIMEOUT_MS);
+
+    it("a handed-over plan whose grace ran out never opens the old owner's Paddle page, and is ended at Paddle", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await handOver(gym, cora);
+      // Past due and its grace over before the worker reached it (Paddle not answering meanwhile).
+      paddle.update(gym.sub, { status: "past_due" });
+      await sql`UPDATE subscriptions SET status = 'past_due', past_due_since = now() - interval '5 days' WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      await endExpiredGraces(billing);
+      const portal = await send("POST", `/v1/orgs/${gym.id}/billing/portal`, cora);
+      expect(portal.statusCode).toBe(409);
+      expect(errorOf(portal)).toBe("handed_over_plan");
+      expect(paddle.portalCalls.filter((c) => c.subscriptionIds.includes(gym.sub))).toHaveLength(0);
+      await worker();
+      expect(paddle.cancelledSubs).toContain(gym.sub);
+      const res = await send("POST", `/v1/orgs/${gym.id}/billing/checkout`, cora, { planCode: PLAN }, { "idempotency-key": `ge-${gym.id}` });
+      expect(res.statusCode, res.body).toBe(200);
+    }, TEST_TIMEOUT_MS);
+
+    it("handed back to the person who pays, the plan is theirs again: their name, their Paddle page, no 'you won't be charged' to the other", async () => {
+      const gym = await makePaidGym("Ann");
+      const bob = await makeCoOwner(gym, "Bob");
+      await handOver(gym, bob);
+      // Bob's box: Bob never paid, so nothing tells him he won't be charged.
+      expect((await staffList({ ...gym, owner: bob }, bob)).planStops).toBeNull();
+      expect((await ask({ ...gym, owner: bob }, gym.owner, bob)).statusCode).toBe(201);
+      expect((await mineAt(gym, gym.owner))?.planStops).toBeNull();
+      const back = await accept(gym, gym.owner);
+      expect(back.statusCode, back.body).toBe(200);
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+      const row = await planRow(gym);
+      expect(row?.handed_over_from).toBeNull();
+      expect((await consolePlan(gym, gym.owner))?.handedOverBy).toBeNull();
+      expect((await send("POST", `/v1/orgs/${gym.id}/billing/portal`, gym.owner)).statusCode).toBe(200);
+    }, TEST_TIMEOUT_MS);
+
+    it("handed on again, the plan stays the first payer's", async () => {
+      const gym = await makePaidGym("Ann");
+      const bob = await makeCoOwner(gym, "Bob");
+      const cy = await makeCoOwner(gym, "Cy");
+      await handOver(gym, bob);
+      const asBob = { ...gym, owner: bob };
+      expect((await ask(asBob, cy, bob)).statusCode).toBe(201);
+      expect((await accept(gym, cy)).statusCode).toBe(200);
+      expect((await planRow(gym))?.handed_over_from).toBe(gym.owner.userId);
+      expect((await consolePlan(gym, cy))?.handedOverBy).toBe("Ann");
+    }, TEST_TIMEOUT_MS);
+
+    it("the old owner still opens Paddle's page for their other gym after they leave the one handed over", async () => {
+      const gym = await makePaidGym("Ann");
+      const bob = await makeCoOwner(gym, "Bob");
+      // Ann's second gym, paid by the same Paddle customer.
+      const res = await send("POST", "/v1/orgs", gym.owner, { trainsHere: false, name: `Ann's Second ${String(Date.now())}`, city: "Austin", country: "US", timezone: "America/Chicago" });
+      expect(res.statusCode, res.body).toBe(201);
+      const second = (JSON.parse(res.body) as { org: { id: string } }).org.id;
+      const payer = (await planRowRef(gym)).provider_customer_ref;
+      await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${second}`;
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, provider_customer_ref, current_period_end)
+        VALUES ('gym', ${second}, (SELECT id FROM plans WHERE code = ${PLAN}), 'active', 'paddle', ${"sub_" + "s".repeat(22) + String(count++).padStart(4, "0")}, ${payer}, now() + interval '20 days')`;
+      await handOver(gym, bob);
+      const removed = await send("DELETE", `/v1/orgs/${gym.id}/staff/${gym.owner.userId}`, bob);
+      expect(removed.statusCode, removed.body).toBe(200);
+      const portal = await send("POST", `/v1/orgs/${second}/billing/portal`, gym.owner);
+      expect(portal.statusCode, portal.body).toBe(200);
+    }, TEST_TIMEOUT_MS);
+
+    it("a smaller size waiting is dropped with the hand-over: the plan has no next month", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await sql`
+        UPDATE subscriptions SET pending_plan_id = plan_id, pending_from = current_period_end
+        WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      await handOver(gym, cora);
+      const pending = await sql<{ pending_plan_id: string | null }[]>`SELECT pending_plan_id FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider_ref = ${gym.sub}`;
+      expect(pending[0]?.pending_plan_id).toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("a paid trial handed over is set to end and never charged early", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      const trialEnd = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+      paddle.update(gym.sub, { status: "trialing", next_billed_at: trialEnd, current_billing_period: { starts_at: new Date(Date.now() - 5 * DAY_MS).toISOString(), ends_at: trialEnd } });
+      await sql`UPDATE subscriptions SET status = 'trialing', trial_ends_at = now() + interval '20 minutes', current_period_end = now() + interval '2 days' WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      await handOver(gym, cora);
+      // The gym's own free trial ends within the hour; Paddle answers the plan set to end with no
+      // date; and the row has not yet heard it is set to end, so Paddle's record is applied.
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, trial_ends_at, ended_at, cancel_reason)
+        VALUES ('gym', ${gym.id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'expired', 'none', now() + interval '20 minutes', now(), 'trial_subscribed')`;
+      await sql`UPDATE subscriptions SET cancel_at_period_end = false WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider = 'paddle'`;
+      expect(await applyPaddleSubscription(billing, gym.sub)).toBe("applied");
+      expect(paddle.activations).not.toContain(gym.sub);
+      expect(paddle.cancelledSubs).not.toContain(gym.sub);
+      expect(paddle.charges.filter((c) => c.subscriptionId === gym.sub)).toHaveLength(0);
+    }, TEST_TIMEOUT_MS);
+
+    it("Accept waits while the plan renews within the hour; the request still waits", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      await sql`UPDATE subscriptions SET current_period_end = now() + interval '20 minutes' WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      const res = await accept(gym, cora);
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res)).toBe("plan_renewing");
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+      expect(await mineAt(gym, cora)).not.toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("two plans at once are not handed over, with a sentence that names no payment company", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await sql`UPDATE subscriptions SET provider_ref = NULL WHERE owner_type = 'gym' AND owner_id = ${gym.id}`;
+      const res = await ask(gym, cora);
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res)).toBe("plan_unclear");
     }, TEST_TIMEOUT_MS);
   });
 
@@ -312,7 +475,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       const tabFine = await staffList(fine, fine.owner);
       expect(tabFine.paidPlan).toBe(false);
       expect(tabFine.paidPlanNote).toBeNull();
-      expect(tabFine.paidUntil).not.toBeNull();
+      expect(tabFine.planStops?.until).not.toBeNull();
     }, TEST_TIMEOUT_MS);
 
     it("a plan already set to end is handed over and stays set to end", async () => {

@@ -571,6 +571,8 @@ export const orgSubscriptionSchema = z.object({
    *  have none). It stops renewing and stays paid until `currentPeriodEnd`; the new owner then
    *  chooses their own plan. Null otherwise. */
   handedOverBy: z.string().nullable().default(null),
+  /** The person reading paid for this handed-over plan: it is their own (4b-iii-a). */
+  handedOverByYou: z.boolean().default(false),
   /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). In a trial this
    *  is only a paid trial made before 2026-09-30: its card saved and the first payment taken when
    *  the trial ends (`currentPeriodEnd`), `priceLabel` the plan's price. Paying now ends the
@@ -2158,9 +2160,17 @@ export const orgStaffResponseSchema = z.object({
   /** The gym's plan stops a hand-over for now (4b-ii); `paidPlanNote` says why. */
   paidPlan: z.boolean().optional(),
   paidPlanNote: z.string().max(200).nullable().optional(),
-  /** A plan paid through Paddle: handed over, it stops renewing and stays paid until this day,
-   *  when the new owner chooses their own plan (4b-iii-a). Null otherwise. */
-  paidUntil: z.string().datetime().nullable().optional(),
+  /** A plan the owner pays through Paddle: handed over, it stops renewing; until when it is
+   *  paid, and whether it is a paid trial (4b-iii-a). Null otherwise. */
+  planStops: z
+    .object({
+      /** When the paid month ends; null when Paddle gives no date. */
+      until: z.string().datetime().nullable(),
+      /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
+      trial: z.boolean(),
+    })
+    .nullable()
+    .optional(),
 });
 export type OrgStaffResponse = z.infer<typeof orgStaffResponseSchema>;
 

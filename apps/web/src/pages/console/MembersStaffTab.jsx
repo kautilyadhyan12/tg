@@ -122,8 +122,8 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
 // an address can ask for the form (Overview's Start here list); `onInviting` sets it.
 export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null }) {
   // `paidPlan`: the gym's plan stops a hand-over for now, `paidPlanNote` says why (4b-ii);
-  // `paidUntil`: a Paddle plan that stops renewing on a hand-over, paid until then (4b-iii-a).
-  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, paidUntil: null });
+  // `planStops`: a Paddle plan that stops renewing on a hand-over, and until when (4b-iii-a).
+  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, planStops: null });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
   const [invites, setInvites] = useState({ loading: true, error: null, list: [] });
@@ -175,7 +175,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       list,
       paidPlan: answer?.paidPlan === true,
       paidPlanNote: answer?.paidPlanNote ?? null,
-      paidUntil: answer?.paidUntil ?? null,
+      planStops: answer?.planStops ?? null,
     });
     return list;
   }, [gymId]);
@@ -563,7 +563,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           staff={staff.list}
           paidPlan={staff.paidPlan}
           paidPlanNote={staff.paidPlanNote}
-          paidUntil={staff.paidUntil}
+          planStops={staff.planStops}
           ownerNote={ownerNote !== null && ownerNote.who === open.userId ? ownerNote.message : null}
           onAskOwner={() => void askOwner(open)}
           onCancelOwner={() => void cancelOwner(open)}

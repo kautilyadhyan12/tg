@@ -326,7 +326,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect(await ownerOf(gym)).toBe(first.userId);
     }, TEST_TIMEOUT_MS);
 
-    // A plan paid through Paddle is handed over with the new owner's card (4b-iii-a,
+    // A plan paid through Paddle is handed over, and its plan stops renewing (4b-iii-a,
     // ownerHandOverPaid.routes.test.ts); one paid through Razorpay is not yet (4b-iii-b).
     it("a gym on a Razorpay plan is not handed over, and one that goes onto one meanwhile is not either", async () => {
       const paid = await makeGym("Kd", undefined, "none");

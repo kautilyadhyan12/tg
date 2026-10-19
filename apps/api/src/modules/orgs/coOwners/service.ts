@@ -134,13 +134,14 @@ export async function answerCoOwnerRequest(
 // through, and the repo refuses anybody who is not the gym's own owner by its owner id.
 
 const notOwner = (): OrgsError => new OrgsError(403, "owner_only", OWNER_REQUEST_WORDS.owner_only);
-const planRefusal = (kind: "paid_plan" | "plan_overdue"): OrgsError => new OrgsError(409, kind, OWNER_REQUEST_WORDS[kind]);
+const planRefusal = (kind: "paid_plan" | "plan_overdue" | "plan_unclear" | "plan_renewing"): OrgsError =>
+  new OrgsError(409, kind, OWNER_REQUEST_WORDS[kind]);
 
 /** Tell Paddle the gym's handed-over plan ends with its month, now rather than at the worker's
  *  next minute. A failure is logged and left to the worker. */
 async function endHandedOverPlans(billing: BillingDeps, gymId: string): Promise<void> {
-  const ref = await repo.handedOverPlanRef(billing.sql, gymId);
-  if (ref !== null) await endHandedOverPlan(billing, { gymId, subscriptionRef: ref });
+  const plan = await repo.handedOverPlanRef(billing.sql, gymId);
+  if (plan !== null) await endHandedOverPlan(billing, { gymId, ...plan });
 }
 
 export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, gymId: string, userId: string): Promise<SendOwnerRequestResponse> {
@@ -157,6 +158,7 @@ export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, g
       throw new OrgsError(409, "not_co_owner", OWNER_REQUEST_WORDS.not_co_owner);
     case "paid_plan":
     case "plan_overdue":
+    case "plan_unclear":
       throw planRefusal(outcome.kind);
     case "already_requested":
       throw new OrgsError(409, "already_requested", OWNER_REQUEST_WORDS.already_requested);
@@ -207,7 +209,7 @@ export async function myOwnerRequest(deps: CoOwnerDeps, userId: string, gymId: s
       id: request.id,
       ownerName: request.ownerName.trim(),
       expiresAt: request.expiresAt.toISOString(),
-      paidUntil: plan.kind === "paddle" ? (plan.paidUntil?.toISOString() ?? null) : null,
+      planStops: repo.planStops(plan),
     },
   };
 }
@@ -235,6 +237,8 @@ export async function answerOwnerRequest(
       throw new OrgsError(409, "request_gone", OWNER_REQUEST_WORDS.request_gone);
     case "paid_plan":
     case "plan_overdue":
+    case "plan_unclear":
+    case "plan_renewing":
       throw planRefusal(outcome.kind);
     case "accepted":
       // After the hand-over is saved: the old owner's payment windows can no longer be paid,

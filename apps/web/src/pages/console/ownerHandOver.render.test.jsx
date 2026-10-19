@@ -177,7 +177,7 @@ describe('Make owner', () => {
   });
 
   it('a plan paid through Paddle: the box says it stops renewing, paid until a day, and the new owner then chooses one (4b-iii-a)', async () => {
-    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, paidUntil: PAID_UNTIL } });
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, planStops: { until: PAID_UNTIL, trial: false } } });
     drawStaff();
     const panel = await openPerson('u3', 'Cora Lim');
     fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
@@ -258,7 +258,7 @@ describe('the co-owner asked, on Overview', () => {
   });
 
   it("a plan paid through Paddle: they're told it stops renewing, paid until a day, and they then choose their own (4b-iii-a)", async () => {
-    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, paidUntil: PAID_UNTIL } } });
+    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, planStops: { until: PAID_UNTIL, trial: false } } } });
     draw();
     const box = within(await screen.findByTestId('owner-request'));
     expect(

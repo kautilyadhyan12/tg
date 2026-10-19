@@ -12,6 +12,7 @@ import {
   heldPrivileges,
   inviteTicks,
   ownerView,
+  planStopsLine,
   privilegeChoices,
   privilegesDiffer,
   roleTargets,
@@ -655,8 +656,8 @@ function CoOwnerSection({ person, gymName, view, off, note, error, onAsk, onCanc
 /** Make owner (ROADMAP 4b-ii): the owner asks a co-owner to take the gym over, and they
  *  answer on their own Overview. Asks first, naming who changes and how; once sent, says it
  *  is waiting and when it ends, with Cancel request. A plan paid through Paddle (4b-iii-a): the
- *  box says it stops renewing, paid until `paidUntil`, and that the new owner then chooses one. */
-function OwnerSection({ person, gymName, words, view, paidPlanNote = null, paidUntil = null, off, note, error, onAsk, onCancel, onOpen }) {
+ *  box says it stops renewing (`planStops`), and that the new owner then chooses one. */
+function OwnerSection({ person, gymName, words, view, paidPlanNote = null, planStops = null, off, note, error, onAsk, onCancel, onOpen }) {
   const [asking, setAsking] = useState(false);
   const question = useInView(asking);
   const name = person.displayName;
@@ -702,12 +703,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, paidU
           </p>
           <ul className="c-s14 c-t2 m-0 pl-5 flex flex-col gap-1">
             <li>{name} becomes the owner and can add or remove co-owners, including you.</li>
-            {paidUntil !== null ? (
-              <li>
-                Your plan stops renewing, so you won&apos;t be charged again. It stays paid until {formatJoinedAt(paidUntil)}; then {name} chooses their own
-                plan.
-              </li>
-            ) : null}
+            {planStopsLine(planStops, name) !== null ? <li>{planStopsLine(planStops, name)}</li> : null}
             <li>You stay on as a co-owner and can still do everything else.</li>
             <li>Handing over doesn&apos;t give you a new free trial.</li>
           </ul>
@@ -740,7 +736,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, paidU
   );
 }
 
-export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, staff = [], paidPlan = false, paidPlanNote = null, paidUntil = null, readOnly, busy, error, coOwnerNote = null, ownerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onAskOwner = () => undefined, onCancelOwner = () => undefined, onOpenPerson = () => undefined, onSeeActivity = null }) {
+export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, staff = [], paidPlan = false, paidPlanNote = null, planStops = null, readOnly, busy, error, coOwnerNote = null, ownerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onAskOwner = () => undefined, onCancelOwner = () => undefined, onOpenPerson = () => undefined, onSeeActivity = null }) {
   const coOwner = coOwnerView(person, viewerIsOwner);
   const owner = ownerView(person, viewerIsOwner, staff, paidPlan);
   const off = busy || readOnly;
@@ -785,7 +781,7 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
           words={words}
           view={owner}
           paidPlanNote={paidPlanNote}
-          paidUntil={paidUntil}
+          planStops={planStops}
           // A gym with no plan can still be handed over: only a change on its way greys it.
           off={busy}
           note={ownerNote}

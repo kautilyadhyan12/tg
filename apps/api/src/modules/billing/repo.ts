@@ -738,15 +738,22 @@ export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<Manag
 
 /** The live Paddle plans handed to another owner that Paddle has not yet confirmed end with
  *  their month (4b-iii-a): the worker tells Paddle until it has. */
-export async function handedOverPlansToEnd(sql: SqlOrTx, limit: number): Promise<{ gymId: string; subscriptionRef: string }[]> {
-  const rows = await sql<{ owner_id: string; provider_ref: string }[]>`
-    SELECT owner_id, provider_ref FROM subscriptions
-    WHERE handed_over_at IS NOT NULL AND status IN ('trialing','active','past_due')
-      AND provider = 'paddle' AND provider_ref IS NOT NULL AND owner_type = 'gym'
-      AND (handed_over_end_sent_at IS NULL OR NOT cancel_at_period_end)
-    ORDER BY handed_over_at
+export async function handedOverPlansToEnd(
+  sql: SqlOrTx,
+  limit: number,
+): Promise<{ gymId: string; subscriptionRef: string; handedOverAt: Date }[]> {
+  // Past due, or its grace ended: a payment failed on the old owner's card after the hand-over,
+  // which Paddle keeps asking for, so it is looked at until it has ended.
+  const rows = await sql<{ owner_id: string; provider_ref: string; handed_over_at: Date }[]>`
+    SELECT owner_id, provider_ref, handed_over_at FROM subscriptions
+    WHERE handed_over_at IS NOT NULL AND provider = 'paddle' AND provider_ref IS NOT NULL AND owner_type = 'gym'
+      AND ((status IN ('trialing','active') AND (handed_over_end_sent_at IS NULL OR NOT cancel_at_period_end))
+           OR status = 'past_due'
+           OR (status = 'expired' AND cancel_reason = ${GRACE_EXPIRED}))
+    -- In no fixed order: a plan Paddle keeps refusing never holds the others back.
+    ORDER BY random()
     LIMIT ${limit}`;
-  return rows.map((r) => ({ gymId: r.owner_id, subscriptionRef: r.provider_ref }));
+  return rows.map((r) => ({ gymId: r.owner_id, subscriptionRef: r.provider_ref, handedOverAt: r.handed_over_at }));
 }
 
 /** Paddle confirmed a handed-over plan ends with its month. */
@@ -757,12 +764,12 @@ export async function markHandedOverEndSent(sql: SqlOrTx, input: { gymId: string
       AND handed_over_at IS NOT NULL`;
 }
 
-/** Is the gym's live plan one handed over from another owner (4b-iii-a)? */
+/** Is the gym's plan one handed over from another owner (4b-iii-a): live, or its grace ended? */
 export async function liveHandedOver(sql: SqlOrTx, gymId: string): Promise<boolean> {
   const rows = await sql`
     SELECT 1 FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId} AND handed_over_at IS NOT NULL
-      AND status IN ('trialing','active','past_due')`;
+      AND (status IN ('trialing','active','past_due') OR cancel_reason = ${GRACE_EXPIRED})`;
   return rows.length > 0;
 }
 
@@ -782,7 +789,10 @@ export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: st
     SELECT DISTINCT owner_id FROM subscriptions
     WHERE provider = 'paddle' AND provider_customer_ref = ${input.customerRef}
       AND owner_type = 'gym' AND owner_id <> ${input.gymId}
-      AND cancel_reason IS DISTINCT FROM 'duplicate'`;
+      AND cancel_reason IS DISTINCT FROM 'duplicate'
+      -- A plan handed over with its gym is the payer's own and ends; one over is nothing to show.
+      AND handed_over_at IS NULL
+      AND (status IN ('trialing','active','past_due') OR cancel_reason = ${GRACE_EXPIRED})`;
   return rows.map((r) => r.owner_id);
 }
 

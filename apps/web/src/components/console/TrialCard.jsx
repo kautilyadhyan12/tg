@@ -174,7 +174,7 @@ export default function TrialCard({ org }) {
   const resize = canChangeSize(org);
   const razorpay = isPaidThroughRazorpay(org);
   const ending = planEndingText(org);
-  const handedOver = handedOverText(sub);
+  const handedOver = handedOverText(sub, org);
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);

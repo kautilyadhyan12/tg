@@ -1353,6 +1353,7 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     subscribed,
     paidThrough,
     handedOverBy: paid ? row.handedOverBy : null,
+    handedOverByYou: paid && row.handedOverByYou,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
     nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
     pendingSize:
@@ -2145,7 +2146,7 @@ export async function listOrgStaff(
   // stopped for now, with why, or a Paddle plan that stops renewing and stays paid until a day.
   const toOwner = await coOwnerRepo.waitingOwnerRequest(deps.sql, gymId, now);
   const plan = await coOwnerRepo.gymHandOverPlan(deps.sql, gymId);
-  const paidPlan = plan.kind === "paid_plan" || plan.kind === "plan_overdue";
+  const paidPlan = plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear";
   // Whose current list record is certainly theirs: removing them from the app moves it
   // to past members, and the Staff tab's box says so (4a-ii round one, L5).
   const members = rows.filter((r) => r.isMember).map((r) => r.userId);
@@ -2170,8 +2171,8 @@ export async function listOrgStaff(
       };
     }),
     paidPlan,
-    paidPlanNote: plan.kind === "paid_plan" || plan.kind === "plan_overdue" ? OWNER_REQUEST_WORDS[plan.kind] : null,
-    paidUntil: plan.kind === "paddle" ? (plan.paidUntil?.toISOString() ?? null) : null,
+    paidPlanNote: plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear" ? OWNER_REQUEST_WORDS[plan.kind] : null,
+    planStops: coOwnerRepo.planStops(plan),
   });
 }
 

@@ -389,15 +389,21 @@ export function planHeadline(sub, orgType) {
   return price === null ? size : `${size} · ${price} a month`;
 }
 
-/** A plan handed over with its gym (4b-iii-a): who paid for it, when it stops, and what to do
- *  then. Null for any other plan. */
-export function handedOverText(sub) {
+/** A plan handed over with its gym (4b-iii-a): who paid for it, when it stops, and what comes
+ *  next, said to the person reading it: the one who paid, the gym's owner, or anybody else on
+ *  the staff. Null for any other plan. */
+export function handedOverText(sub, org) {
   if (sub?.handedOverBy == null) return null;
-  const who = sub.handedOverBy.trim() || 'The last owner';
   const date = trialEndDateLabel(sub.currentPeriodEnd);
-  return date === null
-    ? `${who} paid for this plan, and it doesn't renew. When it ends, choose your own plan and pay with your own card.`
-    : `${who} paid for this plan, and it stops on ${date}. Then choose your own plan and pay with your own card.`;
+  const trial = sub.status === 'trialing';
+  const when = date === null ? (trial ? 'it stops before its first payment' : "it doesn't renew") : `it stops on ${date}`;
+  if (sub.handedOverByYou === true) {
+    return trial ? `You started this plan's trial, and ${when}. You won't be charged.` : `You paid for this plan, and ${when}. You won't be charged again.`;
+  }
+  const who = sub.handedOverBy.trim() || 'The last owner';
+  const what = trial ? `${who} started this plan's trial, and ${when}` : `${who} paid for this plan, and ${when}`;
+  const isOwner = org?.staffRole === 'owner' && org?.coOwner !== true;
+  return isOwner ? `${what}. Then choose your own plan and pay with your own card.` : `${what}. Then the owner chooses the next plan.`;
 }
 
 /** "Next payment $199 on 25 Oct" for a plan in good standing, "Ends 25 Oct" for one set to
