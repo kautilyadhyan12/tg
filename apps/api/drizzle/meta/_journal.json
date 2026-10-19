@@ -981,6 +981,13 @@
       "when": 1790726400140,
       "tag": "0140_member_payers",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1790726400142,
+      "tag": "0142_square_connect",
+      "breakpoints": true
     }
   ]
 }

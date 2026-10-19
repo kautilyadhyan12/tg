@@ -1,0 +1,161 @@
+// The worker's half of a gym's Square connection (ROADMAP 18d-i), every minute: Square's
+// message that a gym took the app off its account, checked with Square before anything
+// changes (a webhook is a doorbell, never a messenger: CLAUDE.md §4); tokens owed a revoke;
+// renewals that are due; presses of Connect Square that ran out. Safe to run twice: events,
+// revokes and renewals are each leased, and every write names the connection it was read for.
+import * as webhooks from "../../webhooks/repo.js";
+import { insertAudit } from "../repo.js";
+import * as repo from "./repo.js";
+import { SQUARE_REFRESH_EVERY_MS, accessContext, refreshContext, sendOwedRevokes, type PaymentsDeps } from "./service.js";
+import type { SquareSettings } from "./settings.js";
+
+export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
+
+export const SQUARE_WORK = {
+  eventsPerRun: 100,
+  refreshesPerRun: 50,
+  leaseMs: 10 * 60_000,
+  /** Square could not be asked about an event: try again this long after. */
+  retryAfterMs: [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000],
+  maxTries: 12,
+  /** Square could not be asked for a renewal; or it refused one while the token still works. */
+  renewAgainMs: 15 * 60_000,
+  renewRefusedAgainMs: 60 * 60_000,
+  keepDays: 90,
+} as const;
+
+export interface SquareWorkRun {
+  /** Connections found taken off inside Square, by an event or a renewal. */
+  removed: number;
+  /** Events whose every connection still works. */
+  unchanged: number;
+  deferred: number;
+  givenUp: number;
+  forgotten: number;
+  revokes: { sent: number; deferred: number; givenUp: number };
+  renewed: number;
+  renewalsWaiting: number;
+  startsForgotten: number;
+}
+
+type Check = "works" | "removed" | "unknown";
+
+/** Does this connection's token still work at Square? A token that no longer opens, or that
+ *  Square refuses, is a connection the gym no longer has: it is marked so. */
+async function checkConnection(deps: PaymentsDeps, square: SquareSettings, row: repo.ConnectionRow): Promise<Check> {
+  const token = row.accessToken === null ? null : square.tokens.open(row.accessToken, accessContext(row.gymId));
+  if (token !== null) {
+    const status = await square.api.tokenStatus(token);
+    if (status.kind === "unavailable") return "unknown";
+    if (status.kind === "ok" && status.value.merchant_id === row.accountId) return "works";
+  } else {
+    deps.log.error({ event: "square.token_unreadable", gymId: row.gymId }, "a gym's Square token could not be opened");
+  }
+  await deps.sql.begin(async (tx) => {
+    if (!(await repo.markRemoved(tx, row.gymId, square.environment, row.connectedAt, deps.now()))) return;
+    await insertAudit(tx, {
+      actorUserId: null,
+      gymId: row.gymId,
+      action: "org.payments_square_removed_in_square",
+      targetType: "gym",
+      targetId: row.gymId,
+      meta: { business: row.businessName },
+    });
+  });
+  return "removed";
+}
+
+async function renew(deps: PaymentsDeps, square: SquareSettings, row: repo.ConnectionRow): Promise<"renewed" | "removed" | "waiting"> {
+  const again = (ms: number) => repo.setRefreshDue(deps.sql, row.gymId, square.environment, row.connectedAt, new Date(deps.now().getTime() + ms));
+  const refreshToken = row.refreshToken === null ? null : square.tokens.open(row.refreshToken, refreshContext(row.gymId));
+  if (refreshToken === null) {
+    if ((await checkConnection(deps, square, row)) === "removed") return "removed";
+    await again(SQUARE_WORK.renewAgainMs);
+    return "waiting";
+  }
+  const result = await square.api.refresh(refreshToken);
+  if (result.kind === "unavailable") {
+    await again(SQUARE_WORK.renewAgainMs);
+    return "waiting";
+  }
+  if (result.kind === "refused" || result.value.merchant_id !== row.accountId) {
+    // Square said no: the gym may have taken the app off, or the fault is ours. Its token
+    // decides which.
+    const check = await checkConnection(deps, square, row);
+    if (check === "removed") return "removed";
+    deps.log.error({ event: "square.renewal_refused", gymId: row.gymId, ...(result.kind === "refused" ? { status: result.status, code: result.code } : {}) }, "Square refused a renewal");
+    await again(check === "works" ? SQUARE_WORK.renewRefusedAgainMs : SQUARE_WORK.renewAgainMs);
+    return "waiting";
+  }
+  const written = await repo.writeRefreshed(deps.sql, {
+    gymId: row.gymId,
+    environment: square.environment,
+    connectedAt: row.connectedAt,
+    accessToken: square.tokens.lock(result.value.access_token, accessContext(row.gymId)),
+    refreshToken: square.tokens.lock(result.value.refresh_token, refreshContext(row.gymId)),
+    accessExpiresAt: new Date(result.value.expires_at),
+    refreshDueAt: new Date(deps.now().getTime() + SQUARE_REFRESH_EVERY_MS),
+  });
+  return written ? "renewed" : "waiting";
+}
+
+/** `eventIds`: only these events, for a test sharing its database; production passes null. */
+export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly string[] | null = null): Promise<SquareWorkRun> {
+  const run: SquareWorkRun = {
+    removed: 0,
+    unchanged: 0,
+    deferred: 0,
+    givenUp: 0,
+    forgotten: 0,
+    revokes: { sent: 0, deferred: 0, givenUp: 0 },
+    renewed: 0,
+    renewalsWaiting: 0,
+    startsForgotten: 0,
+  };
+  const square = deps.square;
+  if (square === null) return run;
+
+  for (let taken = 0; taken < SQUARE_WORK.eventsPerRun; taken++) {
+    const event = await webhooks.claimDueSquareEvent(deps.sql, deps.now(), SQUARE_WORK.leaseMs, eventIds);
+    if (event === null) break;
+    if (event.payload === null || event.payload.type !== SQUARE_REVOKED_EVENT) {
+      await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
+      deps.log.warn({ event: "square.event_unreadable", webhookEventId: event.id }, "a kept Square event no longer parses");
+      run.givenUp += 1;
+      continue;
+    }
+    let unknown = false;
+    for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, event.payload.accountId)) {
+      const check = await checkConnection(deps, square, row);
+      if (check === "removed") run.removed += 1;
+      if (check === "unknown") unknown = true;
+    }
+    if (!unknown) {
+      await webhooks.finishEvent(deps.sql, event, "done", deps.now());
+      run.unchanged += 1;
+      continue;
+    }
+    if (event.tries + 1 >= SQUARE_WORK.maxTries) {
+      await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
+      deps.log.error({ event: "square.event_given_up", webhookEventId: event.id }, "Square could not be asked about an event; given up");
+      run.givenUp += 1;
+    } else {
+      const wait = SQUARE_WORK.retryAfterMs[Math.min(event.tries, SQUARE_WORK.retryAfterMs.length - 1)] ?? 60_000;
+      await webhooks.deferEvent(deps.sql, event, new Date(deps.now().getTime() + wait), true);
+      run.deferred += 1;
+    }
+  }
+
+  run.revokes = await sendOwedRevokes(deps, square, null);
+
+  for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun)) {
+    const outcome = await renew(deps, square, row);
+    if (outcome === "renewed") run.renewed += 1;
+    else if (outcome === "removed") run.removed += 1;
+    else run.renewalsWaiting += 1;
+  }
+
+  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, deps.now());
+  run.forgotten = await webhooks.forgetOldSquareEvents(deps.sql, new Date(deps.now().getTime() - SQUARE_WORK.keepDays * 24 * 60 * 60 * 1000), 1000);
+  return run;
+}

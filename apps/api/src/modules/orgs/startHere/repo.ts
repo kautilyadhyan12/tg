@@ -6,6 +6,9 @@ import type { StartHereStep } from "@app/shared";
 export interface StartHereRow {
   /** `gyms.activation` as stored; the service parses it. */
   activation: unknown;
+  /** Take payments is the gym's own owner's, where Square serves its country (18d-i). */
+  ownerUserId: string;
+  country: string | null;
   done: Record<StartHereStep, boolean>;
 }
 
@@ -18,6 +21,8 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
   const rows = await sql<
     {
       activation: unknown;
+      owner_user_id: string;
+      country: string | null;
       memberships: boolean;
       members: boolean;
       staff: boolean;
@@ -25,9 +30,10 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       hours: boolean;
       contact: boolean;
       front_desk: boolean;
+      payments: boolean;
     }[]
   >`
-    SELECT g.activation,
+    SELECT g.activation, g.owner_user_id, g.country,
       EXISTS (
         SELECT 1 FROM gym_membership_types t
         WHERE t.gym_id = g.id AND t.archived_at IS NULL
@@ -61,13 +67,20 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       EXISTS (
         SELECT 1 FROM gym_checkin_devices d
         WHERE d.gym_id = g.id AND d.switched_off_at IS NULL AND d.key_hash IS NOT NULL
-      ) AS front_desk
+      ) AS front_desk,
+      -- Connected, with the location picked: what card payments will need (18d-i).
+      EXISTS (
+        SELECT 1 FROM gym_payment_connections p
+        WHERE p.gym_id = g.id AND p.state = 'connected' AND p.location_id IS NOT NULL
+      ) AS payments
     FROM gyms g
     WHERE g.id = ${gymId}`;
   const row = rows[0];
   if (row === undefined) return null;
   return {
     activation: row.activation,
+    ownerUserId: row.owner_user_id,
+    country: row.country,
     done: {
       memberships: row.memberships,
       members: row.members,
@@ -76,6 +89,7 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       hours: row.hours,
       contact: row.contact,
       frontDesk: row.front_desk,
+      payments: row.payments,
     },
   };
 }

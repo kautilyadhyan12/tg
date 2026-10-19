@@ -1,16 +1,22 @@
-// The console's "Start here" list on Overview (spec Part 3 §5.1; ROADMAP 23b): seven things
-// a new gym sets up, each ticked by the server from what the gym already has.
+// The console's "Start here" list on Overview (spec Part 3 §5.1; ROADMAP 23b): what a new
+// gym sets up, each ticked by the server from what the gym already has.
 import { z } from "zod";
+import { gymPaymentsAvailability } from "./gymPayments.js";
 import type { OrgPrivilege } from "./orgs.js";
 
-/** The seven steps, in the order the list shows them. `contact` is how members reach the
- *  gym (ROADMAP 20a-iii): done once it has added a phone number or an email address. */
-export const START_HERE_STEPS = ["memberships", "members", "staff", "classes", "hours", "contact", "frontDesk"] as const;
+/** The seven steps a tick opens, in the order the list shows them. `contact` is how members
+ *  reach the gym (ROADMAP 20a-iii): done once it has added a phone number or an email address. */
+export const START_HERE_TICK_STEPS = ["memberships", "members", "staff", "classes", "hours", "contact", "frontDesk"] as const;
+export type StartHereTickStep = (typeof START_HERE_TICK_STEPS)[number];
+
+/** Every step, in the list's order. `payments` (ROADMAP 18d-i) is the gym's own owner's, for
+ *  a gym in a country Square serves: connecting Square is theirs alone, on no tick. */
+export const START_HERE_STEPS = [...START_HERE_TICK_STEPS, "payments"] as const;
 export const startHereStepSchema = z.enum(START_HERE_STEPS);
 export type StartHereStep = z.infer<typeof startHereStepSchema>;
 
 /** The tick each step's own page asks for. A person is sent only the steps they can do. */
-export const START_HERE_STEP_PRIVILEGE: Readonly<Record<StartHereStep, OrgPrivilege>> = {
+export const START_HERE_STEP_PRIVILEGE: Readonly<Record<StartHereTickStep, OrgPrivilege>> = {
   memberships: "memberships.manage",
   members: "members.confirm",
   staff: "staff.manage",
@@ -23,9 +29,14 @@ export const START_HERE_STEP_PRIVILEGE: Readonly<Record<StartHereStep, OrgPrivil
 /** Hiding the list, and showing it again, is for whoever may change the gym's details. */
 export const START_HERE_HIDE_PRIVILEGE: OrgPrivilege = "org.manage";
 
-/** The steps somebody holding these ticks is shown, in the list's order. */
-export function startHereStepsFor(privileges: readonly OrgPrivilege[]): StartHereStep[] {
-  return START_HERE_STEPS.filter((step) => privileges.includes(START_HERE_STEP_PRIVILEGE[step]));
+/** The steps somebody holding these ticks is shown, in the list's order: Take payments too
+ *  for the gym's own owner, where Square serves the gym's country. */
+export function startHereStepsFor(
+  privileges: readonly OrgPrivilege[],
+  owner: { isGymOwner: boolean; country: string | null } = { isGymOwner: false, country: null },
+): StartHereStep[] {
+  const ticked: StartHereStep[] = START_HERE_TICK_STEPS.filter((step) => privileges.includes(START_HERE_STEP_PRIVILEGE[step]));
+  return owner.isGymOwner && gymPaymentsAvailability(owner.country) === "square" ? [...ticked, "payments"] : ticked;
 }
 
 export const startHereSchema = z

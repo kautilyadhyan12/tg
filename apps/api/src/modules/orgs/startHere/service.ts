@@ -29,12 +29,13 @@ function isHidden(activation: unknown): boolean {
   return stored.success && stored.data.startHereHidden === true;
 }
 
-function toResponse(row: repo.StartHereRow, privileges: readonly OrgPrivilege[]): StartHereResponse {
+function toResponse(row: repo.StartHereRow, userId: string, privileges: readonly OrgPrivilege[]): StartHereResponse {
+  const owner = { isGymOwner: row.ownerUserId === userId, country: row.country };
   return startHereResponseSchema.parse({
     startHere: {
       hidden: isHidden(row.activation),
       canHide: privileges.includes(START_HERE_HIDE_PRIVILEGE),
-      steps: startHereStepsFor(privileges).map((step) => ({ step, done: row.done[step] })),
+      steps: startHereStepsFor(privileges, owner).map((step) => ({ step, done: row.done[step] })),
     },
   });
 }
@@ -43,7 +44,7 @@ export async function getStartHere(deps: StartHereDeps, userId: string, gymId: s
   const { privileges } = await requireStaff(deps, gymId, userId);
   const row = await repo.readStartHere(deps.sql, gymId, deps.now());
   if (row === null) throw notFound();
-  return toResponse(row, privileges);
+  return toResponse(row, userId, privileges);
 }
 
 /** Hide the list for the whole gym, or show it again. The same answer twice changes
@@ -72,5 +73,5 @@ export async function setStartHereHidden(
     return await repo.readStartHere(tx, gymId, deps.now());
   });
   if (row === null) throw notFound();
-  return toResponse(row, privileges);
+  return toResponse(row, userId, privileges);
 }
