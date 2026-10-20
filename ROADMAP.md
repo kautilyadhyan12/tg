@@ -260,6 +260,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18d-ii. [ ] **A member saves their card on Square's own form**; staff see "Card on file: Visa ending 4242".
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`).
+     - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
    - 18e. [ ] The second Connect button (GoCardless: the member's bank account). 18f. [ ] Razorpay, for Indian gyms.
    - 18g. **Receipts** (Kd, RULINGS 2026-10-08), split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-18g-i.md`):
      - 18g-i. [x] **Numbered receipts, opened and printed at the desk** — merged 2026-10-15 (PR #277).
