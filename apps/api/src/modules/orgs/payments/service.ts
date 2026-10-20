@@ -260,6 +260,11 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
     if (current?.country !== merchant.value.country || memberCurrencyForCountry(current.country) !== merchant.value.currency) {
       return { outcome: "refused" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
     }
+    // The owner again: a gym handed over while Square was being asked is not connected to the
+    // old owner's account after the hand-over let it go (4b-v).
+    if (current.ownerUserId !== userId) {
+      return { outcome: "not_owner" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
+    }
     const existing = await repo.readConnection(tx, gymId, square.environment, true);
     if (existing?.state === "connected") {
       // Two Allows for one gym: the first stays, and this one's token is let go.
@@ -299,6 +304,7 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
   });
   if (result.revokeId !== null) await sendOwedRevokes(deps, square, [result.revokeId]);
   if (result.outcome === "refused") return refused("wrong_country", merchant.value.country, merchant.value.currency);
+  if (result.outcome === "not_owner") throw new OrgsError(403, "owner_only", GYM_PAYMENTS_WORDS.owner_only);
   return answer(result.outcome);
 }
 
