@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
+import { gymMemberListEntries } from "./memberList.js";
 import { gyms } from "./tenancy.js";
 
 /** A gym's own payment company (0142; ROADMAP 18d-i): Square today, one row a gym and
@@ -101,5 +102,120 @@ export const gymPaymentRevokes = pgTable(
     check("gym_payment_revokes_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_payment_revokes_tries_check", sql`${t.tries} >= 0`),
     index("gym_payment_revokes_due_idx").on(t.notBefore),
+  ],
+);
+
+/** The person a record is in a gym's Square account (0144; ROADMAP 18d-ii): made the first
+ *  time a card is saved for them, once, under a lock. */
+export const gymSquareCustomers = pgTable(
+  "gym_square_customers",
+  {
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_customers_pk", columns: [t.gymId, t.entryId, t.environment, t.accountId] }),
+    check("gym_square_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    foreignKey({ name: "gym_square_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+  ],
+);
+
+/** What the person agreed to when a card was saved (0144): the words shown, when, and on whose
+ *  screen (`desk`: staff's, `app`: the member's own). It outlives a removed card. A record
+ *  deleted for good lets go of it with the day (`record_deleted_at`); its link to the record is
+ *  checked when the transaction commits, so it is not declared here (as `0108`'s is not). */
+export const gymCardAgreements = pgTable(
+  "gym_card_agreements",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id"),
+    recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
+    words: text("words").notNull(),
+    screen: text("screen").notNull(),
+    screenUserId: uuid("screen_user_id").references(() => users.id, { onDelete: "set null" }),
+    brand: text("brand").notNull(),
+    last4: text("last4").notNull(),
+    agreedAt: timestamp("agreed_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    check("gym_card_agreements_words_check", sql`char_length(${t.words}) BETWEEN 20 AND 600`),
+    check("gym_card_agreements_screen_check", sql`${t.screen} IN ('desk','app')`),
+    check("gym_card_agreements_card_check", sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$'`),
+    check("gym_card_agreements_deleted_day_check", sql`${t.entryId} IS NOT NULL OR ${t.recordDeletedAt} IS NOT NULL`),
+    index("gym_card_agreements_entry_idx").on(t.gymId, t.entryId),
+    index("gym_card_agreements_deleted_idx").on(t.recordDeletedAt).where(sql`${t.entryId} IS NULL`),
+  ],
+);
+
+/** A record's card on file (0144): one a record, in the Square account it names. The card
+ *  number never reaches us: Square's ids and what a screen shows of the card. */
+export const gymMemberCards = pgTable(
+  "gym_member_cards",
+  {
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    cardId: text("card_id").notNull(),
+    brand: text("brand").notNull(),
+    last4: text("last4").notNull(),
+    expMonth: integer("exp_month").notNull(),
+    expYear: integer("exp_year").notNull(),
+    savedFrom: text("saved_from").notNull(),
+    savedBy: uuid("saved_by").references(() => users.id, { onDelete: "set null" }),
+    agreementId: uuid("agreement_id")
+      .notNull()
+      .references(() => gymCardAgreements.id),
+    savedAt: timestamp("saved_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_member_cards_pk", columns: [t.gymId, t.entryId] }),
+    unique("gym_member_cards_card_uq").on(t.environment, t.accountId, t.cardId),
+    check("gym_member_cards_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_member_cards_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.cardId} ~ '^[A-Za-z0-9:_-]{1,192}$'`,
+    ),
+    check(
+      "gym_member_cards_card_check",
+      sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$' AND ${t.expMonth} BETWEEN 1 AND 12 AND ${t.expYear} BETWEEN 2000 AND 2200`,
+    ),
+    check("gym_member_cards_saved_from_check", sql`${t.savedFrom} IN ('desk','app')`),
+    foreignKey({ name: "gym_member_cards_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+  ],
+);
+
+/** Cards Square is still to be told to stop (0144): replaced by a newer card, or their record
+ *  deleted for good or joined to another. Sent by the worker with the gym's own connection to
+ *  that account until Square says so. */
+export const gymCardDisables = pgTable(
+  "gym_card_disables",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    cardId: text("card_id").notNull(),
+    tries: integer("tries").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("gym_card_disables_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_card_disables_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.cardId} ~ '^[A-Za-z0-9:_-]{1,192}$'`),
+    check("gym_card_disables_tries_check", sql`${t.tries} >= 0`),
+    index("gym_card_disables_due_idx").on(t.notBefore),
   ],
 );

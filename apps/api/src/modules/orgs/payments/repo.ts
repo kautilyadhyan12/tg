@@ -14,13 +14,14 @@ export interface GymForPayments {
   slug: string;
   name: string;
   country: string | null;
+  timezone: string;
 }
 
 export async function readGym(sql: SqlOrTx, gymId: string): Promise<GymForPayments | null> {
-  const rows = await sql<{ owner_user_id: string; slug: string; name: string; country: string | null }[]>`
-    SELECT owner_user_id, slug, name, country FROM gyms WHERE id = ${gymId}`;
+  const rows = await sql<{ owner_user_id: string; slug: string; name: string; country: string | null; timezone: string }[]>`
+    SELECT owner_user_id, slug, name, country, timezone FROM gyms WHERE id = ${gymId}`;
   const row = rows[0];
-  return row === undefined ? null : { ownerUserId: row.owner_user_id, slug: row.slug, name: row.name, country: row.country };
+  return row === undefined ? null : { ownerUserId: row.owner_user_id, slug: row.slug, name: row.name, country: row.country, timezone: row.timezone };
 }
 
 const locationChoicesSchema = z.array(squareLocationChoiceSchema).max(300);

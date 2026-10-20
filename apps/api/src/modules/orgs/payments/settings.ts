@@ -5,6 +5,8 @@ import { createTokenBox, type TokenBox } from "./tokenBox.js";
 
 export interface SquareSettings {
   api: SquareApi;
+  /** Our app's id at Square: public, and given to Square's card form in the browser (18d-ii). */
+  applicationId: string;
   environment: SquareEnvironment;
   tokens: TokenBox;
   /** Null until a webhook subscription is set up: Square's messages are then refused. */
@@ -19,6 +21,7 @@ export function squareSettings(
 ): SquareSettings | null {
   if (config.SQUARE_APPLICATION_ID === undefined || config.SQUARE_APPLICATION_SECRET === undefined || config.PAYMENT_TOKENS_KEY === undefined) return null;
   return {
+    applicationId: config.SQUARE_APPLICATION_ID,
     api:
       api ??
       createSquareApi({ applicationId: config.SQUARE_APPLICATION_ID, applicationSecret: config.SQUARE_APPLICATION_SECRET, environment: config.SQUARE_ENV }),

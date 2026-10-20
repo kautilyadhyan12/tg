@@ -5,7 +5,7 @@
 // Every action the server writes is in exactly one of the two lists below: a sentence, or
 // "not something staff did" (a member's own press, or the app on its own). The census test
 // reads the source for every action written and fails on one that is in neither.
-import { LEAD_STATUS_WORDS, MEMBER_PAYMENT_METHOD_WORDS, formatMinor, type OrgWords } from "@app/shared";
+import { LEAD_STATUS_WORDS, MEMBER_PAYMENT_METHOD_WORDS, cardName, formatMinor, type OrgWords } from "@app/shared";
 
 /** What a sentence is given: the note's own details, and the name of who or what it is
  *  about, looked up at this gym (null when it no longer exists). */
@@ -39,6 +39,12 @@ const money = (s: Said, key: string): string | null => {
   return minor === null ? null : formatMinor(minor, text(s, "currency") ?? s.currency);
 };
 const quoted = (name: string | null): string => (name === null ? "" : ` “${name}”`);
+/** "Visa ending 1111", from a card note's brand and last four (18d-ii). */
+const cardOf = (s: Said, brandKey: string, last4Key: string): string | null => {
+  const brand = text(s, brandKey);
+  const last4 = text(s, last4Key);
+  return brand === null || last4 === null || !/^[0-9]{4}$/.test(last4) ? null : cardName({ brand, last4 });
+};
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "2026-10-13" → "13 Oct 2026". */
 export function dayWords(day: string | null): string | null {
@@ -236,6 +242,11 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.member_fee_payment_voided": (s) => `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
   "org.member_payer_set": (s) => `Set ${payerOf(s)} to pay for ${person(s)}`,
   "org.member_payer_removed": (s) => `Stopped ${payerOf(s)} paying for ${person(s)}`,
+  "org.member_card_saved": (s) => {
+    const before = cardOf(s, "replacedBrand", "replacedLast4");
+    return `Saved ${cardOf(s, "brand", "last4") ?? "a card"} for ${person(s)}${before === null ? "" : `, in place of ${before}`}`;
+  },
+  "org.member_card_removed": (s) => `Removed ${cardOf(s, "brand", "last4") ?? "a card"} from ${person(s)}`,
   "org.product_created": (s) => {
     const price = money(s, "priceMinor");
     return `Added the product${quoted(text(s, "name"))}${price === null ? "" : ` at ${price}`}`;
@@ -409,6 +420,9 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.held_membership_gift_days_added",
   "org.held_membership_gift_days_taken_back",
   "org.payments_square_removed_in_square",
+  "org.payments_square_stopped",
+  "member.card_saved",
+  "org.member_card_removed_in_square",
   "billing.trial_replaced",
   "billing.size_replaced",
   "billing.duplicate",

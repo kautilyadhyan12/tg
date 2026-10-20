@@ -424,6 +424,21 @@ export async function deleteExpiredWaiverSignatures(sql: Sql, cutoff: Date): Pro
   });
 }
 
+/** What a person agreed to when their card was saved (18d-ii), kept as the gym's proof after
+ *  their record is deleted for good: removed once a year has passed since that day and three
+ *  since it was agreed, the longer of the two that California's automatic renewal law keeps a
+ *  consent for. An agreement whose record is still on the list has no day and stays. */
+export async function deleteExpiredCardAgreements(sql: Sql, now: Date): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM gym_card_agreements
+    WHERE entry_id IS NULL
+      AND record_deleted_at IS NOT NULL
+      AND record_deleted_at <= ${now}::timestamptz - interval '1 year'
+      AND agreed_at <= ${now}::timestamptz - interval '3 years'
+    RETURNING id`;
+  return rows.length;
+}
+
 /** The purge marker AND the ops record (Part 8: a user's life should be
  *  narratable from audit_log). actor_user_id is NULL — the sweep is the
  *  system acting on a schedule, not a person. `meta` carries counts only,

@@ -70,6 +70,7 @@ import { listBillFacts } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 import { movePayerLinks } from "../payers/repo.js";
+import { moveCards } from "../payments/cardsRepo.js";
 
 type Sql = MemberListDeps["sql"];
 
@@ -906,6 +907,8 @@ export async function mergeEntries(
     await repo.moveLeadLinks(tx, gymId, goneId, keepId);
     await moveGiftLinks(tx, gymId, goneId, keepId);
     await moveDeskSignatures(tx, gymId, goneId, keepId);
+    // One card a person (18d-ii): the newer saved stays, the other is owed its stop at Square.
+    await moveCards(tx, gymId, goneId, keepId, at);
     // Who pays for either, and whom either pays for (18i): one person keeps one payer.
     const payers = await movePayerLinks(tx, gymId, goneId, keepId);
     if (payers !== null) throw new OrgsError(409, payers, MEMBER_PAYER_WORDS[payers]);

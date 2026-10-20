@@ -75,6 +75,9 @@ export interface PurgeResult {
   /** Run-level: signed waivers removed on the same six years (3e-iii): an app signature
    *  from its account's deletion, a desk signature from its record's. Zero on a dry run. */
   waiverSignaturesExpired: number;
+  /** Run-level: card agreements removed (18d-ii) whose record was deleted for good a year ago
+   *  and which were agreed three years ago. Zero on a dry run. */
+  cardAgreementsExpired: number;
   /** Run-level: the six-year expiry (the consent log, then the waivers) threw this run. Kept OUT of `errors` (it is
    *  not a user's transaction) and still a shortfall — both entrypoints fail
    *  the run on it, and the next run retries: the delete is idempotent. */
@@ -193,6 +196,7 @@ export async function purgeDueUsers(
     schemaDriftSnapshots: schemaDrift,
     consentProofExpired: 0,
     waiverSignaturesExpired: 0,
+    cardAgreementsExpired: 0,
     consentProofExpiryFailed: false,
     photoFilesLeft: 0,
     dryRun,
@@ -280,6 +284,7 @@ export async function purgeDueUsers(
   try {
     result.consentProofExpired = await repo.deleteExpiredConsentProof(deps.sql, consentCutoff);
     result.waiverSignaturesExpired = await repo.deleteExpiredWaiverSignatures(deps.sql, consentCutoff);
+    result.cardAgreementsExpired = await repo.deleteExpiredCardAgreements(deps.sql, now);
   } catch (err) {
     // NOT result.errors: that counter is "a user's transaction threw", and the
     // worker interpolates it into the message an operator wakes up to. One

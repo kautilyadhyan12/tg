@@ -640,8 +640,9 @@ if (paddle !== null || razorpay !== null) {
 }
 
 // A GYM'S OWN SQUARE ACCOUNT (ROADMAP 18d-i). Its own queue, every minute: Square's messages
-// that a gym took the app off its account, checked with Square; tokens owed a revoke; the
-// renewals that are due. Only when Square is set up.
+// that a gym took the app off its account or that a saved card changed (18d-ii), checked with
+// Square; tokens owed a revoke and cards owed a stop; the renewals that are due. Only when
+// Square is set up.
 export const PAYMENTS_QUEUE = "payments";
 export const PAYMENTS_SQUARE_JOB = "payments.square";
 
@@ -674,7 +675,8 @@ if (square === null) {
       const startedAt = Date.now();
       const run = await processSquareWork({ sql, square, log, now: () => new Date() });
       const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
-      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + run.renewed + run.renewalsWaiting > 0) {
+      const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + run.renewed + run.renewalsWaiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

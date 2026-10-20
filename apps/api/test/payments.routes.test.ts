@@ -152,6 +152,12 @@ function fakeSquare() {
       const t = live(token);
       return t === null ? unauthorized : { kind: "ok", value: t.account.locations };
     },
+    // Saved cards (18d-ii) are driven in `memberCards.routes.test.ts`.
+    createCustomer: () => Promise.resolve(unavailable),
+    createCard: () => Promise.resolve(unavailable),
+    retrieveCard: () => Promise.resolve(unavailable),
+    disableCard: () => Promise.resolve(unavailable),
+    revokeAccount: () => Promise.resolve(unavailable),
   };
   /** The gym signs in at Square as this account and presses Allow: Square hands back a code. */
   const allow = (account: Account): string => {
