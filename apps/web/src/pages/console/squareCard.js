@@ -32,11 +32,35 @@ export function loadSquare(environment) {
   return promise;
 }
 
+/** Square's boxes in the console's own colours, read by name from `console.css` where the form
+ *  is drawn (either look). Square takes plain values; a name not set is left to Square. */
+export function cardStyle(element) {
+  const read = (name) => {
+    const value = globalThis.getComputedStyle(element).getPropertyValue(name).trim();
+    return /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : null;
+  };
+  const [input, line, focus, text, placeholder, bad] = ['--input', '--input-line', '--accent', '--t1', '--t3', '--bad'].map(read);
+  if ([input, line, focus, text, placeholder, bad].includes(null)) return null;
+  return {
+    '.input-container': { borderColor: line, borderRadius: '12px' },
+    '.input-container.is-focus': { borderColor: focus },
+    '.input-container.is-error': { borderColor: bad },
+    '.message-text': { color: placeholder },
+    '.message-icon': { color: placeholder },
+    '.message-text.is-error': { color: bad },
+    '.message-icon.is-error': { color: bad },
+    input: { backgroundColor: input, color: text },
+    'input::placeholder': { color: placeholder },
+    'input.is-error': { color: bad },
+  };
+}
+
 /** Square's card boxes, drawn into `container` for the gym's own Square location. */
 export async function attachCardForm(form, container) {
   const Square = await loadSquare(form.environment);
   const payments = Square.payments(form.applicationId, form.locationId);
-  const card = await payments.card();
+  const style = cardStyle(container);
+  const card = await payments.card(style === null ? undefined : { style });
   await card.attach(container);
   return card;
 }

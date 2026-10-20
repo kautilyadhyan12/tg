@@ -5,6 +5,7 @@
 // once the box is ticked, with the words the person read; and a late answer for a person opened
 // earlier is never drawn.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { act, render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { cardAgreementWords } from '@app/shared';
@@ -76,7 +77,10 @@ describe('Card on file: the worst thing', () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Add card' }));
     expect(await screen.findByText('Add a card for Tara Singh')).toBeTruthy();
-    await waitFor(() => expect(square.attachCardForm).toHaveBeenCalledWith(FORM, screen.getByTestId('square-card-boxes')));
+    await waitFor(() => expect(square.attachCardForm).toHaveBeenCalled());
+    const [form, slot] = vi.mocked(square.attachCardForm).mock.calls[0];
+    expect(form).toEqual(FORM);
+    expect(slot.parentElement).toBe(screen.getByTestId('square-card-boxes'));
     expect(screen.getByText('Tara reads and ticks this box.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
@@ -175,6 +179,30 @@ describe('Card on file: what it says', () => {
     await waitFor(() => expect(orgService.removeMemberCard).toHaveBeenCalledWith(GYM, TARA));
     expect((await screen.findByRole('status')).textContent).toBe('Card removed: Visa ending 1111.');
     expect(screen.getByText('No card on file')).toBeTruthy();
+  });
+
+  it("a form drawn twice at once (React's second mount) keeps its Square boxes: stopping the first empties only its own place", async () => {
+    orgService.getMemberCard.mockReturnValue(answer());
+    // Square's own form: it draws its window into the place it is given, and stopping it
+    // empties that place.
+    vi.mocked(square.attachCardForm).mockImplementation(async (_, place) => {
+      await Promise.resolve();
+      const window = document.createElement('iframe');
+      place.appendChild(window);
+      return { destroy: vi.fn(() => Promise.resolve(place.replaceChildren())) };
+    });
+    render(
+      <StrictMode>
+        <MemoryRouter>
+          <MemberCard gymId={GYM} gym={IRON} entryId={TARA} name="Tara Singh" readOnly={false} />
+        </MemoryRouter>
+      </StrictMode>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Add card' }));
+    await waitFor(() => expect(square.attachCardForm).toHaveBeenCalledTimes(2));
+    await act(async () => undefined);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save card' }).hasAttribute('disabled')).toBe(false));
+    expect(screen.getByTestId('square-card-boxes').querySelectorAll('iframe')).toHaveLength(1);
   });
 
   it("Square's form that does not load says so, and Save card waits for it", async () => {

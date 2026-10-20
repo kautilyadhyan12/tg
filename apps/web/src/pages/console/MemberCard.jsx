@@ -41,9 +41,13 @@ function CardForm({ gymId, entryId, view, name, onSaved, onBack }) {
   const tickId = useId();
 
   useEffect(() => {
+    // Each form in a slot of its own: stopping one empties its slot alone, so a form drawn
+    // again straight after (React's second mount, or Back and Add card again) keeps its boxes.
+    const slot = document.createElement('div');
+    holder.current.appendChild(slot);
     let live = true;
     let made = null;
-    attachCardForm(view.form, holder.current).then(
+    attachCardForm(view.form, slot).then(
       (c) => {
         made = c;
         if (live) setCard(c);
@@ -54,6 +58,7 @@ function CardForm({ gymId, entryId, view, name, onSaved, onBack }) {
     return () => {
       live = false;
       if (made !== null) void made.destroy();
+      slot.remove();
     };
   }, [view.form]);
 
