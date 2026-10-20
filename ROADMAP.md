@@ -150,6 +150,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 4b-iii-a. [x] **A gym paying through Paddle handed over** — merged 2026-10-19 (PR #316).
       - 4b-iii-b. [x] **A gym paying through Razorpay handed over** — merged 2026-10-20 (PR #318).
      - 4b-iv. [x] **A plan set to end is reminded** — merged 2026-10-20 (PR #320).
+     - 4b-v. [ ] **The two extra passes' fixes** over 4b (5 High, 4 Low; `handoff/2026-10-20-4b-v.md`). Before a real gym uses co-owners or a hand-over.
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).
