@@ -60,6 +60,7 @@ import type { ReviewState } from "./review.js";
 import { identityKey } from "./fields.js";
 import { keptWith, nextMemberNumber } from "./memberNumbers.js";
 import { nameKey, sameName } from "./samePerson.js";
+import { letGoOfCards } from "../payments/cardsRepo.js";
 
 export type SqlOrTx = Sql | TransactionSql;
 
@@ -1151,6 +1152,8 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string, at: Da
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, null, at);
+  // Saved cards are owed their stop at Square, and the agreements stay as the gym's proof (18d-ii).
+  await letGoOfCards(tx, gymId, null, at);
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
   // What records deleted for good earlier left behind (18m) goes with the rest of the list:
   // their bills, payments and refunds by the keys' cascade. The gym was warned it would.
@@ -2272,6 +2275,8 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, entryId, at);
+  // Its saved card is owed its stop at Square; the agreement stays as the gym's proof (18d-ii).
+  await letGoOfCards(tx, gymId, entryId, at);
   await keepPaidMemberships(tx, gymId, entryId, at);
   // What this record paid for somebody else stays, with no name: "A deleted member" (18i).
   await tx`

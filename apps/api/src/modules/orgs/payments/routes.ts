@@ -7,13 +7,29 @@
 //   DELETE /v1/orgs/:gymId/payments/square             Disconnect Square (the owner)
 //   POST   /v1/payments/square/finish                  Square's answer, from the return page
 //   POST   /v1/webhooks/square                         Square's messages: signed, kept once
-import { squareFinishRequestSchema, squareLocationRequestSchema, squareWebhookBodySchema } from "@app/shared";
+//
+// A member's card on file (ROADMAP 18d-ii):
+//   GET    /v1/orgs/:gymId/member-list/entries/:entryId/card   Card on file (`billing.members`)
+//   POST   /v1/orgs/:gymId/member-list/entries/:entryId/card   save the card typed into Square's form
+//   DELETE /v1/orgs/:gymId/member-list/entries/:entryId/card   Remove card
+//   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
+//   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
+import {
+  saveCardRequestSchema,
+  squareCardIdSchema,
+  squareFinishRequestSchema,
+  squareLocationRequestSchema,
+  squareObjectIdSchema,
+  squareWebhookBodySchema,
+} from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as webhooks from "../../webhooks/repo.js";
-import { orgParamsSchema } from "../schemas.js";
+import { memberListEntryParamsSchema, orgParamsSchema } from "../schemas.js";
+import { staffOnly } from "../staffLimit.js";
+import * as cards from "./cards.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
@@ -85,6 +101,61 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).send(await service.finishSquareConnect(paymentsDeps, callerId(req), body));
   });
 
+  // Card on file is read with every person's page a payments member of staff opens; a gym's
+  // staff share one address. Each save or removal is a trip to Square, and a save asks the
+  // card's bank: a ceiling also keeps a stolen card from being tried here over and over.
+  const cardReadLimit = createDualRateLimit({ name: "member_card_read", max: 1200, ipMax: 6000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const cardWriteLimit = createDualRateLimit({ name: "member_card_write", max: 60, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const cardUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/card";
+
+  app.get(cardUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, cardReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await cards.readMemberCard(paymentsDeps, callerId(req), params.gymId, params.entryId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(cardUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, cardWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(saveCardRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(200).send(await cards.saveMemberCard(paymentsDeps, callerId(req), params.gymId, params.entryId, body));
+  });
+
+  app.delete(cardUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, cardWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await cards.removeMemberCard(paymentsDeps, callerId(req), params.gymId, params.entryId));
+  });
+
+  // A whole gym opens the app on one wi-fi address; a member saves a card a handful of times.
+  const myCardReadLimit = createDualRateLimit({ name: "my_card_read", max: 600, ipMax: 30_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const myCardWriteLimit = createDualRateLimit({ name: "my_card_write", max: 10, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // Membership first and the limit after it: a stranger's 404 is never a 429.
+  const gate = (limit: typeof myCardReadLimit, req: FastifyRequest, reply: FastifyReply) => async (): Promise<boolean> => {
+    await limit(req, reply);
+    return !reply.sent;
+  };
+
+  app.get("/v1/orgs/:gymId/my-card", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const mine = await cards.readMyCard(paymentsDeps, callerId(req), params.gymId, gate(myCardReadLimit, req, reply));
+    if (mine === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(mine);
+  });
+
+  app.post("/v1/orgs/:gymId/my-card", { preHandler: app.authenticate }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(saveCardRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const mine = await cards.saveMyCard(paymentsDeps, callerId(req), params.gymId, body, gate(myCardWriteLimit, req, reply));
+    if (mine === null) return;
+    return reply.status(200).send(mine);
+  });
+
   void app.register((scope, _options, done) => {
     // The signature is over the bytes as sent, so nothing may parse them first.
     scope.removeAllContentTypeParsers();
@@ -121,12 +192,38 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           req.log.warn({ event: "webhook.square_unreadable" }, "a signed Square webhook body did not parse");
           return reply.status(200).send();
         }
-        // Only a gym taking the app off its account is acted on here; the rest are acknowledged.
-        if (event.data.type !== SQUARE_REVOKED_EVENT) return reply.status(200).send();
-        await webhooks.keepSquareEvent(deps.sql, {
-          eventId: event.data.event_id,
-          payload: { type: event.data.type, accountId: event.data.merchant_id },
-        });
+        // A gym taking the app off its account, and a saved card changed or stopped inside
+        // Square (18d-ii), are kept for the worker; the rest are acknowledged.
+        if (event.data.type === SQUARE_REVOKED_EVENT) {
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id },
+          });
+          return reply.status(200).send();
+        }
+        if (event.data.type === cards.SQUARE_CUSTOMER_DELETED_EVENT) {
+          const customerId = squareObjectIdSchema.safeParse(event.data.data?.id);
+          if (!customerId.success) {
+            req.log.warn({ event: "webhook.square_customer_unreadable" }, "a signed Square customer message names no customer");
+            return reply.status(200).send();
+          }
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id, customerId: customerId.data },
+          });
+          return reply.status(200).send();
+        }
+        if (cards.SQUARE_CARD_EVENTS.includes(event.data.type)) {
+          const cardId = squareCardIdSchema.safeParse(event.data.data?.id);
+          if (!cardId.success) {
+            req.log.warn({ event: "webhook.square_card_unreadable" }, "a signed Square card message names no card");
+            return reply.status(200).send();
+          }
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id, cardId: cardId.data },
+          });
+        }
         return reply.status(200).send();
       },
     );

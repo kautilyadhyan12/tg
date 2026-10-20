@@ -1116,6 +1116,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // driven in `checkin.fixVisit.routes.test.ts`.
       "gym_attendance_removed.entry_id",
       "gym_attendance_removed.gym_id",
+      // A card's agreement (0144; 18d-ii): moved by the join, and kept with no record and the
+      // day when one is deleted for good, as the gym's proof (`memberCards.routes.test.ts`).
+      "gym_card_agreements.entry_id",
+      "gym_card_agreements.gym_id",
       // A class booking (0075): it is the app account's, so the join moves it to the kept
       // record (driven in `classBookings.routes.test.ts`) and a deleted record lets it go
       // (`db.migration.test.ts`).
@@ -1132,6 +1136,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_held_memberships.gym_id",
       "gym_leads.entry_id",
       "gym_leads.gym_id",
+      // A card on file (0144; 18d-ii): the join keeps the newer card on the kept record and owes
+      // Square the other's stop; a record deleted for good owes its card's stop and takes the
+      // card with it (`memberCards.routes.test.ts`).
+      "gym_member_cards.entry_id",
+      "gym_member_cards.gym_id",
       // A tag on the record and a staff note (0083): the join moves both to the kept record
       // and a record deleted for good takes them with it (`memberNotes.routes.test.ts`).
       "gym_member_entry_tags.entry_id",
@@ -1174,6 +1183,10 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // walk-in's when the record is deleted for good (`register.routes.test.ts`).
       "gym_sales.entry_id",
       "gym_sales.gym_id",
+      // The person as a customer in the gym's Square account (0144; 18d-ii): moved by the join
+      // where the kept record has none in that account, and gone with a record deleted for good.
+      "gym_square_customers.entry_id",
+      "gym_square_customers.gym_id",
       // A waiver signed at the desk (0106): moved by the join where the kept record has none
       // of that wording, and kept with no record when one is deleted for good, as the gym's
       // proof (`waiver.desk.routes.test.ts`).

@@ -155,10 +155,16 @@ async function owe(
 export const REVOKE_MAX_TRIES = 12;
 
 /** Send these owed revokes now; whatever Square does not answer, the worker sends later. */
-export async function sendOwedRevokes(deps: PaymentsDeps, square: SquareSettings, ids: readonly string[] | null, limit = 50): Promise<{ sent: number; deferred: number; givenUp: number }> {
+export async function sendOwedRevokes(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  ids: readonly string[] | null,
+  limit = 50,
+  gymIds: readonly string[] | null = null,
+): Promise<{ sent: number; deferred: number; givenUp: number }> {
   const run = { sent: 0, deferred: 0, givenUp: 0 };
   const now = deps.now();
-  const owed = await repo.claimDueRevokes(deps.sql, square.environment, now, 5 * 60_000, limit, ids);
+  const owed = await repo.claimDueRevokes(deps.sql, square.environment, now, 5 * 60_000, limit, ids, gymIds);
   for (const revoke of owed) {
     const token = square.tokens.open(revoke.accessToken, accessContext(revoke.gymId));
     if (token === null) {

@@ -1,10 +1,12 @@
 // The worker's half of a gym's Square connection (ROADMAP 18d-i), every minute: Square's
-// message that a gym took the app off its account, checked with Square before anything
-// changes (a webhook is a doorbell, never a messenger: CLAUDE.md §4); tokens owed a revoke;
-// renewals that are due; presses of Connect Square that ran out. Safe to run twice: events,
-// revokes and renewals are each leased, and every write names the connection it was read for.
+// message that a gym took the app off its account, and its messages about a saved card
+// (18d-ii), each checked with Square before anything changes (a webhook is a doorbell, never
+// a messenger: CLAUDE.md §4); tokens owed a revoke and cards owed a stop; renewals that are
+// due; presses of Connect Square that ran out. Safe to run twice: events, revokes, stops and
+// renewals are each leased, and every write names the connection or card it was read for.
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
+import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
 import * as repo from "./repo.js";
 import { SQUARE_REFRESH_EVERY_MS, accessContext, refreshContext, sendOwedRevokes, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
@@ -36,6 +38,8 @@ export interface SquareWorkRun {
   givenUp: number;
   forgotten: number;
   revokes: { sent: number; deferred: number; givenUp: number };
+  /** Cards Square was owed a stop of (18d-ii). */
+  cardStops: { sent: number; deferred: number; givenUp: number };
   renewed: number;
   renewalsWaiting: number;
   startsForgotten: number;
@@ -110,8 +114,10 @@ async function renew(deps: PaymentsDeps, square: SquareSettings, row: repo.Conne
   return written ? "renewed" : "waiting";
 }
 
-/** `eventIds`: only these events, for a test sharing its database; production passes null. */
-export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly string[] | null = null): Promise<SquareWorkRun> {
+/** `eventIds`: only these events, and `gymIds`: only these gyms' renewals, revokes, card stops and
+ *  presses, for a test sharing its database with a real connection (one run days ahead once
+ *  marked Kd's own test connection taken off, 2026-10-20); production passes null for both. */
+export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly string[] | null = null, gymIds: readonly string[] | null = null): Promise<SquareWorkRun> {
   const run: SquareWorkRun = {
     removed: 0,
     unchanged: 0,
@@ -119,6 +125,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     givenUp: 0,
     forgotten: 0,
     revokes: { sent: 0, deferred: 0, givenUp: 0 },
+    cardStops: { sent: 0, deferred: 0, givenUp: 0 },
     renewed: 0,
     renewalsWaiting: 0,
     startsForgotten: 0,
@@ -129,23 +136,32 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
   for (let taken = 0; taken < SQUARE_WORK.eventsPerRun; taken++) {
     const event = await webhooks.claimDueSquareEvent(deps.sql, deps.now(), SQUARE_WORK.leaseMs, eventIds);
     if (event === null) break;
-    if (event.payload === null || event.payload.type !== SQUARE_REVOKED_EVENT) {
+    const payload = event.payload;
+    const isCard = payload !== null && SQUARE_CARD_EVENTS.includes(payload.type) && payload.cardId !== undefined;
+    const isCustomer = payload !== null && payload.type === SQUARE_CUSTOMER_DELETED_EVENT && payload.customerId !== undefined;
+    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer)) {
       await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
       deps.log.warn({ event: "square.event_unreadable", webhookEventId: event.id }, "a kept Square event no longer parses");
       run.givenUp += 1;
       continue;
     }
     let unknown = false;
-    let stillWorks = false;
-    for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, event.payload.accountId)) {
-      const check = await checkConnection(deps, square, row);
-      if (check === "removed") run.removed += 1;
-      if (check === "unknown") unknown = true;
-      if (check === "works") stillWorks = true;
+    if (isCard && payload.cardId !== undefined) {
+      unknown = (await checkSquareCard(deps, square, payload.accountId, payload.cardId)) === "unknown";
+    } else if (isCustomer && payload.customerId !== undefined) {
+      unknown = (await checkSquareCustomer(deps, square, payload.accountId, payload.customerId)) === "unknown";
+    } else {
+      let stillWorks = false;
+      for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, payload.accountId)) {
+        const check = await checkConnection(deps, square, row);
+        if (check === "removed") run.removed += 1;
+        if (check === "unknown") unknown = true;
+        if (check === "works") stillWorks = true;
+      }
+      // Square's own check can still pass a token for some seconds after its message (seen in
+      // its test area, 2026-10-20): a token that works is asked about again before it is believed.
+      if (stillWorks && event.tries < SQUARE_WORK.recheckTries) unknown = true;
     }
-    // Square's own check can still pass a token for some seconds after its message (seen in
-    // its test area, 2026-10-20): a token that works is asked about again before it is believed.
-    if (stillWorks && event.tries < SQUARE_WORK.recheckTries) unknown = true;
     if (!unknown) {
       await webhooks.finishEvent(deps.sql, event, "done", deps.now());
       run.unchanged += 1;
@@ -162,16 +178,17 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     }
   }
 
-  run.revokes = await sendOwedRevokes(deps, square, null);
+  run.revokes = await sendOwedRevokes(deps, square, null, 50, gymIds);
+  run.cardStops = await sendOwedCardDisables(deps, square, null, 50, gymIds);
 
-  for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun)) {
+  for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);
     if (outcome === "renewed") run.renewed += 1;
     else if (outcome === "removed") run.removed += 1;
     else run.renewalsWaiting += 1;
   }
 
-  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, deps.now());
+  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, square.environment, deps.now(), gymIds);
   run.forgotten = await webhooks.forgetOldSquareEvents(deps.sql, new Date(deps.now().getTime() - SQUARE_WORK.keepDays * 24 * 60 * 60 * 1000), 1000);
   return run;
 }

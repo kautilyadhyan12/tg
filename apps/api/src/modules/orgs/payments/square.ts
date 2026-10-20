@@ -6,14 +6,19 @@
 //
 // A gym approves, once, everything the four Square jobs need (ROADMAP 18d-i to 18d-iv): its
 // business and locations, its customers and saved cards, and taking and refunding payments.
-// Nothing asks for a fee of its own: we take none (RULINGS 2026-09-22).
+// Nothing asks for a fee of its own: we take none (RULINGS 2026-09-22). A saved card (18d-ii)
+// uses CUSTOMERS_WRITE for the person and PAYMENTS_WRITE for the card ("Cards API", read
+// 2026-10-20); PAYMENTS_READ reads it back and lets Square's card messages reach us.
 import {
+  squareCardAnswerSchema,
+  squareCustomerAnswerSchema,
   squareErrorSchema,
   squareLocationsSchema,
   squareMerchantSchema,
   squareRevokeSchema,
   squareTokenSchema,
   squareTokenStatusSchema,
+  type SquareCard,
   type SquareLocation,
   type SquareMerchant,
   type SquareToken,
@@ -40,7 +45,38 @@ export interface SquareApi {
   tokenStatus(accessToken: string): Promise<SquareResult<SquareTokenStatus>>;
   merchant(accessToken: string): Promise<SquareResult<SquareMerchant>>;
   locations(accessToken: string): Promise<SquareResult<SquareLocation[]>>;
+  /** The gym's customer for a person on its list (18d-ii): at least one of the names, the
+   *  email or the phone. `referenceId` is the record's id, so the gym's Square customer can be
+   *  matched to it. */
+  createCustomer(accessToken: string, customer: NewSquareCustomer): Promise<SquareResult<{ id: string }>>;
+  /** Save the card Square's form tokenised (`sourceId`) on that customer. `idempotencyKey`:
+   *  the same press sent twice gives back the same card. */
+  createCard(accessToken: string, card: { idempotencyKey: string; sourceId: string; customerId: string; cardholderName: string | null }): Promise<SquareResult<SquareCard>>;
+  retrieveCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
+  /** 404 is a customer the gym deleted inside Square. */
+  retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<{ id: string }>>;
+  /** No charge or update can reach the card after this; disabling one already disabled is
+   *  allowed and changes nothing. */
+  disableCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
+  /** Stop the app's every token for this Square account, with our own secret: for the stop
+   *  tool (`tools/square-stop.ts`), which works without the gym's token. */
+  revokeAccount(accountId: string): Promise<SquareResult<null>>;
 }
+
+export interface NewSquareCustomer {
+  idempotencyKey: string;
+  givenName: string | null;
+  familyName: string | null;
+  email: string | null;
+  phone: string | null;
+  referenceId: string;
+}
+
+/** The path's own characters are the card id's (`squareCardIdSchema`), as Square writes them. */
+const cardPath = (cardId: string): string => {
+  if (!/^[A-Za-z0-9:_-]{1,192}$/.test(cardId)) throw new Error("not a Square card id");
+  return `/v2/cards/${cardId}`;
+};
 
 export const SQUARE_SCOPES = ["MERCHANT_PROFILE_READ", "CUSTOMERS_READ", "CUSTOMERS_WRITE", "PAYMENTS_READ", "PAYMENTS_WRITE"] as const;
 export const SQUARE_VERSION = "2026-09-16";
@@ -147,6 +183,46 @@ export function createSquareApi(opts: {
     async locations(accessToken) {
       const result = await call("GET", "/v2/locations", squareLocationsSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.locations ?? [] } : result;
+    },
+    async createCustomer(accessToken, c) {
+      const result = await call("POST", "/v2/customers", squareCustomerAnswerSchema, bearer(accessToken), {
+        idempotency_key: c.idempotencyKey,
+        ...(c.givenName === null ? {} : { given_name: c.givenName }),
+        ...(c.familyName === null ? {} : { family_name: c.familyName }),
+        ...(c.email === null ? {} : { email_address: c.email }),
+        ...(c.phone === null ? {} : { phone_number: c.phone }),
+        reference_id: c.referenceId,
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
+    },
+    async createCard(accessToken, c) {
+      const result = await call("POST", "/v2/cards", squareCardAnswerSchema, bearer(accessToken), {
+        idempotency_key: c.idempotencyKey,
+        source_id: c.sourceId,
+        card: { customer_id: c.customerId, ...(c.cardholderName === null ? {} : { cardholder_name: c.cardholderName }) },
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.card } : result;
+    },
+    async retrieveCard(accessToken, cardId) {
+      const result = await call("GET", cardPath(cardId), squareCardAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.card } : result;
+    },
+    async retrieveCustomer(accessToken, customerId) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
+      const result = await call("GET", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
+    },
+    async disableCard(accessToken, cardId) {
+      const result = await call("POST", `${cardPath(cardId)}/disable`, squareCardAnswerSchema, bearer(accessToken), {});
+      return result.kind === "ok" ? { kind: "ok", value: result.value.card } : result;
+    },
+    async revokeAccount(accountId) {
+      const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {
+        client_id: opts.applicationId,
+        merchant_id: accountId,
+      });
+      if (result.kind !== "ok") return result;
+      return result.value.success ? { kind: "ok", value: null } : { kind: "unavailable", status: 200 };
     },
   };
 }

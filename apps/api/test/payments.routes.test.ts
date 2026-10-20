@@ -152,6 +152,13 @@ function fakeSquare() {
       const t = live(token);
       return t === null ? unauthorized : { kind: "ok", value: t.account.locations };
     },
+    // Saved cards (18d-ii) are driven in `memberCards.routes.test.ts`.
+    createCustomer: () => Promise.resolve(unavailable),
+    createCard: () => Promise.resolve(unavailable),
+    retrieveCard: () => Promise.resolve(unavailable),
+    retrieveCustomer: () => Promise.resolve(unavailable),
+    disableCard: () => Promise.resolve(unavailable),
+    revokeAccount: () => Promise.resolve(unavailable),
   };
   /** The gym signs in at Square as this account and presses Allow: Square hands back a code. */
   const allow = (account: Account): string => {
@@ -193,6 +200,11 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
     now: () => clock,
   });
 
+  /** This file's gyms: its worker runs touch nothing else in the shared database, and each run
+   *  names the events it acts on (none, where it acts on none): a real Square message waiting
+   *  in the same database is never taken. */
+  const mine = async (): Promise<string[]> =>
+    (await sql<{ id: string }[]>`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'pay-t-%@example.com')`).map((r) => r.id);
   const cleanup = async () => {
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'pay-t-%@example.com')`;
     await sql`DELETE FROM gym_payment_revokes WHERE gym_id IN (${mine})`;
@@ -559,7 +571,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       }
       // The worker's next minute sends the stop.
       clock = new Date(clock.getTime() + 61_000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect(await owedOf(gymId)).toHaveLength(0);
       expect(square.liveTokensOf("MLDOWN")).toBe(0);
     },
@@ -592,14 +604,14 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-1'`).toHaveLength(1);
       // The worker's clock from now: the message was kept a moment ago, by the database's own.
       clock = new Date();
-      await processSquareWork(workDeps(), ["pay-t-hook-1"]);
+      await processSquareWork(workDeps(), ["pay-t-hook-1"], await mine());
       expect((await read(gymId, owner)).square?.state).toBe("connected");
       // Asked about again a minute, five and fifteen on, then let go: the gym stays connected.
       const pendingHook1 = () => sql`SELECT status FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-1'`;
       expect(await pendingHook1()).toEqual([{ status: "pending" }]);
       for (const minutes of [2, 6, 16]) {
         clock = new Date(clock.getTime() + minutes * 60_000);
-        await processSquareWork(workDeps(), ["pay-t-hook-1"]);
+        await processSquareWork(workDeps(), ["pay-t-hook-1"], await mine());
       }
       expect(await pendingHook1()).toEqual([{ status: "done" }]);
       expect((await read(gymId, owner)).square?.state).toBe("connected");
@@ -615,7 +627,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect((await deliver(second, sign(second))).statusCode).toBe(200);
       square.state.down = true;
       try {
-        await processSquareWork(workDeps(), ["pay-t-hook-2"]);
+        await processSquareWork(workDeps(), ["pay-t-hook-2"], await mine());
         expect((await read(gymId, owner)).square?.state).toBe("connected");
         // It was taken and put back for later, not passed over.
         expect(await sql`SELECT status, tries FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-2'`).toEqual([{ status: "pending", tries: 1 }]);
@@ -623,7 +635,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
         square.state.down = false;
       }
       clock = new Date(clock.getTime() + 2 * 60_000);
-      await processSquareWork(workDeps(), ["pay-t-hook-2"]);
+      await processSquareWork(workDeps(), ["pay-t-hook-2"], await mine());
       const seen = await read(gymId, owner);
       expect(seen.square).toMatchObject({ state: "removed", businessName: "MLHOOK Fitness Ltd" });
       expect(seen.square?.removedAt).not.toBeNull();
@@ -635,12 +647,12 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       // seconds (seen in its test area, 2026-10-20): the gym reads as taken off once it stops.
       const third = body("pay-t-hook-3");
       expect((await deliver(third, sign(third))).statusCode).toBe(200);
-      await processSquareWork(workDeps(), ["pay-t-hook-3"]);
+      await processSquareWork(workDeps(), ["pay-t-hook-3"], await mine());
       expect((await read(gymId, owner)).square?.state).toBe("connected");
       expect(await sql`SELECT status, tries FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-3'`).toEqual([{ status: "pending", tries: 1 }]);
       for (const [token, t] of square.tokens) if (t.account.merchantId === "MLHOOK") square.tokens.set(token, { ...t, stopped: true });
       clock = new Date(clock.getTime() + 2 * 60_000);
-      await processSquareWork(workDeps(), ["pay-t-hook-3"]);
+      await processSquareWork(workDeps(), ["pay-t-hook-3"], await mine());
       expect((await read(gymId, owner)).square?.state).toBe("removed");
     },
     TEST_TIMEOUT_MS,
@@ -654,11 +666,11 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       const gymId = await gym(owner, "Renew Gym");
       await connect(gymId, owner, account("MLRENEW"));
       const before = (await rowOf(gymId))?.access_token;
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect((await rowOf(gymId))?.access_token).toBe(before);
 
       clock = new Date(clock.getTime() + 6 * 24 * 60 * 60_000 + 1000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       const renewed = await rowOf(gymId);
       expect(renewed?.access_token).not.toBe(before);
       expect(renewed?.state).toBe("connected");
@@ -666,12 +678,12 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       // Square refuses the renewal, but the token still works: kept, and tried again later.
       square.state.refreshesRefused = true;
       clock = new Date(clock.getTime() + 6 * 24 * 60 * 60_000 + 1000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect((await rowOf(gymId))?.state).toBe("connected");
       // Then the token stops too: taken off.
       for (const [token, t] of square.tokens) if (t.account.merchantId === "MLRENEW") square.tokens.set(token, { ...t, stopped: true });
       clock = new Date(clock.getTime() + 2 * 60 * 60_000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       square.state.refreshesRefused = false;
       expect((await rowOf(gymId))?.state).toBe("removed");
       expect(await sql`SELECT actor_user_id FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.payments_square_removed_in_square'`).toEqual([{ actor_user_id: null }]);
@@ -700,7 +712,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect(await connect(gymId, owner, acct)).toMatchObject({ outcome: "connected" });
       expect(await owedOf(gymId)).toEqual([{ whole_account: false }]);
       clock = new Date(clock.getTime() + 2 * 60_000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect(await owedOf(gymId)).toHaveLength(0);
       expect(square.liveTokensOf("MLHONE")).toBe(1);
       expect((await read(gymId, owner)).square?.state).toBe("connected");
@@ -718,7 +730,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       }
       await sql`UPDATE gym_payment_revokes SET whole_account = true WHERE gym_id = ${other}`;
       clock = new Date(clock.getTime() + 2 * 60_000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect(await owedOf(other)).toHaveLength(0);
       expect(square.revokes[square.revokes.length - 1]?.wholeAccount).toBe(false);
       expect((await read(gymId, owner)).square?.state).toBe("connected");
@@ -742,7 +754,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
         square.state.statusRefusal = status;
         try {
           clock = new Date(clock.getTime() + 20 * 60_000);
-          await processSquareWork(workDeps(), ["pay-t-h2"]);
+          await processSquareWork(workDeps(), ["pay-t-h2"], await mine());
         } finally {
           square.state.statusRefusal = null;
         }
@@ -789,13 +801,13 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
         await send("DELETE", `/v1/orgs/${gymId}/payments/square`, owner.cookies);
         expect(await owedOf(gymId)).toHaveLength(1);
         clock = new Date(clock.getTime() + 2 * 60_000);
-        await processSquareWork(workDeps());
+        await processSquareWork(workDeps(), [], await mine());
         expect(await owedOf(gymId)).toHaveLength(1);
       } finally {
         square.state.secretRefused = false;
       }
       clock = new Date(clock.getTime() + 10 * 60_000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect(await owedOf(gymId)).toHaveLength(0);
       expect(square.liveTokensOf("MLLONE")).toBe(0);
     },
@@ -905,7 +917,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       // Nor does it hold the gym's country, which the box would give no way to free.
       expect((await send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country: "IE" })).statusCode).toBe(200);
       clock = new Date(clock.getTime() + 7 * 24 * 60 * 60_000);
-      await processSquareWork(workDeps());
+      await processSquareWork(workDeps(), [], await mine());
       expect((await sql<{ access_token: string }[]>`SELECT access_token FROM gym_payment_connections WHERE gym_id = ${gymId}`)[0]?.access_token).toBe("v1.a.b.c");
       // The sandbox gym holding MLENV is the last holder here: its Disconnect stops the whole account.
       await send("DELETE", `/v1/orgs/${other}/payments/square`, owner.cookies);

@@ -108,6 +108,7 @@ import {
   heldMembershipsResponseSchema,
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
+  memberCardResponseSchema,
   memberNotesAndTagsSchema,
   memberNotesOlderResponseSchema,
   memberTagsDoneResponseSchema,
@@ -1738,6 +1739,26 @@ export const orgService = {
       memberPayersResponseSchema,
       'who pays for them',
       authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/payer`),
+    ),
+  /** A person's card on file (ROADMAP 18d-ii), for staff holding `billing.members`. The card
+   *  number goes from Square's own form to Square: what is sent here is Square's token for it. */
+  getMemberCard: (gymId, entryId) =>
+    readThrough(
+      memberCardResponseSchema,
+      'their card on file',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`),
+    ),
+  saveMemberCard: (gymId, entryId, body) =>
+    readThrough(
+      memberCardResponseSchema,
+      'their card on file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`, body),
+    ),
+  removeMemberCard: (gymId, entryId) =>
+    readThrough(
+      memberCardResponseSchema,
+      'their card on file',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`),
     ),
   giveHeldMembership: (gymId, entryId, body) =>
     readThrough(

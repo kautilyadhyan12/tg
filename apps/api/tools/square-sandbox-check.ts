@@ -7,15 +7,21 @@
 // gym whose owner pressed Allow in the console, it asks Square about that gym's connection
 // (the token works, for that account; the business; its locations), then renews it through
 // the worker's own path, as the worker would six days on, and checks the new token works.
+// With `--cards` it then saves a card on a customer made for the check alone (18d-ii), with
+// Square's own test tokens: the card saved, the same press giving it back, read, stopped twice;
+// and what Square answers each of its failing test tokens, in the words the console shows.
 //
 //   cd apps/api
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-sandbox-check.ts [gymId]
+//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-sandbox-check.ts [gymId] [--cards]
+import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { z } from "zod";
+import { cardRefusalOf } from "../src/modules/orgs/payments/cards.js";
 import * as repo from "../src/modules/orgs/payments/repo.js";
 import { accessContext } from "../src/modules/orgs/payments/service.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
+import type { SquareApi } from "../src/modules/orgs/payments/square.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 
 const env = z
@@ -35,7 +41,8 @@ if (!env.success) {
 
 const square = squareSettings({ ...env.data, SQUARE_WEBHOOK_SIGNATURE_KEY: undefined, SQUARE_WEBHOOK_URL: undefined });
 if (square === null) throw new Error("Square settings did not load");
-const gymId = process.argv[2];
+const gymId = process.argv[2]?.startsWith("--") === true ? undefined : process.argv[2];
+const withCards = process.argv.includes("--cards");
 let problems = 0;
 const check = (ok: boolean, line: string) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${line}`);
@@ -49,6 +56,10 @@ const status = await square.api.tokenStatus(neverIssued);
 check(status.kind === "refused" && status.status === 401, `a token Square never issued: ${status.kind}${status.kind === "refused" ? ` ${String(status.status)} ${status.code}` : ""}`);
 const revoke = await square.api.revoke(neverIssued, false);
 check(revoke.kind === "refused", `a revoke of it: ${revoke.kind}${revoke.kind === "refused" ? ` ${String(revoke.status)} ${revoke.code}` : ""}`);
+// The stop tool's own call (`tools/square-stop.ts`), for an account our app was never given: Square
+// takes our secret and the account's id and says it has no such account; a wrong secret is 401.
+const stopUnknown = await square.api.revokeAccount("MLNEVERCONNECTED00");
+check(stopUnknown.kind === "refused" && stopUnknown.status === 404, `the stop tool's call, for an account never connected: ${stopUnknown.kind}${stopUnknown.kind === "refused" ? ` ${String(stopUnknown.status)} ${stopUnknown.code}` : ""}`);
 const page = new URL(square.api.authorizeUrl("x"));
 check(page.origin === "https://connect.squareupsandbox.com", `Square's own page: ${page.origin}${page.pathname}`);
 
@@ -68,12 +79,13 @@ if (gymId !== undefined) {
         check(merchant.kind === "ok", merchant.kind === "ok" ? `the business: ${merchant.value.country}, ${merchant.value.currency}, named ${merchant.value.business_name === undefined ? "nothing" : "as kept"}` : `the business: ${merchant.kind}`);
         const locations = await square.api.locations(token);
         check(locations.kind === "ok", locations.kind === "ok" ? `its locations: ${String(locations.value.length)}, ${String(locations.value.filter((l) => (l.capabilities ?? []).includes("CREDIT_CARD_PROCESSING")).length)} taking cards` : `its locations: ${locations.kind}`);
+        if (withCards) await checkCards(square.api, token, row.accountId);
       }
       // Renewed through the worker's own path, as six days on.
       await sql`UPDATE gym_payment_connections SET refresh_due_at = now() - interval '1 second' WHERE gym_id = ${gymId} AND provider = 'square'`;
       const run = await processSquareWork({ sql, square, log: { info: () => undefined, warn: () => undefined, error: (o, m) => {
         console.error(m, o);
-      } }, now: () => new Date() });
+      } }, now: () => new Date() }, null, [gymId]);
       const after = await repo.readConnection(sql, gymId, "sandbox");
       check(run.renewed >= 1 && after?.accessToken !== row.accessToken, `renewed by the worker: ${String(run.renewed)} renewed, ${String(run.renewalsWaiting)} waiting, ${String(run.removed)} removed`);
       const renewed = after?.accessToken === null || after === null ? null : square.tokens.open(after.accessToken, accessContext(gymId));
@@ -84,6 +96,51 @@ if (gymId !== undefined) {
     }
   } finally {
     await sql.end();
+  }
+}
+
+/** A card saved on a customer made for this check alone, in the gym's own test account. */
+async function checkCards(api: SquareApi, token: string, accountId: string): Promise<void> {
+  const customer = await api.createCustomer(token, {
+    idempotencyKey: randomUUID(),
+    givenName: "KWAZO",
+    familyName: "Card check",
+    email: null,
+    phone: null,
+    referenceId: randomUUID(),
+  });
+  check(customer.kind === "ok", `a customer made in the gym's account: ${customer.kind}${customer.kind === "refused" ? ` ${String(customer.status)} ${customer.code}` : ""}`);
+  if (customer.kind !== "ok") return;
+  const press = randomUUID();
+  const saved = await api.createCard(token, { idempotencyKey: press, sourceId: "cnon:card-nonce-ok", customerId: customer.value.id, cardholderName: null });
+  check(
+    saved.kind === "ok" && saved.value.customer_id === customer.value.id && saved.value.merchant_id === accountId && saved.value.enabled === true && saved.value.last_4 !== undefined,
+    saved.kind === "ok"
+      ? `a card saved: ${saved.value.card_brand ?? "?"} ending ${saved.value.last_4 ?? "?"}, ${String(saved.value.exp_month)}/${String(saved.value.exp_year)}, on that customer, in that account, ${saved.value.enabled === true ? "enabled" : "not enabled"}`
+      : `a card saved: ${saved.kind}${saved.kind === "refused" ? ` ${String(saved.status)} ${saved.code}` : ""}`,
+  );
+  if (saved.kind !== "ok") return;
+  const again = await api.createCard(token, { idempotencyKey: press, sourceId: "cnon:card-nonce-ok", customerId: customer.value.id, cardholderName: null });
+  check(again.kind === "ok" && again.value.id === saved.value.id, `the same press again gives back the same card: ${again.kind === "ok" ? String(again.value.id === saved.value.id) : again.kind}`);
+  const read = await api.retrieveCard(token, saved.value.id);
+  check(read.kind === "ok" && read.value.enabled === true, `read back: ${read.kind}`);
+  const stopped = await api.disableCard(token, saved.value.id);
+  check(stopped.kind === "ok" && stopped.value.enabled === false, `stopped: ${stopped.kind === "ok" ? `enabled ${String(stopped.value.enabled)}` : stopped.kind}`);
+  const twice = await api.disableCard(token, saved.value.id);
+  check(twice.kind === "ok" || (twice.kind === "refused" && twice.status === 404), `stopped twice: ${twice.kind}${twice.kind === "refused" ? ` ${String(twice.status)} ${twice.code}` : ""}`);
+  const after = await api.retrieveCard(token, saved.value.id);
+  check(after.kind !== "ok" || after.value.enabled === false, `read after stopping: ${after.kind === "ok" ? `enabled ${String(after.value.enabled)}` : `${after.kind}${after.kind === "refused" ? ` ${String(after.status)} ${after.code}` : ""}`}`);
+  const noCustomer = await api.createCard(token, { idempotencyKey: randomUUID(), sourceId: "cnon:card-nonce-ok", customerId: "NOSUCHCUSTOMER0000000000", cardholderName: null });
+  check(noCustomer.kind === "refused", `a customer Square never had: ${noCustomer.kind}${noCustomer.kind === "refused" ? ` ${String(noCustomer.status)} ${noCustomer.code}, said "${cardRefusalOf(noCustomer.status, noCustomer.code).words}"` : ""}`);
+  // Square's own failing test tokens ("Sandbox test values", read 2026-10-20).
+  for (const source of ["cnon:card-nonce-rejected-cvv", "cnon:card-nonce-rejected-postalcode", "cnon:card-nonce-rejected-expiration", "cnon:card-nonce-declined", "cnon:card-nonce-already-used"]) {
+    const r = await api.createCard(token, { idempotencyKey: randomUUID(), sourceId: source, customerId: customer.value.id, cardholderName: null });
+    if (r.kind === "ok") {
+      console.log(`info ${source}: Square saved it (${r.value.card_brand ?? "?"} ending ${r.value.last_4 ?? "?"}); stopped again`);
+      await api.disableCard(token, r.value.id);
+    } else {
+      console.log(`info ${source}: ${r.kind}${r.kind === "refused" ? ` ${String(r.status)} ${r.code}, said "${cardRefusalOf(r.status, r.code).words}"` : ""}`);
+    }
   }
 }
 

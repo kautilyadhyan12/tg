@@ -940,6 +940,7 @@ describe("purge shortfall (no database)", () => {
     schemaDriftSnapshots: 0,
     consentProofExpired: 2,
     waiverSignaturesExpired: 1,
+    cardAgreementsExpired: 0,
     consentProofExpiryFailed: false,
     photoFilesLeft: 0,
     dryRun: false,

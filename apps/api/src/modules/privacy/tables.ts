@@ -520,6 +520,17 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // Square (`0142`): a one-time credential, on one_time_tokens' footing, never exported; it
   // goes with the account (`ON DELETE cascade`) and the worker forgets it once it runs out.
   "gym_payment_connect_starts",
+  // gym_member_cards.saved_by — who saved a person's card on file, a member of staff at the desk
+  // or the member in the app (`0144`; 18d-ii), on gym_leads' footing: the gym's record; `ON
+  // DELETE set null`. The card is a record's, not an account's, and holds no card number:
+  // Square's ids, the brand, the last four and the expiry. It goes with its record.
+  "gym_member_cards",
+  // gym_card_agreements.screen_user_id — whose screen a person ticked the card agreement on
+  // (`0144`): the gym's proof that the person agreed, on gym_waiver_desk_signatures' footing.
+  // It outlives a removed card and a record deleted for good; the purge deletes it once a year
+  // has passed since that deletion and three since it was agreed
+  // (repo.deleteExpiredCardAgreements).
+  "gym_card_agreements",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
   "gym_waivers",

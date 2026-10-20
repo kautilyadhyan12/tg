@@ -30,6 +30,7 @@ import { ptEndingAction, ptSessionsAsked } from './ptSessionsEndView';
 import MemberMemberships from './MemberMemberships';
 import MemberPurchases from './MemberPurchases';
 import MemberPayer from './MemberPayer';
+import MemberCard from './MemberCard';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
 import { METHOD_NEEDED, giveBody, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
@@ -1475,6 +1476,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           addNow={addMembership}
         />
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
+        {/* The card on file is for staff holding the payments tick alone (18d-ii). */}
+        {canRecordPayments(viewerPrivileges(gym)) ? <MemberCard key={`card-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} /> : null}
         <MemberPurchases key={`purchases-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} past={p.formerAt !== null} />
         <MemberNotes key={`notes-${p.entryId}`} gymId={gymId} entryId={p.entryId} name={p.fullName} readOnly={readOnly} timeZone={gym?.timezone ?? null} />
         {membership.length > 0 ? (
