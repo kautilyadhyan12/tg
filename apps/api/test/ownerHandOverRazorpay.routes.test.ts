@@ -362,7 +362,7 @@ d("a gym paying through Razorpay handed to a co-owner (real Postgres, fake Razor
           expect(res.statusCode, res.body).toBe(409);
           expect(errorOf(res)).toBe("handed_over_plan");
           // The person who paid is told they handed it over; anybody else, that the last owner paid.
-          expect((JSON.parse(res.body) as { message: string }).message).toMatch(who === gym.owner ? /^You handed this gym over/ : /^This plan was paid by the last owner/);
+          expect((JSON.parse(res.body) as { message: string }).message).toMatch(who === gym.owner ? /^You handed over ownership/ : /^This plan was paid by the last owner/);
         }
         const size = await send("POST", `/v1/orgs/${gym.id}/billing/size/razorpay`, who, { planCode: SMALL }, { "idempotency-key": key() });
         expect(size.statusCode).toBe(409);

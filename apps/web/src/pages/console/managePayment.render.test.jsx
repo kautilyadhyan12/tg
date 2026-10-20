@@ -323,7 +323,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
   it('a plan set to end too close to its end to keep says so, with no Keep my plan', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ cancelAtPeriodEnd: true, keepUntil: null }) }));
     renderOverview();
-    expect(await screen.findByText(/too close to its end to keep it now/)).toBeTruthy();
+    expect(await screen.findByText(/^This plan is set to end and can't be kept now./)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /keep my plan|cancel plan/i })).toBeNull();
   });
 
