@@ -12,7 +12,8 @@ import postgres from "postgres";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
-import { applyPaddleSubscription, endHandedOverPlans, type BillingDeps } from "../src/modules/billing/service.js";
+import { applyPaddleSubscription, endHandedOverPlan, type BillingDeps } from "../src/modules/billing/service.js";
+import { handedOverPlansToEnd } from "../src/modules/billing/repo.js";
 import { FakePaddle } from "./fakePaddle.js";
 import { ROLE_PRIVILEGES, myOwnerRequestResponseSchema, orgPlanCancelResponseSchema, type OrgRole } from "@app/shared";
 
@@ -178,6 +179,12 @@ d("Keep my plan for a Paddle plan set to end (real Postgres)", () => {
     const { orgs } = JSON.parse(res.body) as { orgs: { id: string; subscription: { cancelAtPeriodEnd: boolean; keepUntil: string | null; currentPeriodEnd: string | null } | null }[] };
     return orgs.find((o) => o.id === gym.id)?.subscription ?? null;
   };
+  /** The worker's step for THIS gym only: its sweep over every gym would reach other test files' rows, which this file's fake Paddle has never heard of. */
+  const worker = async (gym: Gym) => {
+    const at = (await planRow(gym))?.handed_over_at;
+    if (at == null) throw new Error("not handed over");
+    return await endHandedOverPlan(billing, { gymId: gym.id, subscriptionRef: gym.sub, handedOverAt: at });
+  };
   const removed = (gym: Gym) => paddle.cancelsRemoved.filter((s) => s === gym.sub).length;
 
   beforeAll(async () => {
@@ -258,7 +265,7 @@ d("Keep my plan for a Paddle plan set to end (real Postgres)", () => {
       expect(res.statusCode, res.body).toBe(409);
       expect(paddle.renews(gym.sub)).toBe(true);
       expect((await planRow(gym))?.handed_over_end_sent_at).toBeNull();
-      expect(await endHandedOverPlans(billing)).toBeGreaterThanOrEqual(1);
+      expect(await worker(gym)).toBe(true);
       expect(paddle.renews(gym.sub)).toBe(false);
       expect((await planRow(gym))?.handed_over_end_sent_at).not.toBeNull();
     }, TEST_TIMEOUT_MS);
@@ -419,10 +426,16 @@ d("Keep my plan for a Paddle plan set to end (real Postgres)", () => {
       // Paddle takes the cancel back; nothing after it runs.
       expect((await paddle.removeScheduledCancel(gym.sub)).kind).toBe("ok");
       expect(paddle.renews(gym.sub)).toBe(true);
+      // Before Paddle's event the worker has nothing to do: the row still reads it ending.
+      const due = async () => (await handedOverPlansToEnd(sql, 100_000)).some((p) => p.gymId === gym.id);
+      expect(await due()).toBe(false);
+      // Paddle's event writes it renewing, and the worker's list picks it up again.
       expect(await applyPaddleSubscription(billing, gym.sub)).toBe("applied");
-      expect(await endHandedOverPlans(billing)).toBeGreaterThanOrEqual(1);
+      expect(await due()).toBe(true);
+      expect(await worker(gym)).toBe(true);
       expect(paddle.renews(gym.sub)).toBe(false);
       expect((await planRow(gym))?.cancel_at_period_end).toBe(true);
+      expect(await due()).toBe(false);
     }, TEST_TIMEOUT_MS);
 
     it("a paid trial set to end is kept: it is charged when the gym's own trial ends, never moved, charged early or cancelled", async () => {
