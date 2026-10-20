@@ -323,8 +323,12 @@ async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: string, pers
   }
   if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, result.value.id)) return result.value.id;
   // Another save wrote it first, asked with the same key: Square's answer is the same customer.
+  // Or another save Square refused let the row go meanwhile: the customer Square made here is
+  // the person's, and is written, so no row is left being made for a later save to ask again.
   const now = await cards.claimCustomer(deps.sql, key, randomUUID());
-  return "customerId" in now ? now.customerId : result.value.id;
+  if ("customerId" in now) return now.customerId;
+  await cards.finishCustomer(deps.sql, key, now.makingKey, result.value.id);
+  return result.value.id;
 }
 
 interface SaveFor {

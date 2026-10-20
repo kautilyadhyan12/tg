@@ -90,13 +90,14 @@ function fakeSquare() {
   const revokedAccounts: string[] = [];
   // `pauseMs`: Square takes this long to answer, so saves sent at once overlap. `odd`: the card
   // Square hands back is not the one asked for. `whileSaving`: done at the gym after Square made
-  // the card and before it answers.
+  // the card and before it answers. `whileCustomer`: the same, for a customer.
   const state: {
     down: boolean;
     pauseMs: number;
     odd: "customer" | "disabled" | "no_last4" | null;
     whileSaving: (() => Promise<unknown>) | null;
-  } = { down: false, pauseMs: 0, odd: null, whileSaving: null };
+    whileCustomer: (() => Promise<unknown>) | null;
+  } = { down: false, pauseMs: 0, odd: null, whileSaving: null, whileCustomer: null };
   const pause = () => new Promise((resolve) => setTimeout(resolve, state.pauseMs));
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
@@ -154,6 +155,7 @@ function fakeSquare() {
       const id = `CUST${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
       customers.set(id, { accountId: a.merchantId, referenceId: c.referenceId, givenName: c.givenName, familyName: c.familyName, email: c.email });
       customerKeys.set(`${a.merchantId}:${c.idempotencyKey}`, id);
+      if (state.whileCustomer !== null) await state.whileCustomer();
       return { kind: "ok", value: { id } };
     },
     async createCard(token, c) {
@@ -840,6 +842,28 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     expect(atSquare.filter((c) => c.enabled).map((c) => c.last4)).toEqual([rows[0]?.last4]);
     expect(await owedOf(gym.id)).toEqual([]);
     expect((await agreementsOf(gym.id)).map((a) => a.screen).sort()).toEqual(["app", "desk"]);
+  });
+
+  it("a person's customer whose 'being made' row another save let go is still written once, never left being made", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Claim");
+    const acct = account(`MLCCL${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const tara = await record(gym, "Tara Claim");
+    // While Square makes Tara's customer, another save that Square refused lets the row go.
+    square.state.whileCustomer = () => sql`DELETE FROM gym_square_customers WHERE gym_id = ${gym.id} AND entry_id = ${tara}`;
+    try {
+      await saved(gym, gym.owner, tara, visa("1111"));
+    } finally {
+      square.state.whileCustomer = null;
+    }
+    const rows = await sql<{ customer_id: string | null; making_key: string | null }[]>`
+      SELECT customer_id, making_key FROM gym_square_customers WHERE gym_id = ${gym.id} AND entry_id = ${tara}`;
+    const [card] = await cardRows(gym.id);
+    expect(rows).toEqual([{ customer_id: card?.customer_id, making_key: null }]);
+    // The next save uses that customer: Square makes no second one.
+    await saved(gym, gym.owner, tara, visa("2222"));
+    expect([...square.customers.values()].filter((c) => c.referenceId === tara)).toHaveLength(1);
   });
 
   it("a card Square hands back that is not the one asked for is stopped at Square and never kept", async () => {
