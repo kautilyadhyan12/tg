@@ -52,6 +52,7 @@ import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
 import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
+import { sendPlanEndReminders } from "./modules/billing/service.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
@@ -606,6 +607,10 @@ if (paddle !== null || razorpay !== null) {
           log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
         }
       }
+      // A plan set to end, through either provider, is reminded a week and a day before (4b-iv).
+      const startedAt = Date.now();
+      const reminded = await sendPlanEndReminders(deps);
+      if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: "billing.plan_end_reminders" }, "job finished");
     },
     { connection },
   );
