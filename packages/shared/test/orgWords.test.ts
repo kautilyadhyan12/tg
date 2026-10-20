@@ -120,31 +120,44 @@ describe("orgWords", () => {
     expect(ptWords("crossfit_box").person_not_found).toBe("That person isn't on your member list.");
   });
 
-  /** Kd's five kinds of business (2026-10-16), each in the words its own software uses. */
-  it("speaks for a CrossFit box, a yoga studio and a Pilates studio in their own words", () => {
-    // A yoga studio has members and trainers, as a gym does (Kd: "it is not a school"); a
-    // CrossFit box has members and coaches (Kd, 5f-ii: members, as Wodify says).
+  /** The worst 5f-iv could do: a yoga or Pilates studio's people told "the studio", or a
+   *  CrossFit's told "the box" (Kd, 2026-10-19: each kind is called by its own name). Every
+   *  word of every kind's set, read whole, for each kind a row can hold. */
+  it("calls each kind by its own name, never a box or a bare studio", () => {
     const rows: [string, string, string, string, string, string][] = [
-      ["crossfit_box", "box", "members", "Coach", "coaches", "Box name"],
-      ["yoga_studio", "studio", "members", "Trainer", "trainers", "Studio name"],
-      ["pilates_studio", "studio", "clients", "Instructor", "instructors", "Studio name"],
+      ["gym", "gym", "Gym", "gyms", "members", "Gym name"],
+      ["studio", "studio", "Studio", "studios", "clients", "Studio name"],
+      ["crossfit_box", "CrossFit gym", "CrossFit gym", "CrossFit gyms", "members", "Gym name"],
+      ["yoga_studio", "yoga studio", "Yoga studio", "yoga studios", "members", "Studio name"],
+      ["pilates_studio", "Pilates studio", "Pilates studio", "Pilates studios", "clients", "Studio name"],
     ];
-    for (const [type, it, people, coachCap, coaches, nameLabel] of rows) {
+    for (const [type, it, itCap, plural, people, nameLabel] of rows) {
       const words = orgWords(type);
       expect(words.it, type).toBe(it);
+      expect(words.itCap, type).toBe(itCap);
       expect(words.itToMembers, type).toBe(it);
-      expect(words.itToMembersPlural, type).toBe(type === "crossfit_box" ? "boxes" : "studios");
+      expect(words.itToMembersCap, type).toBe(itCap);
+      expect(words.itToMembersPlural, type).toBe(plural);
+      expect(words.itToMembersPluralCap, type).toBe(itCap.replace(/$/u, "s"));
       expect(words.people, type).toBe(people);
-      expect(words.peopleCap, type).toBe(people.charAt(0).toUpperCase() + people.slice(1));
-      expect(words.coachCap, type).toBe(coachCap);
-      expect(words.coaches, type).toBe(coaches);
       expect(words.nameLabel, type).toBe(nameLabel);
     }
+    for (const type of orgTypeSchema.options) {
+      for (const word of Object.values(orgWords(type))) {
+        expect(word, type).not.toMatch(/box(es)?/iu);
+        expect(word, type).not.toMatch(/pilates/u);
+        if (type === "yoga_studio" || type === "pilates_studio") expect(word, type).not.toMatch(/^studios?$/iu);
+      }
+    }
+    // Their staff words are unchanged: a CrossFit's coaches, a yoga studio's trainers.
+    expect(orgWords("crossfit_box").coaches).toBe("coaches");
+    expect(orgWords("yoga_studio").coaches).toBe("trainers");
+    expect(orgWords("pilates_studio").coaches).toBe("instructors");
   });
 
   it("names a gym or studio where there is no org to name", () => {
     // The front door, the join screen and the refusal for a code that matched
-    // nothing. A CrossFit box is a gym; a trainer working alone can no longer be made.
+    // nothing. A CrossFit is a gym; a trainer working alone can no longer be made.
     expect(ORG_TYPES_PHRASE).toBe("gym or studio");
   });
 });

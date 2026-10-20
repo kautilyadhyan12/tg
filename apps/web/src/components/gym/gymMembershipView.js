@@ -322,7 +322,7 @@ export function hasFreshCheer(orgs, now = Date.now()) {
  *  are headings above a list nobody has joined yet, where every screen said
  *  "gym" before this card and nothing has been learned that contradicts it.
  *
- *  The plural is `orgWords`' own ("boxes", not "boxs"). */
+ *  The plural is `orgWords`' own ("CrossFit gyms", "yoga studios"). */
 export function myOrgsWords(orgs) {
   const list = Array.isArray(orgs) ? orgs : [];
   const words = list.map((org) => orgWords(org?.orgType));

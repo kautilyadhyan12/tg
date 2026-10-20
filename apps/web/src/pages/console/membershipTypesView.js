@@ -18,7 +18,6 @@ import {
   priceToMinor,
   TAXED_PRICE_MINOR_MAX,
   bpToTaxRateText,
-  orgWords,
 } from '@app/shared';
 
 /** Whether this person may change the price list. The tick, never the job title: an
@@ -39,14 +38,17 @@ export const KIND_CHOICES = [
   { value: 'trial', label: 'Trial', hint: 'A short first membership, free or paid.' },
 ];
 
+const STUDIOS = ['studio', 'yoga_studio', 'pilates_studio'];
+const OPEN_GYMS = ['crossfit_box', 'personal_trainer', 'clinic'];
+
 /** What a place without classes is called, in each kind's own words: a gym's floor is "gym",
- *  a box's and a studio's is "open gym" and "open studio", as they call it themselves; an old
- *  personal trainer's or clinic's is "open gym". The tick on Classes uses the same word. */
+ *  a CrossFit's and a studio's is "open gym" and "open studio", as they call it themselves; an
+ *  old personal trainer's or clinic's is "open gym", and a kind not known here is a gym's, as
+ *  `orgWords` reads it. Read from the kind, not its name. The tick on Classes uses the same word. */
 function openPlace(orgType) {
-  const { it } = orgWords(orgType);
-  if (it === 'gym') return { only: 'No classes, gym only', or: 'The gym or any class', open: 'open gym' };
-  if (it === 'studio') return { only: 'No classes, open studio only', or: 'Open studio or any class', open: 'open studio' };
-  return { only: 'No classes, open gym only', or: 'Open gym or any class', open: 'open gym' };
+  if (STUDIOS.includes(orgType)) return { only: 'No classes, open studio only', or: 'Open studio or any class', open: 'open studio' };
+  if (OPEN_GYMS.includes(orgType)) return { only: 'No classes, open gym only', or: 'Open gym or any class', open: 'open gym' };
+  return { only: 'No classes, gym only', or: 'The gym or any class', open: 'open gym' };
 }
 
 /** The same place as a class's tick and tag on Classes: "Open gym", "Open studio". */

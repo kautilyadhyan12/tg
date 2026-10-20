@@ -38,7 +38,7 @@ export interface OrgWords {
   readonly itToMembers: string;
   /** The same word starting a sentence: *"Your trainer is closed today."*. */
   readonly itToMembersCap: string;
-  /** More than one, for a member's list of places: *"My boxes"*. */
+  /** More than one, for a member's list of places: *"My yoga studios"*. */
   readonly itToMembersPlural: string;
   readonly itToMembersPluralCap: string;
   /** One of the people: *"They stay a client of your studio."* */
@@ -102,17 +102,18 @@ const STUDIO: OrgWords = {
   placeholder: "Flow Studio",
 };
 
-/** Kd's five kinds of business (2026-10-16, ROADMAP 5f): a CrossFit box's members and
+/** Kd's five kinds of business (2026-10-16, ROADMAP 5f): a CrossFit's members and
  *  coaches (members, as Wodify calls them: Kd, 5f-ii), a Pilates studio's clients and
  *  instructors. A yoga studio has members and
- *  trainers, as a gym does (Kd: "it is not a school"). */
+ *  trainers, as a gym does (Kd: "it is not a school"). Each is called by its own name,
+ *  never "box" or a bare "studio" (Kd, 5f-iv): "CrossFit gym" inside a sentence. */
 const CROSSFIT_BOX: OrgWords = {
-  it: "box",
-  itCap: "Box",
-  itToMembers: "box",
-  itToMembersCap: "Box",
-  itToMembersPlural: "boxes",
-  itToMembersPluralCap: "Boxes",
+  it: "CrossFit gym",
+  itCap: "CrossFit gym",
+  itToMembers: "CrossFit gym",
+  itToMembersCap: "CrossFit gym",
+  itToMembersPlural: "CrossFit gyms",
+  itToMembersPluralCap: "CrossFit gyms",
   person: "member",
   personCap: "Member",
   people: "members",
@@ -121,17 +122,17 @@ const CROSSFIT_BOX: OrgWords = {
   coaches: "coaches",
   coachesCap: "Coaches",
   coachCap: "Coach",
-  nameLabel: "Box name",
+  nameLabel: "Gym name",
   placeholder: "Steel City CrossFit",
 };
 
 const YOGA_STUDIO: OrgWords = {
-  it: "studio",
-  itCap: "Studio",
-  itToMembers: "studio",
-  itToMembersCap: "Studio",
-  itToMembersPlural: "studios",
-  itToMembersPluralCap: "Studios",
+  it: "yoga studio",
+  itCap: "Yoga studio",
+  itToMembers: "yoga studio",
+  itToMembersCap: "Yoga studio",
+  itToMembersPlural: "yoga studios",
+  itToMembersPluralCap: "Yoga studios",
   person: "member",
   personCap: "Member",
   people: "members",
@@ -145,12 +146,12 @@ const YOGA_STUDIO: OrgWords = {
 };
 
 const PILATES_STUDIO: OrgWords = {
-  it: "studio",
-  itCap: "Studio",
-  itToMembers: "studio",
-  itToMembersCap: "Studio",
-  itToMembersPlural: "studios",
-  itToMembersPluralCap: "Studios",
+  it: "Pilates studio",
+  itCap: "Pilates studio",
+  itToMembers: "Pilates studio",
+  itToMembersCap: "Pilates studio",
+  itToMembersPlural: "Pilates studios",
+  itToMembersPluralCap: "Pilates studios",
   person: "client",
   personCap: "Client",
   people: "clients",
@@ -246,5 +247,5 @@ export function aCoach(orgType: unknown): string {
  *  Those three places cannot look a type up: two of them run before anybody has
  *  typed a code, and the third is the answer to a code that belongs to nobody.
  *  Kept here so the three read the same. The five kinds of business (2026-10-16) are a
- *  gym or a studio to somebody who has not joined one yet: a CrossFit box is a gym. */
+ *  gym or a studio to somebody who has not joined one yet: a CrossFit is a gym. */
 export const ORG_TYPES_PHRASE = "gym or studio";
