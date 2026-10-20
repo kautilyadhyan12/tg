@@ -421,7 +421,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 1d-iii-b. [x] **A smaller size** — merged 2026-10-01 (PR #148).
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
    - 1f. [x] **The two extra passes' fixes** — merged 2026-10-01 (PR #149).
-   - 1g. [ ] **Keep my plan for a Paddle plan set to end** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): kept from the plan box, as a Razorpay plan is, by removing Paddle's scheduled cancel; its reminder email then says Keep my plan. Risky. Web folder 2, after 4b's two extra passes.
+   - 1g. [x] **Keep my plan for a Paddle plan set to end** — merged 2026-10-20 (PR #325).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [x] **One free trial per person, however the email is spelled** — merged 2026-10-16 (PR #293).
