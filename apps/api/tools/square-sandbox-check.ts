@@ -56,6 +56,10 @@ const status = await square.api.tokenStatus(neverIssued);
 check(status.kind === "refused" && status.status === 401, `a token Square never issued: ${status.kind}${status.kind === "refused" ? ` ${String(status.status)} ${status.code}` : ""}`);
 const revoke = await square.api.revoke(neverIssued, false);
 check(revoke.kind === "refused", `a revoke of it: ${revoke.kind}${revoke.kind === "refused" ? ` ${String(revoke.status)} ${revoke.code}` : ""}`);
+// The stop tool's own call (`tools/square-stop.ts`), for an account our app was never given: Square
+// takes our secret and the account's id and says it has no such account; a wrong secret is 401.
+const stopUnknown = await square.api.revokeAccount("MLNEVERCONNECTED00");
+check(stopUnknown.kind === "refused" && stopUnknown.status === 404, `the stop tool's call, for an account never connected: ${stopUnknown.kind}${stopUnknown.kind === "refused" ? ` ${String(stopUnknown.status)} ${stopUnknown.code}` : ""}`);
 const page = new URL(square.api.authorizeUrl("x"));
 check(page.origin === "https://connect.squareupsandbox.com", `Square's own page: ${page.origin}${page.pathname}`);
 
