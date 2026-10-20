@@ -164,6 +164,57 @@ describe("the plan card's way to Paddle's page", () => {
     expect(screen.queryByRole('button', { name: 'Manage payment' })).toBeNull();
   });
 
+  // Keep my plan for a Paddle plan set to end (1g). The deadline is days from now, never a fixed
+  // date, so the test does not expire.
+  const paddleEnding = (patch = {}) =>
+    plan({ paidThrough: 'paddle', subscribed: true, cancelAtPeriodEnd: true, keepUntil: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), ...patch });
+
+  it('a Paddle plan set to end says until when it can be kept, and Keep my plan keeps it', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paddleEnding() }));
+    renderOverview();
+    expect((await screen.findByTestId('plan-ending')).textContent).toMatch(/^This plan is set to end\. You can keep it until .+\.$/);
+    expect(screen.getByText(/^Ends /)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Manage payment' })).toBeTruthy();
+
+    const renewing = plan({ paidThrough: 'paddle', subscribed: true });
+    orgService.keepPlan.mockResolvedValue({ data: { subscription: renewing } });
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: renewing }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep my plan' }));
+    await waitFor(() => expect(orgService.keepPlan).toHaveBeenCalledWith(GYM_ID));
+    expect(await screen.findByText(/^Next payment /)).toBeTruthy();
+    expect(screen.queryByTestId('plan-ending')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Keep my plan' })).toBeNull();
+  });
+
+  it("a Paddle plan Keep my plan couldn't keep says so in the plan card, and is still set to end", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: paddleEnding() }));
+    orgService.keepPlan.mockRejectedValue(
+      Object.assign(new Error('503'), { response: { status: 503, data: { error: 'payments_unavailable', message: "Paddle couldn't be reached to keep your plan. Please try again in a moment." } } }),
+    );
+    renderOverview();
+    fireEvent.click(await screen.findByRole('button', { name: 'Keep my plan' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe("Paddle couldn't be reached to keep your plan. Please try again in a moment.");
+    expect(screen.getByText(/^Ends /)).toBeTruthy();
+  });
+
+  it('no Keep my plan for a Paddle plan handed over with the gym, past its deadline, or for a trainer', async () => {
+    for (const org of [
+      { ...OWNER, subscription: paddleEnding({ handedOverBy: 'Kd Owner' }) },
+      { ...OWNER, subscription: paddleEnding({ keepUntil: new Date(Date.now() - 60_000).toISOString() }) },
+      { ...TRAINER, subscription: paddleEnding() },
+    ]) {
+      resetConsoleOrgs();
+      orgService.getMine.mockResolvedValue(mineIs(org));
+      const { unmount } = renderOverview();
+      await screen.findByRole('heading', { name: 'Iron House' });
+      // The owner sees the plan card; a trainer, the Overview without its buttons.
+      if (org.staffRole === 'owner') expect((await screen.findAllByText(/^Ends |stops on/)).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('button', { name: 'Keep my plan' })).toBeNull();
+      unmount();
+    }
+  });
+
   it('closes the tab and says so when the page cannot be opened', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan() }));
     orgService.openBillingPortal.mockRejectedValue(Object.assign(new Error('503'), { response: { status: 503, data: { error: 'payments_unavailable', message: "Paying online isn't available right now. Please try again later." } } }));

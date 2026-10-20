@@ -313,6 +313,39 @@ export class FakePaddle implements PaddleApi {
     this.update(subscriptionId, { scheduled_change: { action: "cancel", effective_at: at }, next_billed_at: null });
     return Promise.resolve<PaddleResult<PaddleSubscription>>({ kind: "ok", value: this.subs.get(subscriptionId) ?? sub });
   }
+  /** Cancels taken back (1g); answers to drop first (a 503); the next one made but its answer
+   *  lost; something else at the instant the next one is being made. */
+  cancelsRemoved: string[] = [];
+  removeCancelFailures = 0;
+  loseRemoveCancelAnswer = false;
+  duringNextRemoveCancel: (() => Promise<unknown>) | null = null;
+  refuseNextRemoveCancel = false;
+  async removeScheduledCancel(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>> {
+    const during = this.duringNextRemoveCancel;
+    this.duringNextRemoveCancel = null;
+    if (during !== null) await during();
+    if (this.removeCancelFailures > 0) {
+      this.removeCancelFailures -= 1;
+      return { kind: "unavailable", status: 503 };
+    }
+    const sub = this.subs.get(subscriptionId);
+    if (sub === undefined) return { kind: "not_found" };
+    if (sub.status === "canceled") return { kind: "refused", status: 400, code: "subscription_update_when_canceled" };
+    if (this.refuseNextRemoveCancel) {
+      this.refuseNextRemoveCancel = false;
+      return { kind: "refused", status: 400, code: "subscription_locked_pending_changes" };
+    }
+    this.cancelsRemoved.push(subscriptionId);
+    // Renewing again, Paddle next charges when the month ends.
+    const next = sub.status === "trialing" ? (sub.scheduled_change?.effective_at ?? sub.next_billed_at ?? null) : (sub.current_billing_period?.ends_at ?? null);
+    this.update(subscriptionId, { scheduled_change: null, next_billed_at: next });
+    const changed = this.subs.get(subscriptionId) ?? sub;
+    if (this.loseRemoveCancelAnswer) {
+      this.loseRemoveCancelAnswer = false;
+      return { kind: "unavailable", status: null };
+    }
+    return { kind: "ok", value: changed };
+  }
   /** Paddle takes the next month: a completed charge billed `at`, and the month starting then. */
   renew(subscriptionId: string, at: string, amount = "2900"): string {
     const sub = this.subs.get(subscriptionId);

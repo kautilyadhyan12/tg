@@ -16,6 +16,7 @@ import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import {
   cancelBox,
   canCancelRazorpayPlan,
+  canKeepPaddlePlan,
   canKeepRazorpayPlan,
   canManageRazorpayPlan,
   planEndingText,
@@ -1118,6 +1119,49 @@ describe('an Indian gym paying through Razorpay (1d-i)', () => {
   });
 });
 
+describe('Keep my plan for a Paddle plan set to end (1g)', () => {
+  const NOW = Date.parse('2026-10-20T10:00:00.000Z');
+  const BEFORE = '2026-10-31T21:00:00.000Z';
+  const PASSED = '2026-10-20T09:59:59.000Z';
+  const BILLING = ['members.read', 'billing.manage'];
+  const gym = (sub, patch = {}) => ({
+    orgType: 'gym',
+    staffRole: 'owner',
+    privileges: BILLING,
+    subscription: {
+      status: 'active',
+      currentPeriodEnd: '2026-11-01T00:00:00.000Z',
+      cancelAtPeriodEnd: true,
+      keepUntil: BEFORE,
+      paidThrough: 'paddle',
+      subscribed: true,
+      handedOverBy: null,
+      ...sub,
+    },
+    ...patch,
+  });
+
+  // Who sees Keep my plan, and the line under the plan, for every class of plan and viewer.
+  const table = [
+    ['set to end, billing staff, before the deadline', gym({}), true, 'keep'],
+    ['set to end, past the deadline', gym({ keepUntil: PASSED }), false, 'cannot'],
+    ['set to end, no deadline from the server', gym({ keepUntil: null }), false, 'cannot'],
+    ['set to end, a trainer', gym({}, { staffRole: 'trainer', privileges: ['members.read'] }), false, 'cannot'],
+    ['handed over with the gym', gym({ handedOverBy: 'Kd Owner' }), false, null],
+    ['renewing', gym({ cancelAtPeriodEnd: false, keepUntil: null }), false, null],
+    ['a paid trial set to end', gym({ status: 'trialing' }), true, 'keep'],
+    ['paid through Razorpay', gym({ paidThrough: 'razorpay' }), false, 'keep'],
+    ['a free trial', gym({ status: 'trialing', paidThrough: null, subscribed: false, cancelAtPeriodEnd: false, keepUntil: null }), false, null],
+  ];
+  it.each(table)('%s', (_name, org, keep, line) => {
+    expect(canKeepPaddlePlan(org, NOW)).toBe(keep);
+    const text = planEndingText(org, NOW);
+    if (line === null) expect(text).toBeNull();
+    else if (line === 'keep') expect(text).toMatch(/^This plan is set to end\. You can keep it until .+\.$/);
+    else expect(text).toBe("This plan is set to end and can't be kept now. You can choose a plan again once it ends.");
+  });
+});
+
 describe('a plan paid through Razorpay, managed from the console (1d-ii)', () => {
   const NOW = Date.parse('2026-10-20T10:00:00.000Z');
   const END = '2026-11-01T00:00:00.000Z';
@@ -1192,7 +1236,6 @@ describe('a plan paid through Razorpay, managed from the console (1d-ii)', () =>
       "This plan is set to end and can't be kept now. You can choose a plan again once it ends.",
     );
     expect(planEndingText(gym({}), NOW)).toBeNull();
-    expect(planEndingText(gym({ cancelAtPeriodEnd: true, paidThrough: 'paddle' }), NOW)).toBeNull();
   });
 
   it('a failed payment on a Razorpay plan says Pay now, to billing staff only', () => {
