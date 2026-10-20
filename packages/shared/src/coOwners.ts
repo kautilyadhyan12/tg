@@ -111,7 +111,7 @@ export const OWNER_REQUEST_WORDS = {
   not_co_owner: "Only a co-owner can be made the owner. Make them a co-owner first.",
   plan_overdue: "A payment is overdue, so the owner can't be changed until it's paid.",
   plan_unclear: "This plan can't be handed over right now. Please write to support.",
-  plan_renewing: "The plan renews within the hour, so the owner can't be changed right now. Please try again once it has renewed.",
+  plan_renewing: "The plan is renewing, so the owner can't be changed right now. Please try again in an hour.",
   handed_over_plan: "This plan was paid by the last owner and stops when its paid month ends, so it can't be managed here. Choose your own plan when it ends.",
   handed_over_plan_payer: "You handed over ownership, so this plan stops when its paid month ends and can't be managed here. The new owner chooses the next plan.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
