@@ -258,6 +258,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
+     - 18d-i-b. [ ] **The Square token test that fails at random** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): `payments.unit.test.ts` changes the second-to-last letter but picks it by the last, so about 1 run in 64 nothing changes and it fails (seen on PR #320). A small pull request, no review. Web folder 1.
      - 18d-ii. [ ] **A member saves their card on Square's own form**; staff see "Card on file: Visa ending 4242".
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`).
@@ -418,6 +419,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 1d-iii-b. [x] **A smaller size** — merged 2026-10-01 (PR #148).
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
    - 1f. [x] **The two extra passes' fixes** — merged 2026-10-01 (PR #149).
+   - 1g. [ ] **Keep my plan for a Paddle plan set to end** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): kept from the plan box, as a Razorpay plan is, by removing Paddle's scheduled cancel; its reminder email then says Keep my plan. Risky. Web folder 2, after 4b's two extra passes.
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [x] **One free trial per person, however the email is spelled** — merged 2026-10-16 (PR #293).
