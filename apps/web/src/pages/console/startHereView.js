@@ -62,7 +62,7 @@ function stepWords(step, orgSlug, orgType) {
     case 'payments':
       return {
         title: 'Take payments',
-        line: `Connect your Square account so your ${words.people} can pay you by card. Square pays the money into your bank account.`,
+        line: `Connect your Square account so your ${words.people} can pay you through Square. Square pays the money into your bank account.`,
         actions: [{ label: 'Connect Square', to: to('payments') }],
       };
     default:

@@ -35,10 +35,10 @@ describe('where each button goes', () => {
     const payments = rows.find((r) => r.step === 'payments');
     expect(payments).toMatchObject({
       title: 'Take payments',
-      line: 'Connect your Square account so your members can pay you by card. Square pays the money into your bank account.',
+      line: 'Connect your Square account so your members can pay you through Square. Square pays the money into your bank account.',
       actions: [{ label: 'Connect Square', to: '/console/iron-house/settings#payments' }],
     });
-    expect(view(answer({ steps: ['payments'] }), 'studio').rows[0].line).toBe('Connect your Square account so your clients can pay you by card. Square pays the money into your bank account.');
+    expect(view(answer({ steps: ['payments'] }), 'studio').rows[0].line).toBe('Connect your Square account so your clients can pay you through Square. Square pays the money into your bank account.');
   });
 
   it('only the three that open a form are marked as changes: the two for the member list, and Invite staff', () => {
