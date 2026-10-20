@@ -16,14 +16,16 @@ import { stopSquare } from "../src/modules/orgs/payments/stop.js";
 const env = z
   .object({
     DATABASE_URL: z.string().url(),
-    SQUARE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+    // Named, never assumed: run against production with it unset, a default would stop nothing.
+    SQUARE_ENV: z.enum(["sandbox", "production"]),
     SQUARE_APPLICATION_ID: z.string().regex(/^(sandbox-)?sq0id[bp]-[A-Za-z0-9_-]{10,60}$/),
     SQUARE_APPLICATION_SECRET: z.string().regex(/^(sandbox-)?sq0cs[bp]-[A-Za-z0-9_-]{10,100}$/),
     PAYMENT_TOKENS_KEY: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
   })
+  .refine((e) => e.SQUARE_APPLICATION_ID.startsWith("sandbox-") === (e.SQUARE_ENV === "sandbox"), { message: "SQUARE_ENV is not the environment of the application id" })
   .safeParse(process.env);
 if (!env.success) {
-  console.error("Needs DATABASE_URL, SQUARE_ENV, SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET and PAYMENT_TOKENS_KEY. Secrets are never printed.");
+  console.error("Needs DATABASE_URL, SQUARE_ENV (sandbox or production, matching the application id), SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET and PAYMENT_TOKENS_KEY. Secrets are never printed.");
   process.exit(1);
 }
 

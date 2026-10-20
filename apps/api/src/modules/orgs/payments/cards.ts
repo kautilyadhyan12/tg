@@ -295,35 +295,36 @@ function refusalError(result: Exclude<SquareResult<unknown>, { kind: "ok" }>): O
   return new OrgsError(r.status, r.code, r.words);
 }
 
-/** The person's customer in the gym's Square account: made once, under a lock held over the
- *  one call to Square, so two saves at once make one. */
+/** The person's customer in the gym's Square account, made once. The first save claims a row
+ *  with the key Square is asked with, and every save for that person meanwhile asks with that
+ *  same key, so Square makes one customer; nothing holds the database while Square answers. A
+ *  key Square refused is let go, so the next save asks afresh; one Square did not answer is kept,
+ *  so the next save gets back what Square may have made. */
 async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: string, person: cards.CardPerson): Promise<string> {
-  const { environment } = ready.square;
-  const { accountId } = ready.row;
-  const known = await cards.readCustomer(deps.sql, gymId, person.entryId, environment, accountId);
-  if (known !== null) return known;
-  return await deps.sql.begin(async (tx) => {
-    await cards.lockCustomer(tx, gymId, person.entryId, environment, accountId);
-    const again = await cards.readCustomer(tx, gymId, person.entryId, environment, accountId);
-    if (again !== null) return again;
-    const { givenName, familyName } = cardNameParts(person.fullName);
-    const result = await ready.square.api.createCustomer(ready.token, {
-      // A fresh key each try: the lock is what makes it once.
-      idempotencyKey: randomUUID(),
-      givenName: givenName === "" ? null : givenName,
-      familyName: familyName === "" ? null : familyName,
-      email: person.email,
-      // Square needs a name, an email or a phone: every record has an email or a phone.
-      phone: givenName === "" && person.email === null ? person.phone : null,
-      referenceId: person.entryId,
-    });
-    if (result.kind !== "ok") {
-      if (result.kind === "refused") deps.log.warn({ event: "square.customer_refused", gymId, status: result.status, code: result.code }, "Square refused a customer");
-      throw refusalError(result);
-    }
-    await cards.insertCustomer(tx, { gymId, entryId: person.entryId, environment, accountId, customerId: result.value.id });
-    return result.value.id;
+  const key = { gymId, entryId: person.entryId, environment: ready.square.environment, accountId: ready.row.accountId };
+  const claimed = await cards.claimCustomer(deps.sql, key, randomUUID());
+  if ("customerId" in claimed) return claimed.customerId;
+  const { givenName, familyName } = cardNameParts(person.fullName);
+  const result = await ready.square.api.createCustomer(ready.token, {
+    idempotencyKey: claimed.makingKey,
+    givenName: givenName === "" ? null : givenName,
+    familyName: familyName === "" ? null : familyName,
+    email: person.email,
+    // Square needs a name, an email or a phone: every record has an email or a phone.
+    phone: givenName === "" && person.email === null ? person.phone : null,
+    referenceId: person.entryId,
   });
+  if (result.kind !== "ok") {
+    if (result.kind === "refused") {
+      deps.log.warn({ event: "square.customer_refused", gymId, status: result.status, code: result.code }, "Square refused a customer");
+      await cards.abandonCustomer(deps.sql, key, claimed.makingKey);
+    }
+    throw refusalError(result);
+  }
+  if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, result.value.id)) return result.value.id;
+  // Another save wrote it first, asked with the same key: Square's answer is the same customer.
+  const now = await cards.claimCustomer(deps.sql, key, randomUUID());
+  return "customerId" in now ? now.customerId : result.value.id;
 }
 
 interface SaveFor {
@@ -452,9 +453,10 @@ export async function sendOwedCardDisables(
       continue;
     }
     const result = await square.api.disableCard(token, owed.cardId);
-    // Done when Square stopped it or no longer has it; a dead token is the connection's own
-    // check's to find, and nothing more can be sent with it.
-    if (result.kind === "ok" || (result.kind === "refused" && (result.status === 404 || result.status === 401))) {
+    // Done when Square stopped it or no longer has it. A 401 is a token that has lapsed while the
+    // connection still reads connected: tried again, and given up only once the connection's own
+    // check takes it off (the branch above) or the tries run out.
+    if (result.kind === "ok" || (result.kind === "refused" && result.status === 404)) {
       await cards.finishDisable(deps.sql, owed.id);
       run.sent += 1;
       continue;
@@ -491,10 +493,10 @@ export async function checkSquareCustomer(deps: PaymentsDeps, square: SquareSett
       unknown = true;
       continue;
     }
-    await deps.sql.begin(async (tx) => {
+    const owed = await deps.sql.begin(async (tx) => {
       await lockGym(tx, record.gymId);
-      const card = await cards.letGoOfSquareCustomer(tx, { ...record, environment: square.environment, accountId, customerId });
-      if (card === null) return;
+      const card = await cards.letGoOfSquareCustomer(tx, { ...record, environment: square.environment, accountId, customerId, at: deps.now() });
+      if (card === null) return null;
       await insertAudit(tx, {
         actorUserId: null,
         gymId: record.gymId,
@@ -503,7 +505,10 @@ export async function checkSquareCustomer(deps: PaymentsDeps, square: SquareSett
         targetId: record.entryId,
         meta: { brand: card.brand, last4: card.last4 },
       });
+      return card.disableId;
     });
+    // Square keeps the card of a customer it deleted, still on: it is told to stop it.
+    if (owed !== null) await sendOwedCardDisables(deps, square, [owed]);
   }
   return unknown ? "unknown" : "done";
 }

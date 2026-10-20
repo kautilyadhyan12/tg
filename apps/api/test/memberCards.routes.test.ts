@@ -75,17 +75,29 @@ interface FakeCard {
   expYear: number;
 }
 
-/** Square, as a fake: a form's token reads `cnon:ok-<brand>-<last4>-<month>-<year>`, or
- *  `cnon:declined`. */
+/** Square, as a fake: a form's token reads `cnon:ok-<brand>-<last4>-<month>-<year>`, or Square's
+ *  own decline test token `cnon:card-nonce-declined`, which Square's test area answers with
+ *  INVALID_CARD_DATA when a card is saved (measured 2026-10-20). One idempotency key gives back
+ *  one customer and one card, as Square does. */
 function fakeSquare() {
   const codes = new Map<string, Account>();
   const tokens = new Map<string, Account>();
   const customers = new Map<string, { accountId: string; referenceId: string; givenName: string | null; familyName: string | null; email: string | null }>();
   const cards = new Map<string, FakeCard>();
   const keys = new Map<string, string>();
+  const customerKeys = new Map<string, string>();
   const usedSources = new Set<string>();
   const revokedAccounts: string[] = [];
-  const state: { down: boolean } = { down: false };
+  // `pauseMs`: Square takes this long to answer, so saves sent at once overlap. `odd`: the card
+  // Square hands back is not the one asked for. `whileSaving`: done at the gym after Square made
+  // the card and before it answers.
+  const state: {
+    down: boolean;
+    pauseMs: number;
+    odd: "customer" | "disabled" | "no_last4" | null;
+    whileSaving: (() => Promise<unknown>) | null;
+  } = { down: false, pauseMs: 0, odd: null, whileSaving: null };
+  const pause = () => new Promise((resolve) => setTimeout(resolve, state.pauseMs));
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
   const unauthorized = { kind: "refused", status: 401, code: "UNAUTHORIZED" } as const;
@@ -131,37 +143,47 @@ function fakeSquare() {
       const a = tokens.get(token);
       return Promise.resolve(a === undefined ? unauthorized : { kind: "ok", value: a.locations });
     },
-    createCustomer(token, c) {
-      if (state.down) return Promise.resolve(unavailable);
+    async createCustomer(token, c) {
+      await pause();
+      if (state.down) return unavailable;
       const a = tokens.get(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
+      if (a === undefined) return unauthorized;
+      const again = customerKeys.get(`${a.merchantId}:${c.idempotencyKey}`);
+      if (again !== undefined && customers.has(again)) return { kind: "ok", value: { id: again } };
       n += 1;
       const id = `CUST${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
       customers.set(id, { accountId: a.merchantId, referenceId: c.referenceId, givenName: c.givenName, familyName: c.familyName, email: c.email });
-      return Promise.resolve({ kind: "ok", value: { id } });
+      customerKeys.set(`${a.merchantId}:${c.idempotencyKey}`, id);
+      return { kind: "ok", value: { id } };
     },
-    createCard(token, c) {
-      if (state.down) return Promise.resolve(unavailable);
+    async createCard(token, c) {
+      await pause();
+      if (state.down) return unavailable;
       const a = tokens.get(token);
-      if (a === undefined) return Promise.resolve(unauthorized);
+      if (a === undefined) return unauthorized;
       const customer = customers.get(c.customerId);
-      if (customer?.accountId !== a.merchantId) return Promise.resolve({ kind: "refused", status: 400, code: "CUSTOMER_NOT_FOUND" });
+      if (customer?.accountId !== a.merchantId) return { kind: "refused", status: 400, code: "CUSTOMER_NOT_FOUND" };
       const again = keys.get(`${a.merchantId}:${c.idempotencyKey}`);
       if (again !== undefined) {
         const card = cards.get(again);
-        if (card !== undefined) return Promise.resolve({ kind: "ok", value: cardJson(again, card) });
+        if (card !== undefined) return { kind: "ok", value: cardJson(again, card) };
       }
-      if (usedSources.has(c.sourceId)) return Promise.resolve({ kind: "refused", status: 400, code: "SOURCE_USED" });
-      if (c.sourceId === "cnon:declined") return Promise.resolve({ kind: "refused", status: 400, code: "GENERIC_DECLINE" });
+      if (usedSources.has(c.sourceId)) return { kind: "refused", status: 400, code: "SOURCE_USED" };
+      if (c.sourceId === "cnon:card-nonce-declined") return { kind: "refused", status: 400, code: "INVALID_CARD_DATA" };
       const m = /^cnon:ok-([A-Z_]+)-([0-9]{4})-([0-9]{1,2})-([0-9]{4})/.exec(c.sourceId);
-      if (m === null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CARD_DATA" });
+      if (m === null) return { kind: "refused", status: 400, code: "INVALID_CARD_DATA" };
       usedSources.add(c.sourceId);
       n += 1;
       const id = `ccof:fake${String(n)}${randomBytes(4).toString("hex")}`;
       const card: FakeCard = { accountId: a.merchantId, customerId: c.customerId, enabled: true, brand: m[1] ?? "", last4: m[2] ?? "", expMonth: Number(m[3]), expYear: Number(m[4]) };
       cards.set(id, card);
       keys.set(`${a.merchantId}:${c.idempotencyKey}`, id);
-      return Promise.resolve({ kind: "ok", value: cardJson(id, card) });
+      if (state.whileSaving !== null) await state.whileSaving();
+      const answer = cardJson(id, card);
+      if (state.odd === "customer") return { kind: "ok", value: { ...answer, customer_id: "CUSTSOMEBODYELSE0" } };
+      if (state.odd === "disabled") return { kind: "ok", value: { ...answer, enabled: false } };
+      if (state.odd === "no_last4") return { kind: "ok", value: { ...answer, last_4: undefined } };
+      return { kind: "ok", value: answer };
     },
     retrieveCard(token, id) {
       if (state.down) return Promise.resolve(unavailable);
@@ -198,7 +220,7 @@ function fakeSquare() {
     codes.set(code, account);
     return code;
   };
-  return { api, allow, customers, cards, revokedAccounts, state };
+  return { api, allow, customers, cards, revokedAccounts, state, tokens };
 }
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -567,10 +589,13 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     // One customer for Tara, however many cards.
     expect(new Set(squareCardsOf(acct.merchantId).map((c) => c.customerId)).size).toBe(1);
 
-    // Square refuses a card: nothing is kept, and the card on file stays.
-    const declined = await saveAt(gym, gym.owner, tara, body(gym, "cnon:declined"));
+    // Square refuses a card, as its test area answers its own decline token: nothing is kept, and
+    // the card on file stays. (A bank's own decline codes are swept in `memberCards.unit.test.ts`.)
+    const declined = await saveAt(gym, gym.owner, tara, body(gym, "cnon:card-nonce-declined"));
     expect(declined.statusCode).toBe(409);
-    expect((JSON.parse(declined.body) as { error: string; message: string }).message).toBe("The bank didn't accept this card. Try another card.");
+    expect((JSON.parse(declined.body) as { error: string; message: string }).message).toBe(
+      "Square couldn't read this card. Check the number, expiry date and security code, then try again.",
+    );
     expect((await cardRows(gym.id)).map((r) => r.last4)).toEqual(["2222"]);
 
     // Remove: Square down changes nothing; then Square stops it and the record lets go. The
@@ -679,6 +704,9 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     await processSquareWork(workDeps(), [deleted], await mine());
     expect(await cardRows(gym.id)).toEqual([]);
     expect(await sql`SELECT 1 FROM gym_square_customers WHERE gym_id = ${gym.id}`).toHaveLength(0);
+    // Square keeps that card on: it is told to stop it.
+    expect(square.cards.get(again?.card_id ?? "")?.enabled).toBe(false);
+    expect(await owedOf(gym.id)).toEqual([]);
     expect((await view(gym, gym.owner, tara)).card).toBeNull();
     // The next card saved for her makes a new customer.
     await saved(gym, gym.owner, tara, visa("3333"));
@@ -714,22 +742,63 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     expect(square.cards.get(older?.card_id ?? "")?.enabled).toBe(false);
     expect(await owedOf(gym.id)).toEqual([]);
 
+    // The kept record has no card: the other's moves onto it.
+    const goneA = await record(gym, "Ana Join");
+    const keepA = await record(gym, "Ana J");
+    await saved(gym, gym.owner, goneA, visa("3131"));
+    const mergeA = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/${goneA}/merge`, gym.owner.cookies, { keepEntryId: keepA, acknowledgeLeavesList: true });
+    expect(mergeA.statusCode, mergeA.body).toBe(200);
+    expect((await cardRows(gym.id)).filter((r) => r.entry_id === keepA).map((r) => r.last4)).toEqual(["3131"]);
+    // The kept record's card is the newer: it stays, and the other's is owed its stop and goes.
+    const goneB = await record(gym, "Ben Join");
+    const keepB = await record(gym, "Ben J");
+    await saved(gym, gym.owner, goneB, visa("4141"));
+    clock = new Date(clock.getTime() + 60_000);
+    await saved(gym, gym.owner, keepB, visa("5151"));
+    const [goneBCard] = (await cardRows(gym.id)).filter((r) => r.entry_id === goneB);
+    const mergeB = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/${goneB}/merge`, gym.owner.cookies, { keepEntryId: keepB, acknowledgeLeavesList: true });
+    expect(mergeB.statusCode, mergeB.body).toBe(200);
+    expect((await cardRows(gym.id)).filter((r) => [goneB, keepB].includes(r.entry_id)).map((r) => [r.entry_id, r.last4])).toEqual([[keepB, "5151"]]);
+    expect((await owedOf(gym.id)).map((o) => o.card_id)).toContain(goneBCard?.card_id);
+    clock = new Date(Date.now() + 3 * 60_000);
+    await processSquareWork(workDeps(), [], await mine());
+    expect(square.cards.get(goneBCard?.card_id ?? "")?.enabled).toBe(false);
+    // A card moved onto a record that had its own customer still names the other's customer: the
+    // gym deleting that customer inside Square still takes the card off.
+    const goneC = await record(gym, "Cal Join");
+    const keepC = await record(gym, "Cal J");
+    await saved(gym, gym.owner, keepC, visa("6161"));
+    expect((await send("DELETE", cardUrl(gym, keepC), gym.owner.cookies)).statusCode).toBe(200);
+    await saved(gym, gym.owner, goneC, visa("7171"));
+    const [movedCard] = (await cardRows(gym.id)).filter((r) => r.entry_id === goneC);
+    const mergeC = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/${goneC}/merge`, gym.owner.cookies, { keepEntryId: keepC, acknowledgeLeavesList: true });
+    expect(mergeC.statusCode, mergeC.body).toBe(200);
+    expect((await cardRows(gym.id)).filter((r) => r.entry_id === keepC).map((r) => r.customer_id)).toEqual([movedCard?.customer_id]);
+    square.customers.delete(movedCard?.customer_id ?? "");
+    const deletedC = `card-t-${uniq()}`;
+    await webhook({ id: deletedC, type: "customer.deleted", merchantId: acct.merchantId, customerId: movedCard?.customer_id ?? "" });
+    clock = new Date(Date.now() + 3 * 60_000);
+    await processSquareWork(workDeps(), [deletedC], await mine());
+    expect((await cardRows(gym.id)).filter((r) => r.entry_id === keepC)).toEqual([]);
+    clock = new Date(Date.now() + 3 * 60_000);
+
     // Taken off the list, then deleted for good: Square is owed the card's stop, and the
     // agreements stay with the day, as the gym's proof.
+    await sql`DELETE FROM gym_card_disables WHERE gym_id = ${gym.id}`;
     const off = await send("DELETE", `/v1/orgs/${gym.id}/member-list/entries/${keep}`, gym.owner.cookies);
     expect(off.statusCode, off.body).toBe(200);
     const del = await send("DELETE", `/v1/orgs/${gym.id}/member-list/former/${keep}`, gym.owner.cookies);
     expect(del.statusCode, del.body).toBe(200);
-    expect(await cardRows(gym.id)).toEqual([]);
+    expect((await cardRows(gym.id)).filter((r) => r.entry_id === keep)).toEqual([]);
     expect(await owedOf(gym.id)).toHaveLength(1);
     clock = new Date(Date.now() + 3 * 60_000);
-    const kept = await agreementsOf(gym.id);
+    const kept = (await agreementsOf(gym.id)).filter((a) => a.last4 === "1111" || a.last4 === "2222");
     expect(kept.map((a) => [a.entry_id, a.record_deleted_at === null])).toEqual([
       [null, false],
       [null, false],
     ]);
     await processSquareWork(workDeps(), [], await mine());
-    expect(squareCardsOf(acct.merchantId).every((c) => !c.enabled)).toBe(true);
+    expect(squareCardsOf(acct.merchantId).filter((c) => c.last4 === "1111" || c.last4 === "2222").every((c) => !c.enabled)).toBe(true);
 
     // The purge removes an agreement once a year has passed since the record went and three
     // since it was agreed; not before.
@@ -737,10 +806,124 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     await sql`UPDATE gym_card_agreements SET record_deleted_at = ${at(200)}, agreed_at = ${at(1200)} WHERE gym_id = ${gym.id} AND last4 = '1111'`;
     await sql`UPDATE gym_card_agreements SET record_deleted_at = ${at(400)}, agreed_at = ${at(1200)} WHERE gym_id = ${gym.id} AND last4 = '2222'`;
     await deleteExpiredCardAgreements(sql, new Date());
-    expect((await agreementsOf(gym.id)).map((a) => a.last4)).toEqual(["1111"]);
-    await sql`UPDATE gym_card_agreements SET record_deleted_at = ${at(400)}, agreed_at = ${at(900)} WHERE gym_id = ${gym.id}`;
+    expect((await agreementsOf(gym.id)).filter((a) => a.entry_id === null).map((a) => a.last4)).toEqual(["1111"]);
+    await sql`UPDATE gym_card_agreements SET record_deleted_at = ${at(400)}, agreed_at = ${at(900)} WHERE gym_id = ${gym.id} AND entry_id IS NULL`;
     await deleteExpiredCardAgreements(sql, new Date());
-    expect(await agreementsOf(gym.id)).toHaveLength(1);
+    expect((await agreementsOf(gym.id)).filter((a) => a.entry_id === null)).toHaveLength(1);
+  });
+
+  it("two saves at the same instant, at the desk and on the phone: one customer, one card kept, the other stopped at Square", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Both");
+    const acct = account(`MLCBA${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const tara = await record(gym, "Tara Both");
+    const taraApp = await signedIn("Tara Both");
+    await inApp(gym, taraApp, tara);
+    square.state.pauseMs = 80;
+    try {
+      const [desk, phone] = await Promise.all([
+        saveAt(gym, gym.owner, tara, body(gym, visa("1111"))),
+        send("POST", `/v1/orgs/${gym.id}/my-card`, taraApp.cookies, body(gym, visa("2222"))),
+      ]);
+      expect([desk.statusCode, phone.statusCode], `${desk.body} ${phone.body}`).toEqual([200, 200]);
+    } finally {
+      square.state.pauseMs = 0;
+    }
+    // One Square customer for Tara, made once with one key.
+    expect([...square.customers.values()].filter((c) => c.referenceId === tara)).toHaveLength(1);
+    const rows = await cardRows(gym.id);
+    expect(rows).toHaveLength(1);
+    // Of the two cards Square made, the one kept is on, and the other was told to stop.
+    const atSquare = squareCardsOf(acct.merchantId);
+    expect(atSquare).toHaveLength(2);
+    expect(atSquare.filter((c) => c.enabled).map((c) => c.last4)).toEqual([rows[0]?.last4]);
+    expect(await owedOf(gym.id)).toEqual([]);
+    expect((await agreementsOf(gym.id)).map((a) => a.screen).sort()).toEqual(["app", "desk"]);
+  });
+
+  it("a card Square hands back that is not the one asked for is stopped at Square and never kept", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Odd");
+    const acct = account(`MLCOA${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const tara = await record(gym, "Tara Odd");
+    for (const odd of ["customer", "disabled", "no_last4"] as const) {
+      square.state.odd = odd;
+      try {
+        const res = await saveAt(gym, gym.owner, tara, body(gym, visa("1111")));
+        expect(res.statusCode, odd).toBe(503);
+      } finally {
+        square.state.odd = null;
+      }
+      expect(await cardRows(gym.id), odd).toEqual([]);
+    }
+    expect(await agreementsOf(gym.id)).toEqual([]);
+    expect(squareCardsOf(acct.merchantId)).toHaveLength(3);
+    expect(squareCardsOf(acct.merchantId).every((c) => !c.enabled)).toBe(true);
+    expect(await owedOf(gym.id)).toEqual([]);
+  });
+
+  it("the record, its payer or the gym's Square changing while Square answers: nothing kept, and the card made is let go", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Midway");
+    const acct = account(`MLCMW${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const whileSaving = async (change: () => Promise<unknown>, entryId: string) => {
+      square.state.whileSaving = change;
+      try {
+        return await saveAt(gym, gym.owner, entryId, body(gym, visa("1111")));
+      } finally {
+        square.state.whileSaving = null;
+      }
+    };
+    // The record deleted for good meanwhile.
+    const gone = await record(gym, "Gina Gone");
+    const res1 = await whileSaving(() => sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${gone}`, gone);
+    expect(res1.statusCode, res1.body).toBe(404);
+    // Somebody named to pay for them meanwhile.
+    const aarav = await record(gym, "Aarav Midway");
+    const priya = await record(gym, "Priya Midway");
+    const res2 = await whileSaving(() => sql`INSERT INTO gym_member_payers (gym_id, entry_id, payer_entry_id) VALUES (${gym.id}, ${aarav}, ${priya})`, aarav);
+    expect(res2.statusCode, res2.body).toBe(409);
+    expect((JSON.parse(res2.body) as { error: string }).error).toBe("card_paid_by_payer");
+    expect(await cardRows(gym.id)).toEqual([]);
+    // Both cards made were stopped at Square.
+    expect(squareCardsOf(acct.merchantId).every((c) => !c.enabled)).toBe(true);
+    // The gym's Square disconnected meanwhile: nothing kept, and Square is no longer ours to ask.
+    const zed = await record(gym, "Zed Midway");
+    const res3 = await whileSaving(() => send("DELETE", `/v1/orgs/${gym.id}/payments/square`, gym.owner.cookies), zed);
+    expect(res3.statusCode, res3.body).toBe(409);
+    expect((JSON.parse(res3.body) as { error: string }).error).toBe("card_not_ready");
+    expect(await cardRows(gym.id)).toEqual([]);
+    expect(await agreementsOf(gym.id)).toEqual([]);
+  });
+
+  it("a stop Square refuses with 401 while the gym still reads connected is tried again, never taken as done", async () => {
+    clock = new Date();
+    const gym = await makeGym("Card Lapse");
+    const acct = account(`MLCLA${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const tara = await record(gym, "Tara Lapse");
+    await saved(gym, gym.owner, tara, visa("1111"));
+    const [first] = await cardRows(gym.id);
+    // The gym's token lapses at Square while our row still reads connected.
+    const lapsed = [...square.tokens.entries()].filter(([, a]) => a.merchantId === acct.merchantId);
+    for (const [t] of lapsed) square.tokens.delete(t);
+    await sql`
+      INSERT INTO gym_card_disables (gym_id, environment, account_id, card_id, not_before)
+      VALUES (${gym.id}, 'production', ${acct.merchantId}, ${first?.card_id ?? ""}, ${new Date(Date.now() - 1000)})`;
+    clock = new Date();
+    await processSquareWork(workDeps(), [], await mine());
+    const owed = await sql<{ tries: number }[]>`SELECT tries FROM gym_card_disables WHERE gym_id = ${gym.id}`;
+    expect(owed.map((o) => o.tries)).toEqual([1]);
+    expect(square.cards.get(first?.card_id ?? "")?.enabled).toBe(true);
+    // The token works again (a renewal): the stop is sent.
+    for (const [t, a] of lapsed) square.tokens.set(t, a);
+    clock = new Date(Date.now() + 5 * 60_000);
+    await processSquareWork(workDeps(), [], await mine());
+    expect(await owedOf(gym.id)).toEqual([]);
+    expect(square.cards.get(first?.card_id ?? "")?.enabled).toBe(false);
   });
 
   it("the stop tool: nothing changes without --yes; with it Square ends the account's access and every gym holding it reads disconnected", async () => {

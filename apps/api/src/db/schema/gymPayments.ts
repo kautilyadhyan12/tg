@@ -106,7 +106,8 @@ export const gymPaymentRevokes = pgTable(
 );
 
 /** The person a record is in a gym's Square account (0144; ROADMAP 18d-ii): made the first
- *  time a card is saved for them, once, under a lock. */
+ *  time a card is saved for them, once. `making_key` stands for Square's id while Square is
+ *  asked to make it: every save meanwhile asks with that key, so Square makes one. */
 export const gymSquareCustomers = pgTable(
   "gym_square_customers",
   {
@@ -114,13 +115,15 @@ export const gymSquareCustomers = pgTable(
     entryId: uuid("entry_id").notNull(),
     environment: text("environment").notNull(),
     accountId: text("account_id").notNull(),
-    customerId: text("customer_id").notNull(),
+    customerId: text("customer_id"),
+    makingKey: uuid("making_key"),
     createdAt: createdAt(),
   },
   (t) => [
     primaryKey({ name: "gym_square_customers_pk", columns: [t.gymId, t.entryId, t.environment, t.accountId] }),
     check("gym_square_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
-    check("gym_square_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check("gym_square_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`),
+    check("gym_square_customers_made_check", sql`(${t.customerId} IS NULL) = (${t.makingKey} IS NOT NULL)`),
     foreignKey({ name: "gym_square_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
   ],
 );

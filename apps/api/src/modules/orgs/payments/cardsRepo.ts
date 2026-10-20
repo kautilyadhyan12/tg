@@ -84,23 +84,45 @@ export async function readCard(sql: SqlOrTx, gymId: string, entryId: string, loc
   return row === undefined ? null : toCard(row);
 }
 
-/** Held to the end of the transaction: one person's customer is made once, however many
- *  saves for them arrive together. */
-export async function lockCustomer(tx: TransactionSql, gymId: string, entryId: string, environment: SquareEnvironment, accountId: string): Promise<void> {
-  await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`square-customer:${environment}:${accountId}:${gymId}:${entryId}`}, 0))`;
+interface CustomerKey {
+  gymId: string;
+  entryId: string;
+  environment: SquareEnvironment;
+  accountId: string;
 }
 
-export async function readCustomer(sql: SqlOrTx, gymId: string, entryId: string, environment: SquareEnvironment, accountId: string): Promise<string | null> {
-  const [row] = await sql<{ customer_id: string }[]>`
-    SELECT customer_id FROM gym_square_customers
-    WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND environment = ${environment} AND account_id = ${accountId}`;
-  return row?.customer_id ?? null;
+/** The record's customer in that Square account: Square's id once made, or the key Square is
+ *  being asked to make it with. Null for neither. A row is claimed for `key` when there is
+ *  none, in one statement, so saves at the same instant all read the one key. */
+export async function claimCustomer(sql: SqlOrTx, c: CustomerKey, key: string): Promise<{ customerId: string } | { makingKey: string }> {
+  await sql`
+    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, making_key)
+    VALUES (${c.gymId}, ${c.entryId}, ${c.environment}, ${c.accountId}, ${key})
+    ON CONFLICT (gym_id, entry_id, environment, account_id) DO NOTHING`;
+  const [row] = await sql<{ customer_id: string | null; making_key: string | null }[]>`
+    SELECT customer_id, making_key FROM gym_square_customers
+    WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment} AND account_id = ${c.accountId}`;
+  if (row?.customer_id != null) return { customerId: row.customer_id };
+  if (row?.making_key != null) return { makingKey: row.making_key };
+  throw new Error("a Square customer row was neither made nor being made");
 }
 
-export async function insertCustomer(tx: TransactionSql, c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string }): Promise<void> {
-  await tx`
-    INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id)
-    VALUES (${c.gymId}, ${c.entryId}, ${c.environment}, ${c.accountId}, ${c.customerId})`;
+/** Square made the customer asked for with `key`. False when another save wrote it first. */
+export async function finishCustomer(sql: SqlOrTx, c: CustomerKey, key: string, customerId: string): Promise<boolean> {
+  const rows = await sql<{ entry_id: string }[]>`
+    UPDATE gym_square_customers SET customer_id = ${customerId}, making_key = NULL
+    WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
+      AND account_id = ${c.accountId} AND making_key = ${key}
+    RETURNING entry_id`;
+  return rows.length === 1;
+}
+
+/** Square refused to make the customer with `key`: the next save starts again with a new one. */
+export async function abandonCustomer(sql: SqlOrTx, c: CustomerKey, key: string): Promise<void> {
+  await sql`
+    DELETE FROM gym_square_customers
+    WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
+      AND account_id = ${c.accountId} AND making_key = ${key}`;
 }
 
 /** Square no longer has this customer (the gym deleted it there): the next save makes one. */
@@ -171,30 +193,38 @@ export async function cardsOfSquareCard(sql: SqlOrTx, environment: SquareEnviron
   return rows.map(toCard);
 }
 
-/** The records that are this Square customer, for Square's message that the gym deleted it. */
+/** The records that are this Square customer, for Square's message that the gym deleted it: by
+ *  the customer kept for them, and by a card saved on it (a join of two records moves the card
+ *  and may leave the customer with the record not kept). */
 export async function recordsOfSquareCustomer(sql: SqlOrTx, environment: SquareEnvironment, accountId: string, customerId: string): Promise<{ gymId: string; entryId: string }[]> {
   const rows = await sql<{ gym_id: string; entry_id: string }[]>`
     SELECT gym_id, entry_id FROM gym_square_customers
+    WHERE environment = ${environment} AND account_id = ${accountId} AND customer_id = ${customerId}
+    UNION
+    SELECT gym_id, entry_id FROM gym_member_cards
     WHERE environment = ${environment} AND account_id = ${accountId} AND customer_id = ${customerId}`;
   return rows.map((r) => ({ gymId: r.gym_id, entryId: r.entry_id }));
 }
 
 /** The gym deleted this customer inside Square: the record lets go of it, and of a card saved on
- *  it. Answers the card that went, if one did. The caller holds the gym's lock. */
+ *  it, which Square keeps on and is owed its stop. Answers the card that went and its owed stop,
+ *  if one did. The caller holds the gym's lock. */
 export async function letGoOfSquareCustomer(
   tx: TransactionSql,
-  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string },
-): Promise<{ brand: string; last4: string } | null> {
+  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string; at: Date },
+): Promise<{ brand: string; last4: string; disableId: string } | null> {
   await tx`
     DELETE FROM gym_square_customers
     WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
       AND account_id = ${c.accountId} AND customer_id = ${c.customerId}`;
-  const [card] = await tx<{ brand: string; last4: string }[]>`
+  const [card] = await tx<{ brand: string; last4: string; card_id: string }[]>`
     DELETE FROM gym_member_cards
     WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
       AND account_id = ${c.accountId} AND customer_id = ${c.customerId}
-    RETURNING brand, last4`;
-  return card ?? null;
+    RETURNING brand, last4, card_id`;
+  if (card === undefined) return null;
+  const disableId = await oweDisable(tx, { gymId: c.gymId, environment: c.environment, accountId: c.accountId, cardId: card.card_id, notBefore: c.at });
+  return { brand: card.brand, last4: card.last4, disableId };
 }
 
 /** What Square now says of a card the bank updated (a new expiry, a new number's last four). */
