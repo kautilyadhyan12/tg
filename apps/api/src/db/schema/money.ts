@@ -134,7 +134,7 @@ export const subscriptions = pgTable(
     handedOverAt: timestamp("handed_over_at", { withTimezone: true }),
     handedOverFrom: uuid("handed_over_from"),
     handedOverEndSentAt: timestamp("handed_over_end_sent_at", { withTimezone: true }),
-    /** A plan set to end is reminded 7 days and 1 day before (4b-iv, migration `0142`): the end
+    /** A plan set to end is reminded 7 days and 1 day before (4b-iv, migration `0143`): the end
      *  date each reminder was sent for, so it goes once for that end. */
     endWeekRemindedFor: timestamp("end_week_reminded_for", { withTimezone: true }),
     endDayRemindedFor: timestamp("end_day_reminded_for", { withTimezone: true }),

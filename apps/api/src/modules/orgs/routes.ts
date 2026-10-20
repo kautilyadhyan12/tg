@@ -164,6 +164,7 @@ export function registerOrgRoutes(
     // alternative is the empty catch that rule forbids).
     log: app.log,
     onlinePayments: deps.onlinePayments,
+    paymentsEnvironment: deps.config.SQUARE_ENV,
     ...(overrides.now === undefined ? {} : { now: overrides.now }),
     ...(overrides.gymLimits === undefined ? {} : { unpaidGymLimit: overrides.gymLimits.unpaid }),
   };
@@ -227,7 +228,7 @@ export function registerOrgRoutes(
   registerCoOwnerRoutes(app, { sql: deps.sql, redis: deps.redis, email: deps.coOwnerEmail, addressKey: deps.invites?.hmacKey ?? null, billing: deps.billing ?? null, webOrigin: deps.webOrigin, now: overrides.now ?? (() => new Date()) });
 
   // Overview's "Start here" list: what the gym has set up (ROADMAP 23b).
-  registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  registerStartHereRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()), paymentsEnvironment: deps.config.SQUARE_ENV });
   registerReportsRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   registerAtRiskRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
   // Staff activity: which worker did what, for the owner (ROADMAP 4d).

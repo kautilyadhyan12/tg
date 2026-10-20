@@ -53,6 +53,8 @@ import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
 import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
 import { sendPlanEndReminders } from "./modules/billing/service.js";
+import { squareSettings } from "./modules/orgs/payments/settings.js";
+import { processSquareWork } from "./modules/orgs/payments/work.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
@@ -620,6 +622,53 @@ if (paddle !== null || razorpay !== null) {
   });
 }
 
+// A GYM'S OWN SQUARE ACCOUNT (ROADMAP 18d-i). Its own queue, every minute: Square's messages
+// that a gym took the app off its account, checked with Square; tokens owed a revoke; the
+// renewals that are due. Only when Square is set up.
+export const PAYMENTS_QUEUE = "payments";
+export const PAYMENTS_SQUARE_JOB = "payments.square";
+
+const square = squareSettings(config);
+let paymentsQueue: Queue | null = null;
+let paymentsWorker: Worker | null = null;
+if (square === null) {
+  log.warn({ event: "worker.square_off" }, "Square connections are not kept up: SQUARE_APPLICATION_ID, SQUARE_APPLICATION_SECRET or PAYMENT_TOKENS_KEY is missing");
+} else {
+  paymentsQueue = new Queue(PAYMENTS_QUEUE, { connection });
+  try {
+    await paymentsQueue.upsertJobScheduler(
+      PAYMENTS_SQUARE_JOB,
+      { every: 60_000 },
+      {
+        name: PAYMENTS_SQUARE_JOB,
+        // Events, revokes and renewals are each leased, and every write names the connection
+        // it was read for, so a retry or a second run at once changes nothing twice.
+        opts: { attempts: 1, removeOnComplete: { count: 50 }, removeOnFail: { count: 200 } },
+      },
+    );
+  } catch (err) {
+    log.fatal({ err }, "failed to register the Square schedule");
+    process.exit(1);
+  }
+  paymentsWorker = new Worker(
+    PAYMENTS_QUEUE,
+    async (job) => {
+      if (job.name !== PAYMENTS_SQUARE_JOB) throw new Error(`unknown job on ${PAYMENTS_QUEUE}: ${job.name}`);
+      const startedAt = Date.now();
+      const run = await processSquareWork({ sql, square, log, now: () => new Date() });
+      const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + run.renewed + run.renewalsWaiting > 0) {
+        log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      }
+    },
+    { connection },
+  );
+  paymentsWorker.on("failed", (job, err) => {
+    Sentry.captureException(err, { tags: { job: job?.name ?? "unknown", queue: PAYMENTS_QUEUE } });
+    log.error({ errName: err.name, errMessage: err.message, event: "job.failed", job: job?.name, jobId: job?.id }, "job failed");
+  });
+}
+
 const worker = new Worker(
   ROLLUPS_QUEUE,
   async (job) => {
@@ -846,9 +895,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       await worker.close();
       await invitesWorker?.close();
       await billingWorker?.close();
+      await paymentsWorker?.close();
       await queue.close();
       await invitesQueue?.close();
       await billingQueue?.close();
+      await paymentsQueue?.close();
       await connection.quit();
       await sql.end();
       // T3 round 3 minor: an exception captured moments before SIGTERM would

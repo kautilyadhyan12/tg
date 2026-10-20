@@ -144,6 +144,23 @@ const envSchema = z.object({
   RAZORPAY_KEY_SECRET: z.string().regex(/^[A-Za-z0-9]{20,40}$/, "RAZORPAY_KEY_SECRET must be a Razorpay key secret").optional(),
   // Chosen by Kd when the webhook is added in Razorpay's dashboard.
   RAZORPAY_WEBHOOK_SECRET: z.string().regex(/^[\x21-\x7e]{12,200}$/,"RAZORPAY_WEBHOOK_SECRET must be 12 to 200 visible characters").optional(),
+  // Square, which a gym connects for its members' card payments (ROADMAP 18d-i): our own
+  // application's id and secret, from Square's Developer Console, set together. Sandbox ids
+  // start `sandbox-sq0idb-`, production ones `sq0idp-`; each is checked against the
+  // environment at boot. The signature key is the webhook subscription's, and the address is
+  // the one that subscription was made with, which Square signs. Unset: the Payments box says
+  // Square can't be connected on this server yet.
+  SQUARE_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  SQUARE_APPLICATION_ID: z.string().regex(/^(sandbox-)?sq0id[bp]-[A-Za-z0-9_-]{10,60}$/, "SQUARE_APPLICATION_ID must be a Square application id").optional(),
+  SQUARE_APPLICATION_SECRET: z.string().regex(/^(sandbox-)?sq0cs[bp]-[A-Za-z0-9_-]{10,100}$/, "SQUARE_APPLICATION_SECRET must be a Square application secret").optional(),
+  SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().regex(/^[\x21-\x7e]{10,200}$/, "SQUARE_WEBHOOK_SIGNATURE_KEY must be 10 to 200 visible characters").optional(),
+  SQUARE_WEBHOOK_URL: z.string().url().optional(),
+  // The key that locks each gym's Square tokens in the database (AES-256-GCM): 32 random
+  // bytes, base64. Required with Square. Changing it makes every connected gym connect again.
+  PAYMENT_TOKENS_KEY: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/, "PAYMENT_TOKENS_KEY must be 32 bytes, base64")
+    .optional(),
   // Cloudflare Turnstile, the robot check on a gym page's enquiry form (ROADMAP
   // 20c-iv-a). Set together; REQUIRED in production. Outside production, unset means
   // Cloudflare's own test pair, which passes every check (`robotCheck.ts`).
@@ -229,6 +246,32 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
       {
         path: ["RAZORPAY_WEBHOOK_SECRET"],
         message: "RAZORPAY_WEBHOOK_SECRET is required in production when Razorpay is set up (renewals and failed payments arrive by webhook)",
+      },
+    )
+    .refine((c) => (c.SQUARE_APPLICATION_ID === undefined) === (c.SQUARE_APPLICATION_SECRET === undefined), {
+      path: ["SQUARE_APPLICATION_SECRET"],
+      message: "SQUARE_APPLICATION_ID and SQUARE_APPLICATION_SECRET are set together",
+    })
+    .refine((c) => c.SQUARE_APPLICATION_ID === undefined || c.PAYMENT_TOKENS_KEY !== undefined, {
+      path: ["PAYMENT_TOKENS_KEY"],
+      message: "PAYMENT_TOKENS_KEY is required when Square is set up (a gym's tokens are kept locked)",
+    })
+    .refine(
+      (c) =>
+        [c.SQUARE_APPLICATION_ID, c.SQUARE_APPLICATION_SECRET].every(
+          (value) => value === undefined || value.startsWith("sandbox-") === (c.SQUARE_ENV === "sandbox"),
+        ),
+      { path: ["SQUARE_APPLICATION_ID"], message: "SQUARE_APPLICATION_ID and SQUARE_APPLICATION_SECRET belong to the other Square environment" },
+    )
+    .refine((c) => (c.SQUARE_WEBHOOK_SIGNATURE_KEY === undefined) === (c.SQUARE_WEBHOOK_URL === undefined), {
+      path: ["SQUARE_WEBHOOK_URL"],
+      message: "SQUARE_WEBHOOK_SIGNATURE_KEY and SQUARE_WEBHOOK_URL are set together",
+    })
+    .refine(
+      (c) => c.NODE_ENV !== "production" || c.SQUARE_APPLICATION_ID === undefined || c.SQUARE_WEBHOOK_SIGNATURE_KEY !== undefined,
+      {
+        path: ["SQUARE_WEBHOOK_SIGNATURE_KEY"],
+        message: "SQUARE_WEBHOOK_SIGNATURE_KEY is required in production when Square is set up (a gym removing the app arrives by webhook)",
       },
     )
     .safeParse(env);

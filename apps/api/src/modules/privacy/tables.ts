@@ -512,6 +512,14 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym_sale_refunds.recorded_by and undone_by — which member of staff noted a refund of a
   // sale and who voided it (`0128`), on gym_sales' footing. A reason is one of a fixed list.
   "gym_sale_refunds",
+  // gym_payment_connections.connected_by — which owner connected the gym's Square account
+  // (`0142`; 18d-i), on gym_leads' footing: the gym's record; `ON DELETE set null`. The
+  // account itself is the gym's business, never the person's.
+  "gym_payment_connections",
+  // gym_payment_connect_starts.user_id — a press of Connect Square waiting ten minutes for
+  // Square (`0142`): a one-time credential, on one_time_tokens' footing, never exported; it
+  // goes with the account (`ON DELETE cascade`) and the worker forgets it once it runs out.
+  "gym_payment_connect_starts",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
   "gym_waivers",

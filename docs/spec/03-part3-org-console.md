@@ -1879,7 +1879,7 @@ directions. Marking attendance still needs a membership.
 - Refused on a handed-over plan, for everybody: Keep my plan, Pay now and Update payment method (`handed_over_plan`, in the payer's own words for the person who paid), and size changes (`plan_ending`); `keepUntil` is null. Handed back to the person who pays, the marks are cleared and the plan stays set to end; once its cancel has gone to Razorpay it cannot be kept ("Razorpay has already been told to stop it"), and they choose a plan again when it ends. Handed on again, it stays the first payer's. A plan renewing within the hour waits (`plan_renewing`), and so does a Razorpay month already over whose renewal is not yet read; one past due still is `plan_overdue`.
 - Screens: the same sentences as Paddle's; on the plan box no Pay now, Update payment method, Cancel plan, Keep my plan or "Paid through Razorpay" line. The line under any Razorpay plan set to end says it without saying who ended it: "This plan is set to end. You can keep it until {time}." or "This plan is set to end and can't be kept now. You can choose a plan again once it ends."
 
-**Out of 4b-iv (built 2026-10-20; `rulings/2026-10-20-4b-iv.md`).** A plan set to end is reminded by email. Migration `0142`.
+**Out of 4b-iv (built 2026-10-20; `rulings/2026-10-20-4b-iv.md`).** A plan set to end is reminded by email. Migration `0143`.
 
 - Who and when: a live plan (`trialing` or `active`) through Paddle or Razorpay with `cancel_at_period_end` (cancelled, or handed over) emails the gym's staff who hold `billing.manage` (its owner and co-owners) 7 days and 1 day before `current_period_end`. Set to end inside the last day, only the day-before one goes. A plan that renews, one past due and one ended get none.
 - Once per end: the billing worker, every minute after the providers' events, claims each due plan in one statement, writing the end it was sent for (`end_week_reminded_for`, `end_day_reminded_for`). Kept and set to end again for the same end, it is not sent again; renewed and set to end at a later end, it is. Marked before it is sent, as the size warnings are: one lost in sending is not retried. With no mail sender nothing is marked.
@@ -4046,6 +4046,28 @@ a business in India:
 
 Whether an owner in India can finish each sign-up is proved only by doing it; it is
 free, and Kd's to do when he chooses. Nothing in 14.2 to 14.4 waits for it.
+
+*(As built, 18d-i, 2026-10-19; `rulings/2026-10-19-18d-i.md`.)* Kd's Square developer
+sign-up worked from India; abroad first, Razorpay (18f) after Square's four parts. Settings
+→ **Payments**, under the gym's details: Square's eight countries see **Connect Square**,
+India reads that card and UPI payments are coming soon, any other country that card payments
+are not available there yet, and a gym with no country a link to add it. **Only the gym's own
+owner** connects, picks the location and disconnects (not a co-owner): whoever connects
+decides whose bank account members' money goes into; everybody else reads "Only the owner of
+{gym} can connect Square." A press of Connect Square is a one-time value kept as its SHA-256,
+for that owner at that gym, for ten minutes, used once; Square's answer comes back to
+`/connect/square` and the gym is read from the press, never the request, with the owner
+checked again. A Square account in another country or currency than the gym, or with no
+active location that takes cards, is refused and its tokens stopped; several locations: the
+owner picks one. Tokens are AES-256-GCM under `PAYMENT_TOKENS_KEY`, bound to the gym and the
+kind of token, renewed every six days (Square asks for seven or less), and stopped at
+Disconnect through owed revokes the worker sends until Square answers; one Square account on
+two gyms is stopped whole only when the last lets go. Square's `oauth.authorization.revoked`
+message is signed (HMAC-SHA256 of the subscription's URL and the raw body), kept once by its
+event id, and believed only when Square's own token check agrees: the box then reads "Square
+was disconnected" with the day. Square is asked once for MERCHANT_PROFILE_READ, CUSTOMERS_READ
+and _WRITE, PAYMENTS_READ and _WRITE, never a fee. Start here's **Take payments** is the
+owner's, in Square's countries.
 
 ### 14.6 Cards
 

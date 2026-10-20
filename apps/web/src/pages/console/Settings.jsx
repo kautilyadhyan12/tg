@@ -11,6 +11,7 @@ import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
 import WaiverPanel from '../../components/console/WaiverPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
+import PaymentsPanel from '../../components/console/PaymentsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
 import { useSectionLink } from './useSectionLink';
 import { DETAILS_SECTIONS, SETTINGS_SECTION, placeTo } from './consolePlaces';
@@ -43,7 +44,7 @@ export default function Settings() {
   const section = useSectionLink(!loading && error === null && !notFound);
   // Each press of a link to a section opens it again, also one the owner has since closed:
   // the section is told which press, not only that it is named.
-  const { key: press } = useLocation();
+  const { key: press, state: arrived } = useLocation();
   const linked = (named) => (named ? press : false);
 
   if (loading) {
@@ -87,6 +88,10 @@ export default function Settings() {
   const readOnly = consoleIsReadOnly(org);
   // The words this screen speaks (roadmap 2b).
   const words = orgWords(org.orgType);
+  // Payments is the gym's own owner's to connect (18d-i), whatever their ticks.
+  const isGymOwner = org.staffRole === 'owner' && org.coOwner !== true;
+  // What Square said, brought here by the return page (`/connect/square`).
+  const squareOutcome = arrived !== null && typeof arrived === 'object' && 'squareOutcome' in arrived ? arrived.squareOutcome : null;
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-4">
@@ -141,6 +146,23 @@ export default function Settings() {
             privileges={privileges}
             readOnly={readOnly}
             startOpen={linked(DETAILS_SECTIONS.includes(section))}
+          />
+        </div>
+      ) : null}
+
+      {/* PAYMENTS (18d-i): the gym's own Square account, under the details that hold the gym's
+          country, which decides what the box offers. Everybody who may change the gym's
+          details reads it; only the gym's own owner connects. Keyed per gym for the panels'
+          reason above: it holds a choice of location not saved yet. */}
+      {canEditGym || isGymOwner ? (
+        <div id={SETTINGS_SECTION.payments} style={{ scrollMarginTop: 16 }}>
+          <PaymentsPanel
+            key={`payments-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.payments)}
+            outcome={squareOutcome}
+            countryTo={placeTo(orgSlug, 'country')}
           />
         </div>
       ) : null}

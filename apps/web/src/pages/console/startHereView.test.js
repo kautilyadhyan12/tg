@@ -30,6 +30,17 @@ describe('where each button goes', () => {
     ]);
   });
 
+  it("the owner's Take payments opens Settings at Payments (18d-i)", () => {
+    const rows = view(answer({ steps: [...ALL, 'payments'] })).rows;
+    const payments = rows.find((r) => r.step === 'payments');
+    expect(payments).toMatchObject({
+      title: 'Take payments',
+      line: 'Connect your Square account so your members can pay you through Square. Square pays the money into your bank account.',
+      actions: [{ label: 'Connect Square', to: '/console/iron-house/settings#payments' }],
+    });
+    expect(view(answer({ steps: ['payments'] }), 'studio').rows[0].line).toBe('Connect your Square account so your clients can pay you through Square. Square pays the money into your bank account.');
+  });
+
   it('only the three that open a form are marked as changes: the two for the member list, and Invite staff', () => {
     const rows = view(answer()).rows;
     const changing = rows.flatMap((r) => r.actions.filter((a) => a.changes === true).map((a) => a.label));

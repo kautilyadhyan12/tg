@@ -1,6 +1,6 @@
 // `webhook_events`: every provider event kept once by its own id (Part 4 §3.3), so a
 // webhook answers at once and the worker acts on each event, however often it arrives.
-import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema } from "@app/shared";
+import { paddleSubscriptionIdSchema, razorpaySubscriptionIdSchema, resendEmailEventTypeSchema, squareObjectIdSchema } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 
@@ -64,7 +64,7 @@ export async function claimDueEvent(
 
 async function claimDue(
   sql: Sql,
-  provider: "resend" | "paddle" | "razorpay",
+  provider: "resend" | "paddle" | "razorpay" | "square",
   now: Date,
   leaseMs: number,
   eventIds: readonly string[] | null = null,
@@ -164,6 +164,49 @@ export async function forgetOldRazorpayEvents(sql: SqlOrTx, before: Date, limit:
     WHERE id IN (
       SELECT id FROM webhook_events
       WHERE provider = 'razorpay' AND status <> 'pending' AND processed_at < ${before}
+      LIMIT ${limit})
+    RETURNING id`;
+  return rows.length;
+}
+
+/** What is kept of a Square event (ROADMAP 18d-i): its type and the Square account it is
+ *  about. The worker asks Square about each gym holding that account before acting. */
+export const storedSquareEventSchema = z
+  .object({ type: z.string().min(1).max(100), accountId: squareObjectIdSchema })
+  .strict();
+export type StoredSquareEvent = z.infer<typeof storedSquareEventSchema>;
+
+export async function keepSquareEvent(sql: SqlOrTx, event: { eventId: string; payload: StoredSquareEvent }): Promise<void> {
+  await sql`
+    INSERT INTO webhook_events (provider, event_id, payload)
+    VALUES ('square', ${event.eventId}, ${sql.json(event.payload)})
+    ON CONFLICT (provider, event_id) DO NOTHING`;
+}
+
+export interface ClaimedSquareEvent {
+  id: string;
+  attempts: number;
+  tries: number;
+  receivedAt: Date;
+  payload: StoredSquareEvent | null;
+}
+
+/** `eventIds`: only these events, for a test that shares its database with other suites;
+ *  production passes null. */
+export async function claimDueSquareEvent(sql: Sql, now: Date, leaseMs: number, eventIds: readonly string[] | null = null): Promise<ClaimedSquareEvent | null> {
+  const row = await claimDue(sql, "square", now, leaseMs, eventIds);
+  if (row === null) return null;
+  const payload = storedSquareEventSchema.safeParse(row.payload);
+  return { ...row, payload: payload.success ? payload.data : null };
+}
+
+/** Forget Square's finished events after 90 days (Part 4 §5.1). */
+export async function forgetOldSquareEvents(sql: SqlOrTx, before: Date, limit: number): Promise<number> {
+  const rows = await sql<{ id: string }[]>`
+    DELETE FROM webhook_events
+    WHERE id IN (
+      SELECT id FROM webhook_events
+      WHERE provider = 'square' AND status <> 'pending' AND processed_at < ${before}
       LIMIT ${limit})
     RETURNING id`;
   return rows.length;

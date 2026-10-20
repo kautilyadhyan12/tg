@@ -134,6 +134,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.day_reopened": (s) => `Marked the ${s.words.it} open again${onDay(s, "day")}`,
   "org.start_here_hidden": () => "Hid Start here",
   "org.start_here_shown": () => "Showed Start here again",
+  // The gym's own Square account (18d-i).
+  "org.payments_square_connected": (s) => `Connected Square${quoted(text(s, "business"))}`,
+  "org.payments_square_location_set": (s) => `Chose the Square location${quoted(text(s, "location"))}`,
+  "org.payments_square_disconnected": (s) => `Disconnected Square${quoted(text(s, "business"))}`,
 
   // Joining
   "org.member_joined": (s) => `Accepted ${whose(s, "request to join")}`,
@@ -404,6 +408,7 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.referral_member_gift_waiting_again",
   "org.held_membership_gift_days_added",
   "org.held_membership_gift_days_taken_back",
+  "org.payments_square_removed_in_square",
   "billing.trial_replaced",
   "billing.size_replaced",
   "billing.duplicate",

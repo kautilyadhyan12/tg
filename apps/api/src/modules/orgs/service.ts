@@ -18,6 +18,7 @@ import {
   SMALLER_SIZE_DECIDE_HOURS,
   STAFF_INVITE_WORDS,
   currencyForCountry,
+  GYM_PAYMENTS_WORDS,
   normaliseIndianMobile,
   normaliseJoinCode,
   normaliseSecondTrialCode,
@@ -167,6 +168,9 @@ export interface OrgsDeps {
   /** The invitations' key, so removing a member can withdraw their invitation; null
    *  when invitations are switched off. */
   invites: InviteSettings | null;
+  /** `SQUARE_ENV` (18d-i): a gym's country waits for Disconnect only while it is connected in
+   *  this server's Square environment, the one its Payments box shows. Absent: either. */
+  paymentsEnvironment?: "sandbox" | "production";
   /** The clock a removal reads; tests move it. Production leaves it out. */
   now?: () => Date;
   /** Gyms that never paid one owner may have; tests raise it. Production leaves it out. */
@@ -485,7 +489,7 @@ export async function updateOrg(
     }
   }
 
-  const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
+  const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId, paymentsEnvironment: deps.paymentsEnvironment ?? null });
 
   switch (outcome.kind) {
     // BOTH arms answer 200 with the row, and `unchanged` is not an error: the
@@ -522,6 +526,8 @@ export async function updateOrg(
       // round that wrote it said its purpose was to make the refusal TRUE and
       // left this half carrying the pre-fix wording.
       throw new OrgsError(409, "currency_locked", currencyLockedMessage(org.orgType));
+    case "square_connected":
+      throw new OrgsError(409, "square_connected", GYM_PAYMENTS_WORDS.country_needs_disconnect);
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org
       // and 404'd a stranger — but a gym archived or deleted between that read

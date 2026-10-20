@@ -60,7 +60,7 @@ const gymId = randomUUID();
 await sql`INSERT INTO gyms (id, slug, name, timezone, country, owner_user_id) VALUES (${gymId}, ${PREFIX + gymId}, 'Cost Gym', 'Europe/London', 'GB', ${owner})`;
 await sql`INSERT INTO gym_staff (gym_id, user_id, role) VALUES (${gymId}, ${owner}, 'owner')`;
 
-const deps: StartHereDeps = { sql, now: () => new Date() };
+const deps: StartHereDeps = { sql, now: () => new Date(), paymentsEnvironment: "sandbox" };
 const read = async (expectDone: number): Promise<void> => {
   const { startHere } = await getStartHere(deps, owner, gymId);
   const done = startHere.steps.filter((s) => s.done).length;

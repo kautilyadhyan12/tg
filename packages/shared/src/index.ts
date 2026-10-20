@@ -85,3 +85,5 @@ export * from "./trialPerson.js";
 export * from "./coOwners.js";
 export * from "./paymentsDownload.js";
 export * from "./memberPayers.js";
+export * from "./square.js";
+export * from "./gymPayments.js";
