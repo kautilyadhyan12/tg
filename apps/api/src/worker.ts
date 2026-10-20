@@ -594,6 +594,7 @@ if (paddle !== null || razorpay !== null) {
     async (job) => {
       if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
       const deps = { sql, redis: createMemoryRedis(), paddle, razorpay, log, now: () => new Date(), mail: billingMail };
+      let providerFailed = false;
       try {
         if (razorpay !== null) {
           const startedAt = Date.now();
@@ -612,12 +613,22 @@ if (paddle !== null || razorpay !== null) {
             log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
           }
         }
+      } catch (err) {
+        providerFailed = true;
+        throw err;
       } finally {
         // A plan set to end, through either provider, is reminded a week and a day before (4b-iv),
-        // even in a minute a provider's step failed.
+        // even in a minute a provider's step failed. That step's error stays the job's: one from
+        // the reminders then is reported on its own.
         const startedAt = Date.now();
-        const reminded = await sendPlanEndReminders(deps);
-        if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
+        try {
+          const reminded = await sendPlanEndReminders(deps);
+          if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
+        } catch (err) {
+          if (!providerFailed) throw err;
+          Sentry.captureException(err, { tags: { job: BILLING_PLAN_END_REMINDERS_JOB, queue: BILLING_QUEUE } });
+          log.error({ errName: err instanceof Error ? err.name : typeof err, event: "job.failed", job: BILLING_PLAN_END_REMINDERS_JOB }, "job failed");
+        }
       }
     },
     { connection },
