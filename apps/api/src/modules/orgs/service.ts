@@ -1351,10 +1351,10 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     // Razorpay cannot take a cancel back: it can be kept until it is sent, in the hours before
-    // the paid month ends (1d-ii). Paddle's own page keeps a Paddle plan. A plan handed over
-    // with its gym is never kept (4b-iii-b).
+    // the paid month ends (1d-ii). A Paddle plan is kept until the same hour (1g). A plan handed
+    // over with its gym is never kept (4b-iii-b).
     keepUntil:
-      paidThrough === "razorpay" &&
+      subscribed &&
       paid &&
       row.status !== "past_due" &&
       row.cancelAtPeriodEnd &&
