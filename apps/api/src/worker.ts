@@ -558,6 +558,8 @@ if (invites === null || inviteSender === null) {
 // one rule. Only when one of them is set up.
 export const BILLING_QUEUE = "billing";
 export const BILLING_PADDLE_EVENTS_JOB = "billing.paddle_events";
+/** Not a queue job of its own: the reminders run inside the events job, and log under this name. */
+export const BILLING_PLAN_END_REMINDERS_JOB = "billing.plan_end_reminders";
 
 const paddle = paddleSettings(config);
 const razorpay = razorpaySettings(config);
@@ -612,7 +614,7 @@ if (paddle !== null || razorpay !== null) {
       // A plan set to end, through either provider, is reminded a week and a day before (4b-iv).
       const startedAt = Date.now();
       const reminded = await sendPlanEndReminders(deps);
-      if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: "billing.plan_end_reminders" }, "job finished");
+      if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
     },
     { connection },
   );
