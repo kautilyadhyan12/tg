@@ -123,7 +123,7 @@ function InvitedList({ invites, gym, orgType, viewerIsOwner, busyId, readOnly, n
 export default function MembersStaffTab({ gymId, gym = null, orgType, words, readOnly = false, inviting = false, onInviting = () => undefined, onChanged, onSeeActivity = null, onOpenActivity = null }) {
   // `paidPlan`: the gym's plan stops a hand-over for now, `paidPlanNote` says why (4b-ii);
   // `planStops`: a Paddle plan that stops renewing on a hand-over, and until when (4b-iii-a).
-  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, planStops: null });
+  const [staff, setStaff] = useState({ loading: true, error: null, list: [], paidPlan: false, paidPlanNote: null, planStops: null, squareConnected: false });
   // Their own read and failure: invitations that cannot be read must not hide who already
   // runs the gym.
   const [invites, setInvites] = useState({ loading: true, error: null, list: [] });
@@ -176,6 +176,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       paidPlan: answer?.paidPlan === true,
       paidPlanNote: answer?.paidPlanNote ?? null,
       planStops: answer?.planStops ?? null,
+      squareConnected: answer?.squareConnected === true,
     });
     return list;
   }, [gymId]);
@@ -334,7 +335,9 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
       await orgService.cancelOwnerRequest(gymId, person.userId);
       setOwnerNote({ who: person.userId, message: `Request cancelled. ${person.displayName} can't accept it any more.` });
     } catch (err) {
-      setPanelError({ at: 'owner', who: person.userId, message: errorText(err, "We couldn't cancel that request. Please try again."), retryable: false });
+      // They accepted first: the gym is theirs, which is what happened, not a refusal.
+      if (errorCode(err) === 'already_accepted') setOwnerNote({ who: person.userId, message: errorText(err, `${person.displayName} is the owner now.`) });
+      else setPanelError({ at: 'owner', who: person.userId, message: errorText(err, "We couldn't cancel that request. Please try again."), retryable: false });
     }
     await read();
     setBusyId(null);
@@ -564,6 +567,7 @@ export default function MembersStaffTab({ gymId, gym = null, orgType, words, rea
           paidPlan={staff.paidPlan}
           paidPlanNote={staff.paidPlanNote}
           planStops={staff.planStops}
+          squareConnected={staff.squareConnected}
           ownerNote={ownerNote !== null && ownerNote.who === open.userId ? ownerNote.message : null}
           onAskOwner={() => void askOwner(open)}
           onCancelOwner={() => void cancelOwner(open)}

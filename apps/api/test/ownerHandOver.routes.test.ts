@@ -13,6 +13,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { FakePaddle } from "./fakePaddle.js";
 import type { CoOwnerRequestLetter } from "../src/modules/orgs/coOwners/email.js";
+import { claimOwnerEmail } from "../src/modules/orgs/coOwners/repo.js";
 import {
   OWNER_REQUEST_DAYS,
   ROLE_PRIVILEGES,
@@ -73,6 +74,8 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
   // Every gym any of this file's people ever owned, whoever owns it now.
   const mine = () => sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'handov-t-%')`;
   const cleanup = async () => {
+    await sql`DELETE FROM gym_payment_revokes WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_payment_connections WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_co_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine()})`;
@@ -488,7 +491,9 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       const owner = await ownerOf(raced);
       if (accepted.statusCode === 200) {
         expect(owner).toBe(ben.userId);
-        expect(cancelled.statusCode).toBe(403);
+        // The Cancel that lost is told what happened (4b-v).
+        expect(cancelled.statusCode).toBe(409);
+        expect(errorOf(cancelled)).toBe("already_accepted");
       } else {
         expect(cancelled.statusCode).toBe(200);
         expect(accepted.statusCode).toBe(409);
@@ -545,6 +550,145 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect((await startTrial(ashaNew, asha)).statusCode).toBe(200);
       // Her own trial, on her own gym: said of her, not of the gym.
       expect(await onScreen(ashaNew, asha)).toEqual({ ownerTrialUsed: true, gymTrialUsed: false });
+    }, TEST_TIMEOUT_MS);
+  });
+
+  // ── 4b's two extra passes (`handoff/2026-10-20-4b-v.md`) ─────────────────────────────────
+  describe("the two extra passes: what a hand-over leaves behind, and presses at the same instant", () => {
+    it("a co-owner made a manager loses the request: made a co-owner again later, the old Accept makes nobody the owner", async () => {
+      const gym = await makeGym("Ann");
+      const ben = await makeCoOwner(gym, "Ben");
+      expect((await ask(gym, ben)).statusCode).toBe(201);
+      const oldId = await requestIdFor(gym, ben);
+      // Ann takes it back the only way the screen gives her: Ben is a manager again.
+      const demoted = await send("PATCH", `/v1/orgs/${gym.id}/staff/${ben.userId}`, gym.owner, { role: "manager" });
+      expect(demoted.statusCode, demoted.body).toBe(200);
+      // Days later, a co-owner again, by 4b-i's own request and Accept.
+      expect((await send("POST", `/v1/orgs/${gym.id}/staff/${ben.userId}/co-owner-request`, gym.owner)).statusCode).toBe(201);
+      const coOwnerAsk = await get(`/v1/orgs/${gym.id}/co-owner-request`, ben);
+      const coOwnerId = (JSON.parse(coOwnerAsk.body) as { request: { id: string } | null }).request?.id ?? "";
+      expect((await send("POST", `/v1/orgs/${gym.id}/co-owner-request/${coOwnerId}/accept`, ben)).statusCode).toBe(200);
+
+      expect(await mineAt(gym, ben)).toBeNull();
+      expect((await staffList(gym, gym.owner)).staff.find((p) => p.userId === ben.userId)?.ownerRequest).toBeNull();
+      const late = await answer(gym, oldId, ben);
+      expect(late.statusCode).toBe(409);
+      expect(errorOf(late)).toBe("request_gone");
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+    }, TEST_TIMEOUT_MS);
+
+    it("Accept disconnects the old owner's Square account, as Disconnect does, and both of them are told first", async () => {
+      const gym = await makeGym("Olu");
+      const nia = await makeCoOwner(gym, "Nia");
+      await sql`
+        INSERT INTO gym_payment_connections (gym_id, provider, environment, state, account_id, business_name, country, currency,
+          location_id, location_name, access_token, refresh_token, access_expires_at, refresh_due_at, connected_at, connected_by)
+        VALUES (${gym.id}, 'square', 'sandbox', 'connected', 'MLHANDOV', 'Olu Fitness Ltd', 'GB', 'GBP',
+          'LHANDOV', 'Main', 'v1.sealed-access', 'v1.sealed-refresh', now() + interval '30 days', now() + interval '6 days', now(), ${gym.owner.userId})`;
+      expect((await staffList(gym, gym.owner)).squareConnected).toBe(true);
+      expect((await ask(gym, nia)).statusCode).toBe(201);
+      expect((await mineAt(gym, nia))?.squareConnected).toBe(true);
+
+      expect((await answer(gym, await requestIdFor(gym, nia), nia)).statusCode).toBe(200);
+      expect(await ownerOf(gym)).toBe(nia.userId);
+      expect(await sql`SELECT 1 FROM gym_payment_connections WHERE gym_id = ${gym.id}`).toHaveLength(0);
+      // Its token is owed to Square, for the worker to stop, and nobody else holds that account.
+      const owed = await sql<{ account_id: string; whole_account: boolean; access_token: string }[]>`
+        SELECT account_id, whole_account, access_token FROM gym_payment_revokes WHERE gym_id = ${gym.id}`;
+      expect([...owed]).toEqual([{ account_id: "MLHANDOV", whole_account: true, access_token: "v1.sealed-access" }]);
+      expect((await staffList(gym, nia)).squareConnected).toBe(false);
+      const audit = await sql<{ meta: { squareDisconnected?: string } }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.owner_handed_over'`;
+      expect(audit[0]?.meta.squareDisconnected).toBe("1");
+    }, TEST_TIMEOUT_MS);
+
+    it("a gym with no Square says nothing about it, and its owner's other gym's Square is left alone", async () => {
+      const gym = await makeGym("Kd");
+      const other = await makeGym("Kd", gym.owner);
+      const cora = await makeCoOwner(gym, "Cora");
+      await sql`
+        INSERT INTO gym_payment_connections (gym_id, provider, environment, state, account_id, business_name, country, currency,
+          location_id, location_name, access_token, refresh_token, access_expires_at, refresh_due_at, connected_at)
+        VALUES (${other.id}, 'square', 'sandbox', 'connected', 'MLKEEP', 'Kd Ltd', 'GB', 'GBP',
+          'LKEEP', 'Main', 'v1.keep', 'v1.keep', now() + interval '30 days', now() + interval '6 days', now())`;
+      expect((await staffList(gym, gym.owner)).squareConnected).toBe(false);
+      await handOver(gym, cora);
+      expect(await sql`SELECT 1 FROM gym_payment_connections WHERE gym_id = ${other.id} AND state = 'connected'`).toHaveLength(1);
+      expect(await sql`SELECT 1 FROM gym_payment_revokes WHERE gym_id IN (${gym.id}, ${other.id})`).toHaveLength(0);
+    }, TEST_TIMEOUT_MS);
+
+    it("the old owner's billing mobile goes with them: the new owner's Razorpay window asks for theirs", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await sql`UPDATE gyms SET billing_mobile = '+919876543210' WHERE id = ${gym.id}`;
+      await handOver(gym, cora);
+      expect((await sql<{ billing_mobile: string | null }[]>`SELECT billing_mobile FROM gyms WHERE id = ${gym.id}`)[0]?.billing_mobile).toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("the owner's Cancel pressed after the co-owner accepted says they are the owner now", async () => {
+      const gym = await makeGym("Kd");
+      const asha = await makeCoOwner(gym, "Asha");
+      const otto = await makeCoOwner(gym, "Otto");
+      await handOver(gym, asha);
+      const late = await cancel(gym, asha);
+      expect(late.statusCode).toBe(409);
+      expect(errorOf(late)).toBe("already_accepted");
+      expect(messageOf(late)).toBe("Asha has already accepted, so they're the owner now.");
+      // Another co-owner, who sent nothing, is refused as before.
+      expect(errorOf(await cancel(gym, asha, otto))).toBe("owner_only");
+    }, TEST_TIMEOUT_MS);
+
+    it("a co-owner invitation sent as the gym is handed over is refused, not left waiting for nobody", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      const holder = postgres(url ?? "", { prepare: false, max: 1 });
+      try {
+        let release = (): void => undefined;
+        const released = new Promise<void>((resolve) => (release = resolve));
+        let holderPid = 0;
+        const held = holder.begin(async (tx) => {
+          holderPid = (await tx<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]?.pid ?? 0;
+          await tx`SELECT 1 FROM gyms WHERE id = ${gym.id} FOR UPDATE`;
+          await released;
+          // What Accept writes, under the same lock.
+          await tx`UPDATE gyms SET owner_user_id = ${cora.userId} WHERE id = ${gym.id}`;
+        });
+        while (holderPid === 0) await new Promise((resolve) => setTimeout(resolve, 10));
+        const invite = send("POST", `/v1/orgs/${gym.id}/staff/invites`, gym.owner, { email: addr("xena"), role: "owner" });
+        // The invitation has passed its first owner check and waits for the gym's lock.
+        let waited = false;
+        for (let i = 0; i < 500 && !waited; i += 1) {
+          waited = (await sql`SELECT 1 FROM pg_stat_activity WHERE ${holderPid} = ANY(pg_blocking_pids(pid))`).length > 0;
+          if (!waited) await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(waited).toBe(true);
+        release();
+        await held;
+        const res = await invite;
+        expect(res.statusCode, res.body).toBe(403);
+        expect(errorOf(res)).toBe("owner_only");
+        expect(await sql`SELECT 1 FROM gym_staff_invites WHERE gym_id = ${gym.id}`).toHaveLength(0);
+      } finally {
+        await holder.end();
+      }
+    }, TEST_TIMEOUT_MS);
+
+    it("two request emails claimed at the same instant send one", async () => {
+      const gym = await makeGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      for (let round = 0; round < 10; round += 1) {
+        await sql`DELETE FROM gym_owner_requests WHERE gym_id = ${gym.id}`;
+        const made = await sql<{ id: string }[]>`
+          INSERT INTO gym_owner_requests (gym_id, user_id, requested_by, staff_since, created_at, expires_at, state, answered_at)
+          SELECT ${gym.id}, ${cora.userId}, ${gym.owner.userId}, s.created_at, now(), now() + interval '7 days', v.state, v.answered
+          FROM gym_staff s, (VALUES ('cancelled', now()), ('pending', NULL::timestamptz)) AS v(state, answered)
+          WHERE s.gym_id = ${gym.id} AND s.user_id = ${cora.userId}
+          RETURNING id`;
+        expect(made).toHaveLength(2);
+        const now = new Date();
+        const won = await Promise.all(made.map((r) => claimOwnerEmail(sql, { gymId: gym.id, userId: cora.userId, requestId: r.id, now })));
+        expect(won.filter(Boolean)).toHaveLength(1);
+      }
     }, TEST_TIMEOUT_MS);
   });
 });

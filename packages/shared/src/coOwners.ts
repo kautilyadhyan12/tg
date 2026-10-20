@@ -96,6 +96,8 @@ export const myOwnerRequestResponseSchema = z.object({
         })
         .nullable()
         .optional(),
+      /** The gym's Square account, the old owner's, is disconnected on Accept (Kd, 2026-10-20). */
+      squareConnected: z.boolean().optional(),
     })
     .nullable(),
 });
@@ -112,9 +114,16 @@ export const OWNER_REQUEST_WORDS = {
   plan_overdue: "A payment is overdue, so the owner can't be changed until it's paid.",
   plan_unclear: "This plan can't be handed over right now. Please write to support.",
   plan_renewing: "The plan is renewing, so the owner can't be changed right now. Please try again in an hour.",
+  plan_changing: "The plan's size is being changed, so the owner can't be changed right now. Please try again in a minute.",
   handed_over_plan: "This plan was paid by the last owner and stops when its paid month ends, so it can't be managed here. Choose your own plan when it ends.",
   handed_over_plan_payer: "You handed over ownership, so this plan stops when its paid month ends and can't be managed here. The new owner chooses the next plan.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
   no_request: "There's no request waiting.",
   request_gone: "This request has ended. Ask the owner to send it again if you still want to be the owner.",
 } as const;
+
+/** The owner's Cancel, pressed after the person had already accepted: the gym is theirs. */
+export function ownerRequestAcceptedWords(name: string): string {
+  const who = name.trim();
+  return who === "" ? "They've already accepted, so they're the owner now." : `${who} has already accepted, so they're the owner now.`;
+}

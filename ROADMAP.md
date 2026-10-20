@@ -150,6 +150,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 4b-iii-a. [x] **A gym paying through Paddle handed over** — merged 2026-10-19 (PR #316).
       - 4b-iii-b. [x] **A gym paying through Razorpay handed over** — merged 2026-10-20 (PR #318).
      - 4b-iv. [x] **A plan set to end is reminded** — merged 2026-10-20 (PR #320).
+     - 4b-v. [x] **The two extra passes' fixes** — merged 2026-10-20 (PR #323).
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).
@@ -259,7 +260,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
      - 18d-i-b. [ ] **The Square token test that fails at random** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): `payments.unit.test.ts` changes the second-to-last letter but picks it by the last, so about 1 run in 64 nothing changes and it fails (seen on PR #320). A small pull request, no review. Web folder 1.
-     - 18d-ii. [ ] **A member saves their card on Square's own form**; staff see "Card on file: Visa ending 4242".
+     - 18d-ii. [ ] **A member saves their card on Square's own form**; staff see "Card on file: Visa ending 4242". After a hand-over the cards stay on the old owner's Square (Kd, 2026-10-20, `rulings/2026-10-20-4b-v.md`): each member is asked to add their card again, and their bills read "Payment due" until they do.
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`).
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.

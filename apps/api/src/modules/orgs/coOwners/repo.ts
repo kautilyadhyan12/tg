@@ -6,7 +6,8 @@
 // THE RULE THIS FILE HOLDS: nobody becomes an owner unless the gym's own owner asked them,
 // while they were on its staff, and they themselves pressed Accept before the request ended.
 import type { Sql, TransactionSql } from "postgres";
-import { GRACE_EXPIRED, type PayProvider } from "../../billing/repo.js";
+import { GRACE_EXPIRED, PLAN_CHANGE_STALE_MS, type PayProvider } from "../../billing/repo.js";
+import { endConnectionsForHandOver } from "../payments/repo.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -122,12 +123,16 @@ export async function sendRequest(
  *  gym's in the last day, so Send and Cancel pressed over and over send one email. */
 export async function claimEmail(sql: Sql, input: { gymId: string; userId: string; requestId: string; now: Date }): Promise<boolean> {
   const dayAgo = new Date(input.now.getTime() - DAY_MS);
-  const rows = await sql`
+  // Under the gym's lock: two claims on two requests would not see each other's `emailed_at`.
+  const rows = await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    return await tx`
     UPDATE gym_co_owner_requests r SET emailed_at = ${input.now}
     WHERE r.id = ${input.requestId} AND r.gym_id = ${input.gymId}
       AND NOT EXISTS (SELECT 1 FROM gym_co_owner_requests o
                       WHERE o.gym_id = r.gym_id AND o.user_id = ${input.userId} AND o.emailed_at > ${dayAgo})
     RETURNING r.id`;
+  });
   return rows.length > 0;
 }
 
@@ -333,6 +338,13 @@ export function planStops(plan: HandOverPlan): { until: string | null; trial: bo
   return { until: plan.paidUntil?.toISOString() ?? null, trial: plan.trial };
 }
 
+/** Whether the gym is connected to Square, which a hand-over disconnects. */
+export async function gymSquareConnected(sql: Sql, gymId: string): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM gym_payment_connections WHERE gym_id = ${gymId} AND provider = 'square' AND state = 'connected'`;
+  return rows.length > 0;
+}
+
 /** For the Staff tab and the Overview: what the gym's plan means for a hand-over. */
 export async function gymHandOverPlan(sql: Sql, gymId: string): Promise<HandOverPlan> {
   return await planForHandOver(sql, gymId);
@@ -426,22 +438,36 @@ export async function sendOwnerRequest(
  *  owner requests in the last day, so Send and Cancel pressed over and over send one email. */
 export async function claimOwnerEmail(sql: Sql, input: { gymId: string; userId: string; requestId: string; now: Date }): Promise<boolean> {
   const dayAgo = new Date(input.now.getTime() - DAY_MS);
-  const rows = await sql`
+  const rows = await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId);
+    return await tx`
     UPDATE gym_owner_requests r SET emailed_at = ${input.now}
     WHERE r.id = ${input.requestId} AND r.gym_id = ${input.gymId}
       AND NOT EXISTS (SELECT 1 FROM gym_owner_requests o
                       WHERE o.gym_id = r.gym_id AND o.user_id = ${input.userId} AND o.emailed_at > ${dayAgo})
     RETURNING r.id`;
+  });
   return rows.length > 0;
 }
+
+export type CancelOwnerOutcome = CancelOutcome | { kind: "already_accepted"; name: string };
 
 export async function cancelOwnerRequest(
   sql: Sql,
   input: { gymId: string; userId: string; actorUserId: string; now: Date },
-): Promise<CancelOutcome> {
+): Promise<CancelOwnerOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
-    if ((await gymOwnerId(tx, input.gymId)) !== input.actorUserId) return { kind: "owner_only" };
+    if ((await gymOwnerId(tx, input.gymId)) !== input.actorUserId) {
+      // Accepted a moment before: the caller handed the gym to this person, and is told so.
+      const took = await tx<{ name: string }[]>`
+        SELECT u.display_name AS name FROM gym_owner_requests r
+        JOIN gyms g ON g.id = r.gym_id JOIN users u ON u.id = r.user_id
+        WHERE r.gym_id = ${input.gymId} AND r.user_id = ${input.userId} AND r.requested_by = ${input.actorUserId}
+          AND r.state = 'accepted' AND g.owner_user_id = r.user_id`;
+      const name = took[0]?.name;
+      return name === undefined ? { kind: "owner_only" } : { kind: "already_accepted", name };
+    }
     await endStaleOwnerRequest(tx, input.gymId, input.now);
     const ended = await tx<{ id: string }[]>`
       UPDATE gym_owner_requests SET state = 'cancelled', answered_at = ${input.now}
@@ -487,6 +513,8 @@ export type AnswerOwnerOutcome =
   | { kind: "plan_unclear" }
   /** The plan renews within the hour: asked again once it has; the request still waits. */
   | { kind: "plan_renewing" }
+  /** A size change is being made at the payment company: asked again in a moment. */
+  | { kind: "plan_changing" }
   /** `closed`: the payment windows Accept closed that the payment company holds, to cancel there.
    *  `planEnds`: who takes the payments of the plan the old owner paid, set to end here, to be
    *  told. `reread`: handed back to its payer, a Paddle plan to read again from Paddle. */
@@ -558,9 +586,18 @@ export async function answerOwnerRequest(
     ) {
       return { kind: "plan_renewing" };
     }
+    // A size change asked of the payment company after its check of the plan, and not yet
+    // answered, would charge the old owner after the gym is not theirs. Every writer of these
+    // rows holds this lock, so once it is done the next size change finds the plan handed over.
+    const changing = await tx`
+      SELECT 1 FROM billing_plan_changes
+      WHERE gym_id = ${input.gymId} AND state = 'pending'
+        AND created_at >= ${new Date(input.now.getTime() - PLAN_CHANGE_STALE_MS)}`;
+    if (changing.length > 0) return { kind: "plan_changing" };
 
+    // The billing mobile was the old owner's: the new owner's own Razorpay window asks for theirs.
     const moved = await tx`
-      UPDATE gyms SET owner_user_id = ${input.userId}
+      UPDATE gyms SET owner_user_id = ${input.userId}, billing_mobile = NULL
       WHERE id = ${input.gymId} AND owner_user_id = ${oldOwner}
       RETURNING id`;
     if (moved.length !== 1) throw new Error("the gym's owner changed under its lock");
@@ -604,6 +641,9 @@ export async function answerOwnerRequest(
     await tx`
       UPDATE gym_staff_invites SET state = 'cancelled', answered_at = ${input.now}, answered_by = ${input.userId}
       WHERE gym_id = ${input.gymId} AND role = 'owner' AND state IN ('pending','declined') AND cleared_at IS NULL`;
+    // The old owner's Square account is let go, as Disconnect lets it go: whoever connects
+    // decides whose bank account members' card money goes into (Kd, 2026-10-20).
+    const squareEnded = await endConnectionsForHandOver(tx, input.gymId, input.now);
     await insertAudit(tx, {
       actorUserId: input.userId,
       gymId: input.gymId,
@@ -615,6 +655,7 @@ export async function answerOwnerRequest(
         from: oldOwner,
         to: input.userId,
         closedCheckouts: closed.map((c) => c.id),
+        squareDisconnected: String(squareEnded),
         ...(plan.kind === "paid" ? { planEnds: plan.subscriptionId } : {}),
       },
     });

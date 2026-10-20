@@ -3988,6 +3988,13 @@ export async function updateStaffRole(
     await tx`
       UPDATE gym_staff SET role = ${input.role}, privileges = ${[...input.privileges]}, role_name = ${input.roleName}
       WHERE gym_id = ${input.gymId} AND user_id = ${input.userId}`;
+    // A co-owner made a manager or trainer is no longer asked to be the owner: made a co-owner
+    // again later, the request the owner took back this way must not come back with them.
+    if (previous === "owner" && input.role !== "owner") {
+      await tx`
+        UPDATE gym_owner_requests SET state = 'cancelled', answered_at = now()
+        WHERE gym_id = ${input.gymId} AND user_id = ${input.userId} AND state = 'pending'`;
+    }
 
     const staff = await readStaffRow(tx, input.gymId, input.userId);
     if (staff === null) throw new Error("gym_staff row vanished under FOR UPDATE");

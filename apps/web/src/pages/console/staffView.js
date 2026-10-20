@@ -188,6 +188,12 @@ export function planStopsLine(planStops, name) {
     : `Your plan stops renewing, so you won't be charged again. It stays paid until ${until}; then ${name} chooses their own plan.`;
 }
 
+/** Make owner's line about Square (Kd, 2026-10-20): handed over, the owner's own Square
+ *  account is disconnected, and the new owner connects theirs. Null when none is connected. */
+export function squareStopsLine(connected, gymName, name) {
+  return connected === true ? `Your Square account is disconnected from ${gymName}, and ${name} connects their own.` : null;
+}
+
 /** The same, said to the co-owner asked, on their Overview. */
 export function planStopsForYou(planStops) {
   if (!planStops) return null;

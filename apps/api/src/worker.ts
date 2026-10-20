@@ -587,7 +587,11 @@ if (paddle !== null || razorpay !== null) {
   // A gym's billing staff are emailed about a smaller size through the sign-in codes' sender.
   const billingMail =
     config.RESEND_API_KEY !== undefined && config.EMAIL_FROM !== undefined
-      ? { transport: createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }), webOrigin: config.WEB_ORIGIN }
+      ? {
+          transport: createResendTransport({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }),
+          webOrigin: config.WEB_ORIGIN,
+          addressKey: invites?.hmacKey ?? null,
+        }
       : null;
   billingWorker = new Worker(
     BILLING_QUEUE,
