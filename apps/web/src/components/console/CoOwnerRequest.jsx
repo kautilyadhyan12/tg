@@ -30,7 +30,8 @@ const KINDS = {
     asked: 'asked you to be the owner.',
     what: (who, request) => {
       const plan = planStopsForYou(request?.planStops);
-      return `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.${plan === null ? '' : ` ${plan}`}`;
+      const square = request?.squareConnected === true ? ' Their Square account is disconnected, and you connect your own.' : '';
+      return `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.${plan === null ? '' : ` ${plan}`}${square}`;
     },
     yes: (gym) => `You're now the owner of ${gym}.`,
   },

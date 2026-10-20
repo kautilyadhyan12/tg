@@ -188,6 +188,33 @@ describe('Make owner', () => {
     ).toBeTruthy();
   });
 
+  it('a gym connected to Square: the box says the owner\'s Square account is disconnected and the new owner connects theirs (4b-v)', async () => {
+    orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA]).data, squareConnected: true } });
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
+    expect(within(panel.getByTestId('staff-owner')).getByText('Your Square account is disconnected from Iron House, and Cora Lim connects their own.')).toBeTruthy();
+  });
+
+  it('a gym with no Square says nothing about it (4b-v)', async () => {
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    fireEvent.click(panel.getByRole('button', { name: 'Make owner' }));
+    expect(within(panel.getByTestId('staff-owner')).queryByText(/Square/)).toBeNull();
+  });
+
+  it('Cancel pressed after they accepted says they are the owner now, where the Owner part was (4b-v)', async () => {
+    orgService.getStaff.mockResolvedValue(staffAs('u1', [OWNER, CORA_ASKED, DAN, RITA]));
+    drawStaff();
+    const panel = await openPerson('u3', 'Cora Lim');
+    // Cora accepted a moment before: the gym is hers, and Kd a co-owner.
+    orgService.getStaff.mockResolvedValue(staffAs('u1', [{ ...OWNER, coOwner: true }, { ...CORA, coOwner: false }, DAN, RITA]));
+    orgService.cancelOwnerRequest.mockRejectedValue(apiError(409, 'already_accepted', "Cora Lim has already accepted, so they're the owner now."));
+    fireEvent.click(panel.getByRole('button', { name: 'Cancel request' }));
+    expect(await panel.findByText("Cora Lim has already accepted, so they're the owner now.")).toBeTruthy();
+    expect(panel.queryByRole('alert')).toBeNull();
+  });
+
   it("a plan that stops a hand-over says the server's reason (4b-iii-a)", async () => {
     const note = "A payment is overdue, so the owner can't be changed until it's paid.";
     orgService.getStaff.mockResolvedValue({ data: { ...staffAs('u1', [OWNER, CORA, DAN, RITA], true).data, paidPlanNote: note } });
@@ -267,6 +294,17 @@ describe('the co-owner asked, on Overview', () => {
       ),
     ).toBeTruthy();
     expect(box.getByRole('button', { name: 'Accept' })).toBeTruthy();
+  });
+
+  it("a gym connected to Square: they're told the owner's Square is disconnected and they connect their own (4b-v)", async () => {
+    orgService.getMyOwnerRequest.mockResolvedValue({ data: { request: { ...REQUEST, squareConnected: true } } });
+    draw();
+    const box = within(await screen.findByTestId('owner-request'));
+    expect(
+      box.getByText(
+        `As the owner you can also add and remove co-owners. Kd Owner stays on as a co-owner. Their Square account is disconnected, and you connect your own. The request works until ${formatJoinedAt(UNTIL)}.`,
+      ),
+    ).toBeTruthy();
   });
 
   it('Decline says the owner can ask again, and changes nothing else', async () => {

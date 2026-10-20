@@ -131,6 +131,9 @@ export async function createStaffInvite(
   const at = deps.now();
   const invite = await deps.sql.begin(async (tx) => {
     await orgRepo.lockOrgRow(tx, gymId);
+    // Asked again under the lock: a hand-over accepted since the check above has closed the old
+    // owner's co-owner invitations, and one written after it would wait for nobody.
+    if (coOwner && (await coOwnerRepo.gymOwnerId(tx, gymId)) !== userId) throw new OrgsError(403, "owner_only", CO_OWNER_WORDS.owner_only);
     const staff = await repo.staffNameAt(tx, gymId, input.email);
     if (staff !== null) throw alreadyStaff(staff.displayName, staff.role, staff.roleName, org.orgType);
     const open = await repo.lockOpenInviteFor(tx, gymId, input.email);

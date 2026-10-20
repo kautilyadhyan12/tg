@@ -13,6 +13,7 @@ import {
   inviteTicks,
   ownerView,
   planStopsLine,
+  squareStopsLine,
   privilegeChoices,
   privilegesDiffer,
   roleTargets,
@@ -657,7 +658,7 @@ function CoOwnerSection({ person, gymName, view, off, note, error, onAsk, onCanc
  *  answer on their own Overview. Asks first, naming who changes and how; once sent, says it
  *  is waiting and when it ends, with Cancel request. A plan paid through Paddle (4b-iii-a): the
  *  box says it stops renewing (`planStops`), and that the new owner then chooses one. */
-function OwnerSection({ person, gymName, words, view, paidPlanNote = null, planStops = null, off, note, error, onAsk, onCancel, onOpen }) {
+function OwnerSection({ person, gymName, words, view, paidPlanNote = null, planStops = null, squareConnected = false, off, note, error, onAsk, onCancel, onOpen }) {
   const [asking, setAsking] = useState(false);
   const question = useInView(asking);
   const name = person.displayName;
@@ -704,6 +705,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, planS
           <ul className="c-s14 c-t2 m-0 pl-5 flex flex-col gap-1">
             <li>{name} becomes the owner and can add or remove co-owners, including you.</li>
             {planStopsLine(planStops, name) !== null ? <li>{planStopsLine(planStops, name)}</li> : null}
+            {squareStopsLine(squareConnected, gymName, name) !== null ? <li>{squareStopsLine(squareConnected, gymName, name)}</li> : null}
             <li>You stay on as a co-owner and can still do everything else.</li>
             <li>Handing over doesn&apos;t give you a new free trial.</li>
           </ul>
@@ -736,7 +738,7 @@ function OwnerSection({ person, gymName, words, view, paidPlanNote = null, planS
   );
 }
 
-export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, staff = [], paidPlan = false, paidPlanNote = null, planStops = null, readOnly, busy, error, coOwnerNote = null, ownerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onAskOwner = () => undefined, onCancelOwner = () => undefined, onOpenPerson = () => undefined, onSeeActivity = null }) {
+export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', viewerIsOwner = false, staff = [], paidPlan = false, paidPlanNote = null, planStops = null, squareConnected = false, readOnly, busy, error, coOwnerNote = null, ownerNote = null, onRetry, onClose, onChangeRole, onSavePrivileges, onRemove, onAskCoOwner = () => undefined, onCancelCoOwner = () => undefined, onAskOwner = () => undefined, onCancelOwner = () => undefined, onOpenPerson = () => undefined, onSeeActivity = null }) {
   const coOwner = coOwnerView(person, viewerIsOwner);
   const owner = ownerView(person, viewerIsOwner, staff, paidPlan);
   const off = busy || readOnly;
@@ -758,6 +760,14 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
           <button type="button" onClick={onSeeActivity} className="c-btn c-btn-s c-btn-sm self-start">
             See activity
           </button>
+        ) : null}
+        {/* The gym was handed over a moment before the owner's Cancel: said here, where the
+            Owner part was, since it is no longer theirs to show. */}
+        {owner === null && ownerNote !== null ? (
+          <p className="c-s14 c-w5 m-0 flex items-start gap-2" style={{ color: 'var(--good)' }} role="status" data-testid="staff-owner-handed">
+            <Check aria-hidden="true" className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            {ownerNote}
+          </p>
         ) : null}
         {/* The panel covers the page, so it says itself why its controls are grey. */}
         {readOnly ? <p className="c-s14 c-t2 m-0">{readOnlyNote(orgType)}</p> : null}
@@ -782,6 +792,7 @@ export function StaffPersonPanel({ person, roles, orgType, words, gymName = '', 
           view={owner}
           paidPlanNote={paidPlanNote}
           planStops={planStops}
+          squareConnected={squareConnected}
           // A gym with no plan can still be handed over: only a change on its way greys it.
           off={busy}
           note={ownerNote}
