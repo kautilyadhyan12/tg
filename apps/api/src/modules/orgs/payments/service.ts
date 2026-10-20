@@ -254,6 +254,12 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
   const now = deps.now();
   const result = await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
+    // The country again, under the gym's lock: one changed while Square was being asked is
+    // seen here, as a country change waits for this lock (`orgs/repo.ts` updateOrg).
+    const current = await repo.readGym(tx, gymId);
+    if (current?.country !== merchant.value.country || memberCurrencyForCountry(current.country) !== merchant.value.currency) {
+      return { outcome: "refused" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
+    }
     const existing = await repo.readConnection(tx, gymId, square.environment, true);
     if (existing?.state === "connected") {
       // Two Allows for one gym: the first stays, and this one's token is let go.
@@ -292,6 +298,7 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
     return { outcome: only === null ? ("choose_location" as const) : ("connected" as const), revokeId: null };
   });
   if (result.revokeId !== null) await sendOwedRevokes(deps, square, [result.revokeId]);
+  if (result.outcome === "refused") return refused("wrong_country", merchant.value.country, merchant.value.currency);
   return answer(result.outcome);
 }
 

@@ -164,6 +164,7 @@ export function registerOrgRoutes(
     // alternative is the empty catch that rule forbids).
     log: app.log,
     onlinePayments: deps.onlinePayments,
+    paymentsEnvironment: deps.config.SQUARE_ENV,
     ...(overrides.now === undefined ? {} : { now: overrides.now }),
     ...(overrides.gymLimits === undefined ? {} : { unpaidGymLimit: overrides.gymLimits.unpaid }),
   };

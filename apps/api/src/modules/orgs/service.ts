@@ -168,6 +168,9 @@ export interface OrgsDeps {
   /** The invitations' key, so removing a member can withdraw their invitation; null
    *  when invitations are switched off. */
   invites: InviteSettings | null;
+  /** `SQUARE_ENV` (18d-i): a gym's country waits for Disconnect only while it is connected in
+   *  this server's Square environment, the one its Payments box shows. Absent: either. */
+  paymentsEnvironment?: "sandbox" | "production";
   /** The clock a removal reads; tests move it. Production leaves it out. */
   now?: () => Date;
   /** Gyms that never paid one owner may have; tests raise it. Production leaves it out. */
@@ -486,7 +489,7 @@ export async function updateOrg(
     }
   }
 
-  const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId });
+  const outcome = await repo.updateOrg(deps.sql, { gymId, patch, actorUserId: userId, paymentsEnvironment: deps.paymentsEnvironment ?? null });
 
   switch (outcome.kind) {
     // BOTH arms answer 200 with the row, and `unchanged` is not an error: the

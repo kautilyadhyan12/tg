@@ -993,7 +993,7 @@ export type UpdateOrgOutcome =
  *  snapshot nobody can diff. */
 export async function updateOrg(
   sql: Sql,
-  input: { gymId: string; patch: OrgPatch; actorUserId: string },
+  input: { gymId: string; patch: OrgPatch; actorUserId: string; paymentsEnvironment?: "sandbox" | "production" | null },
 ): Promise<UpdateOrgOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
@@ -1113,7 +1113,8 @@ export async function updateOrg(
     if ("country" in input.patch && input.patch.country !== before.country) {
       const held = await tx<{ n: number }[]>`
         SELECT count(*)::int AS n FROM gym_payment_connections
-        WHERE gym_id = ${input.gymId} AND state = 'connected'`;
+        WHERE gym_id = ${input.gymId} AND state = 'connected'
+          AND (${input.paymentsEnvironment ?? null}::text IS NULL OR environment = ${input.paymentsEnvironment ?? null})`;
       if ((held[0]?.n ?? 0) > 0) return { kind: "square_connected" };
     }
 

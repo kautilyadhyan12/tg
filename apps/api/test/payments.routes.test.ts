@@ -76,7 +76,16 @@ function fakeSquare() {
   // `statusRefusal`: Square's token check refuses with this status (a retired Square-Version, a
   // fault of ours). `secretRefused`: Square refuses our own secret, as it does a wrong one
   // (401 `service.not_authorized`, measured on its test area 2026-10-20).
-  const state: { down: boolean; exchanges: number; refreshesRefused: boolean; statusRefusal: number | null; secretRefused: boolean } = {
+  // `whileAsked`: something done at the gym while Square is being asked for its locations.
+  const state: {
+    down: boolean;
+    exchanges: number;
+    refreshesRefused: boolean;
+    statusRefusal: number | null;
+    secretRefused: boolean;
+    whileAsked: (() => Promise<unknown>) | null;
+  } = {
+    whileAsked: null,
     down: false,
     exchanges: 0,
     refreshesRefused: false,
@@ -137,10 +146,11 @@ function fakeSquare() {
       if (t === null) return Promise.resolve(unauthorized);
       return Promise.resolve({ kind: "ok", value: { id: t.account.merchantId, business_name: t.account.businessName, country: t.account.country, currency: t.account.currency } });
     },
-    locations(token) {
-      if (state.down) return Promise.resolve(unavailable);
+    async locations(token) {
+      if (state.down) return unavailable;
+      if (state.whileAsked !== null) await state.whileAsked();
       const t = live(token);
-      return Promise.resolve(t === null ? unauthorized : { kind: "ok", value: t.account.locations });
+      return t === null ? unauthorized : { kind: "ok", value: t.account.locations };
     },
   };
   /** The gym signs in at Square as this account and presses Allow: Square hands back a code. */
@@ -793,6 +803,26 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
   );
 
   it(
+    "a country changed while Square was being asked is seen at the save: the account is refused and its token stopped",
+    async () => {
+      clock = new Date();
+      const owner = await person("moved-owner");
+      const gymId = await gym(owner, "Moved Gym");
+      square.state.whileAsked = async () => sql`UPDATE gyms SET country = 'IE' WHERE id = ${gymId}`;
+      let answer: SquareFinishResponse;
+      try {
+        answer = await connect(gymId, owner, account("MLMOVED"));
+      } finally {
+        square.state.whileAsked = null;
+      }
+      expect(answer).toMatchObject({ outcome: "refused", refusal: { reason: "wrong_country", squareCountry: "GB", squareCurrency: "GBP" } });
+      expect(await rowOf(gymId)).toBeNull();
+      expect(square.liveTokensOf("MLMOVED")).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "two Allows for one gym: the first stays, and the second account's token is stopped",
     async () => {
       clock = new Date();
@@ -849,6 +879,8 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect((await read(gymId, owner)).square).toBeNull();
       const startHere = startHereResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gymId}/start-here`, owner.cookies)).body)).startHere;
       expect(startHere.steps.find((s) => s.step === "payments")).toEqual({ step: "payments", done: false });
+      // Nor does it hold the gym's country, which the box would give no way to free.
+      expect((await send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country: "IE" })).statusCode).toBe(200);
       clock = new Date(clock.getTime() + 7 * 24 * 60 * 60_000);
       await processSquareWork(workDeps());
       expect((await sql<{ access_token: string }[]>`SELECT access_token FROM gym_payment_connections WHERE gym_id = ${gymId}`)[0]?.access_token).toBe("v1.a.b.c");
