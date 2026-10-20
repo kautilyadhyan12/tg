@@ -103,7 +103,7 @@ export type SquareLocationRequest = z.infer<typeof squareLocationRequestSchema>;
 /** What the server says when it refuses, in the words the console shows. */
 export const GYM_PAYMENTS_WORDS = {
   owner_only: "Only the owner can connect or disconnect Square.",
-  not_offered: "Square doesn't take card payments in your gym's country.",
+  not_offered: "Square doesn't take payments in your country yet.",
   not_ready: "Square can't be connected on this server yet.",
   already_connected: "Square is already connected.",
   not_connected: "Square isn't connected.",
