@@ -134,6 +134,10 @@ export const subscriptions = pgTable(
     handedOverAt: timestamp("handed_over_at", { withTimezone: true }),
     handedOverFrom: uuid("handed_over_from"),
     handedOverEndSentAt: timestamp("handed_over_end_sent_at", { withTimezone: true }),
+    /** A plan set to end is reminded 7 days and 1 day before (4b-iv, migration `0143`): the end
+     *  date each reminder was sent for, so it goes once for that end. */
+    endWeekRemindedFor: timestamp("end_week_reminded_for", { withTimezone: true }),
+    endDayRemindedFor: timestamp("end_day_reminded_for", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -199,6 +203,9 @@ export const subscriptions = pgTable(
     index("subscriptions_replaced_uncancelled_idx")
       .on(t.endedAt)
       .where(sql`${t.cancelReason} = 'replaced' AND ${t.cancelSentAt} IS NULL`),
+    index("subscriptions_set_to_end_idx")
+      .on(t.currentPeriodEnd)
+      .where(sql`${t.cancelAtPeriodEnd} AND ${t.status} IN ('trialing','active')`),
   ],
 );
 

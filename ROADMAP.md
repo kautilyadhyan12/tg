@@ -149,7 +149,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 4b-iii. **A paid gym handed over**: who pays moves at Paddle or Razorpay (split 2026-10-18 by provider, `rulings/2026-10-18-4b-iii-a.md`).
       - 4b-iii-a. [x] **A gym paying through Paddle handed over** — merged 2026-10-19 (PR #316).
       - 4b-iii-b. [x] **A gym paying through Razorpay handed over** — merged 2026-10-20 (PR #318).
-     - 4b-iv. [ ] **A plan set to end is reminded** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iii-b.md`): a plan cancelled or handed over, Paddle or Razorpay, emails the gym's owner and billing staff 7 days and 1 day before it ends, with a button to choose a plan. A plan that renews gets none. Web folder 2, before 4b's two extra passes.
+     - 4b-iv. [x] **A plan set to end is reminded** — merged 2026-10-20 (PR #320).
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).

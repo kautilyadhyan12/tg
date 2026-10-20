@@ -2157,3 +2157,106 @@ export async function markSmallerDropped(sql: SqlOrTx, input: { checkoutId: stri
     UPDATE billing_checkouts SET state = 'dropped', updated_at = now()
     WHERE id = ${input.checkoutId} AND gym_id = ${input.gymId} AND state = 'approved'`;
 }
+
+// ── A plan set to end is reminded (4b-iv) ───────────────────────────────────
+
+/** A plan set to end, claimed for its reminder: `lastDay` is the one a day before, otherwise
+ *  the one a week before. */
+export interface PlanEndReminder {
+  subscriptionRowId: string;
+  gymId: string;
+  provider: PayProvider;
+  status: LocalStatus;
+  endsAt: Date;
+  lastDay: boolean;
+  /** The week-before email went for this same end. */
+  weekSent: boolean;
+  handedOver: boolean;
+  cancelSent: boolean;
+}
+
+/** Live plans set to end within `week`, claimed for the reminder they are due: the one a day
+ *  before inside the last `day`, otherwise the one a week before. Each is marked with the end it
+ *  was sent for in the same statement, so two runs never both claim one, and a plan kept and set
+ *  to end again for a later month is reminded again. A plan that renews is never read. */
+export async function claimPlanEndReminders(
+  sql: SqlOrTx,
+  input: { now: Date; week: number; day: number; limit: number },
+): Promise<PlanEndReminder[]> {
+  const dayFrom = new Date(input.now.getTime() + input.day);
+  const weekFrom = new Date(input.now.getTime() + input.week);
+  const rows = await sql<
+    { id: string; owner_id: string; provider: string; status: LocalStatus; current_period_end: Date; last_day: boolean; week_sent: boolean; handed_over: boolean; cancel_sent: boolean }[]
+  >`
+    UPDATE subscriptions
+    SET end_day_reminded_for = CASE WHEN current_period_end <= ${dayFrom} THEN current_period_end ELSE end_day_reminded_for END,
+        end_week_reminded_for = CASE WHEN current_period_end > ${dayFrom} THEN current_period_end ELSE end_week_reminded_for END
+    WHERE id IN (
+      SELECT id FROM subscriptions
+      WHERE owner_type = 'gym' AND provider IN ('paddle','razorpay')
+        AND cancel_at_period_end AND status IN ('trialing','active')
+        AND current_period_end > ${input.now} AND current_period_end <= ${weekFrom}
+        AND CASE WHEN current_period_end <= ${dayFrom} THEN end_day_reminded_for IS DISTINCT FROM current_period_end
+                 ELSE end_week_reminded_for IS DISTINCT FROM current_period_end END
+      ORDER BY current_period_end, id
+      LIMIT ${input.limit}
+      FOR UPDATE SKIP LOCKED
+    )
+      AND cancel_at_period_end AND status IN ('trialing','active')
+      AND CASE WHEN current_period_end <= ${dayFrom} THEN end_day_reminded_for IS DISTINCT FROM current_period_end
+               ELSE end_week_reminded_for IS DISTINCT FROM current_period_end END
+    RETURNING id, owner_id, provider, status, current_period_end, current_period_end <= ${dayFrom} AS last_day,
+              end_week_reminded_for IS NOT DISTINCT FROM current_period_end AS week_sent,
+              handed_over_at IS NOT NULL AS handed_over, cancel_sent_at IS NOT NULL AS cancel_sent`;
+  const out: PlanEndReminder[] = [];
+  for (const r of rows) {
+    const provider = PROVIDERS.find((p) => p === r.provider);
+    if (provider === undefined) continue;
+    out.push({
+      subscriptionRowId: r.id,
+      gymId: r.owner_id,
+      provider,
+      status: r.status,
+      endsAt: r.current_period_end,
+      lastDay: r.last_day,
+      weekSent: r.week_sent,
+      handedOver: r.handed_over,
+      cancelSent: r.cancel_sent,
+    });
+  }
+  return out;
+}
+
+/** What a plan-end reminder says, read with the gym in the WHERE: the gym, its plan's size and
+ *  price, and its members now. */
+export interface PlanEndFacts {
+  gymName: string;
+  gymSlug: string;
+  orgType: string;
+  timezone: string;
+  members: number;
+  seatCap: number | null;
+  priceMinor: number;
+  currency: string;
+}
+
+export async function planEndFacts(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string }): Promise<PlanEndFacts | null> {
+  const rows = await sql<{ name: string; slug: string; org_type: string; timezone: string; seat_cap: number | null; price_minor: number; currency: string }[]>`
+    SELECT g.name, g.slug, g.org_type, g.timezone, p.seat_cap, p.price_minor, p.currency
+    FROM subscriptions s
+    JOIN gyms g ON g.id = s.owner_id
+    JOIN plans p ON p.id = s.plan_id
+    WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}`;
+  const row = rows[0];
+  if (row === undefined) return null;
+  return {
+    gymName: row.name,
+    gymSlug: row.slug,
+    orgType: row.org_type,
+    timezone: row.timezone,
+    members: await seatsUsed(sql, input.gymId),
+    seatCap: row.seat_cap,
+    priceMinor: row.price_minor,
+    currency: row.currency,
+  };
+}

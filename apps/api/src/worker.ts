@@ -52,6 +52,7 @@ import { purgeDueUsers, purgeShortfall } from "./modules/privacy/purge.js";
 import { createDiskPhotoStore } from "./modules/orgs/gymPage/photoStore.js";
 import { processPaddleEvents, processRazorpayEvents } from "./modules/billing/events.js";
 import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
+import { sendPlanEndReminders } from "./modules/billing/service.js";
 import { squareSettings } from "./modules/orgs/payments/settings.js";
 import { processSquareWork } from "./modules/orgs/payments/work.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
@@ -557,6 +558,8 @@ if (invites === null || inviteSender === null) {
 // one rule. Only when one of them is set up.
 export const BILLING_QUEUE = "billing";
 export const BILLING_PADDLE_EVENTS_JOB = "billing.paddle_events";
+/** Not a queue job of its own: the reminders run inside the events job, and log under this name. */
+export const BILLING_PLAN_END_REMINDERS_JOB = "billing.plan_end_reminders";
 
 const paddle = paddleSettings(config);
 const razorpay = razorpaySettings(config);
@@ -591,21 +594,40 @@ if (paddle !== null || razorpay !== null) {
     async (job) => {
       if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
       const deps = { sql, redis: createMemoryRedis(), paddle, razorpay, log, now: () => new Date(), mail: billingMail };
-      if (razorpay !== null) {
-        const startedAt = Date.now();
-        const run = await processRazorpayEvents(deps);
-        const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-        const cancels = run.cancels.sent + run.cancels.failed + run.cancels.ended + run.reread;
-        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded + cancels > 0) {
-          log.info({ ...run, provider: "razorpay", durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      let providerFailed = false;
+      try {
+        if (razorpay !== null) {
+          const startedAt = Date.now();
+          const run = await processRazorpayEvents(deps);
+          const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+          const cancels = run.cancels.sent + run.cancels.failed + run.cancels.ended + run.reread;
+          if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded + cancels > 0) {
+            log.info({ ...run, provider: "razorpay", durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+          }
         }
-      }
-      if (paddle !== null) {
+        if (paddle !== null) {
+          const startedAt = Date.now();
+          const run = await processPaddleEvents(deps);
+          const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+          if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned + run.handedOverEnded > 0) {
+            log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+          }
+        }
+      } catch (err) {
+        providerFailed = true;
+        throw err;
+      } finally {
+        // A plan set to end, through either provider, is reminded a week and a day before (4b-iv),
+        // even in a minute a provider's step failed. That step's error stays the job's: one from
+        // the reminders then is reported on its own.
         const startedAt = Date.now();
-        const run = await processPaddleEvents(deps);
-        const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned + run.handedOverEnded > 0) {
-          log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+        try {
+          const reminded = await sendPlanEndReminders(deps);
+          if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
+        } catch (err) {
+          if (!providerFailed) throw err;
+          Sentry.captureException(err, { tags: { job: BILLING_PLAN_END_REMINDERS_JOB, queue: BILLING_QUEUE } });
+          log.error({ errName: err instanceof Error ? err.name : typeof err, event: "job.failed", job: BILLING_PLAN_END_REMINDERS_JOB }, "job failed");
         }
       }
     },

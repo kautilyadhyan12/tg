@@ -140,3 +140,57 @@ export function sizeKeptEmail(w: SizeKeptWords): EmailMessage {
   ];
   return message(w.to, `${gym} stays on ${size(w.currentSeatCap, words)}`, lines, { 1: w.planLink });
 }
+
+/** "10:07 pm on 25 Oct" in the gym's time zone. */
+function atLabel(at: Date, timeZone: string): string {
+  const time = inZone(timeZone, { hour: "numeric", minute: "2-digit", hour12: true }).format(at);
+  return `${time} on ${dayLabel(at, timeZone)}`;
+}
+
+/** What the plan box lets the gym do before its plan ends: keep it through Razorpay until a
+ *  moment, or choose a plan once it has ended. A Paddle plan is not said to be kept: nothing
+ *  shows Paddle's own page can undo a cancel. */
+export type PlanEndAction = { kind: "keep_razorpay"; until: Date } | { kind: "choose" };
+
+export interface PlanEndWords {
+  to: string;
+  gymName: string;
+  orgType: string;
+  members: number;
+  seatCap: number | null;
+  priceLabel: string;
+  /** A paid trial set to end: nothing is ever charged. */
+  trialing: boolean;
+  endsAt: Date;
+  timezone: string;
+  /** The day-before email of a plan already sent the week-before one: its subject says so. */
+  reminder: boolean;
+  action: PlanEndAction;
+  planLink: string;
+}
+
+/** A plan set to end, a week and a day before (ROADMAP 4b-iv; Kd, 2026-10-20): when it ends,
+ *  what happens to the members, and one button to the plan box. A plan that renews gets none. */
+export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
+  const words = orgWords(w.orgType);
+  const gym = oneLine(w.gymName) || `Your ${words.it}`;
+  const when = atLabel(w.endsAt, w.timezone);
+  const people = w.members > 0 ? countOf(w.members, words) : words.people;
+  const lines = [
+    w.trialing
+      ? `${gym}'s plan ends with its free trial, at ${when}. Nothing is charged.`
+      : `${gym}'s plan, ${size(w.seatCap, words)} at ${w.priceLabel} a month, ends at ${when} and won't renew. Nothing more is charged.`,
+    `After that, its ${people} ${w.members === 1 ? "gets" : "get"} the free app only.`,
+    w.action.kind === "keep_razorpay"
+      ? `To keep it, press Keep my plan before ${atLabel(w.action.until, w.timezone)}.`
+      : "Once it ends, you can choose a new plan.",
+  ];
+  const button = "Go to your plan";
+  const text = `${lines.join("\n\n")}\n\n${button}: ${w.planLink}\n\n— ${APP_NAME}`;
+  const html =
+    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p><a href="${escapeHtml(w.planLink)}" style="display:inline-block;padding:12px 24px;border-radius:999px;background:#FF8A1F;color:#111111;font-weight:600;text-decoration:none">${button}</a></p>` +
+    `<p>— ${APP_NAME}</p>`;
+  const subject = `${w.reminder ? "Reminder: " : ""}${gym}'s plan ends on ${dayLabel(w.endsAt, w.timezone)}`;
+  return { to: w.to, subject, text, html };
+}

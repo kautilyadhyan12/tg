@@ -51,7 +51,7 @@ import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
 import * as orgsRepo from "../orgs/repo.js";
 import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
-import { dayLabel, momentLabel, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail } from "./emails.js";
+import { dayLabel, momentLabel, planEndReminderEmail, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail, type PlanEndAction } from "./emails.js";
 import type { Snapshot } from "./machine.js";
 import { onlinePaymentFor } from "./online.js";
 import { paddleWindowCountry, type PaddleApi, type PaddleEnvironment, type ProrationMode } from "./paddle.js";
@@ -905,6 +905,55 @@ async function sendSizeWarnings(deps: BillingDeps, provider: repo.PayProvider): 
         }),
         due.gymId,
         "size_warning",
+      );
+    }
+    sent += 1;
+  }
+  return sent;
+}
+
+/** A plan set to end is reminded a week and a day before it ends (ROADMAP 4b-iv). */
+export const PLAN_END_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+export const PLAN_END_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Email the owner and billing staff of each gym whose plan is set to end, cancelled or handed
+ *  over, a week and a day before it ends (Kd, 2026-10-20). A plan that renews gets none. Once per
+ *  end: marked before it is sent, so a second run never sends it again (and one lost in sending
+ *  is not retried; the plan box says it too). Returns the plans reminded. */
+export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
+  const mail = deps.mail ?? null;
+  if (mail === null) return 0;
+  const now = deps.now();
+  let sent = 0;
+  for (const due of await repo.claimPlanEndReminders(deps.sql, { now, week: PLAN_END_WEEK_MS, day: PLAN_END_DAY_MS, limit: 50 })) {
+    const facts = await repo.planEndFacts(deps.sql, due);
+    if (facts === null) continue;
+    // What the plan box offers before the end (`toOrgSubscription`'s `keepUntil`).
+    const keepUntil = new Date(due.endsAt.getTime() - CANCEL_LEAD_MS);
+    const action: PlanEndAction =
+      due.provider === "razorpay" && !due.handedOver && !due.cancelSent && keepUntil > now ? { kind: "keep_razorpay", until: keepUntil } : { kind: "choose" };
+    // The Overview opens at its Plan box (`#plan`), below a new gym's Start here list.
+    const planLink = `${consoleLinks(mail, facts.gymSlug).plan}#plan`;
+    for (const to of await billingRecipients(deps, due.gymId)) {
+      await sendBillingEmail(
+        deps,
+        mail,
+        planEndReminderEmail({
+          to,
+          gymName: facts.gymName,
+          orgType: facts.orgType,
+          members: facts.members,
+          seatCap: facts.seatCap,
+          priceLabel: formatPriceMinor(facts.priceMinor, facts.currency),
+          trialing: due.status === "trialing",
+          endsAt: due.endsAt,
+          timezone: facts.timezone,
+          reminder: due.lastDay && due.weekSent,
+          action,
+          planLink,
+        }),
+        due.gymId,
+        due.lastDay ? "plan_end_day" : "plan_end_week",
       );
     }
     sent += 1;
