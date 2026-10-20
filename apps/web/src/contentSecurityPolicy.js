@@ -8,7 +8,7 @@
 // Each outside address is here for one thing the app does:
 //   Square: its card boxes, their scripts, styles, fonts and the address they send the card to.
 //   Paddle and Razorpay: the checkout a gym pays its plan through (their own domains: neither
-//     publishes a fixed list of hosts).
+//     publishes a fixed list of hosts; to be narrowed once their checkouts are opened with keys).
 //   Cloudflare: the robot check at sign-up and sign-in (developers.cloudflare.com, "Turnstile
 //     Content Security Policy").
 //   jsDelivr and Google's storage: the camera's pose files and model, only when our own copy is
@@ -22,8 +22,10 @@ const SQUARE_FONTS = ['https://square-fonts-production-f.squarecdn.com', 'https:
 const PADDLE = ['https://cdn.paddle.com', 'https://*.paddle.com'];
 const RAZORPAY = ['https://checkout.razorpay.com', 'https://*.razorpay.com'];
 const CLOUDFLARE = ['https://challenges.cloudflare.com'];
-const POSE = ['https://cdn.jsdelivr.net'];
-const POSE_MODEL = ['https://storage.googleapis.com'];
+// Never a public file host whole: anybody can publish a script on jsDelivr, so only the camera's
+// own MediaPipe version is allowed (`REMOTE_WASM_BASE`), and only Google's pose models.
+const POSE = ['https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/'];
+const POSE_MODEL = ['https://storage.googleapis.com/mediapipe-models/'];
 const ADDRESSES = ['https://nominatim.openstreetmap.org', 'https://api.locationiq.com'];
 
 /** The origin of an address the app talks to, or null when there is none or it is not one. */

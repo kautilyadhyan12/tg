@@ -61,10 +61,12 @@ import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
 import SquareReturn from './pages/console/SquareReturn';
 import ConsoleMore     from './pages/console/More';
+import FrameGuard from './components/common/FrameGuard';
 
 export default function App() {
   return (
     <BrowserRouter>
+      <FrameGuard>
       <AuthProvider>
         <TransitionProvider>
           <Toaster
@@ -385,6 +387,7 @@ export default function App() {
           </RunProvider>
         </TransitionProvider>
       </AuthProvider>
+      </FrameGuard>
     </BrowserRouter>
   );
 }
