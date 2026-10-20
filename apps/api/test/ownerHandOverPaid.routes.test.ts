@@ -526,7 +526,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
   });
 
   describe("the plan's state", () => {
-    it("money owed or a Razorpay plan stops a hand-over, and the Staff tab says why and until when a Paddle plan is paid", async () => {
+    it("money owed stops a hand-over, and the Staff tab says why and until when a Paddle plan is paid", async () => {
       const overdue = await makePaidGym("Kd");
       const a = await makeCoOwner(overdue, "Ada");
       await sql`UPDATE subscriptions SET status = 'past_due', past_due_since = now() WHERE owner_type = 'gym' AND owner_id = ${overdue.id}`;
@@ -539,11 +539,6 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
 
       await sql`UPDATE subscriptions SET status = 'expired', ended_at = now(), cancel_reason = 'grace_expired' WHERE owner_type = 'gym' AND owner_id = ${overdue.id}`;
       expect(errorOf(await ask(overdue, a))).toBe("plan_overdue");
-
-      const rupees = await makePaidGym("Kd");
-      const c = await makeCoOwner(rupees, "Cy");
-      await sql`UPDATE subscriptions SET provider = 'razorpay' WHERE owner_type = 'gym' AND owner_id = ${rupees.id}`;
-      expect(errorOf(await ask(rupees, c))).toBe("paid_plan");
 
       const fine = await makePaidGym("Kd");
       const tabFine = await staffList(fine, fine.owner);

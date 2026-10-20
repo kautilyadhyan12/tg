@@ -1345,9 +1345,16 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     currentPeriodEnd: paid ? (row.currentPeriodEnd?.toISOString() ?? null) : null,
     cancelAtPeriodEnd: paid && row.cancelAtPeriodEnd,
     // Razorpay cannot take a cancel back: it can be kept until it is sent, in the hours before
-    // the paid month ends (1d-ii). Paddle's own page keeps a Paddle plan.
+    // the paid month ends (1d-ii). Paddle's own page keeps a Paddle plan. A plan handed over
+    // with its gym is never kept (4b-iii-b).
     keepUntil:
-      paidThrough === "razorpay" && paid && row.status !== "past_due" && row.cancelAtPeriodEnd && row.cancelSentAt === null && row.currentPeriodEnd !== null
+      paidThrough === "razorpay" &&
+      paid &&
+      row.status !== "past_due" &&
+      row.cancelAtPeriodEnd &&
+      row.cancelSentAt === null &&
+      row.handedOverBy === null &&
+      row.currentPeriodEnd !== null
         ? new Date(row.currentPeriodEnd.getTime() - PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000).toISOString()
         : null,
     subscribed,
@@ -2143,10 +2150,10 @@ export async function listOrgStaff(
   const now = deps.now?.() ?? new Date();
   const asked = await coOwnerRepo.waitingRequests(deps.sql, gymId, now);
   // The co-owner asked to be the owner (4b-ii), and what the gym's plan means for a hand-over:
-  // stopped for now, with why, or a Paddle plan that stops renewing and stays paid until a day.
+  // stopped for now, with why, or a paid plan that stops renewing and stays paid until a day.
   const toOwner = await coOwnerRepo.waitingOwnerRequest(deps.sql, gymId, now);
   const plan = await coOwnerRepo.gymHandOverPlan(deps.sql, gymId);
-  const paidPlan = plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear";
+  const paidPlan = plan.kind === "plan_overdue" || plan.kind === "plan_unclear";
   // Whose current list record is certainly theirs: removing them from the app moves it
   // to past members, and the Staff tab's box says so (4a-ii round one, L5).
   const members = rows.filter((r) => r.isMember).map((r) => r.userId);
@@ -2171,7 +2178,7 @@ export async function listOrgStaff(
       };
     }),
     paidPlan,
-    paidPlanNote: plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear" ? OWNER_REQUEST_WORDS[plan.kind] : null,
+    paidPlanNote: plan.kind === "plan_overdue" || plan.kind === "plan_unclear" ? OWNER_REQUEST_WORDS[plan.kind] : null,
     planStops: coOwnerRepo.planStops(plan),
   });
 }

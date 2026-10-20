@@ -326,25 +326,19 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
       expect(await ownerOf(gym)).toBe(first.userId);
     }, TEST_TIMEOUT_MS);
 
-    // A plan paid through Paddle is handed over, and its plan stops renewing (4b-iii-a,
-    // ownerHandOverPaid.routes.test.ts); one paid through Razorpay is not yet (4b-iii-b).
-    it("a gym on a Razorpay plan is not handed over, and one that goes onto one meanwhile is not either", async () => {
+    // A plan paid through Paddle or Razorpay is handed over, and stops renewing (4b-iii-a,
+    // ownerHandOverPaid.routes.test.ts; 4b-iii-b, ownerHandOverRazorpay.routes.test.ts); one
+    // with a payment overdue is not.
+    it("a gym whose Razorpay payment is overdue is not handed over, and one that falls overdue meanwhile is not either", async () => {
       const paid = await makeGym("Kd", undefined, "none");
       await sql`
         INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref)
-        VALUES ('gym', ${paid.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'active', 'razorpay', ${"sub_" + paid.id})`;
+        VALUES ('gym', ${paid.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'past_due', 'razorpay', ${"sub_" + paid.id})`;
       const pat = await makeCoOwner(paid, "Pat");
       const refused = await ask(paid, pat);
       expect(refused.statusCode).toBe(409);
-      expect(errorOf(refused)).toBe("paid_plan");
+      expect(errorOf(refused)).toBe("plan_overdue");
       expect((await staffList(paid, paid.owner)).paidPlan).toBe(true);
-
-      const carded = await makeGym("Kd", undefined, "none");
-      await sql`
-        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, provider_ref, trial_ends_at)
-        VALUES ('gym', ${carded.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'razorpay', ${"sub_" + carded.id}, now() + interval '5 days')`;
-      const cy = await makeCoOwner(carded, "Cy");
-      expect(errorOf(await ask(carded, cy))).toBe("paid_plan");
 
       const gym = await makeGym("Kd");
       const ria = await makeCoOwner(gym, "Ria");
@@ -357,7 +351,7 @@ d("the owner hands the gym to a co-owner (real Postgres)", () => {
         VALUES ('gym', ${gym.id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'past_due', 'razorpay', ${"sub_" + gym.id})`;
       const late = await answer(gym, riaId, ria);
       expect(late.statusCode).toBe(409);
-      expect(errorOf(late)).toBe("paid_plan");
+      expect(errorOf(late)).toBe("plan_overdue");
       expect(await ownerOf(gym)).toBe(gym.owner.userId);
       expect(await ownerOf(paid)).toBe(paid.owner.userId);
     }, TEST_TIMEOUT_MS);
