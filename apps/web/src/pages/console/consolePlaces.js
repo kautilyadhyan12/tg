@@ -26,6 +26,7 @@ export const SETTINGS_SECTION = {
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
   referrals: 'refer-a-friend',
+  payments: 'payments',
 };
 
 /** The sections of Settings that the gym's details box holds. */
@@ -51,6 +52,7 @@ const PLACES = {
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   waiver: { path: `/settings#${SETTINGS_SECTION.waiver}`, may: canManageOrg },
   referrals: { path: `/settings#${SETTINGS_SECTION.referrals}`, may: canManageOrg },
+  payments: { path: `/settings#${SETTINGS_SECTION.payments}`, may: canManageOrg },
   memberships: { path: '/memberships', may: canManageMemberships },
   // The Discounts box on Memberships, where a promo code for a membership is made.
   membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },

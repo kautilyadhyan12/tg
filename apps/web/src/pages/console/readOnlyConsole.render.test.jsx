@@ -94,6 +94,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       /** Who can check in (16d) reads on mount too: a gym that never changed it. */
       // Settings' Waiver box (3e-i): a gym that has written none.
       getGymWaiver: vi.fn(() => Promise.resolve({ data: { waiver: null, inUse: false, people: 0, signed: 0 } })),
+      // Settings' Payments box (18d-i): a gym in a country Square serves, not connected.
+      getGymPayments: vi.fn(() => Promise.resolve({ data: { payments: { availability: 'square', country: 'GB', canConnect: true, squareReady: true, square: null } } })),
       getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in', waiver: 'let_in' }, overdueAfterDays: 0 } })),
       previewCheckinRules: vi.fn(() =>
         Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in', waiver: 'let_in' }, listed: 0, stopped: 0, notListed: 0, people: [] } }),
@@ -1037,9 +1039,10 @@ describe('a step already open when the gym lapses', () => {
  *  sentence unconditionally would satisfy the lapsed half alone (:7104's PG1). */
 describe('every Settings panel that greys a control explains itself, in its own section', () => {
   // Staff left Settings for Members → Staff (23c-ii); its own cases are "the staff list" above.
-  const GREYING_SECTIONS = ['gym details', "when we're open", 'how members reach you', 'automatic messages', 'refer a friend', 'check-in devices', 'who can check in', 'waiver', 'follow-up emails to leads'];
+  // Payments (18d-i) greys Connect Square for the owner of a gym with no plan.
+  const GREYING_SECTIONS = ['gym details', 'payments', "when we're open", 'how members reach you', 'automatic messages', 'refer a friend', 'check-in devices', 'who can check in', 'waiver', 'follow-up emails to leads'];
 
-  it('draws exactly these nine sections and no tenth one nobody is checking', async () => {
+  it('draws exactly these ten sections and no eleventh one nobody is checking', async () => {
     orgService.getMine.mockResolvedValue(mineIs(LAPSED));
     renderConsole(Settings, '/console/iron-house/settings');
     await screen.findByTestId('console-banner');

@@ -49,6 +49,9 @@ import type { PaddleApi } from "./modules/billing/paddle.js";
 import type { RazorpayApi } from "./modules/billing/razorpay.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
 import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js";
+import { registerPaymentRoutes } from "./modules/orgs/payments/routes.js";
+import { squareSettings } from "./modules/orgs/payments/settings.js";
+import type { SquareApi } from "./modules/orgs/payments/square.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
@@ -84,6 +87,8 @@ export interface BuildAppOverrides {
   /** Tests replace Paddle's API with a fake; the keys in the config still switch it on. */
   paddleApi?: PaddleApi;
   razorpayApi?: RazorpayApi;
+  /** Tests replace Square's API with a fake; the keys in the config still switch it on. */
+  squareApi?: SquareApi;
   /** Tests answer the robot check themselves; unset asks Cloudflare. */
   robotCheck?: RobotCheck;
   /** Tests keep a gym page's photos where they can look; unset is `PHOTO_DIR`. */
@@ -351,6 +356,14 @@ export async function buildApp(
   // Check-in at the front desk (spec Part 3 §12): the member's pass, the desk devices and
   // the scan, whose device key is the one credential that is not a person's session.
   registerCheckinRoutes(app, { sql, redis, config, ...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
+  // A gym's own Square account for its members' card payments (ROADMAP 18d-i), and Square's
+  // messages about it.
+  registerPaymentRoutes(app, {
+    sql,
+    redis,
+    square: squareSettings(config, overrides.squareApi),
+    now: overrides.orgs?.now ?? (() => new Date()),
+  });
   // The unsubscribe link in every invitation: public, and not under /v1/orgs.
   registerUnsubscribeRoutes(app, { sql, redis, settings: invites });
   // What Resend reports about each email: signed, kept once, acted on by the worker.

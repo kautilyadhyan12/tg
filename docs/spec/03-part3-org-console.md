@@ -4041,6 +4041,28 @@ a business in India:
 Whether an owner in India can finish each sign-up is proved only by doing it; it is
 free, and Kd's to do when he chooses. Nothing in 14.2 to 14.4 waits for it.
 
+*(As built, 18d-i, 2026-10-19; `rulings/2026-10-19-18d-i.md`.)* Kd's Square developer
+sign-up worked from India; abroad first, Razorpay (18f) after Square's four parts. Settings
+→ **Payments**, under the gym's details: Square's eight countries see **Connect Square**,
+India reads that card and UPI payments are coming soon, any other country that card payments
+are not available there yet, and a gym with no country a link to add it. **Only the gym's own
+owner** connects, picks the location and disconnects (not a co-owner): whoever connects
+decides whose bank account members' money goes into; everybody else reads "Only the owner of
+{gym} can connect Square." A press of Connect Square is a one-time value kept as its SHA-256,
+for that owner at that gym, for ten minutes, used once; Square's answer comes back to
+`/connect/square` and the gym is read from the press, never the request, with the owner
+checked again. A Square account in another country or currency than the gym, or with no
+active location that takes cards, is refused and its tokens stopped; several locations: the
+owner picks one. Tokens are AES-256-GCM under `PAYMENT_TOKENS_KEY`, bound to the gym and the
+kind of token, renewed every six days (Square asks for seven or less), and stopped at
+Disconnect through owed revokes the worker sends until Square answers; one Square account on
+two gyms is stopped whole only when the last lets go. Square's `oauth.authorization.revoked`
+message is signed (HMAC-SHA256 of the subscription's URL and the raw body), kept once by its
+event id, and believed only when Square's own token check agrees: the box then reads "Square
+was disconnected" with the day. Square is asked once for MERCHANT_PROFILE_READ, CUSTOMERS_READ
+and _WRITE, PAYMENTS_READ and _WRITE, never a fee. Start here's **Take payments** is the
+owner's, in Square's countries.
+
 ### 14.6 Cards
 
 **18a** the notebook · **18b** the register, discounts and promo codes · ~~**18c** Pay by

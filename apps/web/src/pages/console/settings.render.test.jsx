@@ -66,6 +66,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       /** Who can check in (16d) reads on mount too: a gym that never changed it. */
       // Settings' Waiver box (3e-i): a gym that has written none.
       getGymWaiver: vi.fn(() => Promise.resolve({ data: { waiver: null, inUse: false, people: 0, signed: 0 } })),
+      // Settings' Payments box (18d-i): a gym in a country Square serves, not connected.
+      getGymPayments: vi.fn(() => Promise.resolve({ data: { payments: { availability: 'square', country: 'GB', canConnect: true, squareReady: true, square: null } } })),
       getCheckinRules: vi.fn(() => Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in', waiver: 'let_in' }, overdueAfterDays: 0 } })),
       previewCheckinRules: vi.fn(() =>
         Promise.resolve({ data: { rules: { who: 'everyone', overdue: 'let_in', waiver: 'let_in' }, listed: 0, stopped: 0, notListed: 0, people: [] } }),

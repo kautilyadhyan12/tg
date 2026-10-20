@@ -9,6 +9,7 @@ import {
   ORG_PRIVILEGES,
   ROLE_PRIVILEGES,
   START_HERE_STEPS,
+  START_HERE_TICK_STEPS,
   withKnownStartHereSteps,
   START_HERE_STEP_PRIVILEGE,
   setStartHereRequestSchema,
@@ -44,9 +45,35 @@ describe("the steps a person is shown", () => {
   });
 
   it("every step asks for a tick the console knows, and every tick in the table above is one", () => {
-    for (const step of START_HERE_STEPS) expect(ORG_PRIVILEGES).toContain(START_HERE_STEP_PRIVILEGE[step]);
+    for (const step of START_HERE_TICK_STEPS) expect(ORG_PRIVILEGES).toContain(START_HERE_STEP_PRIVILEGE[step]);
     const named = new Set(cases.flatMap((c) => c.ticks));
     expect([...named].sort()).toEqual([...ORG_PRIVILEGES].sort());
+  });
+});
+
+// Take payments (ROADMAP 18d-i) is the gym's own owner's, on no tick, where Square takes
+// card payments: its eight countries from Square support's "International availability"
+// (read 2026-09-22), and the countries a gym here can also be in that Square does not serve.
+describe("Take payments", () => {
+  const every = ROLE_PRIVILEGES.owner;
+  const cases: { who: string; isGymOwner: boolean; country: string | null; ticks: readonly OrgPrivilege[]; shown: boolean }[] = [
+    ...["US", "CA", "GB", "IE", "FR", "ES", "AU", "JP"].map((country) => ({ who: `the owner, in ${country}`, isGymOwner: true, country, ticks: every, shown: true })),
+    ...["IN", "DE", "NL", "IT", "PT", "BE", "AT"].map((country) => ({ who: `the owner, in ${country}`, isGymOwner: true, country, ticks: every, shown: false })),
+    { who: "the owner, no country set", isGymOwner: true, country: null, ticks: every, shown: false },
+    { who: "a co-owner or a manager with every tick, in GB", isGymOwner: false, country: "GB", ticks: every, shown: false },
+    { who: "the owner with no ticks at all, in GB", isGymOwner: true, country: "GB", ticks: [], shown: true },
+    { who: "a lower-case country is not a country", isGymOwner: true, country: "gb", ticks: every, shown: false },
+  ];
+  it.each(cases)("$who", ({ isGymOwner, country, ticks, shown }) => {
+    const steps = startHereStepsFor(ticks, { isGymOwner, country });
+    expect(steps.includes("payments")).toBe(shown);
+    // Last in the list, after the seven a tick opens.
+    if (shown) expect(steps[steps.length - 1]).toBe("payments");
+  });
+
+  it("is not offered to anybody without the owner's word", () => {
+    expect(startHereStepsFor(every)).not.toContain("payments");
+    expect(START_HERE_STEPS).toEqual([...START_HERE_TICK_STEPS, "payments"]);
   });
 });
 

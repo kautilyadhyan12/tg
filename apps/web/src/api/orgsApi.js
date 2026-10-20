@@ -85,6 +85,9 @@ import {
   memberListRowsResponseSchema,
   myInvitationsResponseSchema,
   gymWaiverResponseSchema,
+  gymPaymentsResponseSchema,
+  squareConnectResponseSchema,
+  squareFinishResponseSchema,
   myWaiverResponseSchema,
   signWaiverResponseSchema,
   deskWaiverResponseSchema,
@@ -665,6 +668,16 @@ export const orgService = {
   // A GYM'S WAIVER (ROADMAP 3e-i). The first three are Settings', on `org.manage`; the
   // last two are a member's own, at a gym they are in.
   getGymWaiver: (gymId) => readThrough(gymWaiverResponseSchema, 'your waiver', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`)),
+  // Payments (18d-i): the gym's own Square account. Connect returns Square's page to open;
+  // the return page hands Square's answer back as it came.
+  getGymPayments: (gymId) => readThrough(gymPaymentsResponseSchema, 'your payments', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments`)),
+  connectSquare: (gymId) =>
+    readThrough(squareConnectResponseSchema, 'Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/connect`)),
+  finishSquare: (answer) => readThrough(squareFinishResponseSchema, 'Square', authApi.post('/v1/payments/square/finish', answer)),
+  chooseSquareLocation: (gymId, locationId) =>
+    readThrough(gymPaymentsResponseSchema, 'your payments', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/location`, { locationId })),
+  disconnectSquare: (gymId) =>
+    readThrough(gymPaymentsResponseSchema, 'your payments', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square`)),
   saveGymWaiver: (gymId, text) =>
     readThrough(gymWaiverResponseSchema, 'your waiver', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`, { text })),
   stopGymWaiver: (gymId) => readThrough(gymWaiverResponseSchema, 'your waiver', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`)),

@@ -59,6 +59,7 @@ import ConsoleReports  from './pages/console/Reports';
 import ConsoleAtRisk   from './pages/console/AtRisk';
 import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
+import SquareReturn from './pages/console/SquareReturn';
 import ConsoleMore     from './pages/console/More';
 
 export default function App() {
@@ -358,6 +359,14 @@ export default function App() {
             <Route path="/console/:orgSlug/settings" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleSettings /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* Where Square sends a gym's owner back after Allow or Deny (18d-i). Outside
+                /console/:orgSlug: Square's return address is one address for every gym, and
+                the gym comes from the press the server kept. */}
+            <Route path="/connect/square" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><SquareReturn /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* MORE, the phone's fifth tab (spec Part 3 §17.5): the pages that are not tabs,

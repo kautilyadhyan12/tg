@@ -9,7 +9,7 @@
 // tick that stops following that page fails here.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { START_HERE_STEPS, startHereResponseSchema } from "@app/shared";
+import { START_HERE_STEPS, START_HERE_TICK_STEPS, startHereResponseSchema } from "@app/shared";
 import type { GymClassesResponse, GymMembershipTypesResponse, StartHere, StartHereStep } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -53,6 +53,7 @@ const NOTHING_DONE: Record<StartHereStep, boolean> = {
   hours: false,
   contact: false,
   frontDesk: false,
+  payments: false,
 };
 const only = (...steps: StartHereStep[]): Record<StartHereStep, boolean> => ({
   ...NOTHING_DONE,
@@ -292,7 +293,8 @@ d("Overview's Start here list: whose ticks, who sees which step, and who hides i
 
       const mine = await read(setUp, setUpOwner);
       expect(mine.steps.map((s) => s.step)).toEqual([...START_HERE_STEPS]);
-      expect(doneOf(mine)).toEqual(only(...START_HERE_STEPS));
+      // Take payments waits for Square (`payments.routes.test.ts` connects one).
+      expect(doneOf(mine)).toEqual(only(...START_HERE_TICK_STEPS));
       // The gym beside it did none of them, and reads none.
       expect(doneOf(await read(empty, emptyOwner))).toEqual(NOTHING_DONE);
 
