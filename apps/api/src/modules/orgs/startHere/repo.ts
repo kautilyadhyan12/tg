@@ -17,7 +17,13 @@ export interface StartHereRow {
  *  A step is done while the thing is there: a membership type that is archived, a person
  *  who is off the list, an invitation that was cancelled or has run out, a time slot that
  *  was cancelled or is past its last day and a device that was switched off or never opened its link do not count. */
-export async function readStartHere(sql: Sql | TransactionSql, gymId: string, now: Date): Promise<StartHereRow | null> {
+export async function readStartHere(
+  sql: Sql | TransactionSql,
+  gymId: string,
+  now: Date,
+  /** This server's Square environment: a connection in the other one is not this gym's here. */
+  paymentsEnvironment: "sandbox" | "production",
+): Promise<StartHereRow | null> {
   const rows = await sql<
     {
       activation: unknown;
@@ -71,7 +77,7 @@ export async function readStartHere(sql: Sql | TransactionSql, gymId: string, no
       -- Connected, with the location picked: what card payments will need (18d-i).
       EXISTS (
         SELECT 1 FROM gym_payment_connections p
-        WHERE p.gym_id = g.id AND p.state = 'connected' AND p.location_id IS NOT NULL
+        WHERE p.gym_id = g.id AND p.environment = ${paymentsEnvironment} AND p.state = 'connected' AND p.location_id IS NOT NULL
       ) AS payments
     FROM gyms g
     WHERE g.id = ${gymId}`;

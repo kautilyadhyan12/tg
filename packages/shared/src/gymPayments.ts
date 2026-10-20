@@ -110,4 +110,5 @@ export const GYM_PAYMENTS_WORDS = {
   no_such_location: "That location isn't in this Square account. Pick one from the list.",
   connect_expired: "This Square sign-in has run out or was already used. Press Connect Square again.",
   square_unavailable: "Square didn't answer. Nothing was changed. Try again in a minute.",
+  country_needs_disconnect: "Disconnect Square below first, then change your country. Your Square account belongs to your current country.",
 } as const;

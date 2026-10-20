@@ -19,6 +19,8 @@ import * as repo from "./repo.js";
 export interface StartHereDeps {
   sql: Sql;
   now: () => Date;
+  /** `SQUARE_ENV`: Take payments is done by a connection in this server's environment (18d-i). */
+  paymentsEnvironment: "sandbox" | "production";
 }
 
 const notFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
@@ -42,7 +44,7 @@ function toResponse(row: repo.StartHereRow, userId: string, privileges: readonly
 
 export async function getStartHere(deps: StartHereDeps, userId: string, gymId: string): Promise<StartHereResponse> {
   const { privileges } = await requireStaff(deps, gymId, userId);
-  const row = await repo.readStartHere(deps.sql, gymId, deps.now());
+  const row = await repo.readStartHere(deps.sql, gymId, deps.now(), deps.paymentsEnvironment);
   if (row === null) throw notFound();
   return toResponse(row, userId, privileges);
 }
@@ -58,7 +60,7 @@ export async function setStartHereHidden(
   const { privileges } = await requireWritablePrivilege(deps, gymId, userId, START_HERE_HIDE_PRIVILEGE);
   const row = await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
-    const before = await repo.readStartHere(tx, gymId, deps.now());
+    const before = await repo.readStartHere(tx, gymId, deps.now(), deps.paymentsEnvironment);
     if (before === null) return null;
     if (isHidden(before.activation) === hidden) return before;
     await repo.writeHidden(tx, gymId, hidden);
@@ -70,7 +72,7 @@ export async function setStartHereHidden(
       targetId: gymId,
       meta: {},
     });
-    return await repo.readStartHere(tx, gymId, deps.now());
+    return await repo.readStartHere(tx, gymId, deps.now(), deps.paymentsEnvironment);
   });
   if (row === null) throw notFound();
   return toResponse(row, userId, privileges);

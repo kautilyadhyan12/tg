@@ -18,6 +18,7 @@ import {
   SMALLER_SIZE_DECIDE_HOURS,
   STAFF_INVITE_WORDS,
   currencyForCountry,
+  GYM_PAYMENTS_WORDS,
   normaliseIndianMobile,
   normaliseJoinCode,
   normaliseSecondTrialCode,
@@ -522,6 +523,8 @@ export async function updateOrg(
       // round that wrote it said its purpose was to make the refusal TRUE and
       // left this half carrying the pre-fix wording.
       throw new OrgsError(409, "currency_locked", currencyLockedMessage(org.orgType));
+    case "square_connected":
+      throw new OrgsError(409, "square_connected", GYM_PAYMENTS_WORDS.country_needs_disconnect);
     case "not_found":
       // Unreachable in practice — `requirePrivilege` has already read the org
       // and 404'd a stranger — but a gym archived or deleted between that read

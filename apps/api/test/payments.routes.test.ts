@@ -73,7 +73,16 @@ function fakeSquare() {
   const tokens = new Map<string, { account: Account; stopped: boolean; refresh: string }>();
   const refreshes = new Map<string, Account>();
   const revokes: { token: string; wholeAccount: boolean }[] = [];
-  const state = { down: false, exchanges: 0, refreshesRefused: false };
+  // `statusRefusal`: Square's token check refuses with this status (a retired Square-Version, a
+  // fault of ours). `secretRefused`: Square refuses our own secret, as it does a wrong one
+  // (401 `service.not_authorized`, measured on its test area 2026-10-20).
+  const state: { down: boolean; exchanges: number; refreshesRefused: boolean; statusRefusal: number | null; secretRefused: boolean } = {
+    down: false,
+    exchanges: 0,
+    refreshesRefused: false,
+    statusRefusal: null,
+    secretRefused: false,
+  };
   let n = 0;
   const mint = (account: Account) => {
     n += 1;
@@ -108,6 +117,7 @@ function fakeSquare() {
     },
     revoke(token, wholeAccount) {
       if (state.down) return Promise.resolve(unavailable);
+      if (state.secretRefused) return Promise.resolve({ kind: "refused", status: 401, code: "service.not_authorized" });
       revokes.push({ token, wholeAccount });
       const t = tokens.get(token);
       if (t === undefined) return Promise.resolve(unauthorized);
@@ -117,6 +127,7 @@ function fakeSquare() {
     },
     tokenStatus(token) {
       if (state.down) return Promise.resolve(unavailable);
+      if (state.statusRefusal !== null) return Promise.resolve({ kind: "refused", status: state.statusRefusal, code: "BAD_REQUEST" });
       const t = live(token);
       return Promise.resolve(t === null ? unauthorized : { kind: "ok", value: { merchant_id: t.account.merchantId } });
     },
@@ -163,10 +174,11 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
   };
-  const config = loadConfig(baseEnv);
+  // Read in beforeAll: with no database the describe is skipped, and its body still runs.
+  const config = () => loadConfig(baseEnv);
   const workDeps = () => ({
     sql,
-    square: squareSettings(config, square.api),
+    square: squareSettings(config(), square.api),
     log: { info: () => undefined, warn: () => undefined, error: () => undefined },
     now: () => clock,
   });
@@ -184,7 +196,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
+  const send = (method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
     api().inject({
       method,
       url: path,
@@ -260,7 +272,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
                          seat_cap, trial_days, rank, entitlements, member_entitlements)
       VALUES (${LIVE_PLAN}, 'org', ${"plan." + LIVE_PLAN}, 0, 'INR', 'month', 100000, 0, 10, '{}'::jsonb, '{}'::jsonb)
       ON CONFLICT (code) DO UPDATE SET active = true`;
-    app = await buildApp(config, {
+    app = await buildApp(config(), {
       squareApi: square.api,
       orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: {
@@ -653,6 +665,243 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       square.state.refreshesRefused = false;
       expect((await rowOf(gymId))?.state).toBe("removed");
       expect(await sql`SELECT actor_user_id FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.payments_square_removed_in_square'`).toEqual([{ actor_user_id: null }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // ── Round one's findings (reviews/18d-i-2-findings.md), each from its own run. ──
+
+  it(
+    "H1: a stop of the whole account owed while Square was down never ends a connection made after it",
+    async () => {
+      clock = new Date();
+      const owner = await person("h1-owner");
+      const gymId = await gym(owner, "H1 Gym");
+      const acct = account("MLHONE");
+      await connect(gymId, owner, acct);
+      square.state.down = true;
+      try {
+        expect((await send("DELETE", `/v1/orgs/${gymId}/payments/square`, owner.cookies)).statusCode).toBe(200);
+      } finally {
+        square.state.down = false;
+      }
+      expect(await owedOf(gymId)).toEqual([{ whole_account: true }]);
+      // Connected again before the worker's next minute: the owed stop now ends its own token alone.
+      expect(await connect(gymId, owner, acct)).toMatchObject({ outcome: "connected" });
+      expect(await owedOf(gymId)).toEqual([{ whole_account: false }]);
+      clock = new Date(clock.getTime() + 2 * 60_000);
+      await processSquareWork(workDeps());
+      expect(await owedOf(gymId)).toHaveLength(0);
+      expect(square.liveTokensOf("MLHONE")).toBe(1);
+      expect((await read(gymId, owner)).square?.state).toBe("connected");
+
+      // And at the moment of sending: a whole stop owed while a gym holds the account (written
+      // whole here by hand, as one decided before that gym connected) goes out as a stop of its
+      // own token, because the count is made again under the account's lock.
+      const other = await gym(owner, "H1 Second Gym");
+      await connect(other, owner, acct);
+      square.state.down = true;
+      try {
+        await send("DELETE", `/v1/orgs/${other}/payments/square`, owner.cookies);
+      } finally {
+        square.state.down = false;
+      }
+      await sql`UPDATE gym_payment_revokes SET whole_account = true WHERE gym_id = ${other}`;
+      clock = new Date(clock.getTime() + 2 * 60_000);
+      await processSquareWork(workDeps());
+      expect(await owedOf(other)).toHaveLength(0);
+      expect(square.revokes[square.revokes.length - 1]?.wholeAccount).toBe(false);
+      expect((await read(gymId, owner)).square?.state).toBe("connected");
+      expect(square.liveTokensOf("MLHONE")).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "H2: only Square's 401 says a token is dead; any other refusal keeps the gym connected and asks again",
+    async () => {
+      clock = new Date();
+      const owner = await person("h2-owner");
+      const gymId = await gym(owner, "H2 Gym");
+      await connect(gymId, owner, account("MLHTWO"));
+      const payload = JSON.stringify({ merchant_id: "MLHTWO", type: "oauth.authorization.revoked", event_id: "pay-t-h2", created_at: clock.toISOString() });
+      const signature = createHmac("sha256", WEBHOOK_KEY).update(WEBHOOK_URL + payload).digest("base64");
+      const res = await api().inject({ method: "POST", url: "/v1/webhooks/square", remoteAddress: nextIp(), headers: { "content-type": "application/json", "x-square-hmacsha256-signature": signature }, payload });
+      expect(res.statusCode).toBe(200);
+      for (const status of [400, 403, 404]) {
+        square.state.statusRefusal = status;
+        try {
+          clock = new Date(clock.getTime() + 20 * 60_000);
+          await processSquareWork(workDeps(), ["pay-t-h2"]);
+        } finally {
+          square.state.statusRefusal = null;
+        }
+        expect((await read(gymId, owner)).square?.state, String(status)).toBe("connected");
+        expect((await rowOf(gymId))?.access_token, String(status)).not.toBeNull();
+      }
+      expect(await sql`SELECT status FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-h2'`).toEqual([{ status: "pending" }]);
+      expect(square.liveTokensOf("MLHTWO")).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "H3: a gym's country waits for Disconnect while Square is connected",
+    async () => {
+      clock = new Date();
+      const owner = await person("h3-owner");
+      const gymId = await gym(owner, "H3 Gym");
+      await connect(gymId, owner, account("MLHTHREE"));
+      const patch = (country: string) => send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country });
+      for (const country of ["DE", "IN", "IE"]) {
+        const refused = await patch(country);
+        expect(refused.statusCode, country).toBe(409);
+        expect((JSON.parse(refused.body) as { error: string }).error).toBe("square_connected");
+      }
+      expect((await sql<{ country: string }[]>`SELECT country FROM gyms WHERE id = ${gymId}`)[0]?.country).toBe("GB");
+      // The same country again changes nothing and is not refused.
+      expect((await patch("GB")).statusCode).toBe(200);
+      await send("DELETE", `/v1/orgs/${gymId}/payments/square`, owner.cookies);
+      expect((await patch("IE")).statusCode).toBe(200);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "L1: a stop Square refuses for our own secret is kept and tried again, never taken as done",
+    async () => {
+      clock = new Date();
+      const owner = await person("l1-owner");
+      const gymId = await gym(owner, "L1 Gym");
+      await connect(gymId, owner, account("MLLONE"));
+      square.state.secretRefused = true;
+      try {
+        await send("DELETE", `/v1/orgs/${gymId}/payments/square`, owner.cookies);
+        expect(await owedOf(gymId)).toHaveLength(1);
+        clock = new Date(clock.getTime() + 2 * 60_000);
+        await processSquareWork(workDeps());
+        expect(await owedOf(gymId)).toHaveLength(1);
+      } finally {
+        square.state.secretRefused = false;
+      }
+      clock = new Date(clock.getTime() + 10 * 60_000);
+      await processSquareWork(workDeps());
+      expect(await owedOf(gymId)).toHaveLength(0);
+      expect(square.liveTokensOf("MLLONE")).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "two Allows for one gym: the first stays, and the second account's token is stopped",
+    async () => {
+      clock = new Date();
+      const owner = await person("twice-owner");
+      const gymId = await gym(owner, "Twice Gym");
+      const first = await startConnect(gymId, owner);
+      const second = await startConnect(gymId, owner);
+      expect(await finish(owner, { state: first, code: square.allow(account("MLFIRST")) })).toMatchObject({ outcome: "connected" });
+      expect(await finish(owner, { state: second, code: square.allow(account("MLSECOND")) })).toMatchObject({ outcome: "already_connected" });
+      expect((await rowOf(gymId))?.account_id).toBe("MLFIRST");
+      expect(square.liveTokensOf("MLFIRST")).toBe(1);
+      expect(square.liveTokensOf("MLSECOND")).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a late renewal or check, read before a connection was made again, never writes over the new one",
+    async () => {
+      clock = new Date();
+      const owner = await person("late-owner");
+      const gymId = await gym(owner, "Late Gym");
+      await connect(gymId, owner, account("MLLATEA"));
+      const env = "sandbox";
+      const old = (await sql<{ connected_at: Date }[]>`SELECT connected_at FROM gym_payment_connections WHERE gym_id = ${gymId}`)[0]?.connected_at ?? new Date(0);
+      await send("DELETE", `/v1/orgs/${gymId}/payments/square`, owner.cookies);
+      clock = new Date(clock.getTime() + 1000);
+      await connect(gymId, owner, account("MLLATEB"));
+      const before = await rowOf(gymId);
+      const { writeRefreshed, markRemoved, setRefreshDue } = await import("../src/modules/orgs/payments/repo.js");
+      expect(await writeRefreshed(sql, { gymId, environment: env, connectedAt: old, accessToken: "v1.x.y.z", refreshToken: "v1.x.y.z", accessExpiresAt: clock, refreshDueAt: clock })).toBe(false);
+      expect(await markRemoved(sql, gymId, env, old, clock)).toBe(false);
+      await setRefreshDue(sql, gymId, env, old, new Date(0));
+      const after = await rowOf(gymId);
+      expect(after).toEqual(before);
+      expect((await sql<{ refresh_due_at: Date }[]>`SELECT refresh_due_at FROM gym_payment_connections WHERE gym_id = ${gymId}`)[0]?.refresh_due_at.getTime()).toBeGreaterThan(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "another Square environment's row is not this server's: not read, not counted, not renewed, not on Start here",
+    async () => {
+      clock = new Date();
+      const owner = await person("env-owner");
+      const gymId = await gym(owner, "Env Gym");
+      const other = await gym(owner, "Env Other Gym");
+      await connect(other, owner, account("MLENV"));
+      await sql`
+        INSERT INTO gym_payment_connections (gym_id, provider, environment, state, account_id, business_name, country, currency,
+          location_id, location_name, access_token, refresh_token, access_expires_at, refresh_due_at, connected_at)
+        VALUES (${gymId}, 'square', 'production', 'connected', 'MLENV', 'Elsewhere Ltd', 'GB', 'GBP',
+          'LPROD', 'Prod', 'v1.a.b.c', 'v1.a.b.c', now() + interval '30 days', now() - interval '1 day', now())`;
+      expect((await read(gymId, owner)).square).toBeNull();
+      const startHere = startHereResponseSchema.parse(JSON.parse((await send("GET", `/v1/orgs/${gymId}/start-here`, owner.cookies)).body)).startHere;
+      expect(startHere.steps.find((s) => s.step === "payments")).toEqual({ step: "payments", done: false });
+      clock = new Date(clock.getTime() + 7 * 24 * 60 * 60_000);
+      await processSquareWork(workDeps());
+      expect((await sql<{ access_token: string }[]>`SELECT access_token FROM gym_payment_connections WHERE gym_id = ${gymId}`)[0]?.access_token).toBe("v1.a.b.c");
+      // The sandbox gym holding MLENV is the last holder here: its Disconnect stops the whole account.
+      await send("DELETE", `/v1/orgs/${other}/payments/square`, owner.cookies);
+      expect(square.revokes[square.revokes.length - 1]?.wholeAccount).toBe(true);
+      await sql`DELETE FROM gym_payment_connections WHERE gym_id = ${gymId}`;
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a gym that took the app off inside Square does not hold the account: the last connected gym's Disconnect stops it whole",
+    async () => {
+      clock = new Date();
+      const owner = await person("held-owner");
+      const removedGym = await gym(owner, "Held Removed Gym");
+      const liveGym = await gym(owner, "Held Live Gym");
+      await connect(removedGym, owner, account("MLHELD"));
+      await sql`
+        UPDATE gym_payment_connections SET state = 'removed', removed_at = now(), access_token = NULL, refresh_token = NULL,
+          access_expires_at = NULL, refresh_due_at = NULL
+        WHERE gym_id = ${removedGym}`;
+      await connect(liveGym, owner, account("MLHELD"));
+      await send("DELETE", `/v1/orgs/${liveGym}/payments/square`, owner.cookies);
+      expect(square.revokes[square.revokes.length - 1]?.wholeAccount).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "Disconnect takes the account's lock: it waits while another step holds it",
+    async () => {
+      clock = new Date();
+      const owner = await person("lock-owner");
+      const gymId = await gym(owner, "Lock Gym");
+      await connect(gymId, owner, account("MLLOCK"));
+      const holder = await sql.reserve();
+      try {
+        await holder`SELECT pg_advisory_lock(hashtextextended(${"square:sandbox:MLLOCK"}, 0))`;
+        let done = false;
+        const pending = send("DELETE", `/v1/orgs/${gymId}/payments/square`, owner.cookies).then((r) => {
+          done = true;
+          return r;
+        });
+        await new Promise((r) => setTimeout(r, 700));
+        expect(done).toBe(false);
+        await holder`SELECT pg_advisory_unlock(hashtextextended(${"square:sandbox:MLLOCK"}, 0))`;
+        expect((await pending).statusCode).toBe(200);
+      } finally {
+        holder.release();
+      }
+      expect(await rowOf(gymId)).toBeNull();
     },
     TEST_TIMEOUT_MS,
   );

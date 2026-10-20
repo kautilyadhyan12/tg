@@ -168,17 +168,28 @@ export async function sendOwedRevokes(deps: PaymentsDeps, square: SquareSettings
       run.givenUp += 1;
       continue;
     }
-    const result = await square.api.revoke(token, revoke.wholeAccount);
-    // A token Square already refuses has nothing left to stop.
-    if (result.kind !== "unavailable") {
+    // From the count to Square's answer under the account's lock: a gym connecting this account
+    // meanwhile waits for it, so the whole account is stopped only while no gym here holds it,
+    // however long ago the stop was owed. The lock is held over one call of at most
+    // SQUARE_TIMEOUT_MS; a connection's own write takes the same lock.
+    const result = await deps.sql.begin(async (tx) => {
+      await repo.lockAccount(tx, square.environment, revoke.accountId);
+      const whole = revoke.wholeAccount && (await repo.holders(tx, square.environment, revoke.accountId)) === 0;
+      return await square.api.revoke(token, whole);
+    });
+    // Done when Square stopped it, or says the token is already dead. Square's own refusal of
+    // US (a wrong secret answers 401 `service.not_authorized`, measured 2026-10-20) is not.
+    if (result.kind === "ok" || (result.kind === "refused" && result.status === 401 && result.code === "UNAUTHORIZED")) {
       await repo.finishRevoke(deps.sql, revoke.id);
-      if (result.kind === "refused") deps.log.info({ event: "square.revoke_refused", status: result.status, code: result.code }, "Square refused a revoke");
       run.sent += 1;
       continue;
     }
+    if (result.kind === "refused") {
+      deps.log.error({ event: "square.revoke_refused", revokeId: revoke.id, status: result.status, code: result.code }, "Square refused a revoke");
+    }
     if (revoke.tries + 1 >= REVOKE_MAX_TRIES) {
       await repo.finishRevoke(deps.sql, revoke.id);
-      deps.log.error({ event: "square.revoke_given_up", revokeId: revoke.id }, "Square did not answer a revoke; given up");
+      deps.log.error({ event: "square.revoke_given_up", revokeId: revoke.id }, "Square did not stop a token; given up");
       run.givenUp += 1;
       continue;
     }
@@ -249,6 +260,11 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
       return { outcome: "already_connected" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
     }
     await repo.lockAccount(tx, square.environment, accountId);
+    // A stop of this whole account still owed (a Disconnect while Square was down) now ends
+    // only its own token: this gym holds the account again. A stop Square was already sent
+    // before this write may have ended the token just issued; Square's own message then says
+    // so, and the worker marks the gym taken off once Square's token check agrees.
+    await repo.keepAccountWhole(tx, square.environment, accountId);
     await repo.writeConnection(tx, {
       gymId,
       environment: square.environment,

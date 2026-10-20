@@ -968,6 +968,8 @@ export type UpdateOrgOutcome =
    *  described the wrong thing and the message built on it was false to a gym
    *  with no country recorded. What is locked is the CURRENCY. */
   | { kind: "currency_locked" }
+  /** The gym's Square account is connected: its country waits for Disconnect (18d-i). */
+  | { kind: "square_connected" }
   | { kind: "not_found" };
 
 /** EDIT THE GYM'S OWN ROW (Kd's `org.manage`, 2026-08-26).
@@ -1104,6 +1106,15 @@ export async function updateOrg(
           AND owner_id = ${input.gymId}
           AND (status <> 'trialing' OR provider NOT IN ('none','pilot'))`;
       if ((billed[0]?.n ?? 0) > 0) return { kind: "currency_locked" };
+    }
+    // A gym's Square account is in one country and money (18d-i), checked when it was
+    // connected: the gym's own country waits for Disconnect. Under the gym's lock, which a
+    // connection's write takes too.
+    if ("country" in input.patch && input.patch.country !== before.country) {
+      const held = await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM gym_payment_connections
+        WHERE gym_id = ${input.gymId} AND state = 'connected'`;
+      if ((held[0]?.n ?? 0) > 0) return { kind: "square_connected" };
     }
 
     // Compared against the CURRENT row rather than trusted from the request:

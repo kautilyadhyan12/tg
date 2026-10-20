@@ -37,8 +37,11 @@ function requireUserId(req: FastifyRequest): string {
   return userId;
 }
 
-export function registerStartHereRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; now: () => Date }): void {
-  const startHereDeps: service.StartHereDeps = { sql: deps.sql, now: deps.now };
+export function registerStartHereRoutes(
+  app: FastifyInstance,
+  deps: { sql: Sql; redis: RedisLike; now: () => Date; paymentsEnvironment: "sandbox" | "production" },
+): void {
+  const startHereDeps: service.StartHereDeps = { sql: deps.sql, now: deps.now, paymentsEnvironment: deps.paymentsEnvironment };
 
   /** Read once each time Overview opens. Keyed on the person; a gym's whole staff share
    *  one address, so the address ceiling is ten times one person's. */

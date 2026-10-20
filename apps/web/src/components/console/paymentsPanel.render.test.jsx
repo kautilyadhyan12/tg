@@ -103,7 +103,7 @@ describe('connected', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect Square' }));
     const ask = screen.getByRole('group', { name: 'Disconnect Square?' });
     expect(within(ask).getByText("Iron House stops using Iron House Ltd's Square account.")).toBeTruthy();
-    expect(within(ask).getByText('Nothing in your Square account changes, and you can connect it again at any time.')).toBeTruthy();
+    expect(within(ask).getByText('Your Square account and its money stay as they are, and you can connect it again at any time.')).toBeTruthy();
     fireEvent.click(within(ask).getByRole('button', { name: 'Keep connected' }));
     expect(screen.queryByRole('group', { name: 'Disconnect Square?' })).toBeNull();
     expect(orgService.disconnectSquare).not.toHaveBeenCalled();
@@ -131,6 +131,12 @@ describe('connected', () => {
 describe('a Square account with several locations', () => {
   const choosing = { ...CONNECTED, state: 'choose_location', locationName: null, locations: [{ id: 'LLEEDS', name: 'Leeds' }, { id: 'LYORK', name: 'York' }] };
 
+  it('the owner who connected the wrong account can disconnect it without picking, on a lapsed plan too', async () => {
+    open(payments({ square: choosing }), { readOnly: true });
+    expect((await screen.findByRole('button', { name: 'Use this location' })).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Disconnect Square' }).disabled).toBe(false);
+  });
+
   it('the owner picks one; nothing is saved until Use this location', async () => {
     open(payments({ square: choosing }));
     expect(await screen.findByText("Which of this Square account's locations is Iron House?")).toBeTruthy();
@@ -151,11 +157,11 @@ describe('a Square account with several locations', () => {
   });
 });
 
-describe('taken off inside Square', () => {
+describe('the connection ended (taken off inside Square, or a key the server no longer has)', () => {
   it('says so with the day, and offers Connect Square again to the owner alone', async () => {
     const removed = { ...CONNECTED, state: 'removed', removedAt: '2026-10-21T12:00:00.000Z' };
     open(payments({ square: removed }));
-    expect(await screen.findByText("This app was removed from Iron House Ltd's Square account on 21 Oct 2026, inside Square.")).toBeTruthy();
+    expect(await screen.findByText("The connection to Iron House Ltd's Square account ended on 21 Oct 2026.")).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Connect Square again' })).toBeTruthy();
     cleanup();
     open(payments({ canConnect: false, square: removed }));
@@ -173,6 +179,20 @@ describe("what Square's answer says, back in the box", () => {
   ])('%o', async (outcome, data, line) => {
     open(data, { outcome });
     expect((await screen.findByRole('status')).textContent).toBe(line);
+  });
+});
+
+describe('a connection is shown before anything about the country', () => {
+  it.each([
+    ['Germany', payments({ availability: 'not_available', country: 'DE', square: CONNECTED })],
+    ['India', payments({ availability: 'india_soon', country: 'IN', square: CONNECTED })],
+    ['no country', payments({ availability: 'no_country', country: null, square: CONNECTED })],
+  ])('%s: the connection, its rows and Disconnect, never "not available"', async (_where, data) => {
+    open(data);
+    expect(await screen.findByText('Connected to Square')).toBeTruthy();
+    expect(screen.getAllByRole('definition').map((d) => d.textContent)).toEqual(['Iron House Ltd', 'Leeds', '19 Oct 2026']);
+    expect(screen.getByRole('button', { name: 'Disconnect Square' })).toBeTruthy();
+    expect(screen.queryByText(/aren't available|coming soon|Add your country first/)).toBeNull();
   });
 });
 

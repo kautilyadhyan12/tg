@@ -51,6 +51,12 @@ async function checkConnection(deps: PaymentsDeps, square: SquareSettings, row: 
     const status = await square.api.tokenStatus(token);
     if (status.kind === "unavailable") return "unknown";
     if (status.kind === "ok" && status.value.merchant_id === row.accountId) return "works";
+    // Only Square's 401 says the token is dead. Any other refusal (a retired Square-Version,
+    // a fault of ours) says nothing about the gym: ask again, and say so in the log.
+    if (status.kind === "refused" && status.status !== 401) {
+      deps.log.error({ event: "square.token_check_refused", gymId: row.gymId, status: status.status, code: status.code }, "Square refused a token check");
+      return "unknown";
+    }
   } else {
     deps.log.error({ event: "square.token_unreadable", gymId: row.gymId }, "a gym's Square token could not be opened");
   }
@@ -62,7 +68,9 @@ async function checkConnection(deps: PaymentsDeps, square: SquareSettings, row: 
       action: "org.payments_square_removed_in_square",
       targetType: "gym",
       targetId: row.gymId,
-      meta: { business: row.businessName },
+      // `key`: the token was locked under a key this server no longer has (PAYMENT_TOKENS_KEY
+      // changed), not taken off in Square.
+      meta: { business: row.businessName, reason: token === null ? "key" : "square" },
     });
   });
   return "removed";

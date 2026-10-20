@@ -149,12 +149,140 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
     </>
   );
 
+  // Disconnect, the owner's, wherever the box shows a connection: also while a location is
+  // still to be chosen, and on a lapsed plan.
+  const disconnectArea = (live) => {
+    const words = disconnectWords(live, org.name);
+    return (
+      <>
+        {owner && !asking ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAsking(true);
+              setDoneLine(null);
+            }}
+            disabled={busy !== null}
+            className="self-start rounded-full px-4 py-3 text-sm font-semibold disabled:opacity-40 min-h-11"
+            style={{ border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.85)' }}
+          >
+            Disconnect Square
+          </button>
+        ) : null}
+        {owner && asking ? (
+          <div role="group" aria-label={words.question} className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
+            <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+              {words.question}
+            </p>
+            <p className="text-sm m-0" style={labelStyle}>
+              {words.changes}
+            </p>
+            <p className="text-sm m-0" style={softStyle}>
+              {words.kept}
+            </p>
+            <div className="flex flex-wrap gap-3 mt-1">
+              <button
+                type="button"
+                onClick={() => void disconnect()}
+                disabled={busy !== null}
+                className="rounded-full px-4 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40 min-h-11"
+                style={{ background: 'rgba(239,68,68,0.18)', color: '#fca5a5' }}
+              >
+                {busy === 'disconnect' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Disconnect
+              </button>
+              <button
+                type="button"
+                onClick={() => setAsking(false)}
+                disabled={busy !== null}
+                className="rounded-full px-4 py-3 text-sm font-semibold min-h-11"
+                style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
+              >
+                Keep connected
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {!owner ? (
+          <p className="text-sm m-0" style={softStyle}>
+            Only the owner of {org.name} can disconnect Square.
+          </p>
+        ) : null}
+      </>
+    );
+  };
+
   let body = null;
   if (data !== null) {
     const elsewhere = paymentsElsewhereLine(data);
-    if (elsewhere !== null) {
+    // A connection first, whatever the gym's country reads now: what is connected is always
+    // shown, with its Disconnect.
+    if (square !== null && square.state === 'choose_location') {
       body = (
         <div className="flex flex-col gap-3">
+          <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+            {paymentsSummary(data)}
+          </p>
+          {doneAndError}
+          {owner ? (
+            <form onSubmit={chooseLocation} className="flex flex-col gap-3">
+              <fieldset className="flex flex-col gap-2 m-0 p-0 border-0">
+                <legend className="text-sm mb-2" style={labelStyle}>
+                  Which of this Square account&apos;s locations is {org.name}?
+                </legend>
+                {square.locations.map((place) => (
+                  <label key={place.id} className="flex items-center gap-3 rounded-xl px-4 min-h-11 cursor-pointer" style={boxStyle}>
+                    <input type="radio" name={pickName} value={place.id} checked={picked === place.id} onChange={() => setPicked(place.id)} disabled={busy !== null || readOnly} />
+                    <span className="text-sm" style={{ color: '#fff' }}>
+                      {place.name}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+              <button
+                type="submit"
+                disabled={picked === null || busy !== null || readOnly}
+                className="self-start rounded-full px-5 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40 min-h-11"
+                style={mainButton(picked !== null && busy === null && !readOnly)}
+              >
+                {busy === 'location' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Use this location
+              </button>
+            </form>
+          ) : (
+            <p className="text-sm m-0" style={softStyle}>
+              The owner of {org.name} still needs to choose which Square location this is.
+            </p>
+          )}
+          {disconnectArea(square)}
+        </div>
+      );
+    } else if (square !== null && square.state === 'connected') {
+      body = (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+            Connected to Square
+          </p>
+          <dl className="m-0 rounded-xl px-4 py-3 grid gap-x-4 gap-y-1.5" style={{ ...boxStyle, gridTemplateColumns: 'auto 1fr' }}>
+            {squareRows(square, timeZone).map((row) => (
+              <div key={row.label} className="contents">
+                <dt className="text-sm" style={hintStyle}>
+                  {row.label}
+                </dt>
+                <dd className="text-sm m-0" style={{ color: '#fff' }}>
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {doneAndError}
+          {disconnectArea(square)}
+        </div>
+      );
+    } else if (elsewhere !== null) {
+      body = (
+        <div className="flex flex-col gap-3">
+          {doneAndError}
           <p className="text-sm m-0" style={labelStyle}>
             {elsewhere}
           </p>
@@ -171,7 +299,7 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
           Square can&apos;t be connected on this server yet.
         </p>
       );
-    } else if (square === null || square.state === 'removed') {
+    } else {
       body = (
         <div className="flex flex-col gap-3">
           {square !== null ? (
@@ -209,120 +337,6 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               </p>
             </>
           )}
-        </div>
-      );
-    } else if (square.state === 'choose_location') {
-      body = (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-            {paymentsSummary(data)}
-          </p>
-          {doneAndError}
-          {owner ? (
-            <form onSubmit={chooseLocation} className="flex flex-col gap-3">
-              <fieldset className="flex flex-col gap-2 m-0 p-0 border-0">
-                <legend className="text-sm mb-2" style={labelStyle}>
-                  Which of this Square account&apos;s locations is {org.name}?
-                </legend>
-                {square.locations.map((place) => (
-                  <label key={place.id} className="flex items-center gap-3 rounded-xl px-4 min-h-11 cursor-pointer" style={boxStyle}>
-                    <input type="radio" name={pickName} value={place.id} checked={picked === place.id} onChange={() => setPicked(place.id)} disabled={busy !== null || readOnly} />
-                    <span className="text-sm" style={{ color: '#fff' }}>
-                      {place.name}
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-              <button
-                type="submit"
-                disabled={picked === null || busy !== null || readOnly}
-                className="self-start rounded-full px-5 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40 min-h-11"
-                style={mainButton(picked !== null && busy === null && !readOnly)}
-              >
-                {busy === 'location' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Use this location
-              </button>
-            </form>
-          ) : (
-            <p className="text-sm m-0" style={softStyle}>
-              The owner of {org.name} still needs to choose which Square location this is.
-            </p>
-          )}
-        </div>
-      );
-    } else {
-      const words = disconnectWords(square, org.name);
-      body = (
-        <div className="flex flex-col gap-3">
-          <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-            Connected to Square
-          </p>
-          <dl className="m-0 rounded-xl px-4 py-3 grid gap-x-4 gap-y-1.5" style={{ ...boxStyle, gridTemplateColumns: 'auto 1fr' }}>
-            {squareRows(square, timeZone).map((row) => (
-              <div key={row.label} className="contents">
-                <dt className="text-sm" style={hintStyle}>
-                  {row.label}
-                </dt>
-                <dd className="text-sm m-0" style={{ color: '#fff' }}>
-                  {row.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {doneAndError}
-          {owner && !asking ? (
-            <button
-              type="button"
-              onClick={() => {
-                setAsking(true);
-                setDoneLine(null);
-              }}
-              disabled={busy !== null}
-              className="self-start rounded-full px-4 py-3 text-sm font-semibold disabled:opacity-40 min-h-11"
-              style={{ border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.85)' }}
-            >
-              Disconnect Square
-            </button>
-          ) : null}
-          {owner && asking ? (
-            <div role="group" aria-label={words.question} className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
-              <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-                {words.question}
-              </p>
-              <p className="text-sm m-0" style={labelStyle}>
-                {words.changes}
-              </p>
-              <p className="text-sm m-0" style={softStyle}>
-                {words.kept}
-              </p>
-              <div className="flex flex-wrap gap-3 mt-1">
-                <button
-                  type="button"
-                  onClick={() => void disconnect()}
-                  disabled={busy !== null}
-                  className="rounded-full px-4 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40 min-h-11"
-                  style={{ background: 'rgba(239,68,68,0.18)', color: '#fca5a5' }}
-                >
-                  {busy === 'disconnect' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  Disconnect
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAsking(false)}
-                  disabled={busy !== null}
-                  className="rounded-full px-4 py-3 text-sm font-semibold min-h-11"
-                  style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
-                >
-                  Keep connected
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {!owner ? (
-            <p className="text-sm m-0" style={softStyle}>
-              Only the owner of {org.name} can disconnect Square.
-            </p>
-          ) : null}
         </div>
       );
     }

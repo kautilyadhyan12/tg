@@ -76,7 +76,7 @@ export function squareRows(square, timeZone) {
 
 export function removedLine(square, timeZone) {
   const who = square.businessName === '' ? 'your Square account' : `${square.businessName}'s Square account`;
-  return `This app was removed from ${who} on ${paymentsDay(square.removedAt ?? square.connectedAt, timeZone)}, inside Square.`;
+  return `The connection to ${who} ended on ${paymentsDay(square.removedAt ?? square.connectedAt, timeZone)}.`;
 }
 
 export function disconnectWords(square, gymName) {
@@ -84,7 +84,7 @@ export function disconnectWords(square, gymName) {
   return {
     question: 'Disconnect Square?',
     changes: `${gymName} stops using ${account}.`,
-    kept: 'Nothing in your Square account changes, and you can connect it again at any time.',
+    kept: 'Your Square account and its money stay as they are, and you can connect it again at any time.',
   };
 }
 

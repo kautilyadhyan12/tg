@@ -57,8 +57,8 @@ ALTER TABLE "gym_payment_connect_starts" ADD CONSTRAINT "gym_payment_connect_sta
 ALTER TABLE "gym_payment_connect_starts" ADD CONSTRAINT "gym_payment_connect_starts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "gym_payment_connect_starts_expires_idx" ON "gym_payment_connect_starts" USING btree ("expires_at");--> statement-breakpoint
 -- Tokens Square is still to be told to stop, written in the step that lets them go and sent
--- by the worker until Square says so. No key to the gym: a gym deleted for good still owes
--- Square its stop.
+-- by the worker until Square says so. No key to the gym, so a stop outlives the gym's rows.
+-- Nothing deletes a gym today; a future deletion owes its connection's stop first.
 CREATE TABLE "gym_payment_revokes" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"gym_id" uuid NOT NULL,

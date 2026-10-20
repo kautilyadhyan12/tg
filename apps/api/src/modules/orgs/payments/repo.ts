@@ -310,6 +310,14 @@ export async function claimDueRevokes(
   }));
 }
 
+/** Owed stops of this whole account become stops of their own token alone: a gym holds the
+ *  account again. The caller holds the account's lock. */
+export async function keepAccountWhole(tx: TransactionSql, environment: SquareEnvironment, accountId: string): Promise<void> {
+  await tx`
+    UPDATE gym_payment_revokes SET whole_account = false
+    WHERE provider = 'square' AND environment = ${environment} AND account_id = ${accountId} AND whole_account`;
+}
+
 export async function finishRevoke(sql: SqlOrTx, id: string): Promise<void> {
   await sql`DELETE FROM gym_payment_revokes WHERE id = ${id}`;
 }
