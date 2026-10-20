@@ -4,6 +4,7 @@
 import type { Sql } from "postgres";
 import {
   CO_OWNER_WORDS,
+  OWNER_REQUEST_WORDS,
   GYM_COME_BACK_WAIT_DAYS,
   GYM_CONTACT_WORDS,
   GYM_POSTAL_ADDRESS_MAX_CHARS,
@@ -1351,6 +1352,8 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
         : null,
     subscribed,
     paidThrough,
+    handedOverBy: paid ? row.handedOverBy : null,
+    handedOverByYou: paid && row.handedOverByYou,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
     nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
     pendingSize:
@@ -2139,9 +2142,11 @@ export async function listOrgStaff(
   // Who the owner has asked to be a co-owner and has not answered (4b-i).
   const now = deps.now?.() ?? new Date();
   const asked = await coOwnerRepo.waitingRequests(deps.sql, gymId, now);
-  // The co-owner asked to be the owner (4b-ii), and whether a paid plan stops a hand-over.
+  // The co-owner asked to be the owner (4b-ii), and what the gym's plan means for a hand-over:
+  // stopped for now, with why, or a Paddle plan that stops renewing and stays paid until a day.
   const toOwner = await coOwnerRepo.waitingOwnerRequest(deps.sql, gymId, now);
-  const paidPlan = await coOwnerRepo.gymOnPaidPlan(deps.sql, gymId);
+  const plan = await coOwnerRepo.gymHandOverPlan(deps.sql, gymId);
+  const paidPlan = plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear";
   // Whose current list record is certainly theirs: removing them from the app moves it
   // to past members, and the Staff tab's box says so (4a-ii round one, L5).
   const members = rows.filter((r) => r.isMember).map((r) => r.userId);
@@ -2166,6 +2171,8 @@ export async function listOrgStaff(
       };
     }),
     paidPlan,
+    paidPlanNote: plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear" ? OWNER_REQUEST_WORDS[plan.kind] : null,
+    planStops: coOwnerRepo.planStops(plan),
   });
 }
 

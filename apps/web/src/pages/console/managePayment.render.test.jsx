@@ -154,6 +154,16 @@ describe("the plan card's way to Paddle's page", () => {
     expect(screen.getByRole('button', { name: 'Manage payment' })).toBeTruthy();
   });
 
+  it('a plan handed over with the gym says who paid it and when it stops, and does not open their Paddle page (4b-iii-a)', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan({ cancelAtPeriodEnd: true, handedOverBy: 'Kd Owner' }) }));
+    renderOverview();
+    expect(await screen.findByTestId('plan-handed-over')).toBeTruthy();
+    expect(screen.getByTestId('plan-handed-over').textContent).toMatch(
+      /^Kd Owner paid for this plan, and it stops on \S+ \S+\. Then choose your own plan and pay with your own card\.$/,
+    );
+    expect(screen.queryByRole('button', { name: 'Manage payment' })).toBeNull();
+  });
+
   it('closes the tab and says so when the page cannot be opened', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: plan() }));
     orgService.openBillingPortal.mockRejectedValue(Object.assign(new Error('503'), { response: { status: 503, data: { error: 'payments_unavailable', message: "Paying online isn't available right now. Please try again later." } } }));

@@ -27,6 +27,7 @@
 // account, and a cancel kept by us and sent to Razorpay in the hours before the paid month
 // ends, since Razorpay cannot take one back.
 import {
+  OWNER_REQUEST_WORDS,
   PAID_PLAN_GRACE_DAYS,
   payerEmailSchema,
   PLAN_CANCEL_DECIDE_HOURS,
@@ -41,6 +42,7 @@ import {
   type OrgRazorpayMethodResponse,
   type OrgRazorpayPayResponse,
   type PaddleSubscription,
+  type PaddleTransaction,
   type RazorpaySubscription,
 } from "@app/shared";
 import type { Sql } from "postgres";
@@ -511,10 +513,13 @@ export async function openBillingPortal(
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const plan = await repo.managedPlanFor(deps.sql, input.gymId);
   if (plan === null) throw new OrgsError(404, "no_paid_plan", "This plan isn't paid through us, so there's nothing to manage here.");
+  // Handed over (4b-iii-a): Paddle's page is the old owner's own account, with their card and
+  // invoices; and from it the plan could be kept, on their card, for a gym they gave away.
+  if (await repo.liveHandedOver(deps.sql, input.gymId)) throw new OrgsError(409, "handed_over_plan", OWNER_REQUEST_WORDS.handed_over_plan);
   // Paddle's page shows everything its customer pays for: it opens only for somebody
   // who manages the billing of every gym that customer pays for. Paddle keeps one customer
   // per email and the window is filled in with the owner's (1e), so an owner's gyms share one.
-  const otherGyms = await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId });
+  const otherGyms = await repo.otherGymsOfCustomer(deps.sql, { customerRef: plan.customerRef, gymId: input.gymId, callerUserId: input.userId });
   for (const otherGymId of otherGyms) {
     if (!(await holdsPrivilege(deps, otherGymId, input.userId, "billing.manage"))) {
       throw new OrgsError(409, "shared_payer", await sharedPayerMessage(deps, input.gymId, otherGyms));
@@ -1195,6 +1200,9 @@ async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: Paddle
     return await applyPaddleSubscription(deps, sub.id, false);
   };
   if (ownEnd === null || ownEnd <= now) return await cancel("own_trial_ended");
+  // Set to end (cancelled on Paddle's page, or handed over, 4b-iii-a): Paddle answers it with no
+  // next charge, and it is never charged or moved here; it ends by itself.
+  if (sub.scheduled_change?.action === "cancel") return "applied";
 
   if (ownEnd - now >= TRIAL_MOVE_MIN_MS) {
     const moved = await paddle.api.moveTrialEnd(sub.id, new Date(ownEnd).toISOString());
@@ -1214,6 +1222,93 @@ async function alignTrial(deps: BillingDeps, paddle: PaddleSettings, sub: Paddle
   }
   deps.log.info({ event: "billing.trial_activated", gymId }, "a Paddle trial ending within the hour was charged now");
   return await applyPaddleSubscription(deps, sub.id, false);
+}
+
+/** A plan handed to another owner stops renewing at Paddle (4b-iii-a): told until Paddle's own
+ *  record says it ends with its month, and told again if it is ever kept since. Answers
+ *  whether Paddle now says so. Safe to run any number of times. */
+export async function endHandedOverPlan(deps: BillingDeps, input: { gymId: string; subscriptionRef: string; handedOverAt: Date }): Promise<boolean> {
+  const paddle = deps.paddle;
+  if (paddle === null) return false;
+  const current = await paddle.api.getSubscription(input.subscriptionRef);
+  if (current.kind === "not_found") {
+    // Gone at Paddle: nothing left to renew.
+    deps.log.warn({ event: "billing.handed_over_plan_gone", gymId: input.gymId }, "a handed-over plan is no longer at Paddle");
+    await repo.markHandedOverEndSent(deps.sql, { ...input, now: deps.now() });
+    return true;
+  }
+  if (current.kind !== "ok") return false;
+  const sub = current.value;
+  if (sub.status === "canceled") {
+    if ((await applyPaddleSubscription(deps, sub.id, false)) === "retry") return false;
+    await repo.markHandedOverEndSent(deps.sql, { ...input, now: deps.now() });
+    return true;
+  }
+  // A month that started after the hand-over was charged to the old owner (Paddle not told in
+  // time), and a payment failing since is asked of their card: the plan ends now, and what was
+  // taken after the hand-over is refunded. The new owner then chooses their own plan.
+  const started = sub.current_billing_period === null ? null : Date.parse(sub.current_billing_period.starts_at);
+  const renewedSince = started !== null && started > input.handedOverAt.getTime() + HANDED_OVER_SLACK_MS;
+  if (sub.status === "past_due" || renewedSince) return await endHandedOverNow(deps, paddle, sub, input, sub.status === "past_due" ? "past_due" : "renewed");
+  if (sub.scheduled_change?.action !== "cancel") {
+    const asked = await paddle.api.cancelAtPeriodEnd(input.subscriptionRef);
+    // Refused: Paddle locks a plan with a change already waiting; read back, and one set to end
+    // meanwhile (Accept and the worker at once) counts.
+    const after = asked.kind === "ok" ? asked : await paddle.api.getSubscription(input.subscriptionRef);
+    if (after.kind !== "ok" || after.value.scheduled_change?.action !== "cancel") {
+      const refusal = asked.kind === "refused" ? { status: asked.status, code: asked.code } : {};
+      deps.log.error({ event: "billing.handed_over_not_ended", gymId: input.gymId, result: asked.kind, ...refusal }, "a handed-over plan is not yet set to end at Paddle; retrying");
+      return false;
+    }
+  }
+  await repo.markHandedOverEndSent(deps.sql, { ...input, now: deps.now() });
+  return true;
+}
+
+/** Paddle's clock and ours differ a little: a month starting this long after the hand-over is
+ *  one charged after it. */
+const HANDED_OVER_SLACK_MS = 60_000;
+
+/** End a handed-over plan at Paddle now, owing back every payment taken after the hand-over. The
+ *  refunds are written before the cancel, so a cancel whose answer is lost still leaves them. */
+async function endHandedOverNow(
+  deps: BillingDeps,
+  paddle: PaddleSettings,
+  sub: PaddleSubscription,
+  input: { gymId: string; subscriptionRef: string; handedOverAt: Date },
+  why: "past_due" | "renewed",
+): Promise<boolean> {
+  const listed = await paddle.api.listSubscriptionTransactions(sub.id);
+  if (listed.kind !== "ok") return false;
+  const after = (t: PaddleTransaction) => {
+    const at = t.billed_at ?? t.created_at ?? null;
+    return at !== null && Date.parse(at) > input.handedOverAt.getTime();
+  };
+  await repo.oweRefunds(deps.sql, {
+    gymId: input.gymId,
+    provider: "paddle",
+    subscriptionRef: sub.id,
+    reason: "cancelled",
+    transactionRefs: listed.value.filter((t) => MONEY_TAKEN.has(t.status) && t.details?.totals?.grand_total !== "0" && after(t)).map((t) => t.id),
+  });
+  const cancelled = await paddle.api.cancelSubscriptionNow(sub.id);
+  if (cancelled.kind !== "ok" && !(await paddleEnded(paddle, sub.id))) {
+    deps.log.error({ event: "billing.handed_over_not_ended", gymId: input.gymId, result: cancelled.kind, why }, "a handed-over plan was not ended at Paddle; retrying");
+    return false;
+  }
+  deps.log.warn({ event: "billing.handed_over_ended_now", gymId: input.gymId, why }, "a handed-over plan was ended at Paddle at once");
+  await applyPaddleSubscription(deps, sub.id, false);
+  await repo.markHandedOverEndSent(deps.sql, { ...input, now: deps.now() });
+  return true;
+}
+
+/** The worker's minute: every handed-over plan Paddle has not confirmed ends with its month. */
+export async function endHandedOverPlans(deps: BillingDeps): Promise<number> {
+  let ended = 0;
+  for (const plan of await repo.handedOverPlansToEnd(deps.sql, 50)) {
+    if (await endHandedOverPlan(deps, plan)) ended += 1;
+  }
+  return ended;
 }
 
 /** Cancel at Paddle the trial checkouts whose gym's own trial has ended, so their window can

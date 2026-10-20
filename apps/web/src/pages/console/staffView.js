@@ -173,6 +173,35 @@ export function ownerView(person, viewerIsOwner, staff, paidPlan) {
   return other === undefined ? { kind: 'offer' } : { kind: 'other', person: other };
 }
 
+/** The line in Make owner's box about the owner's own Paddle plan (4b-iii-a): it stops renewing
+ *  on Accept. `planStops` is the server's `{ until, trial }`, or null when there is nothing to say. */
+export function planStopsLine(planStops, name) {
+  if (!planStops) return null;
+  const until = planStops.until ? formatJoinedAt(planStops.until) : null;
+  if (planStops.trial) {
+    return until === null
+      ? `Your plan stops before its first payment, so you won't be charged. Then ${name} chooses their own plan.`
+      : `Your plan stops before its first payment, so you won't be charged. Its trial ends on ${until}; then ${name} chooses their own plan.`;
+  }
+  return until === null
+    ? `Your plan stops renewing, so you won't be charged again. When it ends, ${name} chooses their own plan.`
+    : `Your plan stops renewing, so you won't be charged again. It stays paid until ${until}; then ${name} chooses their own plan.`;
+}
+
+/** The same, said to the co-owner asked, on their Overview. */
+export function planStopsForYou(planStops) {
+  if (!planStops) return null;
+  const until = planStops.until ? formatJoinedAt(planStops.until) : null;
+  if (planStops.trial) {
+    return until === null
+      ? 'Their plan stops before its first payment; then you choose your own plan and pay with your own card.'
+      : `Their plan stops before its first payment: its trial ends on ${until}; then you choose your own plan and pay with your own card.`;
+  }
+  return until === null
+    ? 'Their plan stops renewing; when it ends, you choose your own plan and pay with your own card.'
+    : `Their plan stops renewing and stays paid until ${until}; then you choose your own plan and pay with your own card.`;
+}
+
 /** "3 people run your gym", from the whole list.
  *
  *  It takes the ARRAY and not a page because `listStaff` has no LIMIT and no

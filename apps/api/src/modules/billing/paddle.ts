@@ -71,6 +71,8 @@ export interface PaddleApi {
   moveTrialEnd(subscriptionId: string, at: string): Promise<PaddleResult<PaddleSubscription>>;
   /** End a subscription's trial now: Paddle charges the first payment at once. */
   activateTrial(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
+  /** Stop a subscription renewing: it ends with the month already paid (4b-iii-a). */
+  cancelAtPeriodEnd(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
 }
 
 /** The catalogue calls `tools/paddle-prices.ts` makes. */
@@ -253,6 +255,11 @@ export function createPaddleApi(opts: {
       const path = subPath(subscriptionId);
       if (path === null) return { kind: "not_found" };
       return unwrap(await call("POST", `${path}/activate`, paddleEnvelope(paddleSubscriptionSchema)));
+    },
+    async cancelAtPeriodEnd(subscriptionId) {
+      const path = subPath(subscriptionId);
+      if (path === null) return { kind: "not_found" };
+      return unwrap(await call("POST", `${path}/cancel`, paddleEnvelope(paddleSubscriptionSchema), { effective_from: "next_billing_period" }));
     },
     async getPrice(id) {
       if (!/^pri_[a-z\d]{26}$/.test(id)) return { kind: "not_found" };

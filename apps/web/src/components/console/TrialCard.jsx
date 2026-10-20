@@ -21,6 +21,7 @@ import {
   cancelChangeBox,
   pendingChangeText,
   pendingFit,
+  handedOverText,
   planEndingText,
   planHeadline,
   seatLineText,
@@ -173,6 +174,7 @@ export default function TrialCard({ org }) {
   const resize = canChangeSize(org);
   const razorpay = isPaidThroughRazorpay(org);
   const ending = planEndingText(org);
+  const handedOver = handedOverText(sub, org);
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
@@ -319,6 +321,11 @@ export default function TrialCard({ org }) {
       ) : null}
 
       <SeatLine org={org} />
+      {handedOver !== null ? (
+        <div className="text-sm mt-3" style={muted} data-testid="plan-handed-over">
+          {handedOver}
+        </div>
+      ) : null}
       {razorpay ? (
         <div className="text-sm mt-3" style={muted} data-testid="paid-through-razorpay">
           Paid through Razorpay, which emails you about each payment.
@@ -335,7 +342,8 @@ export default function TrialCard({ org }) {
         {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
         {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
             invoices. One paid through Razorpay is managed here (1d-ii), below. */}
-        {!razorpay && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
+        {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
+        {!razorpay && handedOver === null && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
           <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
         ) : null}
       </div>

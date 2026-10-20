@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2, ShieldCheck } from 'lucide-react';
 import { formatJoinedAt } from '../../pages/console/consoleView';
+import { planStopsForYou } from '../../pages/console/staffView';
 import { errorText, orgService } from '../../api/orgsApi';
 
 // "BE A CO-OWNER OF {GYM}" (ROADMAP 4b-i): the gym's owner asked the person reading this
@@ -27,7 +28,10 @@ const KINDS = {
     testId: 'owner-request',
     title: (gym) => `Be the owner of ${gym}`,
     asked: 'asked you to be the owner.',
-    what: (who) => `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.`,
+    what: (who, request) => {
+      const plan = planStopsForYou(request?.planStops);
+      return `As the owner you can also add and remove co-owners. ${who} stays on as a co-owner.${plan === null ? '' : ` ${plan}`}`;
+    },
     yes: (gym) => `You're now the owner of ${gym}.`,
   },
 };
@@ -97,7 +101,7 @@ export default function CoOwnerRequest({ gymId, gymName, onAccepted, kind = 'co-
         </div>
       </div>
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>
-        {words.what(request.ownerName || 'The owner')} The request works until {formatJoinedAt(request.expiresAt)}.
+        {words.what(request.ownerName || 'The owner', request)} The request works until {formatJoinedAt(request.expiresAt)}.
       </p>
       {problem !== null ? (
         <p role="alert" className="text-xs" style={{ color: '#ef4444' }}>

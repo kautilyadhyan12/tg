@@ -736,6 +736,43 @@ export async function managedPlanFor(sql: SqlOrTx, gymId: string): Promise<Manag
   };
 }
 
+/** The live Paddle plans handed to another owner that Paddle has not yet confirmed end with
+ *  their month (4b-iii-a): the worker tells Paddle until it has. */
+export async function handedOverPlansToEnd(
+  sql: SqlOrTx,
+  limit: number,
+): Promise<{ gymId: string; subscriptionRef: string; handedOverAt: Date }[]> {
+  // Past due, or its grace ended: a payment failed on the old owner's card after the hand-over,
+  // which Paddle keeps asking for, so it is looked at until it has ended.
+  const rows = await sql<{ owner_id: string; provider_ref: string; handed_over_at: Date }[]>`
+    SELECT owner_id, provider_ref, handed_over_at FROM subscriptions
+    WHERE handed_over_at IS NOT NULL AND provider = 'paddle' AND provider_ref IS NOT NULL AND owner_type = 'gym'
+      AND ((status IN ('trialing','active') AND (handed_over_end_sent_at IS NULL OR NOT cancel_at_period_end))
+           OR status = 'past_due'
+           OR (status = 'expired' AND cancel_reason = ${GRACE_EXPIRED}))
+    -- In no fixed order: a plan Paddle keeps refusing never holds the others back.
+    ORDER BY random()
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ gymId: r.owner_id, subscriptionRef: r.provider_ref, handedOverAt: r.handed_over_at }));
+}
+
+/** Paddle confirmed a handed-over plan ends with its month. */
+export async function markHandedOverEndSent(sql: SqlOrTx, input: { gymId: string; subscriptionRef: string; now: Date }): Promise<void> {
+  await sql`
+    UPDATE subscriptions SET handed_over_end_sent_at = ${input.now}, cancel_at_period_end = true
+    WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'paddle' AND provider_ref = ${input.subscriptionRef}
+      AND handed_over_at IS NOT NULL`;
+}
+
+/** Is the gym's plan one handed over from another owner (4b-iii-a): live, or its grace ended? */
+export async function liveHandedOver(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND handed_over_at IS NOT NULL
+      AND (status IN ('trialing','active','past_due') OR cancel_reason = ${GRACE_EXPIRED})`;
+  return rows.length > 0;
+}
+
 /** The gym's owner, for the words of a refusal: their account and the name they go by. */
 export async function gymOwner(sql: SqlOrTx, gymId: string): Promise<{ userId: string; displayName: string } | null> {
   const rows = await sql<{ id: string; display_name: string }[]>`
@@ -747,12 +784,15 @@ export async function gymOwner(sql: SqlOrTx, gymId: string): Promise<{ userId: s
 /** The other gyms paid by this Paddle customer. Paddle keeps one customer per email and
  *  reuses it at checkout, and its portal signs in as the whole customer, so every one of
  *  these gyms' plans, invoices and card is on the page this gym's staff would open. */
-export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: string; gymId: string }): Promise<string[]> {
+export async function otherGymsOfCustomer(sql: SqlOrTx, input: { customerRef: string; gymId: string; callerUserId: string }): Promise<string[]> {
   const rows = await sql<{ owner_id: string }[]>`
     SELECT DISTINCT owner_id FROM subscriptions
     WHERE provider = 'paddle' AND provider_customer_ref = ${input.customerRef}
       AND owner_type = 'gym' AND owner_id <> ${input.gymId}
-      AND cancel_reason IS DISTINCT FROM 'duplicate'`;
+      AND cancel_reason IS DISTINCT FROM 'duplicate'
+      -- A plan the caller paid for and handed over with its gym (4b-iii-a) is their own account:
+      -- not another gym's billing kept from them. For anybody else it is, as any other gym is.
+      AND handed_over_from IS DISTINCT FROM ${input.callerUserId}::uuid`;
   return rows.map((r) => r.owner_id);
 }
 
@@ -915,10 +955,11 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
       plan_id: string;
       seat_cap: number | null;
       currency: string;
+      handed_over_at: Date | null;
     }[]
   >`
     SELECT s.id, s.status, s.provider, s.provider_ref, s.cancel_at_period_end, s.current_period_end,
-           s.plan_id, p.seat_cap, p.currency
+           s.plan_id, p.seat_cap, p.currency, s.handed_over_at
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
       AND s.status IN ('trialing','active','past_due')
@@ -934,7 +975,8 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
   if (row.provider === "razorpay") return { kind: "paid_through_razorpay" };
   if (row.provider !== "paddle" || row.provider_ref === null) return { kind: "no_paid_plan", trialing: row.status === "trialing" };
   if (row.status === "past_due") return { kind: "payment_overdue" };
-  if (row.cancel_at_period_end) return { kind: "plan_ending", endsAt: row.current_period_end };
+  // A plan handed to another owner ends with its month, even while Paddle is still being told.
+  if (row.cancel_at_period_end || row.handed_over_at !== null) return { kind: "plan_ending", endsAt: row.current_period_end };
 
   const plans = await sql<{ id: string; code: string; seat_cap: number | null; paddle_price_id: string | null; price_minor: number; currency: string }[]>`
     SELECT id, code, seat_cap, paddle_price_id, price_minor, currency FROM plans

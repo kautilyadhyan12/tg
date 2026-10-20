@@ -6,7 +6,7 @@
 // THE RULE THIS FILE HOLDS: nobody becomes an owner unless the gym's own owner asked them,
 // while they were on its staff, and they themselves pressed Accept before the request ended.
 import type { Sql, TransactionSql } from "postgres";
-import type { PayProvider } from "../../billing/repo.js";
+import { GRACE_EXPIRED, type PayProvider } from "../../billing/repo.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -251,26 +251,88 @@ export async function answerRequest(
 // ── The owner hands the gym to a co-owner (ROADMAP Stage 2 item 4b-ii) ────────────────────
 //
 // THE RULE THESE HOLD: the gym's owner changes only when its owner asked one of its
-// co-owners, while they were a co-owner on that same staff row and the gym was on no paid
-// plan, and that co-owner themselves pressed Accept before the request ended. The old owner's
-// staff row stays an owner's, so from then they are a co-owner.
+// co-owners, while they were a co-owner on that same staff row, and that co-owner themselves
+// pressed Accept before the request ended. The old owner's staff row stays an owner's, so from
+// then they are a co-owner. A plan the old owner pays through Paddle stops renewing in the same
+// transaction that moves the gym (4b-iii-a), so they are never charged for a gym they gave away.
 
 // A WAITING REQUEST, in every reader below: pending, in date, sent by the gym's owner as it
 // is now, to somebody still a co-owner on the staff row they were asked on.
 
-/** The gym is on a plan somebody pays for at Paddle or Razorpay, live or still being paid. */
-async function onPaidPlan(tx: Sql | TransactionSql, gymId: string): Promise<boolean> {
-  const rows = await tx`
-    SELECT 1 FROM subscriptions
-    WHERE owner_type = 'gym' AND owner_id = ${gymId}
-      AND provider NOT IN ('none','pilot') AND status IN ('trialing','active','past_due')
-    LIMIT 1`;
-  return rows.length > 0;
+/** What the gym's plan means for a hand-over. `paddle`: handed over, it stops renewing and
+ *  stays paid until `paidUntil` (`trial`: a paid trial, nothing charged; `handedOverFrom`:
+ *  it was handed over before, by the person who paid it). The others stop a hand-over for now:
+ *  a plan paid through Razorpay (4b-iii-b), money owed (a plan past due, or one whose grace
+ *  ended, which Paddle may still collect on the old owner's card), or two plans at once. */
+export type HandOverPlan =
+  | { kind: "none" }
+  | {
+      kind: "paddle";
+      subscriptionId: string;
+      subscriptionRef: string;
+      paidUntil: Date | null;
+      trial: boolean;
+      handedOverFrom: string | null;
+      handedOver: boolean;
+    }
+  | { kind: "paid_plan" }
+  | { kind: "plan_overdue" }
+  | { kind: "plan_unclear" };
+
+/** A plan renewing within this long is not handed over: Paddle refuses changes in the half hour
+ *  before a charge (`PADDLE_CHANGE_CUTOFF_MS`), so the old owner's card could still be taken. */
+export const HAND_OVER_RENEWAL_CUTOFF_MS = 60 * 60 * 1000;
+
+async function planForHandOver(tx: Sql | TransactionSql, gymId: string): Promise<HandOverPlan> {
+  const rows = await tx<{
+    id: string;
+    provider: string;
+    status: string;
+    provider_ref: string | null;
+    current_period_end: Date | null;
+    handed_over_at: Date | null;
+    handed_over_from: string | null;
+  }[]>`
+    SELECT id, provider, status, provider_ref, current_period_end, handed_over_at, handed_over_from FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider NOT IN ('none','pilot')
+      AND (status IN ('trialing','active','past_due') OR (status = 'expired' AND cancel_reason = ${GRACE_EXPIRED}))`;
+  if (rows.length === 0) return { kind: "none" };
+  if (rows.some((r) => r.provider === "razorpay")) return { kind: "paid_plan" };
+  if (rows.some((r) => r.status === "past_due" || r.status === "expired")) return { kind: "plan_overdue" };
+  const live = rows[0];
+  // One plan a gym, through Paddle; anything else is never handed over on a guess.
+  if (rows.length !== 1 || live === undefined || live.provider !== "paddle" || live.provider_ref === null) return { kind: "plan_unclear" };
+  return {
+    kind: "paddle",
+    subscriptionId: live.id,
+    subscriptionRef: live.provider_ref,
+    paidUntil: live.current_period_end,
+    trial: live.status === "trialing",
+    handedOverFrom: live.handed_over_from,
+    handedOver: live.handed_over_at !== null,
+  };
 }
 
-/** For the Staff tab: whether the gym is on a paid plan. */
-export async function gymOnPaidPlan(sql: Sql, gymId: string): Promise<boolean> {
-  return await onPaidPlan(sql, gymId);
+/** The gym's live Paddle plan handed over from another owner, if any, and when. */
+export async function handedOverPlanRef(sql: Sql, gymId: string): Promise<{ subscriptionRef: string; handedOverAt: Date } | null> {
+  const rows = await sql<{ provider_ref: string; handed_over_at: Date }[]>`
+    SELECT provider_ref, handed_over_at FROM subscriptions
+    WHERE owner_type = 'gym' AND owner_id = ${gymId} AND handed_over_at IS NOT NULL AND provider = 'paddle'
+      AND provider_ref IS NOT NULL AND status IN ('trialing','active','past_due')`;
+  const row = rows[0];
+  return row === undefined ? null : { subscriptionRef: row.provider_ref, handedOverAt: row.handed_over_at };
+}
+
+/** What the box before Make owner, and the request, say about the plan: a Paddle plan this owner
+ *  pays stops renewing on Accept. Null when there is none, or it is already handed over. */
+export function planStops(plan: HandOverPlan): { until: string | null; trial: boolean } | null {
+  if (plan.kind !== "paddle" || plan.handedOver) return null;
+  return { until: plan.paidUntil?.toISOString() ?? null, trial: plan.trial };
+}
+
+/** For the Staff tab and the Overview: what the gym's plan means for a hand-over. */
+export async function gymHandOverPlan(sql: Sql, gymId: string): Promise<HandOverPlan> {
+  return await planForHandOver(sql, gymId);
 }
 
 /** The request waiting at this gym, if any: who was asked, and when it ends. */
@@ -307,6 +369,8 @@ export type SendOwnerOutcome =
   | { kind: "not_staff" }
   | { kind: "not_co_owner" }
   | { kind: "paid_plan" }
+  | { kind: "plan_overdue" }
+  | { kind: "plan_unclear" }
   | { kind: "already_requested" };
 
 export async function sendOwnerRequest(
@@ -328,7 +392,8 @@ export async function sendOwnerRequest(
     const target = staff[0];
     if (target === undefined) return { kind: "not_staff" };
     if (target.role !== "owner" || input.userId === gym.owner_user_id) return { kind: "not_co_owner" };
-    if (await onPaidPlan(tx, input.gymId)) return { kind: "paid_plan" };
+    const plan = await planForHandOver(tx, input.gymId);
+    if (plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear") return { kind: plan.kind };
 
     await endStaleOwnerRequest(tx, input.gymId, input.now);
     const waiting = await tx`SELECT 1 FROM gym_owner_requests WHERE gym_id = ${input.gymId} AND state = 'pending'`;
@@ -417,8 +482,14 @@ export async function myOwnerRequest(
 export type AnswerOwnerOutcome =
   | Exclude<AnswerOutcome, { kind: "accepted" }>
   | { kind: "paid_plan" }
-  /** `closed`: the payment windows Accept closed that the payment company holds, to cancel there. */
-  | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[] };
+  | { kind: "plan_overdue" }
+  | { kind: "plan_unclear" }
+  /** The plan renews within the hour: asked again once it has; the request still waits. */
+  | { kind: "plan_renewing" }
+  /** `closed`: the payment windows Accept closed that the payment company holds, to cancel there.
+   *  `planEnds`: a Paddle plan the old owner paid was set to end here, for Paddle to be told.
+   *  `reread`: handed back to its payer, the plan to read again from Paddle. */
+  | { kind: "accepted"; closed: { provider: PayProvider; ref: string }[]; planEnds: boolean; reread: string | null };
 
 /** Accept or Decline, by the person asked and nobody else: the request is found only with
  *  the caller's own id in the WHERE. Accepting asks again, under the gym's lock, everything
@@ -438,7 +509,7 @@ export async function answerOwnerRequest(
     const request = rows[0];
     if (request === undefined) return { kind: "not_found" };
     if (request.state === "accepted" && input.accept) {
-      return request.owner_user_id === input.userId ? { kind: "accepted", closed: [] } : { kind: "request_gone" };
+      return request.owner_user_id === input.userId ? { kind: "accepted", closed: [], planEnds: false, reread: null } : { kind: "request_gone" };
     }
     if (request.state !== "pending") return { kind: "request_gone" };
     if (request.expires_at.getTime() <= input.now.getTime()) {
@@ -471,9 +542,18 @@ export async function answerOwnerRequest(
       await tx`UPDATE gym_owner_requests SET state = 'cancelled', answered_at = ${input.now} WHERE id = ${input.requestId}`;
       return { kind: "request_gone" };
     }
-    if (await onPaidPlan(tx, input.gymId)) {
+    const plan = await planForHandOver(tx, input.gymId);
+    if (plan.kind === "paid_plan" || plan.kind === "plan_overdue" || plan.kind === "plan_unclear") {
       await tx`UPDATE gym_owner_requests SET state = 'cancelled', answered_at = ${input.now} WHERE id = ${input.requestId}`;
-      return { kind: "paid_plan" };
+      return { kind: plan.kind };
+    }
+    if (
+      plan.kind === "paddle" &&
+      plan.paidUntil !== null &&
+      plan.paidUntil.getTime() - input.now.getTime() < HAND_OVER_RENEWAL_CUTOFF_MS &&
+      plan.paidUntil.getTime() > input.now.getTime() - HAND_OVER_RENEWAL_CUTOFF_MS
+    ) {
+      return { kind: "plan_renewing" };
     }
 
     const moved = await tx`
@@ -481,6 +561,24 @@ export async function answerOwnerRequest(
       WHERE id = ${input.gymId} AND owner_user_id = ${oldOwner}
       RETURNING id`;
     if (moved.length !== 1) throw new Error("the gym's owner changed under its lock");
+    // The old owner's Paddle plan stops renewing with the gym: paid to the end of its month, it
+    // is never charged again. Paddle is told after this commits, and by the worker until it has.
+    // Handed on again, it stays the first payer's; handed back to them, it is theirs again, set
+    // to end, which their own Paddle page can undo. A smaller size waiting has no month to start.
+    if (plan.kind === "paddle") {
+      const back = plan.handedOverFrom === input.userId;
+      await tx`
+        UPDATE subscriptions
+        SET handed_over_at = CASE WHEN ${back} THEN NULL ELSE COALESCE(handed_over_at, ${input.now}) END,
+            handed_over_from = CASE WHEN ${back} THEN NULL ELSE COALESCE(handed_over_from, ${oldOwner}::uuid) END,
+            handed_over_end_sent_at = CASE WHEN ${back} THEN NULL ELSE handed_over_end_sent_at END,
+            -- Handed back before Paddle confirmed it ends: Paddle still renews it, so it is not
+            -- shown as ending (read again from Paddle after this commits).
+            cancel_at_period_end = CASE WHEN ${back} AND handed_over_end_sent_at IS NULL THEN false ELSE true END,
+            pending_plan_id = NULL, pending_from = NULL, pending_requested_plan_id = NULL,
+            pending_held_at = NULL, pending_warned_at = NULL, pending_subscription_ref = NULL
+        WHERE id = ${plan.subscriptionId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
+    }
     // A payment window still open is closed, as a newer press closes it (`beginCheckout`): paid
     // after this, it is set aside as a duplicate and refunded, never the gym's plan, so the old
     // owner never pays for the new owner's gym. Both checkout writers hold this same lock.
@@ -504,10 +602,21 @@ export async function answerOwnerRequest(
       action: "org.owner_handed_over",
       targetType: "gym",
       targetId: input.gymId,
-      meta: { requestId: input.requestId, from: oldOwner, to: input.userId, closedCheckouts: closed.map((c) => c.id) },
+      meta: {
+        requestId: input.requestId,
+        from: oldOwner,
+        to: input.userId,
+        closedCheckouts: closed.map((c) => c.id),
+        ...(plan.kind === "paddle" ? { planEnds: plan.subscriptionId } : {}),
+      },
     });
     // A window still being made has no reference yet: the press making it cancels it itself
     // when it finds it closed (`markCheckoutOpen`).
-    return { kind: "accepted", closed: closed.flatMap((c) => (c.provider_ref === null ? [] : [{ provider: c.provider, ref: c.provider_ref }])) };
+    return {
+      kind: "accepted",
+      closed: closed.flatMap((c) => (c.provider_ref === null ? [] : [{ provider: c.provider, ref: c.provider_ref }])),
+      planEnds: plan.kind === "paddle" && plan.handedOverFrom !== input.userId,
+      reread: plan.kind === "paddle" && plan.handedOverFrom === input.userId ? plan.subscriptionRef : null,
+    };
   });
 }
