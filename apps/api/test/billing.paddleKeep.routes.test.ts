@@ -418,6 +418,18 @@ d("Keep my plan for a Paddle plan set to end (real Postgres)", () => {
       expect(await keptAudits(gym)).toEqual([]);
     }, TEST_TIMEOUT_MS);
 
+    it("Paddle has no record of the plan: says so, never 'couldn't be reached', and nothing written as kept", async () => {
+      const gym = await makePaidGym("Kd");
+      await cancelAtPaddle(gym);
+      paddle.subs.delete(gym.sub);
+      const res = await keep(gym, gym.owner);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("plan_not_at_paddle");
+      expect((JSON.parse(res.body) as { message: string }).message).toBe("Paddle has no record of this plan, so it can't be kept. You can choose a plan again once it ends.");
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(true);
+      expect(await keptAudits(gym)).toEqual([]);
+    }, TEST_TIMEOUT_MS);
+
     it("handed over mid-press and the server dies before it settles: Paddle's event and the worker set it to end", async () => {
       const gym = await makePaidGym("Kd");
       const cora = await makeCoOwner(gym, "Cora");

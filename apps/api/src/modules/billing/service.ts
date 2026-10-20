@@ -2113,11 +2113,13 @@ async function keepPaddlePlan(deps: BillingDeps, input: { userId: string; gymId:
   const asked = await paddle.api.removeScheduledCancel(target.subscriptionRef);
   let kept = asked.kind === "ok" && asked.value.scheduled_change === null;
   let ended = false;
+  let unknown = asked.kind === "not_found";
   if (!kept) {
     // An answer lost, or a second press that lost to the first: Paddle's own record decides.
     const read = await paddle.api.getSubscription(target.subscriptionRef);
     ended = read.kind === "ok" && read.value.status === "canceled";
     kept = read.kind === "ok" && !ended && read.value.scheduled_change === null;
+    unknown = unknown || read.kind === "not_found";
   }
   const settled = await repo.settlePaddleKeep(deps.sql, { gymId: input.gymId, rowId: target.rowId, userId: input.userId, kept });
   if (settled.kind === "handed_over") {
@@ -2127,7 +2129,7 @@ async function keepPaddlePlan(deps: BillingDeps, input: { userId: string; gymId:
   }
   if (!kept) {
     const refusal = asked.kind === "refused" ? { status: asked.status, code: asked.code } : {};
-    deps.log.warn({ event: "billing.keep_failed", provider: "paddle", result: asked.kind, ended, ...refusal }, "Paddle did not keep a plan set to end");
+    deps.log.warn({ event: "billing.keep_failed", provider: "paddle", result: asked.kind, ended, unknown, ...refusal }, "Paddle did not keep a plan set to end");
     if (ended) {
       // Already over at Paddle, its event not yet here: written now, so the plan box reads it.
       await applyPaddleSubscription(deps, target.subscriptionRef);
@@ -2135,6 +2137,9 @@ async function keepPaddlePlan(deps: BillingDeps, input: { userId: string; gymId:
     }
     if (asked.kind === "refused") {
       throw new OrgsError(409, "keep_refused", "Paddle wouldn't keep this plan. Press Manage payment to see it on Paddle's page.");
+    }
+    if (unknown) {
+      throw new OrgsError(409, "plan_not_at_paddle", "Paddle has no record of this plan, so it can't be kept. You can choose a plan again once it ends.");
     }
     throw new OrgsError(503, "payments_unavailable", "Paddle couldn't be reached to keep your plan. Please try again in a moment.");
   }
