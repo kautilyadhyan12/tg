@@ -81,11 +81,15 @@ describe('the words a list of memberships is headed with (roadmap 2b)', () => {
       pluralCap: 'Studios',
     });
     expect(myOrgsWords([of('personal_trainer')]).pluralCap).toBe('Trainers');
-    expect(myOrgsWords([of('crossfit_box')])).toEqual({ one: 'box', oneCap: 'Box', plural: 'boxes', pluralCap: 'Boxes' });
+    expect(myOrgsWords([of('crossfit_box')])).toEqual({ one: 'CrossFit gym', oneCap: 'CrossFit gym', plural: 'CrossFit gyms', pluralCap: 'CrossFit gyms' });
+    expect(myOrgsWords([of('yoga_studio')])).toEqual({ one: 'yoga studio', oneCap: 'Yoga studio', plural: 'yoga studios', pluralCap: 'Yoga studios' });
+    expect(myOrgsWords([of('pilates_studio')]).pluralCap).toBe('Pilates studios');
     expect(myOrgsWords([of('gym'), of('gym', 'y')]).plural).toBe('gyms');
   });
 
   it('falls back to the neutral word when the list mixes types', () => {
+    // Kd, 5f-iv: a yoga studio and a Pilates studio are two kinds, not one "studios".
+    expect(myOrgsWords([of('yoga_studio'), of('pilates_studio', 'y')]).plural).toBe('organisations');
     expect(myOrgsWords([of('gym'), of('studio', 'y')])).toEqual({
       one: 'organisation',
       oneCap: 'Organisation',

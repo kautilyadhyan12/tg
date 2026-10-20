@@ -38,7 +38,7 @@ export type OrgType = z.infer<typeof orgTypeSchema>;
  *  That call was stated to Kd in one line and not overruled.
  *
  *  KD RULING 2026-10-16 (ROADMAP 5f): the app is for five kinds of business — gym,
- *  boutique studio (`studio`), CrossFit box, yoga studio, Pilates studio — and a
+ *  boutique studio (`studio`), CrossFit, yoga studio, Pilates studio — and a
  *  personal trainer working alone is no longer one. `personal_trainer` is closed here
  *  the way `clinic` was: a business already made keeps working. */
 export const createOrgTypeSchema = z.enum(["gym", "studio", "crossfit_box", "yoga_studio", "pilates_studio"]);

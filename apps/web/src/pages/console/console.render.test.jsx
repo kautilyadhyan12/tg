@@ -485,7 +485,7 @@ describe('Create a gym', () => {
 
   it('offers the five kinds of business, and neither a clinic nor a personal trainer', () => {
     drawNew();
-    for (const label of ['Gym', 'Boutique studio', 'CrossFit box', 'Yoga studio', 'Pilates studio']) {
+    for (const label of ['Gym', 'Boutique studio', 'CrossFit', 'Yoga studio', 'Pilates studio']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
     expect(screen.queryByText('Personal trainer')).toBeNull();
@@ -669,10 +669,10 @@ describe('Create a gym', () => {
     expect(orgService.createOrg.mock.calls[0][0].trainsHere).toBe(false);
   });
 
-  it('sends a yes, and asks a CrossFit box in its own words', async () => {
+  it('sends a yes, and asks a CrossFit in its own words', async () => {
     orgService.createOrg.mockResolvedValue({ data: { org: { ...ORG }, joinCode: { code: 'K7QM2X', label: 'Front Desk' } } });
     drawNew();
-    fireEvent.click(screen.getByText('CrossFit box'));
+    fireEvent.click(screen.getByText('CrossFit'));
     const group = screen.getByRole('radiogroup', { name: 'Do you train here too?' });
     expect(within(group).getByRole('radio', { name: /^Yes, I train here too/ }).textContent).toContain("one of your members' places, like any member");
     expect(within(group).getByRole('radio', { name: /^No, I only run it/ }).textContent).toContain('add yourself later from Members');
