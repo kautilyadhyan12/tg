@@ -2169,6 +2169,8 @@ export interface PlanEndReminder {
   status: LocalStatus;
   endsAt: Date;
   lastDay: boolean;
+  /** The week-before email went for this same end. */
+  weekSent: boolean;
   handedOver: boolean;
   cancelSent: boolean;
 }
@@ -2184,7 +2186,7 @@ export async function claimPlanEndReminders(
   const dayFrom = new Date(input.now.getTime() + input.day);
   const weekFrom = new Date(input.now.getTime() + input.week);
   const rows = await sql<
-    { id: string; owner_id: string; provider: string; status: LocalStatus; current_period_end: Date; last_day: boolean; handed_over: boolean; cancel_sent: boolean }[]
+    { id: string; owner_id: string; provider: string; status: LocalStatus; current_period_end: Date; last_day: boolean; week_sent: boolean; handed_over: boolean; cancel_sent: boolean }[]
   >`
     UPDATE subscriptions
     SET end_day_reminded_for = CASE WHEN current_period_end <= ${dayFrom} THEN current_period_end ELSE end_day_reminded_for END,
@@ -2204,6 +2206,7 @@ export async function claimPlanEndReminders(
       AND CASE WHEN current_period_end <= ${dayFrom} THEN end_day_reminded_for IS DISTINCT FROM current_period_end
                ELSE end_week_reminded_for IS DISTINCT FROM current_period_end END
     RETURNING id, owner_id, provider, status, current_period_end, current_period_end <= ${dayFrom} AS last_day,
+              end_week_reminded_for IS NOT DISTINCT FROM current_period_end AS week_sent,
               handed_over_at IS NOT NULL AS handed_over, cancel_sent_at IS NOT NULL AS cancel_sent`;
   const out: PlanEndReminder[] = [];
   for (const r of rows) {
@@ -2216,6 +2219,7 @@ export async function claimPlanEndReminders(
       status: r.status,
       endsAt: r.current_period_end,
       lastDay: r.last_day,
+      weekSent: r.week_sent,
       handedOver: r.handed_over,
       cancelSent: r.cancel_sent,
     });

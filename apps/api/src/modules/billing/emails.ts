@@ -148,8 +148,9 @@ function atLabel(at: Date, timeZone: string): string {
 }
 
 /** What the plan box lets the gym do before its plan ends: keep it through Razorpay until a
- *  moment, keep it on Paddle's own page, or choose a plan once it has ended. */
-export type PlanEndAction = { kind: "keep_razorpay"; until: Date } | { kind: "keep_paddle" } | { kind: "choose" };
+ *  moment, or choose a plan once it has ended. A Paddle plan is not said to be kept: nothing
+ *  shows Paddle's own page can undo a cancel. */
+export type PlanEndAction = { kind: "keep_razorpay"; until: Date } | { kind: "choose" };
 
 export interface PlanEndWords {
   to: string;
@@ -162,8 +163,8 @@ export interface PlanEndWords {
   trialing: boolean;
   endsAt: Date;
   timezone: string;
-  /** The reminder a day before; otherwise the one a week before. */
-  lastDay: boolean;
+  /** The day-before email of a plan already sent the week-before one: its subject says so. */
+  reminder: boolean;
   action: PlanEndAction;
   planLink: string;
 }
@@ -182,9 +183,7 @@ export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
     `After that, its ${people} ${w.members === 1 ? "gets" : "get"} the free app only.`,
     w.action.kind === "keep_razorpay"
       ? `To keep it, press Keep my plan before ${atLabel(w.action.until, w.timezone)}.`
-      : w.action.kind === "keep_paddle"
-        ? "To keep it, press Manage payment."
-        : "Once it ends, you can choose a new plan.",
+      : "Once it ends, you can choose a new plan.",
   ];
   const button = "Go to your plan";
   const text = `${lines.join("\n\n")}\n\n${button}: ${w.planLink}\n\n— ${APP_NAME}`;
@@ -192,6 +191,6 @@ export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
     lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
     `<p><a href="${escapeHtml(w.planLink)}" style="display:inline-block;padding:12px 24px;border-radius:999px;background:#FF8A1F;color:#111111;font-weight:600;text-decoration:none">${button}</a></p>` +
     `<p>— ${APP_NAME}</p>`;
-  const subject = `${w.lastDay ? "Reminder: " : ""}${gym}'s plan ends on ${dayLabel(w.endsAt, w.timezone)}`;
+  const subject = `${w.reminder ? "Reminder: " : ""}${gym}'s plan ends on ${dayLabel(w.endsAt, w.timezone)}`;
   return { to: w.to, subject, text, html };
 }

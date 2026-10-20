@@ -930,13 +930,8 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
     if (facts === null) continue;
     // What the plan box offers before the end (`toOrgSubscription`'s `keepUntil`).
     const keepUntil = new Date(due.endsAt.getTime() - CANCEL_LEAD_MS);
-    const action: PlanEndAction = due.handedOver
-      ? { kind: "choose" }
-      : due.provider === "paddle"
-        ? { kind: "keep_paddle" }
-        : !due.cancelSent && keepUntil > now
-          ? { kind: "keep_razorpay", until: keepUntil }
-          : { kind: "choose" };
+    const action: PlanEndAction =
+      due.provider === "razorpay" && !due.handedOver && !due.cancelSent && keepUntil > now ? { kind: "keep_razorpay", until: keepUntil } : { kind: "choose" };
     // The Overview opens at its Plan box (`#plan`), below a new gym's Start here list.
     const planLink = `${consoleLinks(mail, facts.gymSlug).plan}#plan`;
     for (const to of await billingRecipients(deps, due.gymId)) {
@@ -953,7 +948,7 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
           trialing: due.status === "trialing",
           endsAt: due.endsAt,
           timezone: facts.timezone,
-          lastDay: due.lastDay,
+          reminder: due.lastDay && due.weekSent,
           action,
           planLink,
         }),

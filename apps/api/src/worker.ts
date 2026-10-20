@@ -594,27 +594,31 @@ if (paddle !== null || razorpay !== null) {
     async (job) => {
       if (job.name !== BILLING_PADDLE_EVENTS_JOB) throw new Error(`unknown job on ${BILLING_QUEUE}: ${job.name}`);
       const deps = { sql, redis: createMemoryRedis(), paddle, razorpay, log, now: () => new Date(), mail: billingMail };
-      if (razorpay !== null) {
-        const startedAt = Date.now();
-        const run = await processRazorpayEvents(deps);
-        const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-        const cancels = run.cancels.sent + run.cancels.failed + run.cancels.ended + run.reread;
-        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded + cancels > 0) {
-          log.info({ ...run, provider: "razorpay", durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+      try {
+        if (razorpay !== null) {
+          const startedAt = Date.now();
+          const run = await processRazorpayEvents(deps);
+          const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+          const cancels = run.cancels.sent + run.cancels.failed + run.cancels.ended + run.reread;
+          if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.gracesEnded + cancels > 0) {
+            log.info({ ...run, provider: "razorpay", durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+          }
         }
-      }
-      if (paddle !== null) {
-        const startedAt = Date.now();
-        const run = await processPaddleEvents(deps);
-        const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
-        if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned + run.handedOverEnded > 0) {
-          log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+        if (paddle !== null) {
+          const startedAt = Date.now();
+          const run = await processPaddleEvents(deps);
+          const refunds = run.refunds.requested + run.refunds.notNeeded + run.refunds.deferred + run.refunds.failed;
+          if (run.applied + run.unchanged + run.deferred + run.givenUp + run.forgotten + refunds + run.pendingSizes.applied + run.pendingSizes.waiting + run.pendingSizes.kept + run.pendingSizes.warned + run.handedOverEnded > 0) {
+            log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
+          }
         }
+      } finally {
+        // A plan set to end, through either provider, is reminded a week and a day before (4b-iv),
+        // even in a minute a provider's step failed.
+        const startedAt = Date.now();
+        const reminded = await sendPlanEndReminders(deps);
+        if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
       }
-      // A plan set to end, through either provider, is reminded a week and a day before (4b-iv).
-      const startedAt = Date.now();
-      const reminded = await sendPlanEndReminders(deps);
-      if (reminded > 0) log.info({ reminded, durationMs: Date.now() - startedAt, event: "job.finished", job: BILLING_PLAN_END_REMINDERS_JOB }, "job finished");
     },
     { connection },
   );

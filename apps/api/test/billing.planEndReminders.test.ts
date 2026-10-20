@@ -36,7 +36,7 @@ describe("the reminder's words (no database)", () => {
     // 16:37 UTC is 10:07 pm in India.
     endsAt: new Date("2026-10-27T16:37:00Z"),
     timezone: "Asia/Kolkata",
-    lastDay: false,
+    reminder: false,
     action: { kind: "choose" } as const,
     planLink: `${WEB}/console/iron-den`,
   };
@@ -53,16 +53,15 @@ describe("the reminder's words (no database)", () => {
     expect(m.html).toContain(">Go to your plan</a>");
   });
 
-  it("the day before says it is a reminder", () => {
-    expect(planEndReminderEmail({ ...base, lastDay: true }).subject).toBe("Reminder: Iron Den's plan ends on 27 Oct");
+  it("the day before, after the week-before one, says it is a reminder", () => {
+    expect(planEndReminderEmail({ ...base, reminder: true }).subject).toBe("Reminder: Iron Den's plan ends on 27 Oct");
   });
 
-  it("names what the plan box offers: Keep my plan with its last moment, or Manage payment", () => {
+  it("names what the plan box offers: Keep my plan with its last moment, or a new plan once it ends", () => {
     const keep = planEndReminderEmail({ ...base, action: { kind: "keep_razorpay", until: new Date("2026-10-27T13:37:00Z") } });
     expect(keep.text).toContain("To keep it, press Keep my plan before 7:07 pm on 27 Oct.");
     expect(keep.text).not.toContain("choose a new plan");
-    const paddle = planEndReminderEmail({ ...base, action: { kind: "keep_paddle" } });
-    expect(paddle.text).toContain("To keep it, press Manage payment.");
+    expect(planEndReminderEmail(base).text).not.toMatch(/Keep my plan|Manage payment/);
   });
 
   it("a paid trial set to end charges nothing, and one member reads as one", () => {
@@ -288,7 +287,7 @@ d("plan-end reminders (real Postgres)", () => {
   );
 
   it(
-    "set to end within the last day: only the day-before reminder",
+    "set to end within the last day: only the day-before email, not called a reminder of one never sent",
     async () => {
       const gym = await makeGym({ provider: "paddle", end: at(10 * HOUR_MS), setToEnd: true });
       const from = sent.length;
@@ -296,7 +295,7 @@ d("plan-end reminders (real Postgres)", () => {
       await run(at(HOUR_MS));
       const got = to(gym, from);
       expect(got).toHaveLength(1);
-      expect(got[0]?.subject).toMatch(/^Reminder: /);
+      expect(got[0]?.subject).toMatch(/^Iron Den .+'s plan ends on /);
     },
     T,
   );
@@ -369,7 +368,10 @@ d("plan-end reminders (real Postgres)", () => {
         const from = sent.length;
         await run(now);
         const [k] = to(keep, from);
-        expect(k?.text).toContain("To keep it, press Keep my plan before");
+        // Three hours before the end, in the gym's own time (the plan box's `keepUntil`).
+        const until = new Date(end.getTime() - 3 * HOUR_MS);
+        const zone = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { ...o, timeZone: "Asia/Kolkata" }).format(until);
+        expect(k?.text).toContain(`To keep it, press Keep my plan before ${zone({ hour: "numeric", minute: "2-digit", hour12: true })} on ${zone({ day: "numeric", month: "short" })}.`);
         expect(k?.text).toContain("After that, its 3 members get the free app only.");
         expect(k?.text).toMatch(/up to 250 members at ₹1,999(\.00)? a month/);
         const [s] = to(sentAlready, from);
@@ -380,7 +382,20 @@ d("plan-end reminders (real Postgres)", () => {
     );
 
     it(
-      "Paddle: Manage payment; handed over, either provider: choose a new plan, never keep",
+      "Razorpay inside its last three hours, its cancel not yet sent: too late to keep, so choose a new plan",
+      async () => {
+        const gym = await makeGym({ provider: "razorpay", end: at(2 * HOUR_MS), setToEnd: true });
+        const from = sent.length;
+        await run(now);
+        const [m] = to(gym, from);
+        expect(m?.text).toContain("Once it ends, you can choose a new plan.");
+        expect(m?.text).not.toContain("Keep my plan");
+      },
+      T,
+    );
+
+    it(
+      "Paddle, and handed over through either provider: choose a new plan, never keep and never Manage payment",
       async () => {
         const paddle = await makeGym({ provider: "paddle", end: at(3 * DAY_MS), setToEnd: true });
         const handedPaddle = await makeGym({ provider: "paddle", end: at(3 * DAY_MS), setToEnd: true });
@@ -390,8 +405,7 @@ d("plan-end reminders (real Postgres)", () => {
         }
         const from = sent.length;
         await run(now);
-        expect(to(paddle, from)[0]?.text).toContain("To keep it, press Manage payment.");
-        for (const g of [handedPaddle, handedRazorpay]) {
+        for (const g of [paddle, handedPaddle, handedRazorpay]) {
           const [m] = to(g, from);
           expect(m?.text).toContain("Once it ends, you can choose a new plan.");
           expect(m?.text).not.toMatch(/Keep my plan|Manage payment/);
@@ -406,7 +420,10 @@ d("plan-end reminders (real Postgres)", () => {
         const gym = await makeGym({ provider: "paddle", end: at(2 * DAY_MS), setToEnd: true, status: "trialing" });
         const from = sent.length;
         await run(now);
-        expect(to(gym, from)[0]?.text).toMatch(/plan ends with its free trial, at .+\. Nothing is charged\./);
+        const [m] = to(gym, from);
+        expect(m?.text).toMatch(/plan ends with its free trial, at .+\. Nothing is charged\./);
+        expect(m?.text).toContain("Once it ends, you can choose a new plan.");
+        expect(m?.text).not.toMatch(/Keep my plan|Manage payment/);
       },
       T,
     );
