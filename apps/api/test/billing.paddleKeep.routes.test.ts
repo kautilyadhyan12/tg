@@ -357,7 +357,7 @@ d("Keep my plan for a Paddle plan set to end (real Postgres)", () => {
       expect(Date.parse((await consolePlan(gym, gym.owner))?.keepUntil ?? "")).toBeLessThan(Date.now());
       const res = await keep(gym, gym.owner);
       expect(res.statusCode, res.body).toBe(409);
-      expect(errorOf(res)).toBe("cancel_sent");
+      expect(errorOf(res)).toBe("too_late");
       expect((JSON.parse(res.body) as { message: string }).message).toMatch(/^Your plan ends on .+, and it's too close to then to keep it\. You can choose a plan again once it ends\.$/);
       expect(removed(gym)).toBe(0);
       expect(paddle.renews(gym.sub)).toBe(false);
@@ -380,6 +380,70 @@ d("Keep my plan for a Paddle plan set to end (real Postgres)", () => {
       expect(res.statusCode, res.body).toBe(409);
       expect(errorOf(res)).toBe("plan_past_due");
       expect(removed(gym)).toBe(0);
+    }, TEST_TIMEOUT_MS);
+  });
+
+  // ── Round one (`reviews/1g-2-findings.md`) ─────────────────────────────────────────────────
+  describe("round one", () => {
+    it("Paddle refuses: a true sentence, never 'couldn't be reached', and nothing written as kept", async () => {
+      const gym = await makePaidGym("Kd");
+      await cancelAtPaddle(gym);
+      paddle.refuseNextRemoveCancel = true;
+      const res = await keep(gym, gym.owner);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("keep_refused");
+      expect((JSON.parse(res.body) as { message: string }).message).toBe("Paddle wouldn't keep this plan. Press Manage payment to see it on Paddle's page.");
+      expect(paddle.renews(gym.sub)).toBe(false);
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(true);
+      expect(await keptAudits(gym)).toEqual([]);
+    }, TEST_TIMEOUT_MS);
+
+    it("already ended at Paddle, its event not yet here: says so, the row reads it ended, nothing written as kept", async () => {
+      const gym = await makePaidGym("Kd");
+      await cancelAtPaddle(gym);
+      paddle.update(gym.sub, { status: "canceled", scheduled_change: null });
+      const res = await keep(gym, gym.owner);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("plan_ended");
+      expect((JSON.parse(res.body) as { message: string }).message).toBe("Your plan has already ended, so it can't be kept. You can choose a new plan.");
+      const rows = await sql<{ status: string }[]>`SELECT status FROM subscriptions WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider_ref = ${gym.sub}`;
+      expect(rows[0]?.status).not.toBe("active");
+      expect(await keptAudits(gym)).toEqual([]);
+    }, TEST_TIMEOUT_MS);
+
+    it("handed over mid-press and the server dies before it settles: Paddle's event and the worker set it to end", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      await cancelAtPaddle(gym);
+      paddle.duringNextRemoveCancel = () => handOver(gym, cora);
+      // Paddle takes the cancel back; nothing after it runs.
+      expect((await paddle.removeScheduledCancel(gym.sub)).kind).toBe("ok");
+      expect(paddle.renews(gym.sub)).toBe(true);
+      expect(await applyPaddleSubscription(billing, gym.sub)).toBe("applied");
+      expect(await endHandedOverPlans(billing)).toBeGreaterThanOrEqual(1);
+      expect(paddle.renews(gym.sub)).toBe(false);
+      expect((await planRow(gym))?.cancel_at_period_end).toBe(true);
+    }, TEST_TIMEOUT_MS);
+
+    it("a paid trial set to end is kept: it is charged when the gym's own trial ends, never moved, charged early or cancelled", async () => {
+      const gym = await makePaidGym("Kd");
+      const trialEnd = new Date(Date.now() + 3 * DAY_MS).toISOString();
+      await sql`
+        INSERT INTO subscriptions (owner_type, owner_id, plan_id, status, provider, trial_ends_at, ended_at, cancel_reason)
+        VALUES ('gym', ${gym.id}, (SELECT id FROM plans WHERE code = ${PLAN}), 'expired', 'none', ${trialEnd}, now(), 'trial_subscribed')`;
+      paddle.update(gym.sub, { status: "trialing", next_billed_at: trialEnd, current_billing_period: { starts_at: new Date(Date.now() - 5 * DAY_MS).toISOString(), ends_at: trialEnd } });
+      await sql`UPDATE subscriptions SET status = 'trialing', trial_ends_at = ${trialEnd}, current_period_end = ${trialEnd} WHERE owner_type = 'gym' AND owner_id = ${gym.id} AND provider = 'paddle'`;
+      await cancelAtPaddle(gym);
+      expect((await consolePlan(gym, gym.owner))?.keepUntil).not.toBeNull();
+
+      const res = await keep(gym, gym.owner);
+      expect(res.statusCode, res.body).toBe(200);
+      expect(paddle.renews(gym.sub)).toBe(true);
+      expect(paddle.subs.get(gym.sub)?.next_billed_at).toBe(trialEnd);
+      expect(paddle.trialMoves.filter((m) => m.subscriptionId === gym.sub)).toEqual([]);
+      expect(paddle.activations).not.toContain(gym.sub);
+      expect(paddle.cancelledSubs).not.toContain(gym.sub);
+      expect(await keptAudits(gym)).toEqual(["paddle"]);
     }, TEST_TIMEOUT_MS);
   });
 });

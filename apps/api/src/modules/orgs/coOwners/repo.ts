@@ -606,8 +606,9 @@ export async function answerOwnerRequest(
     // Razorpay plan is set to end as Cancel plan sets it, and its cancel is sent to Razorpay
     // after this commits (`sendDueRazorpayCancels`; Kd, 2026-10-20), by the worker if that
     // fails. Handed on again, it stays the first payer's; handed back to them, it is theirs
-    // again, set to end, which their own Paddle page can undo, and Keep my plan while a Razorpay
-    // cancel has not gone. A smaller size waiting has no month to start.
+    // again, set to end, which Keep my plan undoes (a Paddle plan until three hours before the
+    // end, 1g; a Razorpay plan while its cancel has not gone). A smaller size waiting has no
+    // month to start.
     if (plan.kind === "paid") {
       const back = plan.handedOverFrom === input.userId;
       const paddle = plan.provider === "paddle";

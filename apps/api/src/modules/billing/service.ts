@@ -2095,7 +2095,7 @@ export async function keepPlan(deps: BillingDeps, input: { userId: string; gymId
       throw new OrgsError(409, "plan_past_due", "A payment didn't go through, so this plan can't be kept here. Press Update payment method to pay it.");
     case "too_late": {
       const ends = target.endsAt === null ? "its last day" : dayLabel(target.endsAt, org.timezone);
-      throw new OrgsError(409, "cancel_sent", `Your plan ends on ${ends}, and it's too close to then to keep it. You can choose a plan again once it ends.`);
+      throw new OrgsError(409, "too_late", `Your plan ends on ${ends}, and it's too close to then to keep it. You can choose a plan again once it ends.`);
     }
     case "not_ending":
       return await planNow(deps, input.gymId);
@@ -2112,10 +2112,12 @@ async function keepPaddlePlan(deps: BillingDeps, input: { userId: string; gymId:
   if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const asked = await paddle.api.removeScheduledCancel(target.subscriptionRef);
   let kept = asked.kind === "ok" && asked.value.scheduled_change === null;
+  let ended = false;
   if (!kept) {
     // An answer lost, or a second press that lost to the first: Paddle's own record decides.
     const read = await paddle.api.getSubscription(target.subscriptionRef);
-    kept = read.kind === "ok" && read.value.status !== "canceled" && read.value.scheduled_change === null;
+    ended = read.kind === "ok" && read.value.status === "canceled";
+    kept = read.kind === "ok" && !ended && read.value.scheduled_change === null;
   }
   const settled = await repo.settlePaddleKeep(deps.sql, { gymId: input.gymId, rowId: target.rowId, userId: input.userId, kept });
   if (settled.kind === "handed_over") {
@@ -2125,7 +2127,15 @@ async function keepPaddlePlan(deps: BillingDeps, input: { userId: string; gymId:
   }
   if (!kept) {
     const refusal = asked.kind === "refused" ? { status: asked.status, code: asked.code } : {};
-    deps.log.warn({ event: "billing.keep_failed", provider: "paddle", result: asked.kind, ...refusal }, "Paddle did not keep a plan set to end");
+    deps.log.warn({ event: "billing.keep_failed", provider: "paddle", result: asked.kind, ended, ...refusal }, "Paddle did not keep a plan set to end");
+    if (ended) {
+      // Already over at Paddle, its event not yet here: written now, so the plan box reads it.
+      await applyPaddleSubscription(deps, target.subscriptionRef);
+      throw new OrgsError(409, "plan_ended", "Your plan has already ended, so it can't be kept. You can choose a new plan.");
+    }
+    if (asked.kind === "refused") {
+      throw new OrgsError(409, "keep_refused", "Paddle wouldn't keep this plan. Press Manage payment to see it on Paddle's page.");
+    }
     throw new OrgsError(503, "payments_unavailable", "Paddle couldn't be reached to keep your plan. Please try again in a moment.");
   }
   // Paddle's record, as its own event would bring it; the event is applied the same when it comes.

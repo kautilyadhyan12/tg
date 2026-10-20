@@ -319,6 +319,7 @@ export class FakePaddle implements PaddleApi {
   removeCancelFailures = 0;
   loseRemoveCancelAnswer = false;
   duringNextRemoveCancel: (() => Promise<unknown>) | null = null;
+  refuseNextRemoveCancel = false;
   async removeScheduledCancel(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>> {
     const during = this.duringNextRemoveCancel;
     this.duringNextRemoveCancel = null;
@@ -330,6 +331,10 @@ export class FakePaddle implements PaddleApi {
     const sub = this.subs.get(subscriptionId);
     if (sub === undefined) return { kind: "not_found" };
     if (sub.status === "canceled") return { kind: "refused", status: 400, code: "subscription_update_when_canceled" };
+    if (this.refuseNextRemoveCancel) {
+      this.refuseNextRemoveCancel = false;
+      return { kind: "refused", status: 400, code: "subscription_locked_pending_changes" };
+    }
     this.cancelsRemoved.push(subscriptionId);
     // Renewing again, Paddle next charges when the month ends.
     const next = sub.status === "trialing" ? (sub.scheduled_change?.effective_at ?? sub.next_billed_at ?? null) : (sub.current_billing_period?.ends_at ?? null);
