@@ -44,14 +44,15 @@ import { myOrgsWords } from '../gym/gymMembershipView';
  *  the same expression. */
 export function navWithMyGyms(items, gyms, { dot = false } = {}) {
   // **IT TAKES THE LIST NOW AND NOT A COUNT**, because the label follows what
-  // is in it (roadmap 2b): a studio's client reads "My Studios". A non-array is
-  // the same answer an unreadable count was — no item at all.
+  // is in it (roadmap 2b): a studio's client reads "My Studios", a yoga studio's
+  // member "My Yoga Studios", each word capitalised as Kd's "My Gyms" is. A
+  // non-array is the same answer an unreadable count was — no item at all.
   const list = Array.isArray(gyms) ? gyms : [];
   if (!Array.isArray(items) || list.length === 0) return items;
   const myGyms = {
     to: '/my-gyms',
     icon: Building2,
-    label: `My ${myOrgsWords(list).pluralCap}`,
+    label: `My ${myOrgsWords(list).pluralCap.replace(/\b[a-z]/gu, (c) => c.toUpperCase())}`,
     dot: dot === true,
   };
   const at = items.findIndex((item) => item.to === '/settings');

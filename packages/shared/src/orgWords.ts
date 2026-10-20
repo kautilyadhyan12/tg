@@ -38,7 +38,7 @@ export interface OrgWords {
   readonly itToMembers: string;
   /** The same word starting a sentence: *"Your trainer is closed today."*. */
   readonly itToMembersCap: string;
-  /** More than one, for a member's list of places: *"My boxes"*. */
+  /** More than one, for a member's list of places: *"My yoga studios"*. */
   readonly itToMembersPlural: string;
   readonly itToMembersPluralCap: string;
   /** One of the people: *"They stay a client of your studio."* */
@@ -247,5 +247,5 @@ export function aCoach(orgType: unknown): string {
  *  Those three places cannot look a type up: two of them run before anybody has
  *  typed a code, and the third is the answer to a code that belongs to nobody.
  *  Kept here so the three read the same. The five kinds of business (2026-10-16) are a
- *  gym or a studio to somebody who has not joined one yet: a CrossFit box is a gym. */
+ *  gym or a studio to somebody who has not joined one yet: a CrossFit is a gym. */
 export const ORG_TYPES_PHRASE = "gym or studio";

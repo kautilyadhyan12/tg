@@ -88,6 +88,8 @@ describe('the words a list of memberships is headed with (roadmap 2b)', () => {
   });
 
   it('falls back to the neutral word when the list mixes types', () => {
+    // Kd, 5f-iv: a yoga studio and a Pilates studio are two kinds, not one "studios".
+    expect(myOrgsWords([of('yoga_studio'), of('pilates_studio', 'y')]).plural).toBe('organisations');
     expect(myOrgsWords([of('gym'), of('studio', 'y')])).toEqual({
       one: 'organisation',
       oneCap: 'Organisation',
