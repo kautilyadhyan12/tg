@@ -937,7 +937,8 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
         : !due.cancelSent && keepUntil > now
           ? { kind: "keep_razorpay", until: keepUntil }
           : { kind: "choose" };
-    const planLink = consoleLinks(mail, facts.gymSlug).plan;
+    // The Overview opens at its Plan box (`#plan`), below a new gym's Start here list.
+    const planLink = `${consoleLinks(mail, facts.gymSlug).plan}#plan`;
     for (const to of await billingRecipients(deps, due.gymId)) {
       await sendBillingEmail(
         deps,

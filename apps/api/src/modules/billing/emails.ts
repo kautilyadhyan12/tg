@@ -181,10 +181,10 @@ export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
       : `${gym}'s plan, ${size(w.seatCap, words)} at ${w.priceLabel} a month, ends at ${when} and won't renew. Nothing more is charged.`,
     `After that, its ${people} ${w.members === 1 ? "gets" : "get"} the free app only.`,
     w.action.kind === "keep_razorpay"
-      ? `To keep it, press Keep my plan on your plan before ${atLabel(w.action.until, w.timezone)}.`
+      ? `To keep it, press Keep my plan before ${atLabel(w.action.until, w.timezone)}.`
       : w.action.kind === "keep_paddle"
-        ? "To keep it, press Manage payment on your plan."
-        : "Once it ends, you can choose a new plan there.",
+        ? "To keep it, press Manage payment."
+        : "Once it ends, you can choose a new plan.",
   ];
   const button = "Go to your plan";
   const text = `${lines.join("\n\n")}\n\n${button}: ${w.planLink}\n\n— ${APP_NAME}`;

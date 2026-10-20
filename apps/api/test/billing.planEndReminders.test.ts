@@ -47,7 +47,7 @@ describe("the reminder's words (no database)", () => {
     expect(m.subject).toBe("Iron Den's plan ends on 27 Oct");
     expect(m.text).toContain("Iron Den's plan, up to 250 members at ₹1,999 a month, ends at 10:07 pm on 27 Oct and won't renew. Nothing more is charged.");
     expect(m.text).toContain("After that, its 214 members get the free app only.");
-    expect(m.text).toContain("Once it ends, you can choose a new plan there.");
+    expect(m.text).toContain("Once it ends, you can choose a new plan.");
     expect(m.text).toContain(`Go to your plan: ${WEB}/console/iron-den`);
     expect(m.html).toContain(`href="${WEB}/console/iron-den"`);
     expect(m.html).toContain(">Go to your plan</a>");
@@ -59,10 +59,10 @@ describe("the reminder's words (no database)", () => {
 
   it("names what the plan box offers: Keep my plan with its last moment, or Manage payment", () => {
     const keep = planEndReminderEmail({ ...base, action: { kind: "keep_razorpay", until: new Date("2026-10-27T13:37:00Z") } });
-    expect(keep.text).toContain("To keep it, press Keep my plan on your plan before 7:07 pm on 27 Oct.");
+    expect(keep.text).toContain("To keep it, press Keep my plan before 7:07 pm on 27 Oct.");
     expect(keep.text).not.toContain("choose a new plan");
     const paddle = planEndReminderEmail({ ...base, action: { kind: "keep_paddle" } });
-    expect(paddle.text).toContain("To keep it, press Manage payment on your plan.");
+    expect(paddle.text).toContain("To keep it, press Manage payment.");
   });
 
   it("a paid trial set to end charges nothing, and one member reads as one", () => {
@@ -239,7 +239,7 @@ d("plan-end reminders (real Postgres)", () => {
         expect(to(gym, from).map((m) => m.to).sort()).toEqual([gym.owner.email, coOwner.email].sort());
         expect(sent.slice(from).some((m) => [manager.email, trainer.email, gone.email, other.owner.email].includes(m.to))).toBe(false);
         // Each email names its own gym only.
-        for (const m of to(gym, from)) expect(m.text).toContain(`/console/${slugOf.get(gym.id) ?? "?"}`);
+        for (const m of to(gym, from)) expect(m.text).toContain(`Go to your plan: ${WEB}/console/${slugOf.get(gym.id) ?? "?"}#plan`);
       },
       T,
     );
@@ -369,11 +369,11 @@ d("plan-end reminders (real Postgres)", () => {
         const from = sent.length;
         await run(now);
         const [k] = to(keep, from);
-        expect(k?.text).toContain("To keep it, press Keep my plan on your plan before");
+        expect(k?.text).toContain("To keep it, press Keep my plan before");
         expect(k?.text).toContain("After that, its 3 members get the free app only.");
         expect(k?.text).toMatch(/up to 250 members at ₹1,999(\.00)? a month/);
         const [s] = to(sentAlready, from);
-        expect(s?.text).toContain("Once it ends, you can choose a new plan there.");
+        expect(s?.text).toContain("Once it ends, you can choose a new plan.");
         expect(s?.text).not.toContain("Keep my plan");
       },
       T,
@@ -390,10 +390,10 @@ d("plan-end reminders (real Postgres)", () => {
         }
         const from = sent.length;
         await run(now);
-        expect(to(paddle, from)[0]?.text).toContain("To keep it, press Manage payment on your plan.");
+        expect(to(paddle, from)[0]?.text).toContain("To keep it, press Manage payment.");
         for (const g of [handedPaddle, handedRazorpay]) {
           const [m] = to(g, from);
-          expect(m?.text).toContain("Once it ends, you can choose a new plan there.");
+          expect(m?.text).toContain("Once it ends, you can choose a new plan.");
           expect(m?.text).not.toMatch(/Keep my plan|Manage payment/);
         }
       },
