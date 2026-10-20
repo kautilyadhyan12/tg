@@ -248,9 +248,9 @@ export async function answerOwnerRequest(
       throw planRefusal(outcome.kind);
     case "accepted":
       // After the hand-over is saved: the old owner's payment windows can no longer be paid,
-      // and their plan stops renewing (the worker tells Paddle again if this fails, and sends a
-      // Razorpay cancel in the hours before the month ends, now if that is now). A smaller size
-      // their Razorpay mandate approved is ended there, as Cancel plan ends it.
+      // and their plan stops renewing (the worker tells Paddle, or sends the Razorpay cancel,
+      // again if this fails). A smaller size their Razorpay mandate approved is ended there, as
+      // Cancel plan ends it.
       if (deps.billing !== null) {
         await closeSuperseded(deps.billing, outcome.closed);
         if (outcome.planEnds === "paddle") await endHandedOverPlans(deps.billing, gymId);

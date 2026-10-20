@@ -548,11 +548,13 @@ export async function answerOwnerRequest(
       await tx`UPDATE gym_owner_requests SET state = 'cancelled', answered_at = ${input.now} WHERE id = ${input.requestId}`;
       return { kind: plan.kind };
     }
+    // A Razorpay month already over, its renewal not yet read from Razorpay, waits too: handed
+    // over on the old date it would end at once, and the renewal be refunded.
     if (
       plan.kind === "paid" &&
       plan.paidUntil !== null &&
       plan.paidUntil.getTime() - input.now.getTime() < HAND_OVER_RENEWAL_CUTOFF_MS &&
-      plan.paidUntil.getTime() > input.now.getTime() - HAND_OVER_RENEWAL_CUTOFF_MS
+      (plan.provider === "razorpay" || plan.paidUntil.getTime() > input.now.getTime() - HAND_OVER_RENEWAL_CUTOFF_MS)
     ) {
       return { kind: "plan_renewing" };
     }
@@ -564,11 +566,11 @@ export async function answerOwnerRequest(
     if (moved.length !== 1) throw new Error("the gym's owner changed under its lock");
     // The old owner's plan stops renewing with the gym: paid to the end of its month, it is never
     // charged again. Paddle is told after this commits, and by the worker until it has; a
-    // Razorpay plan is set to end as Cancel plan sets it, and its cancel goes to Razorpay in the
-    // hours before its month ends (`sendDueRazorpayCancels`), at once if that is now. Handed on
-    // again, it stays the first payer's; handed back to them, it is theirs again, set to end,
-    // which their own Paddle page, or Keep my plan for Razorpay, can undo. A smaller size
-    // waiting has no month to start.
+    // Razorpay plan is set to end as Cancel plan sets it, and its cancel is sent to Razorpay
+    // after this commits (`sendDueRazorpayCancels`; Kd, 2026-10-20), by the worker if that
+    // fails. Handed on again, it stays the first payer's; handed back to them, it is theirs
+    // again, set to end, which their own Paddle page can undo, and Keep my plan while a Razorpay
+    // cancel has not gone. A smaller size waiting has no month to start.
     if (plan.kind === "paid") {
       const back = plan.handedOverFrom === input.userId;
       const paddle = plan.provider === "paddle";

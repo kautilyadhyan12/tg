@@ -1187,9 +1187,9 @@ describe('a plan paid through Razorpay, managed from the console (1d-ii)', () =>
   });
 
   it('a plan set to end says until when it can be kept, or that it is too late', () => {
-    expect(planEndingText(gym({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' }), NOW)).toMatch(/^You cancelled this plan\. You can keep it until .+\.$/);
+    expect(planEndingText(gym({ cancelAtPeriodEnd: true, keepUntil: '2026-10-31T21:00:00.000Z' }), NOW)).toMatch(/^This plan is set to end\. You can keep it until .+\.$/);
     expect(planEndingText(gym({ cancelAtPeriodEnd: true, keepUntil: null }), NOW)).toBe(
-      "You cancelled this plan. It's too close to its end to keep it now; you can choose a plan again once it ends.",
+      "This plan is set to end and can't be kept now. You can choose a plan again once it ends.",
     );
     expect(planEndingText(gym({}), NOW)).toBeNull();
     expect(planEndingText(gym({ cancelAtPeriodEnd: true, paidThrough: 'paddle' }), NOW)).toBeNull();

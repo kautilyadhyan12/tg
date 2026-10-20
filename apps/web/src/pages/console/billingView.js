@@ -235,8 +235,9 @@ export function canKeepRazorpayPlan(org, now = Date.now()) {
 export function planEndingText(org, now = Date.now()) {
   const sub = org?.subscription;
   if (!isPaidThroughRazorpay(org) || sub?.cancelAtPeriodEnd !== true || sub?.handedOverBy != null) return null;
-  if (canKeepRazorpayPlan(org, now)) return `You cancelled this plan. You can keep it until ${momentLabel(sub.keepUntil)}.`;
-  return "You cancelled this plan. It's too close to its end to keep it now; you can choose a plan again once it ends.";
+  // Set to end by Cancel plan, or by a hand-over and then handed back: said without saying who.
+  if (canKeepRazorpayPlan(org, now)) return `This plan is set to end. You can keep it until ${momentLabel(sub.keepUntil)}.`;
+  return "This plan is set to end and can't be kept now. You can choose a plan again once it ends.";
 }
 
 /** THE BOX BEFORE "CANCEL PLAN": when the plan ends, what is charged, and what happens to the

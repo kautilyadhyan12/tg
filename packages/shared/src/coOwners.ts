@@ -113,6 +113,7 @@ export const OWNER_REQUEST_WORDS = {
   plan_unclear: "This plan can't be handed over right now. Please write to support.",
   plan_renewing: "The plan renews within the hour, so the owner can't be changed right now. Please try again once it has renewed.",
   handed_over_plan: "This plan was paid by the last owner and stops when its paid month ends, so it can't be managed here. Choose your own plan when it ends.",
+  handed_over_plan_payer: "You handed this gym over, so this plan stops when its paid month ends and can't be managed here. The new owner chooses the next plan.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
   no_request: "There's no request waiting.",
   request_gone: "This request has ended. Ask the owner to send it again if you still want to be the owner.",
