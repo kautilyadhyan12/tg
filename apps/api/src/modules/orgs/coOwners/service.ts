@@ -20,7 +20,14 @@ import {
   type SendOwnerRequestResponse,
 } from "@app/shared";
 import type { Sql } from "postgres";
-import { applyPaddleSubscription, closeSuperseded, endHandedOverPlan, type BillingDeps } from "../../billing/service.js";
+import {
+  applyPaddleSubscription,
+  closeSuperseded,
+  endGymStrandedSizes,
+  endHandedOverPlan,
+  sendDueRazorpayCancels,
+  type BillingDeps,
+} from "../../billing/service.js";
 import { cleanGymText, GYM_TEXT_IN_EMAIL_CHARS, gymNameForEmail } from "../invites/gymText.js";
 import { defaultPrivilegesFor, OrgsError, requirePrivilege, requireStaff, requireWritablePrivilege } from "../service.js";
 import { emailHmac } from "../invites/address.js";
@@ -135,7 +142,7 @@ export async function answerCoOwnerRequest(
 // through, and the repo refuses anybody who is not the gym's own owner by its owner id.
 
 const notOwner = (): OrgsError => new OrgsError(403, "owner_only", OWNER_REQUEST_WORDS.owner_only);
-const planRefusal = (kind: "paid_plan" | "plan_overdue" | "plan_unclear" | "plan_renewing"): OrgsError =>
+const planRefusal = (kind: "plan_overdue" | "plan_unclear" | "plan_renewing"): OrgsError =>
   new OrgsError(409, kind, OWNER_REQUEST_WORDS[kind]);
 
 /** Tell Paddle the gym's handed-over plan ends with its month, now rather than at the worker's
@@ -157,7 +164,6 @@ export async function sendOwnerRequest(deps: CoOwnerDeps, actorUserId: string, g
       throw new OrgsError(404, "not_staff", OWNER_REQUEST_WORDS.not_staff);
     case "not_co_owner":
       throw new OrgsError(409, "not_co_owner", OWNER_REQUEST_WORDS.not_co_owner);
-    case "paid_plan":
     case "plan_overdue":
     case "plan_unclear":
       throw planRefusal(outcome.kind);
@@ -236,17 +242,22 @@ export async function answerOwnerRequest(
       throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.request_gone);
     case "request_gone":
       throw new OrgsError(409, "request_gone", OWNER_REQUEST_WORDS.request_gone);
-    case "paid_plan":
     case "plan_overdue":
     case "plan_unclear":
     case "plan_renewing":
       throw planRefusal(outcome.kind);
     case "accepted":
       // After the hand-over is saved: the old owner's payment windows can no longer be paid,
-      // and their plan stops renewing at Paddle (the worker tells Paddle again if this fails).
+      // and their plan stops renewing (the worker tells Paddle, or sends the Razorpay cancel,
+      // again if this fails). A smaller size their Razorpay mandate approved is ended there, as
+      // Cancel plan ends it.
       if (deps.billing !== null) {
         await closeSuperseded(deps.billing, outcome.closed);
-        if (outcome.planEnds) await endHandedOverPlans(deps.billing, gymId);
+        if (outcome.planEnds === "paddle") await endHandedOverPlans(deps.billing, gymId);
+        if (outcome.planEnds === "razorpay") {
+          await sendDueRazorpayCancels(deps.billing, gymId);
+          await endGymStrandedSizes(deps.billing, gymId);
+        }
         // Handed back to its payer: the row takes Paddle's own record (renewing, or set to end).
         // Paddle not answering: the worker reads it again, as it does an event from Paddle.
         if (outcome.reread !== null && (await applyPaddleSubscription(deps.billing, outcome.reread, false)) === "retry") {

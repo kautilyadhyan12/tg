@@ -57,10 +57,10 @@ export const CO_OWNER_WORDS = {
 // declines. On Accept they are the owner and the old owner stays a co-owner. The free trial
 // stays counted against whoever started it.
 //
-// A gym paying through Paddle (4b-iii-a; Kd 2026-10-18): Accept hands it over at once, and the
-// old owner's plan stops renewing. It stays paid to the end of its month; then the new owner
-// chooses their own plan and pays in their own name. A plan paid through Razorpay, or one with
-// money owed, is not handed over yet.
+// A gym paying through Paddle (4b-iii-a; Kd 2026-10-18) or Razorpay (4b-iii-b): Accept hands it
+// over at once, and the old owner's plan stops renewing. It stays paid to the end of its month;
+// then the new owner chooses their own plan and pays in their own name. A plan with money owed
+// is not handed over yet.
 
 /** How long a request to be the owner waits for an answer. */
 export const OWNER_REQUEST_DAYS = 7;
@@ -89,7 +89,7 @@ export const myOwnerRequestResponseSchema = z.object({
        *  no such plan, or one already handed over to the owner by somebody else. */
       planStops: z
         .object({
-          /** When the paid month ends; null when Paddle gives no date. */
+          /** When the paid month ends; null when the payment company gives no date. */
           until: z.string().datetime().nullable(),
           /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
           trial: z.boolean(),
@@ -109,11 +109,11 @@ export const OWNER_REQUEST_WORDS = {
   owner_only: "Only the owner can choose a new owner.",
   not_staff: "That person isn't on your staff any more.",
   not_co_owner: "Only a co-owner can be made the owner. Make them a co-owner first.",
-  paid_plan: "While a plan paid through Razorpay is running, the owner can't be changed yet.",
   plan_overdue: "A payment is overdue, so the owner can't be changed until it's paid.",
   plan_unclear: "This plan can't be handed over right now. Please write to support.",
-  plan_renewing: "The plan renews within the hour, so the owner can't be changed right now. Please try again once it has renewed.",
+  plan_renewing: "The plan is renewing, so the owner can't be changed right now. Please try again in an hour.",
   handed_over_plan: "This plan was paid by the last owner and stops when its paid month ends, so it can't be managed here. Choose your own plan when it ends.",
+  handed_over_plan_payer: "You handed over ownership, so this plan stops when its paid month ends and can't be managed here. The new owner chooses the next plan.",
   already_requested: "You've already asked someone to be the owner. Cancel that request to ask someone else.",
   no_request: "There's no request waiting.",
   request_gone: "This request has ended. Ask the owner to send it again if you still want to be the owner.",

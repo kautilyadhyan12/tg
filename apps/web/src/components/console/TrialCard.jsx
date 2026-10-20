@@ -326,7 +326,8 @@ export default function TrialCard({ org }) {
           {handedOver}
         </div>
       ) : null}
-      {razorpay ? (
+      {/* A plan handed over with its gym: Razorpay emails the old owner, who paid for it. */}
+      {razorpay && handedOver === null ? (
         <div className="text-sm mt-3" style={muted} data-testid="paid-through-razorpay">
           Paid through Razorpay, which emails you about each payment.
           {trialing ? ' You can change your size once your first payment is taken.' : null}

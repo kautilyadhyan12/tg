@@ -272,6 +272,19 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
   });
 
+  it("a plan handed over with the gym says who paid it and when it stops, and offers nothing that touches the old owner's mandate (4b-iii-b)", async () => {
+    // A Keep until in the future: Keep my plan would be drawn but for the hand-over.
+    const handed = rupees({ cancelAtPeriodEnd: true, handedOverBy: 'Kd Owner', keepUntil: '2099-01-01T00:00:00.000Z' });
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: handed }));
+    renderOverview();
+    expect((await screen.findByTestId('plan-handed-over')).textContent).toMatch(
+      /^Kd Owner paid for this plan, and it stops on \S+ \S+\. Then choose your own plan and pay with your own card\.$/,
+    );
+    expect(screen.queryByTestId('paid-through-razorpay')).toBeNull();
+    expect(screen.queryByTestId('plan-ending')).toBeNull();
+    expect(screen.queryByRole('button', { name: /pay now|update payment method|cancel plan|keep my plan|change size|manage payment/i })).toBeNull();
+  });
+
   it('a trainer sees no button to pay, change or cancel', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, ...TRAINER, country: 'IN', subscription: rupees({ status: 'past_due' }) }));
     renderOverview();
@@ -297,7 +310,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }));
     fireEvent.click(within(screen.getByTestId('cancel-box')).getByRole('button', { name: 'Cancel plan' }));
     await waitFor(() => expect(orgService.cancelPlan).toHaveBeenCalledWith(GYM_ID));
-    expect(await screen.findByText(/^You cancelled this plan\. You can keep it until /)).toBeTruthy();
+    expect(await screen.findByText(/^This plan is set to end\. You can keep it until /)).toBeTruthy();
     expect(screen.getByText(/^Ends /)).toBeTruthy();
 
     orgService.keepPlan.mockResolvedValue({ data: { subscription: rupees() } });
@@ -310,7 +323,7 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
   it('a plan set to end too close to its end to keep says so, with no Keep my plan', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees({ cancelAtPeriodEnd: true, keepUntil: null }) }));
     renderOverview();
-    expect(await screen.findByText(/too close to its end to keep it now/)).toBeTruthy();
+    expect(await screen.findByText(/^This plan is set to end and can't be kept now./)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /keep my plan|cancel plan/i })).toBeNull();
   });
 
