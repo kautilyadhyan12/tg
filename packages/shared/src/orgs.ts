@@ -2160,11 +2160,11 @@ export const orgStaffResponseSchema = z.object({
   /** The gym's plan stops a hand-over for now (4b-ii); `paidPlanNote` says why. */
   paidPlan: z.boolean().optional(),
   paidPlanNote: z.string().max(200).nullable().optional(),
-  /** A plan the owner pays through Paddle: handed over, it stops renewing; until when it is
-   *  paid, and whether it is a paid trial (4b-iii-a). Null otherwise. */
+  /** A plan the owner pays through Paddle or Razorpay: handed over, it stops renewing; until
+   *  when it is paid, and whether it is a paid trial (4b-iii-a, 4b-iii-b). Null otherwise. */
   planStops: z
     .object({
-      /** When the paid month ends; null when Paddle gives no date. */
+      /** When the paid month ends; null when the payment company gives no date. */
       until: z.string().datetime().nullable(),
       /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
       trial: z.boolean(),

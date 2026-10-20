@@ -1879,10 +1879,18 @@ async function razorpayPlan(
   return { razorpay, plan, timezone: org.timezone };
 }
 
+/** A plan handed over with its gym (4b-iii-b) is paid from the old owner's mandate: nobody pays
+ *  its bills or puts a card on it here. It stops with its month; the new owner then chooses
+ *  their own plan. */
+async function refuseHandedOver(deps: BillingDeps, gymId: string): Promise<void> {
+  if (await repo.liveHandedOver(deps.sql, gymId)) throw new OrgsError(409, "handed_over_plan", OWNER_REQUEST_WORDS.handed_over_plan);
+}
+
 /** "Pay now": Razorpay's own page for the oldest bill this gym's plan still owes. The bill is
  *  found from the subscription on THIS gym's row, never one the browser names. */
 export async function payRazorpayBill(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgRazorpayPayResponse> {
   const { razorpay, plan, timezone } = await razorpayPlan(deps, input);
+  await refuseHandedOver(deps, input.gymId);
   const invoices = await razorpay.api.listSubscriptionInvoices(plan.subscriptionRef);
   if (invoices.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   const owed = oldestOwedInvoice(plan.subscriptionRef, invoices.value);
@@ -1925,6 +1933,7 @@ const METHOD_CHANGEABLE: ReadonlySet<string> = new Set(["authenticated", "active
  *  Razorpay, and the plan otherwise unchanged). */
 export async function openRazorpayMethod(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgRazorpayMethodResponse> {
   const { razorpay, plan } = await razorpayPlan(deps, input);
+  await refuseHandedOver(deps, input.gymId);
   const fetched = await razorpay.api.getSubscription(plan.subscriptionRef);
   if (fetched.kind !== "ok") throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   if (!METHOD_CHANGEABLE.has(fetched.value.status)) {
@@ -2004,6 +2013,8 @@ export async function keepRazorpayPlan(deps: BillingDeps, input: { userId: strin
       throw new OrgsError(409, "org_archived", "This organisation is archived.");
     case "no_paid_plan":
       throw new OrgsError(404, "no_paid_plan", NOT_RAZORPAY);
+    case "handed_over":
+      throw new OrgsError(409, "handed_over_plan", OWNER_REQUEST_WORDS.handed_over_plan);
     case "too_late":
       throw new OrgsError(
         409,
@@ -2431,7 +2442,7 @@ async function endStrandedSizes(deps: BillingDeps, razorpay: RazorpaySettings, g
 
 /** After Cancel this change, or Cancel plan: the smaller size no longer waiting is ended at
  *  Razorpay at once rather than on the worker's next run. */
-async function endGymStrandedSizes(deps: BillingDeps, gymId: string): Promise<void> {
+export async function endGymStrandedSizes(deps: BillingDeps, gymId: string): Promise<void> {
   const razorpay = deps.razorpay ?? null;
   if (razorpay !== null) await endStrandedSizes(deps, razorpay, gymId);
 }

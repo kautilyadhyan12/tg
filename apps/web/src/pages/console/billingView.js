@@ -193,10 +193,12 @@ export function isPaidThroughRazorpay(org) {
 
 /** A plan paid through Razorpay — live, or overdue with the console read-only — and a viewer
  *  who manages billing: Pay now and Update payment method are drawn for them. The server
- *  refuses anyone else. */
+ *  refuses anyone else. A plan handed over with its gym (4b-iii-b) is the old owner's mandate,
+ *  and stops with its month: nothing is drawn. */
 export function canManageRazorpayPlan(org) {
   return (
     canManageBilling(viewerPrivileges(org)) &&
+    org?.subscription?.handedOverBy == null &&
     (isPaidThroughRazorpay(org) || (org?.paymentOverdue === true && org?.paymentOverdueThrough === 'razorpay'))
   );
 }
@@ -232,7 +234,7 @@ export function canKeepRazorpayPlan(org, now = Date.now()) {
 /** The line under a Razorpay plan set to end: until when it can be kept, or that it can't. */
 export function planEndingText(org, now = Date.now()) {
   const sub = org?.subscription;
-  if (!isPaidThroughRazorpay(org) || sub?.cancelAtPeriodEnd !== true) return null;
+  if (!isPaidThroughRazorpay(org) || sub?.cancelAtPeriodEnd !== true || sub?.handedOverBy != null) return null;
   if (canKeepRazorpayPlan(org, now)) return `You cancelled this plan. You can keep it until ${momentLabel(sub.keepUntil)}.`;
   return "You cancelled this plan. It's too close to its end to keep it now; you can choose a plan again once it ends.";
 }

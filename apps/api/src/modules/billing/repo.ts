@@ -1599,6 +1599,8 @@ export type KeepPlanOutcome =
   | { kind: "not_ending" }
   /** Too close to the end: the cancel is with Razorpay, or about to be. */
   | { kind: "too_late"; endsAt: Date | null }
+  /** Handed over with its gym (4b-iii-b): the old owner's plan, which ends with its month. */
+  | { kind: "handed_over" }
   | { kind: "no_paid_plan" }
   | { kind: "org_archived" }
   | { kind: "not_found" };
@@ -1613,14 +1615,15 @@ export async function keepPlan(sql: Sql, input: { gymId: string; userId: string;
     const gym = gyms[0];
     if (gym === undefined) return { kind: "not_found" };
     if (gym.status !== "active") return { kind: "org_archived" };
-    const rows = await tx<{ id: string; cancel_at_period_end: boolean; cancel_sent_at: Date | null; current_period_end: Date | null }[]>`
-      SELECT id, cancel_at_period_end, cancel_sent_at, current_period_end FROM subscriptions
+    const rows = await tx<{ id: string; cancel_at_period_end: boolean; cancel_sent_at: Date | null; current_period_end: Date | null; handed_over_at: Date | null }[]>`
+      SELECT id, cancel_at_period_end, cancel_sent_at, current_period_end, handed_over_at FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'razorpay'
         AND status IN ('trialing','active','past_due')
       LIMIT 1
       FOR UPDATE`;
     const row = rows[0];
     if (row === undefined) return { kind: "no_paid_plan" };
+    if (row.handed_over_at !== null) return { kind: "handed_over" };
     if (!row.cancel_at_period_end) return { kind: "not_ending" };
     const end = row.current_period_end;
     if (row.cancel_sent_at !== null || end === null || end.getTime() - input.now.getTime() <= input.leadMs) {
