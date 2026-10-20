@@ -230,6 +230,9 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
   const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
   const workDeps = () => ({ sql, square: squareSettings(config(), square.api), log: quiet, now: () => clock });
 
+  /** This file's gyms: its worker runs touch nothing else in the shared database. */
+  const mine = async (): Promise<string[]> =>
+    (await sql<{ id: string }[]>`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'card-t-%@example.com')`).map((r) => r.id);
   const cleanup = async () => {
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'card-t-%@example.com')`;
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'card-t-%@example.com'`;
@@ -625,26 +628,26 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     clock = new Date();
     square.state.down = true;
     try {
-      expect((await processSquareWork(workDeps(), [updated])).deferred).toBe(1);
+      expect((await processSquareWork(workDeps(), [updated], await mine())).deferred).toBe(1);
     } finally {
       square.state.down = false;
     }
     clock = new Date(Date.now() + 2 * 60_000);
-    await processSquareWork(workDeps(), [updated]);
+    await processSquareWork(workDeps(), [updated], await mine());
     expect((await view(gym, gym.owner, tara)).card).toMatchObject({ last4: "1111", expMonth: 4, expYear: 2033 });
 
     // A message that a card was stopped which Square does not bear out changes nothing.
     const notReally = `card-t-${uniq()}`;
     await webhook({ id: notReally, type: "card.disabled", merchantId: acct.merchantId, cardId });
     clock = new Date(Date.now() + 1000);
-    await processSquareWork(workDeps(), [notReally]);
+    await processSquareWork(workDeps(), [notReally], await mine());
     expect(await cardRows(gym.id)).toHaveLength(1);
     // Stopped inside Square, as Square says: the record no longer has a card.
     fake.enabled = false;
     const disabled = `card-t-${uniq()}`;
     await webhook({ id: disabled, type: "card.disabled", merchantId: acct.merchantId, cardId });
     clock = new Date(Date.now() + 1000);
-    await processSquareWork(workDeps(), [disabled]);
+    await processSquareWork(workDeps(), [disabled], await mine());
     expect(await cardRows(gym.id)).toEqual([]);
     expect(await agreementsOf(gym.id)).toHaveLength(1);
     expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_card_removed_in_square'`).toHaveLength(1);
@@ -652,7 +655,7 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     const other = `card-t-${uniq()}`;
     await webhook({ id: other, type: "card.forgotten", merchantId: acct.merchantId, cardId: "ccof:nobodyhere" });
     clock = new Date(Date.now() + 1000);
-    expect((await processSquareWork(workDeps(), [other])).unchanged).toBe(1);
+    expect((await processSquareWork(workDeps(), [other], await mine())).unchanged).toBe(1);
   });
 
   it("two records joined keep the newer card; a record deleted for good owes its card's stop and keeps its agreement", async () => {
@@ -673,7 +676,7 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     expect((await agreementsOf(gym.id)).map((a) => a.entry_id)).toEqual([keep, keep]);
     // The worker sends the stop (its clock past the join's, which ran a minute ahead).
     clock = new Date(Date.now() + 2 * 60_000);
-    await processSquareWork(workDeps(), []);
+    await processSquareWork(workDeps(), [], await mine());
     expect(square.cards.get(older?.card_id ?? "")?.enabled).toBe(false);
     expect(await owedOf(gym.id)).toEqual([]);
 
@@ -691,7 +694,7 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
       [null, false],
       [null, false],
     ]);
-    await processSquareWork(workDeps(), []);
+    await processSquareWork(workDeps(), [], await mine());
     expect(squareCardsOf(acct.merchantId).every((c) => !c.enabled)).toBe(true);
 
     // The purge removes an agreement once a year has passed since the record went and three

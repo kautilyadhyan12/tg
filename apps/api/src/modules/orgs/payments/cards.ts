@@ -434,10 +434,11 @@ export async function sendOwedCardDisables(
   square: SquareSettings,
   ids: readonly string[] | null,
   limit = 50,
+  gymIds: readonly string[] | null = null,
 ): Promise<{ sent: number; deferred: number; givenUp: number }> {
   const run = { sent: 0, deferred: 0, givenUp: 0 };
   const now = deps.now();
-  for (const owed of await cards.claimDueDisables(deps.sql, square.environment, now, 5 * 60_000, limit, ids)) {
+  for (const owed of await cards.claimDueDisables(deps.sql, square.environment, now, 5 * 60_000, limit, ids, gymIds)) {
     const row = await repo.readConnection(deps.sql, owed.gymId, square.environment);
     const token = row?.state === "connected" && row.accountId === owed.accountId && row.accessToken !== null ? square.tokens.open(row.accessToken, accessContext(owed.gymId)) : null;
     if (token === null) {

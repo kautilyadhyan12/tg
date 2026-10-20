@@ -211,12 +211,14 @@ export async function claimDueDisables(
   leaseMs: number,
   limit: number,
   ids: readonly string[] | null = null,
+  gymIds: readonly string[] | null = null,
 ): Promise<OwedDisable[]> {
   const rows = await sql<{ id: string; gym_id: string; account_id: string; card_id: string; tries: number }[]>`
     WITH due AS (
       SELECT id FROM gym_card_disables
       WHERE environment = ${environment} AND not_before <= ${now}
         AND (${ids === null}::boolean OR id = ANY(${[...(ids ?? [])]}::uuid[]))
+        AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
       ORDER BY not_before
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED

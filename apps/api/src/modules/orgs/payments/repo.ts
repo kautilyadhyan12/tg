@@ -115,10 +115,14 @@ export async function takeStart(sql: SqlOrTx, stateHash: string, userId: string,
   return rows[0]?.gym_id ?? null;
 }
 
-/** Presses that ran out, of this server's Square environment: the other's are its own. */
-export async function forgetExpiredStarts(sql: SqlOrTx, environment: SquareEnvironment, now: Date): Promise<number> {
+/** Presses that ran out, of this server's Square environment: the other's are its own.
+ *  `gymIds`, here and in the claims below: only these gyms, for a test sharing its database
+ *  with a real connection; production passes null. */
+export async function forgetExpiredStarts(sql: SqlOrTx, environment: SquareEnvironment, now: Date, gymIds: readonly string[] | null = null): Promise<number> {
   const rows = await sql<{ state_hash: string }[]>`
-    DELETE FROM gym_payment_connect_starts WHERE environment = ${environment} AND expires_at <= ${now} RETURNING state_hash`;
+    DELETE FROM gym_payment_connect_starts WHERE environment = ${environment} AND expires_at <= ${now}
+      AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
+    RETURNING state_hash`;
   return rows.length;
 }
 
@@ -217,11 +221,19 @@ export async function connectionsOfAccount(sql: SqlOrTx, environment: SquareEnvi
 
 /** Take the connections whose renewal is due and hold each for `leaseMs`: a second worker
  *  skips them, and a worker that dies leaves them to be taken again. */
-export async function claimDueRefreshes(sql: Sql, environment: SquareEnvironment, now: Date, leaseMs: number, limit: number): Promise<ConnectionRow[]> {
+export async function claimDueRefreshes(
+  sql: Sql,
+  environment: SquareEnvironment,
+  now: Date,
+  leaseMs: number,
+  limit: number,
+  gymIds: readonly string[] | null = null,
+): Promise<ConnectionRow[]> {
   const rows = await sql<RawConnection[]>`
     WITH due AS (
       SELECT gym_id, provider FROM gym_payment_connections
       WHERE provider = 'square' AND environment = ${environment} AND state = 'connected' AND refresh_due_at <= ${now}
+        AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
       ORDER BY refresh_due_at
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
@@ -306,12 +318,14 @@ export async function claimDueRevokes(
   leaseMs: number,
   limit: number,
   ids: readonly string[] | null = null,
+  gymIds: readonly string[] | null = null,
 ): Promise<OwedRevoke[]> {
   const rows = await sql<{ id: string; gym_id: string; environment: SquareEnvironment; account_id: string; access_token: string; whole_account: boolean; tries: number }[]>`
     WITH due AS (
       SELECT id FROM gym_payment_revokes
       WHERE provider = 'square' AND environment = ${environment} AND not_before <= ${now}
         AND (${ids === null}::boolean OR id = ANY(${[...(ids ?? [])]}::uuid[]))
+        AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
       ORDER BY not_before
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED

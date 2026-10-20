@@ -81,7 +81,7 @@ if (gymId !== undefined) {
       await sql`UPDATE gym_payment_connections SET refresh_due_at = now() - interval '1 second' WHERE gym_id = ${gymId} AND provider = 'square'`;
       const run = await processSquareWork({ sql, square, log: { info: () => undefined, warn: () => undefined, error: (o, m) => {
         console.error(m, o);
-      } }, now: () => new Date() });
+      } }, now: () => new Date() }, null, [gymId]);
       const after = await repo.readConnection(sql, gymId, "sandbox");
       check(run.renewed >= 1 && after?.accessToken !== row.accessToken, `renewed by the worker: ${String(run.renewed)} renewed, ${String(run.renewalsWaiting)} waiting, ${String(run.removed)} removed`);
       const renewed = after?.accessToken === null || after === null ? null : square.tokens.open(after.accessToken, accessContext(gymId));

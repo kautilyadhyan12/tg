@@ -114,8 +114,10 @@ async function renew(deps: PaymentsDeps, square: SquareSettings, row: repo.Conne
   return written ? "renewed" : "waiting";
 }
 
-/** `eventIds`: only these events, for a test sharing its database; production passes null. */
-export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly string[] | null = null): Promise<SquareWorkRun> {
+/** `eventIds`: only these events, and `gymIds`: only these gyms' renewals, revokes, card stops and
+ *  presses, for a test sharing its database with a real connection (one run days ahead once
+ *  marked Kd's own test connection taken off, 2026-10-20); production passes null for both. */
+export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly string[] | null = null, gymIds: readonly string[] | null = null): Promise<SquareWorkRun> {
   const run: SquareWorkRun = {
     removed: 0,
     unchanged: 0,
@@ -173,17 +175,17 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     }
   }
 
-  run.revokes = await sendOwedRevokes(deps, square, null);
-  run.cardStops = await sendOwedCardDisables(deps, square, null);
+  run.revokes = await sendOwedRevokes(deps, square, null, 50, gymIds);
+  run.cardStops = await sendOwedCardDisables(deps, square, null, 50, gymIds);
 
-  for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun)) {
+  for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);
     if (outcome === "renewed") run.renewed += 1;
     else if (outcome === "removed") run.removed += 1;
     else run.renewalsWaiting += 1;
   }
 
-  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, square.environment, deps.now());
+  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, square.environment, deps.now(), gymIds);
   run.forgotten = await webhooks.forgetOldSquareEvents(deps.sql, new Date(deps.now().getTime() - SQUARE_WORK.keepDays * 24 * 60 * 60 * 1000), 1000);
   return run;
 }
