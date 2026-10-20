@@ -315,7 +315,7 @@ describe('the database’s words are not the screen’s words (T3 L-6)', () => {
   it('labels org types and roles', () => {
     expect(orgTypeLabel('gym')).toBe('Gym');
     expect(orgTypeLabel('studio')).toBe('Boutique studio');
-    expect(orgTypeLabel('crossfit_box')).toBe('CrossFit box');
+    expect(orgTypeLabel('crossfit_box')).toBe('CrossFit');
     expect(orgTypeLabel('yoga_studio')).toBe('Yoga studio');
     expect(orgTypeLabel('pilates_studio')).toBe('Pilates studio');
     expect(orgTypeLabel('personal_trainer')).toBe('Personal trainer');
@@ -480,10 +480,10 @@ describe('the mark that says a member asked again', () => {
 
 describe('the org-type picker matches what the server will accept', () => {
   it('offers the five kinds of business, and neither a clinic nor a trainer working alone', () => {
-    // Kd, 2026-10-16: gym · boutique studio · CrossFit box · yoga studio · Pilates studio.
+    // Kd, 2026-10-16: gym · boutique studio · CrossFit · yoga studio · Pilates studio.
     expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual(['gym', 'studio', 'crossfit_box', 'yoga_studio', 'pilates_studio']);
     expect(ORG_TYPE_CHOICES.map((c) => c.value)).toEqual([...createOrgTypeSchema.options]);
-    expect(ORG_TYPE_CHOICES.map((c) => c.label)).toEqual(['Gym', 'Boutique studio', 'CrossFit box', 'Yoga studio', 'Pilates studio']);
+    expect(ORG_TYPE_CHOICES.map((c) => c.label)).toEqual(['Gym', 'Boutique studio', 'CrossFit', 'Yoga studio', 'Pilates studio']);
   });
 
   it("uses a trainer's words — clients, not members — and the gym's for anything unknown", () => {
