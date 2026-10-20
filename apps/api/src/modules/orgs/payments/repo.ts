@@ -278,6 +278,24 @@ export async function insertRevoke(
   return row.id;
 }
 
+/** A gym handed to a new owner (ROADMAP 4b): every Square connection it has, in every
+ *  environment, is let go as Disconnect lets it go, its token owed to Square for the worker to
+ *  send. The caller holds the gym's lock, so a Connect or Disconnect waits. How many went. */
+export async function endConnectionsForHandOver(tx: TransactionSql, gymId: string, now: Date): Promise<number> {
+  const rows = await tx<RawConnection[]>`
+    SELECT * FROM gym_payment_connections WHERE gym_id = ${gymId} AND provider = 'square'
+    FOR UPDATE`;
+  for (const raw of rows) {
+    const row = toRow(raw);
+    await deleteConnection(tx, gymId, row.environment);
+    if (row.state !== "connected" || row.accessToken === null) continue;
+    await lockAccount(tx, row.environment, row.accountId);
+    const left = await holders(tx, row.environment, row.accountId);
+    await insertRevoke(tx, { gymId, environment: row.environment, accountId: row.accountId, accessToken: row.accessToken, wholeAccount: left === 0, notBefore: now });
+  }
+  return rows.length;
+}
+
 /** Take owed revokes that are due (`ids`: only these, as the request that wrote them sends
  *  them at once) and hold each for `leaseMs`. */
 export async function claimDueRevokes(

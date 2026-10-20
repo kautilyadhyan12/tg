@@ -829,6 +829,29 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
   );
 
   it(
+    "a gym handed to a co-owner while Square was being asked is not connected to the old owner's account (4b-v)",
+    async () => {
+      clock = new Date();
+      const owner = await person("handed-owner");
+      const partner = await person("handed-partner");
+      const gymId = await gym(owner, "Handed Gym");
+      // What Accept writes, under the gym's lock.
+      square.state.whileAsked = async () => sql`UPDATE gyms SET owner_user_id = ${partner.userId} WHERE id = ${gymId}`;
+      let res: Awaited<ReturnType<typeof finishPress>>;
+      try {
+        res = await finishPress(owner, { state: await startConnect(gymId, owner), code: square.allow(account("MLHANDED")) });
+      } finally {
+        square.state.whileAsked = null;
+      }
+      expect(res.statusCode, res.body).toBe(403);
+      expect((JSON.parse(res.body) as { error: string }).error).toBe("owner_only");
+      expect(await rowOf(gymId)).toBeNull();
+      expect(square.liveTokensOf("MLHANDED")).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "two Allows for one gym: the first stays, and the second account's token is stopped",
     async () => {
       clock = new Date();

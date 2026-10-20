@@ -49,6 +49,8 @@ import type { Sql } from "postgres";
 import type { EmailTransport } from "../../email/resend.js";
 import type { RedisLike } from "../../redis.js";
 import { bustEntitlements } from "../entitlements/service.js";
+import { emailHmac } from "../orgs/invites/address.js";
+import { suppressionsFor } from "../orgs/invites/repo.js";
 import * as orgsRepo from "../orgs/repo.js";
 import { formatPriceMinor, holdsPrivilege, OrgsError, requirePrivilege, toOrgSubscription } from "../orgs/service.js";
 import { dayLabel, momentLabel, planEndReminderEmail, sizeFittedEmail, sizeKeptEmail, sizeWarningEmail, type PlanEndAction } from "./emails.js";
@@ -100,6 +102,9 @@ export interface BillingMail {
   transport: EmailTransport;
   /** The console's origin, for the links in the emails. */
   webOrigin: string;
+  /** The invitations' address key: an address that bounced, refused or complained is not
+   *  written to (`email_suppressions`). Absent or null: none is looked up. */
+  addressKey?: Buffer | null;
 }
 
 /** Paddle's transaction states in which the customer's money has been taken. */
@@ -926,6 +931,8 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
   const now = deps.now();
   let sent = 0;
   for (const due of await repo.claimPlanEndReminders(deps.sql, { now, week: PLAN_END_WEEK_MS, day: PLAN_END_DAY_MS, limit: 50 })) {
+    // Read again now, not at the claim: a plan kept, or its end moved, while earlier plans'
+    // emails went says nothing.
     const facts = await repo.planEndFacts(deps.sql, due);
     if (facts === null) continue;
     // What the plan box offers before the end (`toOrgSubscription`'s `keepUntil`).
@@ -935,6 +942,7 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
     // The Overview opens at its Plan box (`#plan`), below a new gym's Start here list.
     const planLink = `${consoleLinks(mail, facts.gymSlug).plan}#plan`;
     for (const to of await billingRecipients(deps, due.gymId)) {
+      if (!(await repo.planStillEnds(deps.sql, due))) break;
       await sendBillingEmail(
         deps,
         mail,
@@ -998,7 +1006,15 @@ async function billingRecipients(deps: BillingDeps, gymId: string): Promise<stri
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
     if (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) out.push(staff.email);
   }
-  return out;
+  const key = deps.mail?.addressKey ?? null;
+  if (key === null || out.length === 0) return out;
+  // An address that cannot or will not take mail is skipped; an unsubscribe from a gym's member
+  // emails is not one: these are the gym's own account's.
+  const held = await suppressionsFor(deps.sql, gymId, out.map((email) => emailHmac(key, email)));
+  return out.filter((email) => {
+    const reason = held.get(emailHmac(key, email));
+    return reason === undefined || reason === "unsubscribed";
+  });
 }
 
 /** One email; a failure is logged (never the address) and never stops the worker. */

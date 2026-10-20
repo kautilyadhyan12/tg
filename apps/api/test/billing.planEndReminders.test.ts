@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { EmailMessage } from "../src/email/resend.js";
 import { planEndReminderEmail } from "../src/modules/billing/emails.js";
 import { sendPlanEndReminders } from "../src/modules/billing/service.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
 
@@ -171,7 +172,10 @@ d("plan-end reminders (real Postgres)", () => {
   };
 
   const mine = sql`SELECT id FROM gyms WHERE slug LIKE 'endrem-%'`;
+  /** Suppressions this file wrote for addresses of its own. */
+  const held = new Set<string>();
   const cleanup = async () => {
+    await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine}) OR email_hmac = ANY(${[...held]}::text[])`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_staff WHERE gym_id IN (${mine})`;
@@ -424,6 +428,67 @@ d("plan-end reminders (real Postgres)", () => {
         expect(m?.text).toMatch(/plan ends with its free trial, at .+\. Nothing is charged\./);
         expect(m?.text).toContain("Once it ends, you can choose a new plan.");
         expect(m?.text).not.toMatch(/Keep my plan|Manage payment/);
+      },
+      T,
+    );
+  });
+
+  // ── 4b's two extra passes (`handoff/2026-10-20-4b-v.md`) ─────────────────────────────────
+  describe("the two extra passes", () => {
+    const now = new Date();
+    const at = (ms: number) => new Date(now.getTime() + ms);
+
+    it(
+      "a plan kept while the run is emailing earlier plans gets no email saying it ends",
+      async () => {
+        const first = await makeGym({ provider: "razorpay", end: at(2 * DAY_MS), setToEnd: true });
+        const second = await makeGym({ provider: "razorpay", end: at(5 * DAY_MS), setToEnd: true });
+        const from = sent.length;
+        let kept = false;
+        // The second gym's owner presses Keep my plan while the first gym's email is being sent.
+        const keeping = {
+          send: async (m: EmailMessage) => {
+            if (!kept && m.to === first.owner.email) {
+              kept = true;
+              await sql`UPDATE subscriptions SET cancel_at_period_end = false WHERE id = ${second.sub}`;
+            }
+            sent.push(m);
+          },
+        };
+        await sendPlanEndReminders({ sql, redis: createMemoryRedis(), paddle: null, log: silent, now: () => now, mail: { transport: keeping, webOrigin: WEB } });
+        expect(kept).toBe(true);
+        expect(to(first, from)).toHaveLength(1);
+        expect(to(second, from)).toHaveLength(0);
+      },
+      T,
+    );
+
+    it(
+      "an address that bounced, refused or complained is not written to; one that only left a gym's member emails still is",
+      async () => {
+        const key = Buffer.from("plan-end-reminders-address-key", "utf8");
+        const gym = await makeGym({ provider: "paddle", end: at(3 * DAY_MS), setToEnd: true });
+        const kinds = ["refused", "complained", "unsubscribed"] as const;
+        const coOwners: Person[] = [];
+        for (const kind of kinds) {
+          const who = await person(`Co-owner ${kind}`);
+          await staff(gym, who, "owner");
+          coOwners.push(who);
+        }
+        const stops: [Person, string, string | null][] = [
+          [gym.owner, "bounced", null],
+          [coOwners[0] ?? gym.owner, "refused", null],
+          [coOwners[1] ?? gym.owner, "complained", gym.id],
+          [coOwners[2] ?? gym.owner, "unsubscribed", gym.id],
+        ];
+        for (const [who, reason, gymId] of stops) {
+          const hmac = emailHmac(key, who.email);
+          held.add(hmac);
+          await sql`INSERT INTO email_suppressions (gym_id, email_hmac, reason) VALUES (${gymId}, ${hmac}, ${reason})`;
+        }
+        const from = sent.length;
+        await sendPlanEndReminders({ sql, redis: createMemoryRedis(), paddle: null, log: silent, now: () => now, mail: { transport, webOrigin: WEB, addressKey: key } });
+        expect(to(gym, from).map((m) => m.to)).toEqual([coOwners[2]?.email]);
       },
       T,
     );

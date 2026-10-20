@@ -2186,6 +2186,7 @@ export async function listOrgStaff(
     paidPlan,
     paidPlanNote: plan.kind === "plan_overdue" || plan.kind === "plan_unclear" ? OWNER_REQUEST_WORDS[plan.kind] : null,
     planStops: coOwnerRepo.planStops(plan),
+    squareConnected: await coOwnerRepo.gymSquareConnected(deps.sql, gymId),
   });
 }
 

@@ -10,6 +10,7 @@ import {
   CO_OWNER_WORDS,
   OWNER_REQUEST_DAYS,
   OWNER_REQUEST_WORDS,
+  ownerRequestAcceptedWords,
   type AnswerCoOwnerRequestResponse,
   type AnswerOwnerRequestResponse,
   type CancelCoOwnerRequestResponse,
@@ -142,7 +143,7 @@ export async function answerCoOwnerRequest(
 // through, and the repo refuses anybody who is not the gym's own owner by its owner id.
 
 const notOwner = (): OrgsError => new OrgsError(403, "owner_only", OWNER_REQUEST_WORDS.owner_only);
-const planRefusal = (kind: "plan_overdue" | "plan_unclear" | "plan_renewing"): OrgsError =>
+const planRefusal = (kind: "plan_overdue" | "plan_unclear" | "plan_renewing" | "plan_changing"): OrgsError =>
   new OrgsError(409, kind, OWNER_REQUEST_WORDS[kind]);
 
 /** Tell Paddle the gym's handed-over plan ends with its month, now rather than at the worker's
@@ -199,6 +200,8 @@ export async function cancelOwnerRequest(deps: CoOwnerDeps, actorUserId: string,
   switch (outcome.kind) {
     case "owner_only":
       throw notOwner();
+    case "already_accepted":
+      throw new OrgsError(409, "already_accepted", ownerRequestAcceptedWords(outcome.name));
     case "no_request":
       throw new OrgsError(404, "no_request", OWNER_REQUEST_WORDS.no_request);
     case "cancelled":
@@ -217,6 +220,7 @@ export async function myOwnerRequest(deps: CoOwnerDeps, userId: string, gymId: s
       ownerName: request.ownerName.trim(),
       expiresAt: request.expiresAt.toISOString(),
       planStops: repo.planStops(plan),
+      squareConnected: await repo.gymSquareConnected(deps.sql, gymId),
     },
   };
 }
@@ -245,6 +249,7 @@ export async function answerOwnerRequest(
     case "plan_overdue":
     case "plan_unclear":
     case "plan_renewing":
+    case "plan_changing":
       throw planRefusal(outcome.kind);
     case "accepted":
       // After the hand-over is saved: the old owner's payment windows can no longer be paid,

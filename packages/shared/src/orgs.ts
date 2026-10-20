@@ -2171,6 +2171,8 @@ export const orgStaffResponseSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** The gym is connected to Square: handed over, the owner's Square account is disconnected. */
+  squareConnected: z.boolean().optional(),
 });
 export type OrgStaffResponse = z.infer<typeof orgStaffResponseSchema>;
 

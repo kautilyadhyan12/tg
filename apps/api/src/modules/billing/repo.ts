@@ -2227,6 +2227,15 @@ export async function claimPlanEndReminders(
   return out;
 }
 
+/** The claimed plan still ends on its claimed date: asked before each of its emails. */
+export async function planStillEnds(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string; endsAt: Date }): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1 FROM subscriptions
+    WHERE id = ${input.subscriptionRowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
+      AND cancel_at_period_end AND status IN ('trialing','active') AND current_period_end = ${input.endsAt}`;
+  return rows.length > 0;
+}
+
 /** What a plan-end reminder says, read with the gym in the WHERE: the gym, its plan's size and
  *  price, and its members now. */
 export interface PlanEndFacts {
@@ -2240,13 +2249,15 @@ export interface PlanEndFacts {
   currency: string;
 }
 
-export async function planEndFacts(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string }): Promise<PlanEndFacts | null> {
+/** Null when the plan no longer ends on the date it was claimed for (kept, renewed, moved). */
+export async function planEndFacts(sql: SqlOrTx, input: { gymId: string; subscriptionRowId: string; endsAt: Date }): Promise<PlanEndFacts | null> {
   const rows = await sql<{ name: string; slug: string; org_type: string; timezone: string; seat_cap: number | null; price_minor: number; currency: string }[]>`
     SELECT g.name, g.slug, g.org_type, g.timezone, p.seat_cap, p.price_minor, p.currency
     FROM subscriptions s
     JOIN gyms g ON g.id = s.owner_id
     JOIN plans p ON p.id = s.plan_id
-    WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}`;
+    WHERE s.id = ${input.subscriptionRowId} AND s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
+      AND s.cancel_at_period_end AND s.status IN ('trialing','active') AND s.current_period_end = ${input.endsAt}`;
   const row = rows[0];
   if (row === undefined) return null;
   return {

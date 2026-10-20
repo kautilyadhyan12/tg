@@ -39,6 +39,9 @@ const HOOK_TIMEOUT_MS = 60_000;
 const TEST_TIMEOUT_MS = 120_000;
 const PLAN = "zz_hand_over_paddle";
 const PRICE = "pri_" + "h".repeat(26);
+/** A bigger size, for a size change pressed as the co-owner accepts. */
+const BIG = "zz_hand_over_paddle_big";
+const BIG_PRICE = "pri_" + "j".repeat(26);
 const addr = (local: string) => `handpd-t-${local}@handpd-t.example.com`;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -61,7 +64,7 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) => Objec
 d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const signInCodes = new Map<string, string>();
-  const paddle = new FakePaddle({ [PRICE]: { amount: "2900", currency: "USD" } });
+  const paddle = new FakePaddle({ [PRICE]: { amount: "2900", currency: "USD" }, [BIG_PRICE]: { amount: "5900", currency: "USD" } });
   const billing: BillingDeps = {
     sql,
     redis: createMemoryRedis(),
@@ -82,6 +85,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     await sql`DELETE FROM gym_co_owner_requests WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM billing_checkouts WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM billing_refunds WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM billing_plan_changes WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_staff_invites WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
@@ -92,7 +96,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
     await sql`DELETE FROM one_time_tokens WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'handpd-t-%')`;
     await sql`DELETE FROM users WHERE email LIKE 'handpd-t-%'`;
     await sql`DELETE FROM sign_in_codes WHERE email LIKE 'handpd-t-%'`;
-    await sql`DELETE FROM plans WHERE code = ${PLAN}`;
+    await sql`DELETE FROM plans WHERE code IN (${PLAN}, ${BIG})`;
     await sql`DELETE FROM webhook_events WHERE provider = 'paddle' AND event_id LIKE 'hand_back:%'`;
   };
 
@@ -196,6 +200,11 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
                          seat_cap, trial_days, rank, entitlements, member_entitlements, paddle_price_id)
       VALUES (${PLAN}, 'org', ${"plan." + PLAN}, 2900, 'USD', 'month', 200, 0, 10, '{}'::jsonb, '{}'::jsonb, ${PRICE})
       ON CONFLICT (code) DO UPDATE SET active = true, paddle_price_id = ${PRICE}`;
+    await sql`
+      INSERT INTO plans (code, audience, name_key, price_minor, currency, interval,
+                         seat_cap, trial_days, rank, entitlements, member_entitlements, paddle_price_id)
+      VALUES (${BIG}, 'org', ${"plan." + BIG}, 5900, 'USD', 'month', 400, 0, 20, '{}'::jsonb, '{}'::jsonb, ${BIG_PRICE})
+      ON CONFLICT (code) DO UPDATE SET active = true, paddle_price_id = ${BIG_PRICE}`;
     app = await buildApp(loadConfig(baseEnv), {
       paddleApi: paddle,
       emailSender: {
@@ -567,6 +576,38 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       expect(errorOf(res)).toBe("plan_overdue");
       expect(await ownerOf(gym)).toBe(gym.owner.userId);
       expect(paddle.renews(gym.sub)).toBe(true);
+    }, TEST_TIMEOUT_MS);
+  });
+
+  // ── 4b's two extra passes (`handoff/2026-10-20-4b-v.md`) ─────────────────────────────────
+  describe("the two extra passes", () => {
+    it("a bigger size pressed as the co-owner accepts is made first: Accept waits, and the old owner is charged for their own gym only", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      expect((await ask(gym, cora)).statusCode).toBe(201);
+      // Accept lands after the size change has checked the plan and before Paddle is asked.
+      const seen: { during: Awaited<ReturnType<typeof accept>> | null } = { during: null };
+      paddle.duringNextChange = async () => {
+        seen.during = await accept(gym, cora);
+      };
+      const size = await send("POST", `/v1/orgs/${gym.id}/billing/size`, gym.owner, { planCode: BIG }, { "idempotency-key": `big-${gym.id}` });
+      expect(size.statusCode, size.body).toBe(200);
+      const during = seen.during;
+      if (during === null) throw new Error("Accept never ran inside the size change");
+      expect(during.statusCode, during.body).toBe(409);
+      expect(errorOf(during)).toBe("plan_changing");
+      // The charge was made while the gym was still Kd's.
+      expect(paddle.charges.filter((c) => c.subscriptionId === gym.sub)).toHaveLength(1);
+      expect(await ownerOf(gym)).toBe(gym.owner.userId);
+      expect(await mineAt(gym, cora)).not.toBeNull();
+
+      // Once the size is made, Accept hands the gym over, and the plan stops renewing.
+      expect((await accept(gym, cora)).statusCode).toBe(200);
+      expect(await ownerOf(gym)).toBe(cora.userId);
+      expect(paddle.renews(gym.sub)).toBe(false);
+      const again = await send("POST", `/v1/orgs/${gym.id}/billing/size`, cora, { planCode: PLAN }, { "idempotency-key": `small-${gym.id}` });
+      expect(again.statusCode).toBe(409);
+      expect(paddle.charges.filter((c) => c.subscriptionId === gym.sub)).toHaveLength(1);
     }, TEST_TIMEOUT_MS);
   });
 });
