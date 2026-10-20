@@ -1,4 +1,4 @@
-import { MEMBER_CARD_WORDS, cardName, cardOnFileLine, cardOwnerOnlyLine, cardPaidByLine } from '@app/shared';
+import { MEMBER_CARD_WORDS, cardEarlierLine, cardName, cardOnFileLine, cardOwnerOnlyLine, cardPaidByLine } from '@app/shared';
 
 // CARD ON FILE, ON A PERSON'S PAGE (ROADMAP 18d-ii): what the box says, from the server's
 // answer. Only staff holding the payments tick open it; a gym outside Square's countries shows
@@ -27,6 +27,9 @@ export function cardBoxView(view, name) {
     cardLine: card === null ? null : cardOnFileLine(card),
     expired: card?.expired === true,
     noneLine: card === null && paidBy === null ? MEMBER_CARD_WORDS.none : null,
+    // A card saved on the Square account the gym used before (a hand-over, Kd 2026-10-20): it is
+    // never charged from here, so they are asked for it again.
+    earlierLine: ready && card === null && paidBy === null && view.earlierCard !== null ? cardEarlierLine(view.earlierCard, view.gymName) : null,
     paidBy,
     canAdd: ready && view.canChange && paidBy === null && view.form !== null,
     canRemove: ready && view.canChange && card !== null,

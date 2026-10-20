@@ -509,15 +509,21 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     // A member of staff without the payments tick reads nothing of it.
     expect((await send("GET", cardUrl(gym, tara), trainer.cookies)).statusCode).toBe(403);
 
-    // Connected to another Square account since: that card is not this gym's to show or use.
+    // Connected to another Square account since (a hand-over to a new owner does the same: Kd,
+    // 2026-10-20): that card is not this gym's to show or use, and it is named so the person is
+    // asked to add theirs again, at the desk and in the app.
+    const taraApp = await signedIn("Tara Seen");
+    await inApp(gym, taraApp, tara);
     await disconnect(gym);
     expect((await view(gym, manager, tara)).card).toBeNull();
     await connect(gym, account(`MLCSB${uniq().slice(-6)}`));
-    expect((await view(gym, manager, tara)).card).toBeNull();
+    const since = await view(gym, manager, tara);
+    expect(since).toMatchObject({ state: "ready", card: null, earlierCard: { brand: "VISA", last4: "1111" } });
+    expect(await myView(gym, taraApp)).toMatchObject({ record: "own", card: null, earlierCard: { brand: "VISA", last4: "1111" }, canSave: true });
     // And the first account again: it is shown again, for it is still in that account.
     await disconnect(gym);
     await connect(gym, first);
-    expect((await view(gym, manager, tara)).card).toMatchObject({ last4: "1111" });
+    expect(await view(gym, manager, tara)).toMatchObject({ card: { last4: "1111" }, earlierCard: null });
 
     // A gym outside Square's countries shows nothing.
     const india = await makeGym("Card India", "IN");

@@ -183,7 +183,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     else run.renewalsWaiting += 1;
   }
 
-  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, deps.now());
+  run.startsForgotten = await repo.forgetExpiredStarts(deps.sql, square.environment, deps.now());
   run.forgotten = await webhooks.forgetOldSquareEvents(deps.sql, new Date(deps.now().getTime() - SQUARE_WORK.keepDays * 24 * 60 * 60 * 1000), 1000);
   return run;
 }

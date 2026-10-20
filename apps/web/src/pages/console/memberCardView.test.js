@@ -5,7 +5,7 @@ import { cardBoxView, cardFormWords, personNames, removeCardWords } from './memb
 
 const FORM = { environment: 'sandbox', applicationId: 'sandbox-sq0idb-VIEWTESTAPP00', locationId: 'L1', contact: { givenName: 'Tara', familyName: 'Singh', email: null, countryCode: 'GB' } };
 const VISA = { brand: 'VISA', last4: '1111', expMonth: 12, expYear: 2028, expired: false, savedAt: '2026-10-20T10:00:00.000Z', savedFrom: 'desk' };
-const view = (over = {}) => ({ state: 'ready', card: null, paidBy: null, inApp: false, canChange: true, isOwner: false, gymName: 'Iron House', agreement: cardAgreementWords('Iron House'), form: FORM, ...over });
+const view = (over = {}) => ({ state: 'ready', card: null, earlierCard: null, paidBy: null, inApp: false, canChange: true, isOwner: false, gymName: 'Iron House', agreement: cardAgreementWords('Iron House'), form: FORM, ...over });
 
 describe('Card on file', () => {
   it("nothing at all outside Square's countries", () => {
@@ -17,6 +17,16 @@ describe('Card on file', () => {
     expect(cardBoxView(view(), 'Tara Singh')).toMatchObject({ noneLine: 'No card on file', canAdd: true, canRemove: false, appLine: null, connect: null, ownerOnly: null });
     expect(cardBoxView(view({ inApp: true }), 'Tara Singh').appLine).toBe('Tara can add a card in the app.');
     expect(cardBoxView(view({ inApp: true }), '').appLine).toBe('This person can add a card in the app.');
+  });
+
+  it('a card saved with the Square account the gym used before: named, and Add card asks for it again', () => {
+    const earlier = { brand: 'MASTERCARD', last4: '4444' };
+    expect(cardBoxView(view({ earlierCard: earlier }), 'Tara Singh')).toMatchObject({
+      noneLine: 'No card on file',
+      earlierLine: 'Mastercard ending 4444 was saved with the Square account Iron House used before. Add the card again.',
+      canAdd: true,
+    });
+    expect(cardBoxView(view({ earlierCard: earlier, state: 'connect', form: null, canChange: false }), 'Tara').earlierLine).toBeNull();
   });
 
   it('a card: its line, Replace and Remove; a lapsed gym can do neither', () => {

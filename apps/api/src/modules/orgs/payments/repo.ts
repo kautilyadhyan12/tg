@@ -115,9 +115,10 @@ export async function takeStart(sql: SqlOrTx, stateHash: string, userId: string,
   return rows[0]?.gym_id ?? null;
 }
 
-export async function forgetExpiredStarts(sql: SqlOrTx, now: Date): Promise<number> {
+/** Presses that ran out, of this server's Square environment: the other's are its own. */
+export async function forgetExpiredStarts(sql: SqlOrTx, environment: SquareEnvironment, now: Date): Promise<number> {
   const rows = await sql<{ state_hash: string }[]>`
-    DELETE FROM gym_payment_connect_starts WHERE expires_at <= ${now} RETURNING state_hash`;
+    DELETE FROM gym_payment_connect_starts WHERE environment = ${environment} AND expires_at <= ${now} RETURNING state_hash`;
   return rows.length;
 }
 

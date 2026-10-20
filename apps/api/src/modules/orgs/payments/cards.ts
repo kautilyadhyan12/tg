@@ -72,6 +72,12 @@ function shownCard(card: cards.CardRow | null, square: SquareSettings | null, ro
   return card.environment === square.environment && card.accountId === row.accountId ? card : null;
 }
 
+/** A card kept for the person in a Square account the gym is no longer connected to (a
+ *  hand-over, or another account since: Kd, 2026-10-20, `rulings/2026-10-20-4b-v.md`): never
+ *  used from here, and named so the person is asked to add their card again. */
+const earlierOf = (card: cards.CardRow | null, shown: cards.CardRow | null): { brand: string; last4: string } | null =>
+  card === null || shown !== null ? null : { brand: card.brand, last4: card.last4 };
+
 const cardOf = (c: cards.CardRow, today: string): MemberCard => ({
   brand: c.brand,
   last4: c.last4,
@@ -127,6 +133,7 @@ async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string, entryI
     cardOnFile: {
       state,
       card: shown === null ? null : cardOf(shown, dayInTz(deps.now(), gym.timezone)),
+      earlierCard: earlierOf(card, shown),
       paidBy: payer === null ? null : { entryId: payer.entryId, name: payer.name },
       inApp: person.inApp,
       canChange,
@@ -198,7 +205,7 @@ async function myView(deps: PaymentsDeps, gymId: string, mine: { own: string | n
   if (gym === null) throw orgNotFound();
   const row = deps.square === null ? null : await repo.readConnection(deps.sql, gymId, deps.square.environment);
   const state = stateOf(deps.square, gym, row);
-  const base = { record: mine.record, state, card: null, paidBy: null, canSave: false, gymName: gym.name, agreement: cardAgreementWords(gym.name), form: null };
+  const base = { record: mine.record, state, card: null, earlierCard: null, paidBy: null, canSave: false, gymName: gym.name, agreement: cardAgreementWords(gym.name), form: null };
   if (mine.own === null) return myCardResponseSchema.parse({ myCard: base });
   const [person, card, payer, live] = await Promise.all([
     cards.readPerson(deps.sql, gymId, mine.own),
@@ -213,6 +220,7 @@ async function myView(deps: PaymentsDeps, gymId: string, mine: { own: string | n
     myCard: {
       ...base,
       card: shown === null ? null : cardOf(shown, dayInTz(deps.now(), gym.timezone)),
+      earlierCard: earlierOf(card, shown),
       paidBy: payer === null ? null : payer.name,
       canSave,
       form: canSave && deps.square !== null && row !== null ? formOf(deps.square, row, gym, person) : null,

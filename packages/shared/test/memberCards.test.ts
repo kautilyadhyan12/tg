@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   cardAgreementWords,
   cardBrandWords,
+  cardEarlierLine,
   cardExpired,
   cardExpiryWords,
   cardName,
@@ -43,6 +44,7 @@ describe("a card's words", () => {
   it("the payer and owner lines name the people and the gym", () => {
     expect(cardPaidByLine("Priya Sharma", "Aarav Sharma")).toBe("Priya Sharma pays for Aarav Sharma, so Priya Sharma's card is used.");
     expect(cardOwnerOnlyLine("Iron House")).toBe("Only the owner of Iron House can connect Square.");
+    expect(cardEarlierLine({ brand: "VISA", last4: "1111" }, "Iron House")).toBe("Visa ending 1111 was saved with the Square account Iron House used before. Add the card again.");
   });
 
   it("a full name is Square's given and family names, the last word the family name", () => {

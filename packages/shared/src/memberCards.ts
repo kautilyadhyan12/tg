@@ -101,11 +101,18 @@ export const cardFormSchema = z
 export type CardForm = z.infer<typeof cardFormSchema>;
 
 /** Card on file, on a person's page, for staff holding the payments tick. */
+/** A card saved on a Square account the gym is no longer connected to: after a hand-over to a
+ *  new owner, or another account connected since (Kd, 2026-10-20, `rulings/2026-10-20-4b-v.md`).
+ *  It stays in that account and is never charged from here: the person is asked to add their
+ *  card again. */
+const earlierCardSchema = z.object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/) }).strict();
+
 export const memberCardViewSchema = z
   .object({
     state: memberCardStateSchema,
     /** Null for none, and for a card in a Square account the gym is no longer connected to. */
     card: memberCardSchema.nullable(),
+    earlierCard: earlierCardSchema.nullable(),
     /** Somebody else on the list pays for this person (18i): that person's card is used. */
     paidBy: z.object({ entryId: z.string().uuid(), name: z.string().max(120) }).strict().nullable(),
     /** One app account of their own holds the record: they can add a card in the app. */
@@ -144,6 +151,7 @@ export const myCardViewSchema = z
     record: z.enum(["own", "none", "shared"]),
     state: memberCardStateSchema,
     card: memberCardSchema.nullable(),
+    earlierCard: earlierCardSchema.nullable(),
     /** The name of whoever pays for them: that person's card is used. */
     paidBy: z.string().max(120).nullable(),
     canSave: z.boolean(),
@@ -192,6 +200,12 @@ export function cardOnFileLine(card: { brand: string; last4: string; expMonth: n
 /** "Priya Sharma pays for Aarav Sharma, so Priya Sharma's card is used." */
 export function cardPaidByLine(payer: string, person: string): string {
   return `${payer} pays for ${person}, so ${payer}'s card is used.`;
+}
+
+/** "Visa ending 1111 was saved with the Square account Iron House used before. Add the card
+ *  again." */
+export function cardEarlierLine(card: { brand: string; last4: string }, gymName: string): string {
+  return `${cardName(card)} was saved with the Square account ${gymName} used before. Add the card again.`;
 }
 
 /** "Only the owner of Iron House can connect Square." */

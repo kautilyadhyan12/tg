@@ -40,6 +40,7 @@ const VISA = { brand: 'VISA', last4: '1111', expMonth: 12, expYear: 2028, expire
 const viewOf = (over = {}) => ({
   state: 'ready',
   card: null,
+  earlierCard: null,
   paidBy: null,
   inApp: false,
   canChange: true,
@@ -151,6 +152,15 @@ describe('Card on file: what it says', () => {
     expect(screen.getByRole('link', { name: 'Open Priya Sharma' }).getAttribute('href')).toBe(`/console/iron-house/members?person=${PRIYA}`);
     expect(screen.queryByRole('button', { name: 'Add card' })).toBeNull();
     expect(screen.queryByText('No card on file')).toBeNull();
+  });
+
+  it('a card saved with the Square account the gym used before: named, with Add card to add it again', async () => {
+    orgService.getMemberCard.mockReturnValue(answer({ inApp: true, earlierCard: { brand: 'VISA', last4: '1111' } }));
+    show();
+    expect(await screen.findByText('Visa ending 1111 was saved with the Square account Iron House used before. Add the card again.')).toBeTruthy();
+    expect(screen.getByText('No card on file')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add card' })).toBeTruthy();
+    expect(screen.queryByText(/Card on file: /)).toBeNull();
   });
 
   it('no card, in the app: says they can add one there', async () => {

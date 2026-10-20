@@ -251,6 +251,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly }) {
         </p>
       ) : null}
       {box.noneLine !== null ? <p className="c-s15 c-t1 m-0">{box.noneLine}</p> : null}
+      {box.earlierLine !== null ? <p className="c-s14 c-t2 m-0">{box.earlierLine}</p> : null}
       {box.appLine !== null ? <p className="c-s14 c-t2 m-0">{box.appLine}</p> : null}
       {box.connectLine !== null ? <p className="c-s14 c-t2 m-0">{box.connectLine}</p> : null}
       {box.ownerOnly !== null ? <p className="c-s14 c-t2 m-0">{box.ownerOnly}</p> : null}
