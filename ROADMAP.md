@@ -257,7 +257,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18b-iii. [x] **Tax on memberships, with named tax rates** — merged 2026-10-15 (PR #267).
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
-     - 18d-i. [ ] **Connect Square and Disconnect**, in Settings → Payments, with Start here's Take payments; the gym's own owner alone.
+     - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
      - 18d-ii. [ ] **A member saves their card on Square's own form**; staff see "Card on file: Visa ending 4242".
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`).
