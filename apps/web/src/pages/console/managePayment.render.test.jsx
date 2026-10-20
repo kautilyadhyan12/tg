@@ -272,6 +272,18 @@ describe('a plan paid through Razorpay (an Indian gym, 1d-i and 1d-ii)', () => {
     expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
   });
 
+  it("a plan handed over with the gym says who paid it and when it stops, and offers nothing that touches the old owner's mandate (4b-iii-b)", async () => {
+    const handed = rupees({ cancelAtPeriodEnd: true, handedOverBy: 'Kd Owner' });
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: handed }));
+    renderOverview();
+    expect((await screen.findByTestId('plan-handed-over')).textContent).toMatch(
+      /^Kd Owner paid for this plan, and it stops on \S+ \S+\. Then choose your own plan and pay with your own card\.$/,
+    );
+    expect(screen.queryByTestId('paid-through-razorpay')).toBeNull();
+    expect(screen.queryByTestId('plan-ending')).toBeNull();
+    expect(screen.queryByRole('button', { name: /pay now|update payment method|cancel plan|keep my plan|change size|manage payment/i })).toBeNull();
+  });
+
   it('a trainer sees no button to pay, change or cancel', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, ...TRAINER, country: 'IN', subscription: rupees({ status: 'past_due' }) }));
     renderOverview();
