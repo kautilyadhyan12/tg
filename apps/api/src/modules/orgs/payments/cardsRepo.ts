@@ -171,6 +171,32 @@ export async function cardsOfSquareCard(sql: SqlOrTx, environment: SquareEnviron
   return rows.map(toCard);
 }
 
+/** The records that are this Square customer, for Square's message that the gym deleted it. */
+export async function recordsOfSquareCustomer(sql: SqlOrTx, environment: SquareEnvironment, accountId: string, customerId: string): Promise<{ gymId: string; entryId: string }[]> {
+  const rows = await sql<{ gym_id: string; entry_id: string }[]>`
+    SELECT gym_id, entry_id FROM gym_square_customers
+    WHERE environment = ${environment} AND account_id = ${accountId} AND customer_id = ${customerId}`;
+  return rows.map((r) => ({ gymId: r.gym_id, entryId: r.entry_id }));
+}
+
+/** The gym deleted this customer inside Square: the record lets go of it, and of a card saved on
+ *  it. Answers the card that went, if one did. The caller holds the gym's lock. */
+export async function letGoOfSquareCustomer(
+  tx: TransactionSql,
+  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string },
+): Promise<{ brand: string; last4: string } | null> {
+  await tx`
+    DELETE FROM gym_square_customers
+    WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
+      AND account_id = ${c.accountId} AND customer_id = ${c.customerId}`;
+  const [card] = await tx<{ brand: string; last4: string }[]>`
+    DELETE FROM gym_member_cards
+    WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment}
+      AND account_id = ${c.accountId} AND customer_id = ${c.customerId}
+    RETURNING brand, last4`;
+  return card ?? null;
+}
+
 /** What Square now says of a card the bank updated (a new expiry, a new number's last four). */
 export async function updateCardDetails(
   sql: SqlOrTx,

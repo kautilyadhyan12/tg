@@ -156,6 +156,7 @@ function fakeSquare() {
     createCustomer: () => Promise.resolve(unavailable),
     createCard: () => Promise.resolve(unavailable),
     retrieveCard: () => Promise.resolve(unavailable),
+    retrieveCustomer: () => Promise.resolve(unavailable),
     disableCard: () => Promise.resolve(unavailable),
     revokeAccount: () => Promise.resolve(unavailable),
   };

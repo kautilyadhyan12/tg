@@ -53,6 +53,8 @@ export interface SquareApi {
    *  the same press sent twice gives back the same card. */
   createCard(accessToken: string, card: { idempotencyKey: string; sourceId: string; customerId: string; cardholderName: string | null }): Promise<SquareResult<SquareCard>>;
   retrieveCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
+  /** 404 is a customer the gym deleted inside Square. */
+  retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<{ id: string }>>;
   /** No charge or update can reach the card after this; disabling one already disabled is
    *  allowed and changes nothing. */
   disableCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
@@ -204,6 +206,11 @@ export function createSquareApi(opts: {
     async retrieveCard(accessToken, cardId) {
       const result = await call("GET", cardPath(cardId), squareCardAnswerSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.card } : result;
+    },
+    async retrieveCustomer(accessToken, customerId) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(customerId)) throw new Error("not a Square customer id");
+      const result = await call("GET", `/v2/customers/${customerId}`, squareCustomerAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
     },
     async disableCard(accessToken, cardId) {
       const result = await call("POST", `${cardPath(cardId)}/disable`, squareCardAnswerSchema, bearer(accessToken), {});

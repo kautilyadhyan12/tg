@@ -14,7 +14,14 @@
 //   DELETE /v1/orgs/:gymId/member-list/entries/:entryId/card   Remove card
 //   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
 //   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
-import { saveCardRequestSchema, squareCardIdSchema, squareFinishRequestSchema, squareLocationRequestSchema, squareWebhookBodySchema } from "@app/shared";
+import {
+  saveCardRequestSchema,
+  squareCardIdSchema,
+  squareFinishRequestSchema,
+  squareLocationRequestSchema,
+  squareObjectIdSchema,
+  squareWebhookBodySchema,
+} from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
@@ -191,6 +198,18 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
             payload: { type: event.data.type, accountId: event.data.merchant_id },
+          });
+          return reply.status(200).send();
+        }
+        if (event.data.type === cards.SQUARE_CUSTOMER_DELETED_EVENT) {
+          const customerId = squareObjectIdSchema.safeParse(event.data.data?.id);
+          if (!customerId.success) {
+            req.log.warn({ event: "webhook.square_customer_unreadable" }, "a signed Square customer message names no customer");
+            return reply.status(200).send();
+          }
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id, customerId: customerId.data },
           });
           return reply.status(200).send();
         }

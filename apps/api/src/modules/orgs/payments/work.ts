@@ -6,7 +6,7 @@
 // renewals are each leased, and every write names the connection or card it was read for.
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
-import { SQUARE_CARD_EVENTS, checkSquareCard, sendOwedCardDisables } from "./cards.js";
+import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
 import * as repo from "./repo.js";
 import { SQUARE_REFRESH_EVERY_MS, accessContext, refreshContext, sendOwedRevokes, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
@@ -138,7 +138,8 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     if (event === null) break;
     const payload = event.payload;
     const isCard = payload !== null && SQUARE_CARD_EVENTS.includes(payload.type) && payload.cardId !== undefined;
-    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard)) {
+    const isCustomer = payload !== null && payload.type === SQUARE_CUSTOMER_DELETED_EVENT && payload.customerId !== undefined;
+    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer)) {
       await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
       deps.log.warn({ event: "square.event_unreadable", webhookEventId: event.id }, "a kept Square event no longer parses");
       run.givenUp += 1;
@@ -147,6 +148,8 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     let unknown = false;
     if (isCard && payload.cardId !== undefined) {
       unknown = (await checkSquareCard(deps, square, payload.accountId, payload.cardId)) === "unknown";
+    } else if (isCustomer && payload.customerId !== undefined) {
+      unknown = (await checkSquareCustomer(deps, square, payload.accountId, payload.customerId)) === "unknown";
     } else {
       let stillWorks = false;
       for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, payload.accountId)) {

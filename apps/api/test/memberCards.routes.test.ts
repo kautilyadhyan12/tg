@@ -170,6 +170,13 @@ function fakeSquare() {
       const card = cards.get(id);
       return Promise.resolve(card?.accountId !== a.merchantId ? notFound : { kind: "ok", value: cardJson(id, card) });
     },
+    retrieveCustomer(token, id) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokens.get(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const customer = customers.get(id);
+      return Promise.resolve(customer?.accountId !== a.merchantId ? notFound : { kind: "ok", value: { id } });
+    },
     disableCard(token, id) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokens.get(token);
@@ -349,8 +356,12 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
   const owedOf = (gymId: string) => sql<{ card_id: string }[]>`SELECT card_id FROM gym_card_disables WHERE gym_id = ${gymId}`;
   const squareCardsOf = (merchantId: string) => [...square.cards.values()].filter((c) => c.accountId === merchantId);
   const signed = (raw: string) => createHmac("sha256", WEBHOOK_KEY).update(WEBHOOK_URL + raw).digest("base64");
-  const webhook = (event: { id: string; type: string; merchantId: string; cardId: string }, sign = true) => {
-    const raw = JSON.stringify({ merchant_id: event.merchantId, type: event.type, event_id: event.id, created_at: clock.toISOString(), data: { type: "card", id: event.cardId, object: { card: { id: event.cardId } } } });
+  const webhook = (event: { id: string; type: string; merchantId: string; cardId?: string; customerId?: string }, sign = true) => {
+    const data =
+      event.customerId !== undefined
+        ? { type: "customer", id: event.customerId, object: { customer: { id: event.customerId } } }
+        : { type: "card", id: event.cardId, object: { card: { id: event.cardId } } };
+    const raw = JSON.stringify({ merchant_id: event.merchantId, type: event.type, event_id: event.id, created_at: clock.toISOString(), data });
     return api().inject({
       method: "POST",
       url: "/v1/webhooks/square",
@@ -651,6 +662,29 @@ d("A member's card on file: saved on Square's own form, on the right person, wit
     expect(await cardRows(gym.id)).toEqual([]);
     expect(await agreementsOf(gym.id)).toHaveLength(1);
     expect(await sql`SELECT 1 FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.member_card_removed_in_square'`).toHaveLength(1);
+    // The gym deleted Tara as a customer inside Square (seen in Square's test area, 2026-10-20:
+    // the card itself stays, marked enabled). A message Square does not bear out changes nothing;
+    // once Square says the customer is gone, her card and her customer go here.
+    await saved(gym, gym.owner, tara, visa("2222"));
+    const [again] = await cardRows(gym.id);
+    const stillThere = `card-t-${uniq()}`;
+    await webhook({ id: stillThere, type: "customer.deleted", merchantId: acct.merchantId, customerId: again?.customer_id ?? "" });
+    clock = new Date(Date.now() + 1000);
+    await processSquareWork(workDeps(), [stillThere], await mine());
+    expect(await cardRows(gym.id)).toHaveLength(1);
+    square.customers.delete(again?.customer_id ?? "");
+    const deleted = `card-t-${uniq()}`;
+    await webhook({ id: deleted, type: "customer.deleted", merchantId: acct.merchantId, customerId: again?.customer_id ?? "" });
+    clock = new Date(Date.now() + 1000);
+    await processSquareWork(workDeps(), [deleted], await mine());
+    expect(await cardRows(gym.id)).toEqual([]);
+    expect(await sql`SELECT 1 FROM gym_square_customers WHERE gym_id = ${gym.id}`).toHaveLength(0);
+    expect((await view(gym, gym.owner, tara)).card).toBeNull();
+    // The next card saved for her makes a new customer.
+    await saved(gym, gym.owner, tara, visa("3333"));
+    const [fresh] = await cardRows(gym.id);
+    expect(fresh?.customer_id).not.toBe(again?.customer_id);
+
     // A message about a card of another account or of nobody here: nothing changes.
     const other = `card-t-${uniq()}`;
     await webhook({ id: other, type: "card.forgotten", merchantId: acct.merchantId, cardId: "ccof:nobodyhere" });

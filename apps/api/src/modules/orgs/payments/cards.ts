@@ -52,6 +52,10 @@ const BILLING = "billing.members";
 /** Square's messages about a saved card. Each is checked with Square before anything changes. */
 export const SQUARE_CARD_EVENTS: readonly string[] = ["card.automatically_updated", "card.updated", "card.disabled", "card.forgotten"];
 
+/** Square's message that the gym deleted a customer inside Square: the card saved on it is no
+ *  longer the person's here (seen 2026-10-20: Square keeps the card itself, marked enabled). */
+export const SQUARE_CUSTOMER_DELETED_EVENT = "customer.deleted";
+
 const orgNotFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
 const entryNotFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
 const unavailable = (): OrgsError => new OrgsError(503, "square_unavailable", MEMBER_CARD_WORDS.square_unavailable);
@@ -468,6 +472,40 @@ export async function sendOwedCardDisables(
     run.deferred += 1;
   }
   return run;
+}
+
+/** Square's message that the gym deleted a customer inside Square: Square is asked for the
+ *  customer, with the gym's own token, before anything changes; only Square's own "not found"
+ *  lets the record go of the customer and its card. */
+export async function checkSquareCustomer(deps: PaymentsDeps, square: SquareSettings, accountId: string, customerId: string): Promise<"done" | "unknown"> {
+  let unknown = false;
+  for (const record of await cards.recordsOfSquareCustomer(deps.sql, square.environment, accountId, customerId)) {
+    const row = await repo.readConnection(deps.sql, record.gymId, square.environment);
+    if (row?.state !== "connected" || row.accountId !== accountId || row.accessToken === null) continue;
+    const token = square.tokens.open(row.accessToken, accessContext(record.gymId));
+    if (token === null) continue;
+    const result = await square.api.retrieveCustomer(token, customerId);
+    if (result.kind === "ok" || (result.kind === "refused" && result.status === 401)) continue;
+    if (result.kind === "unavailable" || result.status !== 404) {
+      if (result.kind === "refused") deps.log.error({ event: "square.customer_check_refused", gymId: record.gymId, status: result.status, code: result.code }, "Square refused a customer check");
+      unknown = true;
+      continue;
+    }
+    await deps.sql.begin(async (tx) => {
+      await lockGym(tx, record.gymId);
+      const card = await cards.letGoOfSquareCustomer(tx, { ...record, environment: square.environment, accountId, customerId });
+      if (card === null) return;
+      await insertAudit(tx, {
+        actorUserId: null,
+        gymId: record.gymId,
+        action: "org.member_card_removed_in_square",
+        targetType: "member_list_entry",
+        targetId: record.entryId,
+        meta: { brand: card.brand, last4: card.last4 },
+      });
+    });
+  }
+  return unknown ? "unknown" : "done";
 }
 
 /** Square's message about a card (a bank updated it, or it was stopped or forgotten): Square is
