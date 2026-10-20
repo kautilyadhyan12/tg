@@ -4069,6 +4069,33 @@ was disconnected" with the day. Square is asked once for MERCHANT_PROFILE_READ, 
 and _WRITE, PAYMENTS_READ and _WRITE, never a fee. Start here's **Take payments** is the
 owner's, in Square's countries.
 
+*(As built, 18d-ii, 2026-10-20; `rulings/2026-10-20-18d-ii.md`.)* **Card on file** on a person's
+page, for staff holding the payments tick alone: "Card on file: Visa ending 1111 · expires
+12/2028" with Replace card and Remove card, or "No card on file" with Add card (and "Tara can add
+a card in the app." for somebody in the app). Add card opens Square's own card boxes (the Web
+Payments SDK, its window inside our page) in a box under the button: the number goes to Square,
+never to us, and Square decides whether the bank checks the card. The person ticks "I agree that
+{gym} may save this card and charge it for my membership and any fees when they are due. I can
+remove it at the front desk at any time." themselves; the words, the time and whose screen (the
+desk's or their own app's) are kept apart from the card, so they outlive a removed card and a
+record deleted for good (then removed a year after that and three after it was agreed, the
+longer of California's two). The person is made a customer in the gym's own Square account once,
+under a lock; the card is saved on that customer with the press as Square's idempotency key, and
+kept only while the record is on the list, nobody pays for them and the gym is still connected to
+that account. One card a person: a newer one replaces the old, which Square is told to stop
+(owed and sent by the worker until Square answers); a join keeps the newer; a record deleted for
+good owes its card's stop. Only staff remove a card; the member adds or updates their own in the
+app (`/v1/orgs/:gymId/my-card`; the phone draws it, Stage 5 item 20). Somebody paid for by
+another reads "{payer} pays for {name}, so {payer}'s card is used." with a button to the payer's
+page. Not connected: the owner reads Connect Square with a button to Settings → Payments,
+everybody else "Only the owner of {gym} can connect Square."; outside Square's countries the box
+is not drawn. A card in a Square account the gym is no longer connected to is not shown. Square's
+`card.automatically_updated`, `card.updated`, `card.disabled` and `card.forgotten` are signed,
+kept once, and acted on only as Square's own read of the card says. Our side can stop one gym's
+or every gym's Square access from a terminal (`tools/square-stop.ts`, `RUNBOOK/stop-square.md`).
+GoCardless (the table above) admits a partner only with its own GoCardless account, which needs
+a business in one of its 31 countries: closed to Kd as he is.
+
 ### 14.6 Cards
 
 **18a** the notebook · **18b** the register, discounts and promo codes · ~~**18c** Pay by

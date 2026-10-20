@@ -259,11 +259,12 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
      - 18d-i-b. [ ] **The Square token test that fails at random** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): `payments.unit.test.ts` changes the second-to-last letter but picks it by the last, so about 1 run in 64 nothing changes and it fails (seen on PR #320). A small pull request, no review. Web folder 1.
-     - 18d-ii. [ ] **A member saves their card on Square's own form**; staff see "Card on file: Visa ending 4242".
+     - 18d-ii. [ ] **A member's card saved on Square's own form** (`rulings/2026-10-20-18d-ii.md`): at the desk on a person's page, or in the app; the member ticks the agreement themselves; staff with the payments tick see "Card on file: Visa ending 1111 · expires 12/2028", Replace card and Remove card; one card a person; a stop tool for our side.
+     - 18r. [ ] **UPI at Sell for gyms in India**: Record payment offers "UPI" beside Cash, Card at the desk and Bank transfer.
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`).
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
-   - 18e. [ ] The second Connect button (GoCardless: the member's bank account). 18f. [ ] Razorpay, for Indian gyms.
+   - 18e. [ ] The second Connect button (GoCardless: the member's bank account): closed to Kd without a business in one of GoCardless's 31 countries (`rulings/2026-10-20-18d-ii.md`). 18f. [ ] Razorpay, for Indian gyms.
    - 18g. **Receipts** (Kd, RULINGS 2026-10-08), split 2026-10-15 in two (the line as first written is in `handoff/2026-10-15-18g-i.md`):
      - 18g-i. [x] **Numbered receipts, opened and printed at the desk** — merged 2026-10-15 (PR #277).
      - 18g-ii. ~~A receipt by email for somebody with no app~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18m.md`): members read receipts in the app (Stage 5 item 16), anybody else gets the printed one, and an email for every purchase costs us.
@@ -484,7 +485,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 17. [ ] **The gym's page**: Updates (post, photos, react, report, block), Events, Leaderboard, Challenges, a person's profile (spec Part 3 §15).
 18. [ ] **Inbox, Contact the gym, and phone notifications** (spec Part 3 §16.1; Part 6 §6): the class reminder, a place is free, a message. Needs Kd's Firebase project.
 19. [ ] **Settings and account**: profile, units, hide me on leaderboards, notification switches that save, change email (Stage 2's 3b-iii), what a gym can see (Stage 1's 8a), download my data, delete account and undo.
-20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the referral link (20e), the member photo (5b-vi), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
+20. [ ] **What the gym side adds for members**, each after its web job: the waiver (3e), the referral link (20e), the member photo (5b-vi), saving their card (18d-ii), buying from the gym (18k), stopping a membership (18l), a gym's plan for a member (19e).
 21. [ ] **Paying, the stores and release**: the $10 plan through the stores (item 6), one device one trial (Stage 3's 2c), the store pages rated 18+, the Terms and Privacy pages that Get started's line opens (it opens nothing today, as the browser's), Google's closed test, then the iPhone version with Apple sign-in.
 
 **Feature folder 2 — `D:\Projects\ai-home-gym-b`: the member's own day.**

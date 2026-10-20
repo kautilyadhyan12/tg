@@ -161,6 +161,8 @@ export type MyCardResponse = z.infer<typeof myCardResponseSchema>;
 export const MEMBER_CARD_WORDS = {
   title: "Card on file",
   none: "No card on file",
+  connect: "Connect Square to save a card.",
+  choose_location: "Choose your Square location to save a card.",
   not_agreed: "The box must be ticked to agree before the card is saved.",
   agreement_changed: "The words to agree to have changed. Read them again, then tick the box.",
   not_ready: "Square isn't ready to save cards for your gym. The owner can finish connecting Square in Settings.",
@@ -181,9 +183,10 @@ export const MEMBER_CARD_WORDS = {
   no_card: "There's no card on file to remove.",
 } as const;
 
-/** "Card on file: Visa ending 1111 · expires 12/2028". */
-export function cardOnFileLine(card: { brand: string; last4: string; expMonth: number; expYear: number }, today: string): string {
-  return `${MEMBER_CARD_WORDS.title}: ${cardName(card)} · ${cardExpiryWords(card, today)}`;
+/** "Card on file: Visa ending 1111 · expires 12/2028", from a card as the server sends it. */
+export function cardOnFileLine(card: { brand: string; last4: string; expMonth: number; expYear: number; expired: boolean }): string {
+  const when = `${String(card.expMonth).padStart(2, "0")}/${String(card.expYear)}`;
+  return `${MEMBER_CARD_WORDS.title}: ${cardName(card)} · ${card.expired ? "expired" : "expires"} ${when}`;
 }
 
 /** "Priya Sharma pays for Aarav Sharma, so Priya Sharma's card is used." */

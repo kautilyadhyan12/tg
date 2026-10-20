@@ -30,7 +30,8 @@ describe("a card's words", () => {
     expect(cardExpired({ expMonth: 3, expYear: 2027 }, "2027-04-01")).toBe(true);
     expect(cardExpiryWords(card, "2026-10-20")).toBe("expires 12/2028");
     expect(cardExpiryWords({ expMonth: 4, expYear: 2025 }, "2026-10-20")).toBe("expired 04/2025");
-    expect(cardOnFileLine({ brand: "VISA", last4: "1111", expMonth: 12, expYear: 2028 }, "2026-10-20")).toBe("Card on file: Visa ending 1111 · expires 12/2028");
+    expect(cardOnFileLine({ brand: "VISA", last4: "1111", expMonth: 12, expYear: 2028, expired: false })).toBe("Card on file: Visa ending 1111 · expires 12/2028");
+    expect(cardOnFileLine({ brand: "MASTERCARD", last4: "4444", expMonth: 4, expYear: 2025, expired: true })).toBe("Card on file: Mastercard ending 4444 · expired 04/2025");
   });
 
   it("the agreement is Kd's sentence, with the gym's own name", () => {

@@ -31,6 +31,7 @@ vi.mock('./MemberNotes', () => ({
 }));
 // Who pays (18i) has its own tests in `memberPayer.render.test.jsx`.
 vi.mock('./MemberPayer', () => ({ default: () => null }));
+vi.mock('./MemberCard', () => ({ default: () => null }));
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
