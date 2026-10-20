@@ -147,10 +147,9 @@ function atLabel(at: Date, timeZone: string): string {
   return `${time} on ${dayLabel(at, timeZone)}`;
 }
 
-/** What the plan box lets the gym do before its plan ends: keep it through Razorpay until a
- *  moment, or choose a plan once it has ended. A Paddle plan is not said to be kept: nothing
- *  shows Paddle's own page can undo a cancel. */
-export type PlanEndAction = { kind: "keep_razorpay"; until: Date } | { kind: "choose" };
+/** What the plan box lets the gym do before its plan ends: keep it until a moment (Paddle or
+ *  Razorpay, 1g), or choose a plan once it has ended. */
+export type PlanEndAction = { kind: "keep"; until: Date } | { kind: "choose" };
 
 export interface PlanEndWords {
   to: string;
@@ -181,7 +180,7 @@ export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
       ? `${gym}'s plan ends with its free trial, at ${when}. Nothing is charged.`
       : `${gym}'s plan, ${size(w.seatCap, words)} at ${w.priceLabel} a month, ends at ${when} and won't renew. Nothing more is charged.`,
     `After that, its ${people} ${w.members === 1 ? "gets" : "get"} the free app only.`,
-    w.action.kind === "keep_razorpay"
+    w.action.kind === "keep"
       ? `To keep it, press Keep my plan before ${atLabel(w.action.until, w.timezone)}.`
       : "Once it ends, you can choose a new plan.",
   ];

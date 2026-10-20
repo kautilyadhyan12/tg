@@ -1644,6 +1644,83 @@ export async function keepPlan(sql: Sql, input: { gymId: string; userId: string;
   });
 }
 
+export type PaddleKeepTarget =
+  | { kind: "paddle"; rowId: string; subscriptionRef: string }
+  /** The live plan is paid through Razorpay: its own Keep my plan. */
+  | { kind: "not_paddle" }
+  /** A payment failed: paid from Manage payment, never kept here. */
+  | { kind: "past_due" }
+  | Exclude<KeepPlanOutcome, { kind: "kept" }>;
+
+/** Keep my plan for a Paddle plan set to end (1g): may it be asked of Paddle now? Read under the
+ *  gym's lock; Paddle is asked after it, and `settlePaddleKeep` reads the row again. */
+export async function paddleKeepTarget(sql: Sql, input: { gymId: string; now: Date; leadMs: number }): Promise<PaddleKeepTarget> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const gyms = await tx<{ status: string }[]>`SELECT status FROM gyms WHERE id = ${input.gymId}`;
+    const gym = gyms[0];
+    if (gym === undefined) return { kind: "not_found" };
+    if (gym.status !== "active") return { kind: "org_archived" };
+    const rows = await tx<{ id: string; provider: string; provider_ref: string | null; status: string; cancel_at_period_end: boolean; current_period_end: Date | null; handed_over_at: Date | null; handed_over_from: string | null }[]>`
+      SELECT id, provider, provider_ref, status, cancel_at_period_end, current_period_end, handed_over_at, handed_over_from FROM subscriptions
+      WHERE owner_type = 'gym' AND owner_id = ${input.gymId} AND provider IN ('paddle','razorpay')
+        AND status IN ('trialing','active','past_due')
+      LIMIT 1`;
+    const row = rows[0];
+    if (row === undefined) return { kind: "no_paid_plan" };
+    if (row.provider !== "paddle") return { kind: "not_paddle" };
+    if (row.provider_ref === null) return { kind: "no_paid_plan" };
+    if (row.handed_over_at !== null) return { kind: "handed_over", handedOverFrom: row.handed_over_from };
+    if (!row.cancel_at_period_end) return { kind: "not_ending" };
+    if (row.status === "past_due") return { kind: "past_due" };
+    const end = row.current_period_end;
+    if (end === null || end.getTime() - input.now.getTime() <= input.leadMs) return { kind: "too_late", endsAt: end };
+    return { kind: "paddle", rowId: row.id, subscriptionRef: row.provider_ref };
+  });
+}
+
+export type PaddleKeepSettled =
+  | { kind: "settled" }
+  /** Handed over while Paddle was asked: the worker sets it to end again. */
+  | { kind: "handed_over"; handedOverFrom: string | null; handedOverAt: Date };
+
+/** After Paddle was asked to keep the plan, whatever it answered: under the gym's lock, a plan
+ *  handed over meanwhile is marked for the worker to set to end again (`handedOverPlansToEnd`),
+ *  so the old owner is never charged for a gym they gave away. Otherwise, when Paddle took it,
+ *  the plan renews; written once however often it is pressed. */
+export async function settlePaddleKeep(sql: Sql, input: { gymId: string; rowId: string; userId: string; kept: boolean }): Promise<PaddleKeepSettled> {
+  return await sql.begin(async (tx) => {
+    await lockOrgRow(tx, input.gymId); // subscription-writer lock
+    const rows = await tx<{ handed_over_at: Date | null; handed_over_from: string | null }[]>`
+      SELECT handed_over_at, handed_over_from FROM subscriptions
+      WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}
+      FOR UPDATE`;
+    const row = rows[0];
+    if (row?.handed_over_at != null) {
+      await tx`
+        UPDATE subscriptions SET handed_over_end_sent_at = NULL, cancel_at_period_end = true
+        WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId}`;
+      return { kind: "handed_over", handedOverFrom: row.handed_over_from, handedOverAt: row.handed_over_at };
+    }
+    if (!input.kept || row === undefined) return { kind: "settled" };
+    const changed = await tx`
+      UPDATE subscriptions SET cancel_at_period_end = false
+      WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId} AND cancel_at_period_end
+      RETURNING id`;
+    if (changed.length === 1) {
+      await insertAudit(tx, {
+        actorUserId: input.userId,
+        gymId: input.gymId,
+        action: "billing.cancel_withdrawn",
+        targetType: "subscription",
+        targetId: input.rowId,
+        meta: { provider: "paddle" },
+      });
+    }
+    return { kind: "settled" };
+  });
+}
+
 export interface CancelToSend {
   id: string;
   gymId: string;

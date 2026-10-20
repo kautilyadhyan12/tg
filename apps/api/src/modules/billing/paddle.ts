@@ -73,6 +73,8 @@ export interface PaddleApi {
   activateTrial(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
   /** Stop a subscription renewing: it ends with the month already paid (4b-iii-a). */
   cancelAtPeriodEnd(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
+  /** Take back a cancel waiting for the month's end: the subscription renews again (1g). */
+  removeScheduledCancel(subscriptionId: string): Promise<PaddleResult<PaddleSubscription>>;
 }
 
 /** The catalogue calls `tools/paddle-prices.ts` makes. */
@@ -260,6 +262,11 @@ export function createPaddleApi(opts: {
       const path = subPath(subscriptionId);
       if (path === null) return { kind: "not_found" };
       return unwrap(await call("POST", `${path}/cancel`, paddleEnvelope(paddleSubscriptionSchema), { effective_from: "next_billing_period" }));
+    },
+    async removeScheduledCancel(subscriptionId) {
+      const path = subPath(subscriptionId);
+      if (path === null) return { kind: "not_found" };
+      return unwrap(await call("PATCH", path, paddleEnvelope(paddleSubscriptionSchema), { scheduled_change: null }));
     },
     async getPrice(id) {
       if (!/^pri_[a-z\d]{26}$/.test(id)) return { kind: "not_found" };

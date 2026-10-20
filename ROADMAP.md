@@ -151,6 +151,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 4b-iii-b. [x] **A gym paying through Razorpay handed over** — merged 2026-10-20 (PR #318).
      - 4b-iv. [x] **A plan set to end is reminded** — merged 2026-10-20 (PR #320).
      - 4b-v. [x] **The two extra passes' fixes** — merged 2026-10-20 (PR #323).
+     - 4b-vi. [ ] **A new owner chooses their plan before the handed-over plan ends** (Kd, 2026-10-20, `rulings/2026-10-20-1g.md`): it starts the day the old plan stops, so the members never drop to the free app between the two. Web folder 2, after 1g.
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).
@@ -420,7 +421,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 1d-iii-b. [x] **A smaller size** — merged 2026-10-01 (PR #148).
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
    - 1f. [x] **The two extra passes' fixes** — merged 2026-10-01 (PR #149).
-   - 1g. [ ] **Keep my plan for a Paddle plan set to end** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): kept from the plan box, as a Razorpay plan is, by removing Paddle's scheduled cancel; its reminder email then says Keep my plan. Risky. Web folder 2, after 4b's two extra passes.
+   - 1g. [x] **Keep my plan for a Paddle plan set to end** — merged 2026-10-20 (PR #325).
 2. **Trials enforced** (split 2026-09-08 after Kd's trial-abuse ruling; no approval queue, ever).
    - 2a. [x] **The price list, the 10-day gym trial at 200 members, no individual trial, one free scan a day** — merged 2026-09-24 (PR #101).
    - 2b. [x] **One free trial per person, however the email is spelled** — merged 2026-10-16 (PR #293).

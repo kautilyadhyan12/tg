@@ -938,7 +938,7 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
     // What the plan box offers before the end (`toOrgSubscription`'s `keepUntil`).
     const keepUntil = new Date(due.endsAt.getTime() - CANCEL_LEAD_MS);
     const action: PlanEndAction =
-      due.provider === "razorpay" && !due.handedOver && !due.cancelSent && keepUntil > now ? { kind: "keep_razorpay", until: keepUntil } : { kind: "choose" };
+      !due.handedOver && !due.cancelSent && keepUntil > now ? { kind: "keep", until: keepUntil } : { kind: "choose" };
     // The Overview opens at its Plan box (`#plan`), below a new gym's Start here list.
     const planLink = `${consoleLinks(mail, facts.gymSlug).plan}#plan`;
     for (const to of await billingRecipients(deps, due.gymId)) {
@@ -2075,9 +2075,80 @@ export async function cancelRazorpayPlan(deps: BillingDeps, input: { userId: str
   return await planNow(deps, input.gymId);
 }
 
-/** "Keep my plan": a plan set to end goes on, while the cancel has not gone to Razorpay. */
-export async function keepRazorpayPlan(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanCancelResponse> {
+/** "Keep my plan": a plan set to end goes on. A Paddle plan's cancel is taken back at Paddle
+ *  (1g); a Razorpay plan's is kept while it has not gone to Razorpay. */
+export async function keepPlan(deps: BillingDeps, input: { userId: string; gymId: string }): Promise<OrgPlanCancelResponse> {
   const { org } = await requirePrivilege(deps, input.gymId, input.userId, "billing.manage");
+  const target = await repo.paddleKeepTarget(deps.sql, { gymId: input.gymId, now: deps.now(), leadMs: CANCEL_LEAD_MS });
+  switch (target.kind) {
+    case "not_paddle":
+      return await keepRazorpayPlan(deps, input, org.timezone);
+    case "not_found":
+      throw new OrgsError(404, "org_not_found", "Organisation not found.");
+    case "org_archived":
+      throw new OrgsError(409, "org_archived", "This organisation is archived.");
+    case "no_paid_plan":
+      throw new OrgsError(404, "no_paid_plan", "There's no paid plan to keep.");
+    case "handed_over":
+      throw handedOverRefusal(target.handedOverFrom, input.userId);
+    case "past_due":
+      throw new OrgsError(409, "plan_past_due", "A payment didn't go through, so this plan can't be kept here. Press Update payment method to pay it.");
+    case "too_late": {
+      const ends = target.endsAt === null ? "its last day" : dayLabel(target.endsAt, org.timezone);
+      throw new OrgsError(409, "too_late", `Your plan ends on ${ends}, and it's too close to then to keep it. You can choose a plan again once it ends.`);
+    }
+    case "not_ending":
+      return await planNow(deps, input.gymId);
+    case "paddle":
+      await keepPaddlePlan(deps, input, target);
+      return await planNow(deps, input.gymId);
+  }
+}
+
+/** Ask Paddle to take the cancel back, then settle it under the gym's lock whatever Paddle
+ *  answered: a gym handed over while Paddle was asked has its plan set to end again. */
+async function keepPaddlePlan(deps: BillingDeps, input: { userId: string; gymId: string }, target: { rowId: string; subscriptionRef: string }): Promise<void> {
+  const paddle = deps.paddle;
+  if (paddle === null) throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+  const asked = await paddle.api.removeScheduledCancel(target.subscriptionRef);
+  let kept = asked.kind === "ok" && asked.value.scheduled_change === null;
+  let ended = false;
+  let unknown = asked.kind === "not_found";
+  if (!kept) {
+    // An answer lost, or a second press that lost to the first: Paddle's own record decides.
+    const read = await paddle.api.getSubscription(target.subscriptionRef);
+    ended = read.kind === "ok" && read.value.status === "canceled";
+    kept = read.kind === "ok" && !ended && read.value.scheduled_change === null;
+    unknown = unknown || read.kind === "not_found";
+  }
+  const settled = await repo.settlePaddleKeep(deps.sql, { gymId: input.gymId, rowId: target.rowId, userId: input.userId, kept });
+  if (settled.kind === "handed_over") {
+    // The worker tries again if Paddle does not take it now (`endHandedOverPlans`).
+    await endHandedOverPlan(deps, { gymId: input.gymId, subscriptionRef: target.subscriptionRef, handedOverAt: settled.handedOverAt });
+    throw handedOverRefusal(settled.handedOverFrom, input.userId);
+  }
+  if (!kept) {
+    const refusal = asked.kind === "refused" ? { status: asked.status, code: asked.code } : {};
+    deps.log.warn({ event: "billing.keep_failed", provider: "paddle", result: asked.kind, ended, unknown, ...refusal }, "Paddle did not keep a plan set to end");
+    if (ended) {
+      // Already over at Paddle, its event not yet here: written now, so the plan box reads it.
+      await applyPaddleSubscription(deps, target.subscriptionRef);
+      throw new OrgsError(409, "plan_ended", "Your plan has already ended, so it can't be kept. You can choose a new plan.");
+    }
+    if (asked.kind === "refused") {
+      throw new OrgsError(409, "keep_refused", "Paddle wouldn't keep this plan. Press Manage payment to see it on Paddle's page.");
+    }
+    if (unknown) {
+      throw new OrgsError(409, "plan_not_at_paddle", "Paddle has no record of this plan, so it can't be kept. You can choose a plan again once it ends.");
+    }
+    throw new OrgsError(503, "payments_unavailable", "Paddle couldn't be reached to keep your plan. Please try again in a moment.");
+  }
+  // Paddle's record, as its own event would bring it; the event is applied the same when it comes.
+  await applyPaddleSubscription(deps, target.subscriptionRef);
+}
+
+/** Keep my plan for a Razorpay plan: while the cancel has not gone to Razorpay. */
+async function keepRazorpayPlan(deps: BillingDeps, input: { userId: string; gymId: string }, timezone: string): Promise<OrgPlanCancelResponse> {
   const outcome = await repo.keepPlan(deps.sql, { ...input, now: deps.now(), leadMs: CANCEL_LEAD_MS });
   switch (outcome.kind) {
     case "not_found":
@@ -2089,7 +2160,7 @@ export async function keepRazorpayPlan(deps: BillingDeps, input: { userId: strin
     case "handed_over":
       throw handedOverRefusal(outcome.handedOverFrom, input.userId);
     case "too_late": {
-      const ends = outcome.endsAt === null ? "its last day" : dayLabel(outcome.endsAt, org.timezone);
+      const ends = outcome.endsAt === null ? "its last day" : dayLabel(outcome.endsAt, timezone);
       // Sent to Razorpay early (a gym handed over, then handed back): not "too close".
       const close = outcome.endsAt === null || outcome.endsAt.getTime() - deps.now().getTime() <= CANCEL_LEAD_MS;
       throw new OrgsError(

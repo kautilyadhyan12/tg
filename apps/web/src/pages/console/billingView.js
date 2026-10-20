@@ -231,12 +231,33 @@ export function canKeepRazorpayPlan(org, now = Date.now()) {
   return canManageRazorpayPlan(org) && sub?.cancelAtPeriodEnd === true && Number.isFinite(until) && until > now;
 }
 
-/** The line under a Razorpay plan set to end: until when it can be kept, or that it can't. */
+/** MAY THIS VIEWER KEEP A PADDLE PLAN SET TO END? Until the server's `keepUntil`, a few hours
+ *  before it ends (1g): Keep my plan takes the cancel back at Paddle. Never a plan handed over
+ *  with its gym, which is the old owner's to pay. */
+export function canKeepPaddlePlan(org, now = Date.now()) {
+  const sub = org?.subscription;
+  const until = Date.parse(sub?.keepUntil ?? '');
+  return (
+    canManageBilling(viewerPrivileges(org)) &&
+    sub?.paidThrough === 'paddle' &&
+    sub?.handedOverBy == null &&
+    sub?.cancelAtPeriodEnd === true &&
+    Number.isFinite(until) &&
+    until > now
+  );
+}
+
+/** May this viewer keep this plan set to end, through whichever company it is paid. */
+export function canKeepPlan(org, now = Date.now()) {
+  return canKeepRazorpayPlan(org, now) || canKeepPaddlePlan(org, now);
+}
+
+/** The line under a plan set to end: until when it can be kept, or that it can't. */
 export function planEndingText(org, now = Date.now()) {
   const sub = org?.subscription;
-  if (!isPaidThroughRazorpay(org) || sub?.cancelAtPeriodEnd !== true || sub?.handedOverBy != null) return null;
+  if (sub?.paidThrough == null || sub?.cancelAtPeriodEnd !== true || sub?.handedOverBy != null) return null;
   // Set to end by Cancel plan, or by a hand-over and then handed back: said without saying who.
-  if (canKeepRazorpayPlan(org, now)) return `This plan is set to end. You can keep it until ${momentLabel(sub.keepUntil)}.`;
+  if (canKeepPlan(org, now)) return `This plan is set to end. You can keep it until ${momentLabel(sub.keepUntil)}.`;
   return "This plan is set to end and can't be kept now. You can choose a plan again once it ends.";
 }
 

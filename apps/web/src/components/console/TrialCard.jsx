@@ -10,6 +10,7 @@ import PlanChoiceDialog from './PlanChoiceDialog';
 import RazorpayPlanActions from './RazorpayPlanActions';
 import {
   canChangeSize,
+  canKeepPaddlePlan,
   canManageBilling,
   canPayDuringTrial,
   firstPaymentText,
@@ -101,7 +102,7 @@ function SeatLine({ org }) {
 }
 
 /** A secondary action on the card: the same look as Manage payment. */
-function CardButton({ onClick, disabled = false, children }) {
+function CardButton({ onClick, disabled = false, busy = false, children }) {
   return (
     <button
       type="button"
@@ -110,6 +111,7 @@ function CardButton({ onClick, disabled = false, children }) {
       className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
       style={{ background: 'rgba(255,138,31,0.15)', color: '#FF8A1F', minHeight: 44 }}
     >
+      {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
       {children}
     </button>
   );
@@ -121,6 +123,8 @@ export default function TrialCard({ org }) {
   const [cancelling, setCancelling] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+  const [keeping, setKeeping] = useState(false);
+  const [keepError, setKeepError] = useState(null);
   // `viewerPrivileges`, not `org.privileges` — absent means "this api is older
   // than this bundle" and the honest fallback is the ROLE's own defaults, never
   // "no powers" (:16101). Reading the raw field would hide the button from every
@@ -173,6 +177,7 @@ export default function TrialCard({ org }) {
   const payNow = canPayDuringTrial(org);
   const resize = canChangeSize(org);
   const razorpay = isPaidThroughRazorpay(org);
+  const keepPaddle = canKeepPaddlePlan(org);
   const ending = planEndingText(org);
   const handedOver = handedOverText(sub, org);
   const change = pendingChangeText(sub, org?.orgType);
@@ -195,6 +200,23 @@ export default function TrialCard({ org }) {
       setCancelError(errorText(err, "We couldn't cancel the change. Please try again."));
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // Keep my plan for a Paddle plan set to end (1g): Paddle is asked by the server, never here.
+  const keepPlan = async () => {
+    if (keeping) return;
+    setKeeping(true);
+    setKeepError(null);
+    try {
+      const res = await orgService.keepPlan(org.id);
+      if (res.data.subscription !== null) applyPaidPlan(org.id, res.data.subscription);
+      refreshConsoleOrgsAfterChange();
+    } catch (err) {
+      setKeepError(errorText(err, "We couldn't keep your plan. Please try again."));
+      refreshConsoleOrgsAfterChange();
+    } finally {
+      setKeeping(false);
     }
   };
 
@@ -341,6 +363,11 @@ export default function TrialCard({ org }) {
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
         {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
         {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
+        {keepPaddle ? (
+          <CardButton onClick={() => void keepPlan()} disabled={keeping} busy={keeping}>
+            Keep my plan
+          </CardButton>
+        ) : null}
         {/* A plan paid through Paddle is managed on Paddle's own page: the card, cancelling,
             invoices. One paid through Razorpay is managed here (1d-ii), below. */}
         {/* A plan handed over with the gym is the old owner's Paddle account: not opened here. */}
@@ -349,6 +376,11 @@ export default function TrialCard({ org }) {
         ) : null}
       </div>
       {razorpay ? <RazorpayPlanActions org={org} cancel /> : null}
+      {keepError !== null ? (
+        <p className="text-sm mt-3" style={{ color: '#ef4444' }} role="alert">
+          {keepError}
+        </p>
+      ) : null}
       {cancelError !== null ? (
         <p className="text-sm mt-3" style={{ color: '#ef4444' }}>
           {cancelError}
