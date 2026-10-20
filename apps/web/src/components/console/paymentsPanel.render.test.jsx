@@ -42,8 +42,10 @@ describe('a gym in a country Square serves, not connected', () => {
   it("the owner reads what Square does and what it costs, and Connect Square opens Square's own page in this tab", async () => {
     open(payments());
     expect(await screen.findByText('Not connected')).toBeTruthy();
-    expect(screen.getByText("Connect Square to take your members' card payments. Square pays the money into your bank account and charges its own card fee. We take nothing.")).toBeTruthy();
-    expect(screen.getByText('No Square account yet? You can create one free after you press Connect Square.')).toBeTruthy();
+    expect(screen.getByText('Connect Square for member payments')).toBeTruthy();
+    expect(screen.getByText('Accept card payments from your members through Square. Payments are deposited directly into your bank account, and Square applies its standard card processing fees.')).toBeTruthy();
+    expect(screen.getByText('No additional fees from us.')).toBeTruthy();
+    expect(screen.getByText("Don't have a Square account? You can create one for free when you connect Square.")).toBeTruthy();
     orgService.connectSquare.mockResolvedValue({ data: { url: 'https://connect.squareupsandbox.com/oauth2/authorize?state=abc' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect Square' }));
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('https://connect.squareupsandbox.com/oauth2/authorize?state=abc'));

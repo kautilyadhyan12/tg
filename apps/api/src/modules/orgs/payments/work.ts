@@ -18,6 +18,9 @@ export const SQUARE_WORK = {
   /** Square could not be asked about an event: try again this long after. */
   retryAfterMs: [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000],
   maxTries: 12,
+  /** A token Square still passes after its "removed" message is asked about this many more
+   *  times, a minute, five and fifteen apart, before the message is taken as about no gym here. */
+  recheckTries: 3,
   /** Square could not be asked for a renewal; or it refused one while the token still works. */
   renewAgainMs: 15 * 60_000,
   renewRefusedAgainMs: 60 * 60_000,
@@ -125,11 +128,16 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
       continue;
     }
     let unknown = false;
+    let stillWorks = false;
     for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, event.payload.accountId)) {
       const check = await checkConnection(deps, square, row);
       if (check === "removed") run.removed += 1;
       if (check === "unknown") unknown = true;
+      if (check === "works") stillWorks = true;
     }
+    // Square's own check can still pass a token for some seconds after its message (seen in
+    // its test area, 2026-10-20): a token that works is asked about again before it is believed.
+    if (stillWorks && event.tries < SQUARE_WORK.recheckTries) unknown = true;
     if (!unknown) {
       await webhooks.finishEvent(deps.sql, event, "done", deps.now());
       run.unchanged += 1;

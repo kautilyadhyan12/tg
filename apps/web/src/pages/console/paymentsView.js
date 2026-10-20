@@ -57,8 +57,11 @@ export function paymentsElsewhereLine(payments) {
   }
 }
 
-export const SQUARE_INTRO = `Connect Square to take your members' card payments. Square pays the money into your bank account and charges its own card fee. We take nothing.`;
-export const SQUARE_NEW_ACCOUNT = 'No Square account yet? You can create one free after you press Connect Square.';
+// Kd's own words, at 18d-i's click-through.
+export const SQUARE_HEADING = 'Connect Square for member payments';
+export const SQUARE_INTRO = 'Accept card payments from your members through Square. Payments are deposited directly into your bank account, and Square applies its standard card processing fees.';
+export const SQUARE_NO_FEE = 'No additional fees from us.';
+export const SQUARE_NEW_ACCOUNT = `Don't have a Square account? You can create one for free when you connect Square.`;
 
 export const ownerOnlyLine = (gymName, again = false) => `Only the owner of ${gymName} can connect Square${again ? ' again' : ''}.`;
 

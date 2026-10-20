@@ -568,7 +568,18 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect((await deliver(first, sign(first))).statusCode).toBe(200);
       expect((await deliver(first, sign(first))).statusCode).toBe(200);
       expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-1'`).toHaveLength(1);
+      // The worker's clock from now: the message was kept a moment ago, by the database's own.
+      clock = new Date();
       await processSquareWork(workDeps(), ["pay-t-hook-1"]);
+      expect((await read(gymId, owner)).square?.state).toBe("connected");
+      // Asked about again a minute, five and fifteen on, then let go: the gym stays connected.
+      const pendingHook1 = () => sql`SELECT status FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-1'`;
+      expect(await pendingHook1()).toEqual([{ status: "pending" }]);
+      for (const minutes of [2, 6, 16]) {
+        clock = new Date(clock.getTime() + minutes * 60_000);
+        await processSquareWork(workDeps(), ["pay-t-hook-1"]);
+      }
+      expect(await pendingHook1()).toEqual([{ status: "done" }]);
       expect((await read(gymId, owner)).square?.state).toBe("connected");
 
       // Another kind of message is acknowledged and not kept.
@@ -584,6 +595,8 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       try {
         await processSquareWork(workDeps(), ["pay-t-hook-2"]);
         expect((await read(gymId, owner)).square?.state).toBe("connected");
+        // It was taken and put back for later, not passed over.
+        expect(await sql`SELECT status, tries FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-2'`).toEqual([{ status: "pending", tries: 1 }]);
       } finally {
         square.state.down = false;
       }
@@ -595,6 +608,18 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect((await rowOf(gymId))?.access_token).toBeNull();
       // Connect again is offered, and works.
       expect(await connect(gymId, owner, account("MLHOOK"))).toMatchObject({ outcome: "connected" });
+
+      // Square's message comes while Square's own check still passes the token for a few
+      // seconds (seen in its test area, 2026-10-20): the gym reads as taken off once it stops.
+      const third = body("pay-t-hook-3");
+      expect((await deliver(third, sign(third))).statusCode).toBe(200);
+      await processSquareWork(workDeps(), ["pay-t-hook-3"]);
+      expect((await read(gymId, owner)).square?.state).toBe("connected");
+      expect(await sql`SELECT status, tries FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-3'`).toEqual([{ status: "pending", tries: 1 }]);
+      for (const [token, t] of square.tokens) if (t.account.merchantId === "MLHOOK") square.tokens.set(token, { ...t, stopped: true });
+      clock = new Date(clock.getTime() + 2 * 60_000);
+      await processSquareWork(workDeps(), ["pay-t-hook-3"]);
+      expect((await read(gymId, owner)).square?.state).toBe("removed");
     },
     TEST_TIMEOUT_MS,
   );

@@ -3,8 +3,10 @@ import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
+  SQUARE_HEADING,
   SQUARE_INTRO,
   SQUARE_NEW_ACCOUNT,
+  SQUARE_NO_FEE,
   disconnectWords,
   ownerOnlyLine,
   paymentsElsewhereLine,
@@ -182,8 +184,14 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
               </p>
             </div>
           ) : null}
+          <p className="text-base font-bold m-0" style={{ color: '#fff' }}>
+            {SQUARE_HEADING}
+          </p>
           <p className="text-sm m-0" style={labelStyle}>
             {SQUARE_INTRO}
+          </p>
+          <p className="text-sm m-0" style={labelStyle}>
+            {SQUARE_NO_FEE}
           </p>
           {owner ? (
             <>
