@@ -680,7 +680,8 @@ if (square === null) {
       const run = await processSquareWork({ sql, square, log, now: () => new Date() });
       const revokes = run.revokes.sent + run.revokes.deferred + run.revokes.givenUp;
       const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
-      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + run.renewed + run.renewalsWaiting > 0) {
+      const terminalSaves = run.terminalSaves.asked + run.terminalSaves.forgotten;
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + terminalSaves + run.renewed + run.renewalsWaiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

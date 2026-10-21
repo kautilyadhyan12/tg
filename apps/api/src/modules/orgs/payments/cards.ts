@@ -17,6 +17,9 @@
 //
 // One card a person: a new one replaces the old, which Square is told to stop. Only staff
 // remove a card (PushPress and Mindbody: only the business does); a member adds or updates.
+//
+// A card saved on the gym's Square Terminal (18d-ii-b-ii, `terminalCards.ts`) is kept by the
+// same step as a typed one (`keepCard`), with the same checks.
 import { randomUUID } from "node:crypto";
 import {
   MEMBER_CARD_WORDS,
@@ -34,7 +37,11 @@ import {
   type MemberCardState,
   type MyCardResponse,
   type SaveCardRequest,
+  type CardTerminal,
+  type SquareCard,
+  type TerminalSave,
 } from "@app/shared";
+import type { TransactionSql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
 import { readerOf } from "../myMembership/repo.js";
@@ -43,11 +50,13 @@ import { gymHasLivePlan, insertAudit, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
-import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, type PaymentsDeps } from "./service.js";
+import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
-import type { SquareResult } from "./square.js";
+import type { SquareEnvironment, SquareResult } from "./square.js";
+import * as terminalSaves from "./terminalCardsRepo.js";
+import * as terminalsRepo from "./terminalsRepo.js";
 
-const BILLING = "billing.members";
+export const BILLING = "billing.members";
 
 /** Square's messages about a saved card. Each is checked with Square before anything changes. */
 export const SQUARE_CARD_EVENTS: readonly string[] = ["card.automatically_updated", "card.updated", "card.disabled", "card.forgotten"];
@@ -56,12 +65,12 @@ export const SQUARE_CARD_EVENTS: readonly string[] = ["card.automatically_update
  *  longer the person's here (seen 2026-10-20: Square keeps the card itself, marked enabled). */
 export const SQUARE_CUSTOMER_DELETED_EVENT = "customer.deleted";
 
-const orgNotFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
-const entryNotFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
-const unavailable = (): OrgsError => new OrgsError(503, "square_unavailable", MEMBER_CARD_WORDS.square_unavailable);
-const notReady = (): OrgsError => new OrgsError(409, "card_not_ready", MEMBER_CARD_WORDS.not_ready);
-const connectionRefused = (): OrgsError => new OrgsError(409, "card_connection_refused", MEMBER_CARD_WORDS.connection_refused);
-const paidBy = (payer: string, person: string): OrgsError =>
+export const orgNotFound = (): OrgsError => new OrgsError(404, "org_not_found", "Organisation not found.");
+export const entryNotFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
+export const unavailable = (): OrgsError => new OrgsError(503, "square_unavailable", MEMBER_CARD_WORDS.square_unavailable);
+export const notReady = (): OrgsError => new OrgsError(409, "card_not_ready", MEMBER_CARD_WORDS.not_ready);
+export const connectionRefused = (): OrgsError => new OrgsError(409, "card_connection_refused", MEMBER_CARD_WORDS.connection_refused);
+export const paidBy = (payer: string, person: string): OrgsError =>
   new OrgsError(409, "card_paid_by_payer", cardPaidByLine(payer === "" ? "Somebody else on your list" : payer, person === "" ? "this person" : person));
 
 function stateOf(square: SquareSettings | null, gym: repo.GymForPayments, row: repo.ConnectionRow | null): MemberCardState {
@@ -103,7 +112,7 @@ function formOf(square: SquareSettings, row: repo.ConnectionRow, gym: repo.GymFo
   };
 }
 
-interface Ready {
+export interface Ready {
   square: SquareSettings;
   row: repo.ConnectionRow;
   /** The gym's own access token, opened. Never logged, never sent to a browser. */
@@ -111,7 +120,7 @@ interface Ready {
 }
 
 /** Square set up here, and the gym connected with a location: or 409. */
-async function readyOrThrow(deps: PaymentsDeps, gymId: string, gym: repo.GymForPayments): Promise<Ready> {
+export async function readyOrThrow(deps: PaymentsDeps, gymId: string, gym: repo.GymForPayments): Promise<Ready> {
   const square = deps.square;
   const row = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
   if (square === null || stateOf(square, gym, row) !== "ready" || row === null || row.accessToken === null) throw notReady();
@@ -123,8 +132,15 @@ async function readyOrThrow(deps: PaymentsDeps, gymId: string, gym: repo.GymForP
   return { square, row, token };
 }
 
+/** The gym's paired Terminals in the account it is connected to now, as Card on file names them. */
+async function terminalsOf(deps: PaymentsDeps, environment: SquareEnvironment, gymId: string, accountId: string) {
+  return (await terminalsRepo.readTerminals(deps.sql, gymId, environment, accountId)).flatMap((t) =>
+    t.state === "paired" && t.deviceId !== null ? [{ id: t.id, serial: t.practice === null ? t.deviceId : null, practice: t.practice, deviceId: t.deviceId }] : [],
+  );
+}
+
 /** Card on file, for staff holding the payments tick. */
-async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string, entryId: string): Promise<MemberCardResponse> {
+export async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string, entryId: string): Promise<MemberCardResponse> {
   const [gym, person] = await Promise.all([repo.readGym(deps.sql, org.id), cards.readPerson(deps.sql, org.id, entryId)]);
   if (gym === null) throw orgNotFound();
   if (person === null) throw entryNotFound();
@@ -133,6 +149,11 @@ async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string, entryI
   const [card, payer, live] = await Promise.all([cards.readCard(deps.sql, org.id, entryId), payerOf(deps.sql, org.id, entryId), gymHasLivePlan(deps.sql, org.id)]);
   const canChange = state === "ready" && live && org.status === "active";
   const shown = shownCard(card, deps.square, row);
+  // A Square Terminal (18d-ii-b-ii): where Square saves cards on one, the gym allowing it.
+  const here = deps.square !== null && state === "ready" && terminalsOffered(row) && !missingScopes(row) ? { environment: deps.square.environment, row } : null;
+  const withTerminals = here !== null;
+  const paired = here === null ? [] : await terminalsOf(deps, here.environment, here.row.gymId, here.row.accountId);
+  const open = deps.square === null ? null : await terminalSaves.readOpenSaveOf(deps.sql, org.id, entryId, deps.square.environment);
   return memberCardResponseSchema.parse({
     cardOnFile: {
       state,
@@ -145,8 +166,27 @@ async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string, entryI
       gymName: gym.name,
       agreement: cardAgreementWords(gym.name),
       form: canChange && payer === null && deps.square !== null && row !== null ? formOf(deps.square, row, gym, person) : null,
+      terminals: canChange && payer === null ? paired.map(({ id, serial, practice }) => ({ id, serial, practice })) : [],
+      pairTerminal: withTerminals && canChange && gym.ownerUserId === userId && paired.length === 0,
+      terminalSave: open === null ? null : terminalSaveView(open, gym.country, await terminalsOf(deps, open.environment, open.gymId, open.accountId)),
     },
   });
+}
+
+/** Where a save on a Terminal stands, for the page that started it or any other. */
+export function terminalSaveView(save: terminalSaves.SaveRow, country: string | null, paired: readonly { id: string; serial: string | null; practice: CardTerminal["practice"]; deviceId: string }[]): TerminalSave {
+  const terminal = paired.find((t) => t.deviceId === save.deviceId);
+  return {
+    id: save.id,
+    step: save.state === "agreeing" ? "agree" : save.state === "saving" ? "card" : "done",
+    outcome: save.outcome,
+    pickedUp: save.pickedUp || save.state !== "agreeing",
+    // Square's page: "In the United States, cards can be dipped or swiped"; in Canada and
+    // Australia "only be swiped".
+    entry: country === "US" ? "insert_or_swipe" : "swipe",
+    terminal: terminal === undefined ? null : { id: terminal.id, serial: terminal.serial, practice: terminal.practice },
+    startedAt: save.startedAt.toISOString(),
+  };
 }
 
 export async function readMemberCard(deps: PaymentsDeps, userId: string, gymId: string, entryId: string): Promise<MemberCardResponse> {
@@ -289,7 +329,7 @@ export function cardRefusalOf(status: number, code: string): { code: string; sta
   return refusal("not_saved");
 }
 
-function refusalError(result: Exclude<SquareResult<unknown>, { kind: "ok" }>): OrgsError {
+export function refusalError(result: Exclude<SquareResult<unknown>, { kind: "ok" }>): OrgsError {
   if (result.kind === "unavailable") return unavailable();
   const r = cardRefusalOf(result.status, result.code);
   return new OrgsError(r.status, r.code, r.words);
@@ -300,7 +340,7 @@ function refusalError(result: Exclude<SquareResult<unknown>, { kind: "ok" }>): O
  *  same key, so Square makes one customer; nothing holds the database while Square answers. A
  *  key Square refused is let go, so the next save asks afresh; one Square did not answer is kept,
  *  so the next save gets back what Square may have made. */
-async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: string, person: cards.CardPerson): Promise<string> {
+export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: string, person: cards.CardPerson): Promise<string> {
   const key = { gymId, entryId: person.entryId, environment: ready.square.environment, accountId: ready.row.accountId };
   const claimed = await cards.claimCustomer(deps.sql, key, randomUUID());
   if ("customerId" in claimed) return claimed.customerId;
@@ -365,12 +405,49 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   const card = created.value;
   const environment = ready.square.environment;
   const accountId = ready.row.accountId;
-  const letGo = async (): Promise<void> => {
-    const id = await deps.sql.begin((tx) => cards.oweDisable(tx, { gymId: s.gymId, environment, accountId, cardId: card.id, notBefore: deps.now() }));
-    await sendOwedCardDisables(deps, ready.square, [id]);
-  };
-  // What Square made is what was asked for: on this customer, in this account, usable, with
-  // what a screen shows. Anything else is let go and never shown.
+  const usable = usableCard(card, customerId, accountId);
+  if (usable === null) {
+    deps.log.error({ event: "square.card_unexpected", gymId: s.gymId }, "Square saved a card that is not the one asked for");
+    await letGoOfCard(deps, ready.square, { gymId: s.gymId, environment, accountId, cardId: card.id });
+    throw unavailable();
+  }
+  const now = deps.now();
+  const outcome = await deps.sql.begin(async (tx) => {
+    await lockGym(tx, s.gymId);
+    return await keepCard(tx, {
+      gymId: s.gymId,
+      entryId: s.entryId,
+      environment,
+      accountId,
+      connectedAt: ready.row.connectedAt,
+      customerId,
+      card: usable,
+      words,
+      screen: s.screen,
+      userId: s.userId,
+      deviceId: null,
+      agreedAt: now,
+      at: now,
+    });
+  });
+  if (outcome.owed.length > 0) await sendOwedCardDisables(deps, ready.square, outcome.owed);
+  if (outcome.kind === "gone") throw entryNotFound();
+  if (outcome.kind === "paid_by") throw paidBy(outcome.payer, person.fullName);
+  if (outcome.kind === "not_ready") throw notReady();
+}
+
+/** A card Square saved, as it may be kept. */
+export interface UsableCard {
+  cardId: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+/** What Square made is what was asked for: on this customer, in this account, usable, with what
+ *  a screen shows. Anything else is null, let go and never shown. */
+export function usableCard(card: SquareCard, customerId: string, accountId: string): UsableCard | null {
   const { last_4: last4, exp_month: expMonth, exp_year: expYear } = card;
   if (
     card.customer_id !== customerId ||
@@ -380,59 +457,99 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
     expMonth === undefined ||
     expYear === undefined
   ) {
-    deps.log.error({ event: "square.card_unexpected", gymId: s.gymId }, "Square saved a card that is not the one asked for");
-    await letGo();
-    throw unavailable();
+    return null;
   }
-  const brand = card.card_brand ?? "OTHER_BRAND";
-  const now = deps.now();
-  const outcome = await deps.sql.begin(async (tx) => {
-    await lockGym(tx, s.gymId);
-    // Still the gym's record, paid for by nobody, and the gym still connected to this account.
-    const still = await cards.readPerson(tx, s.gymId, s.entryId);
-    const payerNow = await payerOf(tx, s.gymId, s.entryId);
-    const row = await repo.readConnection(tx, s.gymId, environment);
-    if (still === null) return { kind: "gone" as const, owed: [await cards.oweDisable(tx, { gymId: s.gymId, environment, accountId, cardId: card.id, notBefore: now })] };
-    if (payerNow !== null) return { kind: "paid_by" as const, payer: payerNow.name, owed: [await cards.oweDisable(tx, { gymId: s.gymId, environment, accountId, cardId: card.id, notBefore: now })] };
-    if (row?.state !== "connected" || row.accountId !== accountId || row.connectedAt.getTime() !== ready.row.connectedAt.getTime()) {
-      return { kind: "not_ready" as const, owed: [await cards.oweDisable(tx, { gymId: s.gymId, environment, accountId, cardId: card.id, notBefore: now })] };
-    }
-    const before = await cards.readCard(tx, s.gymId, s.entryId, true);
-    // The same press sent twice: Square gave back the same card, already kept.
-    if (before !== null && before.environment === environment && before.accountId === accountId && before.cardId === card.id) return { kind: "saved" as const, owed: [] };
-    const agreementId = await cards.insertAgreement(tx, { gymId: s.gymId, entryId: s.entryId, words, screen: s.screen, screenUserId: s.userId, brand, last4, agreedAt: now });
-    await cards.writeCard(tx, {
-      gymId: s.gymId,
-      entryId: s.entryId,
-      environment,
-      accountId,
-      customerId,
-      cardId: card.id,
-      brand,
-      last4,
-      expMonth,
-      expYear,
-      savedFrom: s.screen,
-      savedBy: s.userId,
-      agreementId,
-      at: now,
-    });
-    const owed = before === null ? [] : [await cards.oweDisable(tx, { gymId: s.gymId, environment: before.environment, accountId: before.accountId, cardId: before.cardId, notBefore: now })];
-    await insertAudit(tx, {
-      actorUserId: s.userId,
-      gymId: s.gymId,
-      // A member's own press is not something staff did (Staff activity, 4d).
-      action: s.screen === "desk" ? "org.member_card_saved" : "member.card_saved",
-      targetType: "member_list_entry",
-      targetId: s.entryId,
-      meta: { brand, last4, replacedBrand: before?.brand ?? null, replacedLast4: before?.last4 ?? null },
-    });
-    return { kind: "saved" as const, owed };
+  return { cardId: card.id, brand: card.card_brand ?? "OTHER_BRAND", last4, expMonth, expYear };
+}
+
+/** A card Square made that is not kept: Square is told to stop it, now and by the worker. */
+export async function letGoOfCard(deps: PaymentsDeps, square: SquareSettings, c: { gymId: string; environment: SquareEnvironment; accountId: string; cardId: string }): Promise<void> {
+  const id = await deps.sql.begin((tx) => cards.oweDisable(tx, { ...c, notBefore: deps.now() }));
+  await sendOwedCardDisables(deps, square, [id]);
+}
+
+export interface KeepCard {
+  gymId: string;
+  entryId: string;
+  environment: SquareEnvironment;
+  accountId: string;
+  /** The connection the save began with. */
+  connectedAt: Date;
+  customerId: string;
+  card: UsableCard;
+  /** What the person agreed to, word for word. */
+  words: string;
+  screen: "desk" | "app" | "terminal";
+  /** The member of staff at the desk, or the member in the app. */
+  userId: string | null;
+  /** The Terminal the person agreed on (`terminal` only). */
+  deviceId: string | null;
+  agreedAt: Date;
+  at: Date;
+}
+
+export type Kept = { kind: "saved"; owed: string[] } | { kind: "gone"; owed: string[] } | { kind: "paid_by"; payer: string; owed: string[] } | { kind: "not_ready"; owed: string[] };
+
+/** The card goes on the record, under the gym's lock (the caller's), only while it is still the
+ *  gym's record, paid for by nobody, and the gym still on the connection the save began with;
+ *  otherwise Square is owed its stop. Answers the stops owed, for the caller to send once the
+ *  transaction is over. */
+export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
+  const { gymId, entryId, environment, accountId, card } = k;
+  const owe = async (): Promise<string[]> => [await cards.oweDisable(tx, { gymId, environment, accountId, cardId: card.cardId, notBefore: k.at })];
+  const still = await cards.readPerson(tx, gymId, entryId);
+  const payerNow = await payerOf(tx, gymId, entryId);
+  const row = await repo.readConnection(tx, gymId, environment);
+  if (still === null) return { kind: "gone", owed: await owe() };
+  if (payerNow !== null) return { kind: "paid_by", payer: payerNow.name, owed: await owe() };
+  if (row?.state !== "connected" || row.accountId !== accountId || row.connectedAt.getTime() !== k.connectedAt.getTime()) return { kind: "not_ready", owed: await owe() };
+  const before = await cards.readCard(tx, gymId, entryId, true);
+  // The same press sent twice: Square gave back the same card, already kept.
+  if (before !== null && before.environment === environment && before.accountId === accountId && before.cardId === card.cardId) return { kind: "saved", owed: [] };
+  const agreementId = await cards.insertAgreement(tx, {
+    gymId,
+    entryId,
+    words: k.words,
+    screen: k.screen,
+    screenUserId: k.userId,
+    deviceId: k.deviceId,
+    brand: card.brand,
+    last4: card.last4,
+    agreedAt: k.agreedAt,
   });
-  if (outcome.owed.length > 0) await sendOwedCardDisables(deps, ready.square, outcome.owed);
-  if (outcome.kind === "gone") throw entryNotFound();
-  if (outcome.kind === "paid_by") throw paidBy(outcome.payer, person.fullName);
-  if (outcome.kind === "not_ready") throw notReady();
+  await cards.writeCard(tx, {
+    gymId,
+    entryId,
+    environment,
+    accountId,
+    customerId: k.customerId,
+    cardId: card.cardId,
+    brand: card.brand,
+    last4: card.last4,
+    expMonth: card.expMonth,
+    expYear: card.expYear,
+    savedFrom: k.screen,
+    savedBy: k.userId,
+    agreementId,
+    at: k.at,
+  });
+  const owed = before === null ? [] : [await cards.oweDisable(tx, { gymId, environment: before.environment, accountId: before.accountId, cardId: before.cardId, notBefore: k.at })];
+  await insertAudit(tx, {
+    actorUserId: k.userId,
+    gymId,
+    // A member's own press is not something staff did (Staff activity, 4d).
+    action: k.screen === "app" ? "member.card_saved" : "org.member_card_saved",
+    targetType: "member_list_entry",
+    targetId: entryId,
+    meta: {
+      brand: card.brand,
+      last4: card.last4,
+      replacedBrand: before?.brand ?? null,
+      replacedLast4: before?.last4 ?? null,
+      ...(k.screen === "terminal" ? { via: "terminal" } : {}),
+    },
+  });
+  return { kind: "saved", owed };
 }
 
 /** Tell Square to stop the cards it is owed a stop of (`ids`: only these); whatever Square does

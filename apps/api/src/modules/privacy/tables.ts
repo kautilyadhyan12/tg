@@ -535,6 +535,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // has passed since that deletion and three since it was agreed
   // (repo.deleteExpiredCardAgreements).
   "gym_card_agreements",
+  // gym_terminal_card_saves.started_by — which member of staff pressed Save card on Terminal for a
+  // person (`0148`; 18d-ii-b-ii), on gym_member_cards' footing: the gym's record; `ON DELETE set
+  // null`. It holds Square's ids and the agreement's words, no card number, and is forgotten a
+  // day after the save ends.
+  "gym_terminal_card_saves",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
   "gym_waivers",

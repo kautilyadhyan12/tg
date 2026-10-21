@@ -131,7 +131,8 @@ export const gymSquareCustomers = pgTable(
 );
 
 /** What the person agreed to when a card was saved (0144): the words shown, when, and on whose
- *  screen (`desk`: staff's, `app`: the member's own). It outlives a removed card. A record
+ *  screen (`desk`: staff's, `app`: the member's own, `terminal`: the gym's Square Terminal,
+ *  0148). It outlives a removed card. A record
  *  deleted for good lets go of it with the day (`record_deleted_at`); its link to the record is
  *  checked when the transaction commits, so it is not declared here (as `0108`'s is not). */
 export const gymCardAgreements = pgTable(
@@ -146,13 +147,18 @@ export const gymCardAgreements = pgTable(
     words: text("words").notNull(),
     screen: text("screen").notNull(),
     screenUserId: uuid("screen_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** `terminal` (0148): the Square Terminal the person tapped I agree on. */
+    deviceId: text("device_id"),
     brand: text("brand").notNull(),
     last4: text("last4").notNull(),
     agreedAt: timestamp("agreed_at", { withTimezone: true }).notNull(),
   },
   (t) => [
     check("gym_card_agreements_words_check", sql`char_length(${t.words}) BETWEEN 20 AND 600`),
-    check("gym_card_agreements_screen_check", sql`${t.screen} IN ('desk','app')`),
+    check(
+      "gym_card_agreements_screen_check",
+      sql`${t.screen} IN ('desk','app','terminal') AND (${t.screen} = 'terminal') = (${t.deviceId} IS NOT NULL) AND (${t.deviceId} IS NULL OR ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$')`,
+    ),
     check("gym_card_agreements_card_check", sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$'`),
     check("gym_card_agreements_deleted_day_check", sql`${t.entryId} IS NOT NULL OR ${t.recordDeletedAt} IS NOT NULL`),
     index("gym_card_agreements_entry_idx").on(t.gymId, t.entryId),
@@ -195,7 +201,7 @@ export const gymMemberCards = pgTable(
       "gym_member_cards_card_check",
       sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$' AND ${t.expMonth} BETWEEN 1 AND 12 AND ${t.expYear} BETWEEN 2000 AND 2200`,
     ),
-    check("gym_member_cards_saved_from_check", sql`${t.savedFrom} IN ('desk','app')`),
+    check("gym_member_cards_saved_from_check", sql`${t.savedFrom} IN ('desk','app','terminal')`),
     foreignKey({ name: "gym_member_cards_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
   ],
 );
@@ -266,5 +272,65 @@ export const gymSquareTerminals = pgTable(
     ),
     uniqueIndex("gym_square_terminals_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.deviceId} IS NOT NULL`),
     uniqueIndex("gym_square_terminals_pairing_uq").on(t.gymId, t.environment).where(sql`${t.state} = 'pairing'`),
+  ],
+);
+
+/** Save card on Terminal (0148; ROADMAP 18d-ii-b-ii): one press, while the person agrees on the
+ *  gym's Square Terminal (`agreeing`) and inserts or swipes their card (`saving`), then `saved`
+ *  or `not_saved` with why, kept a day. The key each Square action is asked with is kept, so
+ *  asking again gives back the same action. A record deleted for good or joined lets go of
+ *  `entry_id` alone (`ON DELETE SET NULL ("entry_id")`, which Drizzle cannot write, so that
+ *  link is not declared here): whatever the Terminal then saves is stopped at Square. */
+export const gymTerminalCardSaves = pgTable(
+  "gym_terminal_card_saves",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id"),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    deviceId: text("device_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    state: text("state").notNull(),
+    outcome: text("outcome"),
+    words: text("words").notNull(),
+    confirmKey: uuid("confirm_key").notNull(),
+    confirmActionId: text("confirm_action_id"),
+    pickedUp: boolean("picked_up").notNull().default(false),
+    agreedAt: timestamp("agreed_at", { withTimezone: true }),
+    saveKey: uuid("save_key").notNull(),
+    saveActionId: text("save_action_id"),
+    cardId: text("card_id"),
+    startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    checkingUntil: timestamp("checking_until", { withTimezone: true }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_terminal_card_saves_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_terminal_card_saves_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.confirmActionId} IS NULL OR ${t.confirmActionId} ~ '^[A-Za-z0-9:_-]{1,255}$') AND (${t.saveActionId} IS NULL OR ${t.saveActionId} ~ '^[A-Za-z0-9:_-]{1,255}$') AND (${t.cardId} IS NULL OR ${t.cardId} ~ '^[A-Za-z0-9:_-]{1,192}$')`,
+    ),
+    check("gym_terminal_card_saves_state_check", sql`${t.state} IN ('agreeing','saving','saved','not_saved')`),
+    check(
+      "gym_terminal_card_saves_outcome_check",
+      sql`(${t.state} IN ('agreeing','saving')) = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('saved','not_agreed','cancelled_on_terminal','timed_out','no_answer','cancelled','refused','gone'))`,
+    ),
+    check(
+      "gym_terminal_card_saves_saved_check",
+      sql`(${t.state} = 'saved') = (${t.outcome} IS NOT DISTINCT FROM 'saved') AND (${t.state} <> 'saved' OR (${t.cardId} IS NOT NULL AND ${t.agreedAt} IS NOT NULL))`,
+    ),
+    check("gym_terminal_card_saves_agreed_check", sql`${t.state} NOT IN ('saving','saved') OR ${t.agreedAt} IS NOT NULL`),
+    check("gym_terminal_card_saves_words_check", sql`char_length(${t.words}) BETWEEN 20 AND 600`),
+    uniqueIndex("gym_terminal_card_saves_request_uq").on(t.gymId, t.requestKey),
+    uniqueIndex("gym_terminal_card_saves_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.state} IN ('agreeing','saving')`),
+    uniqueIndex("gym_terminal_card_saves_entry_uq").on(t.gymId, t.entryId).where(sql`${t.state} IN ('agreeing','saving') AND ${t.entryId} IS NOT NULL`),
+    index("gym_terminal_card_saves_open_idx").on(t.checkedAt).where(sql`${t.state} IN ('agreeing','saving')`),
+    index("gym_terminal_card_saves_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL`),
   ],
 );

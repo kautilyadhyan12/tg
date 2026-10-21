@@ -38,7 +38,7 @@ export interface CardRow {
   last4: string;
   expMonth: number;
   expYear: number;
-  savedFrom: "desk" | "app";
+  savedFrom: "desk" | "app" | "terminal";
   savedAt: Date;
 }
 
@@ -53,7 +53,7 @@ interface RawCard {
   last4: string;
   exp_month: number;
   exp_year: number;
-  saved_from: "desk" | "app";
+  saved_from: "desk" | "app" | "terminal";
   saved_at: Date;
 }
 
@@ -135,11 +135,22 @@ export async function dropCustomer(sql: SqlOrTx, gymId: string, entryId: string,
 
 export async function insertAgreement(
   tx: TransactionSql,
-  a: { gymId: string; entryId: string; words: string; screen: "desk" | "app"; screenUserId: string; brand: string; last4: string; agreedAt: Date },
+  a: {
+    gymId: string;
+    entryId: string;
+    words: string;
+    screen: "desk" | "app" | "terminal";
+    screenUserId: string | null;
+    /** The Square Terminal the person agreed on: `terminal` only. */
+    deviceId: string | null;
+    brand: string;
+    last4: string;
+    agreedAt: Date;
+  },
 ): Promise<string> {
   const [row] = await tx<{ id: string }[]>`
-    INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, brand, last4, agreed_at)
-    VALUES (${a.gymId}, ${a.entryId}, ${a.words}, ${a.screen}, ${a.screenUserId}, ${a.brand}, ${a.last4}, ${a.agreedAt})
+    INSERT INTO gym_card_agreements (gym_id, entry_id, words, screen, screen_user_id, device_id, brand, last4, agreed_at)
+    VALUES (${a.gymId}, ${a.entryId}, ${a.words}, ${a.screen}, ${a.screenUserId}, ${a.deviceId}, ${a.brand}, ${a.last4}, ${a.agreedAt})
     RETURNING id`;
   if (row === undefined) throw new Error("card agreement not written");
   return row.id;
@@ -156,8 +167,8 @@ export interface NewCard {
   last4: string;
   expMonth: number;
   expYear: number;
-  savedFrom: "desk" | "app";
-  savedBy: string;
+  savedFrom: "desk" | "app" | "terminal";
+  savedBy: string | null;
   agreementId: string;
   at: Date;
 }

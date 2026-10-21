@@ -111,6 +111,7 @@ import {
   memberGymTagsResponseSchema,
   memberPayersResponseSchema,
   memberCardResponseSchema,
+  terminalSaveResponseSchema,
   memberNotesAndTagsSchema,
   memberNotesOlderResponseSchema,
   memberTagsDoneResponseSchema,
@@ -1777,6 +1778,26 @@ export const orgService = {
       memberCardResponseSchema,
       'their card on file',
       authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card`),
+    ),
+  /** Save card on Terminal (ROADMAP 18d-ii-b-ii): the agreement goes to the gym's Square Terminal,
+   *  then the card the person gives there. Asked about every few seconds until it ends. */
+  startTerminalSave: (gymId, entryId, body) =>
+    readThrough(
+      terminalSaveResponseSchema,
+      'their card on file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/terminal`, body),
+    ),
+  checkTerminalSave: (gymId, entryId, saveId) =>
+    readThrough(
+      terminalSaveResponseSchema,
+      'their card on file',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/terminal/${encodeURIComponent(saveId)}`),
+    ),
+  cancelTerminalSave: (gymId, entryId, saveId) =>
+    readThrough(
+      terminalSaveResponseSchema,
+      'their card on file',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/terminal/${encodeURIComponent(saveId)}/cancel`),
     ),
   giveHeldMembership: (gymId, entryId, body) =>
     readThrough(

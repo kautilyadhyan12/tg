@@ -260,7 +260,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.member_payer_removed": (s) => `Stopped ${payerOf(s)} paying for ${person(s)}`,
   "org.member_card_saved": (s) => {
     const before = cardOf(s, "replacedBrand", "replacedLast4");
-    return `Saved ${cardOf(s, "brand", "last4") ?? "a card"} for ${person(s)}${before === null ? "" : `, in place of ${before}`}`;
+    // Saved on the gym's Square Terminal (18d-ii-b-ii): the person agreed and gave the card there.
+    const where = text(s, "via") === "terminal" ? " on a Square Terminal" : "";
+    return `Saved ${cardOf(s, "brand", "last4") ?? "a card"} for ${person(s)}${where}${before === null ? "" : `, in place of ${before}`}`;
   },
   "org.member_card_removed": (s) => `Removed ${cardOf(s, "brand", "last4") ?? "a card"} from ${person(s)}`,
   "org.product_created": (s) => {

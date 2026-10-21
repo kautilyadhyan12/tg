@@ -177,6 +177,11 @@ export const memberListEntryParamsSchema = z
   .strict();
 export type MemberListEntryParams = z.infer<typeof memberListEntryParamsSchema>;
 
+/** Save card on Terminal (18d-ii-b-ii): one press, on one record. */
+export const terminalSaveParamsSchema = z
+  .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), saveId: z.string().uuid() })
+  .strict();
+
 export const memberNoteParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), noteId: z.string().uuid() })
   .strict();

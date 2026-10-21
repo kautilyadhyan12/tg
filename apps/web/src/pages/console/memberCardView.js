@@ -1,4 +1,5 @@
 import { MEMBER_CARD_WORDS, cardEarlierLine, cardName, cardOnFileLine, cardOwnerOnlyLine, cardPaidByLine } from '@app/shared';
+import { PRACTICE_TERMINAL_WORDS } from './paymentsView';
 
 // CARD ON FILE, ON A PERSON'S PAGE (ROADMAP 18d-ii): what the box says, from the server's
 // answer. Only staff holding the payments tick open it; a gym outside Square's countries shows
@@ -33,6 +34,10 @@ export function cardBoxView(view, name) {
     paidBy,
     canAdd: ready && view.canChange && paidBy === null && view.form !== null,
     canRemove: ready && view.canChange && card !== null,
+    // Save card on Terminal (18d-ii-b-ii): the gym's paired Terminals, and for the owner with none
+    // paired, Pair a Terminal.
+    terminals: ready && view.canChange && paidBy === null ? (view.terminals ?? []) : [],
+    pairTerminal: ready && view.canChange && paidBy === null && view.isOwner && view.pairTerminal === true,
     appLine: ready && card === null && paidBy === null && view.inApp ? `${who.first} can add a card in the app.` : null,
     connect: ready || !view.isOwner ? null : view.state === 'choose_location' ? 'choose' : 'connect',
     connectLine: ready || !view.isOwner ? null : view.state === 'choose_location' ? MEMBER_CARD_WORDS.choose_location : MEMBER_CARD_WORDS.connect,
@@ -68,3 +73,54 @@ export function removeCardWords(view, name) {
 
 export const CARD_FORM_DIDNT_LOAD = "Square's card form didn't load. Check your internet connection, then try again.";
 export const CARD_NOT_TAKEN = 'Check the card details, then try again.';
+
+// ── Save card on Terminal (ROADMAP 18d-ii-b-ii): the person agrees and gives their card on the gym's
+// Square Terminal; typing the card stays, as "Type card instead". ──
+
+/** The box under Save card on Terminal, while it waits: who does what at the Terminal, in Square's
+ *  order. `entry` is how the card goes in where the gym is. */
+export function terminalWaitWords(save, name) {
+  const who = personNames(name);
+  return {
+    title: `Waiting for ${who.first} on the Terminal`,
+    agree: `${who.first} reads the agreement and taps I agree.`,
+    card:
+      save.entry === 'swipe'
+        ? `${who.first} swipes their card, then follows the steps on the Terminal.`
+        : `${who.first} inserts or swipes their card, then follows the steps on the Terminal.`,
+    notShown: "The Terminal hasn't shown it yet. Check it's on and connected to the internet.",
+  };
+}
+
+/** How a save on the Terminal ended, said where it was pressed. */
+export function terminalOutcomeLine(save, card, name) {
+  const who = personNames(name);
+  switch (save.outcome) {
+    case 'saved':
+      return card === null ? 'Card saved.' : cardSavedLine(card);
+    case 'not_agreed':
+      return `Not saved. ${who.first} didn't agree.`;
+    case 'cancelled_on_terminal':
+      return 'Not saved. It was cancelled on the Terminal.';
+    case 'timed_out':
+      return 'Not saved. Time ran out on the Terminal.';
+    case 'no_answer':
+      return "Not saved. The Terminal didn't respond. Check it's on and connected, then try again.";
+    case 'cancelled':
+      return 'Cancelled. Nothing was saved.';
+    case 'refused':
+      return "Not saved. Square couldn't save the card. Try again, or type the card instead.";
+    default:
+      return 'Not saved. Try again.';
+  }
+}
+
+/** A Terminal as the person at the desk knows it: Square's name, and the serial number printed
+ *  under it when there is more than one to tell apart. */
+export function cardTerminalName(terminal) {
+  if (terminal === null) return 'Square Terminal';
+  return terminal.practice === null ? 'Square Terminal' : `Simulated Terminal · ${PRACTICE_TERMINAL_WORDS[terminal.practice] ?? terminal.practice}`;
+}
+export const cardTerminalSerial = (terminal) => (terminal?.serial == null ? null : `Serial ${terminal.serial}`);
+
+export const CHOOSE_TERMINAL = 'Choose a Terminal';
