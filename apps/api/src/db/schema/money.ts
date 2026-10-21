@@ -116,6 +116,10 @@ export const subscriptions = pgTable(
     /** When our server told the provider to end a plan set to end (migration `0058`): Razorpay
      *  cannot take a cancel back, so it is sent in the hours before the paid month ends. */
     cancelSentAt: timestamp("cancel_sent_at", { withTimezone: true }),
+    /** When Razorpay answered that it took that cancel (migration `0146`): `cancel_sent_at` is
+     *  claimed before Razorpay is asked, and put back when it does not take it, so only this says
+     *  a handed-over plan will not renew, and its next plan may be chosen (4b-vi-b). */
+    cancelTakenAt: timestamp("cancel_taken_at", { withTimezone: true }),
     /** The first time this subscription was paid for, written by a trigger (migration `0131`):
      *  a gym that never paid has none on any of its rows (Stage 3 item 2d). */
     paidAt: timestamp("paid_at", { withTimezone: true }),

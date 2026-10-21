@@ -1,6 +1,6 @@
-// The plan card when a gym paying through Paddle is handed to a new owner, who chooses their own
-// plan before the old one ends (ROADMAP Stage 2 item 4b-vi-a): the Overview, its plan box and the
-// window to choose in, against a mocked api.
+// The plan card when a gym paying through Paddle or Razorpay is handed to a new owner, who chooses
+// their own plan before the old one ends (ROADMAP Stage 2 items 4b-vi-a and 4b-vi-b): the Overview,
+// its plan box and the window to choose in, against a mocked api.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -289,5 +289,69 @@ describe('a new owner chooses their plan before the handed-over plan ends (4b-vi
     expect(
       await within(dialog).findByText('Your new plan didn’t start, and nothing was charged. Reload the page to see your plan, then choose again if you need to.'),
     ).toBeTruthy();
+  });
+});
+
+const { openRazorpayCheckout } = await import('../../utils/razorpayCheckout');
+
+describe('a new owner chooses their plan before a Razorpay plan handed over ends (4b-vi-b)', () => {
+  const INDIA = { ...OWNER, country: 'IN', currencyDisplay: 'INR', timezone: 'Asia/Kolkata' };
+  const rupees = (patch = {}) => handedOver({ paidThrough: 'razorpay', priceLabel: '₹8,500', ...patch });
+  const rupeesFollowing = (patch = {}) => following({ paidThrough: 'razorpay', priceLabel: '₹13,500', ...patch });
+
+  it("the new owner chooses in Razorpay's window and is told its first payment is taken when the old plan ends, never that nothing is charged", async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupees() }));
+    orgService.getPlans.mockResolvedValue({
+      data: { plans: [{ code: 'org_b2_in_m', seatCap: 500, priceMinor: 1350000, currency: 'INR', priceLabel: '₹13,500', fits: true }], payOnline: 'available' },
+    });
+    orgService.startCheckout.mockResolvedValue({
+      data: { checkoutId: '22222222-2222-2222-2222-222222222222', provider: 'razorpay', keyId: 'rzp_test_x', subscriptionId: 'sub_01', description: 'Up to 500', email: 'cora@example.com', contact: null },
+    });
+    orgService.syncCheckout.mockResolvedValue({ data: { state: 'paid', subscription: rupeesFollowing() } });
+    let onEvent = null;
+    openRazorpayCheckout.mockImplementation((opts) => {
+      onEvent = opts.onEvent;
+      return Promise.resolve();
+    });
+    renderOverview();
+
+    expect((await screen.findByTestId('plan-handed-over')).textContent).toBe(
+      `Kd Owner paid for this plan, and it stops on ${date}. Choose your plan now and it starts then, so your members keep the app.`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Choose your plan' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        `Your plan starts on ${date}, when the plan Kd Owner paid for ends, so your members keep the app. Its first payment is taken then. Razorpay may check your card or UPI with a small charge that it gives back.`,
+      ),
+    ).toBeTruthy();
+    expect(within(dialog).queryByText(/Nothing is charged|free trial/)).toBeNull();
+    fireEvent.click(await within(dialog).findByRole('button', { name: /Choose this plan/ }));
+    await waitFor(() => expect(openRazorpayCheckout).toHaveBeenCalledWith(expect.objectContaining({ subscriptionId: 'sub_01', email: 'cora@example.com' })));
+    act(() => onEvent({ type: 'completed' }));
+    expect((await within(dialog).findByTestId('plan-choice-done')).textContent).toBe(`Done. Your plan starts on ${date}, and its first payment is taken then.`);
+  });
+
+  it('the plan chosen has one Cancel new plan, never Cancel plan as well, and is kept with Keep my plan', async () => {
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupeesFollowing() }));
+    renderOverview();
+    expect((await screen.findByTestId('plan-following')).textContent).toBe(`Starts on ${date}, when the plan Kd Owner paid for ends. Its first payment is taken then.`);
+    expect(screen.getAllByRole('button', { name: 'Cancel new plan' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Cancel plan' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel new plan' }));
+    const box = await screen.findByTestId('cancel-new-plan-box');
+    const cancelled = rupeesFollowing({ cancelAtPeriodEnd: true, keepUntil: new Date(Date.parse(ENDS) - 3 * 60 * 60 * 1000).toISOString() });
+    orgService.cancelPlan.mockResolvedValue({ data: { subscription: cancelled } });
+    orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: cancelled }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Cancel new plan' }));
+    await waitFor(() => expect(orgService.cancelPlan).toHaveBeenCalledWith(GYM_ID));
+    await waitFor(() =>
+      expect(screen.getByTestId('plan-following').textContent).toMatch(
+        /^This plan was cancelled before it started, so nothing is charged\. To keep it, press Keep my plan before .+\.$/,
+      ),
+    );
+    expect(screen.getAllByRole('button', { name: 'Keep my plan' })).toHaveLength(1);
   });
 });
