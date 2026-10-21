@@ -67,6 +67,10 @@ export const TERMINAL_SAVE = {
   /** Still not done this long past Square's own time: Square is asked to cancel it. An offline
    *  Terminal stays PENDING until cancelled (Square's sandbox, measured 2026-10-21). */
   graceMs: 60_000,
+  /** Never on the Terminal's screen this long: it is off or offline (a Terminal that is on takes
+   *  an action in seconds), so it is cancelled and the desk told, rather than waiting out
+   *  Square's five minutes (Kd's click-through: "its loading for a long time seems like infinite"). */
+  notShownMs: 60_000,
   /** One request asks Square about a save at a time, for at most this long. */
   leaseMs: 20_000,
   /** Nobody has asked for this long: the worker asks. */
@@ -200,6 +204,13 @@ async function agreeing(a: Asking, action: SquareTerminalAction): Promise<Step> 
     save.agreedAt = squareTime(action, save.startedAt, a.now);
     save.pickedUp = true;
     return await step(a);
+  }
+  // Never shown on the Terminal: it is off or offline.
+  if (action.status === "PENDING" && !save.pickedUp && a.now.getTime() > save.startedAt.getTime() + TERMINAL_SAVE.notShownMs) {
+    const cancel = await a.square.api.cancelTerminalAction(a.token, action.id);
+    if (cancel.kind === "ok" && cancel.value.status === "CANCELED") return await ended(a, "no_answer");
+    // Picked up meanwhile, or no answer: its next look decides.
+    return null;
   }
   return await overdue(a, action, save.startedAt);
 }

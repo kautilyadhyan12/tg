@@ -644,7 +644,7 @@ d("Save card on Terminal: the person's own I agree, then their card, on them alo
     expect(actionsOn(desk.deviceId, "CONFIRMATION").map((a) => a.status)).toEqual(["CANCELED", "PENDING"]);
   });
 
-  it("Square's practice Terminals: agrees and saves, doesn't agree, cancels, times out, and offline until Square's time is up", async () => {
+  it("Square's practice Terminals: agrees and saves, doesn't agree, cancels, times out, and offline for a minute at most", async () => {
     clock = new Date();
     const gym = await makeGym("Terminal Practice");
     const acct = account(`TCP${uniq().slice(-6)}`);
@@ -665,14 +665,27 @@ d("Save card on Terminal: the person's own I agree, then their card, on them alo
       expect(after.cardOnFile.card === null, behaviour).toBe(outcome !== "saved");
     }
 
-    // Offline: never on the Terminal, still waiting while Square's time runs, then cancelled.
+    // Offline: never on the Terminal; it waits a minute, then is cancelled and the desk told.
     const olu = await record(gym, "Olu Offline");
     const offline = await terminal(gym, acct, "offline");
     const started = await start(gym, gym.owner, olu, offline.id);
     expect((await check(gym, gym.owner, olu, started.save.id)).save).toMatchObject({ step: "agree", pickedUp: false });
-    clock = new Date(clock.getTime() + TERMINAL_SAVE.deadlineMs + TERMINAL_SAVE.graceMs + 1000);
+    clock = new Date(clock.getTime() + TERMINAL_SAVE.notShownMs - 5000);
+    expect((await check(gym, gym.owner, olu, started.save.id)).save).toMatchObject({ step: "agree", pickedUp: false });
+    clock = new Date(clock.getTime() + 6000);
     expect((await check(gym, gym.owner, olu, started.save.id)).save).toMatchObject({ step: "done", outcome: "no_answer" });
     expect(actionsOn(offline.deviceId)).toMatchObject([{ status: "CANCELED", cancelReason: "SELLER_CANCELED" }]);
+
+    // On the Terminal's screen: the person has Square's own five minutes to read it.
+    const pia = await record(gym, "Pia Reading");
+    const desk = await terminal(gym, acct);
+    const reading = await start(gym, gym.owner, pia, desk.id);
+    square.at(desk.deviceId).sees();
+    expect((await check(gym, gym.owner, pia, reading.save.id)).save.pickedUp).toBe(true);
+    clock = new Date(clock.getTime() + TERMINAL_SAVE.notShownMs + 60_000);
+    expect((await check(gym, gym.owner, pia, reading.save.id)).save).toMatchObject({ step: "agree", outcome: null });
+    square.at(desk.deviceId).agrees();
+    expect((await check(gym, gym.owner, pia, reading.save.id)).save.step).toBe("card");
   });
 
   it("Cancel: stops the Terminal while Square lets it; a card already confirmed is saved, as Square saves it", async () => {
