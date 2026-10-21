@@ -110,8 +110,10 @@ export const squareCustomerAnswerSchema = z.object({ customer: z.object({ id: sq
 // asks Square for a code; the gym types it on the Terminal's sign-in screen within five
 // minutes; Square then names the Terminal that signed in with it.
 
-/** A Terminal's id at Square: the serial number under it ("R5WNWB5BKNG9R"), or one of the
- *  test area's pretend Terminals ("jg260ny-11t2-4xy2-kg21-tl949bp350ca"). */
+/** A Terminal's id at Square: "The device ID is the serial number on the underside of the
+ *  Square Terminal" ("Connect a Square Terminal to a POS Application", read 2026-10-21;
+ *  "R5WNWB5BKNG9R"), or one of the sandbox's simulated Terminals
+ *  ("jg260ny-11t2-4xy2-kg21-tl949bp350ca"). */
 export const squareDeviceIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,100}$/);
 
 /** The code typed on the Terminal: six capital letters in Square's examples and its test area. */

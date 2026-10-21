@@ -166,8 +166,9 @@ describe("the calls to Square", () => {
     const read = await answer(200, { device_code: paired }).retrieveDeviceCode("EAAAtoken-0123456789", "TQYQBS0P8B7AJ");
     expect(read).toMatchObject({ kind: "ok", value: { status: "PAIRED", device_id: "R5WNWB5BKNG9R" } });
     expect(recorded[recorded.length - 1]?.url).toBe("https://connect.squareupsandbox.com/v2/devices/codes/TQYQBS0P8B7AJ");
-    // A code that ran out is no longer returned; a code with no code text is not a code; a path
-    // is never built from anything but an id.
+    // Square's page says a code that ran out is no longer returned (its sandbox answers EXPIRED,
+    // measured 2026-10-21); a code with no code text is not a code; a path is never built from
+    // anything but an id.
     expect(await answer(404, { errors: [{ code: "NOT_FOUND", category: "INVALID_REQUEST_ERROR" }] }).retrieveDeviceCode("t", "TQYQBS0P8B7AJ")).toEqual({ kind: "refused", status: 404, code: "NOT_FOUND" });
     expect(await answer(200, { device_code: { ...paired, code: "not a code" } }).retrieveDeviceCode("t", "TQYQBS0P8B7AJ")).toEqual({ kind: "unavailable", status: 200 });
     // The same code asked for again comes back with its text empty (Square's test area).

@@ -70,7 +70,9 @@ export interface SquareApi {
   /** A code a Square Terminal signs in with, at this location, for five minutes. `name` is
    *  what the gym's Square Dashboard lists the code as. */
   createDeviceCode(accessToken: string, code: { idempotencyKey: string; name: string; locationId: string }): Promise<SquareResult<SquareDeviceCode>>;
-  /** 404 is a code that ran out: Square no longer returns those. */
+  /** A code past its `pair_by` reads EXPIRED (Square's sandbox, 30 and 90 s after, measured
+   *  2026-10-21). Square's page says a code that ran out is no longer returned; a 404 is taken
+   *  as run out too, which only asks the owner for a new code. */
   retrieveDeviceCode(accessToken: string, deviceCodeId: string): Promise<SquareResult<SquareDeviceCode>>;
 }
 

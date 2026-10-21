@@ -181,8 +181,9 @@ export async function checkPairing(deps: PaymentsDeps, userId: string, gymId: st
   }
   if (read.kind === "refused" && read.status === 401) throw connectionRefused();
   if (read.kind === "refused" && read.status === 403) throw needsAllow();
-  // Square no longer returns a code that ran out; one still unpaired past its time has too. With
-  // no clear answer it waits: a Terminal may have signed in.
+  // Run out: Square says EXPIRED (measured in its sandbox), no longer returns the code (its page
+  // says so; a 404 asks only for a new code), or it is still unpaired past its time. With no clear
+  // answer it waits: a Terminal may have signed in.
   const ranOut =
     (read.kind === "ok" && read.value.status === "EXPIRED") ||
     (read.kind === "refused" && read.status === 404) ||
