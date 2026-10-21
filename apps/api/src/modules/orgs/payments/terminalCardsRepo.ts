@@ -150,6 +150,18 @@ export async function claimCheck(sql: SqlOrTx, gymId: string, entryId: string, i
   return row === undefined ? null : toRow(row);
 }
 
+/** The save keeping a Terminal busy, whichever gym on its Square account pressed it, held for
+ *  `until` so it can be asked about: null when none, or while another request asks. Never shown
+ *  to the press that found it: it is asked about with its own gym's token. */
+export async function claimBlocking(sql: SqlOrTx, environment: SquareEnvironment, accountId: string, deviceId: string, now: Date, until: Date): Promise<SaveRow | null> {
+  const [row] = await sql<RawSave[]>`
+    UPDATE gym_terminal_card_saves SET checking_until = ${until}, checked_at = ${now}
+    WHERE environment = ${environment} AND account_id = ${accountId} AND device_id = ${deviceId}
+      AND state IN ('agreeing','saving') AND (checking_until IS NULL OR checking_until <= ${now})
+    RETURNING ${COLUMNS(sql)}`;
+  return row === undefined ? null : toRow(row);
+}
+
 export async function release(sql: SqlOrTx, id: string): Promise<void> {
   await sql`UPDATE gym_terminal_card_saves SET checking_until = NULL WHERE id = ${id}`;
 }

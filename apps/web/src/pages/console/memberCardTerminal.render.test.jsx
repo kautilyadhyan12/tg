@@ -174,6 +174,18 @@ describe('Save card on Terminal: the box', () => {
     expect(orgService.startTerminalSave.mock.calls[1]?.[2].requestKey).not.toBe(orgService.startTerminalSave.mock.calls[0]?.[2].requestKey);
   });
 
+  it('Not saved, then Type card instead: Square’s own card boxes open in the same place', async () => {
+    orgService.getMemberCard.mockReturnValue(cardAnswer());
+    orgService.startTerminalSave.mockReturnValue(saveAnswer({}));
+    orgService.checkTerminalSave.mockReturnValue(saveAnswer({ step: 'done', outcome: 'not_agreed' }));
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Save card on Terminal' }));
+    const ended = await screen.findByTestId('terminal-not-saved');
+    fireEvent.click(within(ended).getByRole('button', { name: 'Type card instead' }));
+    expect(await screen.findByTestId('card-form')).toBeTruthy();
+    expect(screen.queryByTestId('terminal-not-saved')).toBeNull();
+  });
+
   it('Type card instead opens Square’s own card boxes, as Add card does', async () => {
     orgService.getMemberCard.mockReturnValue(cardAnswer());
     show();

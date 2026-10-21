@@ -631,6 +631,17 @@ d("Save card on Terminal: the person's own I agree, then their card, on them alo
     expect((JSON.parse(busy.body) as { error: string }).error).toBe("terminal_busy");
     expect((await start(gym, gym.owner, sam, other.id)).save.step).toBe("agree");
     expect(await sql`SELECT 1 FROM gym_terminal_card_saves WHERE gym_id = ${gym.id} AND state IN ('agreeing','saving')`).toHaveLength(2);
+
+    // A save keeping a Terminal busy that is over (its person deleted, its page closed before the
+    // worker's minute): the next press asks Square about it, stops it, and goes ahead.
+    const una = await record(gym, "Una Once");
+    await sql`DELETE FROM gym_square_customers WHERE gym_id = ${gym.id} AND entry_id = ${tara}`;
+    await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${tara}`;
+    const freed = await start(gym, gym.owner, una, desk.id);
+    expect(freed.save).toMatchObject({ step: "agree", terminal: { id: desk.id } });
+    const [stale] = await sql<{ state: string; outcome: string }[]>`SELECT state, outcome FROM gym_terminal_card_saves WHERE id = ${parsed(one).save.id}`;
+    expect(stale).toEqual({ state: "not_saved", outcome: "gone" });
+    expect(actionsOn(desk.deviceId, "CONFIRMATION").map((a) => a.status)).toEqual(["CANCELED", "PENDING"]);
   });
 
   it("Square's practice Terminals: agrees and saves, doesn't agree, cancels, times out, and offline until Square's time is up", async () => {

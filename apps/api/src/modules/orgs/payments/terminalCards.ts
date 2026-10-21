@@ -355,26 +355,38 @@ export async function startTerminalSave(deps: PaymentsDeps, userId: string, gymI
   if (payer !== null) throw paidBy(payer.name, person.fullName);
   const terminal = await terminalsRepo.readTerminal(deps.sql, gymId, ready.square.environment, body.terminalId);
   if (terminal?.state !== "paired" || terminal.deviceId === null || terminal.accountId !== ready.row.accountId) throw terminalGone();
+  const deviceId = terminal.deviceId;
   const waiting = await saves.readOpenSaveOf(deps.sql, gymId, entryId, ready.square.environment);
   if (waiting !== null) return await answer(deps, userId, gymId, entryId, waiting.id);
 
   const customerId = await customerFor(deps, ready, gymId, person);
   const now = deps.now();
-  const written = await saves.insertSave(deps.sql, {
-    gymId,
-    entryId,
-    environment: ready.square.environment,
-    accountId: ready.row.accountId,
-    deviceId: terminal.deviceId,
-    customerId,
-    requestKey: body.requestKey,
-    words: cardAgreementWords(gym.name),
-    confirmKey: randomUUID(),
-    saveKey: randomUUID(),
-    startedBy: userId,
-    now,
-    checkingUntil: new Date(now.getTime() + TERMINAL_SAVE.leaseMs),
-  });
+  const press = (): Promise<Awaited<ReturnType<typeof saves.insertSave>>> =>
+    saves.insertSave(deps.sql, {
+      gymId,
+      entryId,
+      environment: ready.square.environment,
+      accountId: ready.row.accountId,
+      deviceId,
+      customerId,
+      requestKey: body.requestKey,
+      words: cardAgreementWords(gym.name),
+      confirmKey: randomUUID(),
+      saveKey: randomUUID(),
+      startedBy: userId,
+      now,
+      checkingUntil: new Date(now.getTime() + TERMINAL_SAVE.leaseMs),
+    });
+  let written = await press();
+  if (written.kind === "terminal_busy") {
+    // Busy with a save that may be over (its page closed before the worker's minute, its person
+    // gone): Square is asked about it once, with its own gym's token; then pressed again.
+    const blocking = await saves.claimBlocking(deps.sql, ready.square.environment, ready.row.accountId, deviceId, now, new Date(now.getTime() + TERMINAL_SAVE.leaseMs));
+    if (blocking !== null) {
+      await advance(deps, ready.square, blocking);
+      written = await press();
+    }
+  }
   if (written.kind === "terminal_busy") throw terminalBusy();
   if (written.kind === "key_reused") throw saveGone();
   if (written.kind === "new") {
