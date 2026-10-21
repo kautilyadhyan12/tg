@@ -338,6 +338,71 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
       expect(keptPayments(win.subscriptionId)).toHaveLength(1);
     }, TEST_TIMEOUT_MS);
 
+    it("Razorpay not yet answering the old plan's cancel: the next plan waits, and a cancel refused is asked again", async () => {
+      const gym = await makePaidGym("Kd");
+      const cora = await makeCoOwner(gym, "Cora");
+      const atCycleEnd = razorpay.cancelSubscriptionAtCycleEnd.bind(razorpay);
+      const read = razorpay.getSubscription.bind(razorpay);
+      let unread = true;
+      razorpay.getSubscription = (id: string) => (unread && id === gym.sub ? Promise.resolve({ kind: "unavailable", status: 503 }) : read(id));
+      razorpay.cancelSubscriptionAtCycleEnd = () => Promise.resolve({ kind: "unavailable", status: 503 });
+      await handOver(gym, cora, gym.owner); // Accept's send: unanswered
+      // While the worker's send is with Razorpay, the cancel is claimed but not taken: Cora waits.
+      let during: { statusCode: number; body: string } | undefined;
+      razorpay.cancelSubscriptionAtCycleEnd = async () => {
+        during = await checkout(gym, cora);
+        return { kind: "unavailable", status: 503 };
+      };
+      await runAt(gym.end, -10 * DAY_MS);
+      expect(during?.statusCode).toBe(409);
+      expect(during === undefined ? "" : errorOf(during)).toBe("plan_ending_unconfirmed");
+      expect((await planRow(gym.id, gym.sub))?.cancel_sent_at).toBeNull();
+      // Razorpay answers at the next run: the cancel is taken, and Cora may choose.
+      razorpay.cancelSubscriptionAtCycleEnd = atCycleEnd;
+      razorpay.getSubscription = read;
+      unread = false;
+      await runAt(gym.end, -9 * DAY_MS);
+      expect(razorpay.endAtCycleEnd.has(gym.sub)).toBe(true);
+      const win = opened(await checkout(gym, cora));
+      razorpay.authenticate(win.subscriptionId);
+      expect(await sync(gym.id, win.checkoutId, cora)).toMatchObject({ state: "paid" });
+      oldMonthEnds(gym);
+      razorpay.charge(win.subscriptionId);
+      await runAt(gym.end, 60_000);
+      expect(keptPayments(gym.sub)).toHaveLength(1);
+      expect(keptPayments(win.subscriptionId)).toHaveLength(1);
+    }, TEST_TIMEOUT_MS);
+
+    it("a new plan handed on before it starts, Razorpay not yet answering its cancel: the next owner waits, and nobody's mandate pays for the other's gym", async () => {
+      const { gym, cora } = await handedOverGym();
+      const win = opened(await checkout(gym, cora));
+      razorpay.authenticate(win.subscriptionId);
+      expect(await sync(gym.id, win.checkoutId, cora)).toMatchObject({ state: "paid" });
+      const dev = await makeCoOwner(gym, "Dev");
+      // Accept's cancel of Cora's plan: Dev presses while it is with Razorpay, and Razorpay fails it.
+      let during: { statusCode: number; body: string } | undefined;
+      razorpay.duringNextCancel = async (id) => {
+        if (id === win.subscriptionId) during = await checkout(gym, dev);
+      };
+      razorpay.cancelFailures = 1;
+      await handOver(gym, dev, cora);
+      expect(during?.statusCode).toBe(409);
+      expect(during === undefined ? "" : errorOf(during)).toBe("plan_ending_unconfirmed");
+      expect(razorpay.subs.get(win.subscriptionId)?.status).toBe("authenticated");
+      // The worker asks again; Razorpay ends Cora's plan, and Dev may choose.
+      await runAt(gym.end, -9 * DAY_MS);
+      expect(razorpay.subs.get(win.subscriptionId)?.status).toBe("cancelled");
+      const devs = opened(await checkout(gym, dev));
+      razorpay.authenticate(devs.subscriptionId);
+      expect(await sync(gym.id, devs.checkoutId, dev)).toMatchObject({ state: "paid" });
+      oldMonthEnds(gym);
+      razorpay.charge(devs.subscriptionId);
+      await runAt(gym.end, 60_000);
+      expect(keptPayments(win.subscriptionId)).toEqual([]);
+      expect(keptPayments(gym.sub)).toHaveLength(1);
+      expect(keptPayments(devs.subscriptionId)).toHaveLength(1);
+    }, TEST_TIMEOUT_MS);
+
     it("handed back to the person who paid before the window is paid: it never starts, and nothing is charged", async () => {
       const { gym, cora } = await handedOverGym();
       const win = opened(await checkout(gym, cora));
@@ -392,12 +457,20 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
 
     it("a first payment Razorpay would take before the old plan ends is never opened, nor placed", async () => {
       const { gym, cora } = await handedOverGym();
-      // Razorpay answers a start a second early: the window is never opened.
-      razorpay.shiftNextStart = -1;
-      const refused = await checkout(gym, cora);
-      expect(refused.statusCode, refused.body).toBe(503);
+      // Razorpay answers a start a second early, a window open a second too long, or a bill made
+      // with it: the window is never opened, and Razorpay's subscription is cancelled.
+      const newest = () => [...razorpay.subs.keys()].at(-1) ?? "";
+      for (const [name, wrong] of [
+        ["a start a second early", () => (razorpay.shiftNextStart = -1)],
+        ["a window open a second longer", () => (razorpay.shiftNextExpire = 1)],
+        ["a bill before the first payment", () => (razorpay.billNextAtCreate = true)],
+      ] as const) {
+        wrong();
+        const refused = await checkout(gym, cora);
+        expect(refused.statusCode, name).toBe(503);
+        expect(razorpay.subs.get(newest())?.status, name).toBe("cancelled");
+      }
       const early = razorpay.created.length;
-      expect(razorpay.cancelled.at(-1)).toBeDefined();
 
       // A window whose start moved early after it opened: approved, never placed, cancelled.
       const win = opened(await checkout(gym, cora));

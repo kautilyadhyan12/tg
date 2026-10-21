@@ -41,6 +41,10 @@ export class FakeRazorpay implements RazorpayApi {
   wrongAmount = false;
   /** Make the next subscription start this many seconds away from the start asked for. */
   shiftNextStart = 0;
+  /** Make the next subscription expire this many seconds away from the time asked for. */
+  shiftNextExpire = 0;
+  /** Make the next subscription carry a bill from the moment it is made. */
+  billNextAtCreate = false;
   /** Answer this many refund requests with a 503, making nothing. */
   refundFailures = 0;
   /** Answer this many cancels-at-once with a 503, cancelling nothing. */
@@ -91,9 +95,14 @@ export class FakeRazorpay implements RazorpayApi {
       paid_count: 0,
       notes: { ...input.notes },
       created_at: this.clock,
-      expire_by: input.expireBy == null ? null : Math.floor(input.expireBy.getTime() / 1000),
+      expire_by: input.expireBy == null ? null : Math.floor(input.expireBy.getTime() / 1000) + this.shiftNextExpire,
     };
+    this.shiftNextExpire = 0;
     this.subs.set(id, sub);
+    if (this.billNextAtCreate) {
+      this.invoices.set(id, [this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount: plan.item.amount, amount_paid: 0, amount_due: plan.item.amount, paid_at: null, billing_end: null })]);
+      this.billNextAtCreate = false;
+    }
     if (input.upfront != null) {
       const amount = input.upfront.amountMinor + (this.wrongUpfront ? 100 : 0);
       this.invoices.set(id, [this.invoice({ status: "issued", subscription_id: id, payment_id: null, amount, amount_paid: 0, amount_due: amount, paid_at: null, billing_end: null })]);

@@ -358,6 +358,8 @@ export function followingText(org, now = Date.now()) {
       ? `This plan was cancelled before it started, so nothing is charged. To keep it, press Keep my plan before ${momentLabel(sub.keepUntil)}.`
       : `This plan was cancelled before it started, so nothing is charged. You can choose a plan again once the current one ends on ${date}.`;
   }
+  // Razorpay's window took a small card or UPI check, given back: never "nothing is charged".
+  if (sub.paidThrough === 'razorpay') return `Starts on ${date}, when ${followedPlanName(sub)} ends. Its first payment is taken then.`;
   return `Starts on ${date}, when ${followedPlanName(sub)} ends. Nothing is charged until then.`;
 }
 

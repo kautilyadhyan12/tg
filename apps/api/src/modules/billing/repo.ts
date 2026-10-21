@@ -27,11 +27,12 @@ const FOLLOW_SLACK_MS = 60_000;
 const FOLLOW_MIN_LEAD_MS = 60 * 60 * 1000;
 
 /** When the company a handed-over plan is paid through confirmed it ends: Paddle's scheduled
- *  cancel (4b-iii-a), or the cancel Razorpay took at Accept, which it cannot take back
- *  (4b-iii-b). Null until then: the next plan is not chosen before (4b-vi). */
-function handedOverEndConfirmed(row: { provider: string; handed_over_end_sent_at: Date | null; cancel_sent_at: Date | null }): Date | null {
+ *  cancel (4b-iii-a), or the cancel Razorpay answered it took (4b-iii-b), which it cannot take
+ *  back; never a cancel still being asked. Null until then: the next plan is not chosen before
+ *  (4b-vi). */
+function handedOverEndConfirmed(row: { provider: string; handed_over_end_sent_at: Date | null; cancel_taken_at: Date | null }): Date | null {
   if (row.provider === "paddle") return row.handed_over_end_sent_at;
-  if (row.provider === "razorpay") return row.cancel_sent_at;
+  if (row.provider === "razorpay") return row.cancel_taken_at;
   return null;
 }
 
@@ -201,11 +202,11 @@ export async function beginCheckout(
         handed_over_at: Date | null;
         handed_over_from: string | null;
         handed_over_end_sent_at: Date | null;
-        cancel_sent_at: Date | null;
+        cancel_taken_at: Date | null;
       }[]
     >`
       SELECT id, status, provider, trial_ends_at, cancel_at_period_end, current_period_end,
-             handed_over_at, handed_over_from, handed_over_end_sent_at, cancel_sent_at
+             handed_over_at, handed_over_from, handed_over_end_sent_at, cancel_taken_at
       FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')`;
@@ -578,11 +579,11 @@ export async function applySnapshot(
         current_period_end: Date | null;
         handed_over_at: Date | null;
         handed_over_end_sent_at: Date | null;
-        cancel_sent_at: Date | null;
+        cancel_taken_at: Date | null;
       }[]
     >`
       SELECT id, status, provider, provider_ref, cancel_at_period_end, current_period_end,
-             handed_over_at, handed_over_end_sent_at, cancel_sent_at
+             handed_over_at, handed_over_end_sent_at, cancel_taken_at
       FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')
@@ -613,13 +614,16 @@ export async function applySnapshot(
     // it is a second plan. Razorpay was told the end itself, so its first charge is never earlier.
     const follows = existing === null ? (input.follows ?? null) : null;
     const slackMs = input.provider === "razorpay" ? 0 : FOLLOW_SLACK_MS;
+    // Razorpay's start was fixed when its window was made: placed until that start itself.
+    const leftMs = follows === null ? 0 : follows.until.getTime() - input.now.getTime();
+    const tooLate = input.provider === "razorpay" ? leftMs <= 0 : leftMs < FOLLOW_MIN_LEAD_MS;
     // Paid too close to that end, its first charge could no longer be moved to it.
     const followed =
       follows === null ||
       input.snapshot.status !== "trialing" ||
       input.snapshot.currentPeriodEnd === null ||
       input.snapshot.currentPeriodEnd.getTime() < follows.until.getTime() - slackMs ||
-      follows.until.getTime() - input.now.getTime() < FOLLOW_MIN_LEAD_MS
+      tooLate
         ? null
         : (others.find(
             (o) =>
@@ -1774,7 +1778,7 @@ export async function markCancelSent(sql: Sql, input: { gymId: string; userId: s
   await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId); // subscription-writer lock
     const moved = await tx<{ id: string }[]>`
-      UPDATE subscriptions SET cancel_at_period_end = true, cancel_sent_at = ${input.now}
+      UPDATE subscriptions SET cancel_at_period_end = true, cancel_sent_at = ${input.now}, cancel_taken_at = ${input.now}
       WHERE id = ${input.rowId} AND owner_type = 'gym' AND owner_id = ${input.gymId} AND provider = 'razorpay'
         AND cancel_sent_at IS NULL
       RETURNING id`;
@@ -1947,6 +1951,13 @@ export async function claimCancelsToSend(sql: SqlOrTx, input: { now: Date; leadM
       AND cancel_at_period_end AND cancel_sent_at IS NULL
     RETURNING id, owner_id, provider_ref, status`;
   return rows.map((r) => ({ id: r.id, gymId: r.owner_id, subscriptionRef: r.provider_ref, status: r.status }));
+}
+
+/** Razorpay answered that it took a claimed cancel: the plan will not renew there (4b-vi-b). */
+export async function markCancelTaken(sql: SqlOrTx, input: { id: string; gymId: string; claimedAt: Date; now: Date }): Promise<void> {
+  await sql`
+    UPDATE subscriptions SET cancel_taken_at = ${input.now}
+    WHERE id = ${input.id} AND owner_type = 'gym' AND owner_id = ${input.gymId} AND cancel_sent_at = ${input.claimedAt}`;
 }
 
 /** Razorpay did not take a cancel: it is claimed again on the next run. Keep my plan stays
@@ -2504,7 +2515,7 @@ export async function claimPlanEndReminders(
     RETURNING id, owner_id, provider, status, current_period_end, current_period_end <= ${dayFrom} AS last_day,
               end_week_reminded_for IS NOT DISTINCT FROM current_period_end AS week_sent,
               handed_over_at IS NOT NULL AS handed_over,
-              CASE provider WHEN 'paddle' THEN handed_over_end_sent_at WHEN 'razorpay' THEN cancel_sent_at END IS NOT NULL AS handed_over_confirmed,
+              CASE provider WHEN 'paddle' THEN handed_over_end_sent_at WHEN 'razorpay' THEN cancel_taken_at END IS NOT NULL AS handed_over_confirmed,
               handed_over_from,
               cancel_sent_at IS NOT NULL AS cancel_sent, follows_subscription_id IS NOT NULL AS following`;
   const out: PlanEndReminder[] = [];

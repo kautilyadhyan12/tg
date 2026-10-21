@@ -413,7 +413,13 @@ async function startRazorpayCheckout(
     // Nothing is billed before the first payment: Razorpay's card check is no invoice, and it
     // gives it back itself.
     const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
-    agrees = invoices.kind === "ok" && !invoices.value.some((i) => i.subscription_id === sub.id);
+    if (invoices.kind !== "ok") {
+      await razorpay.api.cancelSubscriptionNow(sub.id);
+      await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
+      deps.log.warn({ event: "billing.razorpay_unavailable", result: invoices.kind }, "Razorpay did not list a new subscription's invoices");
+      throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
+    }
+    agrees = !invoices.value.some((i) => i.subscription_id === sub.id);
   }
   if (!agrees || plan === undefined) {
     await razorpay.api.cancelSubscriptionNow(sub.id);
@@ -2401,6 +2407,7 @@ export async function sendDueRazorpayCancels(deps: BillingDeps, gymId?: string):
       if (fetched.kind === "ok" && fetched.value.status === "authenticated") answer = await razorpay.api.cancelSubscriptionNow(row.subscriptionRef);
     }
     if (await cancelTaken(razorpay, row.subscriptionRef, answer)) {
+      await repo.markCancelTaken(deps.sql, { id: row.id, gymId: row.gymId, claimedAt: now, now: deps.now() });
       run.sent += 1;
       deps.log.info({ event: "billing.cancel_sent", provider: "razorpay", gymId: row.gymId }, "a plan set to end was cancelled at Razorpay");
       continue;

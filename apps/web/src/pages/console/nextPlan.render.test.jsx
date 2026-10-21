@@ -335,7 +335,7 @@ describe('a new owner chooses their plan before a Razorpay plan handed over ends
   it('the plan chosen has one Cancel new plan, never Cancel plan as well, and is kept with Keep my plan', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...INDIA, subscription: rupeesFollowing() }));
     renderOverview();
-    expect((await screen.findByTestId('plan-following')).textContent).toBe(`Starts on ${date}, when the plan Kd Owner paid for ends. Nothing is charged until then.`);
+    expect((await screen.findByTestId('plan-following')).textContent).toBe(`Starts on ${date}, when the plan Kd Owner paid for ends. Its first payment is taken then.`);
     expect(screen.getAllByRole('button', { name: 'Cancel new plan' })).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Cancel plan' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Change size' })).toBeNull();
