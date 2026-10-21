@@ -83,7 +83,7 @@ export function terminalWaitWords(save, name) {
   const who = personNames(name);
   return {
     title: `Waiting for ${who.first} on the Terminal`,
-    agree: `${who.first} reads the agreement and taps I agree.`,
+    agree: `${who.first} reads the agreement and taps "I agree".`,
     card:
       save.entry === 'swipe'
         ? `${who.first} swipes their card, then follows the steps on the Terminal.`

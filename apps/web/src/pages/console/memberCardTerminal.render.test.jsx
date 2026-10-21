@@ -103,7 +103,7 @@ describe('Save card on Terminal: the worst thing', () => {
     expect(body.requestKey).toMatch(/^[0-9a-f-]{36}$/);
     const box = await screen.findByTestId('terminal-wait');
     expect(within(box).getByText('Waiting for Tara on the Terminal')).toBeTruthy();
-    expect(within(box).getByText('Tara reads the agreement and taps I agree.')).toBeTruthy();
+    expect(within(box).getByText('Tara reads the agreement and taps "I agree".')).toBeTruthy();
     expect(within(box).getByText('Tara inserts or swipes their card, then follows the steps on the Terminal.')).toBeTruthy();
     expect(screen.queryByText(/Card saved/)).toBeNull();
     expect(await screen.findByText('Card saved: Visa ending 4242.')).toBeTruthy();
