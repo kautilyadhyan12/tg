@@ -375,6 +375,8 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       paddle.update(sub, { next_billed_at: early, current_billing_period: { starts_at: new Date().toISOString(), ends_at: early } });
       expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
       expect(paddle.cancelledSubs).toContain(sub);
+      // Set aside as a second plan: never the gym's plan, not even for a moment.
+      expect((await rowOf(sub))?.cancel_reason).toBe("duplicate");
       expect(charged(sub)).toEqual([]);
       expect(await liveRef(gym)).toBe(gym.sub);
     }, TEST_TIMEOUT_MS);
@@ -391,6 +393,8 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       const sub = paddle.pay(window.transactionId, "api", true, cora.email);
       expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
       expect(paddle.cancelledSubs).toContain(sub);
+      // Set aside as a second plan: never the gym's plan, not even for a moment.
+      expect((await rowOf(sub))?.cancel_reason).toBe("duplicate");
       expect(charged(sub)).toEqual([]);
       expect(await liveRef(gym)).toBeNull();
     }, TEST_TIMEOUT_MS);
@@ -407,6 +411,8 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       const sub = paddle.pay(window.transactionId, "api", true, cora.email);
       expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
       expect(paddle.cancelledSubs).toContain(sub);
+      // Set aside as a second plan: never the gym's plan, not even for a moment.
+      expect((await rowOf(sub))?.cancel_reason).toBe("duplicate");
       expect(charged(sub)).toEqual([]);
       expect(await liveRef(gym)).toBe(gym.sub);
     }, TEST_TIMEOUT_MS);
@@ -421,6 +427,8 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       const sub = paddle.pay(window.transactionId, "api", true, cora.email);
       expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
       expect(paddle.cancelledSubs).toContain(sub);
+      // Set aside as a second plan: never the gym's plan, not even for a moment.
+      expect((await rowOf(sub))?.cancel_reason).toBe("duplicate");
       expect(charged(sub)).toEqual([]);
       expect(await liveRef(gym)).toBe(gym.sub);
     }, TEST_TIMEOUT_MS);
