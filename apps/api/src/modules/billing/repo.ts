@@ -1927,6 +1927,9 @@ export interface CancelToSend {
   status: LocalStatus;
 }
 
+/** A cancel sent this long ago whose answer was never written down is sent again. */
+const CANCEL_ANSWER_LOST_MS = 10 * 60 * 1000;
+
 /** Plans set to end whose end is within `leadMs` (or past), claimed for sending to Razorpay:
  *  each is marked sent in the same statement, so two runs never both claim one and Keep my plan
  *  sees it gone. A plan handed over with its gym (4b-iii-b; Kd, 2026-10-20) is claimed whatever
@@ -1934,13 +1937,17 @@ export interface CancelToSend {
  *  comes. `gymId` narrows it to one gym (Cancel pressed close to the end, or Accept). */
 export async function claimCancelsToSend(sql: SqlOrTx, input: { now: Date; leadMs: number; limit: number; gymId?: string }): Promise<CancelToSend[]> {
   const until = new Date(input.now.getTime() + input.leadMs);
+  const stale = new Date(input.now.getTime() - CANCEL_ANSWER_LOST_MS);
   const gymId = input.gymId ?? null;
   const rows = await sql<{ id: string; owner_id: string; provider_ref: string; status: LocalStatus }[]>`
     UPDATE subscriptions SET cancel_sent_at = ${input.now}
     WHERE id IN (
       SELECT id FROM subscriptions
       WHERE owner_type = 'gym' AND provider = 'razorpay' AND provider_ref IS NOT NULL
-        AND cancel_at_period_end AND cancel_sent_at IS NULL
+        AND cancel_at_period_end
+        -- Not yet sent; or sent, Razorpay's answer never written down (4b-vi-b): asked again,
+        -- as Razorpay answers a second cancel the same.
+        AND (cancel_sent_at IS NULL OR (cancel_taken_at IS NULL AND cancel_sent_at < ${stale}))
         AND status IN ('trialing','active')
         AND (current_period_end IS NULL OR current_period_end <= ${until} OR handed_over_at IS NOT NULL)
         AND (${gymId}::uuid IS NULL OR owner_id = ${gymId}::uuid)
@@ -1948,7 +1955,7 @@ export async function claimCancelsToSend(sql: SqlOrTx, input: { now: Date; leadM
       LIMIT ${input.limit}
       FOR UPDATE SKIP LOCKED
     )
-      AND cancel_at_period_end AND cancel_sent_at IS NULL
+      AND cancel_at_period_end AND (cancel_sent_at IS NULL OR (cancel_taken_at IS NULL AND cancel_sent_at < ${stale}))
     RETURNING id, owner_id, provider_ref, status`;
   return rows.map((r) => ({ id: r.id, gymId: r.owner_id, subscriptionRef: r.provider_ref, status: r.status }));
 }

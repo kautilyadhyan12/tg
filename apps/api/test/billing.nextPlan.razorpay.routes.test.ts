@@ -426,6 +426,16 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
       expect(razorpay.subs.get(after.subscriptionId)?.status).toBe("cancelled");
     }, TEST_TIMEOUT_MS);
 
+    it("Razorpay took the cancel but its answer was never written down: asked again, and the next plan can be chosen", async () => {
+      const { gym, cora } = await handedOverGym();
+      // A database blip after Razorpay answered: sent half an hour ago, its answer not kept.
+      await sql`UPDATE subscriptions SET cancel_sent_at = now() - interval '30 minutes', cancel_taken_at = NULL WHERE provider_ref = ${gym.sub}`;
+      expect(errorOf(await checkout(gym, cora))).toBe("plan_ending_unconfirmed");
+      await runAt(new Date(), 0);
+      expect((await planRow(gym.id, gym.sub))?.cancel_sent_at).not.toBeNull();
+      expect(opened(await checkout(gym, cora)).subscriptionId).toBeDefined();
+    }, TEST_TIMEOUT_MS);
+
     it("handed back to the person who paid before the window is paid: it never starts, and nothing is charged", async () => {
       const { gym, cora } = await handedOverGym();
       const win = opened(await checkout(gym, cora));
