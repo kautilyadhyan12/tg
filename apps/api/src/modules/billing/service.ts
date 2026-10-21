@@ -262,7 +262,7 @@ function beginRefusal(
     case "next_plan_payer":
       return new OrgsError(409, "next_plan_not_yours", "You paid for the plan that's ending, so the owner chooses the next one.");
     case "next_plan_not_ready":
-      return new OrgsError(409, "plan_ending_unconfirmed", "Paddle is still being told this plan stops. Please try again in a minute.");
+      return new OrgsError(409, "plan_ending_unconfirmed", `${provider === "razorpay" ? "Razorpay" : "Paddle"} is still being told this plan stops. Please try again in a minute.`);
     case "next_plan_too_late": {
       const ends = outcome.endsAt === null ? "its last day" : dayLabel(outcome.endsAt, timezone);
       return new OrgsError(409, "too_late", `This plan ends on ${ends}, too soon to choose the next one now. You can choose a plan once it ends.`);
@@ -332,7 +332,8 @@ export const RAZORPAY_APP_NOTE = "aihg";
 const RAZORPAY_TAKEN: ReadonlySet<string> = new Set(["authenticated", "active", "pending", "halted"]);
 
 /** An Indian gym subscribes through Razorpay (1d-i). Our server creates the subscription at
- *  OUR plan, charged when the window is paid. */
+ *  OUR plan, charged when the window is paid; a new owner's plan chosen before the handed-over
+ *  plan ends (4b-vi-b) is first charged when that plan ends. */
 async function startRazorpayCheckout(
   deps: BillingDeps,
   razorpay: RazorpaySettings,
@@ -372,10 +373,17 @@ async function startRazorpayCheckout(
   await closeSuperseded(deps, outcome.superseded);
 
   const checkoutId = outcome.checkout.id;
+  // A new owner's plan chosen before the handed-over plan ends (4b-vi-b): Razorpay takes the
+  // mandate now and the first payment on that end, and its window can no longer be paid once the
+  // next plan can no longer be chosen.
+  const follows = outcome.checkout.follows;
+  const startAt = follows?.until ?? null;
+  const expireBy = follows === null ? null : new Date(follows.until.getTime() - CANCEL_LEAD_MS);
   const created = await razorpay.api.createSubscription({
     planId: outcome.providerPriceId,
-    startAt: null,
+    startAt,
     notes: { app: RAZORPAY_APP_NOTE, gym_id: input.gymId, checkout_id: checkoutId },
+    expireBy,
   });
   if (created.kind !== "ok") {
     await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
@@ -384,15 +392,16 @@ async function startRazorpayCheckout(
     throw new OrgsError(503, "payments_unavailable", UNAVAILABLE);
   }
   const sub = created.value;
-  // What Razorpay will charge must be exactly our price, from the moment it is paid, or
-  // nothing is opened.
+  // What Razorpay will charge must be exactly our price, from the moment it is paid — or, for a
+  // new owner's plan, from the handed-over plan's end, never before — or nothing is opened.
   const plan = sub.plan;
-  const agrees =
+  let agrees =
     sub.plan_id === outcome.providerPriceId &&
     sub.status === "created" &&
     sub.quantity === 1 &&
     sub.paid_count === 0 &&
-    sub.start_at === null &&
+    sub.start_at === (startAt === null ? null : Math.ceil(startAt.getTime() / 1000)) &&
+    (expireBy === null || (sub.expire_by ?? null) === Math.floor(expireBy.getTime() / 1000)) &&
     sub.notes["checkout_id"] === checkoutId &&
     plan !== undefined &&
     plan.id === outcome.providerPriceId &&
@@ -400,7 +409,13 @@ async function startRazorpayCheckout(
     plan.item.currency === outcome.currency &&
     plan.period === "monthly" &&
     plan.interval === 1;
-  if (!agrees) {
+  if (agrees && follows !== null) {
+    // Nothing is billed before the first payment: Razorpay's card check is no invoice, and it
+    // gives it back itself.
+    const invoices = await razorpay.api.listSubscriptionInvoices(sub.id);
+    agrees = invoices.kind === "ok" && !invoices.value.some((i) => i.subscription_id === sub.id);
+  }
+  if (!agrees || plan === undefined) {
     await razorpay.api.cancelSubscriptionNow(sub.id);
     await repo.failCheckout(deps.sql, { checkoutId, gymId: input.gymId });
     deps.log.error({ event: "billing.price_mismatch", provider: "razorpay", plan: input.planCode }, "Razorpay's subscription does not match our price");
@@ -531,6 +546,17 @@ async function syncRazorpayCheckout(
     }
   }
   const live = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
+  if (checkout.follows !== null) {
+    // A new owner's plan chosen before the handed-over plan ends (4b-vi-b): done only when the
+    // gym's plan is the one this window made. Set aside, it was cancelled with nothing charged.
+    if (applied === "set_aside") return { state: "not_started" };
+    const placed = checkout.providerRef === null ? null : await repo.findProviderSubscription(deps.sql, "razorpay", checkout.providerRef);
+    // Ended at Razorpay before it was placed (its window closed by a hand-over, or expired).
+    if (placed === null && status !== null && ENDED_AT_RAZORPAY.has(status)) return { state: "not_started" };
+    if (placed === null || placed.gymId !== input.gymId) return { state: "waiting" };
+    if (!LIVE_STATUSES.has(placed.status)) return { state: "not_started" };
+    return live === null ? { state: "waiting" } : { state: "paid", subscription: toOrgSubscription(live) };
+  }
   if (checkout.replacesRowId !== null && checkout.direction === "smaller") {
     // A smaller size (1d-iii-b): done once it waits on the gym's plan, or has taken its place.
     if (applied === "set_aside") return { state: "refunded" };
@@ -1088,9 +1114,9 @@ async function billingStaffAddresses(deps: BillingDeps, gymId: string): Promise<
 }
 
 /** What a plan-end reminder offers one of the gym's billing staff: what their plan box offers
- *  before the end (`toOrgSubscription`'s `keepUntil` and `nextPlanUntil`). A Paddle plan handed
- *  over and confirmed to end: the next plan, chosen now (4b-vi-a), but never by the person who
- *  paid for the plan ending. */
+ *  before the end (`toOrgSubscription`'s `keepUntil` and `nextPlanUntil`). A plan handed over and
+ *  confirmed to end by Paddle or Razorpay: the next plan, chosen now (4b-vi), but never by the
+ *  person who paid for the plan ending. */
 export function planEndAction(
   due: Pick<repo.PlanEndReminder, "endsAt" | "handedOver" | "handedOverConfirmed" | "handedOverFrom" | "cancelSent" | "provider">,
   recipientUserId: string,
@@ -1099,8 +1125,8 @@ export function planEndAction(
   const keepUntil = new Date(due.endsAt.getTime() - CANCEL_LEAD_MS);
   if (keepUntil <= now) return { kind: "choose" };
   if (!due.handedOver && !due.cancelSent) return { kind: "keep", until: keepUntil };
-  if (due.handedOver && due.provider === "paddle" && due.handedOverConfirmed && due.handedOverFrom !== recipientUserId) {
-    return { kind: "choose_next", until: keepUntil };
+  if (due.handedOver && due.handedOverConfirmed && due.handedOverFrom !== recipientUserId) {
+    return { kind: "choose_next", until: keepUntil, provider: due.provider };
   }
   return { kind: "choose" };
 }
@@ -1600,9 +1626,12 @@ async function applyRazorpay(
   const checkout = await repo.checkoutForRazorpaySubscription(deps.sql, sub.id);
   let gymId = placed?.gymId ?? null;
   let checkoutId: string | null = null;
+  // A new owner's plan chosen before the handed-over plan it follows ends (4b-vi-b).
+  let follows: { rowId: string; until: Date } | null = null;
   if (gymId === null && checkout !== null && checkout.providerRef === sub.id) {
     gymId = checkout.gymId;
     checkoutId = checkout.id;
+    follows = checkout.follows;
   }
   if (gymId === null) {
     // Something else on the same Razorpay account made it: not ours to cancel or refund.
@@ -1756,13 +1785,18 @@ async function applyRazorpay(
       sizeCheckout === null
         ? null
         : { rowId: sizeCheckout.replacesRowId, periodEnd: sizeCheckout.startsAt, afterRenewal: checkout?.direction === "smaller" },
+    follows,
   });
   if (outcome.replaced !== null) {
     deps.log.info({ event: "billing.size_changed", provider: "razorpay", gymId }, "a gym moved to its new size");
     await endReplacedPlan(deps, razorpay, { gymId, ...outcome.replaced });
   }
   if (outcome.duplicate) {
-    if (outcome.decision.kind === "duplicate") {
+    // A new owner's window approved too late, or after the gym changed (4b-vi-b): expected, and
+    // nothing was charged.
+    if (outcome.decision.kind === "duplicate" && follows !== null) {
+      deps.log.warn({ event: "billing.following_not_started", provider: "razorpay", gymId }, "a new owner's plan could not take the place of the plan it follows: cancelled, nothing charged");
+    } else if (outcome.decision.kind === "duplicate") {
       deps.log.error({ event: "billing.duplicate_subscription", provider: "razorpay", gymId }, "a second paid plan for one gym: cancelling and refunding it");
     }
     return await setAsideRazorpay(deps, razorpay, sub, gymId, "duplicate");
@@ -2420,6 +2454,7 @@ const RAZORPAY_SIZE_REFUSALS: Record<Exclude<repo.RazorpaySizeOutcome["kind"], "
     code: "in_trial",
     message: "Your plan's first payment hasn't been taken yet. You can change its size once it has.",
   },
+  not_started: { status: 409, code: "plan_not_started", message: "Your new plan hasn't started yet, so its size can't be changed until it starts." },
   plan_ending: { status: 409, code: "plan_ending", message: "Your plan is set to end, so its size can't be changed." },
   renewing: { status: 409, code: "renewing", message: "Your plan renews within the hour. Change its size after it renews." },
   no_such_plan: { status: 404, code: "plan_not_found", message: "That plan isn't on your price list." },

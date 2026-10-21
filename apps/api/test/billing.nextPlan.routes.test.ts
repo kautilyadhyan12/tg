@@ -687,7 +687,7 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
     };
     const until = new Date("2026-11-07T21:00:00Z");
     it.each([
-      ["the new owner, Paddle confirmed", due, CORA, { kind: "choose_next", until }],
+      ["the new owner, Paddle confirmed", due, CORA, { kind: "choose_next", until, provider: "paddle" }],
       ["the person who paid for it", due, KD, { kind: "choose" }],
       ["not yet confirmed at Paddle", { ...due, handedOverConfirmed: false }, CORA, { kind: "choose" }],
       ["through Razorpay (4b-vi-b)", { ...due, provider: "razorpay" as const }, CORA, { kind: "choose" }],
@@ -716,7 +716,7 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
     };
 
     it("a plan handed over says the next one can be chosen now, until when, and that it starts when this one ends", () => {
-      const m = planEndReminderEmail({ ...base, action: { kind: "choose_next", until: new Date("2026-11-10T13:00:00Z") } });
+      const m = planEndReminderEmail({ ...base, action: { kind: "choose_next", until: new Date("2026-11-10T13:00:00Z"), provider: "paddle" } });
       expect(m.text).toContain("To keep your members on a plan, choose the next one before 7:00 am on 10 Nov. It starts when this one ends, and nothing is charged until then.");
       expect(m.text).not.toContain("Once it ends");
     });

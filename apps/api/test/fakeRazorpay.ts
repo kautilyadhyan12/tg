@@ -39,6 +39,8 @@ export class FakeRazorpay implements RazorpayApi {
   down = false;
   /** Make the next subscription's plan carry a different amount than the one on record. */
   wrongAmount = false;
+  /** Make the next subscription start this many seconds away from the start asked for. */
+  shiftNextStart = 0;
   /** Answer this many refund requests with a 503, making nothing. */
   refundFailures = 0;
   /** Answer this many cancels-at-once with a 503, cancelling nothing. */
@@ -71,7 +73,8 @@ export class FakeRazorpay implements RazorpayApi {
     if (plan === undefined) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST_ERROR" });
     this.created.push({ ...input });
     const id = razorpayId("sub");
-    const startAt = input.startAt === null ? null : Math.ceil(input.startAt.getTime() / 1000);
+    const startAt = input.startAt === null ? null : Math.ceil(input.startAt.getTime() / 1000) + this.shiftNextStart;
+    this.shiftNextStart = 0;
     const sub: RazorpaySubscription = {
       id,
       entity: "subscription",

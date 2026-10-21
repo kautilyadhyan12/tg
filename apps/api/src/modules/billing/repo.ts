@@ -15,15 +15,25 @@ export const GRACE_EXPIRED = "grace_expired";
 /** `cancel_reason` of a free trial ended because the gym paid during it (1c-ii). */
 export const TRIAL_SUBSCRIBED = "subscribed";
 /** `cancel_reason` of a handed-over plan whose new owner's plan took its place (4b-vi-a): it
- *  ends here then, and at Paddle with the month its payer paid for. */
+ *  ends here then, and at Paddle or Razorpay with the month its payer paid for. */
 export const FOLLOWED = "followed";
 /** A following plan's first charge may be this much before the end of the plan it follows,
- *  never more: Paddle's clock and ours differ a little. */
+ *  never more: Paddle's clock and ours differ a little. Razorpay's is that end itself, rounded up
+ *  to its whole second (4b-vi-b). */
 const FOLLOW_SLACK_MS = 60_000;
 /** Paddle refuses to move a first charge this close to it (tried 2026-10-21: 20 minutes ahead
  *  refused, 50 accepted): a following plan paid later than this before the end it follows could
- *  not start then, so it is never placed. */
+ *  not start then, so it is never placed. Razorpay's window closes three hours before (4b-vi-b). */
 const FOLLOW_MIN_LEAD_MS = 60 * 60 * 1000;
+
+/** When the company a handed-over plan is paid through confirmed it ends: Paddle's scheduled
+ *  cancel (4b-iii-a), or the cancel Razorpay took at Accept, which it cannot take back
+ *  (4b-iii-b). Null until then: the next plan is not chosen before (4b-vi). */
+function handedOverEndConfirmed(row: { provider: string; handed_over_end_sent_at: Date | null; cancel_sent_at: Date | null }): Date | null {
+  if (row.provider === "paddle") return row.handed_over_end_sent_at;
+  if (row.provider === "razorpay") return row.cancel_sent_at;
+  return null;
+}
 
 
 /** `approved` and `dropped` are a smaller size's through Razorpay (1d-iii-b): its window approved
@@ -147,9 +157,9 @@ export type BeginCheckoutOutcome =
  *  both pass the checks, and any checkout still open for this gym is superseded (its
  *  Paddle transaction is cancelled by the caller) so only one can be paid. Every checkout
  *  charges now, in the gym's own free trial too: paying ends the trial and opens the plan's
- *  full size (Kd, RULINGS 2026-09-30). One exception (4b-vi-a): on a plan paid through Paddle and
- *  handed over with its gym, once Paddle has confirmed it ends, the next plan is chosen now and
- *  charged nothing until it ends (`follows`), until `followLeadMs` before then. */
+ *  full size (Kd, RULINGS 2026-09-30). One exception (4b-vi): on a plan handed over with its gym,
+ *  once Paddle or Razorpay has confirmed it ends, the next plan is chosen now through the same
+ *  company and charged nothing until it ends (`follows`), until `followLeadMs` before then. */
 export async function beginCheckout(
   sql: Sql,
   input: {
@@ -191,21 +201,23 @@ export async function beginCheckout(
         handed_over_at: Date | null;
         handed_over_from: string | null;
         handed_over_end_sent_at: Date | null;
+        cancel_sent_at: Date | null;
       }[]
     >`
       SELECT id, status, provider, trial_ends_at, cancel_at_period_end, current_period_end,
-             handed_over_at, handed_over_from, handed_over_end_sent_at
+             handed_over_at, handed_over_from, handed_over_end_sent_at, cancel_sent_at
       FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')`;
     const current = live[0];
     // The gym's own free trial may be paid for now, and ends when that payment lands; anything
-    // else live is a plan already chosen, but for a Paddle plan handed over with its gym.
+    // else live is a plan already chosen, but for a plan handed over with its gym, whose next plan
+    // is chosen through the company it is paid through (4b-vi-a Paddle, 4b-vi-b Razorpay).
     let follows: { rowId: string; until: Date } | null = null;
     if (current !== undefined && !isLocalTrial(current)) {
       const handedOver =
-        input.provider === "paddle" &&
-        current.provider === "paddle" &&
+        (current.provider === "paddle" || current.provider === "razorpay") &&
+        input.provider === current.provider &&
         current.handed_over_at !== null &&
         current.cancel_at_period_end &&
         (current.status === "active" || current.status === "trialing");
@@ -213,8 +225,8 @@ export async function beginCheckout(
       // Paid in the window filled in with the owner's email, their card would pay for the gym
       // they gave away (4b-iii-a).
       if (current.handed_over_from === input.userId) return { kind: "next_plan_payer" };
-      // Until Paddle says it ends, it could still renew on the old owner's card.
-      if (current.handed_over_end_sent_at === null) return { kind: "next_plan_not_ready" };
+      // Until its company says it ends, it could still renew on the old owner's card.
+      if (handedOverEndConfirmed(current) === null) return { kind: "next_plan_not_ready" };
       const end = current.current_period_end;
       if (end === null || end.getTime() - input.now.getTime() <= input.followLeadMs) return { kind: "next_plan_too_late", endsAt: end };
       follows = { rowId: current.id, until: end };
@@ -566,10 +578,11 @@ export async function applySnapshot(
         current_period_end: Date | null;
         handed_over_at: Date | null;
         handed_over_end_sent_at: Date | null;
+        cancel_sent_at: Date | null;
       }[]
     >`
       SELECT id, status, provider, provider_ref, cancel_at_period_end, current_period_end,
-             handed_over_at, handed_over_end_sent_at
+             handed_over_at, handed_over_end_sent_at, cancel_sent_at
       FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')
@@ -595,25 +608,27 @@ export async function applySnapshot(
                 : o.status === "active" && o.current_period_end?.getTime() === replaces.periodEnd.getTime()),
           ) ?? null);
     // A new owner's plan takes the place of the handed-over plan it follows only while that plan
-    // is as it was when the window was opened (still handed over, its end confirmed at Paddle, the
-    // same end), and only while nothing is charged before that end: else it is a second plan.
+    // is as it was when the window was opened (still handed over, its end confirmed by the company
+    // it is paid through, the same end), and only while nothing is charged before that end: else
+    // it is a second plan. Razorpay was told the end itself, so its first charge is never earlier.
     const follows = existing === null ? (input.follows ?? null) : null;
+    const slackMs = input.provider === "razorpay" ? 0 : FOLLOW_SLACK_MS;
     // Paid too close to that end, its first charge could no longer be moved to it.
     const followed =
       follows === null ||
       input.snapshot.status !== "trialing" ||
       input.snapshot.currentPeriodEnd === null ||
-      input.snapshot.currentPeriodEnd.getTime() < follows.until.getTime() - FOLLOW_SLACK_MS ||
+      input.snapshot.currentPeriodEnd.getTime() < follows.until.getTime() - slackMs ||
       follows.until.getTime() - input.now.getTime() < FOLLOW_MIN_LEAD_MS
         ? null
         : (others.find(
             (o) =>
               o.id === follows.rowId &&
-              o.provider === "paddle" &&
+              o.provider === input.provider &&
               (o.status === "active" || o.status === "trialing") &&
               o.cancel_at_period_end &&
               o.handed_over_at !== null &&
-              o.handed_over_end_sent_at !== null &&
+              handedOverEndConfirmed(o) !== null &&
               o.current_period_end?.getTime() === follows.until.getTime(),
           ) ?? null);
     // Razorpay's record never shows a cancel (1d-ii): whether a plan is set to end is our own
@@ -693,7 +708,7 @@ export async function applySnapshot(
         replaced = { rowId: replaceable.id, subscriptionRef: replaceable.provider_ref };
       }
       if (followed !== null && status !== "expired") {
-        // Ended here first (a gym holds one live plan); Paddle ends it with its paid month.
+        // Ended here first (a gym holds one live plan); its company ends it with its paid month.
         const ended = await tx`
           UPDATE subscriptions SET status = 'expired', ended_at = ${input.now}, cancel_reason = ${FOLLOWED}
           WHERE id = ${followed.id} AND owner_id = ${input.gymId} AND status IN ('active','trialing') AND cancel_at_period_end
@@ -1999,6 +2014,8 @@ export type RazorpaySizeOutcome =
   | { kind: "payment_overdue" }
   /** A paid trial made before 2f-i, not yet charged: its size waits for its first payment. */
   | { kind: "in_trial" }
+  /** A new owner's plan not yet started (4b-vi-b). */
+  | { kind: "not_started" }
   | { kind: "plan_ending" }
   /** The month paid ends within `renewGuardMs`, or has ended and its renewal is not written. */
   | { kind: "renewing" }
@@ -2031,10 +2048,11 @@ export async function razorpaySizeTarget(
       currency: string;
       pending_plan_id: string | null;
       handed_over_at: Date | null;
+      follows_subscription_id: string | null;
     }[]
   >`
     SELECT s.id, s.status, s.provider, s.provider_ref, s.cancel_at_period_end, s.current_period_end,
-           s.plan_id, p.seat_cap, p.price_minor, p.currency, s.pending_plan_id, s.handed_over_at
+           s.plan_id, p.seat_cap, p.price_minor, p.currency, s.pending_plan_id, s.handed_over_at, s.follows_subscription_id
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
       AND s.status IN ('trialing','active','past_due')
@@ -2049,6 +2067,8 @@ export async function razorpaySizeTarget(
   }
   if (row.provider !== "razorpay" || row.provider_ref === null) return { kind: "not_razorpay" };
   if (row.status === "past_due") return { kind: "payment_overdue" };
+  // A new owner's plan not yet started (4b-vi-b): its size is not changed before it starts.
+  if (row.status === "trialing" && row.follows_subscription_id !== null) return { kind: "not_started" };
   if (row.status === "trialing") return { kind: "in_trial" };
   if (row.cancel_at_period_end || row.handed_over_at !== null) return { kind: "plan_ending" };
 
@@ -2429,7 +2449,7 @@ export interface PlanEndReminder {
   /** The week-before email went for this same end. */
   weekSent: boolean;
   handedOver: boolean;
-  /** Handed over, and Paddle confirmed it ends: the next plan can be chosen now (4b-vi-a). */
+  /** Handed over, and Paddle or Razorpay confirmed it ends: the next plan can be chosen now (4b-vi). */
   handedOverConfirmed: boolean;
   /** Who paid for it, when handed over: they are not offered the next plan. */
   handedOverFrom: string | null;
@@ -2483,7 +2503,9 @@ export async function claimPlanEndReminders(
                ELSE end_week_reminded_for IS DISTINCT FROM current_period_end END
     RETURNING id, owner_id, provider, status, current_period_end, current_period_end <= ${dayFrom} AS last_day,
               end_week_reminded_for IS NOT DISTINCT FROM current_period_end AS week_sent,
-              handed_over_at IS NOT NULL AS handed_over, handed_over_end_sent_at IS NOT NULL AS handed_over_confirmed, handed_over_from,
+              handed_over_at IS NOT NULL AS handed_over,
+              CASE provider WHEN 'paddle' THEN handed_over_end_sent_at WHEN 'razorpay' THEN cancel_sent_at END IS NOT NULL AS handed_over_confirmed,
+              handed_over_from,
               cancel_sent_at IS NOT NULL AS cancel_sent, follows_subscription_id IS NOT NULL AS following`;
   const out: PlanEndReminder[] = [];
   for (const r of rows) {

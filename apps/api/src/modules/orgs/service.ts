@@ -1367,8 +1367,8 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
     paidThrough,
     handedOverBy: paid ? row.handedOverBy : null,
     handedOverByYou: paid && row.handedOverByYou,
-    // A Paddle plan handed over and confirmed to end: the next plan is chosen until the same hour
-    // a plan set to end can be kept (4b-vi-a).
+    // A plan handed over and confirmed to end by Paddle or Razorpay: the next plan is chosen until
+    // the same hour a plan set to end can be kept (4b-vi).
     nextPlanUntil:
       paid && row.nextPlanFrom !== null
         ? new Date(row.nextPlanFrom.getTime() - PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000).toISOString()

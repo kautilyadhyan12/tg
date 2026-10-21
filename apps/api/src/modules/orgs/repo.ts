@@ -734,7 +734,8 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
              p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
              su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider, su.handed_over_from, CASE WHEN su.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = su.handed_over_from), '') END AS handed_over_by,
-             CASE WHEN su.provider = 'paddle' AND su.handed_over_at IS NOT NULL AND su.handed_over_end_sent_at IS NOT NULL
+             CASE WHEN su.handed_over_at IS NOT NULL
+                       AND CASE su.provider WHEN 'paddle' THEN su.handed_over_end_sent_at WHEN 'razorpay' THEN su.cancel_sent_at END IS NOT NULL
                        AND su.cancel_at_period_end AND su.status IN ('trialing','active') THEN su.current_period_end END AS next_plan_from,
              fo.follows_paid_by, fo.follows_paid_from,
              ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
@@ -2488,7 +2489,8 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
            LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
            p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
            s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider, CASE WHEN s.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = s.handed_over_from), '') END AS handed_over_by,
-           CASE WHEN s.provider = 'paddle' AND s.handed_over_at IS NOT NULL AND s.handed_over_end_sent_at IS NOT NULL
+           CASE WHEN s.handed_over_at IS NOT NULL
+                     AND CASE s.provider WHEN 'paddle' THEN s.handed_over_end_sent_at WHEN 'razorpay' THEN s.cancel_sent_at END IS NOT NULL
                      AND s.cancel_at_period_end AND s.status IN ('trialing','active') THEN s.current_period_end END AS next_plan_from,
            fo.follows_paid_by,
            ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,

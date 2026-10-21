@@ -148,9 +148,12 @@ function atLabel(at: Date, timeZone: string): string {
 }
 
 /** What the plan box lets the gym do before its plan ends: keep it until a moment (Paddle or
- *  Razorpay, 1g), choose the next plan until a moment (a Paddle plan handed over, 4b-vi-a), or
- *  choose a plan once it has ended. */
-export type PlanEndAction = { kind: "keep"; until: Date } | { kind: "choose_next"; until: Date } | { kind: "choose" };
+ *  Razorpay, 1g), choose the next plan until a moment (a plan handed over, through the company it
+ *  is paid through: 4b-vi-a Paddle, 4b-vi-b Razorpay), or choose a plan once it has ended. */
+export type PlanEndAction =
+  | { kind: "keep"; until: Date }
+  | { kind: "choose_next"; until: Date; provider: "paddle" | "razorpay" }
+  | { kind: "choose" };
 
 export interface PlanEndWords {
   to: string;
@@ -188,7 +191,10 @@ export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
     w.action.kind === "keep"
       ? `To keep it, press Keep my plan before ${atLabel(w.action.until, w.timezone)}.`
       : w.action.kind === "choose_next"
-        ? `To keep your ${words.people} on a plan, choose the next one before ${atLabel(w.action.until, w.timezone)}. It starts when this one ends, and nothing is charged until then.`
+        ? `To keep your ${words.people} on a plan, choose the next one before ${atLabel(w.action.until, w.timezone)}. ${
+            // Razorpay checks the card with a small charge it gives back, so "nothing" would not be true.
+            w.action.provider === "razorpay" ? "It starts when this one ends, and its first payment is taken then." : "It starts when this one ends, and nothing is charged until then."
+          }`
         : "Once it ends, you can choose a new plan.",
   ];
   const button = "Go to your plan";
