@@ -39,7 +39,7 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // `next` (4b-vi-a Paddle, 4b-vi-b Razorpay): on a plan handed over with its gym, the new owner
 // chooses their own plan now, in the window of the company that plan is paid through, with their own
 // card. Its first payment is taken when the handed-over plan ends, and the plan starts then, so the
-// members keep the app between the two. Razorpay checks the card first with a small charge it
+// members keep the app between the two. Razorpay checks the card or UPI ID first with a small charge it
 // gives back, so on a Razorpay plan nothing here says "nothing is charged" before that payment.
 //
 // Unlike the prompt a gym on no plan meets (`PlanModal`), this one closes: the gym
@@ -74,7 +74,7 @@ function nextIntroText(sub, words) {
       : 'the current plan';
   const when = on === null ? `when ${who} ends` : `on ${on}, when ${who} ends`;
   if (sub?.paidThrough === 'razorpay') {
-    return `Your plan starts ${when}, so your ${words.people} keep the app. Its first payment is taken then. Razorpay may check your card with a small charge that it gives back.`;
+    return `Your plan starts ${when}, so your ${words.people} keep the app. Its first payment is taken then. Razorpay may check your card or UPI with a small charge that it gives back.`;
   }
   return `Your plan starts ${when}, so your ${words.people} keep the app. Nothing is charged until then. Paddle's window shows the days until then as a free trial, rounded up to whole days.`;
 }

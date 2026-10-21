@@ -322,7 +322,7 @@ describe('a new owner chooses their plan before a Razorpay plan handed over ends
     const dialog = await screen.findByRole('dialog');
     expect(
       within(dialog).getByText(
-        `Your plan starts on ${date}, when the plan Kd Owner paid for ends, so your members keep the app. Its first payment is taken then. Razorpay may check your card with a small charge that it gives back.`,
+        `Your plan starts on ${date}, when the plan Kd Owner paid for ends, so your members keep the app. Its first payment is taken then. Razorpay may check your card or UPI with a small charge that it gives back.`,
       ),
     ).toBeTruthy();
     expect(within(dialog).queryByText(/Nothing is charged|free trial/)).toBeNull();
