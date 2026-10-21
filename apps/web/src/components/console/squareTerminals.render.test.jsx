@@ -76,7 +76,7 @@ afterEach(() => {
 describe('connected in the US, Canada or Australia', () => {
   it('the owner pairs a Terminal: the code and the steps, waiting, then the Terminal by its serial number', async () => {
     render(<Holder start={payments(none())} />);
-    expect(screen.getByText('No Square Terminal is paired with Iron House.')).toBeTruthy();
+    expect(screen.getByText('No Terminals paired yet.')).toBeTruthy();
     orgService.pairSquareTerminal.mockResolvedValue({ data: { code: 'AFZEFB', pairBy: '2026-10-21T15:05:00.000Z', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } })) } });
     orgService.checkSquarePairing
       .mockResolvedValueOnce({ data: { outcome: 'waiting', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } })) } })
@@ -86,21 +86,21 @@ describe('connected in the US, Canada or Australia', () => {
     const box = await screen.findByRole('group', { name: 'Pair a Square Terminal' });
     expect(within(box).getByText('AFZEFB')).toBeTruthy();
     expect(within(box).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'If the Terminal is signed in to Square already, sign it out first: open its menu, then Settings, then Sign out.',
-      'On the Terminal, tap Sign in, then Use a device code.',
-      'Type this code, then tap Sign in:',
+      'If the Terminal is signed in, sign out first (Settings > Sign out).',
+      'Tap Sign in, then Use a device code.',
+      'Enter this code:',
     ]);
-    expect(within(box).getByText(/^The code works until /)).toBeTruthy();
-    expect(within(box).getByText('Waiting for the Terminal to sign in…')).toBeTruthy();
+    expect(within(box).getByText(/^Expires at /)).toBeTruthy();
+    expect(within(box).getByText('Waiting for the Terminal…')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Pair a Terminal' })).toBeNull();
 
-    expect(await screen.findByText('Square Terminal R5WNWB5BKNG9R is paired.')).toBeTruthy();
+    expect(await screen.findByText('Terminal paired.')).toBeTruthy();
     expect(orgService.checkSquarePairing).toHaveBeenCalledTimes(2);
     expect(orgService.checkSquarePairing).toHaveBeenCalledWith(ORG.id, PAIRING_ID);
     expect(screen.queryByRole('group', { name: 'Pair a Square Terminal' })).toBeNull();
     expect(screen.queryByText('AFZEFB')).toBeNull();
     expect(screen.getByText('Square Terminal')).toBeTruthy();
-    expect(screen.getByText('Serial number R5WNWB5BKNG9R · Paired 21 Oct 2026')).toBeTruthy();
+    expect(screen.getByText('Serial R5WNWB5BKNG9R · Paired 21 Oct 2026')).toBeTruthy();
   });
 
   it('a code that runs out says so, and Get a new code asks Square again', async () => {
@@ -108,9 +108,9 @@ describe('connected in the US, Canada or Australia', () => {
     orgService.pairSquareTerminal.mockResolvedValue({ data: { code: 'AFZEFB', pairBy: '2026-10-21T15:05:00.000Z', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } })) } });
     orgService.checkSquarePairing.mockResolvedValue({ data: { outcome: 'expired', payments: payments(none()) } });
     fireEvent.click(screen.getByRole('button', { name: 'Pair a Terminal' }));
-    expect(await screen.findByText('The code ran out before a Terminal signed in with it.')).toBeTruthy();
+    expect(await screen.findByText('This code has expired.')).toBeTruthy();
     expect(screen.queryByText('AFZEFB')).toBeNull();
-    expect(screen.queryByText('Waiting for the Terminal to sign in…')).toBeNull();
+    expect(screen.queryByText('Waiting for the Terminal…')).toBeNull();
     orgService.pairSquareTerminal.mockResolvedValue({ data: { code: 'QYXRJQ', pairBy: '2026-10-21T15:10:00.000Z', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:10:00.000Z' } })) } });
     orgService.checkSquarePairing.mockResolvedValue({ data: { outcome: 'waiting', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:10:00.000Z' } })) } });
     fireEvent.click(screen.getByRole('button', { name: 'Get a new code' }));
@@ -122,7 +122,7 @@ describe('connected in the US, Canada or Australia', () => {
     orgService.checkSquarePairing.mockResolvedValue({ data: { outcome: 'waiting', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } })) } });
     render(<Holder start={payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } }))} />);
     const box = screen.getByRole('group', { name: 'Pair a Square Terminal' });
-    expect(within(box).getByText(/^A code is waiting for a Terminal to sign in\. The code works until .+ If you don't have the code any more, get a new one\.$/)).toBeTruthy();
+    expect(within(box).getByText(/^A pairing code is active until .+\. Get a new code if you no longer have it\.$/)).toBeTruthy();
     expect(within(box).getByRole('button', { name: 'Get a new code' })).toBeTruthy();
     orgService.removeSquareTerminal.mockResolvedValue({ data: { payments: payments(none()) } });
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
@@ -134,32 +134,32 @@ describe('connected in the US, Canada or Australia', () => {
   it('Remove asks first, names what changes and what stays, and says it is done in the same place', async () => {
     render(<Holder start={payments(none({ list: [TERMINAL] }))} />);
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    const ask = screen.getByRole('group', { name: 'Remove Square Terminal R5WNWB5BKNG9R?' });
-    expect(within(ask).getByText('Iron House stops using it.')).toBeTruthy();
-    expect(within(ask).getByText('It stays signed in to your Square account. To sign it out, open its menu, then Settings, then Sign out.')).toBeTruthy();
-    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }));
+    const ask = screen.getByRole('group', { name: 'Remove this Terminal?' });
+    expect(within(ask).getByText('It will no longer be available to Iron House.')).toBeTruthy();
+    expect(within(ask).getByText('It stays signed in to Square. To sign it out, go to Settings > Sign out on the Terminal.')).toBeTruthy();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
     expect(orgService.removeSquareTerminal).not.toHaveBeenCalled();
     orgService.removeSquareTerminal.mockResolvedValue({ data: { payments: payments(none()) } });
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
-    fireEvent.click(within(screen.getByRole('group', { name: 'Remove Square Terminal R5WNWB5BKNG9R?' })).getByRole('button', { name: 'Remove' }));
-    expect(await screen.findByText('Square Terminal R5WNWB5BKNG9R is removed.')).toBeTruthy();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Remove this Terminal?' })).getByRole('button', { name: 'Remove' }));
+    expect(await screen.findByText('Terminal removed.')).toBeTruthy();
     expect(orgService.removeSquareTerminal).toHaveBeenCalledWith(ORG.id, TERMINAL.id);
-    expect(screen.getByText('No Square Terminal is paired with Iron House.')).toBeTruthy();
+    expect(screen.getByText('No Terminals paired yet.')).toBeTruthy();
   });
 
   it("a refusal from the server is said in the box, and nothing reads as paired", async () => {
     render(<Holder start={payments(none())} />);
-    orgService.pairSquareTerminal.mockRejectedValue({ response: { status: 409, data: { error: 'terminals_full', message: 'A gym can pair up to 20 Square Terminals. Remove one first.' } } });
+    orgService.pairSquareTerminal.mockRejectedValue({ response: { status: 409, data: { error: 'terminals_full', message: 'You can pair up to 20 Terminals. Remove one to pair another.' } } });
     fireEvent.click(screen.getByRole('button', { name: 'Pair a Terminal' }));
-    expect(await screen.findByText('A gym can pair up to 20 Square Terminals. Remove one first.')).toBeTruthy();
+    expect(await screen.findByText('You can pair up to 20 Terminals. Remove one to pair another.')).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Pair a Square Terminal' })).toBeNull();
-    expect(screen.queryByText(/ is paired.$/)).toBeNull();
+    expect(screen.queryByText('Terminal paired.')).toBeNull();
   });
 
   it('anybody else reads the list, with no button, and the line says who can', async () => {
     render(<Holder start={payments(none({ list: [TERMINAL] }))} owner={false} />);
-    expect(screen.getByText('Serial number R5WNWB5BKNG9R · Paired 21 Oct 2026')).toBeTruthy();
-    expect(screen.getByText('Only the owner of Iron House can pair or remove a Square Terminal.')).toBeTruthy();
+    expect(screen.getByText('Serial R5WNWB5BKNG9R · Paired 21 Oct 2026')).toBeTruthy();
+    expect(screen.getByText('Only the owner can pair or remove Terminals.')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
@@ -173,22 +173,23 @@ describe('connected in the US, Canada or Australia', () => {
 describe("Square's test area", () => {
   it('the owner adds a practice Terminal, picked from a list, and it is named by what it does', async () => {
     render(<Holder start={payments(none({ practice: true }))} />);
-    const form = screen.getByRole('form', { name: 'Practice Terminals' });
-    expect(within(form).getByText("Square's test area can't pair a real Terminal. Add one of Square's practice Terminals instead.")).toBeTruthy();
-    expect(within(form).getAllByRole('option').map((o) => o.textContent)).toEqual(['Saves the card', "Member doesn't agree", 'Member cancels', 'Square times out', 'Terminal is offline']);
-    fireEvent.change(within(form).getByLabelText('Practice Terminal'), { target: { value: 'cancels' } });
+    const form = screen.getByRole('form', { name: 'Simulated Terminals' });
+    expect(within(form).getByText("Square's sandbox has no physical Terminals. Add a simulated one to test with.")).toBeTruthy();
+    expect(within(form).getByText('Test mode')).toBeTruthy();
+    expect(within(form).getAllByRole('option').map((o) => o.textContent)).toEqual(['Card saved', 'Member declines', 'Member cancels', 'Times out', 'Offline']);
+    fireEvent.change(within(form).getByLabelText('Simulated Terminal'), { target: { value: 'cancels' } });
     const added = { ...PRACTICE, practice: 'cancels' };
     orgService.addPracticeTerminal.mockResolvedValue({ data: { payments: payments(none({ practice: true, list: [added] })) } });
-    fireEvent.click(within(form).getByRole('button', { name: 'Add practice Terminal' }));
-    expect(await screen.findByText('Practice Terminal: member cancels is added.')).toBeTruthy();
+    fireEvent.click(within(form).getByRole('button', { name: 'Add simulated Terminal' }));
+    expect(await screen.findByText('Simulated Terminal added.')).toBeTruthy();
     expect(orgService.addPracticeTerminal).toHaveBeenCalledWith(ORG.id, 'cancels');
-    expect(screen.getByText('Practice Terminal: member cancels')).toBeTruthy();
+    expect(screen.getByText('Simulated Terminal · Member cancels')).toBeTruthy();
     expect(screen.getByText('Added 21 Oct 2026')).toBeTruthy();
   });
 
   it('is never offered outside it', () => {
     render(<Holder start={payments(none())} />);
-    expect(screen.queryByRole('form', { name: 'Practice Terminals' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Simulated Terminals' })).toBeNull();
   });
 });
 
@@ -196,17 +197,17 @@ describe('in the Payments box', () => {
   it('connected before the Terminal could be used: the owner connects Square again, on Square\'s own page', async () => {
     openPanel(payments(none({ needsAllow: true })));
     const part = await screen.findByRole('region', { name: 'Square Terminals' });
-    expect(within(part).getByText("To use a Square Terminal, connect Square again and press Allow on Square's page.")).toBeTruthy();
+    expect(within(part).getByText('Reconnect Square to use Square Terminals.')).toBeTruthy();
     expect(within(part).queryByRole('button', { name: 'Pair a Terminal' })).toBeNull();
     orgService.connectSquare.mockResolvedValue({ data: { url: 'https://connect.squareupsandbox.com/oauth2/authorize?state=abc' } });
-    fireEvent.click(within(part).getByRole('button', { name: 'Connect Square again' }));
+    fireEvent.click(within(part).getByRole('button', { name: 'Reconnect Square' }));
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('https://connect.squareupsandbox.com/oauth2/authorize?state=abc'));
   });
 
   it('anybody else is told the owner needs to', async () => {
     openPanel(payments(none({ needsAllow: true }), { canConnect: false }));
-    expect(await screen.findByText('The owner of Iron House needs to connect Square again to use a Square Terminal.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connect Square again' })).toBeNull();
+    expect(await screen.findByText('The owner needs to reconnect Square before Terminals can be used.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reconnect Square' })).toBeNull();
   });
 
   it('elsewhere, or not connected, there is no Terminals part', async () => {
@@ -219,7 +220,7 @@ describe('in the Payments box', () => {
   it('sits between the connection and Disconnect, and the box keeps every button it had', async () => {
     openPanel(payments(none({ list: [TERMINAL] })));
     const part = await screen.findByRole('region', { name: 'Square Terminals' });
-    expect(within(part).getByText('Serial number R5WNWB5BKNG9R · Paired 21 Oct 2026')).toBeTruthy();
+    expect(within(part).getByText('Serial R5WNWB5BKNG9R · Paired 21 Oct 2026')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Disconnect Square' })).toBeTruthy();
     expect(screen.getAllByRole('definition').map((d) => d.textContent)).toEqual(['Iron House LLC', 'Austin', '19 Oct 2026']);
   });

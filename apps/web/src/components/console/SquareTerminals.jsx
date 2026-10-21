@@ -3,29 +3,32 @@ import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
+  NEEDS_ALLOW_HINT,
   NEEDS_ALLOW_LINE,
+  NEEDS_ALLOW_OTHERS,
+  NO_TERMINALS,
   PAIRING_EXPIRED,
+  PAIRING_WAITING,
   PAIR_STEPS,
   PRACTICE_CHOICES,
   PRACTICE_INTRO,
-  needsAllowOthersLine,
-  noTerminalsLine,
+  REMOVED_TERMINAL,
+  TERMINAL_OWNER_ONLY,
   pairedLine,
+  pairingActiveLine,
   pairingUntilLine,
   removeTerminalWords,
-  removedTerminalLine,
   terminalDetail,
   terminalName,
-  terminalOwnerOnlyLine,
 } from '../../pages/console/paymentsView';
 import { ConsoleFailed } from './ConsoleStates';
 
 // SQUARE TERMINALS (ROADMAP 18d-ii-b-i), in the connected Payments box. Square's own way, and
-// GymMaster's: the owner presses Pair a Terminal, types the code on the Terminal's sign-in screen
+// GymMaster's: the owner presses Pair a Terminal, enters the code on the Terminal's sign-in screen
 // within five minutes, and the box asks Square every few seconds until a Terminal signs in with
 // it. The code is shown here once; the server never keeps it. Everybody who reads the box sees
-// the list; only the owner pairs and removes, as only the owner connects Square. In Square's test
-// area, where no real Terminal can sign in, the owner adds a practice one instead.
+// the list; only the owner pairs and removes, as only the owner connects Square. In Square's
+// sandbox, where no real Terminal can sign in, the owner adds a simulated one instead.
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const softStyle = { color: 'rgba(255,255,255,0.55)' };
@@ -89,7 +92,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
           setExpired(true);
           onReload();
         } else {
-          setError(errorText(err, "We couldn't check the Terminal. Get a new code to try again."));
+          setError(errorText(err, "We couldn't reach Square. Get a new code to try again."));
         }
       }
     };
@@ -140,7 +143,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
     if ((await ownPress('cancel', () => orgService.removeSquareTerminal(org.id, waitingId))) !== null) setShown(null);
   };
   const remove = async (terminal) => {
-    await act('remove', () => orgService.removeSquareTerminal(org.id, terminal.id), () => removedTerminalLine(terminal));
+    await act('remove', () => orgService.removeSquareTerminal(org.id, terminal.id), () => REMOVED_TERMINAL);
     setAsking(null);
   };
   const addPractice = async (event) => {
@@ -150,6 +153,11 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
     );
   };
 
+  const heading = (
+    <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+      Square Terminals
+    </p>
+  );
   const doneAndError = (
     <>
       {error !== null ? <ConsoleFailed message={error} /> : null}
@@ -164,14 +172,17 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
   if (terminals.needsAllow) {
     return (
       <section aria-label="Square Terminals" className="flex flex-col gap-3">
-        <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-          Square Terminals
-        </p>
+        {heading}
         {owner ? (
           <>
-            <p className="text-sm m-0" style={labelStyle}>
-              {NEEDS_ALLOW_LINE}
-            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm m-0" style={labelStyle}>
+                {NEEDS_ALLOW_LINE}
+              </p>
+              <p className="text-sm m-0" style={softStyle}>
+                {NEEDS_ALLOW_HINT}
+              </p>
+            </div>
             <button
               type="button"
               onClick={onConnectAgain}
@@ -180,7 +191,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
               style={mainButton(!connecting && !readOnly)}
             >
               {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {connecting ? 'Opening Square…' : 'Connect Square again'}
+              {connecting ? 'Opening Square…' : 'Reconnect Square'}
             </button>
             {readOnly ? (
               <p className="text-xs m-0" style={softStyle}>
@@ -190,7 +201,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
           </>
         ) : (
           <p className="text-sm m-0" style={softStyle}>
-            {needsAllowOthersLine(org.name)}
+            {NEEDS_ALLOW_OTHERS}
           </p>
         )}
       </section>
@@ -201,12 +212,10 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
 
   return (
     <section aria-label="Square Terminals" className="flex flex-col gap-3">
-      <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-        Square Terminals
-      </p>
+      {heading}
       {terminals.list.length === 0 ? (
         <p className="text-sm m-0" style={softStyle}>
-          {noTerminalsLine(org.name)}
+          {NO_TERMINALS}
         </p>
       ) : (
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
@@ -261,7 +270,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
                         Remove
                       </button>
                       <button type="button" onClick={() => setAsking(null)} disabled={busy !== null} className="rounded-full px-4 py-3 text-sm font-semibold min-h-11" style={plainButton}>
-                        Keep it
+                        Cancel
                       </button>
                     </div>
                   </div>
@@ -284,7 +293,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
             style={mainButton(busy === null && !readOnly)}
           >
             {busy === 'pair' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {busy === 'pair' ? 'Asking Square for a code…' : 'Pair a Terminal'}
+            {busy === 'pair' ? 'Getting a code…' : 'Pair a Terminal'}
           </button>
           {readOnly ? (
             <p className="text-xs m-0" style={softStyle}>
@@ -319,13 +328,13 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
             </>
           ) : (
             <p className="text-sm m-0" style={labelStyle}>
-              A code is waiting for a Terminal to sign in. {pairingUntilLine(terminals.pairing?.pairBy, clock)} If you don&apos;t have the code any more, get a new one.
+              {pairingActiveLine(terminals.pairing?.pairBy, clock)}
             </p>
           )}
           {!expired ? (
             <p role="status" className="text-sm m-0 flex items-center gap-2" style={softStyle}>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Waiting for the Terminal to sign in…
+              {PAIRING_WAITING}
             </p>
           ) : null}
           {doneAndError}
@@ -350,12 +359,16 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
       ) : null}
 
       {owner && terminals.practice ? (
-        <form onSubmit={addPractice} className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle} aria-label="Practice Terminals">
+        <form onSubmit={addPractice} className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle} aria-label="Simulated Terminals">
+          {/* Marked as Stripe and Square mark their own test areas: a real Square account never shows this. */}
+          <span className="self-start rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: 'rgba(255,179,71,0.15)', color: '#FFB347' }}>
+            Test mode
+          </span>
           <p className="text-sm m-0" style={softStyle}>
             {PRACTICE_INTRO}
           </p>
           <label htmlFor={practiceId} className="text-sm" style={labelStyle}>
-            Practice Terminal
+            Simulated Terminal
           </label>
           <select
             id={practiceId}
@@ -378,14 +391,14 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
             style={plainButton}
           >
             {busy === 'practice' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            Add practice Terminal
+            Add simulated Terminal
           </button>
         </form>
       ) : null}
 
       {!owner ? (
         <p className="text-sm m-0" style={softStyle}>
-          {terminalOwnerOnlyLine(org.name)}
+          {TERMINAL_OWNER_ONLY}
         </p>
       ) : null}
     </section>
