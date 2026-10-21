@@ -463,7 +463,13 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       paddle.clock = Date.now();
       const paid = await chooseAndPay(gym, cora, cora);
       expect((await sync(gym, cora, paid.checkoutId)).state).toBe("paid");
-      await handOver(gym, cora, dan);
+      // Dan's request calls it a new plan, never a trial.
+      expect((await send("POST", `/v1/orgs/${gym.id}/staff/${dan.userId}/owner-request`, cora)).statusCode).toBe(201);
+      const asked = myOwnerRequestResponseSchema.parse(JSON.parse((await get(`/v1/orgs/${gym.id}/owner-request`, dan)).body)).request;
+      expect(asked?.planStops).toEqual({ until: expect.any(String), trial: true, following: true });
+      if (asked === null) throw new Error("no request is waiting");
+      const accepted = await send("POST", `/v1/orgs/${gym.id}/owner-request/${asked.id}/accept`, dan);
+      expect(accepted.statusCode, accepted.body).toBe(200);
       expect(paddle.renews(paid.sub)).toBe(false);
       expect(charged(paid.sub)).toEqual([]);
       // Dan may now choose his own, from when Cora's would have started.

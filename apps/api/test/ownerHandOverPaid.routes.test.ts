@@ -235,7 +235,7 @@ d("a gym paying through Paddle handed to a co-owner (real Postgres)", () => {
       // Before Accept: renewing, and the person asked is told until when it is paid.
       expect(paddle.renews(gym.sub)).toBe(true);
       const until = paddle.subs.get(gym.sub)?.current_billing_period?.ends_at ?? null;
-      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: until === null ? null : new Date(until).toISOString(), trial: false });
+      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: until === null ? null : new Date(until).toISOString(), trial: false, following: false });
 
       const res = await accept(gym, cora);
       expect(res.statusCode, res.body).toBe(200);

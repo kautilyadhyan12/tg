@@ -196,6 +196,25 @@ describe('a new owner chooses their plan before the handed-over plan ends (4b-vi
     expect((await within(dialog).findByTestId('plan-choice-done')).textContent).toBe(`Done. Your plan starts on ${date}. Nothing is charged until then.`);
   });
 
+  it("handed on before it started: the next owner's window names who paid for the days until then, not who chose it", async () => {
+    // Cora chose a plan before Kd's ended, then handed the gym on to this owner.
+    orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, subscription: following({ handedOverBy: 'Cora Lim', cancelAtPeriodEnd: true, nextPlanUntil: new Date(Date.parse(ENDS) - 3 * 60 * 60 * 1000).toISOString() }) }));
+    orgService.getPlans.mockResolvedValue({
+      data: { plans: [{ code: 'org_b1_us_m', seatCap: 200, priceMinor: 2900, currency: 'USD', priceLabel: '$29', fits: true }], payOnline: 'available' },
+    });
+    renderOverview();
+    expect((await screen.findByTestId('plan-handed-over')).textContent).toBe(
+      `Cora Lim chose this plan, and it stops on ${date}, before its first payment. Choose your plan now and it starts then, so your members keep the app.`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Choose your plan' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        `Your plan starts on ${date}, when the plan Kd Owner paid for ends, so your members keep the app. Nothing is charged until then. Paddle's window shows the days until then as a free trial, rounded up to whole days.`,
+      ),
+    ).toBeTruthy();
+  });
+
   it('the old owner, who paid for it, is not offered the next plan', async () => {
     orgService.getMine.mockResolvedValue(mineIs({ ...OWNER, coOwner: true, subscription: handedOver({ handedOverByYou: true }) }));
     renderOverview();

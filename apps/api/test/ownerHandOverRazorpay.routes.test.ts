@@ -254,7 +254,7 @@ d("a gym paying through Razorpay handed to a co-owner (real Postgres, fake Razor
       expect((await ask(gym, cora)).statusCode).toBe(201);
       // Before Accept: renewing, and the person asked is told until when it is paid.
       expect(await planRow(gym.id, gym.sub)).toMatchObject({ cancel_at_period_end: false, handed_over_from: null });
-      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: gym.end.toISOString(), trial: false });
+      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: gym.end.toISOString(), trial: false, following: false });
 
       const res = await accept(gym, cora);
       expect(res.statusCode, res.body).toBe(200);
@@ -505,7 +505,7 @@ d("a gym paying through Razorpay handed to a co-owner (real Postgres, fake Razor
 
       const cora = await makeCoOwner(gym, "Cora");
       expect((await ask(gym, cora)).statusCode).toBe(201);
-      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: end.toISOString(), trial: true });
+      expect((await mineAt(gym, cora))?.planStops).toEqual({ until: end.toISOString(), trial: true, following: false });
       expect((await accept(gym, cora)).statusCode).toBe(200);
       expect(razorpay.cancelled).toContain(gym.sub);
       // The trial keeps its plan to its end.
@@ -525,7 +525,7 @@ d("a gym paying through Razorpay handed to a co-owner (real Postgres, fake Razor
       const tab = orgStaffResponseSchema.parse(JSON.parse(res.body));
       expect(tab.paidPlan).toBe(false);
       expect(tab.paidPlanNote).toBeNull();
-      expect(tab.planStops).toEqual({ until: gym.end.toISOString(), trial: false });
+      expect(tab.planStops).toEqual({ until: gym.end.toISOString(), trial: false, following: false });
     }, TEST_TIMEOUT_MS);
   });
 });

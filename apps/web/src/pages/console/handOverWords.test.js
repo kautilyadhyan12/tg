@@ -109,3 +109,24 @@ describe('the next plan, chosen before the handed-over plan ends (4b-vi-a)', () 
     expect(followingText(org, NOW)).toBe(`Starts on ${date}, when the plan before it ends. Nothing is charged until then.`);
   });
 });
+
+describe('a new plan after its first payment, and handed on before it (4b-vi-a, round one)', () => {
+  const billing = ['billing.manage'];
+  it('once paying it is any plan: resized, never "before its first payment"', () => {
+    const sub = { status: 'active', subscribed: true, paidThrough: 'paddle', followsPaidBy: 'Kd Owner', currentPeriodEnd: UNTIL, cancelAtPeriodEnd: false };
+    expect(canChangeSize({ staffRole: 'owner', privileges: billing, subscription: sub })).toBe(true);
+    const handed = { ...sub, handedOverBy: 'Cora Lim', cancelAtPeriodEnd: true };
+    expect(handedOverText(handed, { staffRole: 'owner', coOwner: false, privileges: billing, subscription: handed })).toBe(
+      `Cora Lim paid for this plan, and it stops on ${trialEndDateLabel(UNTIL)}. Then choose your own plan and pay with your own card.`,
+    );
+  });
+  it("Make owner's box and the request call a new plan new, never a trial", () => {
+    const stops = { until: UNTIL, trial: true, following: true };
+    expect(planStopsLine(stops, 'Dan Park')).toBe(
+      `Your new plan stops before it starts, so you won't be charged. The plan before it ends on ${formatJoinedAt(UNTIL)}; then Dan Park chooses their own plan.`,
+    );
+    expect(planStopsForYou(stops)).toBe(
+      `Their new plan stops before it starts, so nothing is charged. The plan before it ends on ${formatJoinedAt(UNTIL)}; then you choose your own plan and pay with your own card.`,
+    );
+  });
+});
