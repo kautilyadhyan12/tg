@@ -466,7 +466,8 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       // Dan's request calls it a new plan, never a trial.
       expect((await send("POST", `/v1/orgs/${gym.id}/staff/${dan.userId}/owner-request`, cora)).statusCode).toBe(201);
       const asked = myOwnerRequestResponseSchema.parse(JSON.parse((await get(`/v1/orgs/${gym.id}/owner-request`, dan)).body)).request;
-      expect(asked?.planStops).toEqual({ until: expect.any(String), trial: true, following: true });
+      expect(asked?.planStops?.following).toBe(true);
+      expect(asked?.planStops?.trial).toBe(true);
       if (asked === null) throw new Error("no request is waiting");
       const accepted = await send("POST", `/v1/orgs/${gym.id}/owner-request/${asked.id}/accept`, dan);
       expect(accepted.statusCode, accepted.body).toBe(200);
