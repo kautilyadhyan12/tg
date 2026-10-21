@@ -5,7 +5,7 @@
 // this page's own record and the Terminal pressed, the box says "Card saved" only on the server's
 // own answer, and an answer about another person's page is never drawn here.
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { cardAgreementWords } from '@app/shared';
 
@@ -223,6 +223,28 @@ describe('Save card on Terminal: the box', () => {
     expect(await screen.findByText('Asking the Terminal to stop…')).toBeTruthy();
     expect(within(screen.getByTestId('terminal-wait')).queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(within(await screen.findByTestId('terminal-not-saved')).getByText('Cancelled. Nothing was saved.')).toBeTruthy();
+  });
+
+  it("Cancel, then the answer to an ask sent before it: that older answer never brings Cancel back", async () => {
+    orgService.getMemberCard.mockReturnValue(cardAnswer());
+    orgService.startTerminalSave.mockReturnValue(saveAnswer({}));
+    let answerFirstAsk = () => undefined;
+    orgService.checkTerminalSave
+      .mockReturnValueOnce(new Promise((resolve) => { answerFirstAsk = resolve; }))
+      .mockReturnValue(new Promise(() => undefined));
+    orgService.cancelTerminalSave.mockReturnValue(saveAnswer({ pickedUp: true, stopping: true }));
+    show({ checkEveryMs: 30 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save card on Terminal' }));
+    await waitFor(() => expect(orgService.checkTerminalSave).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(screen.getByTestId('terminal-wait')).getByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByText('Asking the Terminal to stop…')).toBeTruthy();
+    await act(async () => {
+      answerFirstAsk({ data: { save: saveOf({ pickedUp: true }), cardOnFile: viewOf() } });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(screen.getByText('Asking the Terminal to stop…')).toBeTruthy();
+    expect(within(screen.getByTestId('terminal-wait')).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await waitFor(() => expect(orgService.checkTerminalSave).toHaveBeenCalledTimes(2));
   });
 
   it("Cancel too late (the member confirmed on the Terminal): says so, with no Cancel, and the card step goes on", async () => {
