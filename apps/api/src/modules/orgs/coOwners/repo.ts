@@ -279,6 +279,8 @@ export type HandOverPlan =
       subscriptionRef: string;
       paidUntil: Date | null;
       trial: boolean;
+      /** A new owner's plan not yet started (4b-vi-a): nothing paid, nothing charged. */
+      following: boolean;
       handedOverFrom: string | null;
       handedOver: boolean;
     }
@@ -299,8 +301,9 @@ async function planForHandOver(tx: Sql | TransactionSql, gymId: string): Promise
     current_period_end: Date | null;
     handed_over_at: Date | null;
     handed_over_from: string | null;
+    follows_subscription_id: string | null;
   }[]>`
-    SELECT id, provider, status, provider_ref, current_period_end, handed_over_at, handed_over_from FROM subscriptions
+    SELECT id, provider, status, provider_ref, current_period_end, handed_over_at, handed_over_from, follows_subscription_id FROM subscriptions
     WHERE owner_type = 'gym' AND owner_id = ${gymId} AND provider NOT IN ('none','pilot')
       AND (status IN ('trialing','active','past_due') OR (status = 'expired' AND cancel_reason = ${GRACE_EXPIRED}))`;
   if (rows.length === 0) return { kind: "none" };
@@ -316,6 +319,7 @@ async function planForHandOver(tx: Sql | TransactionSql, gymId: string): Promise
     subscriptionRef: live.provider_ref,
     paidUntil: live.current_period_end,
     trial: live.status === "trialing",
+    following: live.status === "trialing" && live.follows_subscription_id !== null,
     handedOverFrom: live.handed_over_from,
     handedOver: live.handed_over_at !== null,
   };
@@ -333,9 +337,9 @@ export async function handedOverPlanRef(sql: Sql, gymId: string): Promise<{ subs
 
 /** What the box before Make owner, and the request, say about the plan: a plan this owner pays
  *  stops renewing on Accept. Null when there is none, or it is already handed over. */
-export function planStops(plan: HandOverPlan): { until: string | null; trial: boolean } | null {
+export function planStops(plan: HandOverPlan): { until: string | null; trial: boolean; following: boolean } | null {
   if (plan.kind !== "paid" || plan.handedOver) return null;
-  return { until: plan.paidUntil?.toISOString() ?? null, trial: plan.trial };
+  return { until: plan.paidUntil?.toISOString() ?? null, trial: plan.trial, following: plan.following };
 }
 
 /** Whether the gym is connected to Square, which a hand-over disconnects. */

@@ -6,6 +6,8 @@ import { applyPaidPlan, refreshConsoleOrgsAfterChange } from '../../pages/consol
 import {
   chosenSeatCap,
   firstPaymentText,
+  followedPlanName,
+  isFollowingPlan,
   isPaidThroughRazorpay,
   planPriceText,
   planSeatLabel,
@@ -58,10 +60,15 @@ function nextPaidText(paid) {
   return on === null ? 'Done. Your plan starts when the current one ends. Nothing is charged until then.' : `Done. Your plan starts on ${on}. Nothing is charged until then.`;
 }
 
-/** The handed-over plan's end and who paid for it, said before the new owner chooses. */
+/** The handed-over plan's end and who paid for it, said before the new owner chooses. A new plan
+ *  handed on before it started was paid for by nobody: the days until then are the plan it follows. */
 function nextIntroText(sub, words) {
   const on = trialEndDateLabel(sub?.currentPeriodEnd);
-  const who = typeof sub?.handedOverBy === 'string' && sub.handedOverBy.trim() !== '' ? `the plan ${sub.handedOverBy.trim()} paid for` : 'the current plan';
+  const who = isFollowingPlan(sub)
+    ? followedPlanName(sub)
+    : typeof sub?.handedOverBy === 'string' && sub.handedOverBy.trim() !== ''
+      ? `the plan ${sub.handedOverBy.trim()} paid for`
+      : 'the current plan';
   const when = on === null ? `when ${who} ends` : `on ${on}, when ${who} ends`;
   return `Your plan starts ${when}, so your ${words.people} keep the app. Nothing is charged until then. Paddle's window shows the days until then as a free trial, rounded up to whole days.`;
 }

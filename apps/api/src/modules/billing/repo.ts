@@ -20,6 +20,10 @@ export const FOLLOWED = "followed";
 /** A following plan's first charge may be this much before the end of the plan it follows,
  *  never more: Paddle's clock and ours differ a little. */
 const FOLLOW_SLACK_MS = 60_000;
+/** Paddle refuses to move a first charge this close to it (tried 2026-10-21: 20 minutes ahead
+ *  refused, 50 accepted): a following plan paid later than this before the end it follows could
+ *  not start then, so it is never placed. */
+const FOLLOW_MIN_LEAD_MS = 60 * 60 * 1000;
 
 
 /** `approved` and `dropped` are a smaller size's through Razorpay (1d-iii-b): its window approved
@@ -130,6 +134,8 @@ export type BeginCheckoutOutcome =
   | { kind: "next_plan_not_ready" }
   /** A plan handed over with its gym that ends too soon to choose the next plan now. */
   | { kind: "next_plan_too_late"; endsAt: Date | null }
+  /** The person who paid for the plan handed over: the next plan is the owner's to choose. */
+  | { kind: "next_plan_payer" }
   | { kind: "payment_overdue" }
   | { kind: "no_such_plan" }
   | { kind: "plan_too_small"; seatCap: number; seatsUsed: number }
@@ -183,11 +189,12 @@ export async function beginCheckout(
         cancel_at_period_end: boolean;
         current_period_end: Date | null;
         handed_over_at: Date | null;
+        handed_over_from: string | null;
         handed_over_end_sent_at: Date | null;
       }[]
     >`
       SELECT id, status, provider, trial_ends_at, cancel_at_period_end, current_period_end,
-             handed_over_at, handed_over_end_sent_at
+             handed_over_at, handed_over_from, handed_over_end_sent_at
       FROM subscriptions
       WHERE owner_type = 'gym' AND owner_id = ${input.gymId}
         AND status IN ('trialing','active','past_due')`;
@@ -203,6 +210,9 @@ export async function beginCheckout(
         current.cancel_at_period_end &&
         (current.status === "active" || current.status === "trialing");
       if (!handedOver) return { kind: "already_subscribed" };
+      // Paid in the window filled in with the owner's email, their card would pay for the gym
+      // they gave away (4b-iii-a).
+      if (current.handed_over_from === input.userId) return { kind: "next_plan_payer" };
       // Until Paddle says it ends, it could still renew on the old owner's card.
       if (current.handed_over_end_sent_at === null) return { kind: "next_plan_not_ready" };
       const end = current.current_period_end;
@@ -588,11 +598,13 @@ export async function applySnapshot(
     // is as it was when the window was opened (still handed over, its end confirmed at Paddle, the
     // same end), and only while nothing is charged before that end: else it is a second plan.
     const follows = existing === null ? (input.follows ?? null) : null;
+    // Paid too close to that end, its first charge could no longer be moved to it.
     const followed =
       follows === null ||
       input.snapshot.status !== "trialing" ||
       input.snapshot.currentPeriodEnd === null ||
-      input.snapshot.currentPeriodEnd.getTime() < follows.until.getTime() - FOLLOW_SLACK_MS
+      input.snapshot.currentPeriodEnd.getTime() < follows.until.getTime() - FOLLOW_SLACK_MS ||
+      follows.until.getTime() - input.now.getTime() < FOLLOW_MIN_LEAD_MS
         ? null
         : (others.find(
             (o) =>
@@ -611,7 +623,9 @@ export async function applySnapshot(
       input.provider === "razorpay" && existing !== null
         ? { ...input.snapshot, cancelAtPeriodEnd: existing.cancel_at_period_end }
         : input.snapshot;
-    const decision: Decision = closedByNewerPress ? { kind: "duplicate" } : decide({
+    // A following plan is only ever placed in the place of the plan it follows: with that plan
+    // ended or changed, it is a second plan, set aside, nothing charged.
+    const decision: Decision = closedByNewerPress || (follows !== null && followed === null) ? { kind: "duplicate" } : decide({
       row:
         existing === null
           ? null
@@ -804,13 +818,20 @@ export async function setRazorpayPlanId(sql: SqlOrTx, code: string, planId: stri
 
 /** Paddle's trial checkouts still open after the gym's own trial ended: their window would
  *  sell a trial the gym no longer has, so the worker cancels them at Paddle. So with a following
- *  plan's window once the plan it follows has ended (4b-vi-a). A Razorpay one needs nothing:
- *  Razorpay expires a subscription not paid by its start. */
-export async function staleTrialCheckouts(sql: SqlOrTx, now: Date, limit: number): Promise<{ id: string; gymId: string; providerRef: string }[]> {
+ *  plan's window once it could no longer be chosen, `followLeadMs` before the plan it follows
+ *  ends (4b-vi-a). A Razorpay one needs nothing: Razorpay expires a subscription not paid by its
+ *  start. */
+export async function staleTrialCheckouts(
+  sql: SqlOrTx,
+  now: Date,
+  limit: number,
+  followLeadMs: number,
+): Promise<{ id: string; gymId: string; providerRef: string }[]> {
+  const followCutoff = new Date(now.getTime() + followLeadMs);
   const rows = await sql<{ id: string; gym_id: string; provider_ref: string }[]>`
     SELECT id, gym_id, provider_ref FROM billing_checkouts
     WHERE state = 'open' AND provider = 'paddle' AND provider_ref IS NOT NULL
-      AND ((trial_ends_at IS NOT NULL AND trial_ends_at <= ${now}) OR (follows_until IS NOT NULL AND follows_until <= ${now}))
+      AND ((trial_ends_at IS NOT NULL AND trial_ends_at <= ${now}) OR (follows_until IS NOT NULL AND follows_until <= ${followCutoff}))
     ORDER BY COALESCE(trial_ends_at, follows_until), id
     LIMIT ${limit}`;
   return rows.map((r) => ({ id: r.id, gymId: r.gym_id, providerRef: r.provider_ref }));
@@ -1085,6 +1106,8 @@ export type SizeTargetOutcome =
   | { kind: "paid_through_razorpay" }
   | { kind: "payment_overdue" }
   | { kind: "plan_ending"; endsAt: Date | null }
+  /** A new owner's plan not yet started (4b-vi-a): its size is the one chosen moments ago. */
+  | { kind: "not_started" }
   | { kind: "no_such_plan" }
   | { kind: "same_size" }
   /** In a paid trial, where a smaller size is made at once: more members than it holds. */
@@ -1113,10 +1136,11 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
       seat_cap: number | null;
       currency: string;
       handed_over_at: Date | null;
+      follows_subscription_id: string | null;
     }[]
   >`
     SELECT s.id, s.status, s.provider, s.provider_ref, s.cancel_at_period_end, s.current_period_end,
-           s.plan_id, p.seat_cap, p.currency, s.handed_over_at
+           s.plan_id, p.seat_cap, p.currency, s.handed_over_at, s.follows_subscription_id
     FROM subscriptions s JOIN plans p ON p.id = s.plan_id
     WHERE s.owner_type = 'gym' AND s.owner_id = ${input.gymId}
       AND s.status IN ('trialing','active','past_due')
@@ -1134,6 +1158,7 @@ export async function sizeTarget(sql: SqlOrTx, input: { gymId: string; planCode:
   if (row.status === "past_due") return { kind: "payment_overdue" };
   // A plan handed to another owner ends with its month, even while Paddle is still being told.
   if (row.cancel_at_period_end || row.handed_over_at !== null) return { kind: "plan_ending", endsAt: row.current_period_end };
+  if (row.follows_subscription_id !== null && row.status === "trialing") return { kind: "not_started" };
 
   const plans = await sql<{ id: string; code: string; seat_cap: number | null; paddle_price_id: string | null; price_minor: number; currency: string }[]>`
     SELECT id, code, seat_cap, paddle_price_id, price_minor, currency FROM plans
@@ -2406,6 +2431,8 @@ export interface PlanEndReminder {
   handedOver: boolean;
   /** Handed over, and Paddle confirmed it ends: the next plan can be chosen now (4b-vi-a). */
   handedOverConfirmed: boolean;
+  /** Who paid for it, when handed over: they are not offered the next plan. */
+  handedOverFrom: string | null;
   cancelSent: boolean;
   /** A new owner's plan set to end before it starts (4b-vi-a). */
   following: boolean;
@@ -2432,6 +2459,7 @@ export async function claimPlanEndReminders(
       week_sent: boolean;
       handed_over: boolean;
       handed_over_confirmed: boolean;
+      handed_over_from: string | null;
       cancel_sent: boolean;
       following: boolean;
     }[]
@@ -2455,7 +2483,7 @@ export async function claimPlanEndReminders(
                ELSE end_week_reminded_for IS DISTINCT FROM current_period_end END
     RETURNING id, owner_id, provider, status, current_period_end, current_period_end <= ${dayFrom} AS last_day,
               end_week_reminded_for IS NOT DISTINCT FROM current_period_end AS week_sent,
-              handed_over_at IS NOT NULL AS handed_over, handed_over_end_sent_at IS NOT NULL AS handed_over_confirmed,
+              handed_over_at IS NOT NULL AS handed_over, handed_over_end_sent_at IS NOT NULL AS handed_over_confirmed, handed_over_from,
               cancel_sent_at IS NOT NULL AS cancel_sent, follows_subscription_id IS NOT NULL AS following`;
   const out: PlanEndReminder[] = [];
   for (const r of rows) {
@@ -2471,6 +2499,7 @@ export async function claimPlanEndReminders(
       weekSent: r.week_sent,
       handedOver: r.handed_over,
       handedOverConfirmed: r.handed_over_confirmed,
+      handedOverFrom: r.handed_over_from,
       cancelSent: r.cancel_sent,
       following: r.following,
     });

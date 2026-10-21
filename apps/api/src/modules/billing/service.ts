@@ -259,6 +259,8 @@ function beginRefusal(
       return new OrgsError(422, "idempotency_key_reused", "This Idempotency-Key was already used for a different plan.");
     case "already_subscribed":
       return new OrgsError(409, "already_subscribed", "You're already on a paid plan.");
+    case "next_plan_payer":
+      return new OrgsError(409, "next_plan_not_yours", "You paid for the plan that's ending, so the owner chooses the next one.");
     case "next_plan_not_ready":
       return new OrgsError(409, "plan_ending_unconfirmed", "Paddle is still being told this plan stops. Please try again in a minute.");
     case "next_plan_too_late": {
@@ -488,10 +490,10 @@ export async function syncOrgCheckout(
     // gym's plan is the one this window made.
     const placed = subscriptionId === null ? null : await repo.findPaddleSubscription(deps.sql, subscriptionId);
     if (placed === null || placed.gymId !== input.gymId) return { state: "waiting" };
-    if (placed.cancelReason === "duplicate") return { state: "not_started" };
+    // Placed and ended (set aside, or cancelled since): it never starts.
+    if (!LIVE_STATUSES.has(placed.status)) return { state: "not_started" };
     const now = await orgsRepo.gymLiveSubscription(deps.sql, input.gymId);
-    if (now !== null && LIVE_STATUSES.has(placed.status)) return { state: "paid", subscription: toOrgSubscription(now) };
-    return { state: "waiting" };
+    return now === null ? { state: "waiting" } : { state: "paid", subscription: toOrgSubscription(now) };
   }
   // Paid means a plan paid through Paddle is on the gym, a paid trial included; the gym's
   // own free trial is not one.
@@ -634,6 +636,7 @@ const SIZE_REFUSALS: Record<string, { status: number; message: string }> = {
   paid_through_razorpay: { status: 409, message: "This plan is paid through Razorpay, so its new size is paid in Razorpay's window." },
   payment_overdue: { status: 409, message: "A payment is overdue. Update your payment method to pay it, then change your size." },
   plan_ending: { status: 409, message: "Your plan is set to end, so its size can't be changed." },
+  plan_not_started: { status: 409, message: "Your new plan hasn't started yet, so its size can't be changed until it starts." },
   plan_not_found: { status: 404, message: "That plan isn't on your price list." },
   same_size: { status: 409, message: "That's the size you're on." },
   too_many_members: { status: 409, message: "You have more members than that size allows. Remove some first, or keep your size." },
@@ -667,6 +670,8 @@ function refusalCode(outcome: Exclude<repo.SizeTargetOutcome, { kind: "ok" }>): 
     case "same_size":
     case "renewing":
       return outcome.kind;
+    case "not_started":
+      return "plan_not_started";
     case "no_such_plan":
       return "plan_not_found";
     case "not_set_up":
@@ -996,20 +1001,10 @@ export async function sendPlanEndReminders(deps: BillingDeps): Promise<number> {
     // emails went says nothing.
     const facts = await repo.planEndFacts(deps.sql, due);
     if (facts === null) continue;
-    // What the plan box offers before the end (`toOrgSubscription`'s `keepUntil`).
-    const keepUntil = new Date(due.endsAt.getTime() - CANCEL_LEAD_MS);
-    // A Paddle plan handed over and confirmed to end: the next plan can be chosen now (4b-vi-a).
-    const action: PlanEndAction =
-      keepUntil <= now
-        ? { kind: "choose" }
-        : !due.handedOver && !due.cancelSent
-          ? { kind: "keep", until: keepUntil }
-          : due.handedOver && due.provider === "paddle" && due.handedOverConfirmed
-            ? { kind: "choose_next", until: keepUntil }
-            : { kind: "choose" };
     // The Overview opens at its Plan box (`#plan`), below a new gym's Start here list.
     const planLink = `${consoleLinks(mail, facts.gymSlug).plan}#plan`;
-    for (const to of await billingRecipients(deps, due.gymId)) {
+    for (const { userId, email: to } of await billingStaffAddresses(deps, due.gymId)) {
+      const action = planEndAction(due, userId, now);
       if (!(await repo.planStillEnds(deps.sql, due))) break;
       await sendBillingEmail(
         deps,
@@ -1071,19 +1066,43 @@ async function emailSizeKept(deps: BillingDeps, gymId: string, subscriptionRowId
 /** Who a gym's billing emails go to: its staff who may manage billing now, by the same check
  *  as every billing route, so nobody the gym no longer counts as staff is told its figures. */
 async function billingRecipients(deps: BillingDeps, gymId: string): Promise<string[]> {
-  const out: string[] = [];
+  return (await billingStaffAddresses(deps, gymId)).map((r) => r.email);
+}
+
+/** The same, with who each address is: a plan-end reminder offers each what their own plan box
+ *  does. */
+async function billingStaffAddresses(deps: BillingDeps, gymId: string): Promise<{ userId: string; email: string }[]> {
+  const out: { userId: string; email: string }[] = [];
   for (const staff of await repo.staffWithEmail(deps.sql, gymId)) {
-    if (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) out.push(staff.email);
+    if (await holdsPrivilege(deps, gymId, staff.userId, "billing.manage")) out.push({ userId: staff.userId, email: staff.email });
   }
   const key = deps.mail?.addressKey ?? null;
   if (key === null || out.length === 0) return out;
   // An address that cannot or will not take mail is skipped; an unsubscribe from a gym's member
   // emails is not one: these are the gym's own account's.
-  const held = await suppressionsFor(deps.sql, gymId, out.map((email) => emailHmac(key, email)));
-  return out.filter((email) => {
-    const reason = held.get(emailHmac(key, email));
+  const held = await suppressionsFor(deps.sql, gymId, out.map((r) => emailHmac(key, r.email)));
+  return out.filter((r) => {
+    const reason = held.get(emailHmac(key, r.email));
     return reason === undefined || reason === "unsubscribed";
   });
+}
+
+/** What a plan-end reminder offers one of the gym's billing staff: what their plan box offers
+ *  before the end (`toOrgSubscription`'s `keepUntil` and `nextPlanUntil`). A Paddle plan handed
+ *  over and confirmed to end: the next plan, chosen now (4b-vi-a), but never by the person who
+ *  paid for the plan ending. */
+export function planEndAction(
+  due: Pick<repo.PlanEndReminder, "endsAt" | "handedOver" | "handedOverConfirmed" | "handedOverFrom" | "cancelSent" | "provider">,
+  recipientUserId: string,
+  now: Date,
+): PlanEndAction {
+  const keepUntil = new Date(due.endsAt.getTime() - CANCEL_LEAD_MS);
+  if (keepUntil <= now) return { kind: "choose" };
+  if (!due.handedOver && !due.cancelSent) return { kind: "keep", until: keepUntil };
+  if (due.handedOver && due.provider === "paddle" && due.handedOverConfirmed && due.handedOverFrom !== recipientUserId) {
+    return { kind: "choose_next", until: keepUntil };
+  }
+  return { kind: "choose" };
 }
 
 /** One email; a failure is logged (never the address) and never stops the worker. */
@@ -1484,7 +1503,7 @@ export async function closeStaleTrialCheckouts(deps: BillingDeps): Promise<numbe
   const paddle = deps.paddle;
   if (paddle === null) return 0;
   let closed = 0;
-  for (const checkout of await repo.staleTrialCheckouts(deps.sql, deps.now(), 50)) {
+  for (const checkout of await repo.staleTrialCheckouts(deps.sql, deps.now(), 50, CANCEL_LEAD_MS)) {
     const cancelled = await paddle.api.cancelTransaction(checkout.providerRef);
     if (cancelled.kind === "unavailable") continue;
     await repo.closeCheckout(deps.sql, { checkoutId: checkout.id, gymId: checkout.gymId });

@@ -1373,8 +1373,9 @@ export function toOrgSubscription(row: repo.GymSubscriptionRow, fallback: { code
       paid && row.nextPlanFrom !== null
         ? new Date(row.nextPlanFrom.getTime() - PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000).toISOString()
         : null,
-    followsPaidBy: subscribed ? row.followsPaidBy : null,
-    followsPaidByYou: subscribed && row.followsPaidByYou,
+    // A new owner's plan until its first payment; once paying it is any plan (4b-vi-a).
+    followsPaidBy: subscribed && row.status === "trialing" ? row.followsPaidBy : null,
+    followsPaidByYou: subscribed && row.status === "trialing" && row.followsPaidByYou,
     // The chosen size waits for the first payment: through the trial, and a failed charge.
     nextSeatCap: subscribed && row.trialSeatCap !== null && row.planSeatCap !== row.seatCap ? row.planSeatCap : null,
     pendingSize:

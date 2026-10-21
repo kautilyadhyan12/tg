@@ -178,6 +178,12 @@ export function ownerView(person, viewerIsOwner, staff, paidPlan) {
 export function planStopsLine(planStops, name) {
   if (!planStops) return null;
   const until = planStops.until ? formatJoinedAt(planStops.until) : null;
+  // A new owner's plan not yet started (4b-vi-a): never paid, never a trial.
+  if (planStops.following) {
+    return until === null
+      ? `Your new plan stops before it starts, so you won't be charged. Then ${name} chooses their own plan.`
+      : `Your new plan stops before it starts, so you won't be charged. The plan before it ends on ${until}; then ${name} chooses their own plan.`;
+  }
   if (planStops.trial) {
     return until === null
       ? `Your plan stops before its first payment, so you won't be charged. Then ${name} chooses their own plan.`
@@ -198,6 +204,11 @@ export function squareStopsLine(connected, gymName, name) {
 export function planStopsForYou(planStops) {
   if (!planStops) return null;
   const until = planStops.until ? formatJoinedAt(planStops.until) : null;
+  if (planStops.following) {
+    return until === null
+      ? 'Their new plan stops before it starts, so nothing is charged; then you choose your own plan and pay with your own card.'
+      : `Their new plan stops before it starts, so nothing is charged. The plan before it ends on ${until}; then you choose your own plan and pay with your own card.`;
+  }
   if (planStops.trial) {
     return until === null
       ? 'Their plan stops before its first payment; then you choose your own plan and pay with your own card.'

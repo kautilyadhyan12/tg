@@ -2178,6 +2178,8 @@ export const orgStaffResponseSchema = z.object({
       until: z.string().datetime().nullable(),
       /** A paid trial made before 2026-09-30: it ends with its trial, nothing charged. */
       trial: z.boolean(),
+      /** A new owner's plan not yet started (4b-vi-a): it stops before it starts, nothing charged. */
+      following: z.boolean().default(false),
     })
     .nullable()
     .optional(),

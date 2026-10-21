@@ -746,10 +746,10 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       LEFT JOIN plans np ON np.id = su.pending_plan_id
       -- The handed-over plan a new owner's plan follows (4b-vi-a): who paid for it.
       LEFT JOIN LATERAL (
-        -- Named only when it was paid for: a plan that itself followed one was never charged.
-        SELECT CASE WHEN f.follows_subscription_id IS NULL
+        -- Named only when it was ever paid for: a new owner's plan handed on before it started was not.
+        SELECT CASE WHEN f.paid_at IS NOT NULL
                     THEN COALESCE((SELECT fu.display_name FROM users fu WHERE fu.id = f.handed_over_from), '') ELSE '' END AS follows_paid_by,
-               CASE WHEN f.follows_subscription_id IS NULL THEN f.handed_over_from END AS follows_paid_from
+               CASE WHEN f.paid_at IS NOT NULL THEN f.handed_over_from END AS follows_paid_from
         FROM subscriptions f
         WHERE f.id = su.follows_subscription_id AND f.owner_type = 'gym' AND f.owner_id = su.owner_id
       ) fo ON true
@@ -2502,8 +2502,8 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
     LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
     -- The handed-over plan a new owner's plan follows (4b-vi-a): who paid for it.
     LEFT JOIN LATERAL (
-      -- Named only when it was paid for: a plan that itself followed one was never charged.
-      SELECT CASE WHEN f.follows_subscription_id IS NULL
+      -- Named only when it was ever paid for: a new owner's plan handed on before it started was not.
+      SELECT CASE WHEN f.paid_at IS NOT NULL
                   THEN COALESCE((SELECT fu.display_name FROM users fu WHERE fu.id = f.handed_over_from), '') ELSE '' END AS follows_paid_by
       FROM subscriptions f
       WHERE f.id = s.follows_subscription_id AND f.owner_type = 'gym' AND f.owner_id = s.owner_id

@@ -318,11 +318,12 @@ export function cancelBox(org, now = Date.now()) {
  *  when that plan ends (`currentPeriodEnd`), its first payment then; nothing is charged before.
  *  Not a free trial, though the server holds it as one until that payment. */
 export function isFollowingPlan(sub) {
-  return sub?.followsPaidBy != null;
+  // Once its first payment is taken it is any paying plan.
+  return sub?.followsPaidBy != null && sub.status === 'trialing';
 }
 
 /** The plan a new owner's plan follows, named for the person reading. */
-function followedPlanName(sub) {
+export function followedPlanName(sub) {
   if (sub?.followsPaidByYou === true) return 'the plan you paid for';
   const who = typeof sub?.followsPaidBy === 'string' ? sub.followsPaidBy.trim() : '';
   return who === '' ? 'the plan before it' : `the plan ${who} paid for`;

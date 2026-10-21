@@ -15,7 +15,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { planEndReminderEmail } from "../src/modules/billing/emails.js";
-import { applyPaddleSubscription, type BillingDeps } from "../src/modules/billing/service.js";
+import { applyPaddleSubscription, planEndAction, type BillingDeps } from "../src/modules/billing/service.js";
 import { staleTrialCheckouts } from "../src/modules/billing/repo.js";
 import { FakePaddle } from "./fakePaddle.js";
 import {
@@ -379,6 +379,52 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       expect(await liveRef(gym)).toBe(gym.sub);
     }, TEST_TIMEOUT_MS);
 
+    it("paid after the old plan has ended in our records: it never starts, nothing is charged, and the screen is told so", async () => {
+      const { gym, cora } = await handedOverGym();
+      const res = await choose(gym, cora);
+      const window = orgCheckoutResponseSchema.parse(JSON.parse(res.body));
+      if (window.provider !== "paddle") throw new Error("not Paddle's window");
+      // Paddle's end of the old plan reaches us first.
+      paddle.update(gym.sub, { status: "canceled", canceled_at: paddle.tick(), scheduled_change: null });
+      await applyPaddleSubscription(billing, gym.sub);
+      expect(await liveRef(gym)).toBeNull();
+      const sub = paddle.pay(window.transactionId, "api", true, cora.email);
+      expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
+      expect(paddle.cancelledSubs).toContain(sub);
+      expect(charged(sub)).toEqual([]);
+      expect(await liveRef(gym)).toBeNull();
+    }, TEST_TIMEOUT_MS);
+
+    it("paid inside the old plan's last hour, when Paddle could no longer move its first charge: never placed, nothing charged", async () => {
+      const { gym, cora } = await handedOverGym();
+      const res = await choose(gym, cora);
+      const window = orgCheckoutResponseSchema.parse(JSON.parse(res.body));
+      if (window.provider !== "paddle") throw new Error("not Paddle's window");
+      // Time passes: the old plan now ends in half an hour, its window still open.
+      const soon = new Date(Date.now() + 30 * 60_000);
+      await sql`UPDATE subscriptions SET current_period_end = ${soon} WHERE provider_ref = ${gym.sub}`;
+      await sql`UPDATE billing_checkouts SET follows_until = ${soon} WHERE id = ${window.checkoutId}`;
+      const sub = paddle.pay(window.transactionId, "api", true, cora.email);
+      expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
+      expect(paddle.cancelledSubs).toContain(sub);
+      expect(charged(sub)).toEqual([]);
+      expect(await liveRef(gym)).toBe(gym.sub);
+    }, TEST_TIMEOUT_MS);
+
+    it("Paddle no longer confirming the old plan's end when the window is paid: never placed, nothing charged", async () => {
+      const { gym, cora } = await handedOverGym();
+      const res = await choose(gym, cora);
+      const window = orgCheckoutResponseSchema.parse(JSON.parse(res.body));
+      if (window.provider !== "paddle") throw new Error("not Paddle's window");
+      // The old plan kept at Paddle meanwhile: the worker has to tell Paddle again.
+      await sql`UPDATE subscriptions SET handed_over_end_sent_at = NULL WHERE provider_ref = ${gym.sub}`;
+      const sub = paddle.pay(window.transactionId, "api", true, cora.email);
+      expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
+      expect(paddle.cancelledSubs).toContain(sub);
+      expect(charged(sub)).toEqual([]);
+      expect(await liveRef(gym)).toBe(gym.sub);
+    }, TEST_TIMEOUT_MS);
+
     it("cancelled before it starts: Paddle ends it with its free days, and nothing is ever charged", async () => {
       const { gym, cora, until } = await handedOverGym();
       cardSavedLate();
@@ -436,6 +482,65 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       expect(res.statusCode, res.body).toBe(409);
       expect(errorOf(res)).toBe("too_late");
       expect(paddle.created).toBe(made);
+    }, TEST_TIMEOUT_MS);
+
+    it("the person who paid for the plan ending is not let choose the next one, the window filled in with the owner's email", async () => {
+      const { gym } = await handedOverGym();
+      const made = paddle.created;
+      const res = await choose(gym, gym.payer);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("next_plan_not_yours");
+      expect(paddle.created).toBe(made);
+    }, TEST_TIMEOUT_MS);
+
+    it("a new plan's size is not changed before it starts, and is once it has", async () => {
+      const { gym, cora, until } = await handedOverGym();
+      cardSavedLate();
+      const paid = await chooseAndPay(gym, cora, cora);
+      expect((await sync(gym, cora, paid.checkoutId)).state).toBe("paid");
+      const asked = paddle.changeCalls.length;
+      const res = await send("POST", `/v1/orgs/${gym.id}/billing/size`, cora, { planCode: PLAN_BIG }, { "idempotency-key": crypto.randomUUID() });
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("plan_not_started");
+      expect(paddle.changeCalls).toHaveLength(asked);
+      // Once its first payment is taken it is any paying plan: not a new plan on screen, and resized.
+      paddle.renew(paid.sub, until.toISOString(), "2900");
+      expect(await applyPaddleSubscription(billing, paid.sub)).toBe("applied");
+      const paying = await consolePlan(gym, cora);
+      expect(paying?.status).toBe("active");
+      expect(paying?.followsPaidBy).toBeNull();
+      expect(paying?.followsPaidByYou).toBe(false);
+      const resized = await send("POST", `/v1/orgs/${gym.id}/billing/size`, cora, { planCode: PLAN_BIG }, { "idempotency-key": crypto.randomUUID() });
+      expect(resized.statusCode, resized.body).toBe(200);
+    }, TEST_TIMEOUT_MS);
+
+    it("handed on: a new plan never paid names nobody as its payer; one that has paid names who paid", async () => {
+      // Never paid: Cora's new plan handed on to Dan before it started.
+      const first = await handedOverGym();
+      const dan = await makeCoOwner(first.gym, "Dan");
+      paddle.clock = Date.now();
+      const cora1 = await chooseAndPay(first.gym, first.cora, first.cora);
+      expect((await sync(first.gym, first.cora, cora1.checkoutId)).state).toBe("paid");
+      await handOver(first.gym, first.cora, dan);
+      cardSavedLate();
+      const dan1 = await chooseAndPay(first.gym, dan, dan);
+      expect((await sync(first.gym, dan, dan1.checkoutId)).state).toBe("paid");
+      expect((await consolePlan(first.gym, dan))?.followsPaidBy).toBe("");
+
+      // Paid: Cora's plan took its first payment, then was handed on to Eve.
+      const second = await handedOverGym();
+      const eve = await makeCoOwner(second.gym, "Eve");
+      paddle.clock = Date.now();
+      const cora2 = await chooseAndPay(second.gym, second.cora, second.cora);
+      expect((await sync(second.gym, second.cora, cora2.checkoutId)).state).toBe("paid");
+      paddle.renew(cora2.sub, new Date(Date.now() - 60_000).toISOString(), "2900");
+      expect(await applyPaddleSubscription(billing, cora2.sub)).toBe("applied");
+      await handOver(second.gym, second.cora, eve);
+      cardSavedLate();
+      const eve1 = await chooseAndPay(second.gym, eve, eve);
+      expect((await sync(second.gym, eve, eve1.checkoutId)).state).toBe("paid");
+      expect((await consolePlan(second.gym, eve))?.followsPaidBy).toBe("Cora");
+      expect((await consolePlan(second.gym, second.cora))?.followsPaidByYou).toBe(true);
     }, TEST_TIMEOUT_MS);
 
     it("a plan not handed over is still a plan already chosen", async () => {
@@ -534,15 +639,42 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       expect(await liveRef(gym)).toBe(paid.sub);
     }, TEST_TIMEOUT_MS);
 
-    it("a window still open when the old plan has ended is closed, so it can't be paid", async () => {
+    it("a window still open when the next plan can no longer be chosen is closed, so it can't be paid", async () => {
       const { gym, cora, until } = await handedOverGym();
       const res = await choose(gym, cora);
       const window = orgCheckoutResponseSchema.parse(JSON.parse(res.body));
-      const before = await staleTrialCheckouts(sql, new Date(until.getTime() - 60_000), 500);
+      // The button goes three hours before the old plan ends; so does the window.
+      const cutoff = until.getTime() - 3 * HOUR_MS;
+      const before = await staleTrialCheckouts(sql, new Date(cutoff - 60_000), 500, 3 * HOUR_MS);
       expect(before.map((c) => c.id)).not.toContain(window.checkoutId);
-      const after = await staleTrialCheckouts(sql, new Date(until.getTime() + 60_000), 500);
+      const after = await staleTrialCheckouts(sql, new Date(cutoff + 60_000), 500, 3 * HOUR_MS);
       expect(after.map((c) => c.id)).toContain(window.checkoutId);
     }, TEST_TIMEOUT_MS);
+  });
+
+  describe("whom the reminder offers the next plan (no database)", () => {
+    const KD = "11111111-1111-1111-1111-111111111111";
+    const CORA = "22222222-2222-2222-2222-222222222222";
+    const now = new Date("2026-11-01T00:00:00Z");
+    const due = {
+      endsAt: new Date("2026-11-08T00:00:00Z"),
+      handedOver: true,
+      handedOverConfirmed: true,
+      handedOverFrom: KD,
+      cancelSent: false,
+      provider: "paddle" as const,
+    };
+    const until = new Date("2026-11-07T21:00:00Z");
+    it.each([
+      ["the new owner, Paddle confirmed", due, CORA, { kind: "choose_next", until }],
+      ["the person who paid for it", due, KD, { kind: "choose" }],
+      ["not yet confirmed at Paddle", { ...due, handedOverConfirmed: false }, CORA, { kind: "choose" }],
+      ["through Razorpay (4b-vi-b)", { ...due, provider: "razorpay" as const }, CORA, { kind: "choose" }],
+      ["too close to the end", { ...due, endsAt: new Date("2026-11-01T02:00:00Z") }, CORA, { kind: "choose" }],
+      ["not handed over, so kept", { ...due, handedOver: false, handedOverFrom: null }, KD, { kind: "keep", until }],
+    ])("%s", (_name, d, who, expected) => {
+      expect(planEndAction(d, who, now)).toEqual(expected);
+    });
   });
 
   describe("the reminder's words (no database)", () => {
