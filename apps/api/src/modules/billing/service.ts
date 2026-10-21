@@ -1302,7 +1302,11 @@ export async function applyPaddleSubscription(deps: BillingDeps, subscriptionId:
     follows,
   });
   if (outcome.duplicate) {
-    if (outcome.decision.kind === "duplicate") {
+    // A new owner's window paid too late, or after the gym changed (4b-vi-a): expected, and
+    // its window charged nothing.
+    if (outcome.decision.kind === "duplicate" && follows !== null) {
+      deps.log.warn({ event: "billing.following_not_started", gymId }, "a new owner's plan could not take the place of the plan it follows: cancelled, nothing charged");
+    } else if (outcome.decision.kind === "duplicate") {
       deps.log.error({ event: "billing.duplicate_subscription", gymId }, "a second paid plan for one gym: cancelling and refunding it");
     }
     return await setAside(deps, paddle, sub, gymId, "duplicate");

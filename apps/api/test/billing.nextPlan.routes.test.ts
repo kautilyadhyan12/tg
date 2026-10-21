@@ -74,12 +74,14 @@ const cookieMap = (res: { cookies: { name: string; value: string }[] }) => Objec
 d("A new owner chooses their plan before the handed-over plan ends (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const signInCodes = new Map<string, string>();
+  /** What this file's own billing steps logged, as "level event". */
+  const logged: string[] = [];
   const paddle = new FakePaddle({ [PRICE]: { amount: "2900", currency: "USD" }, [PRICE_BIG]: { amount: "4900", currency: "USD" } });
   const billing: BillingDeps = {
     sql,
     redis: createMemoryRedis(),
     paddle: { api: paddle, environment: "sandbox", clientToken: baseEnv.PADDLE_CLIENT_TOKEN },
-    log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+    log: { info: () => undefined, warn: (o: { event?: string }) => void logged.push(`warn ${o.event ?? ""}`), error: (o: { event?: string }) => void logged.push(`error ${o.event ?? ""}`) },
     now: () => new Date(),
   };
   let app: App | undefined;
@@ -391,6 +393,10 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       await applyPaddleSubscription(billing, gym.sub);
       expect(await liveRef(gym)).toBeNull();
       const sub = paddle.pay(window.transactionId, "api", true, cora.email);
+      // Paddle's event: an expected outcome, never an alarm of a second plan refunded.
+      logged.length = 0;
+      expect(await applyPaddleSubscription(billing, sub)).toBe("set_aside");
+      expect(logged).toEqual(["warn billing.following_not_started"]);
       expect((await sync(gym, cora, window.checkoutId)).state).toBe("not_started");
       expect(paddle.cancelledSubs).toContain(sub);
       // Set aside as a second plan: never the gym's plan, not even for a moment.
