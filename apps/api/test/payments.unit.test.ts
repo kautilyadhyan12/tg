@@ -38,8 +38,10 @@ describe("the lock on a gym's Square tokens", () => {
     expect(box.open(sealed, { gymId: GYM_A, provider: "square", kind: "refresh" })).toBeNull();
     expect(createTokenBox(OTHER_KEY).open(sealed, { gymId: GYM_A, provider: "square", kind: "access" })).toBeNull();
     const [scheme, iv, body = "", tag] = sealed.split(".");
-    const flipped = `${body.slice(0, -2)}${body.endsWith("A") ? "B" : "A"}${body.slice(-1)}`;
-    expect(box.open([scheme, iv, flipped, tag].join("."), { gymId: GYM_A, provider: "square", kind: "access" })).toBeNull();
+    // One byte changed, not one letter: a letter swap can land on the same letter.
+    const bytes = Buffer.from(body, "base64url");
+    bytes[0] = (bytes[0] ?? 0) ^ 1;
+    expect(box.open([scheme, iv, bytes.toString("base64url"), tag].join("."), { gymId: GYM_A, provider: "square", kind: "access" })).toBeNull();
     for (const junk of ["", "v1", "v2.a.b.c", "v1.a.b", "v1.!!.!!.!!", token]) {
       expect(box.open(junk, { gymId: GYM_A, provider: "square", kind: "access" })).toBeNull();
     }
