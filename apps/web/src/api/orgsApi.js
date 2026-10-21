@@ -88,6 +88,8 @@ import {
   gymPaymentsResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
+  squarePairResponseSchema,
+  squarePairingCheckResponseSchema,
   myWaiverResponseSchema,
   signWaiverResponseSchema,
   deskWaiverResponseSchema,
@@ -679,6 +681,24 @@ export const orgService = {
     readThrough(gymPaymentsResponseSchema, 'your payments', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/location`, { locationId })),
   disconnectSquare: (gymId) =>
     readThrough(gymPaymentsResponseSchema, 'your payments', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square`)),
+  // Square Terminals (18d-ii-b-i): the code is shown once; the console asks whether a Terminal
+  // signed in with it until it has, or the code ran out.
+  pairSquareTerminal: (gymId) =>
+    readThrough(squarePairResponseSchema, 'Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/terminals/pair`)),
+  checkSquarePairing: (gymId, pairingId) =>
+    readThrough(
+      squarePairingCheckResponseSchema,
+      'Square',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/terminals/${encodeURIComponent(pairingId)}/pairing`),
+    ),
+  addPracticeTerminal: (gymId, practice) =>
+    readThrough(gymPaymentsResponseSchema, 'your payments', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/terminals/practice`, { practice })),
+  removeSquareTerminal: (gymId, terminalId) =>
+    readThrough(
+      gymPaymentsResponseSchema,
+      'your payments',
+      authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/terminals/${encodeURIComponent(terminalId)}`),
+    ),
   saveGymWaiver: (gymId, text) =>
     readThrough(gymWaiverResponseSchema, 'your waiver', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`, { text })),
   stopGymWaiver: (gymId) => readThrough(gymWaiverResponseSchema, 'your waiver', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/waiver`)),

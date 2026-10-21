@@ -42,6 +42,8 @@ export interface ConnectionRow {
   refreshToken: string | null;
   connectedAt: Date;
   removedAt: Date | null;
+  /** What the gym allowed on Square's page; none known for a row made before 0146. */
+  scopes: string[];
 }
 
 interface RawConnection {
@@ -59,6 +61,7 @@ interface RawConnection {
   refresh_token: string | null;
   connected_at: Date;
   removed_at: Date | null;
+  scopes: string[];
 }
 
 function toRow(raw: RawConnection): ConnectionRow {
@@ -78,6 +81,7 @@ function toRow(raw: RawConnection): ConnectionRow {
     refreshToken: raw.refresh_token,
     connectedAt: raw.connected_at,
     removedAt: raw.removed_at,
+    scopes: raw.scopes,
   };
 }
 
@@ -157,6 +161,7 @@ export interface NewConnection {
   refreshDueAt: Date;
   connectedBy: string;
   connectedAt: Date;
+  scopes: readonly string[];
 }
 
 /** Connect, over a row the gym took off inside Square. The caller holds the gym's lock and
@@ -167,11 +172,11 @@ export async function writeConnection(tx: TransactionSql, c: NewConnection): Pro
     INSERT INTO gym_payment_connections (
       gym_id, provider, environment, state, account_id, business_name, country, currency,
       location_id, location_name, location_choices, access_token, refresh_token,
-      access_expires_at, refresh_due_at, connected_by, connected_at, removed_at)
+      access_expires_at, refresh_due_at, connected_by, connected_at, removed_at, scopes)
     VALUES (
       ${c.gymId}, 'square', ${c.environment}, 'connected', ${c.accountId}, ${c.businessName}, ${c.country}, ${c.currency},
       ${c.location?.id ?? null}, ${c.location?.name ?? null}, ${choices}, ${c.accessToken}, ${c.refreshToken},
-      ${c.accessExpiresAt}, ${c.refreshDueAt}, ${c.connectedBy}, ${c.connectedAt}, NULL)
+      ${c.accessExpiresAt}, ${c.refreshDueAt}, ${c.connectedBy}, ${c.connectedAt}, NULL, ${[...c.scopes]}::text[])
     ON CONFLICT (gym_id, provider) DO UPDATE SET
       environment = EXCLUDED.environment, state = 'connected', account_id = EXCLUDED.account_id,
       business_name = EXCLUDED.business_name, country = EXCLUDED.country, currency = EXCLUDED.currency,
@@ -179,7 +184,38 @@ export async function writeConnection(tx: TransactionSql, c: NewConnection): Pro
       location_choices = EXCLUDED.location_choices, access_token = EXCLUDED.access_token,
       refresh_token = EXCLUDED.refresh_token, access_expires_at = EXCLUDED.access_expires_at,
       refresh_due_at = EXCLUDED.refresh_due_at, connected_by = EXCLUDED.connected_by,
-      connected_at = EXCLUDED.connected_at, removed_at = NULL`;
+      connected_at = EXCLUDED.connected_at, removed_at = NULL, scopes = EXCLUDED.scopes`;
+}
+
+/** Connect Square again on the account already connected, to allow what it did not: the new
+ *  tokens and permissions onto that connection, its location kept. `connected_at` moves on, so
+ *  a renewal or a token check the worker began with the old tokens no longer matches it. Only
+ *  the connection this was checked on; false when it changed meanwhile. */
+export async function allowAgain(
+  tx: TransactionSql,
+  r: {
+    gymId: string;
+    environment: SquareEnvironment;
+    accountId: string;
+    wasConnectedAt: Date;
+    accessToken: string;
+    refreshToken: string;
+    accessExpiresAt: Date;
+    refreshDueAt: Date;
+    connectedBy: string;
+    connectedAt: Date;
+    scopes: readonly string[];
+  },
+): Promise<boolean> {
+  const rows = await tx<{ gym_id: string }[]>`
+    UPDATE gym_payment_connections
+    SET access_token = ${r.accessToken}, refresh_token = ${r.refreshToken}, access_expires_at = ${r.accessExpiresAt},
+        refresh_due_at = ${r.refreshDueAt}, connected_by = ${r.connectedBy}, connected_at = ${r.connectedAt},
+        scopes = ${[...r.scopes]}::text[]
+    WHERE gym_id = ${r.gymId} AND provider = 'square' AND environment = ${r.environment}
+      AND state = 'connected' AND account_id = ${r.accountId} AND connected_at = ${r.wasConnectedAt}
+    RETURNING gym_id`;
+  return rows.length === 1;
 }
 
 /** The owner's pick of location, once, while the row is waiting for one. */

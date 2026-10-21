@@ -104,3 +104,32 @@ export const squareCardAnswerSchema = z.object({ card: squareCardSchema });
 
 /** CreateCustomer's answer: only the new customer's id is read. */
 export const squareCustomerAnswerSchema = z.object({ customer: z.object({ id: squareObjectIdSchema }) });
+
+// A gym's Square Terminal (ROADMAP 18d-ii-b-i; developer.squareup.com, read 2026-10-21:
+// "Connect a Square Terminal to a POS Application", CreateDeviceCode, GetDeviceCode). The app
+// asks Square for a code; the gym types it on the Terminal's sign-in screen within five
+// minutes; Square then names the Terminal that signed in with it.
+
+/** A Terminal's id at Square: the serial number under it ("R5WNWB5BKNG9R"), or one of the
+ *  test area's pretend Terminals ("jg260ny-11t2-4xy2-kg21-tl949bp350ca"). */
+export const squareDeviceIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,100}$/);
+
+/** The code typed on the Terminal: six capital letters in Square's examples and its test area. */
+export const squareDeviceCodeTextSchema = z.string().regex(/^[A-Z0-9]{4,12}$/);
+
+/** `status` is UNPAIRED, PAIRED or EXPIRED (or UNKNOWN); kept as text, so a value Square adds
+ *  later reads as not paired rather than as no answer. The same CreateDeviceCode sent again
+ *  gives back the same code with `code` empty (Square's test area, 2026-10-21): the code is
+ *  shown once. */
+export const squareDeviceCodeSchema = z.object({
+  id: squareObjectIdSchema,
+  code: squareDeviceCodeTextSchema.or(z.literal("")).optional(),
+  device_id: squareDeviceIdSchema.optional(),
+  location_id: squareObjectIdSchema.optional(),
+  status: z.string().max(40),
+  pair_by: squareTimeSchema.optional(),
+});
+export type SquareDeviceCode = z.infer<typeof squareDeviceCodeSchema>;
+
+/** CreateDeviceCode's and GetDeviceCode's answer. */
+export const squareDeviceCodeAnswerSchema = z.object({ device_code: squareDeviceCodeSchema });

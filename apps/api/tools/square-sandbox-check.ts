@@ -10,10 +10,12 @@
 // With `--cards` it then saves a card on a customer made for the check alone (18d-ii), with
 // Square's own test tokens: the card saved, the same press giving it back, read, stopped twice;
 // and what Square answers each of its failing test tokens, in the words the console shows.
+// With `--terminals` it makes a Square Terminal code at the gym's location and reads it back
+// (18d-ii-b-i); no Terminal can sign in with it there, so it runs out after five minutes.
 //
 //   cd apps/api
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-sandbox-check.ts [gymId] [--cards]
+//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-sandbox-check.ts [gymId] [--cards] [--terminals]
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { z } from "zod";
@@ -43,6 +45,7 @@ const square = squareSettings({ ...env.data, SQUARE_WEBHOOK_SIGNATURE_KEY: undef
 if (square === null) throw new Error("Square settings did not load");
 const gymId = process.argv[2]?.startsWith("--") === true ? undefined : process.argv[2];
 const withCards = process.argv.includes("--cards");
+const withTerminals = process.argv.includes("--terminals");
 let problems = 0;
 const check = (ok: boolean, line: string) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${line}`);
@@ -80,6 +83,7 @@ if (gymId !== undefined) {
         const locations = await square.api.locations(token);
         check(locations.kind === "ok", locations.kind === "ok" ? `its locations: ${String(locations.value.length)}, ${String(locations.value.filter((l) => (l.capabilities ?? []).includes("CREDIT_CARD_PROCESSING")).length)} taking cards` : `its locations: ${locations.kind}`);
         if (withCards) await checkCards(square.api, token, row.accountId);
+        if (withTerminals && row.locationId !== null) await checkTerminals(square.api, token, row.locationId);
       }
       // Renewed through the worker's own path, as six days on.
       await sql`UPDATE gym_payment_connections SET refresh_due_at = now() - interval '1 second' WHERE gym_id = ${gymId} AND provider = 'square'`;
@@ -142,6 +146,29 @@ async function checkCards(api: SquareApi, token: string, accountId: string): Pro
       console.log(`info ${source}: ${r.kind}${r.kind === "refused" ? ` ${String(r.status)} ${r.code}, said "${cardRefusalOf(r.status, r.code).words}"` : ""}`);
     }
   }
+}
+
+/** A Square Terminal code at the gym's location, read back; the same press twice is one code. */
+async function checkTerminals(api: SquareApi, token: string, locationId: string): Promise<void> {
+  const press = randomUUID();
+  const made = await api.createDeviceCode(token, { idempotencyKey: press, name: "KWAZO Terminal check", locationId });
+  check(
+    made.kind === "ok" && made.value.status === "UNPAIRED" && made.value.code !== undefined && made.value.location_id === locationId,
+    made.kind === "ok"
+      ? `a Terminal code: ${made.value.status}, ${String(made.value.code?.length ?? 0)} characters, at the gym's location: ${String(made.value.location_id === locationId)}, works for ${String(Math.round((Date.parse(made.value.pair_by ?? "") - Date.now()) / 1000))} s`
+      : `a Terminal code: ${made.kind}${made.kind === "refused" ? ` ${String(made.status)} ${made.code}` : ""}`,
+  );
+  if (made.kind !== "ok") return;
+  const again = await api.createDeviceCode(token, { idempotencyKey: press, name: "KWAZO Terminal check", locationId });
+  // Square shows a code once: the same press again is the same code, its text left empty.
+  check(
+    again.kind === "ok" && again.value.id === made.value.id && (again.value.code ?? "") === "",
+    `the same press again gives back the same code, without its text: ${again.kind === "ok" ? `${String(again.value.id === made.value.id)}, text ${again.value.code === "" ? "empty" : "shown"}` : again.kind}`,
+  );
+  const read = await api.retrieveDeviceCode(token, made.value.id);
+  check(read.kind === "ok" && read.value.status === "UNPAIRED" && read.value.device_id === undefined, `read back: ${read.kind === "ok" ? `${read.value.status}, no Terminal yet` : read.kind}`);
+  const never = await api.retrieveDeviceCode(token, "NEVERISSUED00");
+  check(never.kind === "refused" && never.status === 404, `a code Square never made: ${never.kind}${never.kind === "refused" ? ` ${String(never.status)} ${never.code}` : ""}`);
 }
 
 console.log(problems === 0 ? "All checks passed." : `${String(problems)} checks failed.`);

@@ -169,6 +169,9 @@ export const memberListParamsSchema = z
 export type MemberListParams = z.infer<typeof memberListParamsSchema>;
 
 /** A gym and one record of its list, together, for the same reason. */
+/** A gym and one of its Square Terminals, or a code waiting for one (18d-ii-b-i). */
+export const squareTerminalParamsSchema = z.object({ gymId: z.string().uuid(), terminalId: z.string().uuid() }).strict();
+
 export const memberListEntryParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid() })
   .strict();

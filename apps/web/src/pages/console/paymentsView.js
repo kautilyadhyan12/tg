@@ -1,6 +1,7 @@
 // THE PAYMENTS BOX IN SETTINGS (ROADMAP 18d-i): what it says, for each gym and each person.
 // The server sends the gym's country, whether this person is the gym's own owner (who alone
 // connects Square) and the connection; nothing here decides either.
+import { momentLabel } from './checkinDevicesView';
 
 /** Country names from the browser's own list; the two-letter code when it has none. */
 function countryNameOf(code) {
@@ -131,6 +132,8 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
       return 'Square is connected.';
     case 'choose_location':
       return `Square is connected. Choose which of its locations is ${gymName}.`;
+    case 'connected_again':
+      return 'Square is connected again.';
     case 'already_connected':
       return 'Square was already connected.';
     case 'cancelled':
@@ -150,7 +153,72 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
       return 'That Square account has no location that can take card payments yet. Finish setting it up in Square, then press Connect Square again.';
     case 'square_said_no':
       return `Square didn't accept that sign-in. Press Connect Square to try again.`;
+    case 'other_account':
+      return `That's a different Square account from the one ${gymName} is connected to. Sign in to the connected account on Square's page, then press Connect Square again.`;
     default:
       return `Square didn't answer. Press Connect Square to try again in a minute.`;
   }
 }
+
+// ── Square Terminals (ROADMAP 18d-ii-b-i): Square's own way to pair one, and GymMaster's ──
+
+/** Square's practice Terminals, in its test area only, by what each does. */
+export const PRACTICE_TERMINAL_WORDS = {
+  saves: 'saves the card',
+  declines: "member doesn't agree",
+  cancels: 'member cancels',
+  times_out: 'Square times out',
+  offline: 'Terminal is offline',
+};
+
+export const PRACTICE_CHOICES = Object.entries(PRACTICE_TERMINAL_WORDS).map(([value, words]) => ({ value, label: `${words[0].toUpperCase()}${words.slice(1)}` }));
+
+export function terminalName(terminal) {
+  return terminal.practice === null ? 'Square Terminal' : `Practice Terminal: ${PRACTICE_TERMINAL_WORDS[terminal.practice] ?? terminal.practice}`;
+}
+
+/** The line under a Terminal's name: its serial number, as printed under it, and the day. */
+export function terminalDetail(terminal, timeZone) {
+  const day = paymentsDay(terminal.pairedAt, timeZone);
+  if (terminal.practice !== null) return `Added ${day}`;
+  return terminal.serial === null ? `Paired ${day}` : `Serial number ${terminal.serial} · Paired ${day}`;
+}
+
+/** What was paired, said where Pair a Terminal was pressed. */
+export function pairedLine(terminal) {
+  if (terminal === null || terminal === undefined) return 'The Square Terminal is paired.';
+  if (terminal.practice !== null) return `${terminalName(terminal)} is added.`;
+  return terminal.serial === null ? 'The Square Terminal is paired.' : `Square Terminal ${terminal.serial} is paired.`;
+}
+
+export function removedTerminalLine(terminal) {
+  return terminal.practice === null && terminal.serial !== null ? `Square Terminal ${terminal.serial} is removed.` : `${terminalName(terminal)} is removed.`;
+}
+
+export function removeTerminalWords(terminal, gymName) {
+  const which = terminal.practice === null && terminal.serial !== null ? `Square Terminal ${terminal.serial}` : terminalName(terminal);
+  return {
+    question: `Remove ${which}?`,
+    changes: `${gymName} stops using it.`,
+    kept: terminal.practice === null ? 'It stays signed in to your Square account. To sign it out, open its menu, then Settings, then Sign out.' : `It's one of Square's practice Terminals. You can add it again at any time.`,
+  };
+}
+
+/** What the owner does at the Terminal, in Square's and GymMaster's order. */
+export const PAIR_STEPS = [
+  'If the Terminal is signed in to Square already, sign it out first: open its menu, then Settings, then Sign out.',
+  'On the Terminal, tap Sign in, then Use a device code.',
+  'Type this code, then tap Sign in:',
+];
+
+export const pairingUntilLine = (iso, clock) => {
+  const time = momentLabel(iso, clock);
+  return time === '' ? 'The code works for 5 minutes.' : `The code works until ${time}.`;
+};
+
+export const PAIRING_EXPIRED = 'The code ran out before a Terminal signed in with it.';
+export const PRACTICE_INTRO = `Square's test area can't pair a real Terminal. Add one of Square's practice Terminals instead.`;
+export const noTerminalsLine = (gymName) => `No Square Terminal is paired with ${gymName}.`;
+export const NEEDS_ALLOW_LINE = `To use a Square Terminal, connect Square again and press Allow on Square's page.`;
+export const needsAllowOthersLine = (gymName) => `The owner of ${gymName} needs to connect Square again to use a Square Terminal.`;
+export const terminalOwnerOnlyLine = (gymName) => `Only the owner of ${gymName} can pair or remove a Square Terminal.`;

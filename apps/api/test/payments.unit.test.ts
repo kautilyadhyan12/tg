@@ -155,6 +155,28 @@ describe("the calls to Square", () => {
     expect(recorded[recorded.length - 1]?.url).toBe("https://connect.squareupsandbox.com/v2/locations");
   });
 
+  it("asks for a Terminal's code at the gym's location, and reads which Terminal signed in with it", async () => {
+    // Square's own example ("Connect a Square Terminal to a POS Application", read 2026-10-21).
+    const paired = { id: "TQYQBS0P8B7AJ", name: "Counter 1", code: "TRXKEB", device_id: "R5WNWB5BKNG9R", product_type: "TERMINAL_API", location_id: "S8GW3HF3", pair_by: "2020-03-20T19:49:19.000Z", created_at: "2020-03-20T19:44:19.000Z", status: "PAIRED", status_changed_at: "2020-03-20T19:44:19.000Z" };
+    const made = await answer(200, { device_code: { ...paired, status: "UNPAIRED", device_id: undefined } }).createDeviceCode("EAAAtoken-0123456789", { idempotencyKey: "key-1", name: "Iron House", locationId: "S8GW3HF3" });
+    expect(made).toEqual({ kind: "ok", value: { id: "TQYQBS0P8B7AJ", code: "TRXKEB", location_id: "S8GW3HF3", status: "UNPAIRED", pair_by: "2020-03-20T19:49:19.000Z" } });
+    expect(recorded[recorded.length - 1]?.url).toBe("https://connect.squareupsandbox.com/v2/devices/codes");
+    expect(lastBody()).toEqual({ idempotency_key: "key-1", device_code: { name: "Iron House", product_type: "TERMINAL_API", location_id: "S8GW3HF3" } });
+    expect(lastHeaders().get("authorization")).toBe("Bearer EAAAtoken-0123456789");
+    const read = await answer(200, { device_code: paired }).retrieveDeviceCode("EAAAtoken-0123456789", "TQYQBS0P8B7AJ");
+    expect(read).toMatchObject({ kind: "ok", value: { status: "PAIRED", device_id: "R5WNWB5BKNG9R" } });
+    expect(recorded[recorded.length - 1]?.url).toBe("https://connect.squareupsandbox.com/v2/devices/codes/TQYQBS0P8B7AJ");
+    // A code that ran out is no longer returned; a code with no code text is not a code; a path
+    // is never built from anything but an id.
+    expect(await answer(404, { errors: [{ code: "NOT_FOUND", category: "INVALID_REQUEST_ERROR" }] }).retrieveDeviceCode("t", "TQYQBS0P8B7AJ")).toEqual({ kind: "refused", status: 404, code: "NOT_FOUND" });
+    expect(await answer(200, { device_code: { ...paired, code: "not a code" } }).retrieveDeviceCode("t", "TQYQBS0P8B7AJ")).toEqual({ kind: "unavailable", status: 200 });
+    // The same code asked for again comes back with its text empty (Square's test area).
+    expect(await answer(200, { device_code: { ...paired, code: "" } }).createDeviceCode("t", { idempotencyKey: "key-1", name: "x", locationId: "S8GW3HF3" })).toMatchObject({ kind: "ok", value: { code: "" } });
+    await expect(answer(200, {}).retrieveDeviceCode("t", "../v2/payments")).rejects.toThrow("not a Square device code id");
+    // The Terminal's permissions are asked for with the rest.
+    expect(SQUARE_SCOPES).toEqual(expect.arrayContaining(["DEVICE_CREDENTIAL_MANAGEMENT", "PAYMENTS_WRITE_IN_PERSON"]));
+  });
+
   it("talks to Square's live address in production", () => {
     const api = createSquareApi({ applicationId: "sq0idp-APPID0000000", applicationSecret: "sq0csp-SECRET00000000", environment: "production" }); // dummy, gitleaks:allow
     expect(api.authorizeUrl("s").startsWith("https://connect.squareup.com/oauth2/authorize?")).toBe(true);

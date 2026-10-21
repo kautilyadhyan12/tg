@@ -5,7 +5,7 @@
 // (Square support, "International availability", read 2026-09-22); a gym in India waits
 // for Razorpay (ROADMAP 18f), and a gym anywhere else is told so.
 import { z } from "zod";
-import { squareObjectIdSchema } from "./square.js";
+import { squareDeviceCodeTextSchema, squareObjectIdSchema } from "./square.js";
 
 export const SQUARE_COUNTRIES: readonly string[] = ["US", "CA", "GB", "IE", "FR", "ES", "AU", "JP"];
 
@@ -43,6 +43,47 @@ export const squareConnectionSchema = z
   .strict();
 export type SquareConnection = z.infer<typeof squareConnectionSchema>;
 
+/** Square saves a card on a Square Terminal in these countries only ("Save a Card on File with
+ *  the Terminal API", read 2026-10-21). */
+export const SQUARE_TERMINAL_COUNTRIES: readonly string[] = ["US", "CA", "AU"];
+
+/** How long Square's code waits for a Terminal to sign in with it ("within 5 minutes"). */
+export const SQUARE_PAIRING_MINUTES = 5;
+
+/** A gym pairs at most this many Terminals. */
+export const SQUARE_TERMINALS_MAX = 20;
+
+/** Square's pretend Terminals in its test area ("Sandbox testing", Terminal actions, read
+ *  2026-10-21), which pairs no real one: it saves the card, the member taps Don't agree, the
+ *  member cancels, Square times out, the Terminal is offline. */
+export const squarePracticeTerminalSchema = z.enum(["saves", "declines", "cancels", "times_out", "offline"]);
+export type SquarePracticeTerminal = z.infer<typeof squarePracticeTerminalSchema>;
+
+export const squareTerminalSchema = z
+  .object({
+    id: z.string().uuid(),
+    /** A real Terminal's serial number, as Square names it; null for a practice one. */
+    serial: z.string().max(100).nullable(),
+    practice: squarePracticeTerminalSchema.nullable(),
+    pairedAt: z.string().datetime(),
+  })
+  .strict();
+export type SquareTerminal = z.infer<typeof squareTerminalSchema>;
+
+/** The connected box's Square Terminals, in a country where Square saves cards on one. */
+export const squareTerminalsSchema = z
+  .object({
+    /** Connected before Square Terminals could be used: the owner connects Square again. */
+    needsAllow: z.boolean(),
+    /** Square's test area: its practice Terminals are offered, as it pairs no real one. */
+    practice: z.boolean(),
+    list: z.array(squareTerminalSchema).max(SQUARE_TERMINALS_MAX),
+    /** A code waiting for a Terminal to sign in, for the owner alone. */
+    pairing: z.object({ id: z.string().uuid(), pairBy: z.string().datetime() }).strict().nullable(),
+  })
+  .strict();
+export type SquareTerminals = z.infer<typeof squareTerminalsSchema>;
+
 export const gymPaymentsSchema = z
   .object({
     availability: gymPaymentsAvailabilitySchema,
@@ -52,6 +93,8 @@ export const gymPaymentsSchema = z
     /** Square's keys are set on this server. */
     squareReady: z.boolean(),
     square: squareConnectionSchema.nullable(),
+    /** Null unless connected, with a location, in one of SQUARE_TERMINAL_COUNTRIES. */
+    terminals: squareTerminalsSchema.nullable(),
   })
   .strict();
 export type GymPayments = z.infer<typeof gymPaymentsSchema>;
@@ -82,13 +125,16 @@ export const squareRefusalSchema = z.enum([
   "square_said_no",
   /** Square did not answer. */
   "square_unavailable",
+  /** Connect Square again, signed in to another Square account than the one connected. */
+  "other_account",
 ]);
 export type SquareRefusal = z.infer<typeof squareRefusalSchema>;
 
 export const squareFinishResponseSchema = z
   .object({
     gymSlug: z.string().min(1).max(100),
-    outcome: z.enum(["connected", "choose_location", "cancelled", "already_connected", "refused"]),
+    /** `connected_again`: the account already connected now allows what it did not. */
+    outcome: z.enum(["connected", "choose_location", "connected_again", "cancelled", "already_connected", "refused"]),
     refusal: z
       .object({ reason: squareRefusalSchema, squareCountry: z.string().regex(/^[A-Z]{2}$/).nullable(), squareCurrency: z.string().regex(/^[A-Z]{3}$/).nullable() })
       .strict()
@@ -96,6 +142,21 @@ export const squareFinishResponseSchema = z
   })
   .strict();
 export type SquareFinishResponse = z.infer<typeof squareFinishResponseSchema>;
+
+/** Pair a Terminal: Square's code, shown once and never kept, and until when it works. */
+export const squarePairResponseSchema = z
+  .object({ code: squareDeviceCodeTextSchema, pairBy: z.string().datetime(), payments: gymPaymentsSchema })
+  .strict();
+export type SquarePairResponse = z.infer<typeof squarePairResponseSchema>;
+
+/** Whether a Terminal has signed in with the code yet. */
+export const squarePairingCheckResponseSchema = z
+  .object({ outcome: z.enum(["waiting", "paired", "expired"]), payments: gymPaymentsSchema })
+  .strict();
+export type SquarePairingCheckResponse = z.infer<typeof squarePairingCheckResponseSchema>;
+
+export const squarePracticeRequestSchema = z.object({ practice: squarePracticeTerminalSchema }).strict();
+export type SquarePracticeRequest = z.infer<typeof squarePracticeRequestSchema>;
 
 export const squareLocationRequestSchema = z.object({ locationId: squareObjectIdSchema }).strict();
 export type SquareLocationRequest = z.infer<typeof squareLocationRequestSchema>;
@@ -111,4 +172,11 @@ export const GYM_PAYMENTS_WORDS = {
   connect_expired: "This Square sign-in has run out or was already used. Press Connect Square again.",
   square_unavailable: "Square didn't answer. Nothing was changed. Try again in a minute.",
   country_needs_disconnect: "Disconnect Square below first, then change your country. Your Square account belongs to your current country.",
+  terminal_owner_only: "Only the owner can pair or remove a Square Terminal.",
+  terminals_not_offered: "Square Terminals save cards in the United States, Canada and Australia only.",
+  terminals_need_allow: "Connect Square again to use a Square Terminal.",
+  terminals_full: `A gym can pair up to ${String(SQUARE_TERMINALS_MAX)} Square Terminals. Remove one first.`,
+  pairing_gone: "That code isn't waiting for a Terminal any more. Get a new code.",
+  practice_only: "Practice Terminals are only in Square's test area.",
+  pairing_refused: "Square didn't make a code. Try again in a minute.",
 } as const;

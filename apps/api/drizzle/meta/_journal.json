@@ -1016,6 +1016,13 @@
       "when": 1790726400145,
       "tag": "0145_next_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "7",
+      "when": 1790726400146,
+      "tag": "0146_square_terminals",
+      "breakpoints": true
     }
   ]
 }
