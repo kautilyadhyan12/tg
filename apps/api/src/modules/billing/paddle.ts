@@ -43,12 +43,26 @@ export type PaddleResult<T> =
   /** No clear answer: a timeout, a network failure, a 429 or a 5xx. Try again later. */
   | { kind: "unavailable"; status: number | null };
 
+/** A new owner's plan chosen before the handed-over plan it follows ends (4b-vi-a): Paddle saves
+ *  the card and charges nothing for `trialDays`, then the plan's month. Paddle keeps a trial on the
+ *  price, so the checkout carries a price of its own — the plan's amount, tax and month — marked
+ *  with the plan's code. Tried on Paddle's sandbox 2026-10-21: the window charges 0, and the
+ *  first charge then moves to the second asked. */
+export interface TrialCheckout {
+  trialDays: number;
+  planCode: string;
+  productId: string;
+  name: string;
+  amountMinor: number;
+  currency: string;
+}
+
 /** How Paddle bills a change of items: at once for the rest of the month, or not at all
  *  (the only mode Paddle allows during a trial). */
 export type ProrationMode = "prorated_immediately" | "do_not_bill";
 
 export interface PaddleApi {
-  createTransaction(input: { priceId: string; customData: Record<string, string> }): Promise<PaddleResult<PaddleTransaction>>;
+  createTransaction(input: { priceId: string; customData: Record<string, string>; trial?: TrialCheckout }): Promise<PaddleResult<PaddleTransaction>>;
   getTransaction(id: string): Promise<PaddleResult<PaddleTransaction>>;
   cancelTransaction(id: string): Promise<PaddleResult<null>>;
   getSubscription(id: string): Promise<PaddleResult<PaddleSubscription>>;
@@ -65,7 +79,7 @@ export interface PaddleApi {
   previewPriceChange(subscriptionId: string, priceId: string, mode: ProrationMode): Promise<PaddleResult<PaddleSubscriptionPreview>>;
   /** Move the subscription to this one price. If the charge fails, Paddle changes nothing. */
   changePrice(subscriptionId: string, priceId: string, mode: ProrationMode): Promise<PaddleResult<PaddleSubscription>>;
-  /** A catalogue price (`tools/paddle-prices.ts` reads its name). */
+  /** A catalogue price (`tools/paddle-prices.ts` reads its name; a following plan's checkout copies its product and name). */
   getPrice(id: string): Promise<PaddleResult<PaddlePrice>>;
   /** Move a trialing subscription's first charge to `at` (only `do_not_bill` is allowed). */
   moveTrialEnd(subscriptionId: string, at: string): Promise<PaddleResult<PaddleSubscription>>;
@@ -167,9 +181,28 @@ export function createPaddleApi(opts: {
 
   return {
     async createTransaction(input) {
+      const trial = input.trial;
+      const item =
+        trial === undefined
+          ? { price_id: input.priceId, quantity: 1 }
+          : {
+              quantity: 1,
+              price: {
+                product_id: trial.productId,
+                description: `${trial.planCode}, from when the plan before it ends`,
+                name: trial.name,
+                unit_price: { amount: String(trial.amountMinor), currency_code: trial.currency },
+                billing_cycle: { interval: "month", frequency: 1 },
+                trial_period: { interval: "day", frequency: trial.trialDays },
+                // Tax is added on top where the law asks (Kd, RULINGS 2026-09-24).
+                tax_mode: "external",
+                quantity: { minimum: 1, maximum: 1 },
+                custom_data: { plan_code: trial.planCode },
+              },
+            };
       return unwrap(
         await call("POST", "/transactions", paddleEnvelope(paddleTransactionSchema), {
-          items: [{ price_id: input.priceId, quantity: 1 }],
+          items: [item],
           collection_mode: "automatic",
           custom_data: input.customData,
         }),

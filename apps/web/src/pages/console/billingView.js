@@ -252,10 +252,11 @@ export function canKeepPlan(org, now = Date.now()) {
   return canKeepRazorpayPlan(org, now) || canKeepPaddlePlan(org, now);
 }
 
-/** The line under a plan set to end: until when it can be kept, or that it can't. */
+/** The line under a plan set to end: until when it can be kept, or that it can't. A new owner's
+ *  plan not yet started says it in its own line (`followingText`). */
 export function planEndingText(org, now = Date.now()) {
   const sub = org?.subscription;
-  if (sub?.paidThrough == null || sub?.cancelAtPeriodEnd !== true || sub?.handedOverBy != null) return null;
+  if (sub?.paidThrough == null || sub?.cancelAtPeriodEnd !== true || sub?.handedOverBy != null || isFollowingPlan(sub)) return null;
   // Set to end by Cancel plan, or by a hand-over and then handed back: said without saying who.
   if (canKeepPlan(org, now)) return `This plan is set to end. You can keep it until ${momentLabel(sub.keepUntil)}.`;
   return "This plan is set to end and can't be kept now. You can choose a plan again once it ends.";
@@ -313,6 +314,92 @@ export function cancelBox(org, now = Date.now()) {
   };
 }
 
+/** A NEW OWNER'S PLAN, CHOSEN BEFORE THE PLAN HANDED OVER WITH THE GYM ENDED (4b-vi-a). It starts
+ *  when that plan ends (`currentPeriodEnd`), its first payment then; nothing is charged before.
+ *  Not a free trial, though the server holds it as one until that payment. */
+export function isFollowingPlan(sub) {
+  // Once its first payment is taken it is any paying plan.
+  return sub?.followsPaidBy != null && sub.status === 'trialing';
+}
+
+/** The plan a new owner's plan follows, named for the person reading. */
+export function followedPlanName(sub) {
+  if (sub?.followsPaidByYou === true) return 'the plan you paid for';
+  const who = typeof sub?.followsPaidBy === 'string' ? sub.followsPaidBy.trim() : '';
+  return who === '' ? 'the plan before it' : `the plan ${who} paid for`;
+}
+
+/** MAY THIS VIEWER CHOOSE THE NEXT PLAN NOW? A plan handed over with its gym, paid through
+ *  Paddle, until the server's `nextPlanUntil` (4b-vi-a). Whoever manages billing, but the person
+ *  who paid for the plan being handed over; never on a read-only console. */
+export function canChooseNextPlan(org, now = Date.now()) {
+  const sub = org?.subscription;
+  const until = Date.parse(sub?.nextPlanUntil ?? '');
+  return (
+    canManageBilling(viewerPrivileges(org)) &&
+    sub?.handedOverByYou !== true &&
+    Number.isFinite(until) &&
+    until > now &&
+    !consoleIsReadOnly(org)
+  );
+}
+
+/** The line under a new owner's plan not yet started: when it starts and that nothing is charged
+ *  until then; or, cancelled, that it won't start, and until when it can be kept. Null for any
+ *  other plan, and for one handed over again (that line is `handedOverText`'s). */
+export function followingText(org, now = Date.now()) {
+  const sub = org?.subscription;
+  if (!isFollowingPlan(sub) || sub.status !== 'trialing' || sub.handedOverBy != null) return null;
+  const date = trialEndDateLabel(sub.currentPeriodEnd) ?? 'its first day';
+  if (sub.cancelAtPeriodEnd === true) {
+    return canKeepPlan(org, now)
+      ? `This plan was cancelled before it started, so nothing is charged. To keep it, press Keep my plan before ${momentLabel(sub.keepUntil)}.`
+      : `This plan was cancelled before it started, so nothing is charged. You can choose a plan again once the current one ends on ${date}.`;
+  }
+  return `Starts on ${date}, when ${followedPlanName(sub)} ends. Nothing is charged until then.`;
+}
+
+/** MAY THIS VIEWER CANCEL A NEW OWNER'S PLAN BEFORE IT STARTS? Paddle ends it with nothing
+ *  charged (4b-vi-a). Any other plan paid through Paddle is cancelled on Paddle's own page. */
+export function canCancelFollowingPlan(org) {
+  const sub = org?.subscription;
+  return (
+    canManageBilling(viewerPrivileges(org)) &&
+    isFollowingPlan(sub) &&
+    sub?.paidThrough === 'paddle' &&
+    sub?.status === 'trialing' &&
+    sub?.cancelAtPeriodEnd !== true &&
+    sub?.handedOverBy == null &&
+    !consoleIsReadOnly(org)
+  );
+}
+
+/** THE BOX BEFORE "CANCEL NEW PLAN": that it won't start and nothing is charged, what the members
+ *  keep and until when, and until when this can be undone. Null when it can't be cancelled here. */
+export function followingCancelBox(org, now = Date.now()) {
+  if (!canCancelFollowingPlan(org)) return null;
+  const sub = org.subscription;
+  const words = orgWords(org?.orgType);
+  const used = org?.seatsUsed;
+  const counted = Number.isFinite(used) && used > 0;
+  const people = counted ? `Your ${countOf(used, org?.orgType)}` : `Your ${words.people}`;
+  const one = counted && used === 1;
+  const date = trialEndDateLabel(sub.currentPeriodEnd) ?? 'its first day';
+  const end = Date.parse(sub.currentPeriodEnd ?? '');
+  const deadline = Number.isFinite(end) ? end - PLAN_CANCEL_DECIDE_HOURS * 60 * 60 * 1000 : null;
+  return {
+    title: 'Cancel your new plan?',
+    lines: [
+      "It won't start, and nothing is charged.",
+      `${people} ${one ? 'keeps' : 'keep'} everything until ${date}, when ${followedPlanName(sub)} ends. Then they get the free app only.`,
+      deadline !== null && deadline > now
+        ? `You can change your mind until ${momentLabel(new Date(deadline).toISOString())}.`
+        : "It's too close to the start to change your mind after this.",
+    ],
+    confirm: 'Cancel new plan',
+  };
+}
+
 /** THE LINE UNDER THE PRICES when the gym can pay online. An Indian gym pays through
  *  Razorpay with no GST added while Kd is not registered for it (Kd, RULINGS 2026-09-29);
  *  the ways to pay are Razorpay's own window's, which on Kd's account offered cards and bank
@@ -345,6 +432,8 @@ export function canChangeSize(org) {
   return (
     canManageBilling(viewerPrivileges(org)) &&
     isSubscribed(org) &&
+    // A new owner's plan not yet started was chosen at its size moments ago (4b-vi-a).
+    !isFollowingPlan(sub) &&
     (sub?.status === 'active' || (sub?.status === 'trialing' && !isPaidThroughRazorpay(org))) &&
     sub?.cancelAtPeriodEnd !== true &&
     !consoleIsReadOnly(org)
@@ -416,17 +505,31 @@ export function planHeadline(sub, orgType) {
 /** A plan handed over with its gym (4b-iii-a): who paid for it, when it stops, and what comes
  *  next, said to the person reading it: the one who paid, the gym's owner, or anybody else on
  *  the staff. Null for any other plan. */
-export function handedOverText(sub, org) {
+export function handedOverText(sub, org, now = Date.now()) {
   if (sub?.handedOverBy == null) return null;
   const date = trialEndDateLabel(sub.currentPeriodEnd);
   const trial = sub.status === 'trialing';
+  // A new owner's plan handed on before it started (4b-vi-a): chosen, never paid for.
+  const following = isFollowingPlan(sub);
   const when = date === null ? (trial ? 'it stops before its first payment' : "it doesn't renew") : `it stops on ${date}`;
   if (sub.handedOverByYou === true) {
+    if (following) return `You chose this plan, and ${when}, before its first payment. You won't be charged.`;
     return trial ? `You started this plan's trial, and ${when}. You won't be charged.` : `You paid for this plan, and ${when}. You won't be charged again.`;
   }
   const who = sub.handedOverBy.trim() || 'The last owner';
-  const what = trial ? `${who} started this plan's trial, and ${when}` : `${who} paid for this plan, and ${when}`;
+  const what = following
+    ? `${who} chose this plan, and ${when}, before its first payment`
+    : trial
+      ? `${who} started this plan's trial, and ${when}`
+      : `${who} paid for this plan, and ${when}`;
   const isOwner = org?.staffRole === 'owner' && org?.coOwner !== true;
+  const people = orgWords(org?.orgType).people;
+  // The next plan can be chosen now, and starts when this one stops (4b-vi-a).
+  if (canChooseNextPlan(org, now)) {
+    return isOwner
+      ? `${what}. Choose your plan now and it starts then, so your ${people} keep the app.`
+      : `${what}. The next plan can be chosen now and starts then, so your ${people} keep the app.`;
+  }
   return isOwner ? `${what}. Then choose your own plan and pay with your own card.` : `${what}. Then the owner chooses the next plan.`;
 }
 
@@ -615,7 +718,7 @@ function nextDecideAt(periodEnd) {
  *  on 9 Oct, when ₹7,500 is charged for 9 Oct to 8 Nov." Null for anything
  *  else, or when the server has not said the price or the date. */
 export function firstPaymentText(sub) {
-  if (sub?.status !== 'trialing' || sub?.subscribed !== true) return null;
+  if (sub?.status !== 'trialing' || sub?.subscribed !== true || isFollowingPlan(sub)) return null;
   const date = trialEndDateLabel(sub.currentPeriodEnd);
   const price = typeof sub.priceLabel === 'string' && sub.priceLabel !== '' ? sub.priceLabel : null;
   if (date === null || price === null) return null;
@@ -655,7 +758,8 @@ export function sizeChargeText(preview) {
  *  The `status` question rule 3 at the top of this file exists for. Everything
  *  below that talks about a trial asks this and not "is there an end date". */
 export function isTrialing(org) {
-  return org?.subscription?.status === 'trialing';
+  // A new owner's plan waiting for its first payment is held as a trial, and is not one (4b-vi-a).
+  return org?.subscription?.status === 'trialing' && !isFollowingPlan(org.subscription);
 }
 
 /** WHOLE LOCAL CALENDAR DAYS UNTIL THE TRIAL ENDS — 0 on the last day, negative

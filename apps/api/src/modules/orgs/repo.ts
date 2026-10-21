@@ -512,6 +512,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
       sub_cancel_sent_at: Date | null;
       sub_handed_over_by: string | null;
       sub_handed_over_by_you: boolean | null;
+      sub_next_plan_from: Date | null;
+      sub_follows_paid_by: string | null;
+      sub_follows_paid_by_you: boolean | null;
       sub_provider: string | null;
       sub_pending_seat_cap: number | null;
       sub_pending_price_minor: number | null;
@@ -559,6 +562,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
            sub.cancel_sent_at AS sub_cancel_sent_at,
            sub.handed_over_by AS sub_handed_over_by,
            sub.handed_over_from = ${userId} AS sub_handed_over_by_you,
+           sub.next_plan_from AS sub_next_plan_from,
+           sub.follows_paid_by AS sub_follows_paid_by,
+           sub.follows_paid_from = ${userId} AS sub_follows_paid_by_you,
            sub.provider AS sub_provider,
            sub.pending_seat_cap AS sub_pending_seat_cap,
            sub.pending_price_minor AS sub_pending_price_minor,
@@ -728,6 +734,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              LEAST(p.seat_cap, su.trial_seat_cap, CASE WHEN su.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
              p.seat_cap AS plan_seat_cap, su.trial_seat_cap, p.price_minor, p.currency,
              su.current_period_end, su.cancel_at_period_end, su.cancel_sent_at, su.provider, su.handed_over_from, CASE WHEN su.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = su.handed_over_from), '') END AS handed_over_by,
+             CASE WHEN su.provider = 'paddle' AND su.handed_over_at IS NOT NULL AND su.handed_over_end_sent_at IS NOT NULL
+                       AND su.cancel_at_period_end AND su.status IN ('trialing','active') THEN su.current_period_end END AS next_plan_from,
+             fo.follows_paid_by, fo.follows_paid_from,
              ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, su.pending_from,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
              CASE WHEN lc.failure = 'too_many_members' AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -735,6 +744,15 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
              CASE WHEN lc.state = 'done' AND lc.asked_seat_cap IS NOT NULL AND su.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS fitted_members
       FROM subscriptions su JOIN plans p ON p.id = su.plan_id
       LEFT JOIN plans np ON np.id = su.pending_plan_id
+      -- The handed-over plan a new owner's plan follows (4b-vi-a): who paid for it.
+      LEFT JOIN LATERAL (
+        -- Named only when it was ever paid for: a new owner's plan handed on before it started was not.
+        SELECT CASE WHEN f.paid_at IS NOT NULL
+                    THEN COALESCE((SELECT fu.display_name FROM users fu WHERE fu.id = f.handed_over_from), '') ELSE '' END AS follows_paid_by,
+               CASE WHEN f.paid_at IS NOT NULL THEN f.handed_over_from END AS follows_paid_from
+        FROM subscriptions f
+        WHERE f.id = su.follows_subscription_id AND f.owner_type = 'gym' AND f.owner_id = su.owner_id
+      ) fo ON true
       -- The size asked for, which the card names; np is what is being made.
       LEFT JOIN plans ap ON ap.id = COALESCE(su.pending_requested_plan_id, su.pending_plan_id)
       -- The last size change: a smaller size the members did not fit is said on the card.
@@ -775,6 +793,9 @@ export async function listOrgsForUser(sql: SqlOrTx, userId: string): Promise<MyO
             cancel_sent_at: r.sub_cancel_sent_at,
             handed_over_by: r.sub_handed_over_by,
             handed_over_by_you: r.sub_handed_over_by_you,
+            next_plan_from: r.sub_next_plan_from,
+            follows_paid_by: r.sub_follows_paid_by,
+            follows_paid_by_you: r.sub_follows_paid_by_you,
             provider: r.sub_provider ?? "none",
             pending_seat_cap: r.sub_pending_seat_cap,
             pending_price_minor: r.sub_pending_price_minor,
@@ -1844,6 +1865,13 @@ export interface GymSubscriptionRow {
   handedOverBy: string | null;
   /** The person reading paid for it. */
   handedOverByYou: boolean;
+  /** Handed over through Paddle and confirmed to end (4b-vi-a): the next plan starts then. */
+  nextPlanFrom: Date | null;
+  /** A new owner's plan chosen before the handed-over plan it follows ended (4b-vi-a): who paid
+   *  for that plan ("" when they have no name); null otherwise. */
+  followsPaidBy: string | null;
+  /** The person reading paid for the plan it follows. */
+  followsPaidByYou: boolean;
   /** A paid trial's free-trial limit, held until the first payment; null otherwise. */
   trialSeatCap: number | null;
   /** A smaller size waiting, due at `from` (the end of the month paid). */
@@ -2231,6 +2259,8 @@ export async function startGymTrial(
     const subscription = toGymSubscription({
       status: row.status,
       trial_ends_at: row.trial_ends_at,
+      next_plan_from: null,
+      follows_paid_by: null,
       seat_cap: trialSeatCap,
       plan_seat_cap: trialSeatCap,
       price_minor: plan.price_minor,
@@ -2405,6 +2435,12 @@ interface RawGymSubscription {
   handed_over_by?: string | null;
   /** The person reading is the one who paid for it; absent where no reader is known. */
   handed_over_by_you?: boolean | null;
+  /** Handed over through Paddle and confirmed to end (4b-vi-a): when it ends; null otherwise. */
+  next_plan_from: Date | null;
+  /** A new owner's plan (4b-vi-a): who paid for the plan it follows; null otherwise. */
+  follows_paid_by: string | null;
+  /** The person reading paid for the plan it follows; absent where no reader is known. */
+  follows_paid_by_you?: boolean | null;
   pending_seat_cap: number | null;
   pending_price_minor: number | null;
   pending_from: Date | null;
@@ -2429,6 +2465,9 @@ function toGymSubscription(raw: RawGymSubscription): GymSubscriptionRow {
     provider: raw.provider,
     handedOverBy: raw.handed_over_by ?? null,
     handedOverByYou: raw.handed_over_by_you === true,
+    nextPlanFrom: raw.next_plan_from,
+    followsPaidBy: raw.follows_paid_by,
+    followsPaidByYou: raw.follows_paid_by_you === true,
     trialSeatCap: raw.trial_seat_cap,
     pending:
       raw.pending_from === null || raw.pending_price_minor === null || raw.pending_seat_cap === null
@@ -2449,6 +2488,9 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
            LEAST(p.seat_cap, s.trial_seat_cap, CASE WHEN s.pending_held_at IS NOT NULL THEN np.seat_cap END) AS seat_cap,
            p.seat_cap AS plan_seat_cap, s.trial_seat_cap, p.price_minor, p.currency,
            s.current_period_end, s.cancel_at_period_end, s.cancel_sent_at, s.provider, CASE WHEN s.handed_over_at IS NOT NULL THEN COALESCE((SELECT hu.display_name FROM users hu WHERE hu.id = s.handed_over_from), '') END AS handed_over_by,
+           CASE WHEN s.provider = 'paddle' AND s.handed_over_at IS NOT NULL AND s.handed_over_end_sent_at IS NOT NULL
+                     AND s.cancel_at_period_end AND s.status IN ('trialing','active') THEN s.current_period_end END AS next_plan_from,
+           fo.follows_paid_by,
            ap.seat_cap AS pending_seat_cap, ap.price_minor AS pending_price_minor, s.pending_from,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.seat_cap END AS kept_seat_cap,
            CASE WHEN lc.failure = 'too_many_members' AND s.pending_plan_id IS NULL AND lc.recent THEN lc.members_counted END AS kept_members,
@@ -2458,6 +2500,14 @@ export async function gymLiveSubscription(sql: SqlOrTx, gymId: string): Promise<
     LEFT JOIN plans np ON np.id = s.pending_plan_id
     -- The size asked for, which the card names; np is what is being made.
     LEFT JOIN plans ap ON ap.id = COALESCE(s.pending_requested_plan_id, s.pending_plan_id)
+    -- The handed-over plan a new owner's plan follows (4b-vi-a): who paid for it.
+    LEFT JOIN LATERAL (
+      -- Named only when it was ever paid for: a new owner's plan handed on before it started was not.
+      SELECT CASE WHEN f.paid_at IS NOT NULL
+                  THEN COALESCE((SELECT fu.display_name FROM users fu WHERE fu.id = f.handed_over_from), '') ELSE '' END AS follows_paid_by
+      FROM subscriptions f
+      WHERE f.id = s.follows_subscription_id AND f.owner_type = 'gym' AND f.owner_id = s.owner_id
+    ) fo ON true
     LEFT JOIN LATERAL (
       SELECT c.state, c.failure, c.members_counted, kp.seat_cap, rp.seat_cap AS asked_seat_cap,
              -- Said until the payment after the one it was decided for.

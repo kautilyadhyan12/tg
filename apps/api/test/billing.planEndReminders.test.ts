@@ -34,6 +34,7 @@ describe("the reminder's words (no database)", () => {
     seatCap: 250,
     priceLabel: "₹1,999",
     trialing: false,
+    following: false,
     // 16:37 UTC is 10:07 pm in India.
     endsAt: new Date("2026-10-27T16:37:00Z"),
     timezone: "Asia/Kolkata",

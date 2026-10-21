@@ -1009,6 +1009,13 @@
       "when": 1790726400144,
       "tag": "0144_member_cards",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1790726400145,
+      "tag": "0145_next_plan",
+      "breakpoints": true
     }
   ]
 }

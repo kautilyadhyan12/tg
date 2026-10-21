@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -138,6 +139,9 @@ export const subscriptions = pgTable(
      *  date each reminder was sent for, so it goes once for that end. */
     endWeekRemindedFor: timestamp("end_week_reminded_for", { withTimezone: true }),
     endDayRemindedFor: timestamp("end_day_reminded_for", { withTimezone: true }),
+    /** A new owner's plan chosen before the handed-over plan it follows ended (4b-vi-a, migration
+     *  `0145`): its first payment is at that plan's end, which then ends in our records. */
+    followsSubscriptionId: uuid("follows_subscription_id"),
     createdAt: createdAt(),
   },
   (t) => [
@@ -203,6 +207,7 @@ export const subscriptions = pgTable(
     index("subscriptions_replaced_uncancelled_idx")
       .on(t.endedAt)
       .where(sql`${t.cancelReason} = 'replaced' AND ${t.cancelSentAt} IS NULL`),
+    foreignKey({ name: "subscriptions_follows_subscription_fk", columns: [t.followsSubscriptionId], foreignColumns: [t.id] }),
     index("subscriptions_set_to_end_idx")
       .on(t.currentPeriodEnd)
       .where(sql`${t.cancelAtPeriodEnd} AND ${t.status} IN ('trialing','active')`),

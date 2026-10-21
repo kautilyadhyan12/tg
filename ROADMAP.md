@@ -151,7 +151,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
       - 4b-iii-b. [x] **A gym paying through Razorpay handed over** — merged 2026-10-20 (PR #318).
      - 4b-iv. [x] **A plan set to end is reminded** — merged 2026-10-20 (PR #320).
      - 4b-v. [x] **The two extra passes' fixes** — merged 2026-10-20 (PR #323).
-     - 4b-vi. [ ] **A new owner chooses their plan before the handed-over plan ends** (Kd, 2026-10-20, `rulings/2026-10-20-1g.md`): it starts the day the old plan stops, so the members never drop to the free app between the two. Web folder 2, after 1g.
+     - 4b-vi. **A new owner chooses their plan before the handed-over plan ends** (Kd, 2026-10-20, `rulings/2026-10-20-1g.md`): it starts the day the old plan stops, so the members never drop to the free app between the two. Split 2026-10-21 by provider, as 4b-iii was.
+      - 4b-vi-a. [x] **Through Paddle** — merged 2026-10-21 (PR #327).
+      - 4b-vi-b. [ ] **Through Razorpay**: a subscription that starts on the old plan's end. Web folder 2, after 4b-vi-a.
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).
