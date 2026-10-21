@@ -34,6 +34,10 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // the next payment. A smaller one: nothing now (Razorpay's ₹5 check, given back), the new price
 // from the next payment, and the gym keeps its whole size until then.
 //
+// `next` (4b-vi-a): on a plan handed over with its gym, paid through Paddle, the new owner chooses
+// their own plan now, in Paddle's window with their own card. Nothing is charged until the handed-
+// over plan ends, and the plan starts then, so the members keep the app between the two.
+//
 // Unlike the prompt a gym on no plan meets (`PlanModal`), this one closes: the gym
 // already has a plan, and nothing here is owed.
 
@@ -46,6 +50,20 @@ function paidText(paid, words) {
   return Number.isFinite(paid.seatCap)
     ? `You're subscribed. Up to ${paid.seatCap.toLocaleString()} ${words.people} can now join.`
     : `You're subscribed. Your plan has no ${words.person} limit.`;
+}
+
+/** What the dialog says once a new owner's plan is chosen (4b-vi-a). */
+function nextPaidText(paid) {
+  const on = trialEndDateLabel(paid.currentPeriodEnd);
+  return on === null ? 'Done. Your plan starts when the current one ends. Nothing is charged until then.' : `Done. Your plan starts on ${on}. Nothing is charged until then.`;
+}
+
+/** The handed-over plan's end and who paid for it, said before the new owner chooses. */
+function nextIntroText(sub, words) {
+  const on = trialEndDateLabel(sub?.currentPeriodEnd);
+  const who = typeof sub?.handedOverBy === 'string' && sub.handedOverBy.trim() !== '' ? `the plan ${sub.handedOverBy.trim()} paid for` : 'the current plan';
+  const when = on === null ? `when ${who} ends` : `on ${on}, when ${who} ends`;
+  return `Your plan starts ${when}, so your ${words.people} keep the app. Nothing is charged until then; Paddle's window calls the days until then a free trial.`;
 }
 
 /** What the dialog says once a size is changed or chosen. */
@@ -169,7 +187,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
       >
         <div className="flex items-start justify-between gap-4">
           <h2 id={titleId} className="text-xl font-bold" style={{ color: '#fff' }}>
-            {mode === 'size' ? 'Change size' : `Choose your ${words.it}'s plan`}
+            {mode === 'size' ? 'Change size' : mode === 'next' ? 'Choose your plan' : `Choose your ${words.it}'s plan`}
           </h2>
           <button
             type="button"
@@ -191,7 +209,9 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 ? doneText(changed, words, firstPaymentOn)
                 : mode === 'size'
                   ? doneText(paid, words, firstPaymentOn)
-                  : paidText(paid, words)}
+                  : mode === 'next'
+                    ? nextPaidText(paid)
+                    : paidText(paid, words)}
             </p>
             {doneWarning !== null ? (
               <p className="text-sm mt-2" style={warn}>
@@ -214,7 +234,9 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                 ? inTrial && !razorpay
                   ? `Your trial allows up to ${sub?.seatCap} ${words.people} until your first payment${firstPaymentOn === null ? '' : ` on ${firstPaymentOn}`}; the size you choose starts then. Nothing is charged now.`
                   : `Bigger sizes start today: you pay the difference for this month. Smaller sizes start${firstPaymentOn === null ? ' with your next payment' : ` on ${firstPaymentOn}`}.`
-                : `You pay today and get the size you choose at once. Your free trial ends then.`}
+                : mode === 'next'
+                  ? nextIntroText(sub, words)
+                  : `You pay today and get the size you choose at once. Your free trial ends then.`}
             </p>
 
             {plans.loading ? (
@@ -230,7 +252,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
             ) : null}
 
             {/* ── Pay during the trial ──────────────────────────────────────── */}
-            {mode === 'subscribe' && plans.list !== null ? (
+            {(mode === 'subscribe' || mode === 'next') && plans.list !== null ? (
               <ul className="flex flex-col gap-2 mt-4" data-testid="plan-list">
                 {plans.list.map((p) => (
                   <PlanRow
@@ -241,7 +263,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
                     busy={paying !== null}
                     working={paying?.planCode === p.code}
                     onSubscribe={subscribe}
-                    buttonText="Subscribe and pay today"
+                    buttonText={mode === 'next' ? 'Choose this plan' : 'Subscribe and pay today'}
                   />
                 ))}
               </ul>
@@ -365,7 +387,7 @@ export default function PlanChoiceDialog({ org, mode, onClose }) {
               </p>
             ) : null}
 
-            {mode === 'subscribe' ? (
+            {mode === 'subscribe' || mode === 'next' ? (
               <p className="text-sm mt-5" style={muted}>
                 {paying?.phase === 'confirming'
                   ? 'Confirming your payment…'

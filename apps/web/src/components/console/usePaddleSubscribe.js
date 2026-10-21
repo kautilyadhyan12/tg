@@ -61,6 +61,16 @@ export function usePaddleSubscribe(gymId, gymName = '') {
           }
           return;
         }
+        // A new owner's plan the gym changed under before it was paid (4b-vi-a): cancelled, nothing charged.
+        if (res.data?.state === 'not_started') {
+          closeCheckout();
+          refreshConsoleOrgsAfterChange();
+          if (mounted.current) {
+            setPaying(null);
+            setPayError('Your new plan didn’t start, and nothing was charged. Reload the page to see your plan, then choose again if you need to.');
+          }
+          return;
+        }
         if (res.data?.state === 'paid') {
           closeCheckout();
           applyPaidPlan(gymId, res.data.subscription);

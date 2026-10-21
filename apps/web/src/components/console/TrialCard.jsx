@@ -9,11 +9,15 @@ import ManagePaymentButton from './ManagePaymentButton';
 import PlanChoiceDialog from './PlanChoiceDialog';
 import RazorpayPlanActions from './RazorpayPlanActions';
 import {
+  canCancelFollowingPlan,
   canChangeSize,
+  canChooseNextPlan,
   canKeepPaddlePlan,
   canManageBilling,
   canPayDuringTrial,
   firstPaymentText,
+  followingCancelBox,
+  followingText,
   isPaidThroughRazorpay,
   isSubscribed,
   nextPaymentText,
@@ -118,8 +122,12 @@ function CardButton({ onClick, disabled = false, busy = false, children }) {
 }
 
 export default function TrialCard({ org }) {
-  /** Which choice is open: 'subscribe' during a free trial, 'size' on a paid plan. */
+  /** Which choice is open: 'subscribe' during a free trial, 'size' on a paid plan, 'next' on a
+   *  plan handed over with its gym (4b-vi-a). */
   const [choosing, setChoosing] = useState(null);
+  const [confirmingCancelNew, setConfirmingCancelNew] = useState(false);
+  const [cancellingNew, setCancellingNew] = useState(false);
+  const [cancelNewError, setCancelNewError] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelError, setCancelError] = useState(null);
@@ -180,6 +188,11 @@ export default function TrialCard({ org }) {
   const keepPaddle = canKeepPaddlePlan(org);
   const ending = planEndingText(org);
   const handedOver = handedOverText(sub, org);
+  // A new owner's plan, chosen before the plan handed over with the gym ended (4b-vi-a).
+  const following = followingText(org);
+  const chooseNext = canChooseNextPlan(org);
+  const cancelNew = canCancelFollowingPlan(org);
+  const cancelNewBox = confirmingCancelNew ? followingCancelBox(org) : null;
   const change = pendingChangeText(sub, org?.orgType);
   const fit = pendingFit(org);
   const kept = sizeKeptText(sub, org?.orgType) ?? sizeFittedText(sub, org?.orgType);
@@ -200,6 +213,23 @@ export default function TrialCard({ org }) {
       setCancelError(errorText(err, "We couldn't cancel the change. Please try again."));
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // Cancel a new owner's plan before it starts (4b-vi-a): asked first, then the server asks Paddle.
+  const confirmCancelNew = async () => {
+    if (cancellingNew) return;
+    setCancellingNew(true);
+    setCancelNewError(null);
+    try {
+      const res = await orgService.cancelPlan(org.id);
+      if (res.data.subscription !== null) applyPaidPlan(org.id, res.data.subscription);
+      refreshConsoleOrgsAfterChange();
+      setConfirmingCancelNew(false);
+    } catch (err) {
+      setCancelNewError(errorText(err, "We couldn't cancel your new plan. Please try again."));
+    } finally {
+      setCancellingNew(false);
     }
   };
 
@@ -253,7 +283,12 @@ export default function TrialCard({ org }) {
           {ending}
         </div>
       ) : null}
-      {nextSize !== null && !sub.cancelAtPeriodEnd ? (
+      {following !== null ? (
+        <div className="text-sm mt-1" style={muted} data-testid="plan-following">
+          {following}
+        </div>
+      ) : null}
+      {nextSize !== null && !sub.cancelAtPeriodEnd && following === null ? (
         <div className="text-sm mt-1" style={muted}>
           {nextSize}
         </div>
@@ -362,6 +397,7 @@ export default function TrialCard({ org }) {
       ) : null}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
         {payNow ? <CardButton onClick={() => setChoosing('subscribe')}>Choose a plan</CardButton> : null}
+        {chooseNext ? <CardButton onClick={() => setChoosing('next')}>Choose your plan</CardButton> : null}
         {resize ? <CardButton onClick={() => setChoosing('size')}>Change size</CardButton> : null}
         {keepPaddle ? (
           <CardButton onClick={() => void keepPlan()} disabled={keeping} busy={keeping}>
@@ -374,7 +410,64 @@ export default function TrialCard({ org }) {
         {!razorpay && handedOver === null && (subscribed || sub.status === 'active' || sub.status === 'past_due') ? (
           <ManagePaymentButton gymId={org.id} label={sub.status === 'past_due' ? 'Update payment method' : 'Manage payment'} />
         ) : null}
+        {cancelNew && cancelNewBox === null ? (
+          <button
+            type="button"
+            onClick={() => {
+              setCancelNewError(null);
+              setConfirmingCancelNew(true);
+            }}
+            className="self-stretch sm:self-start rounded-xl px-4 py-2.5 text-sm font-semibold"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
+          >
+            Cancel new plan
+          </button>
+        ) : null}
       </div>
+      {cancelNewBox !== null ? (
+        <div
+          className="mt-3 rounded-xl px-4 py-3 flex flex-col gap-2"
+          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.25)' }}
+          role="group"
+          aria-label={cancelNewBox.title}
+          data-testid="cancel-new-plan-box"
+        >
+          <div className="font-semibold text-sm" style={{ color: '#fff' }}>
+            {cancelNewBox.title}
+          </div>
+          {cancelNewBox.lines.map((line) => (
+            <p key={line} className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+              {line}
+            </p>
+          ))}
+          <div className="flex flex-col sm:flex-row gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => void confirmCancelNew()}
+              disabled={cancellingNew}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', minHeight: 44 }}
+            >
+              {cancellingNew ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {cancelNewBox.confirm}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingCancelNew(false)}
+              disabled={cancellingNew}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', minHeight: 44 }}
+            >
+              Keep my new plan
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {cancelNewError !== null ? (
+        <p className="text-sm mt-3" style={{ color: '#ef4444' }} role="alert">
+          {cancelNewError}
+        </p>
+      ) : null}
       {razorpay ? <RazorpayPlanActions org={org} cancel /> : null}
       {keepError !== null ? (
         <p className="text-sm mt-3" style={{ color: '#ef4444' }} role="alert">
