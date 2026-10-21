@@ -165,6 +165,10 @@ function fakeSquare(clock: () => Date) {
       if (c === undefined || c.gone || c.accountId !== t.account.merchantId) return Promise.resolve({ kind: "refused", status: 404, code: "NOT_FOUND" });
       return Promise.resolve({ kind: "ok", value: json(c) });
     },
+    // Save card on Terminal (18d-ii-b-ii) is driven in `terminalCards.routes.test.ts`.
+    createTerminalAction: () => Promise.resolve(unavailable),
+    getTerminalAction: () => Promise.resolve(unavailable),
+    cancelTerminalAction: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgb-${randomBytes(8).toString("hex")}`;

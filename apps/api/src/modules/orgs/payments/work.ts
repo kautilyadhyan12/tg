@@ -2,14 +2,16 @@
 // message that a gym took the app off its account, and its messages about a saved card
 // (18d-ii), each checked with Square before anything changes (a webhook is a doorbell, never
 // a messenger: CLAUDE.md §4); tokens owed a revoke and cards owed a stop; renewals that are
-// due; presses of Connect Square that ran out. Safe to run twice: events, revokes, stops and
-// renewals are each leased, and every write names the connection or card it was read for.
+// due; presses of Connect Square that ran out; cards being saved on a Square Terminal whose page
+// was closed (18d-ii-b-ii). Safe to run twice: events, revokes, stops, renewals and Terminal
+// saves are each leased, and every write names the connection or card it was read for.
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
 import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
 import * as repo from "./repo.js";
 import { SQUARE_REFRESH_EVERY_MS, accessContext, refreshContext, sendOwedRevokes, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
+import { processTerminalSaves } from "./terminalCards.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
 
@@ -43,6 +45,8 @@ export interface SquareWorkRun {
   renewed: number;
   renewalsWaiting: number;
   startsForgotten: number;
+  /** Saves on a Square Terminal nobody was asking about, and done ones forgotten (18d-ii-b-ii). */
+  terminalSaves: { asked: number; forgotten: number };
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -129,6 +133,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     renewed: 0,
     renewalsWaiting: 0,
     startsForgotten: 0,
+    terminalSaves: { asked: 0, forgotten: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -180,6 +185,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
 
   run.revokes = await sendOwedRevokes(deps, square, null, 50, gymIds);
   run.cardStops = await sendOwedCardDisables(deps, square, null, 50, gymIds);
+  run.terminalSaves = await processTerminalSaves(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

@@ -219,6 +219,10 @@ function fakeSquare() {
     // Square Terminals (18d-ii-b-i) are driven in `squareTerminals.routes.test.ts`.
     createDeviceCode: () => Promise.resolve(unavailable),
     retrieveDeviceCode: () => Promise.resolve(unavailable),
+    // Save card on Terminal (18d-ii-b-ii) is driven in `terminalCards.routes.test.ts`.
+    createTerminalAction: () => Promise.resolve(unavailable),
+    getTerminalAction: () => Promise.resolve(unavailable),
+    cancelTerminalAction: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgb-${randomBytes(8).toString("hex")}`;

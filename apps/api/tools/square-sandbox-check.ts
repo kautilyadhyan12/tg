@@ -12,18 +12,25 @@
 // and what Square answers each of its failing test tokens, in the words the console shows.
 // With `--terminals` it makes a Square Terminal code at the gym's location and reads it back
 // (18d-ii-b-i); no Terminal can sign in with it there, so it runs out after five minutes.
+// With `--terminal-save` (18d-ii-b-ii, a US, Canadian or Australian test account) it sends the
+// gym's agreement to each of Square's simulated Terminals and reads each answer back through our
+// own calls: agreed, then the card saved on a customer made for the check alone; not agreed;
+// cancelled; timed out; and offline, cancelled by us.
 //
 //   cd apps/api
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-sandbox-check.ts [gymId] [--cards] [--terminals]
+//   corepack pnpm exec node --env-file=.env.square.local --import tsx tools/square-sandbox-check.ts [gymId] [--cards] [--terminals] [--terminal-save]
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { z } from "zod";
-import { cardRefusalOf } from "../src/modules/orgs/payments/cards.js";
+import { cardAgreementWords } from "@app/shared";
+import { cardRefusalOf, usableCard } from "../src/modules/orgs/payments/cards.js";
 import * as repo from "../src/modules/orgs/payments/repo.js";
 import { accessContext } from "../src/modules/orgs/payments/service.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import type { SquareApi } from "../src/modules/orgs/payments/square.js";
+import { TERMINAL_SAVE } from "../src/modules/orgs/payments/terminalCards.js";
+import { SQUARE_PRACTICE_DEVICES } from "../src/modules/orgs/payments/terminals.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 
 const env = z
@@ -46,6 +53,7 @@ if (square === null) throw new Error("Square settings did not load");
 const gymId = process.argv[2]?.startsWith("--") === true ? undefined : process.argv[2];
 const withCards = process.argv.includes("--cards");
 const withTerminals = process.argv.includes("--terminals");
+const withTerminalSave = process.argv.includes("--terminal-save");
 let problems = 0;
 const check = (ok: boolean, line: string) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${line}`);
@@ -84,6 +92,7 @@ if (gymId !== undefined) {
         check(locations.kind === "ok", locations.kind === "ok" ? `its locations: ${String(locations.value.length)}, ${String(locations.value.filter((l) => (l.capabilities ?? []).includes("CREDIT_CARD_PROCESSING")).length)} taking cards` : `its locations: ${locations.kind}`);
         if (withCards) await checkCards(square.api, token, row.accountId);
         if (withTerminals && row.locationId !== null) await checkTerminals(square.api, token, row.locationId);
+        if (withTerminalSave) await checkTerminalSave(square.api, token, row.accountId);
       }
       // Renewed through the worker's own path, as six days on.
       await sql`UPDATE gym_payment_connections SET refresh_due_at = now() - interval '1 second' WHERE gym_id = ${gymId} AND provider = 'square'`;
@@ -169,6 +178,84 @@ async function checkTerminals(api: SquareApi, token: string, locationId: string)
   check(read.kind === "ok" && read.value.status === "UNPAIRED" && read.value.device_id === undefined, `read back: ${read.kind === "ok" ? `${read.value.status}, no Terminal yet` : read.kind}`);
   const never = await api.retrieveDeviceCode(token, "NEVERISSUED00");
   check(never.kind === "refused" && never.status === 404, `a code Square never made: ${never.kind}${never.kind === "refused" ? ` ${String(never.status)} ${never.code}` : ""}`);
+}
+
+/** Save card on Terminal on Square's simulated Terminals, through our own calls and the same
+ *  checks the app makes: the words come back as sent, the answer is read, and the card saved is
+ *  on the customer asked for, in this account. */
+async function checkTerminalSave(api: SquareApi, token: string, accountId: string): Promise<void> {
+  const words = cardAgreementWords("KWAZO Terminal check");
+  const customer = await api.createCustomer(token, { idempotencyKey: randomUUID(), givenName: "KWAZO", familyName: "Terminal save check", email: null, phone: null, referenceId: randomUUID() });
+  if (customer.kind !== "ok") {
+    check(false, `a customer for the check: ${customer.kind}`);
+    return;
+  }
+  const confirm = async (deviceId: string) =>
+    api.createTerminalAction(token, {
+      idempotencyKey: randomUUID(),
+      deviceId,
+      deadline: TERMINAL_SAVE.deadline,
+      type: "CONFIRMATION",
+      title: "Save your card",
+      body: words,
+      agree: "I agree",
+      disagree: "I don't agree",
+      awaitNext: TERMINAL_SAVE.awaitNext,
+    });
+  const settle = async (id: string) => {
+    let last = await api.getTerminalAction(token, id);
+    for (let i = 0; i < 10 && last.kind === "ok" && (last.value.status === "PENDING" || last.value.status === "IN_PROGRESS"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      last = await api.getTerminalAction(token, id);
+    }
+    return last;
+  };
+  const expected: [keyof typeof SQUARE_PRACTICE_DEVICES, string][] = [
+    ["saves", "COMPLETED agreed"],
+    ["declines", "COMPLETED not agreed"],
+    ["cancels", "CANCELED BUYER_CANCELED"],
+    ["times_out", "CANCELED TIMED_OUT"],
+  ];
+  for (const [practice, want] of expected) {
+    const made = await confirm(SQUARE_PRACTICE_DEVICES[practice]);
+    if (made.kind !== "ok") {
+      check(false, `${practice}: the agreement sent: ${made.kind}${made.kind === "refused" ? ` ${String(made.status)} ${made.code}` : ""}`);
+      continue;
+    }
+    const got = await settle(made.value.id);
+    const said =
+      got.kind !== "ok"
+        ? got.kind
+        : got.value.status === "COMPLETED"
+          ? `COMPLETED ${got.value.confirmation_options?.decision?.has_agreed === true ? "agreed" : "not agreed"}`
+          : `${got.value.status} ${got.value.cancel_reason ?? ""}`;
+    check(said === want && (got.kind !== "ok" || got.value.confirmation_options?.body === words), `${practice}: ${said}, the words back as sent: ${String(got.kind === "ok" && got.value.confirmation_options?.body === words)}`);
+    if (practice !== "saves" || said !== want) continue;
+    const save = await api.createTerminalAction(token, { idempotencyKey: randomUUID(), deviceId: SQUARE_PRACTICE_DEVICES.saves, deadline: TERMINAL_SAVE.deadline, type: "SAVE_CARD", customerId: customer.value.id, referenceId: randomUUID() });
+    if (save.kind !== "ok") {
+      check(false, `saves: the card asked for: ${save.kind}`);
+      continue;
+    }
+    const saved = await settle(save.value.id);
+    const cardId = saved.kind === "ok" ? saved.value.save_card_options?.card_id : null;
+    const card = cardId == null ? null : await api.retrieveCard(token, cardId);
+    const usable = card?.kind === "ok" ? usableCard(card.value, customer.value.id, accountId) : null;
+    check(usable !== null, `saves: the card saved, on the customer asked for, in this account: ${usable === null ? "no" : `${usable.brand} ending ${usable.last4}`}`);
+    if (cardId != null) await api.disableCard(token, cardId);
+  }
+  // Offline: never picked up; our cancel stops it.
+  const offline = await confirm(SQUARE_PRACTICE_DEVICES.offline);
+  if (offline.kind === "ok") {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const still = await api.getTerminalAction(token, offline.value.id);
+    const cancel = await api.cancelTerminalAction(token, offline.value.id);
+    check(
+      still.kind === "ok" && still.value.status === "PENDING" && cancel.kind === "ok" && cancel.value.status === "CANCELED",
+      `offline: ${still.kind === "ok" ? still.value.status : still.kind}, then cancelled by us: ${cancel.kind === "ok" ? `${cancel.value.status} ${cancel.value.cancel_reason ?? ""}` : cancel.kind}`,
+    );
+  } else {
+    check(false, `offline: the agreement sent: ${offline.kind}`);
+  }
 }
 
 console.log(problems === 0 ? "All checks passed." : `${String(problems)} checks failed.`);

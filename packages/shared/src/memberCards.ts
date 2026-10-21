@@ -6,6 +6,7 @@
 // payments tick (`billing.members`) see the card and remove it; a member adds or updates
 // their own in the app.
 import { z } from "zod";
+import { SQUARE_TERMINALS_MAX, squarePracticeTerminalSchema } from "./gymPayments.js";
 import { squareCardSourceSchema, squareObjectIdSchema } from "./square.js";
 
 /** Square's card brands (its `CardBrand`), as a card names itself. Any other is a "Card". */
@@ -68,8 +69,9 @@ export const memberCardSchema = z
     /** Past its expiry month, on the gym's day. */
     expired: z.boolean(),
     savedAt: z.string().datetime(),
-    /** `desk`: on staff's screen; `app`: the member's own. */
-    savedFrom: z.enum(["desk", "app"]),
+    /** `desk`: on staff's screen; `app`: the member's own; `terminal`: on the gym's Square
+     *  Terminal (18d-ii-b-ii). */
+    savedFrom: z.enum(["desk", "app", "terminal"]),
   })
   .strict();
 export type MemberCard = z.infer<typeof memberCardSchema>;
@@ -107,6 +109,52 @@ export type CardForm = z.infer<typeof cardFormSchema>;
  *  card again. */
 const earlierCardSchema = z.object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/) }).strict();
 
+// SAVE CARD ON TERMINAL (ROADMAP 18d-ii-b-ii; rulings/2026-10-21-18d-ii-b.md): staff press it on a
+// person's page, the person reads the agreement on the gym's Square Terminal and taps I agree,
+// then inserts or swipes their card there, and Square saves it on them. Typing the card (above)
+// stays.
+
+/** A Terminal a card can be saved on: a real one by its serial number, or one of Square's
+ *  simulated Terminals in its sandbox. */
+export const cardTerminalSchema = z
+  .object({
+    id: z.string().uuid(),
+    serial: z.string().max(100).nullable(),
+    practice: squarePracticeTerminalSchema.nullable(),
+  })
+  .strict();
+export type CardTerminal = z.infer<typeof cardTerminalSchema>;
+
+/** Why a save on a Terminal ended. `not_agreed`: the person didn't tap I agree;
+ *  `cancelled_on_terminal`: they cancelled there; `timed_out`: Square's time on the Terminal ran
+ *  out; `no_answer`: the Terminal never showed it (off, or offline); `cancelled`: staff pressed
+ *  Cancel; `refused`: Square refused; `gone`: the record, its payer or the gym's Square
+ *  connection changed meanwhile, so nothing was kept. */
+export const terminalSaveOutcomeSchema = z.enum(["saved", "not_agreed", "cancelled_on_terminal", "timed_out", "no_answer", "cancelled", "refused", "gone"]);
+export type TerminalSaveOutcome = z.infer<typeof terminalSaveOutcomeSchema>;
+
+export const terminalSaveSchema = z
+  .object({
+    id: z.string().uuid(),
+    /** `agree`: waiting for I agree; `card`: waiting for the card; `done`: see `outcome`. */
+    step: z.enum(["agree", "card", "done"]),
+    outcome: terminalSaveOutcomeSchema.nullable(),
+    /** The Terminal has the step on its screen (Square no longer reads it as pending). */
+    pickedUp: z.boolean(),
+    /** Cancel was pressed and Square has not stopped it yet. */
+    stopping: z.boolean(),
+    /** Square refused Cancel: the person had confirmed on the Terminal, and the card goes in. */
+    tooLate: z.boolean(),
+    /** How the card goes in: inserted or swiped in the US, swiped only in Canada and Australia
+     *  (Square's "Save a Card on File with the Terminal API", read 2026-10-21). */
+    entry: z.enum(["insert_or_swipe", "swipe"]),
+    /** Null once the gym has removed the Terminal. */
+    terminal: cardTerminalSchema.nullable(),
+    startedAt: z.string().datetime(),
+  })
+  .strict();
+export type TerminalSave = z.infer<typeof terminalSaveSchema>;
+
 export const memberCardViewSchema = z
   .object({
     state: memberCardStateSchema,
@@ -125,12 +173,27 @@ export const memberCardViewSchema = z
     agreement: z.string().max(600),
     /** Square's form, when a card can be added for this person now. */
     form: cardFormSchema.nullable(),
+    /** The gym's Square Terminals a card can be saved on for this person now: empty unless one
+     *  is paired and a card can be added. */
+    terminals: z.array(cardTerminalSchema).max(SQUARE_TERMINALS_MAX),
+    /** The owner, where Square saves cards on a Terminal, with none paired: Pair a Terminal. */
+    pairTerminal: z.boolean(),
+    /** A save waiting at a Terminal for this person, from this page or another. */
+    terminalSave: terminalSaveSchema.nullable(),
   })
   .strict();
 export type MemberCardView = z.infer<typeof memberCardViewSchema>;
 
 export const memberCardResponseSchema = z.object({ cardOnFile: memberCardViewSchema }).strict();
 export type MemberCardResponse = z.infer<typeof memberCardResponseSchema>;
+
+/** Save card on Terminal. `requestKey`: the same press sent twice is one save. */
+export const terminalSaveRequestSchema = z.object({ terminalId: z.string().uuid(), requestKey: z.string().uuid() }).strict();
+export type TerminalSaveRequest = z.infer<typeof terminalSaveRequestSchema>;
+
+/** Where a save on a Terminal stands, and Card on file as it is now. */
+export const terminalSaveResponseSchema = z.object({ save: terminalSaveSchema, cardOnFile: memberCardViewSchema }).strict();
+export type TerminalSaveResponse = z.infer<typeof terminalSaveResponseSchema>;
 
 /** Save card: what Square's form handed back, and the agreement as the person read it and
  *  ticked it. `requestKey` is Square's idempotency key: the same press sent twice saves once. */
@@ -189,7 +252,15 @@ export const MEMBER_CARD_WORDS = {
   not_your_card: "Your app isn't linked to your membership yet. Ask at the front desk.",
   not_taken: "Cards can't be saved here right now.",
   no_card: "There's no card on file to remove.",
+  terminal_gone: "This Terminal is no longer paired. Choose another, or type the card instead.",
+  terminal_busy: "This Terminal is busy. Try again in a minute, or choose another Terminal.",
+  terminal_refused: "Square couldn't send this to the Terminal. Check it's on and signed in, then try again.",
+  terminal_save_gone: "This save is no longer active.",
 } as const;
+
+/** What the Terminal shows (ConfirmationOptions: a title, the agreement, two buttons). The body
+ *  is `cardAgreementWords`, word for word, as on the typed form. */
+export const TERMINAL_AGREEMENT = { title: "Save your card", agree: "I agree", disagree: "I don't agree" } as const;
 
 /** "Card on file: Visa ending 1111 · expires 12/2028", from a card as the server sends it. */
 export function cardOnFileLine(card: { brand: string; last4: string; expMonth: number; expYear: number; expired: boolean }): string {

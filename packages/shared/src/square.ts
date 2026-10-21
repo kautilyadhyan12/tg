@@ -135,3 +135,41 @@ export type SquareDeviceCode = z.infer<typeof squareDeviceCodeSchema>;
 
 /** CreateDeviceCode's and GetDeviceCode's answer. */
 export const squareDeviceCodeAnswerSchema = z.object({ device_code: squareDeviceCodeSchema });
+
+// Save card on Terminal (ROADMAP 18d-ii-b-ii; developer.squareup.com, read 2026-10-21: "Save a
+// Card on File with the Terminal API", TerminalAction, ConfirmationOptions, CreateTerminalAction,
+// GetTerminalAction, CancelTerminalAction). Two actions on the gym's Terminal: CONFIRMATION shows
+// the gym's agreement and answers whether the person tapped I agree; SAVE_CARD saves the card
+// they insert or swipe on their own customer and answers its id. Terminal actions are Beta.
+
+/** A Terminal action's id at Square. */
+export const squareTerminalActionIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,255}$/);
+
+/** `status` is PENDING (not yet on the Terminal), IN_PROGRESS, CANCEL_REQUESTED, CANCELED or
+ *  COMPLETED; `cancel_reason` BUYER_CANCELED, SELLER_CANCELED or TIMED_OUT. Both kept as text, so
+ *  a value Square adds later reads as still waiting, never as done. Measured in Square's test area
+ *  (2026-10-21): the body comes back word for word, and `decision.has_agreed` says the answer. */
+export const squareTerminalActionSchema = z.object({
+  id: squareTerminalActionIdSchema,
+  device_id: squareDeviceIdSchema.optional(),
+  type: z.string().max(40).optional(),
+  status: z.string().max(40),
+  cancel_reason: z.string().max(40).nullish(),
+  updated_at: squareTimeSchema.nullish(),
+  confirmation_options: z
+    .object({
+      body: z.string().max(10_000).nullish(),
+      decision: z.object({ has_agreed: z.boolean().nullish() }).nullish(),
+    })
+    .nullish(),
+  save_card_options: z
+    .object({
+      customer_id: squareObjectIdSchema.nullish(),
+      card_id: squareCardIdSchema.nullish(),
+    })
+    .nullish(),
+});
+export type SquareTerminalAction = z.infer<typeof squareTerminalActionSchema>;
+
+/** CreateTerminalAction's, GetTerminalAction's and CancelTerminalAction's answer. */
+export const squareTerminalActionAnswerSchema = z.object({ action: squareTerminalActionSchema });

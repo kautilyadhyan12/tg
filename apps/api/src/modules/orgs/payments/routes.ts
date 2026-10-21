@@ -19,9 +19,15 @@
 //   DELETE /v1/orgs/:gymId/member-list/entries/:entryId/card   Remove card
 //   GET    /v1/orgs/:gymId/my-card                             the member's own, for the phone
 //   POST   /v1/orgs/:gymId/my-card                             the member adds or updates their own
+//
+// Save card on Terminal (ROADMAP 18d-ii-b-ii), `billing.members`:
+//   POST   …/member-list/entries/:entryId/card/terminal                 the agreement goes to the Terminal
+//   GET    …/member-list/entries/:entryId/card/terminal/:saveId         where it stands (asked every few seconds)
+//   POST   …/member-list/entries/:entryId/card/terminal/:saveId/cancel  Cancel
 import {
   saveCardRequestSchema,
   squareCardIdSchema,
+  terminalSaveRequestSchema,
   squareFinishRequestSchema,
   squareLocationRequestSchema,
   squareObjectIdSchema,
@@ -32,11 +38,12 @@ import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as webhooks from "../../webhooks/repo.js";
-import { memberListEntryParamsSchema, orgParamsSchema, squareTerminalParamsSchema } from "../schemas.js";
+import { memberListEntryParamsSchema, orgParamsSchema, squareTerminalParamsSchema, terminalSaveParamsSchema } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
 import * as cards from "./cards.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
+import * as terminalCards from "./terminalCards.js";
 import * as terminals from "./terminals.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
 
@@ -159,6 +166,34 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await cards.removeMemberCard(paymentsDeps, callerId(req), params.gymId, params.entryId));
+  });
+
+  // Save card on Terminal: a press is a trip to Square and a customer made there, so it counts
+  // with the other card writes; while it waits the page asks every 3 seconds, ten minutes at most
+  // (both of Square's five-minute steps): about two hundred asks a press.
+  const terminalCheckLimit = createDualRateLimit({ name: "terminal_save_check", max: 2400, ipMax: 12_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+
+  app.post(`${cardUrl}/terminal`, { preHandler: [app.authenticate, staffOnly(deps.sql, cardWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(terminalSaveRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await terminalCards.startTerminalSave(paymentsDeps, callerId(req), params.gymId, params.entryId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get(`${cardUrl}/terminal/:saveId`, { preHandler: [app.authenticate, staffOnly(deps.sql, terminalCheckLimit)] }, async (req, reply) => {
+    const params = parseOr400(terminalSaveParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalCards.checkTerminalSave(paymentsDeps, callerId(req), params.gymId, params.entryId, params.saveId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${cardUrl}/terminal/:saveId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, cardWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(terminalSaveParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalCards.cancelTerminalSave(paymentsDeps, callerId(req), params.gymId, params.entryId, params.saveId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
   // A whole gym opens the app on one wi-fi address; a member saves a card a handful of times.

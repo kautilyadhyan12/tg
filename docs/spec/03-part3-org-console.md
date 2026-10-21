@@ -4117,6 +4117,24 @@ or every gym's Square access from a terminal (`tools/square-stop.ts`, `RUNBOOK/s
 GoCardless (the table above) admits a partner only with its own GoCardless account, which needs
 a business in one of its 31 countries: closed to Kd as he is.
 
+*(As built, 18d-ii-b-ii, 2026-10-21; `rulings/2026-10-21-18d-ii-b.md`.)* **Save card on Terminal**,
+in the US, Canada and Australia, where the gym has paired a Square Terminal (18d-ii-b-i): the main
+button of Card on file, with **Type card instead** (18d-ii's Square boxes) beside it; with two or
+more Terminals a short list asks which. The Terminal shows "Save your card", the same agreement as
+the typed form word for word, and I agree / I don't agree (Square's CONFIRMATION action); after I
+agree the card is inserted or swiped (swiped only in Canada and Australia) and Square saves it on
+the person's own customer (SAVE_CARD), with Square's own email step. The box under the button
+reads "Waiting for Tara on the Terminal" with the two steps, Cancel, and after 20 seconds unseen
+"The Terminal hasn't shown it yet…"; it ends in "Card saved: Visa ending 4242." or "Not saved." with
+why (didn't agree, cancelled on the Terminal, time ran out, the Terminal didn't respond) and Try
+again or Type card instead. The server asks Square every 3 seconds while the page is open and the
+worker each minute once it is closed, so a card saved at the Terminal still lands on the person;
+the card is kept only after Square says that Terminal's person agreed to those very words, only on
+that person's customer, through 18d-ii's own keeping step; anything else is stopped at Square. One
+save waits on a Terminal, and one for a person; a save still waiting shows to whoever opens the
+page. The agreement keeps the Terminal it was given on. The owner with no Terminal paired reads
+**Pair a Terminal**, which opens Settings → Payments. Done saves are forgotten a day later.
+
 ### 14.6 Cards
 
 **18a** the notebook · **18b** the register, discounts and promo codes · ~~**18c** Pay by

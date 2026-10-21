@@ -12,7 +12,8 @@
 // Terminal (18d-ii-b) is paired with DEVICE_CREDENTIAL_MANAGEMENT ("Connect a Square Terminal
 // to a POS Application", read 2026-10-21), and saves a card with PAYMENTS_WRITE_IN_PERSON: its
 // test area left a save "in progress" for 512 seconds without it, and saved one in 2 with it
-// (measured 2026-10-21).
+// (measured 2026-10-21). Save card on Terminal (18d-ii-b-ii) sends two Terminal actions with
+// those: CONFIRMATION, the gym's agreement, then SAVE_CARD.
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
@@ -21,12 +22,14 @@ import {
   squareLocationsSchema,
   squareMerchantSchema,
   squareRevokeSchema,
+  squareTerminalActionAnswerSchema,
   squareTokenSchema,
   squareTokenStatusSchema,
   type SquareCard,
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
+  type SquareTerminalAction,
   type SquareToken,
   type SquareTokenStatus,
 } from "@app/shared";
@@ -74,7 +77,22 @@ export interface SquareApi {
    *  2026-10-21). Square's page says a code that ran out is no longer returned; a 404 is taken
    *  as run out too, which only asks the owner for a new code. */
   retrieveDeviceCode(accessToken: string, deviceCodeId: string): Promise<SquareResult<SquareDeviceCode>>;
+  /** An action on a paired Terminal. `idempotencyKey`: asked again, Square gives back the same
+   *  action. */
+  createTerminalAction(accessToken: string, action: NewTerminalAction): Promise<SquareResult<SquareTerminalAction>>;
+  getTerminalAction(accessToken: string, actionId: string): Promise<SquareResult<SquareTerminalAction>>;
+  /** Square stops an action still pending or in progress; a SAVE_CARD only until the person
+   *  confirms their email on the Terminal. */
+  cancelTerminalAction(accessToken: string, actionId: string): Promise<SquareResult<SquareTerminalAction>>;
 }
+
+/** CONFIRMATION shows `title`, `body` and two buttons, and keeps the Terminal waiting
+ *  `awaitNext` for the next action instead of going back to its idle screen; SAVE_CARD saves the
+ *  card inserted or swiped on `customerId`. `deadline`: Square cancels it after this (at most
+ *  five minutes). Durations are RFC 3339 ("PT5M"). */
+export type NewTerminalAction =
+  | { idempotencyKey: string; deviceId: string; deadline: string; type: "CONFIRMATION"; title: string; body: string; agree: string; disagree: string; awaitNext: string }
+  | { idempotencyKey: string; deviceId: string; deadline: string; type: "SAVE_CARD"; customerId: string; referenceId: string };
 
 export interface NewSquareCustomer {
   idempotencyKey: string;
@@ -89,6 +107,12 @@ export interface NewSquareCustomer {
 const cardPath = (cardId: string): string => {
   if (!/^[A-Za-z0-9:_-]{1,192}$/.test(cardId)) throw new Error("not a Square card id");
   return `/v2/cards/${cardId}`;
+};
+
+/** The same for a Terminal action's id (`squareTerminalActionIdSchema`). */
+const actionPath = (actionId: string): string => {
+  if (!/^[A-Za-z0-9:_-]{1,255}$/.test(actionId)) throw new Error("not a Square Terminal action id");
+  return `/v2/terminals/actions/${actionId}`;
 };
 
 export const SQUARE_SCOPES = [
@@ -248,6 +272,29 @@ export function createSquareApi(opts: {
       if (!/^[A-Za-z0-9_-]{1,64}$/.test(deviceCodeId)) throw new Error("not a Square device code id");
       const result = await call("GET", `/v2/devices/codes/${deviceCodeId}`, squareDeviceCodeAnswerSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.device_code } : result;
+    },
+    async createTerminalAction(accessToken, a) {
+      const options =
+        a.type === "CONFIRMATION"
+          ? {
+              await_next_action: true,
+              await_next_action_duration: a.awaitNext,
+              confirmation_options: { title: a.title, body: a.body, agree_button_text: a.agree, disagree_button_text: a.disagree },
+            }
+          : { save_card_options: { customer_id: a.customerId, reference_id: a.referenceId } };
+      const result = await call("POST", "/v2/terminals/actions", squareTerminalActionAnswerSchema, bearer(accessToken), {
+        idempotency_key: a.idempotencyKey,
+        action: { device_id: a.deviceId, type: a.type, deadline_duration: a.deadline, ...options },
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.action } : result;
+    },
+    async getTerminalAction(accessToken, actionId) {
+      const result = await call("GET", actionPath(actionId), squareTerminalActionAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.action } : result;
+    },
+    async cancelTerminalAction(accessToken, actionId) {
+      const result = await call("POST", `${actionPath(actionId)}/cancel`, squareTerminalActionAnswerSchema, bearer(accessToken), {});
+      return result.kind === "ok" ? { kind: "ok", value: result.value.action } : result;
     },
     async revokeAccount(accountId) {
       const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {
