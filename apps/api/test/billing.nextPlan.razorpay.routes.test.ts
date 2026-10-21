@@ -403,6 +403,23 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
       expect(keptPayments(devs.subscriptionId)).toHaveLength(1);
     }, TEST_TIMEOUT_MS);
 
+    it("a window paid in time and read only in the last hour before it starts is still placed; read after its start, it is not", async () => {
+      const { gym, cora } = await handedOverGym();
+      const win = opened(await checkout(gym, cora));
+      razorpay.authenticate(win.subscriptionId);
+      // The browser closed before its sync; Razorpay's event is read half an hour before the start.
+      const late = await syncOrgCheckout(deps(() => new Date(gym.end.getTime() - 30 * 60_000)), { userId: cora.userId, gymId: gym.id, checkoutId: win.checkoutId });
+      expect(late).toMatchObject({ state: "paid" });
+      expect((await liveRows(gym.id)).map((r) => r.provider_ref)).toEqual([win.subscriptionId]);
+
+      const other = await handedOverGym();
+      const after = opened(await checkout(other.gym, other.cora));
+      razorpay.authenticate(after.subscriptionId);
+      const read = await syncOrgCheckout(deps(() => new Date(other.gym.end.getTime() + 1000)), { userId: other.cora.userId, gymId: other.gym.id, checkoutId: after.checkoutId });
+      expect(read).toEqual({ state: "not_started" });
+      expect(razorpay.subs.get(after.subscriptionId)?.status).toBe("cancelled");
+    }, TEST_TIMEOUT_MS);
+
     it("handed back to the person who paid before the window is paid: it never starts, and nothing is charged", async () => {
       const { gym, cora } = await handedOverGym();
       const win = opened(await checkout(gym, cora));
