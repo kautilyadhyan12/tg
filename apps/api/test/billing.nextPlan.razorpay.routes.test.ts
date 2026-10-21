@@ -17,7 +17,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { planEndReminderEmail } from "../src/modules/billing/emails.js";
 import { processRazorpayEvents } from "../src/modules/billing/events.js";
-import { planEndAction, syncOrgCheckout } from "../src/modules/billing/service.js";
+import { applyRazorpaySubscription, planEndAction, syncOrgCheckout } from "../src/modules/billing/service.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { ROLE_PRIVILEGES, myOwnerRequestResponseSchema, orgCheckoutSyncResponseSchema, orgPlanCancelResponseSchema } from "@app/shared";
 import { BILLING_LOCK_WAIT_MS, holdBillingSuiteLock } from "./billingSuiteLock.js";
@@ -313,6 +313,29 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
       expect(keptPayments(win.subscriptionId)).toHaveLength(1);
       expect(await planRow(gym.id, win.subscriptionId)).toMatchObject({ status: "active", trial_seat_cap: null });
       expect(await consolePlan(gym, cora)).toMatchObject({ status: "active", followsPaidBy: null, seatCap: 1000 });
+    }, TEST_TIMEOUT_MS);
+
+    it("the old plan Razorpay charges anyway after the new one took its place: that month goes back to the old owner", async () => {
+      const { gym, cora } = await handedOverGym();
+      const win = opened(await checkout(gym, cora));
+      razorpay.authenticate(win.subscriptionId);
+      expect(await sync(gym.id, win.checkoutId, cora)).toMatchObject({ state: "paid" });
+      // Razorpay forgets the month-end cancel it took at Accept and renews the old plan.
+      razorpay.endAtCycleEnd.delete(gym.sub);
+      oldMonthEnds(gym);
+      const renewal = keptPayments(gym.sub).at(-1);
+      expect(keptPayments(gym.sub)).toHaveLength(2);
+      razorpay.charge(win.subscriptionId);
+      // Razorpay's event about the old plan: it is ended there and the renewal refunded.
+      const after = () => new Date(gym.end.getTime() + 60_000);
+      expect(await applyRazorpaySubscription(deps(after), gym.sub)).not.toBe("retry");
+      await runAt(gym.end, 60_000);
+      expect(razorpay.subs.get(gym.sub)?.status).toBe("cancelled");
+      expect(razorpay.refunds).toContain(renewal);
+      expect(keptPayments(gym.sub)).toHaveLength(1);
+      // The new owner's plan is the gym's, paid once.
+      expect((await liveRows(gym.id)).map((r) => r.provider_ref)).toEqual([win.subscriptionId]);
+      expect(keptPayments(win.subscriptionId)).toHaveLength(1);
     }, TEST_TIMEOUT_MS);
 
     it("handed back to the person who paid before the window is paid: it never starts, and nothing is charged", async () => {
