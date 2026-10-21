@@ -8,6 +8,11 @@
 //   POST   /v1/payments/square/finish                  Square's answer, from the return page
 //   POST   /v1/webhooks/square                         Square's messages: signed, kept once
 //
+// A gym's Square Terminals (ROADMAP 18d-ii-b-i), the owner's:
+//   POST   /v1/orgs/:gymId/payments/square/terminals/pair                 Pair a Terminal: Square's code
+//   GET    /v1/orgs/:gymId/payments/square/terminals/:terminalId/pairing  has a Terminal signed in with it
+//   DELETE /v1/orgs/:gymId/payments/square/terminals/:terminalId          Remove
+//
 // A member's card on file (ROADMAP 18d-ii):
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/card   Card on file (`billing.members`)
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/card   save the card typed into Square's form
@@ -27,11 +32,12 @@ import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as webhooks from "../../webhooks/repo.js";
-import { memberListEntryParamsSchema, orgParamsSchema } from "../schemas.js";
+import { memberListEntryParamsSchema, orgParamsSchema, squareTerminalParamsSchema } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
 import * as cards from "./cards.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
+import * as terminals from "./terminals.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
 
 export const SQUARE_WEBHOOK_PATH = "/v1/webhooks/square";
@@ -99,6 +105,32 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const body = parseOr400(squareFinishRequestSchema, req.body, req, reply);
     if (body === null) return;
     return reply.status(200).send(await service.finishSquareConnect(paymentsDeps, callerId(req), body));
+  });
+
+  // An owner pairs a Terminal a few times; each press is a code made at Square. The console asks
+  // every few seconds while a code waits, five minutes at most: about a hundred asks a code.
+  const pairLimit = createDualRateLimit({ name: "terminal_pair", max: 30, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const pairingLimit = createDualRateLimit({ name: "terminal_pairing", max: 1200, ipMax: 6000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const terminalsUrl = "/v1/orgs/:gymId/payments/square/terminals";
+
+  app.post(`${terminalsUrl}/pair`, { preHandler: [app.authenticate, pairLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    // The code is for this screen alone.
+    return reply.status(200).header("cache-control", "no-store").send(await terminals.pairTerminal(paymentsDeps, callerId(req), params.gymId));
+  });
+
+  app.get(`${terminalsUrl}/:terminalId/pairing`, { preHandler: [app.authenticate, pairingLimit] }, async (req, reply) => {
+    const params = parseOr400(squareTerminalParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminals.checkPairing(paymentsDeps, callerId(req), params.gymId, params.terminalId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.delete(`${terminalsUrl}/:terminalId`, { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
+    const params = parseOr400(squareTerminalParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await terminals.removeTerminal(paymentsDeps, callerId(req), params.gymId, params.terminalId));
   });
 
   // Card on file is read with every person's page a payments member of staff opens; a gym's

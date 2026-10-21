@@ -216,6 +216,9 @@ function fakeSquare() {
       for (const [t, a] of tokens) if (a.merchantId === accountId) tokens.delete(t);
       return Promise.resolve({ kind: "ok", value: null });
     },
+    // Square Terminals (18d-ii-b-i) are driven in `squareTerminals.routes.test.ts`.
+    createDeviceCode: () => Promise.resolve(unavailable),
+    retrieveDeviceCode: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgb-${randomBytes(8).toString("hex")}`;

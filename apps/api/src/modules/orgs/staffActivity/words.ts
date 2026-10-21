@@ -144,6 +144,22 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.payments_square_connected": (s) => `Connected Square${quoted(text(s, "business"))}`,
   "org.payments_square_location_set": (s) => `Chose the Square location${quoted(text(s, "location"))}`,
   "org.payments_square_disconnected": (s) => `Disconnected Square${quoted(text(s, "business"))}`,
+  // Square Terminals (18d-ii-b-i).
+  "org.payments_square_connected_again": (s) => `Reconnected Square${quoted(text(s, "business"))}`,
+  "org.payments_square_terminal_paired": (s) => {
+    const serial = text(s, "serial");
+    return serial === null ? "Added a simulated Square Terminal" : `Paired Square Terminal ${serial}`;
+  },
+  "org.payments_square_terminal_moved": (s) => {
+    const serial = text(s, "serial");
+    const to = text(s, "to");
+    const which = serial === null ? "A simulated Square Terminal" : `Square Terminal ${serial}`;
+    return to === null ? `${which} was paired elsewhere` : `${which} was paired with ${to}`;
+  },
+  "org.payments_square_terminal_removed": (s) => {
+    const serial = text(s, "serial");
+    return serial === null ? "Removed a simulated Square Terminal" : `Removed Square Terminal ${serial}`;
+  },
 
   // Joining
   "org.member_joined": (s) => `Accepted ${whose(s, "request to join")}`,

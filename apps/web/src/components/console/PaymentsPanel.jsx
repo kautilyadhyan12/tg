@@ -17,13 +17,15 @@ import {
   squareRows,
 } from '../../pages/console/paymentsView';
 import PlaceLink from './PlaceLink';
+import SquareTerminals from './SquareTerminals';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
 // PAYMENTS (ROADMAP 18d-i): the gym connects its own Square account, so its members' card
 // payments go to the gym's own bank account. Only the gym's own owner connects, picks the
 // location and disconnects; everybody else who opens Settings reads it, with a line saying who
 // can. Connect Square opens Square's own page in this tab, and Square sends the person back to
-// `/connect/square`, which brings them here with what happened (`outcome`).
+// `/connect/square`, which brings them here with what happened (`outcome`). Connected in the US,
+// Canada or Australia, the box lists the gym's Square Terminals (18d-ii-b-i).
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const hintStyle = { color: 'rgba(255,255,255,0.45)' };
@@ -276,6 +278,18 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
             ))}
           </dl>
           {doneAndError}
+          {data.terminals ? (
+            <SquareTerminals
+              org={org}
+              terminals={data.terminals}
+              owner={owner}
+              readOnly={readOnly}
+              onPayments={setData}
+              onReload={() => void fetchPayments()}
+              onConnectAgain={() => void connect()}
+              connecting={busy === 'connect'}
+            />
+          ) : null}
           {disconnectArea(square)}
         </div>
       );

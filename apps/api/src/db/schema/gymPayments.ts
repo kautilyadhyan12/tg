@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gymMemberListEntries } from "./memberList.js";
@@ -10,7 +10,8 @@ import { gyms } from "./tenancy.js";
  *  `PAYMENT_TOKENS_KEY` (`tokenBox.ts`) and held only while `state` is `connected`;
  *  `removed` keeps the business's name to say the gym took the app off inside Square. A
  *  connected row with no `location_id` is waiting for the owner to pick one of
- *  `location_choices`. */
+ *  `location_choices`. `scopes` (0147): what the gym allowed on Square's page; a row made
+ *  before a permission was added is asked to connect again. */
 export const gymPaymentConnections = pgTable(
   "gym_payment_connections",
   {
@@ -35,6 +36,7 @@ export const gymPaymentConnections = pgTable(
     connectedBy: uuid("connected_by").references(() => users.id, { onDelete: "set null" }),
     connectedAt: timestamp("connected_at", { withTimezone: true }).notNull(),
     removedAt: timestamp("removed_at", { withTimezone: true }),
+    scopes: text("scopes").array().notNull().default(sql`'{}'::text[]`),
     createdAt: createdAt(),
   },
   (t) => [
@@ -220,5 +222,49 @@ export const gymCardDisables = pgTable(
     check("gym_card_disables_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.cardId} ~ '^[A-Za-z0-9:_-]{1,192}$'`),
     check("gym_card_disables_tries_check", sql`${t.tries} >= 0`),
     index("gym_card_disables_due_idx").on(t.notBefore),
+  ],
+);
+
+/** A gym's Square Terminals (0147; ROADMAP 18d-ii-b-i), in the Square account they were paired
+ *  in. `pairing`: Square's code waits for a Terminal to sign in with it until `pair_by`; the
+ *  code itself is never kept. `paired`: `device_id` is the Terminal's id at Square, the serial
+ *  number under it; one row a Terminal in a Square account, whichever gym. `practice`: one of
+ *  Square's simulated Terminals, in its sandbox only. */
+export const gymSquareTerminals = pgTable(
+  "gym_square_terminals",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    state: text("state").notNull(),
+    deviceCodeId: text("device_code_id"),
+    deviceId: text("device_id"),
+    practice: text("practice"),
+    pairBy: timestamp("pair_by", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    pairedAt: timestamp("paired_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    check("gym_square_terminals_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_terminals_state_check", sql`${t.state} IN ('pairing','paired')`),
+    check(
+      "gym_square_terminals_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.deviceCodeId} IS NULL OR ${t.deviceCodeId} ~ '^[A-Za-z0-9_-]{1,64}$') AND (${t.deviceId} IS NULL OR ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$')`,
+    ),
+    check(
+      "gym_square_terminals_pairing_check",
+      sql`(${t.state} = 'pairing') = (${t.deviceCodeId} IS NOT NULL AND ${t.pairBy} IS NOT NULL AND ${t.deviceId} IS NULL AND ${t.pairedAt} IS NULL)`,
+    ),
+    check("gym_square_terminals_paired_check", sql`(${t.state} = 'paired') = (${t.deviceId} IS NOT NULL AND ${t.pairedAt} IS NOT NULL AND ${t.pairBy} IS NULL)`),
+    check(
+      "gym_square_terminals_practice_check",
+      sql`${t.practice} IS NULL OR (${t.practice} IN ('saves','declines','cancels','times_out','offline') AND ${t.environment} = 'sandbox' AND ${t.state} = 'paired' AND ${t.deviceCodeId} IS NULL)`,
+    ),
+    uniqueIndex("gym_square_terminals_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.deviceId} IS NOT NULL`),
+    uniqueIndex("gym_square_terminals_pairing_uq").on(t.gymId, t.environment).where(sql`${t.state} = 'pairing'`),
   ],
 );

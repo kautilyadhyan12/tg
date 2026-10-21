@@ -1,6 +1,7 @@
 // THE PAYMENTS BOX IN SETTINGS (ROADMAP 18d-i): what it says, for each gym and each person.
 // The server sends the gym's country, whether this person is the gym's own owner (who alone
 // connects Square) and the connection; nothing here decides either.
+import { momentLabel } from './checkinDevicesView';
 
 /** Country names from the browser's own list; the two-letter code when it has none. */
 function countryNameOf(code) {
@@ -131,6 +132,8 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
       return 'Square is connected.';
     case 'choose_location':
       return `Square is connected. Choose which of its locations is ${gymName}.`;
+    case 'connected_again':
+      return 'Square is reconnected.';
     case 'already_connected':
       return 'Square was already connected.';
     case 'cancelled':
@@ -150,7 +153,65 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
       return 'That Square account has no location that can take card payments yet. Finish setting it up in Square, then press Connect Square again.';
     case 'square_said_no':
       return `Square didn't accept that sign-in. Press Connect Square to try again.`;
+    case 'other_account':
+      return `That Square account isn't the one connected to ${gymName}. Sign in to the connected account, then reconnect.`;
     default:
       return `Square didn't answer. Press Connect Square to try again in a minute.`;
   }
 }
+
+// ── Square Terminals (ROADMAP 18d-ii-b-i): pairing as Square's Dashboard and Stripe Terminal word it ──
+
+/** Square's simulated Terminals, in its sandbox only (Stripe calls its own "simulated readers"),
+ *  added by a tester's tool and never from a screen. */
+export const PRACTICE_TERMINAL_WORDS = {
+  saves: 'Card saved',
+  declines: 'Member declines',
+  cancels: 'Member cancels',
+  times_out: 'Times out',
+  offline: 'Offline',
+};
+
+export function terminalName(terminal) {
+  return terminal.practice === null ? 'Square Terminal' : `Simulated Terminal · ${PRACTICE_TERMINAL_WORDS[terminal.practice] ?? terminal.practice}`;
+}
+
+/** The line under a Terminal's name: its serial number, as printed under it, and the day. */
+export function terminalDetail(terminal, timeZone) {
+  const day = paymentsDay(terminal.pairedAt, timeZone);
+  if (terminal.practice !== null) return `Added ${day}`;
+  return terminal.serial === null ? `Paired ${day}` : `Serial ${terminal.serial} · Paired ${day}`;
+}
+
+/** Said where Pair a Terminal was pressed. */
+export const PAIRED_TERMINAL = 'Terminal paired.';
+
+export const REMOVED_TERMINAL = 'Terminal removed.';
+
+export function removeTerminalWords(terminal, gymName) {
+  return {
+    question: 'Remove this Terminal?',
+    changes: `It will no longer be available to ${gymName}.`,
+    kept: terminal.practice === null ? 'It stays signed in to Square. To sign it out, go to Settings > Sign out on the Terminal.' : "It's a simulated Terminal in Square's sandbox.",
+  };
+}
+
+/** What the owner does at the Terminal, in Square's own order. */
+export const PAIR_STEPS = ['If the Terminal is signed in, sign out first (Settings > Sign out).', 'Tap Sign in, then Use a device code.', 'Enter this code:'];
+
+export const pairingUntilLine = (iso, clock) => {
+  const time = momentLabel(iso, clock);
+  return time === '' ? 'Expires in 5 minutes' : `Expires at ${time}`;
+};
+
+export const PAIRING_WAITING = 'Waiting for the Terminal…';
+export const PAIRING_EXPIRED = 'This code has expired.';
+export const pairingActiveLine = (iso, clock) => {
+  const time = momentLabel(iso, clock);
+  return `A pairing code is active${time === '' ? '' : ` until ${time}`}. Get a new code if you no longer have it.`;
+};
+export const NO_TERMINALS = 'No Terminals paired yet.';
+export const NEEDS_ALLOW_LINE = 'Reconnect Square to use Square Terminals.';
+export const NEEDS_ALLOW_HINT = 'Square will ask you to approve device access and in-person payments.';
+export const NEEDS_ALLOW_OTHERS = 'The owner needs to reconnect Square before Terminals can be used.';
+export const TERMINAL_OWNER_ONLY = 'Only the owner can pair or remove Terminals.';

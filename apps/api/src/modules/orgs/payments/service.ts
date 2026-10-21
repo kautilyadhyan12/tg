@@ -14,10 +14,15 @@
 // Tokens a connection does not keep (Disconnect, a Square account refused, a second Allow)
 // are written as owed revokes in the same step that lets them go, and sent to Square at once
 // and by the worker until Square says so.
+//
+// A gym connected before a permission was added (18d-ii-b-i: the Square Terminal's) connects
+// again, on the account already connected and no other: its members' cards are saved there.
+// The new tokens replace the old on that connection, and the old token is let go.
 import { createHash, randomBytes } from "node:crypto";
 import {
   GYM_PAYMENTS_WORDS,
   SQUARE_CONNECT_MINUTES,
+  SQUARE_TERMINAL_COUNTRIES,
   gymPaymentsAvailability,
   gymPaymentsResponseSchema,
   memberCurrencyForCountry,
@@ -29,12 +34,15 @@ import {
   type SquareFinishRequest,
   type SquareFinishResponse,
   type SquareRefusal,
+  type SquareTerminals,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requireStaff, requireWritableGym } from "../service.js";
 import * as repo from "./repo.js";
 import type { SquareSettings } from "./settings.js";
+import { SQUARE_SCOPES } from "./square.js";
+import * as terminalsRepo from "./terminalsRepo.js";
 import type { TokenContext } from "./tokenBox.js";
 
 export interface PaymentsLog {
@@ -65,18 +73,42 @@ export function hashConnectState(state: string): string {
   return createHash("sha256").update(state, "utf8").digest("hex");
 }
 
-function squareOrThrow(deps: PaymentsDeps): SquareSettings {
+export function squareOrThrow(deps: PaymentsDeps): SquareSettings {
   if (deps.square === null) throw new OrgsError(503, "square_not_ready", GYM_PAYMENTS_WORDS.not_ready);
   return deps.square;
 }
 
 /** The gym's own owner, or 404 for anybody not on its staff and 403 for staff. */
-async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId: string) {
+export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId: string, words: string = GYM_PAYMENTS_WORDS.owner_only) {
   const { org } = await requireStaff(deps, gymId, userId);
   const gym = await repo.readGym(deps.sql, gymId);
   if (gym === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
-  if (gym.ownerUserId !== userId) throw new OrgsError(403, "owner_only", GYM_PAYMENTS_WORDS.owner_only);
+  if (gym.ownerUserId !== userId) throw new OrgsError(403, "owner_only", words);
   return { org, gym };
+}
+
+/** The connection allows less than we now ask Square for: the owner connects Square again. */
+export const missingScopes = (row: repo.ConnectionRow): boolean => SQUARE_SCOPES.some((scope) => !row.scopes.includes(scope));
+
+/** Connected, with its location, where Square saves cards on a Terminal. */
+export const terminalsOffered = (row: repo.ConnectionRow | null): row is repo.ConnectionRow & { locationId: string } =>
+  row?.state === "connected" && row.locationId !== null && SQUARE_TERMINAL_COUNTRIES.includes(row.country);
+
+/** The connected box's Terminals: those paired in the Square account the gym is connected to
+ *  now, never another's; the code waiting, for the owner alone. */
+async function terminalsView(deps: PaymentsDeps, square: SquareSettings, row: repo.ConnectionRow | null, isOwner: boolean): Promise<SquareTerminals | null> {
+  if (!terminalsOffered(row)) return null;
+  const rows = await terminalsRepo.readTerminals(deps.sql, row.gymId, square.environment, row.accountId);
+  const pairing = isOwner ? rows.find((t) => t.state === "pairing") : undefined;
+  return {
+    needsAllow: missingScopes(row),
+    list: rows.flatMap((t) =>
+      t.state === "paired" && t.pairedAt !== null
+        ? [{ id: t.id, serial: t.practice === null ? t.deviceId : null, practice: t.practice, pairedAt: t.pairedAt.toISOString() }]
+        : [],
+    ),
+    pairing: pairing?.pairBy == null ? null : { id: pairing.id, pairBy: pairing.pairBy.toISOString() },
+  };
 }
 
 function connectionView(row: repo.ConnectionRow | null, isOwner: boolean): SquareConnection | null {
@@ -106,6 +138,7 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       canConnect: isOwner,
       squareReady: deps.square !== null,
       square: connectionView(row, isOwner),
+      terminals: deps.square === null ? null : await terminalsView(deps, deps.square, row, isOwner),
     },
   });
 }
@@ -117,7 +150,8 @@ export async function startSquareConnect(deps: PaymentsDeps, userId: string, gym
   const square = squareOrThrow(deps);
   if (gymPaymentsAvailability(gym.country) !== "square") throw new OrgsError(409, "square_not_offered", GYM_PAYMENTS_WORDS.not_offered);
   const existing = await repo.readConnection(deps.sql, gymId, square.environment);
-  if (existing?.state === "connected") throw new OrgsError(409, "square_already_connected", GYM_PAYMENTS_WORDS.already_connected);
+  // Connected and allowing everything asked for: nothing to connect again for.
+  if (existing?.state === "connected" && !missingScopes(existing)) throw new OrgsError(409, "square_already_connected", GYM_PAYMENTS_WORDS.already_connected);
   const state = randomBytes(32).toString("base64url");
   await repo.insertStart(deps.sql, {
     stateHash: hashConnectState(state),
@@ -272,6 +306,38 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
       return { outcome: "not_owner" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
     }
     const existing = await repo.readConnection(tx, gymId, square.environment, true);
+    if (existing?.state === "connected" && missingScopes(existing) && existing.accessToken !== null) {
+      // Connect Square again, to allow what the connection did not: only on the account it is
+      // connected to, where its members' cards are saved. The old token is let go; the gym
+      // still holds the account, so only that token.
+      if (existing.accountId !== accountId) {
+        return { outcome: "other_account" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
+      }
+      await repo.lockAccount(tx, square.environment, accountId);
+      const allowed = await repo.allowAgain(tx, {
+        gymId,
+        environment: square.environment,
+        accountId,
+        wasConnectedAt: existing.connectedAt,
+        accessToken: lockedAccess,
+        refreshToken: lockedRefresh,
+        accessExpiresAt: new Date(token.value.expires_at),
+        refreshDueAt: new Date(now.getTime() + SQUARE_REFRESH_EVERY_MS),
+        connectedBy: userId,
+        connectedAt: now,
+        scopes: SQUARE_SCOPES,
+      });
+      if (!allowed) return { outcome: "already_connected" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
+      await insertAudit(tx, {
+        actorUserId: userId,
+        gymId,
+        action: "org.payments_square_connected_again",
+        targetType: "gym",
+        targetId: gymId,
+        meta: { business: merchant.value.business_name ?? "" },
+      });
+      return { outcome: "connected_again" as const, revokeId: await owe(tx, square, gymId, accountId, existing.accessToken, now) };
+    }
     if (existing?.state === "connected") {
       // Two Allows for one gym: the first stays, and this one's token is let go.
       return { outcome: "already_connected" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
@@ -297,6 +363,7 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
       refreshDueAt: new Date(now.getTime() + SQUARE_REFRESH_EVERY_MS),
       connectedBy: userId,
       connectedAt: now,
+      scopes: SQUARE_SCOPES,
     });
     await insertAudit(tx, {
       actorUserId: userId,
@@ -311,6 +378,7 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
   if (result.revokeId !== null) await sendOwedRevokes(deps, square, [result.revokeId]);
   if (result.outcome === "refused") return refused("wrong_country", merchant.value.country, merchant.value.currency);
   if (result.outcome === "not_owner") throw new OrgsError(403, "owner_only", GYM_PAYMENTS_WORDS.owner_only);
+  if (result.outcome === "other_account") return refused("other_account");
   return answer(result.outcome);
 }
 

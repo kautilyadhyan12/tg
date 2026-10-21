@@ -264,9 +264,13 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
      - 18d-i-b. [x] **The Square token test that fails at random** — merged 2026-10-21 (PR #326).
      - 18d-ii. [x] **A member's card saved on Square's own form** — merged 2026-10-21 (PR #324).
-     - 18d-ii-b. [ ] **Tap to save the card on a Square Terminal at the desk** (Kd, 2026-10-20, `rulings/2026-10-20-18d-ii.md`): in the US, Canada and Australia, staff press Tap card on Terminal and the member taps or inserts their card on the gym's own Square Terminal; typing into Square's boxes (18d-ii) stays the fallback. Its plan first checks whether Square's kit for the small Square Reader can save a card.
+     - 18d-ii-b. **Save a card on a Square Terminal at the desk** (US, Canada, Australia; Kd 2026-10-20 and 2026-10-21, `rulings/2026-10-21-18d-ii-b.md`), split in two on 2026-10-21 (the line as first written is in `handoff/2026-10-21-18d-ii-b.md`):
+       - 18d-ii-b-i. [x] **Pair a Square Terminal** — merged 2026-10-21 (PR #328).
+       - 18d-ii-b-ii. [ ] **Save card on Terminal** on a person's page: our agreement on the Terminal, then Square's own save; Waiting, Cancel, Card saved or Not saved; typing (18d-ii) stays.
+     - 18d-ii-c. [ ] **A front-desk app for the Square Reader** (Kd, 2026-10-21): staff sign in, find the member, the member pays on the Reader and ticks the agreement, Square saves the card from that payment; Square's React Native kit, tested with its pretend Reader only.
      - 18r. [ ] **UPI at Sell for gyms in India**: Record payment offers "UPI" beside Cash, Card at the desk and Bank transfer.
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge.
+     - 18d-iii-b. [ ] **A payment taken in Square's own app recorded on the member** (Kd, 2026-10-21): staff pick the member in Square's Point of Sale app and take it on the Reader; Square's payment message is matched by the Square customer we made for them; tested in Square's test area.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`).
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
    - 18e. [ ] The second Connect button (GoCardless: the member's bank account): closed to Kd without a business in one of GoCardless's 31 countries (`rulings/2026-10-20-18d-ii.md`). 18f. [ ] Razorpay, for Indian gyms.

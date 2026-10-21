@@ -8,10 +8,15 @@
 // business and locations, its customers and saved cards, and taking and refunding payments.
 // Nothing asks for a fee of its own: we take none (RULINGS 2026-09-22). A saved card (18d-ii)
 // uses CUSTOMERS_WRITE for the person and PAYMENTS_WRITE for the card ("Cards API", read
-// 2026-10-20); PAYMENTS_READ reads it back and lets Square's card messages reach us.
+// 2026-10-20); PAYMENTS_READ reads it back and lets Square's card messages reach us. A Square
+// Terminal (18d-ii-b) is paired with DEVICE_CREDENTIAL_MANAGEMENT ("Connect a Square Terminal
+// to a POS Application", read 2026-10-21), and saves a card with PAYMENTS_WRITE_IN_PERSON: its
+// test area left a save "in progress" for 512 seconds without it, and saved one in 2 with it
+// (measured 2026-10-21).
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
+  squareDeviceCodeAnswerSchema,
   squareErrorSchema,
   squareLocationsSchema,
   squareMerchantSchema,
@@ -19,6 +24,7 @@ import {
   squareTokenSchema,
   squareTokenStatusSchema,
   type SquareCard,
+  type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
   type SquareToken,
@@ -61,6 +67,13 @@ export interface SquareApi {
   /** Stop the app's every token for this Square account, with our own secret: for the stop
    *  tool (`tools/square-stop.ts`), which works without the gym's token. */
   revokeAccount(accountId: string): Promise<SquareResult<null>>;
+  /** A code a Square Terminal signs in with, at this location, for five minutes. `name` is
+   *  what the gym's Square Dashboard lists the code as. */
+  createDeviceCode(accessToken: string, code: { idempotencyKey: string; name: string; locationId: string }): Promise<SquareResult<SquareDeviceCode>>;
+  /** A code past its `pair_by` reads EXPIRED (Square's sandbox, 30 and 90 s after, measured
+   *  2026-10-21). Square's page says a code that ran out is no longer returned; a 404 is taken
+   *  as run out too, which only asks the owner for a new code. */
+  retrieveDeviceCode(accessToken: string, deviceCodeId: string): Promise<SquareResult<SquareDeviceCode>>;
 }
 
 export interface NewSquareCustomer {
@@ -78,7 +91,15 @@ const cardPath = (cardId: string): string => {
   return `/v2/cards/${cardId}`;
 };
 
-export const SQUARE_SCOPES = ["MERCHANT_PROFILE_READ", "CUSTOMERS_READ", "CUSTOMERS_WRITE", "PAYMENTS_READ", "PAYMENTS_WRITE"] as const;
+export const SQUARE_SCOPES = [
+  "MERCHANT_PROFILE_READ",
+  "CUSTOMERS_READ",
+  "CUSTOMERS_WRITE",
+  "PAYMENTS_READ",
+  "PAYMENTS_WRITE",
+  "PAYMENTS_WRITE_IN_PERSON",
+  "DEVICE_CREDENTIAL_MANAGEMENT",
+] as const;
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_TIMEOUT_MS = 10_000;
 
@@ -215,6 +236,18 @@ export function createSquareApi(opts: {
     async disableCard(accessToken, cardId) {
       const result = await call("POST", `${cardPath(cardId)}/disable`, squareCardAnswerSchema, bearer(accessToken), {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.card } : result;
+    },
+    async createDeviceCode(accessToken, c) {
+      const result = await call("POST", "/v2/devices/codes", squareDeviceCodeAnswerSchema, bearer(accessToken), {
+        idempotency_key: c.idempotencyKey,
+        device_code: { name: c.name, product_type: "TERMINAL_API", location_id: c.locationId },
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.device_code } : result;
+    },
+    async retrieveDeviceCode(accessToken, deviceCodeId) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(deviceCodeId)) throw new Error("not a Square device code id");
+      const result = await call("GET", `/v2/devices/codes/${deviceCodeId}`, squareDeviceCodeAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.device_code } : result;
     },
     async revokeAccount(accountId) {
       const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {
