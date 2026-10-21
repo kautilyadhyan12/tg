@@ -690,7 +690,7 @@ d("A new owner chooses their plan before the handed-over plan ends (real Postgre
       ["the new owner, Paddle confirmed", due, CORA, { kind: "choose_next", until, provider: "paddle" }],
       ["the person who paid for it", due, KD, { kind: "choose" }],
       ["not yet confirmed at Paddle", { ...due, handedOverConfirmed: false }, CORA, { kind: "choose" }],
-      ["through Razorpay (4b-vi-b)", { ...due, provider: "razorpay" as const }, CORA, { kind: "choose" }],
+      ["through Razorpay (4b-vi-b)", { ...due, provider: "razorpay" as const }, CORA, { kind: "choose_next", until, provider: "razorpay" }],
       ["too close to the end", { ...due, endsAt: new Date("2026-11-01T02:00:00Z") }, CORA, { kind: "choose" }],
       ["not handed over, so kept", { ...due, handedOver: false, handedOverFrom: null }, KD, { kind: "keep", until }],
     ])("%s", (_name, d, who, expected) => {
