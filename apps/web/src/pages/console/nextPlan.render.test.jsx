@@ -184,7 +184,7 @@ describe('a new owner chooses their plan before the handed-over plan ends (4b-vi
     expect(within(dialog).getByRole('heading').textContent).toBe('Choose your plan');
     expect(
       within(dialog).getByText(
-        `Your plan starts on ${date}, when the plan Kd Owner paid for ends, so your members keep the app. Nothing is charged until then; Paddle's window calls the days until then a free trial.`,
+        `Your plan starts on ${date}, when the plan Kd Owner paid for ends, so your members keep the app. Nothing is charged until then. Paddle's window shows the days until then as a free trial, rounded up to whole days.`,
       ),
     ).toBeTruthy();
     const choices = await within(dialog).findAllByRole('button', { name: /Choose this plan/ });

@@ -63,7 +63,7 @@ function nextIntroText(sub, words) {
   const on = trialEndDateLabel(sub?.currentPeriodEnd);
   const who = typeof sub?.handedOverBy === 'string' && sub.handedOverBy.trim() !== '' ? `the plan ${sub.handedOverBy.trim()} paid for` : 'the current plan';
   const when = on === null ? `when ${who} ends` : `on ${on}, when ${who} ends`;
-  return `Your plan starts ${when}, so your ${words.people} keep the app. Nothing is charged until then; Paddle's window calls the days until then a free trial.`;
+  return `Your plan starts ${when}, so your ${words.people} keep the app. Nothing is charged until then. Paddle's window shows the days until then as a free trial, rounded up to whole days.`;
 }
 
 /** What the dialog says once a size is changed or chosen. */
