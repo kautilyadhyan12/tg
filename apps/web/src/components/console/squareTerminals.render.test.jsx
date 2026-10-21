@@ -20,7 +20,6 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       disconnectSquare: vi.fn(),
       pairSquareTerminal: vi.fn(),
       checkSquarePairing: vi.fn(),
-      addPracticeTerminal: vi.fn(),
       removeSquareTerminal: vi.fn(),
     },
   };
@@ -36,7 +35,7 @@ const CONNECTED = { state: 'connected', businessName: 'Iron House LLC', location
 const PAIRING_ID = '22222222-2222-4222-8222-222222222222';
 const TERMINAL = { id: PAIRING_ID, serial: 'R5WNWB5BKNG9R', practice: null, pairedAt: '2026-10-21T15:00:00.000Z' };
 const PRACTICE = { id: '33333333-3333-4333-8333-333333333333', serial: null, practice: 'saves', pairedAt: '2026-10-21T15:00:00.000Z' };
-const none = (over = {}) => ({ needsAllow: false, practice: false, list: [], pairing: null, ...over });
+const none = (over = {}) => ({ needsAllow: false, list: [], pairing: null, ...over });
 const payments = (terminals, over = {}) => ({ availability: 'square', country: 'US', canConnect: true, squareReady: true, square: CONNECTED, terminals, ...over });
 
 const assign = vi.fn();
@@ -170,26 +169,22 @@ describe('connected in the US, Canada or Australia', () => {
   });
 });
 
-describe("Square's test area", () => {
-  it('the owner adds a practice Terminal, picked from a list, and it is named by what it does', async () => {
-    render(<Holder start={payments(none({ practice: true }))} />);
-    const form = screen.getByRole('form', { name: 'Simulated Terminals' });
-    expect(within(form).getByText("Square's sandbox has no physical Terminals. Add a simulated one to test with.")).toBeTruthy();
-    expect(within(form).getByText('Test mode')).toBeTruthy();
-    expect(within(form).getAllByRole('option').map((o) => o.textContent)).toEqual(['Card saved', 'Member declines', 'Member cancels', 'Times out', 'Offline']);
-    fireEvent.change(within(form).getByLabelText('Simulated Terminal'), { target: { value: 'cancels' } });
-    const added = { ...PRACTICE, practice: 'cancels' };
-    orgService.addPracticeTerminal.mockResolvedValue({ data: { payments: payments(none({ practice: true, list: [added] })) } });
-    fireEvent.click(within(form).getByRole('button', { name: 'Add simulated Terminal' }));
-    expect(await screen.findByText('Simulated Terminal added.')).toBeTruthy();
-    expect(orgService.addPracticeTerminal).toHaveBeenCalledWith(ORG.id, 'cancels');
+describe("Square's sandbox", () => {
+  it('a simulated Terminal added for testing is listed by what it does, and the box offers nothing a real gym does not see', async () => {
+    const simulated = { ...PRACTICE, practice: 'cancels' };
+    render(<Holder start={payments(none({ list: [simulated] }))} />);
     expect(screen.getByText('Simulated Terminal · Member cancels')).toBeTruthy();
     expect(screen.getByText('Added 21 Oct 2026')).toBeTruthy();
-  });
-
-  it('is never offered outside it', () => {
-    render(<Holder start={payments(none())} />);
-    expect(screen.queryByRole('form', { name: 'Simulated Terminals' })).toBeNull();
+    expect(screen.queryByText(/Test mode|sandbox|Add simulated/)).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Remove', 'Pair a Terminal']);
+    orgService.removeSquareTerminal.mockResolvedValue({ data: { payments: payments(none()) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    const ask = screen.getByRole('group', { name: 'Remove this Terminal?' });
+    expect(within(ask).getByText("It's a simulated Terminal in Square's sandbox.")).toBeTruthy();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Remove' }));
+    expect(await screen.findByText('Terminal removed.')).toBeTruthy();
+    expect(orgService.removeSquareTerminal).toHaveBeenCalledWith(ORG.id, simulated.id);
   });
 });
 

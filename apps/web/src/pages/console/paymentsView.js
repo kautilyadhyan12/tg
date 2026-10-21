@@ -162,7 +162,8 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
 
 // ── Square Terminals (ROADMAP 18d-ii-b-i): pairing as Square's Dashboard and Stripe Terminal word it ──
 
-/** Square's simulated Terminals, in its sandbox only (Stripe calls its own "simulated readers"). */
+/** Square's simulated Terminals, in its sandbox only (Stripe calls its own "simulated readers"),
+ *  added by a tester's tool and never from a screen. */
 export const PRACTICE_TERMINAL_WORDS = {
   saves: 'Card saved',
   declines: 'Member declines',
@@ -170,8 +171,6 @@ export const PRACTICE_TERMINAL_WORDS = {
   times_out: 'Times out',
   offline: 'Offline',
 };
-
-export const PRACTICE_CHOICES = Object.entries(PRACTICE_TERMINAL_WORDS).map(([value, label]) => ({ value, label }));
 
 export function terminalName(terminal) {
   return terminal.practice === null ? 'Square Terminal' : `Simulated Terminal · ${PRACTICE_TERMINAL_WORDS[terminal.practice] ?? terminal.practice}`;
@@ -184,8 +183,8 @@ export function terminalDetail(terminal, timeZone) {
   return terminal.serial === null ? `Paired ${day}` : `Serial ${terminal.serial} · Paired ${day}`;
 }
 
-/** What was paired, said where Pair a Terminal was pressed. */
-export const pairedLine = (terminal) => (terminal?.practice != null ? 'Simulated Terminal added.' : 'Terminal paired.');
+/** Said where Pair a Terminal was pressed. */
+export const PAIRED_TERMINAL = 'Terminal paired.';
 
 export const REMOVED_TERMINAL = 'Terminal removed.';
 
@@ -193,7 +192,7 @@ export function removeTerminalWords(terminal, gymName) {
   return {
     question: 'Remove this Terminal?',
     changes: `It will no longer be available to ${gymName}.`,
-    kept: terminal.practice === null ? 'It stays signed in to Square. To sign it out, go to Settings > Sign out on the Terminal.' : 'You can add it again at any time.',
+    kept: terminal.practice === null ? 'It stays signed in to Square. To sign it out, go to Settings > Sign out on the Terminal.' : "It's a simulated Terminal in Square's sandbox.",
   };
 }
 
@@ -211,7 +210,6 @@ export const pairingActiveLine = (iso, clock) => {
   const time = momentLabel(iso, clock);
   return `A pairing code is active${time === '' ? '' : ` until ${time}`}. Get a new code if you no longer have it.`;
 };
-export const PRACTICE_INTRO = `Square's sandbox has no physical Terminals. Add a simulated one to test with.`;
 export const NO_TERMINALS = 'No Terminals paired yet.';
 export const NEEDS_ALLOW_LINE = 'Reconnect Square to use Square Terminals.';
 export const NEEDS_ALLOW_HINT = 'Square will ask you to approve device access and in-person payments.';

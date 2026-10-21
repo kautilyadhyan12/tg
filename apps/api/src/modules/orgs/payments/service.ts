@@ -102,7 +102,6 @@ async function terminalsView(deps: PaymentsDeps, square: SquareSettings, row: re
   const pairing = isOwner ? rows.find((t) => t.state === "pairing") : undefined;
   return {
     needsAllow: missingScopes(row),
-    practice: square.environment === "sandbox",
     list: rows.flatMap((t) =>
       t.state === "paired" && t.pairedAt !== null
         ? [{ id: t.id, serial: t.practice === null ? t.deviceId : null, practice: t.practice, pairedAt: t.pairedAt.toISOString() }]

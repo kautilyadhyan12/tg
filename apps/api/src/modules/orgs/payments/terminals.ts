@@ -13,8 +13,8 @@
 // gym's own owner pairs and removes, as only the owner connects Square. The code is shown once
 // and never kept.
 //
-// Square's test area makes and reads codes but no real Terminal can sign in there; the owner adds
-// one of its pretend Terminals instead.
+// Square's sandbox makes and reads codes but no real Terminal can sign in there; a tester adds one
+// of its simulated Terminals with `tools/square-simulated-terminal.ts`, never from a screen.
 import { randomUUID } from "node:crypto";
 import {
   GYM_PAYMENTS_WORDS,
@@ -37,7 +37,7 @@ import { accessContext, missingScopes, readPayments, requireGymOwner, squareOrTh
 import type { SquareSettings } from "./settings.js";
 import * as terminals from "./terminalsRepo.js";
 
-/** Square's pretend Terminals ("Sandbox testing", Terminal actions, read 2026-10-21). */
+/** Square's simulated Terminals ("Sandbox testing", Terminal actions, read 2026-10-21). */
 export const SQUARE_PRACTICE_DEVICES: Record<SquarePracticeTerminal, string> = {
   saves: "jg260ny-11t2-4xy2-kg21-tl949bp350ca",
   declines: "fgw34tg-qwe1-fod2-e03e-e0fk0qiabcfk",
@@ -177,22 +177,22 @@ export async function checkPairing(deps: PaymentsDeps, userId: string, gymId: st
   return await answer("waiting");
 }
 
-/** Square's test area: one of its pretend Terminals, in place of a real one signing in. */
-export async function addPracticeTerminal(deps: PaymentsDeps, userId: string, gymId: string, practice: SquarePracticeTerminal): Promise<GymPaymentsResponse> {
-  const { org } = await requireGymOwner(deps, gymId, userId, ownerOnly);
-  await requireWritableGym(deps, org);
-  if (squareOrThrow(deps).environment !== "sandbox") throw new OrgsError(409, "practice_only", GYM_PAYMENTS_WORDS.practice_only);
+/** Square's sandbox only: one of its simulated Terminals on a test gym, in place of a real one
+ *  signing in, for `tools/square-simulated-terminal.ts`. The gym is as Pair a Terminal needs it:
+ *  connected, with its location, where Square saves cards on a Terminal, allowing the Terminal.
+ *  Once a gym and account: false when it has it already. */
+export async function addSimulatedTerminal(deps: PaymentsDeps, gymId: string, practice: SquarePracticeTerminal): Promise<boolean> {
+  if (squareOrThrow(deps).environment !== "sandbox") throw new Error("simulated Terminals are for Square's sandbox only");
+  const gym = await repo.readGym(deps.sql, gymId);
+  if (gym === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   const { square, row } = await readyOrThrow(deps, gymId);
   if ((await terminals.countPaired(deps.sql, gymId, square.environment, row.accountId)) >= SQUARE_TERMINALS_MAX) {
     throw new OrgsError(409, "terminals_full", GYM_PAYMENTS_WORDS.terminals_full);
   }
-  await deps.sql.begin(async (tx) => {
+  return await deps.sql.begin(async (tx) => {
     await stillConnected(tx, square, gymId, row.accountId);
-    const added = await terminals.addPractice(tx, { gymId, accountId: row.accountId, practice, deviceId: SQUARE_PRACTICE_DEVICES[practice], createdBy: userId, now: deps.now() });
-    if (!added) return;
-    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.payments_square_terminal_paired", targetType: "gym", targetId: gymId, meta: { practice } });
+    return await terminals.addPractice(tx, { gymId, accountId: row.accountId, practice, deviceId: SQUARE_PRACTICE_DEVICES[practice], createdBy: gym.ownerUserId, now: deps.now() });
   });
-  return gymPaymentsResponseSchema.parse({ payments: await paymentsOf(deps, userId, gymId) });
 }
 
 /** Remove a Terminal, or a code still waiting, whatever the gym's plan: a gym may always stop

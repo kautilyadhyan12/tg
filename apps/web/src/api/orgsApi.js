@@ -691,8 +691,6 @@ export const orgService = {
       'Square',
       authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/terminals/${encodeURIComponent(pairingId)}/pairing`),
     ),
-  addPracticeTerminal: (gymId, practice) =>
-    readThrough(gymPaymentsResponseSchema, 'your payments', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/terminals/practice`, { practice })),
   removeSquareTerminal: (gymId, terminalId) =>
     readThrough(
       gymPaymentsResponseSchema,

@@ -53,16 +53,17 @@ export const SQUARE_PAIRING_MINUTES = 5;
 /** A gym pairs at most this many Terminals. */
 export const SQUARE_TERMINALS_MAX = 20;
 
-/** Square's pretend Terminals in its test area ("Sandbox testing", Terminal actions, read
- *  2026-10-21), which pairs no real one: it saves the card, the member taps Don't agree, the
- *  member cancels, Square times out, the Terminal is offline. */
+/** Square's simulated Terminals in its sandbox ("Sandbox testing", Terminal actions, read
+ *  2026-10-21), which pairs no real one: it saves the card, the member declines, the member
+ *  cancels, Square times out, the Terminal is offline. Added by `tools/square-simulated-terminal.ts`,
+ *  never from a screen (Kd, 2026-10-21: what a tester sees is what a business sees). */
 export const squarePracticeTerminalSchema = z.enum(["saves", "declines", "cancels", "times_out", "offline"]);
 export type SquarePracticeTerminal = z.infer<typeof squarePracticeTerminalSchema>;
 
 export const squareTerminalSchema = z
   .object({
     id: z.string().uuid(),
-    /** A real Terminal's serial number, as Square names it; null for a practice one. */
+    /** A real Terminal's serial number, as Square names it; null for a simulated one. */
     serial: z.string().max(100).nullable(),
     practice: squarePracticeTerminalSchema.nullable(),
     pairedAt: z.string().datetime(),
@@ -75,8 +76,6 @@ export const squareTerminalsSchema = z
   .object({
     /** Connected before Square Terminals could be used: the owner connects Square again. */
     needsAllow: z.boolean(),
-    /** Square's test area: its practice Terminals are offered, as it pairs no real one. */
-    practice: z.boolean(),
     list: z.array(squareTerminalSchema).max(SQUARE_TERMINALS_MAX),
     /** A code waiting for a Terminal to sign in, for the owner alone. */
     pairing: z.object({ id: z.string().uuid(), pairBy: z.string().datetime() }).strict().nullable(),
@@ -155,9 +154,6 @@ export const squarePairingCheckResponseSchema = z
   .strict();
 export type SquarePairingCheckResponse = z.infer<typeof squarePairingCheckResponseSchema>;
 
-export const squarePracticeRequestSchema = z.object({ practice: squarePracticeTerminalSchema }).strict();
-export type SquarePracticeRequest = z.infer<typeof squarePracticeRequestSchema>;
-
 export const squareLocationRequestSchema = z.object({ locationId: squareObjectIdSchema }).strict();
 export type SquareLocationRequest = z.infer<typeof squareLocationRequestSchema>;
 
@@ -177,6 +173,5 @@ export const GYM_PAYMENTS_WORDS = {
   terminals_need_allow: "Reconnect Square to use Square Terminals.",
   terminals_full: `You can pair up to ${String(SQUARE_TERMINALS_MAX)} Terminals. Remove one to pair another.`,
   pairing_gone: "This code is no longer active. Get a new code.",
-  practice_only: "Simulated Terminals are available in Square's sandbox only.",
   pairing_refused: "Square couldn't create a code. Try again in a minute.",
 } as const;

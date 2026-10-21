@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -9,12 +9,10 @@ import {
   NO_TERMINALS,
   PAIRING_EXPIRED,
   PAIRING_WAITING,
+  PAIRED_TERMINAL,
   PAIR_STEPS,
-  PRACTICE_CHOICES,
-  PRACTICE_INTRO,
   REMOVED_TERMINAL,
   TERMINAL_OWNER_ONLY,
-  pairedLine,
   pairingActiveLine,
   pairingUntilLine,
   removeTerminalWords,
@@ -27,8 +25,9 @@ import { ConsoleFailed } from './ConsoleStates';
 // GymMaster's: the owner presses Pair a Terminal, enters the code on the Terminal's sign-in screen
 // within five minutes, and the box asks Square every few seconds until a Terminal signs in with
 // it. The code is shown here once; the server never keeps it. Everybody who reads the box sees
-// the list; only the owner pairs and removes, as only the owner connects Square. In Square's
-// sandbox, where no real Terminal can sign in, the owner adds a simulated one instead.
+// the list; only the owner pairs and removes, as only the owner connects Square. The box is the
+// same in Square's sandbox as with a real account (Kd, 2026-10-21): a simulated Terminal for
+// testing is added by `apps/api/tools/square-simulated-terminal.ts`, never from here.
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const softStyle = { color: 'rgba(255,255,255,0.55)' };
@@ -42,7 +41,6 @@ const plainButton = { background: 'rgba(255,255,255,0.07)', color: '#fff' };
 const CHECK_EVERY_MS = 3000;
 
 export default function SquareTerminals({ org, terminals, owner, readOnly, onPayments, onReload, onConnectAgain, connecting = false, checkEveryMs = CHECK_EVERY_MS }) {
-  const practiceId = useId();
   // The code, for this screen alone: lost on leaving, as the server never keeps it.
   const [shown, setShown] = useState(null);
   const [expired, setExpired] = useState(false);
@@ -50,7 +48,6 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
   const [error, setError] = useState(null);
   const [doneLine, setDoneLine] = useState(null);
   const [asking, setAsking] = useState(null);
-  const [practice, setPractice] = useState(PRACTICE_CHOICES[0]?.value ?? 'saves');
   const clock = { timezone: org.timezone, clockFormat: org.clockFormat };
   const waitingId = owner ? (terminals.pairing?.id ?? null) : null;
   // The code whose answers the box takes: none while the owner's own press (a new code, Cancel)
@@ -74,7 +71,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
         onPayments(res.data.payments);
         if (res.data.outcome === 'paired') {
           setShown(null);
-          setDoneLine(pairedLine(res.data.payments.terminals?.list.find((t) => t.id === waitingId)));
+          setDoneLine(PAIRED_TERMINAL);
         } else if (res.data.outcome === 'expired') {
           setShown(null);
           setExpired(true);
@@ -145,12 +142,6 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
   const remove = async (terminal) => {
     await act('remove', () => orgService.removeSquareTerminal(org.id, terminal.id), () => REMOVED_TERMINAL);
     setAsking(null);
-  };
-  const addPractice = async (event) => {
-    event.preventDefault();
-    await act('practice', () => orgService.addPracticeTerminal(org.id, practice), (data) =>
-      pairedLine(data.payments.terminals?.list.find((t) => t.practice === practice)),
-    );
   };
 
   const heading = (
@@ -356,44 +347,6 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
             </button>
           </div>
         </div>
-      ) : null}
-
-      {owner && terminals.practice ? (
-        <form onSubmit={addPractice} className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle} aria-label="Simulated Terminals">
-          {/* Marked as Stripe and Square mark their own test areas: a real Square account never shows this. */}
-          <span className="self-start rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: 'rgba(255,179,71,0.15)', color: '#FFB347' }}>
-            Test mode
-          </span>
-          <p className="text-sm m-0" style={softStyle}>
-            {PRACTICE_INTRO}
-          </p>
-          <label htmlFor={practiceId} className="text-sm" style={labelStyle}>
-            Simulated Terminal
-          </label>
-          <select
-            id={practiceId}
-            value={practice}
-            onChange={(e) => setPractice(e.target.value)}
-            disabled={busy !== null || readOnly}
-            className="rounded-xl px-3 min-h-11 text-sm"
-            style={{ background: 'rgba(255,255,255,0.06)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)' }}
-          >
-            {PRACTICE_CHOICES.map((choice) => (
-              <option key={choice.value} value={choice.value} style={{ color: '#000' }}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            disabled={busy !== null || readOnly}
-            className="self-start rounded-full px-4 py-3 text-sm font-semibold flex items-center gap-2 disabled:opacity-40 min-h-11"
-            style={plainButton}
-          >
-            {busy === 'practice' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            Add simulated Terminal
-          </button>
-        </form>
       ) : null}
 
       {!owner ? (

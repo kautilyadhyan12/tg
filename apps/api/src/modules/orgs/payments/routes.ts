@@ -11,7 +11,6 @@
 // A gym's Square Terminals (ROADMAP 18d-ii-b-i), the owner's:
 //   POST   /v1/orgs/:gymId/payments/square/terminals/pair                 Pair a Terminal: Square's code
 //   GET    /v1/orgs/:gymId/payments/square/terminals/:terminalId/pairing  has a Terminal signed in with it
-//   POST   /v1/orgs/:gymId/payments/square/terminals/practice             one of Square's pretend Terminals
 //   DELETE /v1/orgs/:gymId/payments/square/terminals/:terminalId          Remove
 //
 // A member's card on file (ROADMAP 18d-ii):
@@ -26,7 +25,6 @@ import {
   squareFinishRequestSchema,
   squareLocationRequestSchema,
   squareObjectIdSchema,
-  squarePracticeRequestSchema,
   squareWebhookBodySchema,
 } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -127,14 +125,6 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const answer = await terminals.checkPairing(paymentsDeps, callerId(req), params.gymId, params.terminalId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
-  });
-
-  app.post(`${terminalsUrl}/practice`, { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {
-    const params = parseOr400(orgParamsSchema, req.params, req, reply);
-    if (params === null) return;
-    const body = parseOr400(squarePracticeRequestSchema, req.body, req, reply);
-    if (body === null) return;
-    return reply.status(200).send(await terminals.addPracticeTerminal(paymentsDeps, callerId(req), params.gymId, body.practice));
   });
 
   app.delete(`${terminalsUrl}/:terminalId`, { preHandler: [app.authenticate, changeLimit] }, async (req, reply) => {

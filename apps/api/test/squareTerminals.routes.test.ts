@@ -23,7 +23,9 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import type { SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
+import { addSimulatedTerminal } from "../src/modules/orgs/payments/terminals.js";
 
 const url = process.env["DATABASE_URL"];
 const d = describe.skipIf(url === undefined || url === "");
@@ -201,7 +203,6 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
   let clock = new Date();
   const square = fakeSquare(() => clock);
   let app: App | undefined;
-  let production: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
@@ -219,8 +220,8 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
     await sql`DELETE FROM plans WHERE code = ${LIVE_PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown, on: () => App = api) =>
-    on().inject({
+  const send = (method: "GET" | "POST" | "DELETE", path: string, cookies: Cookies, payload?: unknown) =>
+    api().inject({
       method,
       url: path,
       remoteAddress: nextIp(),
@@ -280,7 +281,7 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
     expect(res.statusCode, res.body).toBe(200);
     return gymPaymentsResponseSchema.parse(JSON.parse(res.body)).payments;
   };
-  const pairPress = (gymId: string, who: User, on?: () => App) => send("POST", `/v1/orgs/${gymId}/payments/square/terminals/pair`, who.cookies, undefined, on);
+  const pairPress = (gymId: string, who: User) => send("POST", `/v1/orgs/${gymId}/payments/square/terminals/pair`, who.cookies);
   const pair = async (gymId: string, owner: User) => {
     const res = await pairPress(gymId, owner);
     expect(res.statusCode, res.body).toBe(200);
@@ -296,8 +297,10 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
     return squarePairingCheckResponseSchema.parse(JSON.parse(res.body));
   };
   const removePress = (gymId: string, who: User, id: string) => send("DELETE", `/v1/orgs/${gymId}/payments/square/terminals/${id}`, who.cookies);
-  const practicePress = (gymId: string, who: User, practice: string, on?: () => App) =>
-    send("POST", `/v1/orgs/${gymId}/payments/square/terminals/practice`, who.cookies, { practice }, on);
+  /** The tester's tool (`tools/square-simulated-terminal.ts`), with this file's Square. */
+  const log = { info: () => undefined, warn: () => undefined, error: () => undefined };
+  const simulate = (gymId: string, kind: "saves" | "cancels", env: Record<string, string> = {}) =>
+    addSimulatedTerminal({ sql, square: squareSettings(loadConfig({ ...baseEnv, ...env }), square.api), log, now: () => clock }, gymId, kind);
   const rowsOf = (gymId: string) =>
     sql<{ id: string; state: string; account_id: string; device_id: string | null }[]>`
       SELECT id, state, account_id, device_id FROM gym_square_terminals WHERE gym_id = ${gymId} ORDER BY created_at`;
@@ -323,14 +326,11 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
     };
     app = await buildApp(loadConfig(baseEnv), opts);
     await api().ready();
-    production = await buildApp(loadConfig({ ...baseEnv, SQUARE_ENV: "production", SQUARE_APPLICATION_ID: "sq0idp-TERMINALSROUTES", SQUARE_APPLICATION_SECRET: "sq0csp-TERMINALSROUTESSECRET" }), opts); // dummy, gitleaks:allow
-    await production.ready();
   }, HOOK_TIMEOUT_MS);
 
   afterAll(async () => {
     await cleanup();
     await app?.close();
-    await production?.close();
     await sql.end();
   }, HOOK_TIMEOUT_MS);
 
@@ -370,7 +370,6 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
         expect((await pairPress(gymA, who)).statusCode).toBe(404);
         expect((await checkPress(gymA, who, waitingA.id)).statusCode).toBe(404);
         expect((await removePress(gymA, who, rowA.id)).statusCode).toBe(404);
-        expect((await practicePress(gymA, who, "saves")).statusCode).toBe(404);
       }
       // A's own staff read the list; only A's owner pairs, checks and removes, as only the owner
       // connects Square. Nobody else is shown the code waiting.
@@ -381,7 +380,6 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
         expect((await pairPress(gymA, who)).statusCode).toBe(403);
         expect((await checkPress(gymA, who, waitingA.id)).statusCode).toBe(403);
         expect((await removePress(gymA, who, rowA.id)).statusCode).toBe(403);
-        expect((await practicePress(gymA, who, "saves")).statusCode).toBe(403);
       }
       expect(await rowsOf(gymA)).toHaveLength(2);
 
@@ -419,7 +417,7 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       const gymId = await gym(owner, "Pair Gym");
       expect(await connect(gymId, owner, account("MLTPAIR"))).toMatchObject({ outcome: "connected" });
       const before = await read(gymId, owner);
-      expect(before.terminals).toEqual({ needsAllow: false, practice: true, list: [], pairing: null });
+      expect(before.terminals).toEqual({ needsAllow: false, list: [], pairing: null });
 
       const made = await pair(gymId, owner);
       expect(made.code).toMatch(/^[A-Z]{6}$/);
@@ -556,7 +554,6 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       expect((await checkPress(refused, owner, "not-a-uuid")).statusCode).toBe(400);
       expect((await removePress(refused, owner, "not-a-uuid")).statusCode).toBe(400);
       expect((await checkPress(refused, owner, randomUUID())).statusCode).toBe(404);
-      expect((await practicePress(refused, owner, "jg260ny-11t2-4xy2-kg21-tl949bp350ca")).statusCode).toBe(400);
       expect((await send("POST", `/v1/orgs/${refused}/payments/square/terminals/pair`, {})).statusCode).toBe(401);
     },
     TEST_TIMEOUT_MS,
@@ -574,7 +571,7 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       const old = await read(gymId, owner);
       expect(old.terminals).toMatchObject({ needsAllow: true, list: [] });
       expect((JSON.parse((await pairPress(gymId, owner)).body) as { error: string }).error).toBe("terminals_need_allow");
-      expect((await practicePress(gymId, owner, "saves")).statusCode).toBe(409);
+      await expect(simulate(gymId, "saves")).rejects.toThrow("Reconnect Square to use Square Terminals.");
       const connectedAt = old.square?.connectedAt;
 
       // Signed in to another Square account on Square's page: refused, and nothing changes.
@@ -602,29 +599,34 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
   );
 
   it(
-    "Square's test area: a practice Terminal in place of a real one, once each; never in Square's real one",
+    "Square's sandbox: a simulated Terminal from the tester's tool, once each, never from a screen and never in Square's real one",
     async () => {
       clock = new Date();
       const owner = await person("practice-owner");
       const gymId = await gym(owner, "Practice Gym");
       await connect(gymId, owner, account("MLTPRAC"));
-      const added = await practicePress(gymId, owner, "saves");
-      expect(added.statusCode, added.body).toBe(200);
-      expect((await practicePress(gymId, owner, "saves")).statusCode).toBe(200);
-      expect((await practicePress(gymId, owner, "cancels")).statusCode).toBe(200);
+      // No address of the app adds one: the box is the same as a real gym's.
+      expect((await send("POST", `/v1/orgs/${gymId}/payments/square/terminals/practice`, owner.cookies, { practice: "saves" })).statusCode).toBe(404);
+      expect(await simulate(gymId, "saves")).toBe(true);
+      expect(await simulate(gymId, "saves")).toBe(false);
+      expect(await simulate(gymId, "cancels")).toBe(true);
       const list = (await read(gymId, owner)).terminals?.list ?? [];
       expect(list.map((t) => [t.serial, t.practice])).toEqual([
         [null, "saves"],
         [null, "cancels"],
       ]);
       expect((await rowsOf(gymId)).map((r) => r.device_id)).toEqual(["jg260ny-11t2-4xy2-kg21-tl949bp350ca", "aafea9fa-350c-4ab2-b033-b2fbb672e712"]);
+      // The owner removes one there like any Terminal.
+      const [first] = await rowsOf(gymId);
+      expect((await removePress(gymId, owner, first?.id ?? "")).statusCode).toBe(200);
+      expect(await simulate(gymId, "saves")).toBe(true);
 
-      const real = await practicePress(gymId, owner, "saves", () => {
-        if (production === undefined) throw new Error("no production app");
-        return production;
-      });
-      expect(real.statusCode).toBe(409);
-      expect((JSON.parse(real.body) as { error: string }).error).toBe("practice_only");
+      // Never with Square's real keys, and never on a gym not ready for a Terminal.
+      await expect(simulate(gymId, "saves", { SQUARE_ENV: "production", SQUARE_APPLICATION_ID: "sq0idp-TERMINALSROUTES", SQUARE_APPLICATION_SECRET: "sq0csp-TERMINALSROUTESSECRET" })).rejects.toThrow("sandbox only"); // dummy, gitleaks:allow
+      const uk = await gym(owner, "Practice UK Gym", "GB");
+      await connect(uk, owner, account("MLTPRACUK", "GB"));
+      await expect(simulate(uk, "saves")).rejects.toThrow();
+      expect(await rowsOf(uk)).toEqual([]);
 
       // At most twenty: the twenty-first is refused.
       for (let i = 0; i < 18; i += 1) {
