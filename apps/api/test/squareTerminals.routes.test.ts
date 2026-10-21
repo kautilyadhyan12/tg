@@ -648,7 +648,7 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       const owner = await person("again-owner");
       const gymId = await gym(owner, "Again Gym");
       await connect(gymId, owner, account("MLTAGAIN"));
-      // As a connection made before 0146 reads.
+      // As a connection made before 0147 reads.
       await sql`UPDATE gym_payment_connections SET scopes = '{}' WHERE gym_id = ${gymId}`;
       const old = await read(gymId, owner);
       expect(old.terminals).toMatchObject({ needsAllow: true, list: [] });

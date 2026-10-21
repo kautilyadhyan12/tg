@@ -10,7 +10,7 @@ import { gyms } from "./tenancy.js";
  *  `PAYMENT_TOKENS_KEY` (`tokenBox.ts`) and held only while `state` is `connected`;
  *  `removed` keeps the business's name to say the gym took the app off inside Square. A
  *  connected row with no `location_id` is waiting for the owner to pick one of
- *  `location_choices`. `scopes` (0146): what the gym allowed on Square's page; a row made
+ *  `location_choices`. `scopes` (0147): what the gym allowed on Square's page; a row made
  *  before a permission was added is asked to connect again. */
 export const gymPaymentConnections = pgTable(
   "gym_payment_connections",
@@ -225,7 +225,7 @@ export const gymCardDisables = pgTable(
   ],
 );
 
-/** A gym's Square Terminals (0146; ROADMAP 18d-ii-b-i), in the Square account they were paired
+/** A gym's Square Terminals (0147; ROADMAP 18d-ii-b-i), in the Square account they were paired
  *  in. `pairing`: Square's code waits for a Terminal to sign in with it until `pair_by`; the
  *  code itself is never kept. `paired`: `device_id` is the Terminal's id at Square, the serial
  *  number under it; one row a Terminal in a Square account, whichever gym. `practice`: one of

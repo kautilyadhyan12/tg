@@ -520,7 +520,7 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // Square (`0142`): a one-time credential, on one_time_tokens' footing, never exported; it
   // goes with the account (`ON DELETE cascade`) and the worker forgets it once it runs out.
   "gym_payment_connect_starts",
-  // gym_square_terminals.created_by — which owner paired a Square Terminal (`0146`; 18d-ii-b-i),
+  // gym_square_terminals.created_by — which owner paired a Square Terminal (`0147`; 18d-ii-b-i),
   // on gym_payment_connections' footing: the gym's record; `ON DELETE set null`. A Terminal is
   // the gym's device, named by Square's serial number; nothing in the row is about a person.
   "gym_square_terminals",

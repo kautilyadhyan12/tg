@@ -1021,7 +1021,14 @@
       "idx": 145,
       "version": "7",
       "when": 1790726400146,
-      "tag": "0146_square_terminals",
+      "tag": "0146_next_plan_razorpay",
+      "breakpoints": true
+    },
+    {
+      "idx": 146,
+      "version": "7",
+      "when": 1790726400147,
+      "tag": "0147_square_terminals",
       "breakpoints": true
     }
   ]

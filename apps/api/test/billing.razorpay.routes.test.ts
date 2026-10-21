@@ -1007,9 +1007,10 @@ d("an Indian gym pays through Razorpay (real Postgres, fake Razorpay)", () => {
       // A run claims the cancel two hours before the end, then dies before asking Razorpay.
       const claimed = await claimCancelsToSend(sql, { now: new Date(a.end.getTime() - 2 * HOUR_MS), leadMs: 3 * HOUR_MS, limit: 50, gymId: a.gymId });
       expect(claimed.map((c) => c.subscriptionRef)).toEqual([a.sub]);
+      // An hour later its answer was never written down: it is sent again (4b-vi-b).
       await runAt(a.end, -HOUR_MS);
-      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(false);
-      // The month is over and Razorpay was never told: it is cancelled there now.
+      expect(razorpay.endAtCycleEnd.has(a.sub)).toBe(true);
+      // The month is over: the plan ends here, and is ended at Razorpay too.
       await runAt(a.end, 60_000);
       expect(await planRow(a.gymId)).toMatchObject({ status: "expired", cancel_at_period_end: true });
       expect(razorpay.subs.get(a.sub)?.status).toBe("cancelled");

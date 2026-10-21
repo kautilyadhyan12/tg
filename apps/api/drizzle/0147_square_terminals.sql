@@ -1,5 +1,6 @@
 -- A gym pairs its Square Terminal (ROADMAP Stage 2 item 18d-ii-b-i; spec Part 3 §14.5).
 -- Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of this commit.
+-- Numbered 0147 because web folder 2's pull request #329 merged 0146 first.
 --
 -- What each connection allowed: Square's page asks for every permission at once and the gym
 -- allows them all or none, so a connection made before a permission was added is asked to

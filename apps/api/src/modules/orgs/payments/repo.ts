@@ -42,7 +42,7 @@ export interface ConnectionRow {
   refreshToken: string | null;
   connectedAt: Date;
   removedAt: Date | null;
-  /** What the gym allowed on Square's page; none known for a row made before 0146. */
+  /** What the gym allowed on Square's page; none known for a row made before 0147. */
   scopes: string[];
 }
 

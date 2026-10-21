@@ -153,7 +153,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 4b-v. [x] **The two extra passes' fixes** — merged 2026-10-20 (PR #323).
      - 4b-vi. **A new owner chooses their plan before the handed-over plan ends** (Kd, 2026-10-20, `rulings/2026-10-20-1g.md`): it starts the day the old plan stops, so the members never drop to the free app between the two. Split 2026-10-21 by provider, as 4b-iii was.
       - 4b-vi-a. [x] **Through Paddle** — merged 2026-10-21 (PR #327).
-      - 4b-vi-b. [ ] **Through Razorpay**: a subscription that starts on the old plan's end. Web folder 2, after 4b-vi-a.
+      - 4b-vi-b. [x] **Through Razorpay** — merged 2026-10-21 (PR #329).
    - 4c. [x] **A seat is a person using the member app — the owner and staff too** — merged 2026-10-01 (PR #150).
    - 4d. [x] **Staff activity** — merged 2026-10-16 (PR #283).
    - 4e. [x] **A studio's coach sees the client list** — merged 2026-10-10 (PR #213).
@@ -427,6 +427,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 1d-iii. **A bigger or smaller size.** Razorpay refuses to change what an Indian card, UPI or bank mandate charges (tried 2026-10-01), so a new size is a new plan the gym approves in Razorpay's window. Split that day in two:
        - 1d-iii-a. [x] **A bigger size** — merged 2026-10-01 (PR #146).
        - 1d-iii-b. [x] **A smaller size** — merged 2026-10-01 (PR #148).
+     - 1d-iv. [ ] **UPI AutoPay** (Kd, 2026-10-21: *"KEEP UPI TO ROADMAP WILL DO LATER"*): switched on in Razorpay's dashboard (Subscriptions, Settings, UPI) and checked in its window. Razorpay takes UPI and cards only up to ₹15,000 a debit, so the ₹19,000, ₹26,500 and ₹36,500 sizes are paid by bank mandate: options to Kd in its plan.
    - 1e. [x] **Paddle's window filled in** — merged 2026-10-01 (PR #142).
    - 1f. [x] **The two extra passes' fixes** — merged 2026-10-01 (PR #149).
    - 1g. [x] **Keep my plan for a Paddle plan set to end** — merged 2026-10-20 (PR #325).
