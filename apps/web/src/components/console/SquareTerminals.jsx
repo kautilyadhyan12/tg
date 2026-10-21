@@ -305,7 +305,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
             </p>
           ) : shown !== null ? (
             <>
-              <ol className="m-0 pl-5 flex flex-col gap-1.5 text-sm" style={labelStyle}>
+              <ol className="m-0 pl-5 list-decimal flex flex-col gap-1.5 text-sm" style={labelStyle}>
                 {PAIR_STEPS.map((step) => (
                   <li key={step}>{step}</li>
                 ))}
