@@ -212,11 +212,13 @@ export function razorpayBillOwed(org) {
   );
 }
 
-/** MAY THIS VIEWER CANCEL THE RAZORPAY PLAN HERE? A live plan not already set to end. */
+/** MAY THIS VIEWER CANCEL THE RAZORPAY PLAN HERE? A live plan not already set to end. A new
+ *  owner's plan not yet started has its own Cancel new plan (`canCancelFollowingPlan`). */
 export function canCancelRazorpayPlan(org) {
   const sub = org?.subscription;
   return (
     canManageRazorpayPlan(org) &&
+    !isFollowingPlan(sub) &&
     sub?.cancelAtPeriodEnd !== true &&
     (sub?.status === 'active' || sub?.status === 'trialing' || sub?.status === 'past_due') &&
     !consoleIsReadOnly(org)
@@ -330,7 +332,7 @@ export function followedPlanName(sub) {
 }
 
 /** MAY THIS VIEWER CHOOSE THE NEXT PLAN NOW? A plan handed over with its gym, paid through
- *  Paddle, until the server's `nextPlanUntil` (4b-vi-a). Whoever manages billing, but the person
+ *  Paddle or Razorpay, until the server's `nextPlanUntil` (4b-vi). Whoever manages billing, but the person
  *  who paid for the plan being handed over; never on a read-only console. */
 export function canChooseNextPlan(org, now = Date.now()) {
   const sub = org?.subscription;
@@ -360,13 +362,15 @@ export function followingText(org, now = Date.now()) {
 }
 
 /** MAY THIS VIEWER CANCEL A NEW OWNER'S PLAN BEFORE IT STARTS? Paddle ends it with nothing
- *  charged (4b-vi-a). Any other plan paid through Paddle is cancelled on Paddle's own page. */
+ *  charged (4b-vi-a); Razorpay is told in the hours before it would start, as Cancel plan tells it,
+ *  and it can be kept until then (4b-vi-b). Any other plan paid through Paddle is cancelled on
+ *  Paddle's own page. */
 export function canCancelFollowingPlan(org) {
   const sub = org?.subscription;
   return (
     canManageBilling(viewerPrivileges(org)) &&
     isFollowingPlan(sub) &&
-    sub?.paidThrough === 'paddle' &&
+    (sub?.paidThrough === 'paddle' || sub?.paidThrough === 'razorpay') &&
     sub?.status === 'trialing' &&
     sub?.cancelAtPeriodEnd !== true &&
     sub?.handedOverBy == null &&

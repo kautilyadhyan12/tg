@@ -36,9 +36,11 @@ import { usePaddleSubscribe } from './usePaddleSubscribe';
 // the next payment. A smaller one: nothing now (Razorpay's ₹5 check, given back), the new price
 // from the next payment, and the gym keeps its whole size until then.
 //
-// `next` (4b-vi-a): on a plan handed over with its gym, paid through Paddle, the new owner chooses
-// their own plan now, in Paddle's window with their own card. Nothing is charged until the handed-
-// over plan ends, and the plan starts then, so the members keep the app between the two.
+// `next` (4b-vi-a Paddle, 4b-vi-b Razorpay): on a plan handed over with its gym, the new owner
+// chooses their own plan now, in the window of the company that plan is paid through, with their own
+// card. Its first payment is taken when the handed-over plan ends, and the plan starts then, so the
+// members keep the app between the two. Razorpay checks the card first with a small charge it
+// gives back, so on a Razorpay plan nothing here says "nothing is charged" before that payment.
 //
 // Unlike the prompt a gym on no plan meets (`PlanModal`), this one closes: the gym
 // already has a plan, and nothing here is owed.
@@ -54,10 +56,11 @@ function paidText(paid, words) {
     : `You're subscribed. Your plan has no ${words.person} limit.`;
 }
 
-/** What the dialog says once a new owner's plan is chosen (4b-vi-a). */
+/** What the dialog says once a new owner's plan is chosen (4b-vi). */
 function nextPaidText(paid) {
   const on = trialEndDateLabel(paid.currentPeriodEnd);
-  return on === null ? 'Done. Your plan starts when the current one ends. Nothing is charged until then.' : `Done. Your plan starts on ${on}. Nothing is charged until then.`;
+  const starts = on === null ? 'Done. Your plan starts when the current one ends' : `Done. Your plan starts on ${on}`;
+  return paid.paidThrough === 'razorpay' ? `${starts}, and its first payment is taken then.` : `${starts}. Nothing is charged until then.`;
 }
 
 /** The handed-over plan's end and who paid for it, said before the new owner chooses. A new plan
@@ -70,6 +73,9 @@ function nextIntroText(sub, words) {
       ? `the plan ${sub.handedOverBy.trim()} paid for`
       : 'the current plan';
   const when = on === null ? `when ${who} ends` : `on ${on}, when ${who} ends`;
+  if (sub?.paidThrough === 'razorpay') {
+    return `Your plan starts ${when}, so your ${words.people} keep the app. Its first payment is taken then. Razorpay may check your card with a small charge that it gives back.`;
+  }
   return `Your plan starts ${when}, so your ${words.people} keep the app. Nothing is charged until then. Paddle's window shows the days until then as a free trial, rounded up to whole days.`;
 }
 
