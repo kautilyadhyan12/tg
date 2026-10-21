@@ -573,6 +573,16 @@ export const orgSubscriptionSchema = z.object({
   handedOverBy: z.string().nullable().default(null),
   /** The person reading paid for this handed-over plan: it is their own (4b-iii-a). */
   handedOverByYou: z.boolean().default(false),
+  /** A plan handed over with its gym and paid through Paddle, once Paddle has confirmed it ends
+   *  (4b-vi-a): the next plan can be chosen until this moment (`PLAN_CANCEL_DECIDE_HOURS` before
+   *  `currentPeriodEnd`), and starts when this one ends. Null otherwise. */
+  nextPlanUntil: z.string().nullable().default(null),
+  /** A new owner's plan chosen before the handed-over plan it follows ended (4b-vi-a): who paid for
+   *  that plan, by name ("" when they have none). Its first payment is `currentPeriodEnd`. Null
+   *  for any other plan. */
+  followsPaidBy: z.string().nullable().default(null),
+  /** The person reading paid for the plan this one follows. */
+  followsPaidByYou: z.boolean().default(false),
   /** The gym has chosen a plan and paid for it through us (Paddle or Razorpay). In a trial this
    *  is only a paid trial made before 2026-09-30: its card saved and the first payment taken when
    *  the trial ends (`currentPeriodEnd`), `priceLabel` the plan's price. Paying now ends the

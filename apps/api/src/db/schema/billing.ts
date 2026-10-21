@@ -1,5 +1,5 @@
 // A gym paying us (ROADMAP Stage 3 items 1a, 1c-ii and 1c-iii). Mirrors `0041_paddle_billing.sql`,
-// `0044_paddle_plan_changes.sql`, `0045_paddle_smaller_size.sql`, `0060_razorpay_bigger_size.sql` and `0061_razorpay_smaller_size.sql`.
+// `0044_paddle_plan_changes.sql`, `0045_paddle_smaller_size.sql`, `0060_razorpay_bigger_size.sql`, `0061_razorpay_smaller_size.sql` and `0145_next_plan.sql`.
 import { sql } from "drizzle-orm";
 import { check, index, integer, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt } from "./common.js";
@@ -37,6 +37,10 @@ export const billingCheckouts = pgTable(
     upfrontMinor: integer("upfront_minor"),
     /** Whether the replacing plan is bigger or smaller (`0061`); null for a first plan. */
     sizeDirection: text("size_direction"),
+    /** A new owner's plan chosen before the handed-over plan it follows ends (`0145`, Paddle
+     *  only): that plan, and its end when the window was opened, when the first payment is taken. */
+    followsSubscriptionId: uuid("follows_subscription_id").references(() => subscriptions.id),
+    followsUntil: timestamp("follows_until", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -58,6 +62,10 @@ export const billingCheckouts = pgTable(
     check(
       "billing_checkouts_size_direction_check",
       sql`(${t.sizeDirection} IS NULL) = (${t.replacesSubscriptionId} IS NULL) AND (${t.sizeDirection} IS NULL OR ${t.sizeDirection} IN ('bigger','smaller')) AND (${t.upfrontMinor} IS NULL OR ${t.sizeDirection} = 'bigger')`,
+    ),
+    check(
+      "billing_checkouts_follows_check",
+      sql`(${t.followsSubscriptionId} IS NULL) = (${t.followsUntil} IS NULL) AND (${t.followsSubscriptionId} IS NULL OR (${t.provider} = 'paddle' AND ${t.replacesSubscriptionId} IS NULL))`,
     ),
     unique("billing_checkouts_gym_key_uq").on(t.gymId, t.idempotencyKey),
     unique("billing_checkouts_provider_ref_uq").on(t.provider, t.providerRef),

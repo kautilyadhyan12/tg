@@ -273,7 +273,7 @@ export function registerBillingRoutes(
     async (req, reply) => {
       const params = parseOr400(gymParams, req.params, req, reply);
       if (params === null) return;
-      const plan = await service.cancelRazorpayPlan(deps, { userId: requireUserId(req), gymId: params.gymId });
+      const plan = await service.cancelPlan(deps, { userId: requireUserId(req), gymId: params.gymId });
       return reply.status(200).send(plan);
     },
   );

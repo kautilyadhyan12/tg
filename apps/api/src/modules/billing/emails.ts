@@ -148,8 +148,9 @@ function atLabel(at: Date, timeZone: string): string {
 }
 
 /** What the plan box lets the gym do before its plan ends: keep it until a moment (Paddle or
- *  Razorpay, 1g), or choose a plan once it has ended. */
-export type PlanEndAction = { kind: "keep"; until: Date } | { kind: "choose" };
+ *  Razorpay, 1g), choose the next plan until a moment (a Paddle plan handed over, 4b-vi-a), or
+ *  choose a plan once it has ended. */
+export type PlanEndAction = { kind: "keep"; until: Date } | { kind: "choose_next"; until: Date } | { kind: "choose" };
 
 export interface PlanEndWords {
   to: string;
@@ -160,6 +161,8 @@ export interface PlanEndWords {
   priceLabel: string;
   /** A paid trial set to end: nothing is ever charged. */
   trialing: boolean;
+  /** A new owner's plan set to end before it starts (4b-vi-a): nothing is ever charged. */
+  following: boolean;
   endsAt: Date;
   timezone: string;
   /** The day-before email of a plan already sent the week-before one: its subject says so. */
@@ -176,13 +179,17 @@ export function planEndReminderEmail(w: PlanEndWords): EmailMessage {
   const when = atLabel(w.endsAt, w.timezone);
   const people = w.members > 0 ? countOf(w.members, words) : words.people;
   const lines = [
-    w.trialing
-      ? `${gym}'s plan ends with its free trial, at ${when}. Nothing is charged.`
-      : `${gym}'s plan, ${size(w.seatCap, words)} at ${w.priceLabel} a month, ends at ${when} and won't renew. Nothing more is charged.`,
+    w.following
+      ? `${gym}'s new plan, ${size(w.seatCap, words)} at ${w.priceLabel} a month, was cancelled before it started, so it ends at ${when} and nothing is charged.`
+      : w.trialing
+        ? `${gym}'s plan ends with its free trial, at ${when}. Nothing is charged.`
+        : `${gym}'s plan, ${size(w.seatCap, words)} at ${w.priceLabel} a month, ends at ${when} and won't renew. Nothing more is charged.`,
     `After that, its ${people} ${w.members === 1 ? "gets" : "get"} the free app only.`,
     w.action.kind === "keep"
       ? `To keep it, press Keep my plan before ${atLabel(w.action.until, w.timezone)}.`
-      : "Once it ends, you can choose a new plan.",
+      : w.action.kind === "choose_next"
+        ? `To keep your ${words.people} on a plan, choose the next one before ${atLabel(w.action.until, w.timezone)}. It starts when this one ends, and nothing is charged until then.`
+        : "Once it ends, you can choose a new plan.",
   ];
   const button = "Go to your plan";
   const text = `${lines.join("\n\n")}\n\n${button}: ${w.planLink}\n\n— ${APP_NAME}`;

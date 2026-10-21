@@ -73,6 +73,9 @@ export const orgCheckoutSyncResponseSchema = z.discriminatedUnion("state", [
   /** A bigger size paid after the plan changed meanwhile (1d-iii-a): nothing changed, and what
    *  was paid is refunded. */
   z.object({ state: z.literal("refunded") }),
+  /** A new owner's plan chosen before the handed-over plan ended, not put on the gym (the gym
+   *  changed meanwhile): its window charged nothing, and it is cancelled (4b-vi-a). */
+  z.object({ state: z.literal("not_started") }),
   z.object({ state: z.literal("paid"), subscription: orgSubscriptionSchema }),
 ]);
 export type OrgCheckoutSyncResponse = z.infer<typeof orgCheckoutSyncResponseSchema>;
