@@ -343,24 +343,25 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
       const cora = await makeCoOwner(gym, "Cora");
       const atCycleEnd = razorpay.cancelSubscriptionAtCycleEnd.bind(razorpay);
       const read = razorpay.getSubscription.bind(razorpay);
-      let unread = true;
-      razorpay.getSubscription = (id: string) => (unread && id === gym.sub ? Promise.resolve({ kind: "unavailable", status: 503 }) : read(id));
-      razorpay.cancelSubscriptionAtCycleEnd = () => Promise.resolve({ kind: "unavailable", status: 503 });
-      await handOver(gym, cora, gym.owner); // Accept's send: unanswered
-      // While the worker's send is with Razorpay, the cancel is claimed but not taken: Cora waits.
       let during: { statusCode: number; body: string } | undefined;
-      razorpay.cancelSubscriptionAtCycleEnd = async () => {
-        during = await checkout(gym, cora);
-        return { kind: "unavailable", status: 503 };
-      };
-      await runAt(gym.end, -10 * DAY_MS);
+      try {
+        razorpay.getSubscription = (id: string) => (id === gym.sub ? Promise.resolve({ kind: "unavailable", status: 503 }) : read(id));
+        razorpay.cancelSubscriptionAtCycleEnd = () => Promise.resolve({ kind: "unavailable", status: 503 });
+        await handOver(gym, cora, gym.owner); // Accept's send: unanswered
+        // While the worker's send is with Razorpay, the cancel is claimed but not taken: Cora waits.
+        razorpay.cancelSubscriptionAtCycleEnd = async () => {
+          during = await checkout(gym, cora);
+          return { kind: "unavailable", status: 503 };
+        };
+        await runAt(gym.end, -10 * DAY_MS);
+      } finally {
+        razorpay.cancelSubscriptionAtCycleEnd = atCycleEnd;
+        razorpay.getSubscription = read;
+      }
       expect(during?.statusCode).toBe(409);
       expect(during === undefined ? "" : errorOf(during)).toBe("plan_ending_unconfirmed");
       expect((await planRow(gym.id, gym.sub))?.cancel_sent_at).toBeNull();
       // Razorpay answers at the next run: the cancel is taken, and Cora may choose.
-      razorpay.cancelSubscriptionAtCycleEnd = atCycleEnd;
-      razorpay.getSubscription = read;
-      unread = false;
       await runAt(gym.end, -9 * DAY_MS);
       expect(razorpay.endAtCycleEnd.has(gym.sub)).toBe(true);
       const win = opened(await checkout(gym, cora));
@@ -385,7 +386,12 @@ d("a new owner chooses their plan before a Razorpay plan handed over with the gy
         if (id === win.subscriptionId) during = await checkout(gym, dev);
       };
       razorpay.cancelFailures = 1;
-      await handOver(gym, dev, cora);
+      try {
+        await handOver(gym, dev, cora);
+      } finally {
+        razorpay.duringNextCancel = null;
+        razorpay.cancelFailures = 0;
+      }
       expect(during?.statusCode).toBe(409);
       expect(during === undefined ? "" : errorOf(during)).toBe("plan_ending_unconfirmed");
       expect(razorpay.subs.get(win.subscriptionId)?.status).toBe("authenticated");
