@@ -32,6 +32,8 @@ export interface SaveRow {
   cardId: string | null;
   startedBy: string | null;
   startedAt: Date;
+  /** Staff pressed Cancel: the next look at Square stops the Terminal first. */
+  cancelWantedAt: Date | null;
 }
 
 interface RawSave {
@@ -54,6 +56,7 @@ interface RawSave {
   card_id: string | null;
   started_by: string | null;
   started_at: Date;
+  cancel_wanted_at: Date | null;
 }
 
 const toRow = (r: RawSave): SaveRow => {
@@ -78,12 +81,13 @@ const toRow = (r: RawSave): SaveRow => {
     cardId: r.card_id,
     startedBy: r.started_by,
     startedAt: r.started_at,
+    cancelWantedAt: r.cancel_wanted_at,
   };
 };
 
 const COLUMNS = (sql: SqlOrTx) =>
   sql`id, gym_id, entry_id, environment, account_id, device_id, customer_id, state, outcome, words, confirm_key,
-      confirm_action_id, picked_up, agreed_at, save_key, save_action_id, card_id, started_by, started_at`;
+      confirm_action_id, picked_up, agreed_at, save_key, save_action_id, card_id, started_by, started_at, cancel_wanted_at`;
 
 export interface NewSave {
   gymId: string;
@@ -162,8 +166,26 @@ export async function claimBlocking(sql: SqlOrTx, environment: SquareEnvironment
   return row === undefined ? null : toRow(row);
 }
 
-export async function release(sql: SqlOrTx, id: string): Promise<void> {
-  await sql`UPDATE gym_terminal_card_saves SET checking_until = NULL WHERE id = ${id}`;
+/** Let go of the save, while this request still holds it (`until` is its own hold): a hold that
+ *  ran out and was taken by another request is that one's. */
+export async function release(sql: SqlOrTx, id: string, until: Date): Promise<void> {
+  await sql`UPDATE gym_terminal_card_saves SET checking_until = NULL WHERE id = ${id} AND checking_until = ${until}`;
+}
+
+/** Staff pressed Cancel: kept on the save, so whichever request asks Square next stops the Terminal
+ *  before anything else. False when there is no such save waiting. */
+export async function wantCancel(sql: SqlOrTx, gymId: string, entryId: string, id: string, now: Date): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    UPDATE gym_terminal_card_saves SET cancel_wanted_at = COALESCE(cancel_wanted_at, ${now})
+    WHERE id = ${id} AND gym_id = ${gymId} AND entry_id = ${entryId} AND state IN ('agreeing','saving')
+    RETURNING id`;
+  return rows.length === 1;
+}
+
+/** Whether Cancel has been pressed, read afresh: another request may have marked it meanwhile. */
+export async function readCancelWanted(sql: SqlOrTx, id: string): Promise<Date | null> {
+  const [row] = await sql<{ cancel_wanted_at: Date | null }[]>`SELECT cancel_wanted_at FROM gym_terminal_card_saves WHERE id = ${id}`;
+  return row?.cancel_wanted_at ?? null;
 }
 
 /** Saves nobody has asked about for `idleMs`, for the worker: a page closed while it waited. */
@@ -205,11 +227,11 @@ export async function setPickedUp(sql: SqlOrTx, id: string): Promise<void> {
   await sql`UPDATE gym_terminal_card_saves SET picked_up = true WHERE id = ${id} AND NOT picked_up`;
 }
 
-/** The person tapped I agree: the card is asked for next. */
+/** The person tapped I agree: the card is asked for next, unless Cancel was pressed meanwhile. */
 export async function toSaving(sql: SqlOrTx, id: string, agreedAt: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE gym_terminal_card_saves SET state = 'saving', agreed_at = ${agreedAt}, picked_up = true
-    WHERE id = ${id} AND state = 'agreeing'
+    WHERE id = ${id} AND state = 'agreeing' AND cancel_wanted_at IS NULL
     RETURNING id`;
   return rows.length === 1;
 }

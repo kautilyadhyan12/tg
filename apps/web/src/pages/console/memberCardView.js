@@ -124,3 +124,6 @@ export function cardTerminalName(terminal) {
 export const cardTerminalSerial = (terminal) => (terminal?.serial == null ? null : `Serial ${terminal.serial}`);
 
 export const CHOOSE_TERMINAL = 'Choose a Terminal';
+
+/** Cancel was pressed and Square has not stopped the Terminal yet: the box asks again until it has. */
+export const TERMINAL_STOPPING = 'Asking the Terminal to stop…';

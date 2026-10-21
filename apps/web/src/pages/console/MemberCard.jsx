@@ -11,6 +11,7 @@ import {
   CARD_FORM_DIDNT_LOAD,
   CARD_NOT_TAKEN,
   CHOOSE_TERMINAL,
+  TERMINAL_STOPPING,
   cardBoxView,
   cardFormWords,
   cardRemovedLine,
@@ -175,18 +176,26 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
         <TerminalStep state={agreed ? 'done' : 'now'}>{words.agree}</TerminalStep>
         <TerminalStep state={agreed ? 'now' : 'later'}>{words.card}</TerminalStep>
       </ol>
-      {slow && !save.pickedUp && !agreed ? <p className="c-s14 c-t2 m-0">{words.notShown}</p> : null}
+      {slow && !save.pickedUp && !agreed && !save.stopping ? <p className="c-s14 c-t2 m-0">{words.notShown}</p> : null}
+      {save.stopping ? (
+        <p className="c-s14 c-t1 m-0 flex items-center gap-2" data-testid="terminal-stopping">
+          <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+          {TERMINAL_STOPPING}
+        </p>
+      ) : null}
       {problem !== null ? (
         <p className="c-s14 m-0" style={BAD} role="alert">
           {problem}
         </p>
       ) : null}
-      <div>
-        <button type="button" className={PLAIN} disabled={cancelling} onClick={() => void cancel()}>
-          {cancelling ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {cancelling ? 'Cancelling' : 'Cancel'}
-        </button>
-      </div>
+      {save.stopping ? null : (
+        <div>
+          <button type="button" className={PLAIN} disabled={cancelling} onClick={() => void cancel()}>
+            {cancelling ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {cancelling ? 'Cancelling' : 'Cancel'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

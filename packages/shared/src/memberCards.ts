@@ -141,6 +141,8 @@ export const terminalSaveSchema = z
     outcome: terminalSaveOutcomeSchema.nullable(),
     /** The Terminal has the step on its screen (Square no longer reads it as pending). */
     pickedUp: z.boolean(),
+    /** Cancel was pressed and Square has not stopped it yet. */
+    stopping: z.boolean(),
     /** How the card goes in: inserted or swiped in the US, swiped only in Canada and Australia
      *  (Square's "Save a Card on File with the Terminal API", read 2026-10-21). */
     entry: z.enum(["insert_or_swipe", "swipe"]),

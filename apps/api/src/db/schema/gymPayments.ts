@@ -308,6 +308,7 @@ export const gymTerminalCardSaves = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     checkingUntil: timestamp("checking_until", { withTimezone: true }),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    cancelWantedAt: timestamp("cancel_wanted_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [

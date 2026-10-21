@@ -16,8 +16,9 @@
 // waits on a Terminal at a time, and one for a person.
 //
 // Square answers with no clear answer (no connection, a 5xx) are asked again: a save is ended
-// only on Square's own answer, staff's Cancel, the gym leaving that Square account, or a day
-// without an answer.
+// only on Square's own answer, the gym leaving that Square account, or a day without an answer.
+// Staff's Cancel is kept on the save, so whichever request asks Square next stops the Terminal
+// before anything else, and says "Cancelled" only once Square has.
 import { randomUUID } from "node:crypto";
 import {
   GYM_PAYMENTS_WORDS,
@@ -46,7 +47,6 @@ import {
   sendOwedCardDisables,
   staffView,
   terminalSaveView,
-  unavailable,
   usableCard,
 } from "./cards.js";
 import * as cards from "./cardsRepo.js";
@@ -61,9 +61,12 @@ export const TERMINAL_SAVE = {
   /** Square cancels each action after this, at most five minutes ("TerminalAction"). */
   deadline: "PT5M",
   deadlineMs: 5 * 60_000,
-  /** After I agree the Terminal shows Square's waiting screen this long for the card step: long
-   *  enough for the worker's minute when nobody is on the page. */
-  awaitNext: "PT3M",
+  /** After the agreement the Terminal shows Square's waiting screen this long for the card step,
+   *  which the page sends within seconds. Kept short: after "I don't agree", or Cancel after
+   *  "I agree", no card step follows and the member would look at it (review round one, Low 2;
+   *  to be checked on the first real Terminal). A page closed meanwhile: the worker's card step
+   *  arrives at the Terminal after it, as any action does. */
+  awaitNext: "PT30S",
   /** Still not done this long past Square's own time: Square is asked to cancel it. An offline
    *  Terminal stays PENDING until cancelled (Square's sandbox, measured 2026-10-21). */
   graceMs: 60_000,
@@ -73,6 +76,8 @@ export const TERMINAL_SAVE = {
   notShownMs: 60_000,
   /** One request asks Square about a save at a time, for at most this long. */
   leaseMs: 20_000,
+  /** Cancel waits this long for a request already asking Square, then leaves its mark for it. */
+  cancelWaitMs: 2_000,
   /** Nobody has asked for this long: the worker asks. */
   idleMs: 20_000,
   /** Square giving no answer at all for a day: given up. */
@@ -157,14 +162,15 @@ async function actionOf(a: Asking): Promise<SquareResult<SquareTerminalAction>> 
   return made;
 }
 
-/** The action is the one this step asked for: this Terminal, this kind, this person. */
+/** The action is the one this step asked for: this Terminal and this kind, named in Square's
+ *  answer (its test area always names both). A card step naming another customer is not ours;
+ *  the card itself is checked when it is read back (`usableCard`). */
 function isOurs(a: Asking, action: SquareTerminalAction): boolean {
   const { save } = a;
   const id = save.state === "agreeing" ? save.confirmActionId : save.saveActionId;
-  if (action.id !== id) return false;
-  if (action.device_id !== undefined && action.device_id !== save.deviceId) return false;
-  if (save.state === "agreeing") return action.type === undefined || action.type === "CONFIRMATION";
-  if (action.type !== undefined && action.type !== "SAVE_CARD") return false;
+  if (action.id !== id || action.device_id !== save.deviceId) return false;
+  if (save.state === "agreeing") return action.type === "CONFIRMATION";
+  if (action.type !== "SAVE_CARD") return false;
   const customer = action.save_card_options?.customer_id;
   return customer == null || customer === save.customerId;
 }
@@ -279,9 +285,28 @@ async function saving(a: Asking, action: SquareTerminalAction): Promise<Step> {
   return kept.outcome === null ? null : { done: kept.outcome };
 }
 
+/** Cancel was pressed: the Terminal is stopped before anything else is asked of it. A card Square
+ *  saved already is kept, as Square saved it; otherwise it ends only on Square's own answer. */
+async function stopping(a: Asking, action: SquareTerminalAction): Promise<Step> {
+  const { save } = a;
+  if (action.status === "CANCELED") return await ended(a, cancelledAs(action, save.pickedUp));
+  // The agreement answered: no card is asked for. The card saved: kept.
+  if (action.status === "COMPLETED") return save.state === "agreeing" ? await ended(a, "cancelled") : await saving(a, action);
+  const cancel = await a.square.api.cancelTerminalAction(a.token, action.id);
+  if (cancel.kind === "ok" && isOurs(a, cancel.value) && (cancel.value.status === "CANCELED" || cancel.value.status === "COMPLETED")) return await stopping(a, cancel.value);
+  // Square has no such action: nothing is on the Terminal.
+  if (cancel.kind === "refused" && cancel.status === 404) return await ended(a, "cancelled");
+  // Asked (CANCEL_REQUESTED), refused as too late (the person confirmed their email on the
+  // Terminal), or no answer: Square's next answer ends it.
+  return null;
+}
+
 /** One look at Square for the save's step, and whatever follows from Square's answer. */
 async function step(a: Asking): Promise<Step> {
   const { deps, save } = a;
+  save.cancelWantedAt ??= await saves.readCancelWanted(deps.sql, save.id);
+  // Cancel pressed before the card was asked for: it never is.
+  if (save.cancelWantedAt !== null && save.state === "saving" && save.saveActionId === null) return await ended(a, "cancelled");
   const got = await actionOf(a);
   if (got.kind === "unavailable") {
     if (a.now.getTime() > save.startedAt.getTime() + TERMINAL_SAVE.giveUpMs) {
@@ -292,6 +317,7 @@ async function step(a: Asking): Promise<Step> {
   }
   if (got.kind === "refused") {
     if (got.code === "SAVE_MOVED_ON") return null;
+    if (save.cancelWantedAt !== null && got.status === 404) return await ended(a, "cancelled");
     deps.log.warn({ event: "square.terminal_action_refused", gymId: save.gymId, status: got.status, code: got.code }, "Square refused a Terminal action");
     return await ended(a, "refused", got);
   }
@@ -305,6 +331,7 @@ async function step(a: Asking): Promise<Step> {
     await saves.setPickedUp(deps.sql, save.id);
     save.pickedUp = true;
   }
+  if (save.cancelWantedAt !== null) return await stopping(a, action);
   return save.state === "agreeing" ? await agreeing(a, action) : await saving(a, action);
 }
 
@@ -317,17 +344,19 @@ async function tokenFor(deps: PaymentsDeps, square: SquareSettings, save: saves.
   return token === null ? null : { token, connectedAt: row.connectedAt };
 }
 
-/** Ask Square about a save this request holds, then let it go. */
-async function advance(deps: PaymentsDeps, square: SquareSettings, save: saves.SaveRow): Promise<Step> {
+/** Ask Square about a save this request holds until `until`, then let it go. */
+async function advance(deps: PaymentsDeps, square: SquareSettings, save: saves.SaveRow, until: Date): Promise<Step> {
   try {
     const now = deps.now();
     const held = await tokenFor(deps, square, save);
     if (held === null) return await ended({ deps, square, token: "", connectedAt: now, save, now }, "gone");
     return await step({ deps, square, ...held, save, now });
   } finally {
-    await saves.release(deps.sql, save.id);
+    await saves.release(deps.sql, save.id, until);
   }
 }
+
+const leaseFrom = (at: Date): Date => new Date(at.getTime() + TERMINAL_SAVE.leaseMs);
 
 /** The answer for the page: where the save stands, and Card on file as it is now. */
 async function answer(deps: PaymentsDeps, userId: string, gymId: string, entryId: string, saveId: string): Promise<TerminalSaveResponse> {
@@ -386,22 +415,22 @@ export async function startTerminalSave(deps: PaymentsDeps, userId: string, gymI
       saveKey: randomUUID(),
       startedBy: userId,
       now,
-      checkingUntil: new Date(now.getTime() + TERMINAL_SAVE.leaseMs),
+      checkingUntil: leaseFrom(now),
     });
   let written = await press();
   if (written.kind === "terminal_busy") {
     // Busy with a save that may be over (its page closed before the worker's minute, its person
     // gone): Square is asked about it once, with its own gym's token; then pressed again.
-    const blocking = await saves.claimBlocking(deps.sql, ready.square.environment, ready.row.accountId, deviceId, now, new Date(now.getTime() + TERMINAL_SAVE.leaseMs));
+    const blocking = await saves.claimBlocking(deps.sql, ready.square.environment, ready.row.accountId, deviceId, now, leaseFrom(now));
     if (blocking !== null) {
-      await advance(deps, ready.square, blocking);
+      await advance(deps, ready.square, blocking, leaseFrom(now));
       written = await press();
     }
   }
   if (written.kind === "terminal_busy") throw terminalBusy();
   if (written.kind === "key_reused") throw saveGone();
   if (written.kind === "new") {
-    const first = await advance(deps, ready.square, written.save);
+    const first = await advance(deps, ready.square, written.save, leaseFrom(now));
     if (first?.refusal !== undefined && first.done === "refused") throw startRefused(first.refusal);
   }
   return await answer(deps, userId, gymId, entryId, written.save.id);
@@ -413,54 +442,33 @@ export async function checkTerminalSave(deps: PaymentsDeps, userId: string, gymI
   const square = deps.square;
   if (square === null) throw saveGone();
   const now = deps.now();
-  const held = await saves.claimCheck(deps.sql, gymId, entryId, saveId, now, new Date(now.getTime() + TERMINAL_SAVE.leaseMs));
-  if (held !== null) await advance(deps, square, held);
+  const held = await saves.claimCheck(deps.sql, gymId, entryId, saveId, now, leaseFrom(now));
+  if (held !== null) await advance(deps, square, held, leaseFrom(now));
   return await answer(deps, userId, gymId, entryId, saveId);
 }
 
-/** Cancel: Square is asked to stop the step on the Terminal. Square stops a card save only until
- *  the person confirms their email there; after that the save finishes, and is kept. */
+/** Cancel: kept on the save, then Square is asked to stop the step on the Terminal, by this request
+ *  or, while another is asking Square, by that one (review round one, High 1). Square stops a card
+ *  save only until the person confirms their email there; after that the save finishes, and is kept. */
 export async function cancelTerminalSave(deps: PaymentsDeps, userId: string, gymId: string, entryId: string, saveId: string): Promise<TerminalSaveResponse> {
   await requirePrivilege(deps, gymId, userId, BILLING);
   const square = deps.square;
   if (square === null) throw saveGone();
-  if ((await saves.readSave(deps.sql, gymId, entryId, saveId)) === null) throw saveGone();
-  const now = deps.now();
-  const held = await saves.claimCheck(deps.sql, gymId, entryId, saveId, now, new Date(now.getTime() + TERMINAL_SAVE.leaseMs));
-  // Done already, or another request is asking Square this second: the answer says which.
-  if (held === null) return await answer(deps, userId, gymId, entryId, saveId);
-  const from = held.state === "saving" ? "saving" : "agreeing";
-  try {
-    const conn = await tokenFor(deps, square, held);
-    if (conn === null) {
-      await saves.finish(deps.sql, held.id, from, "gone", now);
-    } else {
-      const a = { deps, square, ...conn, save: held, now };
-      const got = await actionOf(a);
-      if (got.kind === "unavailable") throw unavailable();
-      // Square has no such action to stop: nothing is on the Terminal.
-      if (got.kind === "refused" && got.code !== "SAVE_MOVED_ON") await saves.finish(deps.sql, held.id, from, "cancelled", now);
-      if (got.kind === "ok" && isOurs(a, got.value)) {
-        const stopped = async (action: SquareTerminalAction): Promise<boolean> => {
-          if (action.status === "CANCELED") await saves.finish(deps.sql, held.id, from, cancelledAs(action, held.pickedUp), now);
-          // The agreement already answered: no card is asked for.
-          else if (action.status === "COMPLETED" && from === "agreeing") await saves.finish(deps.sql, held.id, from, "cancelled", now);
-          // The card already saved: kept, as Square saved it.
-          else if (action.status === "COMPLETED") await step(a);
-          else return false;
-          return true;
-        };
-        if (!(await stopped(got.value))) {
-          const cancel = await square.api.cancelTerminalAction(conn.token, got.value.id);
-          if (cancel.kind === "unavailable") throw unavailable();
-          if (cancel.kind === "ok" && isOurs(a, cancel.value)) await stopped(cancel.value);
-          // Asked (CANCEL_REQUESTED), or refused as too late (the person confirmed their email on
-          // the Terminal): Square's next answer ends it.
-        }
-      }
+  if (!(await saves.wantCancel(deps.sql, gymId, entryId, saveId, deps.now()))) {
+    // Done already, or no such save.
+    if ((await saves.readSave(deps.sql, gymId, entryId, saveId)) === null) throw saveGone();
+    return await answer(deps, userId, gymId, entryId, saveId);
+  }
+  const waitUntil = Date.now() + TERMINAL_SAVE.cancelWaitMs;
+  for (;;) {
+    const now = deps.now();
+    const held = await saves.claimCheck(deps.sql, gymId, entryId, saveId, now, leaseFrom(now));
+    if (held !== null) {
+      await advance(deps, square, held, leaseFrom(now));
+      break;
     }
-  } finally {
-    await saves.release(deps.sql, held.id);
+    if (Date.now() >= waitUntil) break;
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   return await answer(deps, userId, gymId, entryId, saveId);
 }
@@ -468,9 +476,15 @@ export async function cancelTerminalSave(deps: PaymentsDeps, userId: string, gym
 /** The worker's minute: saves nobody has asked about since a page closed, and done ones to forget.
  *  `gymIds`: only these gyms, for a test sharing its database; production passes null. */
 export async function processTerminalSaves(deps: PaymentsDeps, square: SquareSettings, gymIds: readonly string[] | null = null): Promise<{ asked: number; forgotten: number }> {
-  const now = deps.now();
-  const idle = await saves.claimIdle(deps.sql, square.environment, now, TERMINAL_SAVE.idleMs, new Date(now.getTime() + TERMINAL_SAVE.leaseMs), TERMINAL_SAVE.perRun, gymIds);
-  for (const save of idle) await advance(deps, square, save);
-  const forgotten = await saves.forgetDone(deps.sql, new Date(now.getTime() - TERMINAL_SAVE.keepMs), gymIds);
-  return { asked: idle.length, forgotten };
+  // One at a time, each held only while it is asked about (review round one, Low 5).
+  let asked = 0;
+  while (asked < TERMINAL_SAVE.perRun) {
+    const at = deps.now();
+    const [save] = await saves.claimIdle(deps.sql, square.environment, at, TERMINAL_SAVE.idleMs, leaseFrom(at), 1, gymIds);
+    if (save === undefined) break;
+    await advance(deps, square, save, leaseFrom(at));
+    asked += 1;
+  }
+  const forgotten = await saves.forgetDone(deps.sql, new Date(deps.now().getTime() - TERMINAL_SAVE.keepMs), gymIds);
+  return { asked, forgotten };
 }

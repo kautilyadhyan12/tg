@@ -86,6 +86,8 @@ interface FakeAction {
   cardId: string | null;
   /** The person confirmed their email on the Terminal: Square no longer cancels the save. */
   confirmed: boolean;
+  /** Square's own time of its last change. */
+  updatedAt: string | null;
 }
 
 function fakeSquare() {
@@ -98,8 +100,14 @@ function fakeSquare() {
   const actions = new Map<string, FakeAction>();
   const actionKeys = new Map<string, string>();
   // `down`: no answer at all. `loseAnswers`: a new action is made and its answer lost on the
-  // way. `wordsSaid`: the Terminal answers for other words than asked.
-  const state: { down: boolean; loseAnswers: boolean; wordsSaid: string | null } = { down: false, loseAnswers: false, wordsSaid: null };
+  // way. `wordsSaid`: the Terminal answers for other words than asked. `answerAs`: Square's
+  // answer names another Terminal or another kind of action.
+  const state: { down: boolean; loseAnswers: boolean; wordsSaid: string | null; answerAs: { device_id?: string | undefined; type?: string | undefined } | null } = {
+    down: false,
+    loseAnswers: false,
+    wordsSaid: null,
+    answerAs: null,
+  };
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
   const unauthorized = { kind: "refused", status: 401, code: "UNAUTHORIZED" } as const;
@@ -120,6 +128,7 @@ function fakeSquare() {
     type: a.type,
     status: a.status,
     ...(a.cancelReason === null ? {} : { cancel_reason: a.cancelReason }),
+    ...(a.updatedAt === null ? {} : { updated_at: a.updatedAt }),
     ...(a.type === "CONFIRMATION"
       ? { confirmation_options: { body: state.wordsSaid ?? a.body, ...(a.hasAgreed === null ? {} : { decision: { has_agreed: a.hasAgreed } }) } }
       : { save_card_options: { customer_id: a.customerId, ...(a.cardId === null ? {} : { card_id: a.cardId }) } }),
@@ -227,6 +236,7 @@ function fakeSquare() {
         customerId: c.type === "SAVE_CARD" ? c.customerId : null,
         cardId: null,
         confirmed: false,
+        updatedAt: null,
       };
       actions.set(made.id, made);
       actionKeys.set(`${a.merchantId}:${c.idempotencyKey}`, made.id);
@@ -240,7 +250,7 @@ function fakeSquare() {
       const action = actions.get(id);
       if (action?.accountId !== a.merchantId) return Promise.resolve(notFound);
       play(action);
-      return Promise.resolve({ kind: "ok", value: actionJson(action) });
+      return Promise.resolve({ kind: "ok", value: { ...actionJson(action), ...(state.answerAs ?? {}) } });
     },
     cancelTerminalAction(token, id) {
       if (state.down) return Promise.resolve(unavailable);
@@ -267,7 +277,7 @@ function fakeSquare() {
   /** The person at a Terminal. */
   const at = (deviceId: string) => ({
     sees: () => Object.assign(open(deviceId, "CONFIRMATION"), { status: "IN_PROGRESS" }),
-    agrees: () => Object.assign(open(deviceId, "CONFIRMATION"), { status: "COMPLETED", hasAgreed: true }),
+    agrees: (at: Date | null = null) => Object.assign(open(deviceId, "CONFIRMATION"), { status: "COMPLETED", hasAgreed: true, updatedAt: at === null ? null : at.toISOString() }),
     disagrees: () => Object.assign(open(deviceId, "CONFIRMATION"), { status: "COMPLETED", hasAgreed: false }),
     cancels: () => Object.assign(open(deviceId, "CONFIRMATION"), { status: "CANCELED", cancelReason: "BUYER_CANCELED" }),
     confirmsEmail: () => Object.assign(open(deviceId, "SAVE_CARD"), { status: "IN_PROGRESS", confirmed: true }),
@@ -570,6 +580,62 @@ d("Save card on Terminal: the person's own I agree, then their card, on them alo
     expect((await cardRows(gymA.id)).map((r) => [r.entry_id, r.last4])).toEqual([[tara, "4242"]]);
   });
 
+  it("Square's answer naming another Terminal or another kind of action is never acted on (review round one)", async () => {
+    clock = new Date();
+    const gym = await makeGym("Terminal Not Ours");
+    const acct = account(`TCN${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const desk = await terminal(gym, acct);
+    for (const [answerAs, who] of [
+      [{ device_id: "R5SOMEOTHERONE" }, "Ann Other Terminal"],
+      [{ type: "SIGNATURE" }, "Ben Other Kind"],
+      [{ device_id: undefined }, "Cy No Terminal Named"],
+    ] as const) {
+      const person = await record(gym, who);
+      const started = await start(gym, gym.owner, person, desk.id);
+      square.at(desk.deviceId).agrees();
+      square.state.answerAs = answerAs;
+      expect((await check(gym, gym.owner, person, started.save.id)).save, who).toMatchObject({ step: "done", outcome: "refused" });
+      square.state.answerAs = null;
+    }
+    expect(actionsOn(desk.deviceId, "SAVE_CARD")).toHaveLength(0);
+    expect(await cardRows(gym.id)).toEqual([]);
+  });
+
+  it("the agreement is kept with Square's own time of I agree; a payer added while the card goes in keeps no card (review round one)", async () => {
+    clock = new Date();
+    const gym = await makeGym("Terminal Kept");
+    const acct = account(`TCK${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const desk = await terminal(gym, acct);
+    const tara = await record(gym, "Tara Kept");
+    const started = await start(gym, gym.owner, tara, desk.id);
+    const tapped = new Date(clock.getTime() + 4_000);
+    clock = new Date(clock.getTime() + 9_000);
+    square.at(desk.deviceId).agrees(tapped);
+    expect((await check(gym, gym.owner, tara, started.save.id)).save.step).toBe("card");
+    square.at(desk.deviceId).gives("1212");
+    expect((await check(gym, gym.owner, tara, started.save.id)).save.outcome).toBe("saved");
+    const [kept] = await sql<{ agreed_at: Date }[]>`SELECT agreed_at FROM gym_card_agreements WHERE gym_id = ${gym.id} AND entry_id = ${tara}`;
+    expect(kept?.agreed_at.toISOString()).toBe(tapped.toISOString());
+
+    // Aarav: Priya starts paying for him while his card goes in. Nothing is kept, and Square is
+    // told to stop the card it saved.
+    const aarav = await record(gym, "Aarav Kept");
+    const priya = await record(gym, "Priya Kept");
+    const second = await start(gym, gym.owner, aarav, desk.id);
+    square.at(desk.deviceId).agrees();
+    expect((await check(gym, gym.owner, aarav, second.save.id)).save.step).toBe("card");
+    const link = await send("PUT", `/v1/orgs/${gym.id}/member-list/entries/${aarav}/payer`, gym.owner.cookies, { payerEntryId: priya });
+    expect(link.statusCode, link.body).toBe(200);
+    square.at(desk.deviceId).gives("3434");
+    const ended = await check(gym, gym.owner, aarav, second.save.id);
+    expect(ended.save).toMatchObject({ step: "done", outcome: "gone" });
+    expect(ended.cardOnFile.card).toBeNull();
+    expect((await cardRows(gym.id)).map((r) => r.entry_id)).toEqual([tara]);
+    expect([...square.cards.values()].find((c) => c.last4 === "3434")?.enabled).toBe(false);
+  });
+
   it("what staff see on a person's page: Terminals for the payments tick, Pair a Terminal for the owner, the save waiting", async () => {
     clock = new Date();
     const gym = await makeGym("Terminal View");
@@ -716,6 +782,36 @@ d("Save card on Terminal: the person's own I agree, then their card, on them alo
     square.at(desk.deviceId).gives("5151");
     expect((await check(gym, gym.owner, tara, second.save.id)).save.outcome).toBe("saved");
     expect((await cardRows(gym.id)).map((r) => r.last4)).toEqual(["5151"]);
+  });
+
+  it("Cancel pressed while another request is asking Square: it is kept, and that ask stops the Terminal (review round one, High 1)", async () => {
+    clock = new Date();
+    const gym = await makeGym("Terminal Cancel Race");
+    const acct = account(`TCR${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const tara = await record(gym, "Tara Race");
+    const desk = await terminal(gym, acct);
+    const holding = async (id: string) => sql`UPDATE gym_terminal_card_saves SET checking_until = ${new Date(clock.getTime() + 20_000)} WHERE id = ${id}`;
+    const letGo = async (id: string) => sql`UPDATE gym_terminal_card_saves SET checking_until = NULL WHERE id = ${id}`;
+
+    // Cancel while the page's own ask holds the save: it says it is stopping, and the next ask stops it.
+    const first = await start(gym, gym.owner, tara, desk.id);
+    await holding(first.save.id);
+    const pressed = parsed(await cancelPress(gym, gym.owner, tara, first.save.id));
+    expect(pressed.save).toMatchObject({ step: "agree", outcome: null, stopping: true });
+    await letGo(first.save.id);
+    expect((await check(gym, gym.owner, tara, first.save.id)).save).toMatchObject({ step: "done", outcome: "cancelled" });
+    expect(actionsOn(desk.deviceId)).toMatchObject([{ type: "CONFIRMATION", status: "CANCELED", cancelReason: "SELLER_CANCELED" }]);
+
+    // Cancel while an ask holds it, and the member taps I agree meanwhile: no card is ever asked for.
+    const second = await start(gym, gym.owner, tara, desk.id);
+    await holding(second.save.id);
+    expect(parsed(await cancelPress(gym, gym.owner, tara, second.save.id)).save.stopping).toBe(true);
+    square.at(desk.deviceId).agrees();
+    await letGo(second.save.id);
+    expect((await check(gym, gym.owner, tara, second.save.id)).save).toMatchObject({ step: "done", outcome: "cancelled" });
+    expect(actionsOn(desk.deviceId, "SAVE_CARD")).toHaveLength(0);
+    expect(await cardRows(gym.id)).toEqual([]);
   });
 
   it("a page closed while it waits: the worker finishes it, and a record deleted meanwhile keeps nothing", async () => {

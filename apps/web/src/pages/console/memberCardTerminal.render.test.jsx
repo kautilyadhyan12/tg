@@ -65,6 +65,7 @@ const saveOf = (over = {}) => ({
   step: 'agree',
   outcome: null,
   pickedUp: false,
+  stopping: false,
   entry: 'insert_or_swipe',
   terminal: DESK,
   startedAt: new Date().toISOString(),
@@ -203,6 +204,23 @@ describe('Save card on Terminal: the box', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Save card on Terminal' }));
     fireEvent.click(within(await screen.findByTestId('terminal-wait')).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(orgService.cancelTerminalSave).toHaveBeenCalledWith(GYM, TARA, SAVE_ID));
+    expect(within(await screen.findByTestId('terminal-not-saved')).getByText('Cancelled. Nothing was saved.')).toBeTruthy();
+  });
+
+  it("Cancel while Square has not stopped it yet: says it is asking the Terminal to stop, and keeps asking until it has", async () => {
+    orgService.getMemberCard.mockReturnValue(cardAnswer());
+    orgService.startTerminalSave.mockReturnValue(saveAnswer({}));
+    orgService.checkTerminalSave
+      .mockReturnValueOnce(saveAnswer({ pickedUp: true }))
+      .mockReturnValueOnce(saveAnswer({ pickedUp: true, stopping: true }))
+      .mockReturnValue(saveAnswer({ step: 'done', outcome: 'cancelled' }));
+    orgService.cancelTerminalSave.mockReturnValue(saveAnswer({ pickedUp: true, stopping: true }));
+    show({ checkEveryMs: 30 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save card on Terminal' }));
+    const box = await screen.findByTestId('terminal-wait');
+    fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByText('Asking the Terminal to stop…')).toBeTruthy();
+    expect(within(screen.getByTestId('terminal-wait')).queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(within(await screen.findByTestId('terminal-not-saved')).getByText('Cancelled. Nothing was saved.')).toBeTruthy();
   });
 
