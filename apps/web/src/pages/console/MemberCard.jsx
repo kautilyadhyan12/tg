@@ -177,6 +177,7 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
         <TerminalStep state={agreed ? 'now' : 'later'}>{words.card}</TerminalStep>
       </ol>
       {slow && !save.pickedUp && !agreed && !save.stopping ? <p className="c-s14 c-t2 m-0">{words.notShown}</p> : null}
+      {save.tooLate ? <p className="c-s14 c-t1 m-0">{words.tooLate}</p> : null}
       {save.stopping ? (
         <p className="c-s14 c-t1 m-0 flex items-center gap-2" data-testid="terminal-stopping">
           <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
@@ -188,7 +189,7 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
           {problem}
         </p>
       ) : null}
-      {save.stopping ? null : (
+      {save.stopping || save.tooLate ? null : (
         <div>
           <button type="button" className={PLAIN} disabled={cancelling} onClick={() => void cancel()}>
             {cancelling ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}

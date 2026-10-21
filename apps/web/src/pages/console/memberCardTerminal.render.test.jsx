@@ -66,6 +66,7 @@ const saveOf = (over = {}) => ({
   outcome: null,
   pickedUp: false,
   stopping: false,
+  tooLate: false,
   entry: 'insert_or_swipe',
   terminal: DESK,
   startedAt: new Date().toISOString(),
@@ -222,6 +223,16 @@ describe('Save card on Terminal: the box', () => {
     expect(await screen.findByText('Asking the Terminal to stop…')).toBeTruthy();
     expect(within(screen.getByTestId('terminal-wait')).queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(within(await screen.findByTestId('terminal-not-saved')).getByText('Cancelled. Nothing was saved.')).toBeTruthy();
+  });
+
+  it("Cancel too late (the member confirmed on the Terminal): says so, with no Cancel, and the card step goes on", async () => {
+    orgService.getMemberCard.mockReturnValue(cardAnswer({ terminalSave: saveOf({ step: 'card', pickedUp: true, tooLate: true }) }));
+    orgService.checkTerminalSave.mockReturnValue(new Promise(() => undefined));
+    show();
+    const box = await screen.findByTestId('terminal-wait');
+    expect(within(box).getByText('Too late to cancel: Tara has confirmed on the Terminal.')).toBeTruthy();
+    expect(within(box).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect([...box.querySelectorAll('li')].map((li) => li.getAttribute('data-state'))).toEqual(['done', 'now']);
   });
 
   it('a save already waiting is shown to whoever opens the page, and the steps say where it is', async () => {

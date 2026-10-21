@@ -34,6 +34,8 @@ export interface SaveRow {
   startedAt: Date;
   /** Staff pressed Cancel: the next look at Square stops the Terminal first. */
   cancelWantedAt: Date | null;
+  /** Square refused Cancel as too late: the person confirmed on the Terminal. */
+  cancelTooLate: boolean;
 }
 
 interface RawSave {
@@ -57,6 +59,7 @@ interface RawSave {
   started_by: string | null;
   started_at: Date;
   cancel_wanted_at: Date | null;
+  cancel_too_late: boolean;
 }
 
 const toRow = (r: RawSave): SaveRow => {
@@ -82,12 +85,13 @@ const toRow = (r: RawSave): SaveRow => {
     startedBy: r.started_by,
     startedAt: r.started_at,
     cancelWantedAt: r.cancel_wanted_at,
+    cancelTooLate: r.cancel_too_late,
   };
 };
 
 const COLUMNS = (sql: SqlOrTx) =>
   sql`id, gym_id, entry_id, environment, account_id, device_id, customer_id, state, outcome, words, confirm_key,
-      confirm_action_id, picked_up, agreed_at, save_key, save_action_id, card_id, started_by, started_at, cancel_wanted_at`;
+      confirm_action_id, picked_up, agreed_at, save_key, save_action_id, card_id, started_by, started_at, cancel_wanted_at, cancel_too_late`;
 
 export interface NewSave {
   gymId: string;
@@ -180,6 +184,12 @@ export async function wantCancel(sql: SqlOrTx, gymId: string, entryId: string, i
     WHERE id = ${id} AND gym_id = ${gymId} AND entry_id = ${entryId} AND state IN ('agreeing','saving')
     RETURNING id`;
   return rows.length === 1;
+}
+
+/** Square refused Cancel as too late (the person confirmed on the Terminal): the card goes in,
+ *  and the box says so instead of waiting for a stop that will not come. */
+export async function cancelRefusedTooLate(sql: SqlOrTx, id: string): Promise<void> {
+  await sql`UPDATE gym_terminal_card_saves SET cancel_too_late = true, cancel_wanted_at = NULL WHERE id = ${id} AND state = 'saving'`;
 }
 
 /** Whether Cancel has been pressed, read afresh: another request may have marked it meanwhile. */

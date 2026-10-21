@@ -143,6 +143,8 @@ export const terminalSaveSchema = z
     pickedUp: z.boolean(),
     /** Cancel was pressed and Square has not stopped it yet. */
     stopping: z.boolean(),
+    /** Square refused Cancel: the person had confirmed on the Terminal, and the card goes in. */
+    tooLate: z.boolean(),
     /** How the card goes in: inserted or swiped in the US, swiped only in Canada and Australia
      *  (Square's "Save a Card on File with the Terminal API", read 2026-10-21). */
     entry: z.enum(["insert_or_swipe", "swipe"]),

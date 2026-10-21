@@ -89,6 +89,7 @@ export function terminalWaitWords(save, name) {
         ? `${who.first} swipes their card, then follows the steps on the Terminal.`
         : `${who.first} inserts or swipes their card, then follows the steps on the Terminal.`,
     notShown: "The Terminal hasn't shown it yet. Check it's on and connected to the internet.",
+    tooLate: `Too late to cancel: ${who.first} has confirmed on the Terminal.`,
   };
 }
 

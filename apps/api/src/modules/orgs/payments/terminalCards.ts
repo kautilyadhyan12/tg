@@ -296,6 +296,13 @@ async function stopping(a: Asking, action: SquareTerminalAction): Promise<Step> 
   if (cancel.kind === "ok" && isOurs(a, cancel.value) && (cancel.value.status === "CANCELED" || cancel.value.status === "COMPLETED")) return await stopping(a, cancel.value);
   // Square has no such action: nothing is on the Terminal.
   if (cancel.kind === "refused" && cancel.status === 404) return await ended(a, "cancelled");
+  // Too late: the person confirmed on the Terminal, and the card goes in (review re-check, Low 7).
+  if (cancel.kind === "refused" && cancel.status === 400 && save.state === "saving") {
+    await saves.cancelRefusedTooLate(a.deps.sql, save.id);
+    save.cancelWantedAt = null;
+    save.cancelTooLate = true;
+    return null;
+  }
   // Asked (CANCEL_REQUESTED), refused as too late (the person confirmed their email on the
   // Terminal), or no answer: Square's next answer ends it.
   return null;

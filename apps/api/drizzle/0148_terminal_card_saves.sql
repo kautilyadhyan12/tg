@@ -8,7 +8,8 @@
 -- `not_saved` are done, with why in `outcome`. The key each action is asked with is kept, so
 -- asking again gives back the same action. A card is kept only while the gym is still on the
 -- Square account the press began with. `cancel_wanted_at`: staff pressed Cancel, and whichever
--- request asks Square next stops the Terminal before anything else.
+-- request asks Square next stops the Terminal before anything else; `cancel_too_late`: Square
+-- refused, as the person had confirmed on the Terminal, so the card goes in.
 --
 -- A record deleted for good, or joined to another, lets go of its row's `entry_id`: whatever
 -- the Terminal then saves is stopped at Square and never kept. The link sets `entry_id` alone
@@ -37,6 +38,7 @@ CREATE TABLE "gym_terminal_card_saves" (
 	"checking_until" timestamp with time zone,
 	"checked_at" timestamp with time zone NOT NULL,
 	"cancel_wanted_at" timestamp with time zone,
+	"cancel_too_late" boolean DEFAULT false NOT NULL,
 	"finished_at" timestamp with time zone,
 	CONSTRAINT "gym_terminal_card_saves_environment_check" CHECK ("environment" IN ('sandbox','production')),
 	CONSTRAINT "gym_terminal_card_saves_ids_check" CHECK ("account_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "device_id" ~ '^[A-Za-z0-9:_-]{1,100}$' AND "customer_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND ("confirm_action_id" IS NULL OR "confirm_action_id" ~ '^[A-Za-z0-9:_-]{1,255}$') AND ("save_action_id" IS NULL OR "save_action_id" ~ '^[A-Za-z0-9:_-]{1,255}$') AND ("card_id" IS NULL OR "card_id" ~ '^[A-Za-z0-9:_-]{1,192}$')),

@@ -778,7 +778,7 @@ d("Save card on Terminal: the person's own I agree, then their card, on them alo
     square.at(desk.deviceId).agrees();
     expect((await check(gym, gym.owner, tara, second.save.id)).save.step).toBe("card");
     square.at(desk.deviceId).confirmsEmail();
-    expect(parsed(await cancelPress(gym, gym.owner, tara, second.save.id)).save.step).toBe("card");
+    expect(parsed(await cancelPress(gym, gym.owner, tara, second.save.id)).save).toMatchObject({ step: "card", stopping: false, tooLate: true });
     square.at(desk.deviceId).gives("5151");
     expect((await check(gym, gym.owner, tara, second.save.id)).save.outcome).toBe("saved");
     expect((await cardRows(gym.id)).map((r) => r.last4)).toEqual(["5151"]);

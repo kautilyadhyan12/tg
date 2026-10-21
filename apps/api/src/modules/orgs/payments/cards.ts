@@ -182,6 +182,7 @@ export function terminalSaveView(save: terminalSaves.SaveRow, country: string | 
     outcome: save.outcome,
     pickedUp: save.pickedUp || save.state !== "agreeing",
     stopping: save.cancelWantedAt !== null && (save.state === "agreeing" || save.state === "saving"),
+    tooLate: save.cancelTooLate && save.state === "saving",
     // Square's page: "In the United States, cards can be dipped or swiped"; in Canada and
     // Australia "only be swiped".
     entry: country === "US" ? "insert_or_swipe" : "swipe",
