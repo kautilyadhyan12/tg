@@ -265,7 +265,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18d-i-b. [x] **The Square token test that fails at random** — merged 2026-10-21 (PR #326).
      - 18d-ii. [x] **A member's card saved on Square's own form** — merged 2026-10-21 (PR #324).
      - 18d-ii-b. **Save a card on a Square Terminal at the desk** (US, Canada, Australia; Kd 2026-10-20 and 2026-10-21, `rulings/2026-10-21-18d-ii-b.md`), split in two on 2026-10-21 (the line as first written is in `handoff/2026-10-21-18d-ii-b.md`):
-       - 18d-ii-b-i. [ ] **Pair a Square Terminal** in Settings → Payments: Square's five-minute code typed on the Terminal; Connect Square again for the Terminal's permissions; Square's practice Terminals in its test area.
+       - 18d-ii-b-i. [x] **Pair a Square Terminal** — merged 2026-10-21 (PR #328).
        - 18d-ii-b-ii. [ ] **Save card on Terminal** on a person's page: our agreement on the Terminal, then Square's own save; Waiting, Cancel, Card saved or Not saved; typing (18d-ii) stays.
      - 18d-ii-c. [ ] **A front-desk app for the Square Reader** (Kd, 2026-10-21): staff sign in, find the member, the member pays on the Reader and ticks the agreement, Square saves the card from that payment; Square's React Native kit, tested with its pretend Reader only.
      - 18r. [ ] **UPI at Sell for gyms in India**: Record payment offers "UPI" beside Cash, Card at the desk and Bank transfer.
