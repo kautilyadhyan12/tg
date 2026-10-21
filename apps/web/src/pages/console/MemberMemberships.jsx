@@ -106,6 +106,11 @@ const TONE_COLOURS = { green: 'var(--good)', orange: 'var(--warn)', red: 'var(--
 const MAIN = 'c-btn c-btn-p';
 const PLAIN = 'c-btn c-btn-s';
 const SMALL = 'c-btn c-btn-s c-btn-sm';
+
+/** A gym with no memberships set up yet: what a person's page says, and for staff who cannot set
+ *  them up, who can. */
+export const NONE_TO_SELL = 'No memberships set up yet.';
+export const NONE_TO_SELL_ASK = 'No memberships set up yet. Ask the owner to set them up.';
 const DANGER = 'c-btn c-btn-danger';
 const LINK = 'c-btn c-btn-link c-btn-sm';
 // A small button's colour says what kind of thing it does: taking a payment is the
@@ -213,7 +218,9 @@ export default function MemberMemberships({
   // A box that sends staff to Memberships reads again when they come back to this tab, so
   // a type set up in another one is here to pick: while its button is on screen, on the
   // list's own row or in the Add membership form of a gym with no types.
-  const sendsToMemberships = listed?.toMemberships === true || (open?.what === 'add' && shown !== null && shown.types.length === 0);
+  const sendsToMemberships =
+    listed?.toMemberships === true ||
+    (shown !== null && shown.types.length === 0 && (open?.what === 'add' || shown.memberships.length === 0));
   useCameBack(membershipsTo !== null && sendsToMemberships, () => setAttempt((n) => n + 1));
 
   if (loadError !== null && shown === null) {
@@ -239,8 +246,10 @@ export default function MemberMemberships({
   if (shown === null) return null;
   /** The gym's price list, as it was when these memberships were read. */
   const types = shown.types;
-  // A gym that sells nothing here, and a person holding nothing: no box.
-  if (types.length === 0 && shown.memberships.length === 0) return null;
+  // A gym that sells nothing here yet, and a person holding nothing: the box says so, with the
+  // button to Memberships for whoever may set them up (Kd, 2026-10-21: "there is no option to
+  // sell membership did you dele that option").
+  const nothingToSell = types.length === 0 && shown.memberships.length === 0;
 
   const today = shown.today;
   /** A bill of it can be paid now, or a fee of it is owed: one that is over and still owes
@@ -1306,7 +1315,7 @@ export default function MemberMemberships({
     <section className="c-card px-4 py-3 md:px-5 md:py-4 flex flex-col gap-2" data-testid="held-memberships">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="c-h2 flex-1 min-w-0">Memberships</h3>
-        {canAct && open === null ? (
+        {canAct && open === null && !nothingToSell ? (
           <button type="button" className={SMALL} onClick={startAdd} disabled={busy}>
             <Plus aria-hidden="true" className="w-4 h-4" />
             Add membership
@@ -1343,7 +1352,13 @@ export default function MemberMemberships({
           {listed.toMemberships ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : null}
         </div>
       ) : null}
-      {live.length === 0 && over.length === 0 && open === null && listed === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}
+      {nothingToSell && listed === null ? (
+        <div className="flex flex-col gap-2 items-start" data-testid="held-none-to-sell">
+          <p className="c-s14 c-t2 m-0">{managesTypes ? NONE_TO_SELL : NONE_TO_SELL_ASK}</p>
+          {managesTypes ? <PlaceLink to={membershipsTo}>Set up memberships</PlaceLink> : null}
+        </div>
+      ) : null}
+      {!nothingToSell && live.length === 0 && over.length === 0 && open === null && listed === null ? <p className="c-s14 c-t3 m-0">No membership yet.</p> : null}
       {nothingNow !== null && live.length === 0 && over.length > 0 && !shown.past ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-nothing-now">
           {`No membership now. ${nothingNow}`}

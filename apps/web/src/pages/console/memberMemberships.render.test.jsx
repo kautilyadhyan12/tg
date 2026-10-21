@@ -308,12 +308,24 @@ describe('cancelling a pack that classes are booked with', () => {
 });
 
 describe('what the box draws', () => {
-  it('draws nothing for a gym with no membership types and a person holding none', async () => {
+  it("a gym with no memberships set up yet: says so, with Set up memberships for whoever may (Kd, 2026-10-21)", async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [] }));
-    render(draw(ADA, 'Ada Lovelace'));
-    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledWith(GYM, ADA));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(screen.queryByTestId('held-memberships')).toBeNull();
+    render(draw(ADA, 'Ada Lovelace', { membershipsTo: '/console/iron-house/memberships' }));
+    const b = await boxSoon();
+    expect(within(b.getByTestId('held-none-to-sell')).getByText('No memberships set up yet.')).toBeTruthy();
+    expect(b.getByRole('link', { name: 'Set up memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships');
+    // Nothing to add from here, and no "No membership yet." beside it.
+    expect(b.queryByRole('button', { name: 'Add membership' })).toBeNull();
+    expect(b.queryByText('No membership yet.')).toBeNull();
+  });
+
+  it('a gym with no memberships set up yet, for staff who cannot set them up: who can, and no button', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { types: [] }));
+    render(draw(ADA, 'Ada Lovelace', { managesTypes: false, membershipsTo: null }));
+    const b = await boxSoon();
+    expect(b.getByText('No memberships set up yet. Ask the owner to set them up.')).toBeTruthy();
+    expect(b.queryByRole('link', { name: 'Set up memberships' })).toBeNull();
+    expect(b.queryByRole('button', { name: 'Add membership' })).toBeNull();
   });
 
   it("says the membership their list names where they do not hold it here, never 'No membership yet' beside it (Kd's click-through)", async () => {
