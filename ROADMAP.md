@@ -260,7 +260,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18c. ~~Pay by the gym's own link~~ **Dropped 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`): not standard practice; members pay through 18d's company or at the desk.
    - 18d. **The first Connect button: Square** (Kd's sign-up worked 2026-10-19; `rulings/2026-10-19-18d-i.md`), split that day in four (the line as first written is in `handoff/2026-10-19-18d-i.md`):
      - 18d-i. [x] **Connect Square and Disconnect** — merged 2026-10-20 (PR #319).
-     - 18d-i-b. [ ] **The Square token test that fails at random** (Kd, 2026-10-20, `rulings/2026-10-20-4b-iv.md`): `payments.unit.test.ts` changes the second-to-last letter but picks it by the last, so about 1 run in 64 nothing changes and it fails (seen on PR #320). A small pull request, no review. Web folder 1.
+     - 18d-i-b. [x] **The Square token test that fails at random** — merged 2026-10-21 (PR #326).
      - 18d-ii. [x] **A member's card saved on Square's own form** — merged 2026-10-21 (PR #324).
      - 18d-ii-b. [ ] **Tap to save the card on a Square Terminal at the desk** (Kd, 2026-10-20, `rulings/2026-10-20-18d-ii.md`): in the US, Canada and Australia, staff press Tap card on Terminal and the member taps or inserts their card on the gym's own Square Terminal; typing into Square's boxes (18d-ii) stays the fallback. Its plan first checks whether Square's kit for the small Square Reader can save a card.
      - 18r. [ ] **UPI at Sell for gyms in India**: Record payment offers "UPI" beside Cash, Card at the desk and Bank transfer.
