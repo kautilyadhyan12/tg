@@ -161,6 +161,16 @@ export async function addPractice(
   return { outcome: "paired", movedFrom };
 }
 
+/** This person is the gym's owner or on its staff. */
+export async function isStaffOf(sql: SqlOrTx, gymId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ one: number }[]>`
+    SELECT 1 AS one FROM gyms WHERE id = ${gymId} AND owner_user_id = ${userId}
+    UNION ALL
+    SELECT 1 AS one FROM gym_staff WHERE gym_id = ${gymId} AND user_id = ${userId}
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
 /** Remove: the gym stops using the Terminal, paired or still waiting. */
 export async function deleteTerminal(tx: TransactionSql, gymId: string, environment: SquareEnvironment, id: string): Promise<TerminalRow | null> {
   const rows = await tx<RawTerminal[]>`

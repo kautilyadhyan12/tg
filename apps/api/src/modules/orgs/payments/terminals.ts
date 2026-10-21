@@ -60,11 +60,14 @@ const needsAllow = (): OrgsError => new OrgsError(409, "terminals_need_allow", G
 const pairingGone = (): OrgsError => new OrgsError(404, "pairing_gone", GYM_PAYMENTS_WORDS.pairing_gone);
 const full = (): OrgsError => new OrgsError(409, "terminals_full", GYM_PAYMENTS_WORDS.terminals_full);
 
-/** In each gym that listed the Terminal until it signed in here: where it went. */
+/** In each gym that listed the Terminal until it signed in here: where it went. The person is
+ *  named there only when they are on that gym's staff (one owner of both, as in most chains);
+ *  otherwise the line names nobody, and Staff activity, which shows what a gym's own people did,
+ *  leaves it out rather than show another business's person. */
 async function auditMoves(tx: TransactionSql, userId: string, toName: string, movedFrom: readonly terminals.MovedFrom[], deviceId: string): Promise<void> {
   for (const from of movedFrom) {
     await insertAudit(tx, {
-      actorUserId: userId,
+      actorUserId: (await terminals.isStaffOf(tx, from.gymId, userId)) ? userId : null,
       gymId: from.gymId,
       action: "org.payments_square_terminal_moved",
       targetType: "gym",

@@ -51,7 +51,7 @@ function openPanel(data) {
 }
 
 /** The Terminals part alone, holding the box's answer as the box does, asking every 5 ms. */
-function Holder({ start, owner = true, readOnly = false }) {
+function Holder({ start, owner = true, readOnly = false, onReload = () => undefined }) {
   const [data, setData] = useState(start);
   return (
     <SquareTerminals
@@ -60,7 +60,7 @@ function Holder({ start, owner = true, readOnly = false }) {
       owner={owner}
       readOnly={readOnly}
       onPayments={setData}
-      onReload={() => undefined}
+      onReload={onReload}
       onConnectAgain={() => undefined}
       checkEveryMs={5}
     />
@@ -132,7 +132,8 @@ describe('connected in the US, Canada or Australia', () => {
     expect(screen.queryByText("Square didn't answer.")).toBeNull();
 
     cleanup();
-    render(<Holder start={payments(none())} />);
+    const reload = vi.fn();
+    render(<Holder start={payments(none())} onReload={reload} />);
     orgService.checkSquarePairing.mockReset();
     orgService.checkSquarePairing.mockRejectedValue({ response: { status: 409, data: { error: 'card_connection_refused', message: "Square didn't accept the connection to your Square account." } } });
     fireEvent.click(screen.getByRole('button', { name: 'Pair a Terminal' }));
@@ -143,6 +144,8 @@ describe('connected in the US, Canada or Australia', () => {
     const asked = orgService.checkSquarePairing.mock.calls.length;
     await new Promise((r) => setTimeout(r, 60));
     expect(orgService.checkSquarePairing.mock.calls.length).toBe(asked);
+    // The server may have let the code go: the box is read again.
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 
   it('a code waiting from before, with the code gone from the screen: Get a new code or Cancel', async () => {

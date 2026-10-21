@@ -436,11 +436,25 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
         SELECT meta FROM audit_log WHERE gym_id = ${north} AND action = 'org.payments_square_terminal_moved'`;
       expect(moved.map((m) => m.meta)).toEqual([{ serial: desk, to: "Chain South" }]);
 
+      // Another business's owner on the same Square account (not on North's staff) takes the
+      // Terminal: North's line names nobody, so North's Staff activity never shows that person.
+      const other = await person("chain-other");
+      const west = await gym(other, "Chain West");
+      expect(await connect(west, other, chain)).toMatchObject({ outcome: "connected" });
+      await pairTerminal(west, other, desk);
+      const fromSouth = await sql<{ actor_user_id: string | null; meta: { to?: string } }[]>`
+        SELECT actor_user_id, meta FROM audit_log WHERE gym_id = ${south} AND action = 'org.payments_square_terminal_moved'`;
+      expect(fromSouth).toEqual([{ actor_user_id: null, meta: { serial: desk, to: "Chain West" } }]);
+      const northMoves = await sql<{ actor_user_id: string | null }[]>`
+        SELECT actor_user_id FROM audit_log WHERE gym_id = ${north} AND action = 'org.payments_square_terminal_moved'`;
+      expect(northMoves).toEqual([{ actor_user_id: owner.userId }]);
+
       // A simulated Terminal follows the same rule.
       expect(await simulate(north, "saves")).toBe(true);
       expect(await simulate(south, "saves")).toBe(true);
       expect((await read(north, owner)).terminals?.list.map((t) => t.practice)).toEqual([]);
-      expect((await read(south, owner)).terminals?.list.map((t) => t.practice)).toEqual([null, "saves"]);
+      // (The desk now stands at West.)
+      expect((await read(south, owner)).terminals?.list.map((t) => t.practice)).toEqual(["saves"]);
     },
     TEST_TIMEOUT_MS,
   );

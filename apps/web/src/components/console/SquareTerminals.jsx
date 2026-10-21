@@ -105,6 +105,8 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
         } else {
           setStalled(true);
           setError(errorText(err, "We couldn't reach Square. Get a new code to try again."));
+          // The server may have let the code go (past the limit, say): read the box again.
+          onReload();
         }
       }
     };
