@@ -228,7 +228,8 @@ export const gymCardDisables = pgTable(
 /** A gym's Square Terminals (0146; ROADMAP 18d-ii-b-i), in the Square account they were paired
  *  in. `pairing`: Square's code waits for a Terminal to sign in with it until `pair_by`; the
  *  code itself is never kept. `paired`: `device_id` is the Terminal's id at Square, the serial
- *  number under it. `practice`: one of Square's pretend Terminals, in its test area only. */
+ *  number under it; one row a Terminal in a Square account, whichever gym. `practice`: one of
+ *  Square's simulated Terminals, in its sandbox only. */
 export const gymSquareTerminals = pgTable(
   "gym_square_terminals",
   {
@@ -263,7 +264,7 @@ export const gymSquareTerminals = pgTable(
       "gym_square_terminals_practice_check",
       sql`${t.practice} IS NULL OR (${t.practice} IN ('saves','declines','cancels','times_out','offline') AND ${t.environment} = 'sandbox' AND ${t.state} = 'paired' AND ${t.deviceCodeId} IS NULL)`,
     ),
-    uniqueIndex("gym_square_terminals_device_uq").on(t.gymId, t.environment, t.accountId, t.deviceId).where(sql`${t.deviceId} IS NOT NULL`),
+    uniqueIndex("gym_square_terminals_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.deviceId} IS NOT NULL`),
     uniqueIndex("gym_square_terminals_pairing_uq").on(t.gymId, t.environment).where(sql`${t.state} = 'pairing'`),
   ],
 );

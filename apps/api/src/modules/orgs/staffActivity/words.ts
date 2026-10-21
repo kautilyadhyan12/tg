@@ -150,6 +150,12 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const serial = text(s, "serial");
     return serial === null ? "Added a simulated Square Terminal" : `Paired Square Terminal ${serial}`;
   },
+  "org.payments_square_terminal_moved": (s) => {
+    const serial = text(s, "serial");
+    const to = text(s, "to");
+    const which = serial === null ? "A simulated Square Terminal" : `Square Terminal ${serial}`;
+    return to === null ? `${which} was paired elsewhere` : `${which} was paired with ${to}`;
+  },
   "org.payments_square_terminal_removed": (s) => {
     const serial = text(s, "serial");
     return serial === null ? "Removed a simulated Square Terminal" : `Removed Square Terminal ${serial}`;

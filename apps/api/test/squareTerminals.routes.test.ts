@@ -23,6 +23,7 @@ import {
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
+import { endConnectionsForHandOver } from "../src/modules/orgs/payments/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import type { SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 import { addSimulatedTerminal } from "../src/modules/orgs/payments/terminals.js";
@@ -398,13 +399,80 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       expect(await connect(gymA, ownerA, account("MLTWA"))).toMatchObject({ outcome: "connected" });
       expect((await read(gymA, ownerA)).terminals?.list.map((t) => t.serial)).toEqual([deviceA]);
 
-      // A gym handed to a new owner: the old owner's account goes, and so does its Terminal.
+      // A gym handed to a new owner: the hand-over lets the old owner's account go (4b-v's own
+      // step), and with it its Terminal.
       await sql`UPDATE gyms SET owner_user_id = ${coOwner.userId} WHERE id = ${gymA}`;
-      await sql`DELETE FROM gym_payment_connections WHERE gym_id = ${gymA}`;
+      await sql.begin((tx) => endConnectionsForHandOver(tx, gymA, clock));
       expect((await read(gymA, coOwner)).terminals).toBeNull();
       expect(await connect(gymA, coOwner, account("MLTWNEW"))).toMatchObject({ outcome: "connected" });
       expect((await read(gymA, coOwner)).terminals?.list).toEqual([]);
       expect((await pairPress(gymA, ownerA)).statusCode).toBe(403);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the worst thing, two gyms on one Square account: a Terminal is listed by the gym it last signed in for, never by both",
+    async () => {
+      clock = new Date();
+      const owner = await person("chain-owner");
+      const north = await gym(owner, "Chain North");
+      const south = await gym(owner, "Chain South");
+      const chain = account("MLTCHAIN");
+      expect(await connect(north, owner, chain)).toMatchObject({ outcome: "connected" });
+      expect(await connect(south, owner, chain)).toMatchObject({ outcome: "connected" });
+
+      const desk = await pairTerminal(north, owner);
+      expect((await read(north, owner)).terminals?.list.map((t) => t.serial)).toEqual([desk]);
+      expect((await read(south, owner)).terminals?.list).toEqual([]);
+
+      // The Terminal is carried to South's desk and signs in with South's code: South has it, and
+      // North no longer lists a Terminal that now stands elsewhere.
+      await pairTerminal(south, owner, desk);
+      expect((await read(south, owner)).terminals?.list.map((t) => t.serial)).toEqual([desk]);
+      expect((await read(north, owner)).terminals?.list).toEqual([]);
+      expect(await sql`SELECT gym_id FROM gym_square_terminals WHERE device_id = ${desk}`).toEqual([{ gym_id: south }]);
+      const moved = await sql<{ meta: { serial?: string; to?: string } }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${north} AND action = 'org.payments_square_terminal_moved'`;
+      expect(moved.map((m) => m.meta)).toEqual([{ serial: desk, to: "Chain South" }]);
+
+      // A simulated Terminal follows the same rule.
+      expect(await simulate(north, "saves")).toBe(true);
+      expect(await simulate(south, "saves")).toBe(true);
+      expect((await read(north, owner)).terminals?.list.map((t) => t.practice)).toEqual([]);
+      expect((await read(south, owner)).terminals?.list.map((t) => t.practice)).toEqual([null, "saves"]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "never past twenty: counted again when a Terminal signs in, so two codes finishing together cannot pass it",
+    async () => {
+      clock = new Date();
+      const owner = await person("cap-owner");
+      const gymId = await gym(owner, "Cap Gym");
+      await connect(gymId, owner, account("MLTCAP"));
+      for (let i = 0; i < 19; i += 1) {
+        await sql`
+          INSERT INTO gym_square_terminals (gym_id, environment, account_id, state, device_id, paired_at)
+          VALUES (${gymId}, 'sandbox', 'MLTCAP', 'paired', ${`CAP${String(i)}`}, now())`;
+      }
+      // Nineteen paired: a code is made. Meanwhile a twentieth arrives (another code finishing).
+      const made = await pair(gymId, owner);
+      await sql`
+        INSERT INTO gym_square_terminals (gym_id, environment, account_id, state, device_id, paired_at)
+        VALUES (${gymId}, 'sandbox', 'MLTCAP', 'paired', 'CAP19', now())`;
+      square.signIn(made.code, serial());
+      const late = await checkPress(gymId, owner, made.id);
+      expect(late.statusCode).toBe(409);
+      expect((JSON.parse(late.body) as { error: string }).error).toBe("terminals_full");
+      // The box still loads, with its twenty, and no code waits.
+      const now = await read(gymId, owner);
+      expect(now.terminals?.list).toHaveLength(20);
+      expect(now.terminals?.pairing).toBeNull();
+      // The tester's tool is held to it too.
+      await expect(simulate(gymId, "saves")).rejects.toThrow("You can pair up to 20 Terminals.");
+      expect(await rowsOf(gymId)).toHaveLength(20);
     },
     TEST_TIMEOUT_MS,
   );

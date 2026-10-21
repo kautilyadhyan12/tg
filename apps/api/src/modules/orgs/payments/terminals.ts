@@ -9,7 +9,9 @@
 // over, or connected to another account since, still offered the old account's Terminal, or one
 // gym's Terminal shown or removed by another. So every row is read with its gym and environment,
 // only rows of the account the gym is connected to NOW are shown, and a Terminal is paired only
-// into the account whose token made its code, while the gym is still connected to it. Only the
+// into the account whose token made its code, while the gym is still connected to it. Two gyms
+// holding one Square account (a chain) never both list a Terminal: it stands at one desk, so the
+// gym it last signed in for has it, and the other's Staff activity says where it went. Only the
 // gym's own owner pairs and removes, as only the owner connects Square. The code is shown once
 // and never kept.
 //
@@ -56,6 +58,21 @@ const unavailable = (): OrgsError => new OrgsError(503, "square_unavailable", GY
 const connectionRefused = (): OrgsError => new OrgsError(409, "card_connection_refused", MEMBER_CARD_WORDS.connection_refused);
 const needsAllow = (): OrgsError => new OrgsError(409, "terminals_need_allow", GYM_PAYMENTS_WORDS.terminals_need_allow);
 const pairingGone = (): OrgsError => new OrgsError(404, "pairing_gone", GYM_PAYMENTS_WORDS.pairing_gone);
+const full = (): OrgsError => new OrgsError(409, "terminals_full", GYM_PAYMENTS_WORDS.terminals_full);
+
+/** In each gym that listed the Terminal until it signed in here: where it went. */
+async function auditMoves(tx: TransactionSql, userId: string, toName: string, movedFrom: readonly terminals.MovedFrom[], deviceId: string): Promise<void> {
+  for (const from of movedFrom) {
+    await insertAudit(tx, {
+      actorUserId: userId,
+      gymId: from.gymId,
+      action: "org.payments_square_terminal_moved",
+      targetType: "gym",
+      targetId: from.gymId,
+      meta: from.practice === null ? { serial: deviceId, to: toName } : { practice: from.practice, to: toName },
+    });
+  }
+}
 
 interface Ready {
   square: SquareSettings;
@@ -93,9 +110,9 @@ export async function pairTerminal(deps: PaymentsDeps, userId: string, gymId: st
   const { org, gym } = await requireGymOwner(deps, gymId, userId, ownerOnly);
   await requireWritableGym(deps, org);
   const { square, row, token } = await readyOrThrow(deps, gymId);
-  if ((await terminals.countPaired(deps.sql, gymId, square.environment, row.accountId)) >= SQUARE_TERMINALS_MAX) {
-    throw new OrgsError(409, "terminals_full", GYM_PAYMENTS_WORDS.terminals_full);
-  }
+  // Counted again when a Terminal signs in, under the locks (finishPairing); this spares Square a
+  // code that could pair nothing.
+  if ((await terminals.countPaired(deps.sql, gymId, square.environment, row.accountId)) >= SQUARE_TERMINALS_MAX) throw full();
   // The name the gym's Square Dashboard lists the code under: the gym's own.
   const made = await square.api.createDeviceCode(token, { idempotencyKey: randomUUID(), name: gym.name.slice(0, 128), locationId: row.locationId });
   if (made.kind === "unavailable") throw unavailable();
@@ -121,7 +138,7 @@ export async function pairTerminal(deps: PaymentsDeps, userId: string, gymId: st
 
 /** Whether a Terminal signed in with the code: paired, still waiting, or the code ran out. */
 export async function checkPairing(deps: PaymentsDeps, userId: string, gymId: string, pairingId: string): Promise<SquarePairingCheckResponse> {
-  await requireGymOwner(deps, gymId, userId, ownerOnly);
+  const { gym } = await requireGymOwner(deps, gymId, userId, ownerOnly);
   const square = squareOrThrow(deps);
   const answer = async (outcome: SquarePairingCheckResponse["outcome"]) =>
     squarePairingCheckResponseSchema.parse({ outcome, payments: await paymentsOf(deps, userId, gymId) });
@@ -143,7 +160,9 @@ export async function checkPairing(deps: PaymentsDeps, userId: string, gymId: st
       const locked = await terminals.readTerminal(tx, gymId, square.environment, waiting.id, true);
       if (locked === null) return "gone" as const;
       if (locked.state === "paired") return "paired" as const;
-      if (await terminals.finishPairing(tx, gymId, square.environment, locked, deviceId, now)) {
+      const finished = await terminals.finishPairing(tx, gymId, square.environment, locked, deviceId, now);
+      if (finished.outcome === "full") return "full" as const;
+      if (finished.outcome === "paired") {
         await insertAudit(tx, {
           actorUserId: userId,
           gymId,
@@ -152,10 +171,12 @@ export async function checkPairing(deps: PaymentsDeps, userId: string, gymId: st
           targetId: gymId,
           meta: { serial: deviceId },
         });
+        await auditMoves(tx, userId, gym.name, finished.movedFrom, deviceId);
       }
       return "paired" as const;
     });
     if (paired === "gone") throw pairingGone();
+    if (paired === "full") throw full();
     return await answer("paired");
   }
   if (read.kind === "refused" && read.status === 401) throw connectionRefused();
@@ -186,13 +207,15 @@ export async function addSimulatedTerminal(deps: PaymentsDeps, gymId: string, pr
   const gym = await repo.readGym(deps.sql, gymId);
   if (gym === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
   const { square, row } = await readyOrThrow(deps, gymId);
-  if ((await terminals.countPaired(deps.sql, gymId, square.environment, row.accountId)) >= SQUARE_TERMINALS_MAX) {
-    throw new OrgsError(409, "terminals_full", GYM_PAYMENTS_WORDS.terminals_full);
-  }
-  return await deps.sql.begin(async (tx) => {
+  const deviceId = SQUARE_PRACTICE_DEVICES[practice];
+  const added = await deps.sql.begin(async (tx) => {
     await stillConnected(tx, square, gymId, row.accountId);
-    return await terminals.addPractice(tx, { gymId, accountId: row.accountId, practice, deviceId: SQUARE_PRACTICE_DEVICES[practice], createdBy: gym.ownerUserId, now: deps.now() });
+    const done = await terminals.addPractice(tx, { gymId, accountId: row.accountId, practice, deviceId, createdBy: gym.ownerUserId, now: deps.now() });
+    if (done.outcome === "paired") await auditMoves(tx, gym.ownerUserId, gym.name, done.movedFrom, deviceId);
+    return done.outcome;
   });
+  if (added === "full") throw full();
+  return added === "paired";
 }
 
 /** Remove a Terminal, or a code still waiting, whatever the gym's plan: a gym may always stop

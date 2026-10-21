@@ -39,11 +39,16 @@ const mainButton = (on) => ({
 const plainButton = { background: 'rgba(255,255,255,0.07)', color: '#fff' };
 
 const CHECK_EVERY_MS = 3000;
+/** Asks that got no answer (no connection, too many asks, a server fault) in a row before the
+ *  box stops asking and says so: the code may still work, and Get a new code starts again. */
+const PASSING_FAULTS_MAX = 5;
 
 export default function SquareTerminals({ org, terminals, owner, readOnly, onPayments, onReload, onConnectAgain, connecting = false, checkEveryMs = CHECK_EVERY_MS }) {
   // The code, for this screen alone: lost on leaving, as the server never keeps it.
   const [shown, setShown] = useState(null);
   const [expired, setExpired] = useState(false);
+  // Stopped asking after a fault: the box no longer says it is waiting.
+  const [stalled, setStalled] = useState(false);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
   const [doneLine, setDoneLine] = useState(null);
@@ -59,6 +64,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
     if (waitingId === null) return undefined;
     let stopped = false;
     let timer = null;
+    let faults = 0;
     askingFor.current = waitingId;
     const ask = async () => {
       try {
@@ -68,6 +74,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
           timer = setTimeout(ask, checkEveryMs);
           return;
         }
+        faults = 0;
         onPayments(res.data.payments);
         if (res.data.outcome === 'paired') {
           setShown(null);
@@ -84,11 +91,19 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
           timer = setTimeout(ask, checkEveryMs);
           return;
         }
+        const status = err?.response?.status;
+        // No answer is not a no: the code still works, so ask again, more slowly.
+        if ((status === undefined || status === 429 || status >= 500) && faults < PASSING_FAULTS_MAX) {
+          faults += 1;
+          timer = setTimeout(ask, checkEveryMs * 2);
+          return;
+        }
         setShown(null);
-        if (err?.response?.status === 404) {
+        if (status === 404) {
           setExpired(true);
           onReload();
         } else {
+          setStalled(true);
           setError(errorText(err, "We couldn't reach Square. Get a new code to try again."));
         }
       }
@@ -129,15 +144,20 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
   };
   const pair = async () => {
     setExpired(false);
+    setStalled(false);
     const data = await ownPress('pair', () => orgService.pairSquareTerminal(org.id));
     if (data !== null) setShown({ code: data.code, pairBy: data.pairBy });
   };
   const cancelPairing = async () => {
     if (waitingId === null) {
       setExpired(false);
+      setStalled(false);
       return;
     }
-    if ((await ownPress('cancel', () => orgService.removeSquareTerminal(org.id, waitingId))) !== null) setShown(null);
+    if ((await ownPress('cancel', () => orgService.removeSquareTerminal(org.id, waitingId))) !== null) {
+      setShown(null);
+      setStalled(false);
+    }
   };
   const remove = async (terminal) => {
     await act('remove', () => orgService.removeSquareTerminal(org.id, terminal.id), () => REMOVED_TERMINAL);
@@ -322,7 +342,7 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
               {pairingActiveLine(terminals.pairing?.pairBy, clock)}
             </p>
           )}
-          {!expired ? (
+          {!expired && !stalled ? (
             <p role="status" className="text-sm m-0 flex items-center gap-2" style={softStyle}>
               <Loader2 className="w-4 h-4 animate-spin" />
               {PAIRING_WAITING}

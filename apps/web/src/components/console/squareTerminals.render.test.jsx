@@ -117,6 +117,34 @@ describe('connected in the US, Canada or Australia', () => {
     expect(orgService.pairSquareTerminal).toHaveBeenCalledTimes(2);
   });
 
+  it('no answer for a moment is not a no: it keeps asking, and a refusal stops the waiting and says why', async () => {
+    render(<Holder start={payments(none())} />);
+    const waiting = payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } }));
+    orgService.pairSquareTerminal.mockResolvedValue({ data: { code: 'AFZEFB', pairBy: '2026-10-21T15:05:00.000Z', payments: waiting } });
+    orgService.checkSquarePairing
+      .mockRejectedValueOnce({ message: 'Network Error' })
+      .mockRejectedValueOnce({ response: { status: 429, data: { error: 'rate_limited', message: 'Too many attempts.' } } })
+      .mockRejectedValueOnce({ response: { status: 503, data: { error: 'square_unavailable', message: "Square didn't answer." } } })
+      .mockResolvedValueOnce({ data: { outcome: 'paired', payments: payments(none({ list: [TERMINAL] })) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Pair a Terminal' }));
+    expect(await screen.findByText('Terminal paired.')).toBeTruthy();
+    expect(orgService.checkSquarePairing).toHaveBeenCalledTimes(4);
+    expect(screen.queryByText("Square didn't answer.")).toBeNull();
+
+    cleanup();
+    render(<Holder start={payments(none())} />);
+    orgService.checkSquarePairing.mockReset();
+    orgService.checkSquarePairing.mockRejectedValue({ response: { status: 409, data: { error: 'card_connection_refused', message: "Square didn't accept the connection to your Square account." } } });
+    fireEvent.click(screen.getByRole('button', { name: 'Pair a Terminal' }));
+    expect(await screen.findByText("Square didn't accept the connection to your Square account.")).toBeTruthy();
+    const box = screen.getByRole('group', { name: 'Pair a Square Terminal' });
+    expect(within(box).queryByText('Waiting for the Terminal…')).toBeNull();
+    expect(within(box).getByRole('button', { name: 'Get a new code' })).toBeTruthy();
+    const asked = orgService.checkSquarePairing.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 60));
+    expect(orgService.checkSquarePairing.mock.calls.length).toBe(asked);
+  });
+
   it('a code waiting from before, with the code gone from the screen: Get a new code or Cancel', async () => {
     orgService.checkSquarePairing.mockResolvedValue({ data: { outcome: 'waiting', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } })) } });
     render(<Holder start={payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } }))} />);

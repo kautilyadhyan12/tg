@@ -31,7 +31,8 @@ CREATE TABLE "gym_square_terminals" (
 );--> statement-breakpoint
 ALTER TABLE "gym_square_terminals" ADD CONSTRAINT "gym_square_terminals_gym_id_gyms_id_fk" FOREIGN KEY ("gym_id") REFERENCES "public"."gyms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gym_square_terminals" ADD CONSTRAINT "gym_square_terminals_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
--- One row a Terminal, in a gym's Square account.
-CREATE UNIQUE INDEX "gym_square_terminals_device_uq" ON "gym_square_terminals" USING btree ("gym_id","environment","account_id","device_id") WHERE "device_id" IS NOT NULL;--> statement-breakpoint
+-- One row a Terminal in a Square account, whichever gym: two gyms holding one account (a chain)
+-- never both list the Terminal standing at one of their desks.
+CREATE UNIQUE INDEX "gym_square_terminals_device_uq" ON "gym_square_terminals" USING btree ("environment","account_id","device_id") WHERE "device_id" IS NOT NULL;--> statement-breakpoint
 -- One code waiting at a time: a new one replaces it.
 CREATE UNIQUE INDEX "gym_square_terminals_pairing_uq" ON "gym_square_terminals" USING btree ("gym_id","environment") WHERE "state" = 'pairing';

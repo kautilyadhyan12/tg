@@ -2,6 +2,8 @@
 // environment; what is shown or paired also names the Square account the gym is connected to.
 import { squarePracticeTerminalSchema, type SquarePracticeTerminal } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import { SQUARE_TERMINALS_MAX } from "@app/shared";
+import { lockAccount } from "./repo.js";
 import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
@@ -89,38 +91,74 @@ export async function startPairing(
   return row.id;
 }
 
-/** The Terminal that signed in with the code. A Terminal the gym has already, in this account,
- *  stays as it is and the waiting row goes. The caller holds the gym's lock and the row's. */
-export async function finishPairing(tx: TransactionSql, gymId: string, environment: SquareEnvironment, waiting: TerminalRow, deviceId: string, now: Date): Promise<boolean> {
+/** A gym that listed a Terminal until it signed in for another gym on the same Square account. */
+export interface MovedFrom {
+  gymId: string;
+  practice: SquarePracticeTerminal | null;
+}
+
+/** A Terminal stands at one desk: once it signs in for this gym, any other gym holding the same
+ *  Square account stops listing it. The caller holds the account's lock. */
+async function takeFromOtherGyms(tx: TransactionSql, gymId: string, environment: SquareEnvironment, accountId: string, deviceId: string): Promise<MovedFrom[]> {
+  const rows = await tx<{ gym_id: string; practice: string | null }[]>`
+    DELETE FROM gym_square_terminals
+    WHERE environment = ${environment} AND account_id = ${accountId} AND device_id = ${deviceId} AND gym_id <> ${gymId}
+    RETURNING gym_id, practice`;
+  return rows.map((r) => {
+    const practice = squarePracticeTerminalSchema.safeParse(r.practice);
+    return { gymId: r.gym_id, practice: practice.success ? practice.data : null };
+  });
+}
+
+export type FinishedPairing = { outcome: "paired"; movedFrom: MovedFrom[] } | { outcome: "known" } | { outcome: "full" };
+
+/** The Terminal that signed in with the code. One the gym has already stays as it is; one that
+ *  would take the gym past SQUARE_TERMINALS_MAX is not paired; either way the waiting row goes.
+ *  Counted here, under the locks, as two codes can finish at once. The caller holds the gym's
+ *  lock and the row's. */
+export async function finishPairing(tx: TransactionSql, gymId: string, environment: SquareEnvironment, waiting: TerminalRow, deviceId: string, now: Date): Promise<FinishedPairing> {
+  await lockAccount(tx, environment, waiting.accountId);
   const known = await tx<{ id: string }[]>`
     SELECT id FROM gym_square_terminals
     WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${waiting.accountId} AND device_id = ${deviceId}`;
   if (known.length > 0) {
     await dropPairing(tx, gymId, environment, waiting.id);
-    return false;
+    return { outcome: "known" };
   }
+  if ((await countPaired(tx, gymId, environment, waiting.accountId)) >= SQUARE_TERMINALS_MAX) {
+    await dropPairing(tx, gymId, environment, waiting.id);
+    return { outcome: "full" };
+  }
+  const movedFrom = await takeFromOtherGyms(tx, gymId, environment, waiting.accountId, deviceId);
   await tx`
     UPDATE gym_square_terminals
     SET state = 'paired', device_id = ${deviceId}, paired_at = ${now}, pair_by = NULL
     WHERE id = ${waiting.id} AND gym_id = ${gymId} AND environment = ${environment} AND state = 'pairing'`;
-  return true;
+  return { outcome: "paired", movedFrom };
 }
 
 export async function dropPairing(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, id: string): Promise<void> {
   await sql`DELETE FROM gym_square_terminals WHERE id = ${id} AND gym_id = ${gymId} AND environment = ${environment} AND state = 'pairing'`;
 }
 
-/** One of Square's pretend Terminals, in its test area; once a gym and account. */
+/** One of Square's simulated Terminals, in its sandbox, as a real one signing in would be: once a
+ *  gym, taken from any other gym on the account, never past SQUARE_TERMINALS_MAX. The caller
+ *  holds the gym's lock. */
 export async function addPractice(
   tx: TransactionSql,
   p: { gymId: string; accountId: string; practice: SquarePracticeTerminal; deviceId: string; createdBy: string; now: Date },
-): Promise<boolean> {
-  const rows = await tx<{ id: string }[]>`
+): Promise<FinishedPairing> {
+  await lockAccount(tx, "sandbox", p.accountId);
+  const known = await tx<{ id: string }[]>`
+    SELECT id FROM gym_square_terminals
+    WHERE gym_id = ${p.gymId} AND environment = 'sandbox' AND account_id = ${p.accountId} AND device_id = ${p.deviceId}`;
+  if (known.length > 0) return { outcome: "known" };
+  if ((await countPaired(tx, p.gymId, "sandbox", p.accountId)) >= SQUARE_TERMINALS_MAX) return { outcome: "full" };
+  const movedFrom = await takeFromOtherGyms(tx, p.gymId, "sandbox", p.accountId, p.deviceId);
+  await tx`
     INSERT INTO gym_square_terminals (gym_id, environment, account_id, state, device_id, practice, created_by, paired_at)
-    VALUES (${p.gymId}, 'sandbox', ${p.accountId}, 'paired', ${p.deviceId}, ${p.practice}, ${p.createdBy}, ${p.now})
-    ON CONFLICT (gym_id, environment, account_id, device_id) WHERE device_id IS NOT NULL DO NOTHING
-    RETURNING id`;
-  return rows.length === 1;
+    VALUES (${p.gymId}, 'sandbox', ${p.accountId}, 'paired', ${p.deviceId}, ${p.practice}, ${p.createdBy}, ${p.now})`;
+  return { outcome: "paired", movedFrom };
 }
 
 /** Remove: the gym stops using the Terminal, paired or still waiting. */
