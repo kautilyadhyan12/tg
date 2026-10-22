@@ -5,7 +5,7 @@
 // Every action the server writes is in exactly one of the two lists below: a sentence, or
 // "not something staff did" (a member's own press, or the app on its own). The census test
 // reads the source for every action written and fails on one that is in neither.
-import { LEAD_STATUS_WORDS, MEMBER_PAYMENT_METHOD_WORDS, cardName, formatMinor, type OrgWords } from "@app/shared";
+import { LEAD_STATUS_WORDS, MEMBER_PAYMENT_METHOD_WORDS, cardName, dayOfMonthWords, formatMinor, type OrgWords } from "@app/shared";
 
 /** What a sentence is given: the note's own details, and the name of who or what it is
  *  about, looked up at this gym (null when it no longer exists). */
@@ -276,6 +276,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     return `Undid a refund${amount === null ? "" : ` of ${amount}`} to ${person(s)}`;
   },
   "org.bill_settings_changed": () => "Changed when an unpaid bill shows as Payment due",
+  "org.bill_day_changed": (s) => {
+    const day = count(s, "billDay");
+    return day === null ? "Stopped billing new memberships on one day of the month" : `Set new memberships to be billed on the ${dayOfMonthWords(day)} of each month`;
+  },
   "org.member_fee_paid": (s) => `Recorded ${pay(s)} from ${fromWhom(s)} for a ${feeOf(s)}${methodWords(s)}`,
   "org.member_fee_waived": (s) => {
     const amount = money(s, "amountMinor");

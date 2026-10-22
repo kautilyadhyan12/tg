@@ -259,7 +259,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       if (m === undefined) throw new Error("no membership");
       expect(made.canBill).toBe(true);
       expect(m.billing).toEqual({
-        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, joiningFeeMinor: 0, changeCreditMinor: 0, movedMinor: 0, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [], voidedPayments: [] }],
+        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, part: false, amountMinor: 4999, tax: null, joiningFeeMinor: 0, changeCreditMinor: 0, movedMinor: 0, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [], voidedPayments: [] }],
         billsNotShown: 0,
         pay: { periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, leftMinor: 4999, dueOn: today, state: "due" },
         cancel: { billId: expect.any(String) as string },
@@ -825,7 +825,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect((await give(gymId, second, narrowed.cookies, { typeId: gold, startsOn: today, paid: false })).statusCode).toBe(201);
       expect(await paymentsOf(gymId)).toEqual(before.payments);
       // They read the setting, and are told they cannot change it; the trainer reads it too.
-      expect(JSON.parse((await get(settingsUrl, narrowed.cookies)).body)).toEqual({ overdueAfterDays: 0, canChange: false });
+      expect(JSON.parse((await get(settingsUrl, narrowed.cookies)).body)).toEqual({ overdueAfterDays: 0, billDay: null, canChange: false });
       expect((await get(settingsUrl, trainer.cookies)).statusCode).toBe(200);
       for (const cookies of [stranger.cookies, rival.cookies, member.cookies]) expect((await get(settingsUrl, cookies)).statusCode).toBe(404);
       expect((await get(settingsUrl, {})).statusCode).toBe(401);

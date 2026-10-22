@@ -50,6 +50,7 @@ const membership = (over: Partial<HeldMembership> = {}): HeldMembership => ({
   paidFloor: 0,
   renews: true,
   classesLeft: null,
+  fullFrom: null,
   ...over,
 });
 

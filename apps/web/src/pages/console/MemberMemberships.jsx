@@ -41,6 +41,7 @@ import {
   newRequestKey,
   paymentLine,
   statusTag,
+  firstBillPart,
 } from './heldMembershipsView';
 import {
   CANCEL_REASONS,
@@ -302,7 +303,8 @@ export default function MemberMemberships({
   }
   if (shown === null) return null;
   /** The gym's price list, as it was when these memberships were read. */
-  const types = shown.types;
+  // Each with the gym's day of the month it bills everyone on (18y), as the Add box works it out.
+  const types = shown.types.map((t) => ({ ...t, billDay: shown.billDay ?? null }));
   // A gym that sells nothing here yet, and a person holding nothing: the box says so, with the
   // button to Memberships for whoever may set them up (Kd, 2026-10-21: "there is no option to
   // sell membership did you dele that option").
@@ -353,6 +355,8 @@ export default function MemberMemberships({
       if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed')) {
         setAttempt((n) => n + 1);
       }
+      // The gym's billing day changed (18y): read it again, and keep the box open with its new total.
+      if (code === 'membership_bill_day_changed') setAttempt((n) => n + 1);
       // Somebody else changed it first: show it as it is now.
       if (STALE_CODES.includes(errorCode(err))) {
         setOpen(null);
@@ -1681,10 +1685,12 @@ export default function MemberMemberships({
     // The person's own Refer a friend gift (20e-ii-b-ii-a), filled in unless Removed: only one
     // off a membership (one off products is Sell's, 20e-ii-b-ii-b).
     const memberGift = shown.canBill && !free && shown.memberGift !== null && shown.memberGift !== undefined ? shown.memberGift : null;
-    const giftFits = memberGift !== null && choice.type !== null && membershipSummary(choice.type, discount, shown.taxIncluded, memberGift)?.giftOffMinor > 0;
+    // Where the gym bills everyone on one day (18y), the first bill is the part month before it.
+    const part = choice.problem === null ? firstBillPart(choice.type, form.startsOn, today) : null;
+    const giftFits = memberGift !== null && choice.type !== null && membershipSummary(choice.type, discount, shown.taxIncluded, memberGift, 0, part)?.giftOffMinor > 0;
     const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
     const fee = joiningFeeFor(choice.type, form.joiningFee, shown.canBill, shown.memberships.some(isLive));
-    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed, fee.feeMinor);
+    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed, fee.feeMinor, part);
     const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && summary !== null;
     return (
       <form

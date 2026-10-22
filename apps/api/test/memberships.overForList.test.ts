@@ -9,7 +9,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { addDays, heldOnList, type GymMembershipTypesResponse, type HeldForList, type HeldMembership } from "@app/shared";
+import { addDays, fullFromOf, heldOnList, type GymMembershipTypesResponse, type HeldForList, type HeldMembership } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { inUseForList, overForList } from "../src/modules/orgs/memberships/heldRepo.js";
@@ -96,6 +96,7 @@ function make(person: number, type: number, status: HeldMembership["status"]): M
     // Refer a friend's free days, before the first period, the second or a later one.
     giftDays: pick([0, 0, 0, 1, 14, 90]),
     giftFrom: pick([0, 1, 1, 2, 3]),
+    fullFrom: null,
     status,
     frozenOn: status === "frozen" ? addDays(startsOn, pick([0, 10])) : null,
     // Before it started, on the day, and long after; and some of the days the list is read on.
@@ -112,7 +113,9 @@ function make(person: number, type: number, status: HeldMembership["status"]): M
   if (kind === "recurring") {
     const paidFloor = free ? 0 : rand(3);
     const term = { termCount: pick([1, 2, 3, 6, 12]), termUnit: pick(["week", "month", "year"] as const) };
-    return { ...made, membership: { ...base, ...none, ...term, kind, paidPeriods: free ? 0 : paidFloor + rand(4), paidFloor, renews: rand(2) === 0 } };
+    // Some billed from a gym's day of the month (18y), their first period the part month.
+    const fullFrom = rand(2) === 0 ? fullFromOf({ kind, termUnit: term.termUnit }, startsOn, pick([1, 15, 28])) : null;
+    return { ...made, membership: { ...base, ...none, ...term, kind, fullFrom, paidPeriods: free ? 0 : paidFloor + rand(4), paidFloor, renews: rand(2) === 0 } };
   }
   const term = { termCount: pick([1, 3, 7, 12, 30]), termUnit: pick(["day", "week", "month", "year"] as const) };
   return { ...made, membership: { ...base, ...none, ...term, kind, paidPeriods: free ? 0 : rand(2), paidFloor: 0, renews: false } };
@@ -146,7 +149,7 @@ function everybody(): { people: number; made: Made[] } {
   }
   // The same last day, 30 September 2026: a membership is named before a pack, though
   // the pack started later.
-  const ended = { free: false, frozenDays: 0, giftDays: 0, giftFrom: 0, status: "ended", frozenOn: null, cancelledOn: null, paidPeriods: 1, paidFloor: 0, renews: false } as const;
+  const ended = { free: false, frozenDays: 0, giftDays: 0, giftFrom: 0, fullFrom: null, status: "ended", frozenOn: null, cancelledOn: null, paidPeriods: 1, paidFloor: 0, renews: false } as const;
   const noPack = { packClasses: null, packDays: null, classesLeft: null };
   for (; person < 56; person += 1) {
     made.push({
@@ -288,6 +291,7 @@ d("the stored row the Members list reads for somebody whose memberships are over
       paid_floor: m.paidFloor,
       renews: m.renews,
       classes_left: m.classesLeft,
+      full_from: m.fullFrom,
       from_list: fromList,
     }));
     await sql`INSERT INTO gym_held_memberships ${sql(rows)}`;
@@ -379,6 +383,7 @@ d("the stored row the Members list reads for somebody whose memberships are over
           packClasses: null,
           packDays: null,
           classesLeft: null,
+          fullFrom: null,
           free: false,
           startsOn: "2026-10-01",
           frozenDays: 0,

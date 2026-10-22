@@ -137,6 +137,8 @@ export const gymMembershipTypesResponseSchema = z
     /** The gym's tax rates, for "Tax" (18b-iii), and whether its prices hold the tax. */
     taxRates: z.array(z.object({ id: z.string().uuid(), name: z.string(), bp: z.number().int().min(1).max(3000) }).strict()),
     taxIncluded: z.boolean(),
+    /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */
+    billDay: z.number().int().min(1).max(28).nullable().default(null),
   })
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;

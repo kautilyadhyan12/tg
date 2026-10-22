@@ -187,6 +187,9 @@ export const gymHeldMemberships = pgTable(
     /** The change set the one it replaced to stop at the end of what is paid (0152): cancelling
      *  this one before it starts sets that one renewing again. */
     replacedStopped: boolean("replaced_stopped").notNull().default(false),
+    /** Given while the gym billed everyone on one day (0154; 18y): the first of those days after
+     *  the start, from which its full periods count; its first period is the part month before. */
+    fullFrom: date("full_from"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -197,6 +200,10 @@ export const gymHeldMemberships = pgTable(
     ),
     check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
     check("gym_held_memberships_replaces_check", sql`${t.replacesId} IS NULL OR ${t.replacesId} <> ${t.id}`),
+    check(
+      "gym_held_memberships_full_from_check",
+      sql`${t.fullFrom} IS NULL OR (${t.kind} = 'recurring' AND ${t.termUnit} IN ('month','year') AND ${t.fullFrom} > ${t.startsOn} AND ${t.fullFrom} <= ${t.startsOn} + 31)`,
+    ),
     // `0152` clears only `replaces_id` when that row goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_held_memberships_replaces_fk",

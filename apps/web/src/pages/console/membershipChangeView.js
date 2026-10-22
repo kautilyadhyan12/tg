@@ -4,7 +4,7 @@
 // shared rule the server checks again (`changeTo`), so the box never offers what the server
 // refuses. A cheaper move today would leave money over: it waits for the next payment date
 // (Kd, 2026-10-22, "go B").
-import { MEMBERSHIP_CHANGE_WORDS, addDays, cardOwnerOnlyLine, changeTo, formatMinor } from '@app/shared';
+import { MEMBERSHIP_CHANGE_WORDS, addDays, cardOwnerOnlyLine, changeTo, formatMinor, partPeriod } from '@app/shared';
 import { dayWords } from './memberListView';
 import { changeSummary } from './sellDiscountsView';
 import { newRequestKey } from './heldMembershipsView';
@@ -44,8 +44,9 @@ export function changeChoice(m, types, form, taxIncluded, today, name) {
   if (type === null) return base;
 
   const money = (minor) => formatMinor(minor, m.currency);
-  const now = changeTo(c, m.typeId, type, 'today', today);
-  const later = changeTo(c, m.typeId, type, 'next_payment', today);
+  // The gym's day of the month it bills everyone on (18y), carried on each type.
+  const now = changeTo(c, m.typeId, type, 'today', today, type.billDay ?? null);
+  const later = changeTo(c, m.typeId, type, 'next_payment', today, type.billDay ?? null);
   const days = c.daysLeft === 1 ? '1 day' : `${String(c.daysLeft)} days`;
   const todayDetail = now.ok
     ? now.creditMinor > 0
@@ -66,7 +67,12 @@ export function changeChoice(m, types, form, taxIncluded, today, name) {
   const when = usable.includes(form.when) ? form.when : (usable[0] ?? null);
   const picked = when === 'today' ? now : when === 'next_payment' ? later : null;
   if (picked === null || !picked.ok) return { ...base, options, when };
-  const summary = changeSummary(type, picked.creditMinor, m.typeName, taxIncluded);
+  // Its first bill is the part month before the gym's billing day, where it has one.
+  const part =
+    picked.fullFrom === null
+      ? null
+      : { ...partPeriod({ ...type, packDays: null, startsOn: picked.startsOn, fullFrom: picked.fullFrom }), from: picked.startsOn, to: addDays(picked.fullFrom, -1), fullFrom: picked.fullFrom };
+  const summary = changeSummary(type, picked.creditMinor, m.typeName, taxIncluded, part);
   // Paid now only for what is charged today; a later start is paid on its day.
   const paidLabel = when === 'today' && summary !== null && summary.totalMinor > 0 ? `They have paid the ${summary.total}` : null;
   const methodNeeded = paidLabel !== null && form.paid === true && (form.method ?? '') === '';
@@ -81,6 +87,7 @@ export function changeBody(form, choice) {
     typeId: choice.type.id,
     when: choice.when,
     startsOn: choice.picked.startsOn,
+    fullFrom: choice.picked.fullFrom,
     priceMinor: choice.type.priceMinor,
     creditMinor: choice.picked.creditMinor,
     totalMinor: choice.summary.totalMinor,

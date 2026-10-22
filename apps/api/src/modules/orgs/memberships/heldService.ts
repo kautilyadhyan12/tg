@@ -60,7 +60,7 @@ import * as changeRepo from "./changeRepo.js";
 import { membershipDiscounts } from "../register/discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
-import { overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
+import { billDayOf, overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 import * as feesRepo from "./feesRepo.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 
@@ -109,6 +109,7 @@ function billingOf(
       id: b.id,
       periodIndex: b.periodIndex,
       covers: b.covers,
+      part: b.periodIndex === 0 && row.membership.fullFrom !== null,
       amountMinor: b.amountMinor,
       tax: b.tax,
       joiningFeeMinor: b.joiningFeeMinor,
@@ -296,6 +297,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       packClasses: row.membership.packClasses,
       packDays: row.membership.packDays,
       startsOn: row.membership.startsOn,
+      fullFrom: row.membership.fullFrom,
       frozenOn: row.membership.frozenOn,
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
@@ -329,6 +331,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     listed: list.listed,
     canBill,
     taxIncluded: list.taxIncluded,
+    billDay: list.billDay,
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
     friendGift: list.past ? null : friendGift,
     memberGift,
@@ -380,6 +383,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(400, "payment_method_needed", "Pick how they paid.");
     case "price_changed":
       throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
+    case "bill_day_changed":
+      throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
     case "discount_not_found":
       throw new OrgsError(409, "discount_not_available", DISCOUNT_WORDS.membership_not_available);
     case "discount_refused":
@@ -460,6 +465,8 @@ export async function giveHeldMembership(
       shownPriceMinor: req.priceMinor ?? null,
       shownTotalMinor: req.totalMinor ?? null,
       joiningFeeMinor: req.joiningFeeMinor ?? null,
+      // A screen that showed a price and said nothing of a part month showed none (18y).
+      ...(req.priceMinor === undefined && req.fullFrom === undefined ? {} : { shownFullFrom: req.fullFrom ?? null }),
       // Leaving the fee off is waiving it, which is where payments are taken, as a discount is.
       mayWaiveJoiningFee: canBill,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
@@ -529,6 +536,7 @@ export async function changeHeldMembership(
     shownCreditMinor: req.creditMinor,
     shownTotalMinor: req.totalMinor,
     shownStartsOn: req.startsOn,
+    shownFullFrom: req.fullFrom ?? null,
     paid: req.paid,
     method: req.method ?? null,
     confirmBookings: req.confirmBookings ?? null,
@@ -809,13 +817,13 @@ export async function undoPaidMark(
 
 export async function getBillSettings(deps: HeldDeps, userId: string, gymId: string): Promise<BillSettingsResponse> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
-  return billSettingsResponseSchema.parse({ overdueAfterDays: await overdueDaysOf(deps.sql, gymId), canChange: privileges.includes(BILLING) });
+  return billSettingsResponseSchema.parse({ overdueAfterDays: await overdueDaysOf(deps.sql, gymId), billDay: await billDayOf(deps.sql, gymId), canChange: privileges.includes(BILLING) });
 }
 
 export async function saveBillSettings(deps: HeldDeps, userId: string, gymId: string, req: BillSettings): Promise<BillSettingsResponse> {
   const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.read");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
   const days = Math.min(BILL_OVERDUE_DAYS_MAX, Math.max(0, req.overdueAfterDays));
-  await billsRepo.saveOverdueDays(deps.sql, { gymId, days, actorUserId: userId });
-  return billSettingsResponseSchema.parse({ overdueAfterDays: days, canChange: true });
+  const billDay = await billsRepo.saveBillSettings(deps.sql, { gymId, days, billDay: req.billDay, actorUserId: userId });
+  return billSettingsResponseSchema.parse({ overdueAfterDays: days, billDay, canChange: true });
 }

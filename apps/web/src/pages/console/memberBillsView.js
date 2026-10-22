@@ -4,7 +4,9 @@
 // what can still be refunded (`memberBillRules.ts` in `@app/shared`); this file only puts
 // them into words.
 import {
+  addDays,
   bpToTaxRateText,
+  BILL_DAY_MAX,
   BILL_CANCEL_REASONS,
   BILL_CANCEL_REASON_WORDS,
   BILL_OVERDUE_DAYS_MAX,
@@ -18,7 +20,9 @@ import {
   REFUND_VOID_REASONS,
   REFUND_VOID_REASON_WORDS,
   currencyDecimals,
+  dayOfMonthWords,
   formatMinor,
+  fullFromOf,
   memberGiftBillLine,
   minorToPriceText,
   priceToMinor,
@@ -145,7 +149,8 @@ export function billRow(bill, currency, today) {
   return {
     id: bill.id,
     periodIndex: bill.periodIndex,
-    days: billDays(bill.covers),
+    // The first bill of one billed on the gym's day of the month: the days before it (18y).
+    days: bill.part === true ? `${billDays(bill.covers)} · Part month` : billDays(bill.covers),
     amount,
     tag: state.tag,
     tone: state.tone,
@@ -503,6 +508,21 @@ const GRACE_CHOICES = [0, 1, 2, 3, 5, 7, 10, 14, 21, 30, 45, BILL_OVERDUE_DAYS_M
 export function graceChoices(current) {
   const days = GRACE_CHOICES.includes(current) ? GRACE_CHOICES : [...GRACE_CHOICES, current].sort((a, b) => a - b);
   return days.map((value) => ({ value, label: value === 0 ? 'None' : value === 1 ? '1 day' : `${String(value)} days` }));
+}
+
+/** The billing day's choices (18y): each member billed from the day they start, or every new
+ *  monthly or yearly membership on one day of the month, the 1st to the 28th. */
+export function billDayChoices() {
+  return [{ value: '', label: 'The day each membership starts' }, ...Array.from({ length: BILL_DAY_MAX }, (_, i) => ({ value: String(i + 1), label: `The ${dayOfMonthWords(i + 1)} of each month` }))];
+}
+
+/** The billing day said with a real date: what somebody who joins that month pays first. */
+export function billDayExample(billDay) {
+  if (billDay === null || billDay === undefined) return 'Each membership is billed on the day of the month it started.';
+  const startsOn = billDay < 20 ? '2026-03-20' : '2026-03-05';
+  const fullFrom = fullFromOf({ kind: 'recurring', termUnit: 'month' }, startsOn, billDay);
+  const to = shortDay(addDays(fullFrom, -1), false);
+  return `Somebody who joins on ${shortDay(startsOn, false)} pays for ${shortDay(startsOn, false)} to ${to} first, then the full price on the ${dayOfMonthWords(billDay)}: each month for a monthly membership, each year for a yearly one. Members who already have a membership keep their own billing day.`;
 }
 
 /** The setting said with a real date: a bill stays Due on its due date and for the days

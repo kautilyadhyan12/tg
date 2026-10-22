@@ -14,6 +14,9 @@
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg'
 //   corepack pnpm --filter api exec tsx tools/measure-member-bills-cost.ts
 //
+// With `BILL_DAY=1` (1 to 28) every membership is billed from that day of the month (18y), its
+// first period the part month before it.
+//
 // LOCAL DATABASES ONLY: it writes gyms, their lists and memberships, and removes them.
 import { createHash, randomUUID } from "node:crypto";
 import { cpus } from "node:os";
@@ -34,6 +37,7 @@ const BIG = 2000;
 const RUNS = 9;
 const PLAN = "zz_bills_cost";
 const PREFIX = "bills-cost-";
+const BILL_DAY = process.env["BILL_DAY"] === undefined ? null : Number(process.env["BILL_DAY"]);
 
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
@@ -87,9 +91,17 @@ async function seedGym(people: number): Promise<Gym> {
   // Given 40 days ago and never paid: the first month and the one that began since are owed.
   await sql`
     INSERT INTO gym_held_memberships
-      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews, tax_rate_id)
-    SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', current_date - 40, 'active', 0, true, ${rateId}
+      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews, tax_rate_id, tax_included)
+    SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 4999, 'GBP', 1, 'month', current_date - 40, 'active', 0, true, ${rateId}, false
     FROM gym_member_list_entries e WHERE e.gym_id = ${id}`;
+  // The first of the gym's billing days after the start, where one is set and it is not the start.
+  if (BILL_DAY !== null) {
+    await sql`
+      UPDATE gym_held_memberships SET full_from = f.day
+      FROM (SELECT (date_trunc('month', current_date - 40)::date + (${BILL_DAY}::int - 1)
+                    + CASE WHEN extract(day FROM current_date - 40) < ${BILL_DAY}::int THEN interval '0' ELSE interval '1 month' END)::date AS day) f
+      WHERE gym_id = ${id} AND extract(day FROM current_date - 40) <> ${BILL_DAY}::int`;
+  }
   const first = records[0]?.id ?? "";
   const [m] = await sql<{ id: string }[]>`SELECT id FROM gym_held_memberships WHERE gym_id = ${id} AND entry_id = ${first}`;
   return { id, owner, first, firstMembership: m?.id ?? "" };
@@ -116,7 +128,7 @@ const big = await seedGym(BIG);
 await sql`VACUUM ANALYZE gym_held_memberships`;
 const ids = gyms.map((g) => g.id);
 const log = { info: () => undefined, error: (obj: object) => { console.error("a gym failed", obj); } };
-console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, each person a count to move and a bill to open; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
+console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, each person a count to move and a bill to open; billed from ${BILL_DAY === null ? "each start" : `day ${String(BILL_DAY)}`}; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
 
 const delay = monitorEventLoopDelay({ resolution: 1 });
 delay.enable();

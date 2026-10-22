@@ -45,6 +45,8 @@ export interface PriceListRow {
   /** The gym's tax rates, for a type's "Tax" (18b-iii), and whether its prices hold the tax. */
   taxRates: { id: string; name: string; bp: number }[];
   taxIncluded: boolean;
+  /** The day of the month the gym bills everyone on (18y), for Add member's total; null for none. */
+  billDay: number | null;
 }
 
 interface RawType {
@@ -85,7 +87,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     LIMIT ${limit}`;
 
   const [gymRows, live, archived, totals, covered, classChoices, rates, taxIncluded] = await Promise.all([
-    sql<{ country: string | null }[]>`SELECT country FROM gyms WHERE id = ${gymId}`,
+    sql<{ country: string | null; bills_day: number | null }[]>`SELECT country, bills_day FROM gyms WHERE id = ${gymId}`,
     readTypes(false, MEMBERSHIP_TYPES_MAX),
     readTypes(true, MEMBERSHIP_ARCHIVED_PAGE),
     sql<{ n: number }[]>`
@@ -144,6 +146,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     classChoices: classChoices.map((c) => ({ id: c.id, name: c.name })),
     taxRates: rates.map((r) => ({ id: r.id, name: r.name, bp: r.bp })),
     taxIncluded,
+    billDay: gym.bills_day,
   };
 }
 

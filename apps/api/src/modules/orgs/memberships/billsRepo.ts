@@ -10,6 +10,7 @@
 import type { Sql, TransactionSql } from "postgres";
 import {
   billsToOpen,
+  periodListedMinor,
   countAfterGap,
   countAfterPayment,
   countAfterUndo,
@@ -31,7 +32,22 @@ import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { lockGym } from "../memberList/repo.js";
-import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, terminalWaiting, type NewBill } from "./billsSql.js";
+import {
+  billDayOf,
+  billOf,
+  billsFor,
+  cancelBill,
+  insertBills,
+  insertPayment,
+  insertRefund,
+  overdueDaysOf,
+  paymentsFor,
+  setBillDay,
+  setBillStatus,
+  setOverdueDays,
+  terminalWaiting,
+  type NewBill,
+} from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
 export type BillWriteOutcome =
@@ -128,7 +144,7 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
   // bill behind.
   const found = bills.find((b) => b.periodIndex === target.periodIndex);
   // A period with no bill yet is opened as the bill run would open it today, its tax in.
-  const opening = billOf(row.priceMinor, row.taxApplied);
+  const opening = billOf(periodListedMinor(row.membership, target.periodIndex, row.priceMinor), row.taxApplied);
   const paid = payMemberBill(found ?? { status: "open", amountMinor: opening.amountMinor, paidMinor: 0 }, input.amountMinor);
   if (!paid.ok) return { kind: "not_allowed" };
   // The count of paid periods moves with the payment that settles the bill, or not at all.
@@ -516,18 +532,38 @@ export async function voidRefund(
   });
 }
 
-export async function saveOverdueDays(sql: Sql, input: { gymId: string; days: number; actorUserId: string }): Promise<void> {
-  await sql.begin(async (tx) => {
+/** The gym's two settings for bills, under its lock, which every membership given takes too: the
+ *  days before an unpaid bill reads Overdue, and the day of the month it bills everyone on (18y).
+ *  Each change is a line of the gym's activity; nothing written where nothing changed. A day left
+ *  out stays as it is. Answers the day as it now stands. */
+export async function saveBillSettings(sql: Sql, input: { gymId: string; days: number; billDay: number | null | undefined; actorUserId: string }): Promise<number | null> {
+  return await sql.begin(async (tx) => {
     await lockGym(tx, input.gymId);
-    await setOverdueDays(tx, input.gymId, input.days);
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.bill_settings_changed",
-      targetType: "gym",
-      targetId: input.gymId,
-      meta: { overdueAfterDays: String(input.days) },
-    });
+    const days = await overdueDaysOf(tx, input.gymId);
+    const billDay = await billDayOf(tx, input.gymId);
+    if (days !== input.days) {
+      await setOverdueDays(tx, input.gymId, input.days);
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.bill_settings_changed",
+        targetType: "gym",
+        targetId: input.gymId,
+        meta: { overdueAfterDays: String(input.days) },
+      });
+    }
+    if (input.billDay !== undefined && billDay !== input.billDay) {
+      await setBillDay(tx, input.gymId, input.billDay);
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.bill_day_changed",
+        targetType: "gym",
+        targetId: input.gymId,
+        meta: input.billDay === null ? { billDay: "off" } : { billDay: String(input.billDay) },
+      });
+    }
+    return input.billDay === undefined ? billDay : input.billDay;
   });
 }
 
@@ -552,7 +588,7 @@ const owing = (sql: Sql | TransactionSql, gymIds: readonly string[] | null) => s
   SELECT h.id, t.name AS type_name, h.kind, h.term_count, h.term_unit, h.pack_classes, h.pack_days,
          (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
          h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
-         h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
+         h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
          h.gym_id, h.entry_id, g.timezone, h.price_minor, h.currency,
          r.name AS tax_name, r.rate_bp AS tax_bp, h.tax_included
   FROM gym_held_memberships h
@@ -620,8 +656,9 @@ function owed(rows: readonly Owing[], billed: ReadonlyMap<string, ReadonlySet<nu
     if (opens.length === 0) continue;
     // Each bill charges the rate its membership was sold with, at its percentage today.
     const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: row.tax_included ?? false };
-    const bill = billOf(row.price_minor, tax);
     for (const due of opens) {
+      // The part month's share where it is the first period of one billed from the gym's day (18y).
+      const bill = billOf(periodListedMinor(membership, due.periodIndex, row.price_minor), tax);
       work.bills.push({ membershipId: row.id, periodIndex: due.periodIndex, amountMinor: bill.amountMinor, tax: bill.tax, currency: row.currency, dueOn: due.dueOn, covers: due.covers });
     }
   }

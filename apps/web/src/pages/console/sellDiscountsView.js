@@ -13,10 +13,12 @@ import {
   MEMBER_GIFT_SALE_NAME,
   memberGiftOff,
   minorToPriceText,
+  partMinor,
   percentToBp,
   priceToMinor,
   promoCodeFrom,
 } from '@app/shared';
+import { billDays } from './memberBillsView';
 
 // DISCOUNTS AND PROMO CODES (spec Part 3 §14.3; ROADMAP 18b-ii-a and 18b-ii-b): on the Sell
 // page, its membership box and a person's Add membership. Every sentence about a discount
@@ -273,8 +275,9 @@ const taxLabel = (tax) => `${tax.name} ${bpToTaxRateText(tax.bp)}%`;
  *  `offMinor` is what the server is sent as coming off, `totalMinor` what its first bill
  *  comes to: the server gives nothing where either is no longer so. `shows` is whether
  *  there is anything to show beyond the price itself. Null where the discount cannot be
- *  used on this type. */
-export function membershipSummary(type, discount, taxIncluded = false, memberGift = null, joiningFeeMinor = 0) {
+ *  used on this type. `part` is the part month its first bill is for where the gym bills
+ *  everyone on one day (18y, `firstBillPart`): that bill is the price for those days. */
+export function membershipSummary(type, discount, taxIncluded = false, memberGift = null, joiningFeeMinor = 0, part = null) {
   if (type === null || type === undefined) return null;
   const money = (minor) => formatMinor(minor, type.currency);
   if (type.priceMinor === 0) {
@@ -286,26 +289,38 @@ export function membershipSummary(type, discount, taxIncluded = false, memberGif
     if (!made.ok) return null;
     costs = made;
   }
+  // The part month: the first bill is the price, after any discount, for those days alone, as
+  // the server works it out (`periodListedMinor`).
+  const firstListed = part === null ? costs.firstBillMinor : partMinor(costs.firstBillMinor, part);
   // The person's own Refer a friend gift (20e-ii-b-ii-a) comes off the first bill, after any
   // discount, where it fits: 0 where it does not, and it waits for their next payment.
-  const giftOffMinor = memberGift === null || memberGift === undefined ? 0 : memberGiftOff(memberGift, costs.firstBillMinor, type.currency);
+  const giftOffMinor = memberGift === null || memberGift === undefined ? 0 : memberGiftOff(memberGift, firstListed, type.currency);
   const tax = typeTax(type, taxIncluded);
   // The joining fee is on the first bill alone, and no discount or gift comes off it.
   const fee = joiningFeeMinor > 0 ? joiningFeeMinor : 0;
-  const first = billAmounts(costs.firstBillMinor - giftOffMinor + fee, tax);
+  const first = billAmounts(firstListed - giftOffMinor + fee, tax);
   const next = billAmounts(costs.payments === 'first' ? type.priceMinor : costs.heldPriceMinor, tax);
   if (!first.ok || !next.ok) return null;
   const onTop = tax !== null && !tax.included;
   const lines = [];
-  if (costs.offMinor !== null || giftOffMinor > 0 || onTop || fee > 0) lines.push({ label: 'Price', value: money(type.priceMinor) });
-  if (costs.offMinor !== null) lines.push({ label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` });
+  if (part !== null) {
+    // The days it is for, at the full price for those days, and the discount's share of them.
+    const partPrice = partMinor(type.priceMinor, part);
+    lines.push({ label: `Part month, ${billDays({ from: part.from, to: part.to })}`, value: money(partPrice) });
+    if (costs.offMinor !== null) lines.push({ label: `Discount (${discount.name})`, value: `-${money(partPrice - firstListed)}` });
+  } else {
+    if (costs.offMinor !== null || giftOffMinor > 0 || onTop || fee > 0) lines.push({ label: 'Price', value: money(type.priceMinor) });
+    if (costs.offMinor !== null) lines.push({ label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` });
+  }
   if (giftOffMinor > 0) lines.push({ label: MEMBER_GIFT_SALE_NAME, value: `-${money(giftOffMinor)}` });
   if (fee > 0) lines.push({ label: 'Joining fee', value: money(fee) });
   if (onTop) lines.push({ label: taxLabel(tax), value: money(first.taxMinor) });
   lines.push({ label: 'Total', value: money(first.totalMinor), strong: true });
   if (tax !== null && tax.included) lines.push({ label: `Includes ${taxLabel(tax)}`, value: money(first.taxMinor) });
   let later = null;
-  if (type.kind === 'recurring' && (costs.offMinor !== null || giftOffMinor > 0 || fee > 0)) {
+  if (part !== null) {
+    later = `This pays for ${billDays({ from: part.from, to: part.to })}. From ${dayWords(part.fullFrom)}, each payment is ${money(next.totalMinor)}.`;
+  } else if (type.kind === 'recurring' && (costs.offMinor !== null || giftOffMinor > 0 || fee > 0)) {
     later =
       costs.payments === 'first' || giftOffMinor > 0 || fee > 0
         ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.`
@@ -319,31 +334,41 @@ export function membershipSummary(type, discount, taxIncluded = false, memberGif
     total: money(first.totalMinor),
     lines,
     later,
-    shows: costs.offMinor !== null || giftOffMinor > 0 || tax !== null || fee > 0,
+    shows: costs.offMinor !== null || giftOffMinor > 0 || tax !== null || fee > 0 || part !== null,
+    // Its first bill is a part month (18y): a form that draws totals only for some things draws this one.
+    part: part !== null,
   };
 }
 
 /** What a change of membership comes to (18x): the new type's price, the unused days of the one
  *  it replaces taken off before tax, and the tax on what is left, as the server works it out.
  *  `fromName` is the membership being changed. */
-export function changeSummary(type, creditMinor, fromName, taxIncluded = false) {
+export function changeSummary(type, creditMinor, fromName, taxIncluded = false, part = null) {
   if (type === null || type === undefined) return null;
   const money = (minor) => formatMinor(minor, type.currency);
   const tax = typeTax(type, taxIncluded);
-  const listed = type.priceMinor - creditMinor;
+  // Where the gym bills everyone on one day (18y), the first bill is the part month before it.
+  const priced = part === null ? type.priceMinor : partMinor(type.priceMinor, part);
+  const listed = priced - creditMinor;
   const first = listed <= 0 ? { ok: true, totalMinor: 0, taxMinor: 0 } : billAmounts(listed, tax);
   const next = type.priceMinor === 0 ? { ok: true, totalMinor: 0 } : billAmounts(type.priceMinor, tax);
   if (!first.ok || !next.ok) return null;
   const onTop = tax !== null && !tax.included && first.taxMinor > 0;
-  const lines = [{ label: 'Price', value: type.priceMinor === 0 ? 'Free' : money(type.priceMinor) }];
+  const lines = [
+    part === null
+      ? { label: 'Price', value: type.priceMinor === 0 ? 'Free' : money(type.priceMinor) }
+      : { label: `Part month, ${billDays({ from: part.from, to: part.to })}`, value: money(priced) },
+  ];
   if (creditMinor > 0) lines.push({ label: `Unused days of ${fromName}`, value: `-${money(creditMinor)}` });
   if (onTop) lines.push({ label: taxLabel(tax), value: money(first.taxMinor) });
   lines.push({ label: 'Total', value: money(first.totalMinor), strong: true });
   if (tax !== null && tax.included && first.taxMinor > 0) lines.push({ label: `Includes ${taxLabel(tax)}`, value: money(first.taxMinor) });
   const later =
-    type.kind === 'recurring' && type.priceMinor > 0 && (creditMinor > 0 || first.totalMinor !== next.totalMinor)
-      ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.`
-      : null;
+    part !== null && type.priceMinor > 0
+      ? `This pays for ${billDays({ from: part.from, to: part.to })}. From ${dayWords(part.fullFrom)}, each payment is ${money(next.totalMinor)}.`
+      : type.kind === 'recurring' && type.priceMinor > 0 && (creditMinor > 0 || first.totalMinor !== next.totalMinor)
+        ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.`
+        : null;
   return { totalMinor: first.totalMinor, lines, later, total: money(first.totalMinor) };
 }
 
