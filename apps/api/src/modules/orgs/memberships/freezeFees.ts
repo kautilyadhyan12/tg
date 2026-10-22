@@ -67,8 +67,19 @@ type Opening = { m: string; a: number; tm: number; tb: number; tn: string | null
 
 function owedFees(rows: readonly Frozen[], now: Date): Map<string, Opening[]> {
   const byGym = new Map<string, Opening[]>();
+  // The gym's day, worked out once a time zone: one for every row kept the thread busy a second
+  // over 6,000 frozen memberships (`tools/measure-member-bills-cost.ts`).
+  const days = new Map<string, string>();
+  const dayIn = (timezone: string): string => {
+    let day = days.get(timezone);
+    if (day === undefined) {
+      day = dayInTz(now, timezone);
+      days.set(timezone, day);
+    }
+    return day;
+  };
   for (const row of rows) {
-    const month = freezeFeeMonth(row.frozen_on, dayInTz(now, row.timezone));
+    const month = freezeFeeMonth(row.frozen_on, dayIn(row.timezone));
     if (month === null || row.billed.includes(month.from)) continue;
     // The amount the gym set is what the person pays: the membership's rate is inside it, as a late cancel's is.
     const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
