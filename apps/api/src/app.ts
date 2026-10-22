@@ -13,6 +13,7 @@ import postgres from "postgres";
 import { createAnalytics, type Analytics } from "./analytics.js";
 import { createResendTransport } from "./email/resend.js";
 import { createDevEmailSender, createResendEmailSender, type EmailSender } from "./modules/auth/email.js";
+import { fromOurWebsite } from "./modules/auth/fromOurWebsite.js";
 import { accessClaimsOf, registerAuthenticate } from "./modules/auth/plugin.js";
 import { AuthError, type PasswordHasher } from "./modules/auth/service.js";
 import { registerAuthRoutes } from "./modules/auth/routes.js";
@@ -176,6 +177,16 @@ export async function buildApp(
     // ceiling) saves a round trip a save, where a browser would otherwise ask again
     // after five seconds.
     maxAge: 7200,
+  });
+  // A browser's change is taken only from our own website (`fromOurWebsite.ts`). After
+  // CORS, which answers a browser's pre-check, and before the floor below counts anything.
+  app.addHook("onRequest", async (req, reply) => {
+    if (fromOurWebsite(req.method, req.headers, config.WEB_ORIGIN) === "pass") return;
+    return reply.status(403).send({
+      error: "cross_site_request",
+      message: "This change was refused because it did not come from our website.",
+      requestId: req.id,
+    });
   });
   // The app-wide floor under the per-route limits. A gym's front desk and its members on
   // the gym's wi-fi are ONE address (ROADMAP Stage 4 item 10), so a signed-in person is
