@@ -169,7 +169,7 @@ function PayForm({ gymId, item, person, payerName, today, onDone, onBack }) {
         </label>
       ) : null}
       <label className="c-field">
-        <span className="c-label">How they paid</span>
+        <span className="c-label">Payment method</span>
         <select className="c-sel" value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}>
           <option value="">Choose one</option>
           {PAYMENT_METHODS.map((method) => (

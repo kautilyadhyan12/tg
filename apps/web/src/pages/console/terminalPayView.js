@@ -20,7 +20,7 @@ export function payTerminalName(terminal) {
   return `Simulated Terminal · ${PRACTICE_PAYMENT_WORDS[terminal.practice] ?? terminal.practice}`;
 }
 
-/** "Card on Terminal" in How they paid: the value the form sends to the Terminal, not the server. */
+/** "Card on Terminal" in Payment method: the value the form sends to the Terminal, not the server. */
 export const TERMINAL_METHOD = 'terminal';
 
 /** What the Record payment box says under its title when the Terminal takes the money: it is

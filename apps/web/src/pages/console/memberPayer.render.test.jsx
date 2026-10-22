@@ -122,7 +122,7 @@ describe('Who pays', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
     const form = screen.getByTestId('payer-pay');
     expect(within(form).getByText(/The receipt says Priya Sharma paid\./)).toBeTruthy();
-    fireEvent.change(within(form).getByLabelText('How they paid'), { target: { value: 'cash' } });
+    fireEvent.change(within(form).getByLabelText('Payment method'), { target: { value: 'cash' } });
     const paid = { ...aaravGold, billing: { ...aaravGold.billing, pay: null, bills: aaravGold.billing.bills.map((b) => ({ ...b, payments: [{ id: '55555555-5555-4555-8555-000000000001', amountMinor: 150_000, method: 'cash', paidOn: TODAY, by: 'Sam', refunds: [], voidedRefunds: [], refundableMinor: 150_000, receiptNumber: 41 }] })) } };
     orgService.changeHeldMembership.mockResolvedValue(heldAnswer([paid]));
     fireEvent.click(within(form).getByRole('button', { name: 'Record payment' }));

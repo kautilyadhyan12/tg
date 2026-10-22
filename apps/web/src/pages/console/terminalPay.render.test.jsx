@@ -118,7 +118,7 @@ const openPay = async () => {
   fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
   return within(await screen.findByTestId('held-pay'));
 };
-const howPaid = (form) => form.getByLabelText('How they paid');
+const howPaid = (form) => form.getByLabelText('Payment method');
 const optionsOf = (select) => [...select.querySelectorAll('option')].map((o) => o.textContent);
 
 beforeEach(() => {

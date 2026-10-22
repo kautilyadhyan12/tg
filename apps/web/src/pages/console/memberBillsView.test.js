@@ -130,7 +130,7 @@ describe('the amount typed is the amount sent', () => {
       expect(paymentBody(m, draft({ amount, method: 'cash' })), amount).toEqual({ problem: 'Type the amount they paid, like 20 or 20.50.', body: null });
     }
     expect(paymentBody(m, draft({ amount: '50', method: 'cash' }))).toEqual({ problem: 'That is more than is left to pay. £49.99 is left.', body: null });
-    expect(paymentBody(m, draft())).toEqual({ problem: 'Pick how they paid.', body: null });
+    expect(paymentBody(m, draft())).toEqual({ problem: 'Choose a payment method.', body: null });
   });
 
   it('asks for a whole number in a currency with no pennies', () => {

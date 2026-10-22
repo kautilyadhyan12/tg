@@ -441,7 +441,7 @@ export default function MemberMemberships({
         >
           <p className="c-s15 c-w6 c-t1 m-0">{`Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
           <label className="c-field">
-            <span className="c-label">How they paid</span>
+            <span className="c-label">Payment method</span>
             <select className="c-sel" value={feeForm.method} onChange={(e) => setFeeForm((f) => ({ ...f, method: e.target.value }))}>
               <option value="">Choose one</option>
               {PAYMENT_METHODS.map((method) => (
@@ -919,7 +919,7 @@ export default function MemberMemberships({
           />
         </label>
         <label className="c-field">
-          <span className="c-label">How they paid</span>
+          <span className="c-label">Payment method</span>
           <select className="c-sel" value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value }))}>
             <option value="">Choose one</option>
             {methods.map((method) => (

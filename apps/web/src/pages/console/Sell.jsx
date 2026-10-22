@@ -188,7 +188,7 @@ function PayPicker({ method, setMethod, disabled }) {
   return (
     <div className="c-field">
       <label className="c-label" htmlFor={id}>
-        How did they pay?
+        Payment method
       </label>
       <select id={id} className="c-input" style={{ maxWidth: 280 }} value={method} disabled={disabled} onChange={(e) => setMethod(e.target.value)}>
         {PAY_CHOICES.map((c) => (
@@ -570,7 +570,7 @@ function MembershipFinder({ gymId, words, locked, addMemberTo, onOpen }) {
     <section className="c-card p-4 md:p-5 flex flex-col gap-4" aria-label="Sell a membership">
       <div className="flex flex-col gap-1">
         <h2 className="c-h2">Sell a membership</h2>
-        <p className="c-s14 c-t2 m-0">Memberships are sold on the {words.person}&apos;s own page, where you pick the membership, a discount if there is one, and how they paid.</p>
+        <p className="c-s14 c-t2 m-0">Memberships are sold on the {words.person}&apos;s own page, where you pick the membership, a discount if there is one, and the payment method.</p>
       </div>
       <WhoPicker gymId={gymId} who="member" setWho={() => undefined} person={person} setPerson={setPerson} mustPick disabled={locked} addMemberTo={addMemberTo} />
       {person !== null ? (

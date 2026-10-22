@@ -231,7 +231,7 @@ export function feePayDraft(fee, newKey) {
 /** Why a fee's payment cannot be sent as it stands, or null; and the body it sends. */
 export function feePayBody(draft, fee) {
   if (draft === null || fee === undefined || fee === null) return { problem: 'Open the form again.', body: null };
-  if (!MEMBER_PAYMENT_BY_HAND.includes(draft.method)) return { problem: 'Pick how they paid.', body: null };
+  if (!MEMBER_PAYMENT_BY_HAND.includes(draft.method)) return { problem: 'Choose a payment method.', body: null };
   return { problem: null, body: { requestKey: draft.requestKey, amountMinor: fee.amountMinor, method: draft.method } };
 }
 
@@ -439,7 +439,7 @@ export function paymentBody(m, draft) {
   if (amountMinor > pay.leftMinor) {
     return { problem: `That is more than is left to pay. ${formatMinor(pay.leftMinor, m.currency)} is left.`, body: null };
   }
-  if (draft.method === '') return { problem: 'Pick how they paid.', body: null };
+  if (draft.method === '') return { problem: 'Choose a payment method.', body: null };
   return { problem: null, body: { requestKey: draft.requestKey, periodIndex: pay.periodIndex, amountMinor, method: draft.method } };
 }
 

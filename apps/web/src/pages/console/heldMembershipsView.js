@@ -320,7 +320,7 @@ export function membershipChoice(types, value, today, paidMinor = null) {
 }
 
 /** Said where a form is sent with the paid tick on and no way of paying picked. */
-export const METHOD_NEEDED = 'Pick how they paid.';
+export const METHOD_NEEDED = 'Choose a payment method.';
 
 /** What the server is sent for a choice. `requestKey` is made once a form. A paid one
  *  says how it was paid: the server records the payment with the membership. */
