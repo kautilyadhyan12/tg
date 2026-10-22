@@ -483,7 +483,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 16. [x] **S1 · The server's ready-made parts updated** · merged 2026-10-22 · PR #333
 
-17. [ ] **S2 · Changes only from KWAZO's own website** (Kd, 2026-10-21): session cookies are SameSite=None in production and nothing checks where a write came from; one check in one place. Risky. Web folder 2.
+17. [x] **S2 · Changes only from KWAZO's own website** · merged 2026-10-22 · PR #334
 
 ## Stage 5 — The phone app
 
