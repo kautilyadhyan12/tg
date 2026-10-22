@@ -270,7 +270,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-ii-b-i. [x] **Pair a Square Terminal** — merged 2026-10-21 (PR #328).
        - 18d-ii-b-ii. [x] **Save card on Terminal** — merged 2026-10-21 (PR #330).
      - 18d-vi. **Take payment on Terminal** (Kd, 2026-10-21), in three parts since 2026-10-22 (`handoff/2026-10-22-18d-vi-a.md` keeps its line as first written):
-       - 18d-vi-a. [ ] **On a member's bill**: Record payment → Card on Terminal, the amount on the gym's Terminal, Paid with its receipt; refunded in Square, never voided here. Web folder 1.
+       - 18d-vi-a. [x] **Take payment on Terminal on a member's bill** — merged 2026-10-22 (PR #335).
        - 18d-vi-b. [ ] **At Sell**, for the whole basket, and on a class or personal training fee's bill. Web folder 1.
        - 18d-vi-c. [ ] **The card kept from a Terminal payment** for a membership that renews: the agreement grows to Visa's list on all three screens, the member agrees on the Terminal first. Web folder 1.
      - 18r. [ ] **UPI for gyms in India**, wherever a payment is recorded: Sell, Record payment and Add member's "how they paid", beside Cash, Card at the desk and Bank transfer. Web folder 1, after 18d-vi.
