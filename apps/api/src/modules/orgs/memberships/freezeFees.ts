@@ -5,7 +5,7 @@
 // staff made with no fee. So a fee is opened only for a membership stored frozen with its own
 // fee above 0 (set at the freeze, from the gym's fee then, or 0 where staff unticked it), of a
 // person still on the gym's list, and only for the month today falls in (`freezeFeeMonth`); one
-// fee a month of a membership is held by `gym_member_bills_freeze_fee_uq` (0155). An unfreeze or
+// fee a month of a membership is held by `gym_member_bills_freeze_fee_uq` (0156). An unfreeze or
 // a cancel takes off, unpaid, the fees of months that begin that day or later.
 //
 // A freeze fee is a fee bill like a late cancel's (`feesRepo.ts`): paid all at once, with a

@@ -190,7 +190,7 @@ export const gymHeldMemberships = pgTable(
     /** Given while the gym billed everyone on one day (0154; 18y): the first of those days after
      *  the start, from which its full periods count; its first period is the part month before. */
     fullFrom: date("full_from"),
-    /** What its freeze charges a month (0155; 18z): the gym's freeze fee when it was frozen, or 0
+    /** What its freeze charges a month (0156; 18z): the gym's freeze fee when it was frozen, or 0
      *  where staff froze it with no fee. Read only while it is frozen. */
     freezeFeeMinor: integer("freeze_fee_minor").notNull().default(0),
     createdAt: createdAt(),
@@ -325,7 +325,7 @@ export const gymMemberBills = pgTable(
     /** On a bill of a membership changed for another (0152; 18x): the money whose days moved to
      *  the new one, never refunded from this bill. 0 on every other. */
     movedMinor: integer("moved_minor").notNull().default(0),
-    /** A freeze fee whose month began on or after the day its freeze ended (0155; 18z): never owed,
+    /** A freeze fee whose month began on or after the day its freeze ended (0156; 18z): never owed,
      *  paid or not. False on every other bill. */
     freezeStopped: boolean("freeze_stopped").notNull().default(false),
     createdAt: createdAt(),
@@ -347,7 +347,7 @@ export const gymMemberBills = pgTable(
       sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show','freeze') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.fee} <> 'freeze' OR (${t.classBookingId} IS NULL AND ${t.ptAppointmentId} IS NULL))`,
     ),
     // `0136` holds its foreign key, which sets the booking to null when it goes.
-    // One freeze fee a month of a membership (0155; 18z); a waived one counts.
+    // One freeze fee a month of a membership (0156; 18z); a waived one counts.
     uniqueIndex("gym_member_bills_freeze_fee_uq")
       .on(t.heldMembershipId, t.coversFrom)
       .where(sql`${t.fee} = 'freeze' AND (${t.status} <> 'void' OR ${t.voidReason} = 'waived')`),
@@ -435,7 +435,7 @@ export const gymMemberPayments = pgTable(
     unique("gym_member_payments_gym_id_uq").on(t.gymId, t.id),
     check("gym_member_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','link','company','terminal')`),
+    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','link','company','terminal')`),
     check(
       "gym_member_payments_provider_check",
       sql`(${t.method} IN ('company','terminal')) = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
@@ -485,7 +485,7 @@ export const gymMemberRefunds = pgTable(
     unique("gym_member_refunds_request_uq").on(t.gymId, t.requestKey),
     check("gym_member_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer')`),
+    check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer')`),
     check("gym_member_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other')`),
     foreignKey({
       name: "gym_member_refunds_payment_fk",

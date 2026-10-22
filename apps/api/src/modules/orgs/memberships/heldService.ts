@@ -47,6 +47,7 @@ import {
   type HeldMembershipsResponse,
   type MemberBilling,
   type MemberFee,
+  type MemberPaymentByHand,
   type RecordMemberFeePaymentRequest,
   type NoteMemberRefundRequest,
   type RecordMemberPaymentRequest,
@@ -55,6 +56,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { refuseMethodElsewhere } from "../paymentMethods.js";
 import { endMembershipBookings, membershipBookingsAsk } from "../classes/bookingChanges.js";
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
@@ -477,6 +479,7 @@ export async function giveHeldMembership(
   // discount, which is taken where payments are (18b-ii-a), paid or not.
   if (req.paid && !canBill) throw new OrgsError(403, "forbidden", NO_BILLING);
   if ((req.discountId !== undefined || req.memberGiftId !== undefined) && !canBill) throw new OrgsError(403, "forbidden", NO_DISCOUNTS);
+  refuseMethodElsewhere(org.country, req.method ?? null);
   const now = deps.now();
   const today = dayInTz(now, org.timezone);
   throwOnFailure(
@@ -554,7 +557,7 @@ export async function changeHeldMembership(
   membershipId: string,
   req: ChangeHeldMembershipRequest,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
-  const { today, now } = await requireBilling(deps, userId, gymId);
+  const { today, now } = await requireBilling(deps, userId, gymId, req.method ?? null);
   const outcome = await changeRepo.changeHeld(deps.sql, CANCEL_BOOKINGS, {
     gymId,
     entryId,
@@ -594,9 +597,10 @@ const BILLING = "billing.members";
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 const NO_DISCOUNTS = "Using a discount isn't part of your role. Add the membership without one, or ask the owner to turn on \"Record members' payments\" for you.";
 
-async function requireBilling(deps: HeldDeps, userId: string, gymId: string): Promise<{ today: string; now: Date }> {
+async function requireBilling(deps: HeldDeps, userId: string, gymId: string, method: MemberPaymentByHand | null = null): Promise<{ today: string; now: Date }> {
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
+  refuseMethodElsewhere(org.country, method);
   const now = deps.now();
   return { today: dayInTz(now, org.timezone), now };
 }
@@ -670,7 +674,7 @@ export async function recordMemberPayment(
   membershipId: string,
   req: RecordMemberPaymentRequest,
 ): Promise<HeldMembershipsResponse> {
-  const { today, now } = await requireBilling(deps, userId, gymId);
+  const { today, now } = await requireBilling(deps, userId, gymId, req.method);
   throwOnBillFailure(
     await billsRepo.recordPayment(deps.sql, {
       gymId,
@@ -727,7 +731,7 @@ export async function noteMemberRefund(
   paymentId: string,
   req: NoteMemberRefundRequest,
 ): Promise<HeldMembershipsResponse> {
-  const { today, now } = await requireBilling(deps, userId, gymId);
+  const { today, now } = await requireBilling(deps, userId, gymId, req.method);
   throwOnBillFailure(
     await billsRepo.noteRefund(deps.sql, {
       gymId,
@@ -800,7 +804,7 @@ export async function recordMemberFeePayment(
   billId: string,
   req: RecordMemberFeePaymentRequest,
 ): Promise<HeldMembershipsResponse> {
-  const { today, now } = await requireBilling(deps, userId, gymId);
+  const { today, now } = await requireBilling(deps, userId, gymId, req.method);
   throwOnFeeFailure(
     await feesRepo.recordFeePayment(deps.sql, { gymId, entryId, membershipId, billId, requestKey: req.requestKey, amountMinor: req.amountMinor, method: req.method, today, actorUserId: userId, now }),
   );

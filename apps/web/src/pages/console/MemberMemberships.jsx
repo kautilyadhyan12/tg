@@ -50,7 +50,7 @@ import {
 import {
   CANCEL_REASONS,
   NO_PAYMENTS_LINE,
-  PAYMENT_METHODS,
+  paymentMethodsFor,
   PAYMENT_VOID_CHOICES,
   REFUND_REASON_CHOICES,
   REFUND_VOID_CHOICES,
@@ -164,6 +164,7 @@ export default function MemberMemberships({
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
 }) {
+  const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -475,7 +476,7 @@ export default function MemberMemberships({
       const { problem, body } = onTerminal ? { problem: null, body: { requestKey: feeForm.requestKey, amountMinor: fee.amountMinor } } : feePayBody(feeForm, fee);
       const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === feeForm.terminalId);
       const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
-      const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...PAYMENT_METHODS] : PAYMENT_METHODS;
+      const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...payMethods] : payMethods;
       const take = feeTakeWords(fee, m.currency);
       return (
         <form
@@ -826,7 +827,7 @@ export default function MemberMemberships({
           <span className="c-label">How you gave it back</span>
           <select className="c-sel" value={refundForm.method} onChange={(e) => setRefundForm((f) => ({ ...f, method: e.target.value }))}>
             <option value="">Choose one</option>
-            {PAYMENT_METHODS.map((method) => (
+            {payMethods.map((method) => (
               <option key={method.value} value={method.value}>
                 {method.label}
               </option>
@@ -1020,7 +1021,7 @@ export default function MemberMemberships({
     const { problem, body } = paymentBody(m, payForm);
     const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === payForm.terminalId);
     const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
-    const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...PAYMENT_METHODS] : PAYMENT_METHODS;
+    const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...payMethods] : payMethods;
     return (
       <form
         noValidate
@@ -1494,7 +1495,7 @@ export default function MemberMemberships({
                     <span className="c-label">Payment method</span>
                     <select className="c-sel" value={changeDraft.method} onChange={(e) => set({ method: e.target.value })}>
                       <option value="">Choose one</option>
-                      {PAYMENT_METHODS.map((method) => (
+                      {payMethods.map((method) => (
                         <option key={method.value} value={method.value}>
                           {method.label}
                         </option>
@@ -1759,6 +1760,7 @@ export default function MemberMemberships({
         ) : (
           <>
             <MembershipChoice
+              country={gym?.country}
               types={types}
               today={today}
               value={form}

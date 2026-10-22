@@ -8,7 +8,7 @@ import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
 import { consoleIsReadOnly } from './billingView';
 import { personOption } from './sellView';
-import { PAYMENT_METHODS, canRecordPayments, feePayBody, paymentBody, paymentDraft, paymentWords } from './memberBillsView';
+import { canRecordPayments, feePayBody, paymentBody, paymentDraft, paymentMethodsFor, paymentWords } from './memberBillsView';
 import {
   PAYER_ASK_LINE,
   familyPaidWords,
@@ -125,7 +125,7 @@ function AskBox({ words, busy, refusal, onYes, onBack, danger = false }) {
 }
 
 /** Record payment for one thing a person owes, from the payer's page. */
-function PayForm({ gymId, item, person, payerName, today, onDone, onBack }) {
+function PayForm({ gymId, country, item, person, payerName, today, onDone, onBack }) {
   const m = item.membership;
   const [draft, setDraft] = useState(() => (item.kind === 'bill' ? { ...paymentDraft(m, newKey), tried: false } : { billId: item.fee.id, requestKey: newKey(), method: '', tried: false }));
   const [busy, setBusy] = useState(false);
@@ -172,7 +172,7 @@ function PayForm({ gymId, item, person, payerName, today, onDone, onBack }) {
         <span className="c-label">Payment method</span>
         <select className="c-sel" value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}>
           <option value="">Choose one</option>
-          {PAYMENT_METHODS.map((method) => (
+          {paymentMethodsFor(country).map((method) => (
             <option key={method.value} value={method.value}>
               {method.label}
             </option>
@@ -254,6 +254,7 @@ function PaidForRow({ gymId, gym, person, payerName, canBill, canChange, members
           </div>
           {paying === item.key ? (
             <PayForm
+              country={gym?.country}
               gymId={gymId}
               item={item}
               person={person}

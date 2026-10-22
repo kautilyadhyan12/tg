@@ -1,6 +1,6 @@
 import {
-  MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
+  paymentMethodsByHand,
   PRODUCTS_MAX,
   PRODUCT_NAME_MAX,
   PRODUCT_STOCK_MAX,
@@ -57,8 +57,11 @@ export const NO_MANAGING_LINE = 'The owner, or staff who can change membership t
 export const SELL_REFUSED = "Your role doesn't allow you to sell or to change products. Ask the owner if you need to.";
 export const SALE_HINT = 'This records the sale. Take the money yourself: the app does not charge anybody.';
 
-export const PAY_CHOICES = MEMBER_PAYMENT_BY_HAND.map((value) => ({ value, label: MEMBER_PAYMENT_METHOD_WORDS[value] }));
+/** How a sale is paid by hand at a gym in this country: UPI in India alone (18r). */
+export const payChoicesFor = (country) => paymentMethodsByHand(country ?? null).map((value) => ({ value, label: MEMBER_PAYMENT_METHOD_WORDS[value] }));
 export const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? String(method);
+/** Inside a sentence: "Bank transfer" reads "bank transfer", and "UPI" stays "UPI". */
+const inSentence = (words) => (/^[A-Z]{2,}\b/.test(words) ? words : words.toLowerCase());
 
 /** "8.25%" for 825. */
 export function taxPercent(bp) {
@@ -169,7 +172,7 @@ export function soldWords(sale) {
   const first = basket.first;
   const to = first.person === null ? 'a walk-in' : first.person.name;
   // "Terminal" is the device's name, kept as Square writes it (18d-vi-b-ii).
-  const sold = `Sold: ${basketTitle(basket)} to ${to}. ${formatMinor(basket.totalMinor, first.currency)}, ${first.method === 'terminal' ? 'card on the Terminal' : methodWords(first.method).toLowerCase()}.`;
+  const sold = `Sold: ${basketTitle(basket)} to ${to}. ${formatMinor(basket.totalMinor, first.currency)}, ${first.method === 'terminal' ? 'card on the Terminal' : inSentence(methodWords(first.method))}.`;
   const off = basketDiscountWords(basket);
   return off === null ? sold : `${sold} ${off}.`;
 }
@@ -212,6 +215,7 @@ export function takingsWords(page) {
   if (totals.payments > 0) what.push(count(totals.payments, 'membership payment', 'membership payments'));
   const how = [];
   if (totals.cash > 0) how.push(`Cash ${money(totals.cash)}`);
+  if (totals.upi > 0) how.push(`UPI ${money(totals.upi)}`);
   if (totals.card_at_desk > 0) how.push(`Card at the desk ${money(totals.card_at_desk)}`);
   if (totals.bank_transfer > 0) how.push(`Bank transfer ${money(totals.bank_transfer)}`);
   // Named as each payment's own row names it.

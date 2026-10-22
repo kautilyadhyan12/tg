@@ -1084,7 +1084,14 @@
       "idx": 154,
       "version": "7",
       "when": 1790726400155,
-      "tag": "0155_freeze_fee",
+      "tag": "0155_upi_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1790726400156,
+      "tag": "0156_freeze_fee",
       "breakpoints": true
     }
   ]

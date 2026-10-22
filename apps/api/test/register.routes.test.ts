@@ -277,7 +277,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
 
       // The page adds up only what stands: one water sale of 398, one shaker, three bars.
       const now = await read(gymId, owner.cookies);
-      expect(now.totals).toEqual({ count: 5, payments: 0, totalMinor: 398 + 1200 + 900, taxMinor: 0, cash: 1200 + 900, card_at_desk: 398, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
+      expect(now.totals).toEqual({ count: 5, payments: 0, totalMinor: 398 + 1200 + 900, taxMinor: 0, cash: 1200 + 900, upi: 0, card_at_desk: 398, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
       expect(now.sales).toHaveLength(5);
       expect(now.sales.filter((s) => s.person !== null)).toEqual([expect.objectContaining({ person: { entryId: maya, name: "Maya Patel" }, by: expect.stringMatching(/^Reg once-/) as unknown })]);
     },
@@ -466,7 +466,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await salesOf(us)).toEqual(usBefore);
       const after = await read(us, owner.cookies);
       expect(after.sales.map((s) => s.itemName).sort()).toEqual(["Gift card", "Water", "Water", "Water"]);
-      expect(after.totals).toEqual({ count: 4, payments: 0, totalMinor: 199 + 215 + 646 + 2500, taxMinor: 16 + 49, cash: 199 + 215, card_at_desk: 2500, bank_transfer: 646, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
+      expect(after.totals).toEqual({ count: 4, payments: 0, totalMinor: 199 + 215 + 646 + 2500, taxMinor: 16 + 49, cash: 199 + 215, upi: 0, card_at_desk: 2500, bank_transfer: 646, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
       // The tax changes are written to the gym's record once each, and a save that changes nothing is not.
       expect((await put(`${base(us)}/tax`, { included: true }, owner.cookies)).statusCode).toBe(200);
       expect((await put(`${base(us)}/tax-rates/${salesTax}`, { name: "State tax", bp: 625 }, owner.cookies)).statusCode).toBe(200);
@@ -509,7 +509,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(await auditOf(gymId, "org.sale_undone")).toHaveLength(1);
       now = await read(gymId, owner.cookies);
       expect(now.sales.map((s) => [s.itemName, s.canUndo, s.undone])).toEqual([["Coffee", true, false], ["Bar", false, true]]);
-      expect(now.totals).toEqual({ count: 1, payments: 0, totalMinor: 250, taxMinor: 0, cash: 0, card_at_desk: 250, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
+      expect(now.totals).toEqual({ count: 1, payments: 0, totalMinor: 250, taxMinor: 0, cash: 0, upi: 0, card_at_desk: 250, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
       // The sale's own key again does not sell it a second time.
       expect((await salesOf(gymId)).filter((s) => !s.undone)).toHaveLength(1);
 
@@ -697,13 +697,13 @@ d("the register: products, sales and tax (real Postgres)", () => {
 
       const now = await read(gymId, owner.cookies);
       expect(now.payments?.map((p) => [p.typeName, p.amountMinor, p.method, p.person])).toEqual([["One month", 4999, "card_at_desk", { entryId: maya, name: "Maya Patel" }]]);
-      expect(now.totals).toEqual({ count: 1, payments: 1, totalMinor: 199 + 4999, taxMinor: 0, cash: 199, card_at_desk: 4999, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
+      expect(now.totals).toEqual({ count: 1, payments: 1, totalMinor: 199 + 4999, taxMinor: 0, cash: 199, upi: 0, card_at_desk: 4999, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
       // Whoever cannot record a payment is sent no payment and no money from one.
       const forPricer = await read(gymId, pricer.cookies);
       expect(forPricer.payments).toBeNull();
       expect(forPricer.sales).toEqual([]);
       expect(forPricer.salesNotShown).toBe(0);
-      expect(forPricer.totals).toEqual({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
+      expect(forPricer.totals).toEqual({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
 
       // A refund noted today is said beside the total and taken off nothing.
       const held = JSON.parse(given.body) as { memberships: { id: string; billing: { bills: { payments: { id: string }[] }[] } | null }[] };
@@ -720,7 +720,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await post(`/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${membership.id}/payments/${paymentId}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
       const afterUndo = await read(gymId, owner.cookies);
       expect(afterUndo.payments).toEqual([]);
-      expect(afterUndo.totals).toEqual({ count: 1, payments: 0, totalMinor: 199, taxMinor: 0, cash: 199, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
+      expect(afterUndo.totals).toEqual({ count: 1, payments: 0, totalMinor: 199, taxMinor: 0, cash: 199, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 0 });
       // Next door's takings are its own.
       expect((await read(otherGym, other.cookies)).totals).toMatchObject({ count: 0, payments: 1, totalMinor: 4999, cash: 4999 });
     },
@@ -751,7 +751,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect(now.currency).toBe("GBP");
       expect(now.products.map((p) => [p.name, p.currency])).toEqual([["Water", "USD"]]);
       // Nothing in dollars is added to a total in pounds, and the page says how many there are.
-      expect(now.totals).toEqual({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 2 });
+      expect(now.totals).toEqual({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 2 });
       expect(now.sales).toHaveLength(1);
       expect(now.payments).toHaveLength(1);
 
@@ -773,7 +773,7 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await sell(gymId, owner.cookies, sale(water.id, 150))).statusCode).toBe(201);
       expect((await sell(gymId, owner.cookies, sale(bar.id, 200, { method: "card_at_desk" }))).statusCode).toBe(201);
       now = await read(gymId, owner.cookies);
-      expect(now.totals).toEqual({ count: 2, payments: 0, totalMinor: 350, taxMinor: 0, cash: 150, card_at_desk: 200, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 2 });
+      expect(now.totals).toEqual({ count: 2, payments: 0, totalMinor: 350, taxMinor: 0, cash: 150, upi: 0, card_at_desk: 200, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, discountMinor: 0, otherCurrency: 2 });
       // The rows keep the money each was taken in.
       expect((await salesOf(gymId)).map((r) => [r.currency, r.total_minor])).toEqual([["USD", 597], ["GBP", 150], ["GBP", 200]]);
     },

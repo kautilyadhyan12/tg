@@ -268,7 +268,7 @@ export interface RegisterRow {
   /** The day's sales, each counted once however many lines it has (18q). */
   salesTotal: number;
   /** The day's sales that stand, added up in each money they were taken in; `count` counts sales. */
-  totals: { currency: string; count: number; totalMinor: number; taxMinor: number; discountMinor: number; cash: number; card_at_desk: number; bank_transfer: number; terminal: number }[];
+  totals: { currency: string; count: number; totalMinor: number; taxMinor: number; discountMinor: number; cash: number; upi: number; card_at_desk: number; bank_transfer: number; terminal: number }[];
   /** Refunds of sales noted on the day that stand, in each money (18p). */
   refunds: { currency: string; totalMinor: number }[];
 }
@@ -312,13 +312,14 @@ export async function readRegister(
       ORDER BY s.receipt_number DESC, s.line_no`,
     !withSales
       ? []
-      : sql<{ currency: string; n: number; standing: number; total: string; tax: string; discount: string; cash: string; card: string; bank: string; terminal: string }[]>`
+      : sql<{ currency: string; n: number; standing: number; total: string; tax: string; discount: string; cash: string; upi: string; card: string; bank: string; terminal: string }[]>`
       SELECT currency, (count(*) FILTER (WHERE line_no = 1))::int AS n,
              (count(*) FILTER (WHERE line_no = 1 AND undone_at IS NULL))::int AS standing,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS total,
              COALESCE(sum(tax_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS tax,
              COALESCE(sum(discount_minor) FILTER (WHERE undone_at IS NULL), 0)::text AS discount,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'cash'), 0)::text AS cash,
+             COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'upi'), 0)::text AS upi,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'card_at_desk'), 0)::text AS card,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'bank_transfer'), 0)::text AS bank,
              COALESCE(sum(total_minor) FILTER (WHERE undone_at IS NULL AND method = 'terminal'), 0)::text AS terminal
@@ -348,6 +349,7 @@ export async function readRegister(
       taxMinor: Number(row.tax),
       discountMinor: Number(row.discount),
       cash: Number(row.cash),
+      upi: Number(row.upi),
       card_at_desk: Number(row.card),
       bank_transfer: Number(row.bank),
       terminal: Number(row.terminal),
