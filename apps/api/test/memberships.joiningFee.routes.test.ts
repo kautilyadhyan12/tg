@@ -87,6 +87,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
 
   const cleanup = async () => {
     const mine = sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'jfee-t-%@example.com')`;
+    await sql`DELETE FROM gym_referral_member_gifts WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mine})`;
     await sql`DELETE FROM gym_discounts WHERE gym_id IN (${mine})`;
@@ -327,7 +328,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
   );
 
   it(
-    "waiving the fee is for staff who take payments: the owner leaves it off; a member of staff without the payments tick cannot, and their screen is sent back",
+    "waiving the fee is for staff who take payments: the owner leaves it off, and it is kept who did; a member of staff without the payments tick cannot; a screen that said nothing of a fee is sent back",
     async () => {
       clock = new Date("2026-10-15T17:00:00Z");
       const owner = await makeUser("waive-owner");
@@ -337,16 +338,31 @@ d("a joining fee on a membership type (real Postgres)", () => {
       await makeDeskStaff(org, owner, desk);
       const gold = await addType(gymId, owner.cookies, monthly({ joiningFeeMinor: 2500 }));
 
-      // The owner waives it: $50.00, no fee.
+      // A screen that said nothing of the fee, as one opened before it was set: sent back, for
+      // the owner too. Nobody waives a fee they were never shown.
       const liam = await addPerson(gymId, owner.cookies, "Liam Chen");
-      expect((await give(gymId, liam, owner.cookies, giveBody(gold, 5000))).statusCode).toBe(201);
-      expect(await bills(gymId, await membershipIdOf(gymId, liam))).toEqual([["2026-10-15", 5000, 0, "paid"]]);
+      const unseen = await give(gymId, liam, owner.cookies, giveBody(gold, 5000));
+      expect(unseen.statusCode, unseen.body).toBe(409);
+      expect(errorOf(unseen)).toBe("membership_price_changed");
+      expect(await membershipCount(gymId)).toBe(0);
+      // The owner unticks it: $50.00, no fee, and the gym's history says whose and how much.
+      expect((await give(gymId, liam, owner.cookies, giveBody(gold, 5000, { joiningFeeMinor: 0 }))).statusCode).toBe(201);
+      const liamGold = await membershipIdOf(gymId, liam);
+      expect(await bills(gymId, liamGold)).toEqual([["2026-10-15", 5000, 0, "paid"]]);
+      const [given] = await sql<{ actor_user_id: string; meta: Record<string, string> }[]>`
+        SELECT actor_user_id, meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.held_membership_given' AND target_id = ${liamGold}`;
+      expect(given?.actor_user_id).toBe(owner.userId);
+      expect(given?.meta["joiningFeeWaivedMinor"]).toBe("2500");
+      expect(given?.meta["joiningFeeMinor"]).toBeUndefined();
 
       // The desk cannot leave it off; with it, the bill is opened unpaid for $75.00.
       const ava = await addPerson(gymId, owner.cookies, "Ava Jones");
       const waived = await give(gymId, ava, desk.cookies, { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: false, priceMinor: 5000 });
       expect(waived.statusCode, waived.body).toBe(409);
       expect(errorOf(waived)).toBe("membership_price_changed");
+      expect(await sql`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${ava}`).toHaveLength(0);
+      const unticked = await give(gymId, ava, desk.cookies, { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: false, priceMinor: 5000, joiningFeeMinor: 0 });
+      expect(unticked.statusCode, unticked.body).toBe(409);
       expect(await sql`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${gymId} AND entry_id = ${ava}`).toHaveLength(0);
       const charged = await give(gymId, ava, desk.cookies, { requestKey: nextForm(), typeId: gold, startsOn: "2026-10-15", paid: false, priceMinor: 5000, joiningFeeMinor: 2500 });
       expect(charged.statusCode, charged.body).toBe(201);
@@ -357,6 +373,69 @@ d("a joining fee on a membership type (real Postgres)", () => {
       const zoe = await addPerson(gymId, owner.cookies, "Zoe King");
       expect((await give(gymId, zoe, desk.cookies, { requestKey: nextForm(), typeId: silver, startsOn: "2026-10-15", paid: false, priceMinor: 5000 })).statusCode).toBe(201);
       expect(await bills(gymId, await membershipIdOf(gymId, zoe))).toEqual([["2026-10-15", 5000, 0, "open"]]);
+    },
+    T,
+  );
+
+  it(
+    "a Refer a friend gift comes off the membership's price, never the joining fee: filled in on Add, or taken off an open first bill by the hourly run, which goes on billing the gym",
+    async () => {
+      clock = new Date("2026-10-15T17:00:00Z");
+      const owner = await makeUser("gift-owner");
+      const gymId = (await makeGym(owner, "Jfee Gift Gym")).org.id;
+      const gold = await addType(gymId, owner.cookies, monthly({ joiningFeeMinor: 2500 }));
+      const friend = await addPerson(gymId, owner.cookies, "The Friend");
+      /** A person on the list whose own account is joined to their record, as a member who invited a friend is. */
+      const member = async (local: string, name: string) => {
+        const entryId = await addPerson(gymId, owner.cookies, name);
+        const user = await makeUser(local);
+        await sql`INSERT INTO gym_members (gym_id, user_id, entry_id) VALUES (${gymId}, ${user.userId}, ${entryId})`;
+        return { entryId, userId: user.userId };
+      };
+      /** A gift waiting for them: 'percent' in basis points, or an amount in cents. */
+      const gift = async (userId: string, kind: "percent" | "amount", value: number) => {
+        const [row] = await sql<{ id: string }[]>`
+          INSERT INTO gym_referral_member_gifts (gym_id, friend_entry_id, member_user_id, kind, percent_bp, amount_minor, currency, given_at, given_on)
+          VALUES (${gymId}, NULL, ${userId}, ${kind}, ${kind === "percent" ? value : null}, ${kind === "amount" ? value : null}, ${kind === "amount" ? "USD" : null}, now(), '2026-10-15')
+          RETURNING id`;
+        if (row === undefined) throw new Error("no gift");
+        return row.id;
+      };
+      const giftRow = async (id: string) => (await sql<{ used_off_minor: number | null }[]>`SELECT used_off_minor FROM gym_referral_member_gifts WHERE id = ${id}`)[0]?.used_off_minor;
+      expect(friend).toBeDefined();
+
+      // Filled in on Add: 50% off $50.00 is $25.00, and the $25.00 fee stays. A screen that took
+      // half off the fee too ($37.50 off) is refused.
+      const maya = await member("gift-maya", "Maya Patel");
+      const half = await gift(maya.userId, "percent", 5000);
+      const withGift = (off: number, total: number) => giveBody(gold, total, { paid: false, method: undefined, joiningFeeMinor: 2500, memberGiftId: half, memberGiftMinor: off });
+      expect((await give(gymId, maya.entryId, owner.cookies, withGift(3750, 3750))).statusCode).toBe(409);
+      expect(await membershipCount(gymId)).toBe(0);
+      expect((await give(gymId, maya.entryId, owner.cookies, withGift(2500, 5000))).statusCode).toBe(201);
+      expect(await bills(gymId, await membershipIdOf(gymId, maya.entryId))).toEqual([["2026-10-15", 5000, 2500, "open"]]);
+      expect(await giftRow(half)).toBe(2500);
+
+      // Given with the fee and no gift; the gift arrives after, and the hourly run takes it off
+      // the open first bill: 50% of $50.00, never of $75.00.
+      const noah = await member("gift-noah", "Noah Brown");
+      const ava = await member("gift-ava", "Ava Jones");
+      for (const who of [noah, ava]) expect((await give(gymId, who.entryId, owner.cookies, giveBody(gold, 7500, { paid: false, method: undefined, joiningFeeMinor: 2500 }))).statusCode).toBe(201);
+      const noahHalf = await gift(noah.userId, "percent", 5000);
+      // $60.00 is more than the $50.00 membership: it does not fit this bill and waits. It never
+      // eats into the fee, and the run goes on billing everybody.
+      const avaSixty = await gift(ava.userId, "amount", 6000);
+      const ran = await run(gymId, "2026-11-15T17:00:00Z");
+      expect(ran.failed).toBe(0);
+      expect(await bills(gymId, await membershipIdOf(gymId, noah.entryId))).toEqual([
+        ["2026-10-15", 5000, 2500, "open"],
+        ["2026-11-15", 5000, 0, "open"],
+      ]);
+      expect(await giftRow(noahHalf)).toBe(2500);
+      expect(await bills(gymId, await membershipIdOf(gymId, ava.entryId))).toEqual([
+        ["2026-10-15", 7500, 2500, "open"],
+        ["2026-11-15", 5000, 0, "open"],
+      ]);
+      expect(await giftRow(avaSixty)).toBeNull();
     },
     T,
   );

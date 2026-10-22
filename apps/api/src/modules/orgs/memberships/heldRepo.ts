@@ -590,7 +590,8 @@ export async function giveHeld(
     memberGift: { id: string; shownOffMinor: number } | null;
     /** What the screen showed its first bill comes to, tax in; null where it showed none. */
     shownTotalMinor: number | null;
-    /** The type's joining fee the screen showed and charges (18t); null: none charged. */
+    /** The type's joining fee the screen showed and charges (18t), 0 where it showed it waived;
+     *  null where it showed none. */
     joiningFeeMinor: number | null;
     /** Whether this reader may give a type that has a joining fee without it. */
     mayWaiveJoiningFee: boolean;
@@ -658,11 +659,13 @@ export async function giveHeld(
       gift = { id: found.id, offMinor: off };
     }
     // The joining fee (18t): the type's own as it is now, and only where the screen showed that
-    // very amount. Left off is waived, which only a reader who takes payments may do; a fee
-    // set since another reader's screen was opened sends them back to look again.
+    // very amount. 0 is waived, which only a reader who takes payments may do. A screen that
+    // said nothing of a fee the type has was opened before it was set: sent back to look again.
     const joiningFeeMinor = input.joiningFeeMinor ?? 0;
-    if (input.joiningFeeMinor !== null && input.joiningFeeMinor !== type.joiningFeeMinor) return { kind: "price_changed" };
-    if (input.joiningFeeMinor === null && type.joiningFeeMinor > 0 && !input.mayWaiveJoiningFee) return { kind: "price_changed" };
+    if (input.joiningFeeMinor === null && type.joiningFeeMinor > 0) return { kind: "price_changed" };
+    if (joiningFeeMinor > 0 && joiningFeeMinor !== type.joiningFeeMinor) return { kind: "price_changed" };
+    if (input.joiningFeeMinor === 0 && type.joiningFeeMinor > 0 && !input.mayWaiveJoiningFee) return { kind: "price_changed" };
+    const waivedFeeMinor = joiningFeeMinor === 0 ? type.joiningFeeMinor : 0;
     // The first bill: its price after any discount and gift, the joining fee, and its tax.
     // Nothing is given at a total the screen did not show.
     const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0) + joiningFeeMinor, tax);
@@ -720,6 +723,7 @@ export async function giveHeld(
         ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
         ...(tax === null ? {} : { tax: tax.name, taxBp: String(tax.bp) }),
         ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
+        ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
       },
     });
 

@@ -332,7 +332,9 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
   const shown = {
     ...body,
     priceMinor: type.priceMinor,
-    ...(joiningFeeMinor > 0 ? { joiningFeeMinor } : {}),
+    // Said for every type with a fee, 0 where it was unticked: the server sends back a screen
+    // that said nothing of a fee the type has.
+    ...(type.joiningFeeMinor > 0 ? { joiningFeeMinor } : {}),
     ...(summary === null ? {} : { totalMinor: summary.totalMinor }),
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).

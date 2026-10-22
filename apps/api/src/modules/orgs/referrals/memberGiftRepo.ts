@@ -149,6 +149,7 @@ interface RawOpenBill extends RawTerms {
   tax_bp: number;
   tax_name: string | null;
   tax_included: boolean | null;
+  joining_fee_minor: number;
   bill_currency: string;
 }
 
@@ -160,7 +161,7 @@ interface RawOpenBill extends RawTerms {
 export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now: Date, onlyGiftId: string | null = null): Promise<number> {
   const rows = await tx<RawOpenBill[]>`
     SELECT g.id AS gift_id, g.kind, g.percent_bp, g.amount_minor, g.currency,
-           b.id AS bill_id, b.amount_minor AS amount_minor_bill, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.currency AS bill_currency
+           b.id AS bill_id, b.amount_minor AS amount_minor_bill, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.joining_fee_minor, b.currency AS bill_currency
     FROM gym_referral_member_gifts g
     JOIN gym_members m ON m.gym_id = g.gym_id AND m.user_id = g.member_user_id AND m.removed_at IS NULL
     JOIN users u ON u.id = m.user_id AND u.status = 'active'
@@ -178,9 +179,10 @@ export async function giftsOntoOpenBills(tx: TransactionSql, gymId: string, now:
   for (const row of rows) {
     if (done.has(row.gift_id) || billsTaken.has(row.bill_id)) continue;
     const tax = row.tax_name === null || row.tax_included === null ? null : { name: row.tax_name, bp: row.tax_bp, included: row.tax_included };
-    // The bill's own price before tax: a price that held its tax is the amount itself.
+    // The bill's own price before tax: a price that held its tax is the amount itself. A
+    // joining fee in it (18t) is not the membership's price: the gift never comes off it.
     const listed = tax === null || tax.included ? row.amount_minor_bill : row.amount_minor_bill - row.tax_minor;
-    const off = memberGiftOff(terms(row), listed, row.bill_currency);
+    const off = memberGiftOff(terms(row), listed - row.joining_fee_minor, row.bill_currency);
     if (off === 0) continue;
     const bill = billOf(listed - off, tax);
     picks.push({ gift: row.gift_id, bill: row.bill_id, amount: bill.amountMinor, tax: bill.tax?.minor ?? 0, off, currency: row.bill_currency });
