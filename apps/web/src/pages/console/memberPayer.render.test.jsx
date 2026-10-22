@@ -100,6 +100,20 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Who pays', () => {
+  it("Record payment for somebody they pay for offers UPI after Cash at a gym in India, never elsewhere (18r)", async () => {
+    orgService.getPayers.mockResolvedValue(payers({ paysFor: [person(AARAV, 'Aarav Sharma')] }));
+    orgService.getHeldMemberships.mockResolvedValue(heldAnswer([held(1, TODAY)]));
+    const methods = async (gym) => {
+      render(draw(PRIYA, 'Priya Sharma', gym));
+      fireEvent.click(within(await screen.findByTestId('owed-item')).getByRole('button', { name: 'Record payment' }));
+      const shown = Array.from(within(screen.getByTestId('payer-pay')).getByLabelText('Payment method').options).map((o) => o.textContent);
+      cleanup();
+      return shown;
+    };
+    expect(await methods({ ...IRON, country: 'IN' })).toEqual(['Choose one', 'Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
+    expect(await methods({ ...IRON, country: 'GB' })).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
+  });
+
   it("THE WORST THING: a late answer for the person opened before is never drawn, and Record payment on Priya's page sends Aarav's own record and membership", async () => {
     let lateForRavi;
     orgService.getPayers.mockImplementation((_gym, entryId) =>

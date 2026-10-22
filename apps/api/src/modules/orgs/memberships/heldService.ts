@@ -30,9 +30,7 @@ import {
   memberCancelTarget,
   memberPayTarget,
   memberUndoTarget,
-  paymentMethodOffered,
   paymentRefundableMinor,
-  UPI_ONLY_IN_INDIA,
   type BillSettings,
   type BillSettingsResponse,
   type CancelMemberBillRequest,
@@ -55,6 +53,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { refuseMethodElsewhere } from "../paymentMethods.js";
 import { endMembershipBookings, membershipBookingsAsk } from "../classes/bookingChanges.js";
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
@@ -574,11 +573,6 @@ async function requireBilling(deps: HeldDeps, userId: string, gymId: string, met
   refuseMethodElsewhere(org.country, method);
   const now = deps.now();
   return { today: dayInTz(now, org.timezone), now };
-}
-
-/** UPI is recorded by a gym in India alone (18r). */
-export function refuseMethodElsewhere(country: string | null, method: MemberPaymentByHand | null): void {
-  if (method !== null && !paymentMethodOffered(country, method)) throw new OrgsError(400, "payment_method_not_offered", UPI_ONLY_IN_INDIA);
 }
 
 function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {

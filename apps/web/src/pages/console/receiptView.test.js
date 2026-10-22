@@ -104,6 +104,7 @@ describe('receiptLines', () => {
 
   it('a refund: which receipt it gives back for, and how much', () => {
     expect(drawn(refund())).toEqual(['Refund for receipt #12', 'Gold Monthly, 15 Oct – 14 Nov 2026', 'Given back by bank transfer | $10.00']);
+    expect(drawn(refund({ method: 'upi' })).at(-1)).toBe('Given back by UPI | $10.00');
   });
 
   it("a refund of a sale at the desk (18p): the sale's receipt and the product", () => {

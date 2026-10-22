@@ -116,10 +116,11 @@ d("UPI as a payment method, for gyms in India (real Postgres)", () => {
       VALUES ('gym', ${id}, (SELECT id FROM plans WHERE code = ${LIVE_PLAN}), 'trialing', 'pilot')`;
     return id;
   };
-  const addType = async (gymId: string, cookies: Cookies): Promise<string> => {
-    const res = await post(`/v1/orgs/${gymId}/membership-types`, monthly, cookies);
+  const addType = async (gymId: string, cookies: Cookies, over: { name?: string; priceMinor?: number } = {}): Promise<string> => {
+    const body = { ...monthly, ...over };
+    const res = await post(`/v1/orgs/${gymId}/membership-types`, body, cookies);
     expect(res.statusCode, res.body).toBe(201);
-    const found = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === monthly.name);
+    const found = (JSON.parse(res.body) as GymMembershipTypesResponse).types.find((t) => t.name === body.name);
     if (found === undefined) throw new Error("no type");
     return found.id;
   };
@@ -226,6 +227,23 @@ d("UPI as a payment method, for gyms in India (real Postgres)", () => {
       expect(saleBack.statusCode, saleBack.body).toBe(201);
 
       expect(await methodsIn(gymId)).toEqual({ payments: ["upi", "upi"], refunds: ["upi"], sales: ["upi"], saleRefunds: ["upi"] });
+
+      // A no-show fee paid by UPI, and a change to another membership paid by UPI.
+      const [fee] = await sql<{ id: string }[]>`
+        INSERT INTO gym_member_bills (gym_id, held_membership_id, fee, fee_for, covers_from, covers_to, amount_minor, currency, due_on, status)
+        VALUES (${gymId}, ${owing.id}, 'no_show', 'Spin', ${day}::date, ${day}::date, 20000, 'INR', ${day}::date, 'open')
+        RETURNING id`;
+      const feePaid = await post(`${heldUrl(gymId, ravi)}/${owing.id}/fees/${fee?.id ?? ''}/payments`, { requestKey: nextKey(), amountMinor: 20000, method: 'upi' }, owner.cookies);
+      expect(answer(feePaid)).toEqual([200, 'ok', null]);
+      const plus = await addType(gymId, owner.cookies, { name: 'Monthly Plus', priceMinor: 200000 });
+      const ashaPaid = firstBill(held(given));
+      const changed = await post(
+        `${heldUrl(gymId, asha)}/${ashaPaid.id}/change`,
+        { requestKey: nextKey(), typeId: plus, when: 'today', startsOn: day, priceMinor: 200000, creditMinor: 150000, totalMinor: 50000, paid: true, method: 'upi' },
+        owner.cookies,
+      );
+      expect(answer(changed)).toEqual([200, 'ok', null]);
+      expect(await methodsIn(gymId)).toEqual({ payments: ['upi', 'upi', 'upi', 'upi'], refunds: ['upi'], sales: ['upi'], saleRefunds: ['upi'] });
 
       // The same in the US: every route refuses UPI, and nothing is written.
       const us = await makeUser("us-owner");

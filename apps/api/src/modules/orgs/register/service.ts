@@ -63,7 +63,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { MEMBER_LIST_BY_HAND_WORDS } from "@app/shared";
 import { OrgsError, requireStaff, requireWritablePrivilege } from "../service.js";
 import { paymentsOn } from "../memberships/billsSql.js";
-import { refuseMethodElsewhere } from "../memberships/heldService.js";
+import { refuseMethodElsewhere } from "../paymentMethods.js";
 import * as discounts from "./discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
