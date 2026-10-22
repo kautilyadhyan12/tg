@@ -1058,6 +1058,13 @@
       "when": 1790726400151,
       "tag": "0151_terminal_fee_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 151,
+      "version": "7",
+      "when": 1790726400152,
+      "tag": "0152_membership_change",
+      "breakpoints": true
     }
   ]
 }

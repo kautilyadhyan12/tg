@@ -168,6 +168,17 @@ export function refundableMinor(billStatus: MemberBillStatus, payment: { amountM
   return billStatus === "paid" ? Math.max(0, payment.amountMinor - payment.refundedMinor) : 0;
 }
 
+/** The same, within what the whole bill can still give back: the money a change of membership
+ *  moved to the one that replaced it (18x, `movedMinor`) paid for that one, and is never
+ *  refunded from here. */
+export function paymentRefundableMinor(
+  bill: { status: MemberBillStatus; paidMinor: number; refundedMinor: number; movedMinor?: number },
+  payment: { amountMinor: number; refundedMinor: number },
+): number {
+  const room = Math.max(0, bill.paidMinor - bill.refundedMinor - (bill.movedMinor ?? 0));
+  return Math.min(refundableMinor(bill.status, payment), room);
+}
+
 /** ONE REFUND NOTED AGAINST A PAYMENT. More than is left of that payment is refused, so a
  *  gym's notebook never says it gave back more than it took. The bill reads Refunded once
  *  everything paid on it has been given back; until then it stays Paid. A refund moves no
@@ -176,7 +187,7 @@ export function refundableMinor(billStatus: MemberBillStatus, payment: { amountM
  *  `bill.paidMinor` and `bill.refundedMinor` are the payments and refunds that stand on
  *  the whole bill. */
 export function refundMemberPayment(
-  bill: { status: MemberBillStatus; paidMinor: number; refundedMinor: number },
+  bill: { status: MemberBillStatus; paidMinor: number; refundedMinor: number; movedMinor?: number },
   payment: { amountMinor: number; refundedMinor: number },
   amountMinor: number,
 ): RefundMemberPayment {
@@ -184,7 +195,7 @@ export function refundMemberPayment(
   if (bill.status === "refunded") return { ok: false, reason: "too_much", leftMinor: 0 };
   if (bill.status !== "paid") return { ok: false, reason: "not_settled" };
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return { ok: false, reason: "not_an_amount" };
-  const leftMinor = refundableMinor(bill.status, payment);
+  const leftMinor = paymentRefundableMinor(bill, payment);
   if (amountMinor > leftMinor) return { ok: false, reason: "too_much", leftMinor };
   return { ok: true, billStatus: bill.refundedMinor + amountMinor >= bill.paidMinor ? "refunded" : "paid" };
 }

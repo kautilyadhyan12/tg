@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -8,6 +9,7 @@ import ReceiptBox from '../../components/console/ReceiptBox';
 import MoreMenu from '../../components/console/MoreMenu';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
+import { Tick } from './MemberListUpload';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
 import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
@@ -17,6 +19,9 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
+import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
+import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
@@ -184,11 +189,15 @@ export default function MemberMemberships({
   /** A fee's own form (18h-i): { what: 'payFee' | 'waiveFee' | 'voidFeePayment', billId,
    *  requestKey, method, tried }, for the membership in `open`. */
   const [feeForm, setFeeForm] = useState(null);
+  /** The Change membership box (18x): { requestKey, typeId, when, paid, method }, for the membership in `open`. */
+  const [changeDraft, setChangeDraft] = useState(null);
   const addedNow = useRef(false);
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
    *  open box follows, { membershipId, feeBillId, payment, terminalId }, until it ends. `feeBillId`:
    *  a late cancel or no-show fee's (18d-vi-b-i), whose box is drawn under that fee. */
-  const [terminals, setTerminals] = useState({ entryId: null, list: [] });
+  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false });
+  const routed = useInRouterContext();
+  const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   const [terminalPay, setTerminalPay] = useState(null);
 
   useEffect(() => {
@@ -214,7 +223,7 @@ export default function MemberMemberships({
     orgService.getTerminalPayments(gymId, entryId).then(
       (res) => {
         if (!live) return;
-        setTerminals({ entryId, list: res.data.terminals });
+        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner });
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
@@ -230,6 +239,19 @@ export default function MemberMemberships({
     };
   }, [gymId, entryId, canBillHere, attempt]);
   const terminalList = terminals.entryId === entryId ? terminals.list : [];
+  // Square not set up yet (18x, Kd 2026-10-22): the payment forms say so, with Connect Square for the owner.
+  const squareLine = terminals.entryId === entryId ? squareSetUpLine(terminals.square, terminals.isOwner, gym?.name ?? 'this gym') : null;
+  const renderSquareLine = () =>
+    squareLine === null ? null : (
+      <div className="flex flex-wrap items-center gap-2" data-testid="held-connect-square">
+        <span className="c-s14 c-t2">{squareLine.line}</span>
+        {squareLine.button !== null && paymentsTo !== null ? (
+          <Link to={paymentsTo} className={SMALL}>
+            {squareLine.button}
+          </Link>
+        ) : null}
+      </div>
+    );
   // Opened by "Add membership" on the Members list's own row (21c-iii): the form is open
   // already, once, when their memberships have loaded.
   const addsNow = addNow && !readOnly && shown !== null && !shown.past;
@@ -312,6 +334,7 @@ export default function MemberMemberships({
       setRefundForm(null);
       setVoidForm(null);
       setFeeForm(null);
+      setChangeDraft(null);
       // What a press says when done may read the server's answer (a void's "owes … again").
       setNotice(typeof said === 'function' ? said(res.data) : (said ?? doneWords(what, m)));
       // The list behind this page says what the person holds (23a-i): it reads again.
@@ -320,7 +343,7 @@ export default function MemberMemberships({
       // Classes are booked with it: the box names them and waits for its own button.
       const booked = m === null ? null : membershipBookingsAsked(err);
       if (booked !== null) {
-        setEnding({ id: m.id, later: what === 'cancelLater', ending: booked, all: false, moved: ending !== null && ending.id === m.id });
+        setEnding({ id: m.id, later: what === 'cancelLater', change: what === 'change', ending: booked, all: false, moved: ending !== null && ending.id === m.id });
         return;
       }
       setEnding(null);
@@ -338,6 +361,7 @@ export default function MemberMemberships({
         setRefundForm(null);
         setVoidForm(null);
         setFeeForm(null);
+        setChangeDraft(null);
         setAttempt((n) => n + 1);
       }
     } finally {
@@ -369,6 +393,14 @@ export default function MemberMemberships({
     setEnding(null);
     setPayForm({ ...paymentDraft(m, newRequestKey), tried: false });
     setOpen({ what: 'pay', id: m.id });
+  };
+
+  const startChange = (m) => {
+    setNotice(null);
+    setRefusal(null);
+    setEnding(null);
+    setChangeDraft(changeForm(types, m));
+    setOpen({ what: 'change', id: m.id });
   };
 
   const startCancelBill = (m) => {
@@ -408,6 +440,7 @@ export default function MemberMemberships({
     setRefundForm(null);
     setVoidForm(null);
     setFeeForm(null);
+    setChangeDraft(null);
   };
 
   /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */
@@ -1018,6 +1051,7 @@ export default function MemberMemberships({
             ))}
           </select>
         </label>
+        {renderSquareLine()}
         {onTerminal && terminalList.length > 1 ? (
           <label className="c-field">
             <span className="c-label">Terminal</span>
@@ -1062,7 +1096,7 @@ export default function MemberMemberships({
     if (billing === null || billing.bills.length === 0) return null;
     const all = allBills === m.id;
     const drawn = billsToDraw(billing, all);
-    const rows = drawn.bills.map((bill) => billRow(bill, m.currency, today));
+    const rows = drawn.bills.map((bill) => ({ ...billRow(bill, m.currency, today), credit: changeCreditLine(bill, m) }));
     const hidden = drawn.hidden;
     // Staff who can change things here act on a bill, and not while another box is open
     // under this membership.
@@ -1089,7 +1123,7 @@ export default function MemberMemberships({
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
-            const notes = [row.joiningFee, row.gift, row.tax, row.when, row.cancelled].filter((line) => line !== null && line !== undefined);
+            const notes = [row.credit, row.joiningFee, row.gift, row.tax, row.when, row.cancelled].filter((line) => line !== null && line !== undefined);
             return (
               <li
                 key={row.id}
@@ -1232,6 +1266,7 @@ export default function MemberMemberships({
 
   /** The second question of a cancel: the classes booked with the membership. */
   const renderEnding = (m) => {
+    if (ending.change) return renderChangeEnding(m);
     const words = endingWords(ending.ending, m, name, ending.later, clockFormat);
     const rows = ending.all ? words.rows : words.rows.slice(0, ENDING_CLASSES_SHOWN);
     const hidden = words.rows.length - rows.length;
@@ -1300,6 +1335,178 @@ export default function MemberMemberships({
           </button>
         </div>
       </div>
+    );
+  };
+
+  /** The second question of a change (18x): the bookings the new membership does not cover. */
+  const renderChangeEnding = (m) => {
+    const choice = changeDraft === null ? null : changeChoice(m, types, changeDraft, shown.taxIncluded, today, name);
+    if (choice === null || choice.blocked !== null || choice.type === null || !choice.ready) return null;
+    const words = endingWords(ending.ending, m, name, false, clockFormat);
+    const asked = changeEndingWords(ending.ending, m, name, choice.type.name);
+    const rows = ending.all ? words.rows : words.rows.slice(0, ENDING_CLASSES_SHOWN);
+    const hidden = words.rows.length - rows.length;
+    const sessions = ending.ending.ptSessions ?? null;
+    const body = { ...changeBody(changeDraft, choice), ...endingConfirm(ending.ending) };
+    return (
+      <div role="group" aria-label="Bookings that will end" className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-change-ending">
+        {ending.moved ? (
+          <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }} role="status">
+            {sessions !== null ? ENDING_MOVED_WITH_SESSIONS : ENDING_MOVED}
+          </p>
+        ) : null}
+        <p className="c-s15 c-w6 c-t1 m-0">{asked.title}</p>
+        {ending.ending.booked > 0 ? (
+          <>
+            <p className="c-s14 c-t2 m-0">{words.change}</p>
+            <ul className="m-0 p-0 list-none flex flex-col gap-1">
+              {rows.map((row) => (
+                <li key={row.id} className="c-s15 c-t1 c-ell">
+                  {row.line}
+                </li>
+              ))}
+            </ul>
+            {hidden > 0 ? (
+              <p className="c-s14 c-t2 m-0">
+                {`and ${(hidden + words.unlisted).toLocaleString('en')} more · `}
+                <button type="button" className="c-btn-link c-w6" onClick={() => setEnding({ ...ending, all: true })}>
+                  See all
+                </button>
+              </p>
+            ) : null}
+          </>
+        ) : null}
+        {sessions !== null ? <PtSessionsEnding ending={sessions} clockFormat={clockFormat} onePerson /> : null}
+        <p className="c-s14 c-t2 m-0">{asked.kept}</p>
+        <p className="c-s14 c-w5 m-0" style={{ color: 'var(--warn)' }}>
+          {ENDING_NOT_TOLD}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={DANGER}
+            disabled={busy}
+            onClick={() => void run('change', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'change', body), changeDoneWords(m, choice))}
+          >
+            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+            {asked.button}
+          </button>
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /** CHANGE MEMBERSHIP (18x): the new type, today or on the next payment date, and the total. */
+  const renderChange = (m) => {
+    const choice = changeChoice(m, types, changeDraft, shown.taxIncluded, today, name);
+    const set = (next) => setChangeDraft((f) => ({ ...f, ...next }));
+    if (choice.blocked !== null) {
+      return (
+        <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid="held-change">
+          <p className="c-s15 c-w6 c-t1 m-0">{`Change ${name}'s ${m.typeName}`}</p>
+          <p className="c-s14 c-t2 m-0">{choice.blocked}</p>
+          <div className="flex flex-wrap gap-2">
+            {choice.reason === 'unpaid' && m.billing?.pay !== null && m.billing?.pay !== undefined ? (
+              <button type="button" className={MAIN} disabled={busy} onClick={() => startPay(m)}>
+                {payLabel(m, today)}
+              </button>
+            ) : null}
+            {choice.reason === 'frozen' && m.view.can.unfreeze ? (
+              <button type="button" className={MAIN} disabled={busy} onClick={() => ask('unfreeze', m)}>
+                Unfreeze
+              </button>
+            ) : null}
+            <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <form
+        noValidate
+        className="rounded-[14px] p-3 flex flex-col gap-3"
+        style={{ background: 'var(--raise)' }}
+        data-testid="held-change"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!choice.ready || busy) return;
+          void run('change', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'change', changeBody(changeDraft, choice)), changeDoneWords(m, choice));
+        }}
+      >
+        <p className="c-s15 c-w6 c-t1 m-0">{`Change ${name}'s ${m.typeName} to another membership`}</p>
+        {choice.targets.length === 0 ? (
+          <>
+            <p className="c-s14 c-t2 m-0">
+              {managesTypes ? 'There is no other membership to change to. Add one in Memberships.' : 'There is no other membership to change to. Ask the owner to add one.'}
+            </p>
+            {managesTypes ? <PlaceLink to={membershipsTo}>Open Memberships</PlaceLink> : null}
+          </>
+        ) : (
+          <>
+            <label className="c-field">
+              <span className="c-label">New membership</span>
+              <select className="c-sel" value={changeDraft.typeId} onChange={(e) => set({ typeId: e.target.value })}>
+                {choice.targets.length > 1 ? <option value="">Choose one</option> : null}
+                {choice.targets.map((t) => (
+                  <option key={t.id} value={t.id}>{`${t.name} · ${termLine(t)}`}</option>
+                ))}
+              </select>
+            </label>
+            {choice.options.length > 0 ? (
+              <fieldset className="c-field m-0 p-0 border-0">
+                <legend className="c-label">When</legend>
+                {choice.options.map((o) => (
+                  <label key={o.value} className="flex gap-2 items-start py-1" style={o.ok ? undefined : { color: 'var(--t3)' }}>
+                    <input type="radio" name="change-when" value={o.value} checked={choice.when === o.value} disabled={!o.ok} onChange={() => set({ when: o.value })} />
+                    <span className="flex flex-col">
+                      <span className="c-s15 c-w5">{o.label}</span>
+                      <span className="c-s14 c-t2">{o.detail}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
+            {choice.paidLabel !== null ? (
+              <div className="flex flex-col gap-2">
+                <Tick checked={changeDraft.paid} onChange={(paid) => set({ paid })}>
+                  {choice.paidLabel}
+                </Tick>
+                {changeDraft.paid ? (
+                  <label className="c-field">
+                    <span className="c-label">Payment method</span>
+                    <select className="c-sel" value={changeDraft.method} onChange={(e) => set({ method: e.target.value })}>
+                      <option value="">Choose one</option>
+                      {PAYMENT_METHODS.map((method) => (
+                        <option key={method.value} value={method.value}>
+                          {method.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {renderSquareLine()}
+              </div>
+            ) : null}
+            <MembershipTotal summary={choice.summary} />
+          </>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {choice.targets.length > 0 ? (
+            <button type="submit" disabled={busy || !choice.ready} className={choice.ready ? MAIN : 'c-btn'} style={choice.ready ? undefined : { background: 'var(--card)', color: 'var(--t3)', opacity: 1 }}>
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
+              Change membership
+            </button>
+          ) : null}
+          <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+            Back
+          </button>
+        </div>
+      </form>
     );
   };
 
@@ -1387,6 +1594,11 @@ export default function MemberMemberships({
         {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
         {heldTaxLine(m) !== null ? <span className="c-s14 c-t2">{heldTaxLine(m)}</span> : null}
         <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
+        {changeLine(m, today) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-change-line">
+            {changeLine(m, today)}
+          </span>
+        ) : null}
         {/* Refer a friend's free days (20e-ii-b-ii-b): why its dates moved, and for whom. */}
         {(m.freeDays ?? []).map((d, i) => (
           <span key={`free-days-${String(i)}`} className="c-s14 c-t2" data-testid="held-free-days">
@@ -1412,6 +1624,8 @@ export default function MemberMemberships({
             terminalPay.feeBillId === null || !(m.billing?.fees ?? []).some((f) => f.id === terminalPay.feeBillId) ? renderTerminalWait(m) : null
           ) : open.what === 'pay' && payForm !== null ? (
             renderPay(m)
+          ) : open.what === 'change' && changeDraft !== null ? (
+            ending !== null && ending.id === m.id ? renderEnding(m) : renderChange(m)
           ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
             // Drawn inside the bill, payment or refund they are about (`renderBills`).
             renderAsk(m)
@@ -1421,9 +1635,14 @@ export default function MemberMemberships({
             {payButton}
             {undoLink}
           </div>
-        ) : inUse && (payButton !== null || can.freeze || can.unfreeze || can.cancel || canUndo) ? (
+        ) : inUse && (payButton !== null || can.freeze || can.unfreeze || can.cancel || canUndo || showsChange(m)) ? (
           <div className={BAR} style={BAR_LINE}>
             {payButton}
+            {showsChange(m) ? (
+              <button type="button" className={SMALL} disabled={busy} onClick={() => startChange(m)}>
+                Change membership
+              </button>
+            ) : null}
             {can.freeze ? (
               <button type="button" className={SMALL} disabled={busy} onClick={() => ask('freeze', m)}>
                 Freeze

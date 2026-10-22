@@ -300,7 +300,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18u. [ ] **Membership agreement**: one per gym in its own words, each membership's details filled in and the notices its place requires; signed when a membership is given, at the desk or in the app, kept with its time, a copy to the member (Kd, 2026-10-22). Needs the lawyer's words. Web folder 2.
    - 18v. [ ] **Each place's rules**: renewal on or off per type (Quebec: none paid), a longest term, a cooling-off refund, a notice period, a cancellation fee, release on death, disability or a move, reminders before a renewal, a price change or a trial's end (Kd, 2026-10-22; spec §14.8). Needs the lawyer. Web folder 2.
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
-   - 18x. [ ] **Move to another membership**, the difference in price worked out (Kd, 2026-10-22; Glofox and TeamUp do it). Web folder 2.
+   - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [ ] **Bill everyone on one day of the month**, the first payment for the part month, a gym's choice (Kd, 2026-10-22). Web folder 2.
    - 18z. [ ] **A fee while frozen**, a gym's choice (Kd, 2026-10-22). Web folder 2.
 19. **The gym's shared page** (RULINGS 2026-09-22, Part 6 of the re-plan; spec Part 3 §15) — it takes in items 1b, 6, 10 and 11. Every card Opus xhigh.
