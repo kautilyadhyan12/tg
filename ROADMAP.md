@@ -310,7 +310,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 19b-ii-a. [x] **Members post, Report and the reported list** — merged 2026-10-05 (PR #170).
        - 19b-ii-b. [x] **Block, the bad-words check and the support address** — merged 2026-10-05 (PR #172).
        - 19b-ii-c. [x] **A person's posts on their profile** — merged 2026-10-05 (PR #174).
-     - 19b-iii. [ ] **Video**: only the gym's staff post it, one video of up to a minute a post, 20 a month a gym, played on a tap (RULINGS 2026-10-05). Needs Kd's Cloudflare Stream account.
+     - 19b-iii. [ ] **Video**: only the gym's staff post it, one video of up to a minute a post, 20 a month a gym, played on a tap (RULINGS 2026-10-05). Needs Kd's Cloudflare Stream account. **Not built until there is money** (Kd, 2026-10-21, `rulings/2026-10-22-S2.md`).
      - 19b-iv. [x] **Smaller photos before upload** — merged 2026-10-05 (PR #176).
      - 19b-v. [x] **The feature's two extra passes, fixed** — merged 2026-10-05 (PR #178).
      - 19b-vi. [x] **A post five people have reported is hidden until staff decide** — merged 2026-10-06 (PR #180).
