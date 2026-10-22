@@ -114,6 +114,7 @@ import {
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
   terminalPaymentsResponseSchema,
+  terminalSalesResponseSchema,
   memberNotesAndTagsSchema,
   memberNotesOlderResponseSchema,
   memberTagsDoneResponseSchema,
@@ -1840,6 +1841,13 @@ export const orgService = {
       "this person's payments",
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/terminal-payments/${encodeURIComponent(paymentId)}/cancel`),
     ),
+  // Take payment on Terminal at Sell (18d-vi-b-ii).
+  getTerminalSales: (gymId) => readThrough(terminalSalesResponseSchema, 'Sell', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/terminal-sales`)),
+  startTerminalSale: (gymId, body) => readThrough(terminalPaymentResponseSchema, 'Sell', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/terminal-sales`, body)),
+  checkTerminalSale: (gymId, paymentId) =>
+    readThrough(terminalPaymentResponseSchema, 'Sell', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/terminal-sales/${encodeURIComponent(paymentId)}`)),
+  cancelTerminalSale: (gymId, paymentId) =>
+    readThrough(terminalPaymentResponseSchema, 'Sell', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/terminal-sales/${encodeURIComponent(paymentId)}/cancel`)),
   giveHeldMembership: (gymId, entryId, body) =>
     readThrough(
       heldMembershipsResponseSchema,

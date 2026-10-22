@@ -29,15 +29,23 @@ export function terminalPayDetail(name, leftWords) {
   return `${leftWords} The Terminal shows the amount and ${personNames(name).first} pays by card.`;
 }
 
+/** Who pays, in a sentence: the person's first name, or at Sell with nobody picked (18d-vi-b-ii),
+ *  the customer. */
+function payer(payment, name) {
+  if (payment.forSale === true && (typeof name !== 'string' || name.trim() === '')) return { inside: 'the customer', first: 'The customer' };
+  const first = personNames(name).first;
+  return { inside: first, first };
+}
+
 /** While the Terminal waits: the title and its two steps. */
 export function terminalPayWaitWords(payment, name) {
-  const who = personNames(name).first;
+  const who = payer(payment, name);
   return {
-    title: `Waiting for ${who} to pay ${formatMinor(payment.amountMinor, payment.currency)} on the Terminal`,
+    title: `Waiting for ${who.inside} to pay ${formatMinor(payment.amountMinor, payment.currency)} on the Terminal`,
     shown: 'The Terminal shows the amount.',
-    card: `${who} taps, inserts or swipes their card.`,
+    card: `${who.first} taps, inserts or swipes their card.`,
     notShown: "The Terminal hasn't shown it yet. Check it's on and connected to the internet.",
-    tooLate: `Too late to cancel: ${who} is paying on the Terminal.`,
+    tooLate: `Too late to cancel: ${who.inside} is paying on the Terminal.`,
   };
 }
 
@@ -46,8 +54,9 @@ export const TERMINAL_FEE_NOT_OWED = 'This fee is no longer owed. Cancel it on t
 
 /** What a payment that ended is said as, in the place it was pressed. */
 export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
-  const who = personNames(name).first;
   const amount = formatMinor(payment.amountMinor, payment.currency);
+  if (payment.forSale === true) return terminalSaleOutcomeLine(payment, name, amount);
+  const who = personNames(name).first;
   // A late cancel or no-show fee (18d-vi-b-i) is paid all at once.
   const fee = payment.feeBillId != null;
   switch (payment.outcome) {
@@ -77,6 +86,38 @@ export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
     default:
       return 'Not paid. Try again.';
   }
+}
+
+/** A sale at Sell (18d-vi-b-ii): how it ended. */
+function terminalSaleOutcomeLine(payment, name, amount) {
+  const who = payer(payment, name);
+  switch (payment.outcome) {
+    case 'paid':
+      return `${amount} paid by card on the Terminal. Sale recorded.`;
+    case 'cancelled_on_terminal':
+      return `Not paid. ${who.first} cancelled on the Terminal. Nothing was charged.`;
+    case 'not_recorded':
+      return `Square took another amount than this sale's ${amount}, so the sale isn't recorded. Refund it in your Square Dashboard, then take payment again.`;
+    default:
+      return terminalPayOutcomeLine({ ...payment, forSale: false }, name, payment.amountMinor);
+  }
+}
+
+/** Under Take payment at Sell when the Terminal takes the money, in place of the line for a sale
+ *  taken by hand. */
+export const TERMINAL_SALE_HINT = 'The Terminal shows the total and the customer pays by card. The sale is recorded once they have paid.';
+
+/** At Sell, where the gym cannot take a card on a Terminal yet (Kd, 2026-10-22): what is missing,
+ *  and for the owner the button that opens the place to set it up; null when nothing is. `till` is
+ *  the server's answer, or null before it comes. */
+export function tillSetupView(till, gymName) {
+  if (till === null) return null;
+  const missing = till.square === 'connect' || till.square === 'choose_location';
+  if (missing && !till.isOwner) return { line: `To take card payments on a Square Terminal, connect Square. Only the owner of ${gymName} can do this.`, button: null };
+  if (till.square === 'connect') return { line: 'To take card payments on a Square Terminal, connect Square.', button: 'Connect Square' };
+  if (till.square === 'choose_location') return { line: 'To take card payments on a Square Terminal, choose your Square location.', button: 'Choose location' };
+  if (till.pairTerminal) return { line: 'To take card payments here, pair your Square Terminal.', button: 'Pair a Terminal' };
+  return null;
 }
 
 /** Whether the person may well have paid: the box then offers no Try again. */

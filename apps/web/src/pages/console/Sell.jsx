@@ -23,6 +23,9 @@ import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import { discountOption, offeredDiscounts, oldMoneySaleLine } from './sellDiscountsView';
 import { addToBasket, applyBasketCode, basketBody, basketCodeNote, basketView, withFriendGift, withLineDiscount, withoutDiscount } from './sellBasketView';
 import { FriendGiftNote, MemberGiftNote } from './FriendGift';
+import TerminalPayBox from './TerminalPayBox';
+import { cardTerminalSerial } from './memberCardView';
+import { TERMINAL_METHOD, TERMINAL_SALE_HINT, mayHavePaid, payTerminalName, terminalPayOutcomeLine, tillSetupView } from './terminalPayView';
 import { SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
 import {
   NO_SELLING_LINE,
@@ -45,7 +48,8 @@ import {
 } from './sellView';
 
 // SELL (spec Part 3 §14.3; ROADMAP 18b-i, 18b-ii-a): the desk's register. Staff pick what
-// is sold, who it is for, a discount if there is one, and how it was paid, and press once. The menu draws the line for whoever
+// is sold, who it is for, a discount if there is one, and how it was paid, and press once. Where
+// the gym has a Square Terminal, Card on Terminal comes first and takes the money there (18d-vi-b-ii). The menu draws the line for whoever
 // may sell or change products; the address can be typed by anybody, so somebody without
 // either tick is told, and nothing is asked for them.
 
@@ -183,7 +187,7 @@ function SaleRecorded({ words, note, onNew, children, below = null }) {
   );
 }
 
-function PayPicker({ method, setMethod, disabled }) {
+function PayPicker({ method, setMethod, choices, disabled }) {
   const id = useId();
   return (
     <div className="c-field">
@@ -191,7 +195,7 @@ function PayPicker({ method, setMethod, disabled }) {
         Payment method
       </label>
       <select id={id} className="c-input" style={{ maxWidth: 280 }} value={method} disabled={disabled} onChange={(e) => setMethod(e.target.value)}>
-        {PAY_CHOICES.map((c) => (
+        {choices.map((c) => (
           <option key={c.value} value={c.value}>
             {c.label}
           </option>
@@ -280,13 +284,23 @@ function BasketLine({ row, offered, disabled, onQuantity, onDiscount, onRemove }
 
 /** A BASKET (18q): products added one by one, each its own line with how many and its own
  *  discount, then who is buying and how they paid, and one press records the whole sale. */
-function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, canAdd, onAddProduct, onPage }) {
+function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMemberTo, paymentsTo, canAdd, onAddProduct, onPage }) {
   const [lines, setLines] = useState([]);
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
   const [person, setPerson] = useState(firstPerson);
   const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, done: null });
+  /** The gym's Square and Terminals (18d-vi-b-ii), as the server says them; null until it does. */
+  const [till, setTill] = useState(null);
+  /** Payment method picked by hand: until then Card on Terminal is first where there is a Terminal. */
+  const [methodPicked, setMethodPicked] = useState(false);
+  const [terminalId, setTerminalId] = useState(null);
+  /** The sale this form sent to the Terminal, { payment }, until it ends and is closed. */
+  const [onTill, setOnTill] = useState(null);
+  /** Sales left waiting on a Terminal when Sell was closed: shown again above the form. */
+  const [resumed, setResumed] = useState([]);
+  const finished = useRef(null);
   const [code, setCode] = useState({ text: '', note: null, appliedId: null });
   /** Refer a friend's gift for the person picked, where they are a friend a member invited
    *  (20e-ii-b-i), and the buyer's own gift (20e-ii-b-ii-a): each filled in, with Remove. */
@@ -320,6 +334,31 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   const shownLines = gift !== null && !friendGiftRemoved ? withFriendGift(lines, page, gift.discount.id) : lines;
   const pickerId = useId();
   const codeId = useId();
+  const terminalPickId = useId();
+
+  useEffect(() => {
+    let live = true;
+    orgService.getTerminalSales(gymId).then(
+      (res) => {
+        if (!live) return;
+        setTill(res.data);
+        setResumed(res.data.waiting);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId]);
+  const terminals = till?.terminals ?? [];
+  const methodChoices = terminals.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...PAY_CHOICES] : PAY_CHOICES;
+  const wanted = methodPicked ? method : terminals.length > 0 ? TERMINAL_METHOD : method;
+  const chosen = wanted === TERMINAL_METHOD && terminals.length === 0 ? (PAY_CHOICES[0]?.value ?? 'cash') : wanted;
+  const onTerminal = chosen === TERMINAL_METHOD;
+  const pickedTerminal = terminals.length === 1 ? terminals[0] : terminals.find((t) => t.id === terminalId);
+  const waiting = onTill !== null && onTill.payment.step !== 'done';
+  const setup = tillSetupView(till, org.name);
+  const buyerName = who === 'member' && person !== null ? person.name : null;
 
   const view = basketView({ page, lines: shownLines, who, person, memberGift, giftRemoved });
   const offered = offeredDiscounts(page).length > 0;
@@ -341,21 +380,69 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     touched();
   };
 
-  const sell = async () => {
+  /** A new sale: the form as it first opened. */
+  const clearForm = () => {
+    setKey(newKey());
+    setLines([]);
+    setWho('walkin');
+    setPerson(null);
+    setGiftRemoved(false);
+    setFriendGiftRemoved(false);
+    setGiftRead(null);
+    setCode({ text: '', note: null, appliedId: null });
+  };
+
+  /** Take payment on Terminal (18d-vi-b-ii): the basket goes to the Terminal, and the box under the
+   *  button follows it. A refusal names why, and nothing was charged. */
+  const sendToTerminal = async (requestKey) => {
     if (view.problem !== null || view.summary === null) return;
+    if (pickedTerminal === undefined) {
+      setState({ busy: false, error: 'Choose a Terminal.', done: null });
+      return;
+    }
+    const b = basketBody(view, { requestKey, entryId: buyerId, method: TERMINAL_METHOD });
     setState({ busy: true, error: null, done: null });
     try {
-      const answer = await registerService.sell(gymId, basketBody(view, { requestKey: key, entryId: buyerId, method }));
+      const res = await orgService.startTerminalSale(gymId, { terminalId: pickedTerminal.id, requestKey: b.requestKey, entryId: b.entryId, totalMinor: b.totalMinor, lines: b.lines });
+      setOnTill({ payment: res.data.payment });
+      setState({ busy: false, error: null, done: null });
+    } catch (err) {
+      setState({ busy: false, error: errorText(err, "We couldn't reach the Terminal. Nothing was charged: try again."), done: null });
+      if (errorStatus(err) === 409) {
+        setKey(newKey());
+        registerService.get(gymId).then(onPage, () => undefined);
+      }
+    }
+  };
+
+  /** Square took the money and the sale is recorded: said as a sale by hand is, with its receipt. */
+  const paidOnTerminal = async (payment) => {
+    if (finished.current === payment.id) return;
+    finished.current = payment.id;
+    const next = await registerService.get(gymId).catch(() => null);
+    const sold = next === null ? undefined : saleBaskets(next.sales).find((b) => b.receiptNumber === payment.receiptNumber);
+    setOnTill(null);
+    clearForm();
+    setState({ busy: false, error: null, done: sold === undefined ? terminalPayOutcomeLine(payment, buyerName, payment.amountMinor) : soldWords(sold), receiptNumber: payment.receiptNumber, receiptOpen: false, onTerminal: true });
+    if (next !== null) onPage(next);
+  };
+  const onTillAnswer = (payment) => {
+    setOnTill((was) => (was === null || was.payment.id !== payment.id || was.payment.step === 'done' ? was : { payment }));
+    if (payment.step === 'done' && payment.outcome === 'paid') void paidOnTerminal(payment);
+  };
+
+  const sell = async () => {
+    if (view.problem !== null || view.summary === null) return;
+    if (onTerminal) {
+      await sendToTerminal(key);
+      return;
+    }
+    setState({ busy: true, error: null, done: null });
+    try {
+      const answer = await registerService.sell(gymId, basketBody(view, { requestKey: key, entryId: buyerId, method: chosen }));
       const sold = saleBaskets(answer.register.sales).find((b) => b.receiptNumber === answer.receiptNumber);
       setState({ busy: false, error: null, done: sold === undefined ? 'Sold.' : soldWords(sold), receiptNumber: answer.receiptNumber, receiptOpen: false });
-      setKey(newKey());
-      setLines([]);
-      setWho('walkin');
-      setPerson(null);
-      setGiftRemoved(false);
-      setFriendGiftRemoved(false);
-      setGiftRead(null);
-      setCode({ text: '', note: null, appliedId: null });
+      clearForm();
       onPage(answer.register);
     } catch (err) {
       setState({ busy: false, error: errorText(err, "We couldn't record that sale. Nothing was sold: try again."), done: null });
@@ -372,7 +459,11 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     return (
       <SaleRecorded
         words={state.done}
-        note="It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale."
+        note={
+          state.onTerminal === true
+            ? "It is in today's list below. To give the money back, refund it in your Square Dashboard, then press ⋯ on its row and Refund sale."
+            : "It is in today's list below. If it was a mistake, press ⋯ on its row, then Void sale."
+        }
         onNew={() => setState({ busy: false, error: null, done: null })}
         below={number !== null && state.receiptOpen ? <ReceiptBox gymId={gymId} gym={org} number={number} onClose={() => setState((was) => ({ ...was, receiptOpen: false }))} /> : null}
       >
@@ -407,8 +498,12 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   }
 
   const full = lines.length >= SALE_LINES_MAX;
+  const still = locked || state.busy || waiting;
   return (
     <div className="flex flex-col gap-4">
+      {resumed.map((payment) => (
+        <ResumedSale key={payment.id} gymId={gymId} payment={payment} showName={terminals.length > 1} onPaid={() => registerService.get(gymId).then(onPage, () => undefined)} onClose={() => setResumed((was) => was.filter((w) => w.id !== payment.id))} />
+      ))}
       <div className="c-field">
         <label className="c-label" htmlFor={pickerId}>
           Add a product
@@ -417,7 +512,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           id={pickerId}
           className="c-input"
           value=""
-          disabled={locked || state.busy || full}
+          disabled={still || full}
           onChange={(e) => {
             const product = page.products.find((p) => p.id === e.target.value);
             if (product !== undefined) change(addToBasket(shownLines, product));
@@ -441,7 +536,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
               key={row.key}
               row={row}
               offered={offered}
-              disabled={locked || state.busy}
+              disabled={still}
               onQuantity={(text) => change(shownLines.map((l, i) => (i === row.index ? { ...l, quantityText: text } : l)))}
               onDiscount={(id) => {
                 if (gift !== null && row.discount !== null && row.discount.id === gift.discount.id) setFriendGiftRemoved(true);
@@ -467,7 +562,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           touched();
         }}
         mustPick={false}
-        disabled={locked || state.busy}
+        disabled={still}
         addMemberTo={addMemberTo}
       />
       {view.rows.length > 0 && gift !== null ? (
@@ -484,7 +579,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
             setFriendGiftRemoved(false);
             change(withFriendGift(shownLines, page, gift.discount.id));
           }}
-          disabled={locked || state.busy}
+          disabled={still}
         />
       ) : null}
       {view.rows.length > 0 && memberGift !== null ? (
@@ -501,7 +596,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
             setGiftRemoved(false);
             touched();
           }}
-          disabled={locked || state.busy}
+          disabled={still}
         />
       ) : null}
       {view.rows.length > 0 && hasCodes ? (
@@ -517,13 +612,13 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
               value={code.text}
               maxLength={40}
               autoComplete="off"
-              disabled={locked || state.busy}
+              disabled={still}
               onChange={(e) => setCode({ text: e.target.value, note: null, appliedId: null })}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') applyCode();
               }}
             />
-            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={locked || state.busy} onClick={applyCode}>
+            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={still} onClick={applyCode}>
               Apply
             </button>
           </div>
@@ -536,7 +631,41 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
           )}
         </div>
       ) : null}
-      <PayPicker method={method} setMethod={setMethod} disabled={locked || state.busy} />
+      <PayPicker
+        method={chosen}
+        setMethod={(next) => {
+          setMethod(next);
+          setMethodPicked(true);
+          touched();
+        }}
+        choices={methodChoices}
+        disabled={still}
+      />
+      {onTerminal && terminals.length > 1 ? (
+        <div className="c-field">
+          <label className="c-label" htmlFor={terminalPickId}>
+            Terminal
+          </label>
+          <select id={terminalPickId} className="c-input" style={{ maxWidth: 280 }} value={terminalId ?? ''} disabled={still} onChange={(e) => setTerminalId(e.target.value === '' ? null : e.target.value)}>
+            <option value="">Choose a Terminal</option>
+            {terminals.map((t) => (
+              <option key={t.id} value={t.id}>
+                {cardTerminalSerial(t) === null ? payTerminalName(t) : `${payTerminalName(t)} · ${cardTerminalSerial(t)}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      {setup !== null ? (
+        <div className="flex flex-wrap items-center gap-2" data-testid="sell-terminal-setup">
+          <p className="c-s14 c-t2 m-0">{setup.line}</p>
+          {setup.button !== null && paymentsTo !== null ? (
+            <Link to={paymentsTo} className="c-btn c-btn-s">
+              {setup.button}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       {view.summary !== null ? (
         <dl className="flex flex-col gap-1 m-0 pt-3" style={LINE} data-testid="sale-summary">
@@ -550,14 +679,87 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       ) : null}
 
       <div className="flex flex-col gap-2">
-        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={locked || state.busy || view.problem !== null || view.summary === null} onClick={() => void sell()}>
+        <button type="button" className="c-btn c-btn-p c-btn-lg self-start" disabled={still || view.problem !== null || view.summary === null} onClick={() => void sell()}>
           {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          {state.busy ? 'Recording…' : view.summary !== null ? `Take payment · ${view.summary.total}` : 'Take payment'}
+          {state.busy ? (onTerminal ? 'Sending…' : 'Recording…') : `${onTerminal ? 'Take payment on Terminal' : 'Take payment'}${view.summary !== null ? ` · ${view.summary.total}` : ''}`}
         </button>
         {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <p className="c-s14 c-t2 m-0">{view.problem}</p> : null}
-        <p className="c-s13 c-t3 m-0">{SALE_HINT}</p>
+        <p className="c-s13 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
       </div>
+      {onTill !== null && onTill.payment.step !== 'done' ? (
+        <TerminalPayBox gymId={gymId} entryId={null} payment={onTill.payment} name={buyerName} showName={terminals.length > 1} onAnswer={onTillAnswer} onEnded={(why) => setState({ busy: false, error: why, done: null })} />
+      ) : null}
+      {onTill !== null && onTill.payment.step === 'done' && onTill.payment.outcome !== 'paid' ? (
+        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
+          <p className="c-s14 m-0" style={{ color: mayHavePaid(onTill.payment) ? 'var(--t1)' : 'var(--bad)' }} role="alert">
+            {terminalPayOutcomeLine(onTill.payment, buyerName, onTill.payment.amountMinor)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {!mayHavePaid(onTill.payment) && pickedTerminal !== undefined ? (
+              <button
+                type="button"
+                className="c-btn c-btn-p"
+                disabled={state.busy}
+                onClick={() => {
+                  const next = newKey();
+                  setKey(next);
+                  void sendToTerminal(next);
+                }}
+              >
+                {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                Try again
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="c-btn c-btn-s"
+              disabled={state.busy}
+              onClick={() => {
+                setOnTill(null);
+                setKey(newKey());
+                if (!mayHavePaid(onTill.payment)) {
+                  setMethod(PAY_CHOICES[0]?.value ?? 'cash');
+                  setMethodPicked(true);
+                }
+              }}
+            >
+              {mayHavePaid(onTill.payment) ? 'Close' : 'Record another way'}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
+    </div>
+  );
+}
+
+/** A sale left waiting on a Terminal when Sell was closed (18d-vi-b-ii): its box until it ends, then
+ *  how it ended, with Close. */
+function ResumedSale({ gymId, payment: first, showName, onPaid, onClose }) {
+  const [payment, setPayment] = useState(first);
+  const [problem, setProblem] = useState(null);
+  const answer = (next) => {
+    setPayment((was) => (was.step === 'done' ? was : next));
+    if (next.step === 'done' && next.outcome === 'paid') onPaid();
+  };
+  if (payment.step !== 'done') {
+    return (
+      <div className="flex flex-col gap-2">
+        <TerminalPayBox gymId={gymId} entryId={null} payment={payment} name={null} showName={showName} onAnswer={answer} onEnded={setProblem} />
+        {problem !== null ? <Refusal>{problem}</Refusal> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-sale-resumed">
+      <p className="c-s14 m-0" style={{ color: payment.outcome === 'paid' || mayHavePaid(payment) ? 'var(--t1)' : 'var(--bad)' }} role="status">
+        {payment.outcome === 'paid' ? `${terminalPayOutcomeLine(payment, null, payment.amountMinor)} It is in today's list below.` : terminalPayOutcomeLine(payment, null, payment.amountMinor)}
+      </p>
+      <div>
+        <button type="button" className="c-btn c-btn-s" onClick={onClose}>
+          Close
+        </button>
+      </div>
     </div>
   );
 }
@@ -938,6 +1140,7 @@ export default function Sell() {
                   locked={readOnly}
                   firstPerson={firstPerson}
                   addMemberTo={placeFor(orgSlug, privileges, 'addMember')}
+                  paymentsTo={placeFor(orgSlug, privileges, 'payments')}
                   canAdd={page.canManage}
                   onAddProduct={addProduct}
                   onPage={setPage}

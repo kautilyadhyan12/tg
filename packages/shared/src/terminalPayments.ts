@@ -25,7 +25,7 @@ export const terminalPaymentSchema = z
     /** Null for a basket at Sell (18d-vi-b-ii). */
     membershipId: z.string().uuid().nullable(),
     /** A basket at Sell: recorded as that sale once Square takes the money (18d-vi-b-ii). */
-    forSale: z.boolean(),
+    forSale: z.boolean().default(false),
     /** The fee it pays (18d-vi-b-i); null for a period of the membership. */
     feeBillId: z.string().uuid().nullable(),
     amountMinor: z.number().int().min(1).max(99_999_999),
