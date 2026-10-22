@@ -102,6 +102,9 @@ describe('the amount typed is the amount sent', () => {
     expect(paymentWords(m, 'Ada Lovelace', TODAY)).toEqual({
       title: "Record a payment for Ada Lovelace's Gold Monthly",
       detail: '£49.99 is left to pay for 4 October 2026 to 3 November 2026. This only writes it in your records: no money is taken.',
+      // Card on Terminal takes the money (18d-vi-a): its box keeps what is left and drops the last sentence.
+      takeTitle: "Take a payment for Ada Lovelace's Gold Monthly",
+      left: '£49.99 is left to pay for 4 October 2026 to 3 November 2026.',
     });
     expect(payLabel(m, TODAY)).toBe('Record payment');
   });

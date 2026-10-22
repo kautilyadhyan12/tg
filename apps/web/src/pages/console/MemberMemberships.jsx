@@ -9,8 +9,8 @@ import MoreMenu from '../../components/console/MoreMenu';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
 import TerminalPayBox from './TerminalPayBox';
-import { cardTerminalName, cardTerminalSerial } from './memberCardView';
-import { TERMINAL_METHOD, mayHavePaid, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
+import { cardTerminalSerial } from './memberCardView';
+import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
 import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
@@ -936,7 +936,7 @@ export default function MemberMemberships({
               <option value="">Choose one</option>
               {terminalList.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {cardTerminalSerial(t) === null ? cardTerminalName(t) : `${cardTerminalName(t)} · ${cardTerminalSerial(t)}`}
+                  {cardTerminalSerial(t) === null ? payTerminalName(t) : `${payTerminalName(t)} · ${cardTerminalSerial(t)}`}
                 </option>
               ))}
             </select>

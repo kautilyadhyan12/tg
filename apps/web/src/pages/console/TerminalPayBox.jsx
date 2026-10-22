@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Circle, Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
-import { TERMINAL_STOPPING, cardTerminalName, cardTerminalSerial } from './memberCardView';
-import { terminalPayWaitWords } from './terminalPayView';
+import { TERMINAL_STOPPING, cardTerminalSerial } from './memberCardView';
+import { payTerminalName, terminalPayWaitWords } from './terminalPayView';
 
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a): the box on a bill while the amount waits on the
 // gym's Square Terminal. It asks the server every few seconds and hands each answer up; the
@@ -114,7 +114,7 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
         <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
         {showName ? (
           <p className="c-s13 c-t2 m-0">
-            {cardTerminalName(payment.terminal)}
+            {payTerminalName(payment.terminal)}
             {cardTerminalSerial(payment.terminal) !== null ? <span className="c-num">{` · ${cardTerminalSerial(payment.terminal)}`}</span> : null}
           </p>
         ) : null}

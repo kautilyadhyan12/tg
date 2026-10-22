@@ -4,6 +4,22 @@
 import { formatMinor } from '@app/shared';
 import { personNames } from './memberCardView';
 
+/** Square's simulated Terminals (its test area only) by what each does with a payment: they are
+ *  named for saving a card elsewhere, and the one that saves a card is the one that pays. */
+const PRACTICE_PAYMENT_WORDS = {
+  saves: 'Member pays',
+  declines: 'Member declines',
+  cancels: 'Member cancels',
+  times_out: 'Times out',
+  offline: 'Offline',
+};
+
+/** A Terminal in the payment box: Square's name, and the serial number printed on it. */
+export function payTerminalName(terminal) {
+  if (terminal === null || terminal.practice === null) return 'Square Terminal';
+  return `Simulated Terminal · ${PRACTICE_PAYMENT_WORDS[terminal.practice] ?? terminal.practice}`;
+}
+
 /** "Card on Terminal" in How they paid: the value the form sends to the Terminal, not the server. */
 export const TERMINAL_METHOD = 'terminal';
 
