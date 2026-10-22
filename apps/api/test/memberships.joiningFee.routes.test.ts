@@ -166,12 +166,32 @@ d("a joining fee on a membership type (real Postgres)", () => {
     if (found === undefined) throw new Error(`no live type named ${String(body["name"])}`);
     return found.id;
   };
+  /** A type's fields as a change sends them back, every one, as the list has them. */
+  const typeBody = (t: GymMembershipTypesResponse["types"][number]): Record<string, unknown> => ({
+    name: t.name,
+    description: t.description,
+    kind: t.kind,
+    priceMinor: t.priceMinor,
+    termCount: t.termCount,
+    termUnit: t.termUnit,
+    packClasses: t.packClasses,
+    packDays: t.packDays,
+    access: t.access,
+    bookingsLimit: t.bookingsLimit,
+    bookingsPeriod: t.bookingsPeriod,
+    classTypeIds: null,
+    includesPt: t.includesPt,
+    ptLimit: t.ptLimit,
+    ptPeriod: t.ptPeriod,
+    taxRateId: t.taxRateId,
+    joiningFeeMinor: t.joiningFeeMinor,
+    updatedAt: t.updatedAt,
+  });
   /** A change as the screen sends it: every field as the list has it, with `over` on top. */
   const changeType = async (gymId: string, cookies: Cookies, typeId: string, over: Record<string, unknown>) => {
     const t = (await priceList(gymId, cookies)).types.find((x) => x.id === typeId);
     if (t === undefined) throw new Error("no such type");
-    const { id: _id, currency: _currency, archivedAt: _archived, classTypes: _classes, ...fields } = t;
-    return await put(`${typesUrl(gymId)}/${typeId}`, { ...fields, classTypeIds: null, ...over }, cookies);
+    return await put(`${typesUrl(gymId)}/${typeId}`, { ...typeBody(t), ...over }, cookies);
   };
   const feeOfType = async (typeId: string) => (await sql<{ fee: number }[]>`SELECT joining_fee_minor AS fee FROM gym_membership_types WHERE id = ${typeId}`)[0]?.fee;
 
@@ -440,8 +460,9 @@ d("a joining fee on a membership type (real Postgres)", () => {
       // A change that leaves the fee out is refused, and the fee stays.
       const t = list.types.find((x) => x.id === quarter);
       if (t === undefined) throw new Error("no type");
-      const { id: _id, currency: _currency, archivedAt: _archived, classTypes: _classes, joiningFeeMinor: _fee, ...fields } = t;
-      expect((await put(`${typesUrl(gymId)}/${quarter}`, { ...fields, classTypeIds: null }, owner.cookies)).statusCode).toBe(400);
+      const withoutFee = typeBody(t);
+      delete withoutFee["joiningFeeMinor"];
+      expect((await put(`${typesUrl(gymId)}/${quarter}`, withoutFee, owner.cookies)).statusCode).toBe(400);
       expect(await feeOfType(quarter)).toBe(2000);
       // Taken off, put on another, and never on a pack.
       expect((await changeType(gymId, owner.cookies, quarter, { joiningFeeMinor: 0 })).statusCode).toBe(200);
@@ -478,8 +499,7 @@ d("a joining fee on a membership type (real Postgres)", () => {
       expect((await changeType(gymId, owner.cookies, gold, { joiningFeeMinor: 9000 })).statusCode).toBe(200);
       const t = (await priceList(gymId, owner.cookies)).types.find((x) => x.id === gold);
       if (t === undefined) throw new Error("no type");
-      const { id: _id, currency: _currency, archivedAt: _archived, classTypes: _classes, ...fields } = t;
-      expect((await put(`${typesUrl(gymId)}/${gold}`, { ...fields, classTypeIds: null, joiningFeeMinor: 1 }, stranger.cookies)).statusCode).toBe(404);
+      expect((await put(`${typesUrl(gymId)}/${gold}`, { ...typeBody(t), joiningFeeMinor: 1 }, stranger.cookies)).statusCode).toBe(404);
       expect(await feeOfType(gold)).toBe(9000);
 
       // The bills' own line: a fee's bill (no period) carries no joining fee.

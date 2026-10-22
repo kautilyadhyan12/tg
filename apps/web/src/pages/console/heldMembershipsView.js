@@ -324,17 +324,35 @@ export const METHOD_NEEDED = 'Pick how they paid.';
 
 /** What the server is sent for a choice. `requestKey` is made once a form. A paid one
  *  says how it was paid: the server records the payment with the membership. */
-export function giveBody(requestKey, type, value, discount = null, summary = null, memberGift = null) {
+export function giveBody(requestKey, type, value, discount = null, summary = null, memberGift = null, joiningFeeMinor = 0) {
   const paid = type.priceMinor === 0 ? false : value.paid;
   const body = { requestKey, typeId: type.id, startsOn: value.startsOn, paid, ...(paid ? { method: value.method } : {}) };
-  // The screen says the price and what the first bill comes to, tax in (18b-iii): the
-  // server gives nothing where either is no longer so.
-  const shown = { ...body, priceMinor: type.priceMinor, ...(summary === null ? {} : { totalMinor: summary.totalMinor }) };
+  // The screen says the price, the joining fee it charges (18t) and what the first bill
+  // comes to, tax in (18b-iii): the server gives nothing where any is no longer so.
+  const shown = {
+    ...body,
+    priceMinor: type.priceMinor,
+    ...(joiningFeeMinor > 0 ? { joiningFeeMinor } : {}),
+    ...(summary === null ? {} : { totalMinor: summary.totalMinor }),
+  };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };
   // With a discount, what comes off too (18b-ii-b).
   if (discount === null || summary === null || summary.offMinor === null) return gifted;
   return { ...gifted, discountId: discount.id, discountMinor: summary.offMinor };
+}
+
+/** The joining fee a membership is given with (18t): the type's own, on its first bill.
+ *  Staff who take payments may untick it; `choice` is 'auto' until they press the tick,
+ *  then 'charge' or 'waive'. Left to itself it is ticked, unless the person already has a
+ *  membership here. `tick` is whether the tick is shown; `note` says why it starts unticked. */
+export function joiningFeeFor(type, choice, canBill, alreadyMember) {
+  const fee = type !== null && type !== undefined && type.joiningFeeMinor > 0 ? type.joiningFeeMinor : 0;
+  if (fee === 0) return { feeMinor: 0, tick: false, note: null };
+  if (!canBill) return { feeMinor: fee, tick: false, note: null };
+  const charged = choice === 'charge' || (choice !== 'waive' && !alreadyMember);
+  const note = choice !== 'charge' && choice !== 'waive' && alreadyMember ? 'Left unticked because they already have a membership here.' : null;
+  return { feeMinor: charged ? fee : 0, tick: true, note };
 }
 
 /** A price-list type with the tax its bills charge, as the Add form reads it (18b-iii). */
