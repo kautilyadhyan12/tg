@@ -40,6 +40,7 @@ import { fillClassSessionsJob } from "./modules/orgs/classes/fill.js";
 import { sendDueMessages } from "./modules/orgs/messages/send.js";
 import { ORGS_MEMBER_MESSAGES_JOB, scheduleMemberMessages } from "./modules/orgs/messages/sendSchedule.js";
 import { openDueBills } from "./modules/orgs/memberships/billsRepo.js";
+import { openDueFreezeFees } from "./modules/orgs/memberships/freezeFees.js";
 import { ORGS_MEMBER_BILLS_JOB, scheduleMemberBills } from "./modules/orgs/memberships/billsSchedule.js";
 import { markEndedClasses } from "./modules/orgs/classes/attendance.js";
 import { hourlyTidyUp } from "./modules/orgs/hourlyTidyUp.js";
@@ -849,8 +850,10 @@ const worker = new Worker(
     // Each gym is its own transaction; one that fails is logged and tried on the next run.
     if (job.name === ORGS_MEMBER_BILLS_JOB) {
       const bills = await openDueBills({ sql, log });
+      // The month's fee of each membership frozen with one (18z).
+      const freezeFees = await openDueFreezeFees({ sql, log });
       log.info(
-        { ...bills, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
+        { ...bills, freezeFeesOpened: freezeFees.opened, freezeFeesFailed: freezeFees.failed, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name },
         "job finished",
       );
       return;

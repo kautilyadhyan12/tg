@@ -40,6 +40,7 @@ import {
   partPeriod,
   countAfterGap,
   discountFits,
+  freezeFeeApplies,
   giveHeldMembership,
   heldMembershipStatusSchema,
   heldMembershipView,
@@ -70,6 +71,7 @@ import { friendGiftOpen } from "../referrals/friendGiftRepo.js";
 import { giftUseUndone, giveMemberGift, lockedWaitingGift, markUsed } from "../referrals/memberGiftRepo.js";
 import { rateOf, taxIncludedOf } from "../register/taxRepo.js";
 import { feesFor, type FeePaymentRow, type FeeRow } from "./feesRepo.js";
+import { freezeFeeOf, openFreezeFee, removeFreezeFees } from "./freezeFees.js";
 import {
   billOf,
   billsFor,
@@ -109,6 +111,8 @@ export interface HeldRow {
   /** What the bill of the first period not paid comes to when opened today, its tax in (the part
    *  month's, 18y, where that is the first period); 0 for a free one. */
   nextBillMinor: number;
+  /** What its freeze charges a month (18z), read while it is frozen; 0 for none. */
+  freezeFeeMinor: number;
   membership: HeldMembership;
 }
 
@@ -136,6 +140,7 @@ const rawSchema = z.object({
   renews: z.boolean(),
   classes_left: z.number().int().nullable(),
   full_from: z.string().nullable(),
+  freeze_fee_minor: z.number().int(),
   from_list: z.boolean(),
   discount_name: z.string().nullable(),
   discount_minor: z.number().int(),
@@ -159,6 +164,7 @@ function shape(row: unknown): HeldRow {
   return {
     tax,
     taxApplied,
+    freezeFeeMinor: r.freeze_fee_minor,
     nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.full_from !== null && r.paid_periods === 0 ? partOf(r) : r.price_minor, taxApplied).amountMinor,
     id: r.id,
     typeId: r.membership_type_id,
@@ -248,7 +254,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
   h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
-  h.discount_name, h.discount_minor, h.discount_payments,
+  h.freeze_fee_minor, h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
   (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
   h.tax_included`;
@@ -296,6 +302,8 @@ export interface HeldList {
   taxIncluded: boolean;
   /** The day of the month the gym bills everyone on (18y), for the Add form; null for none. */
   billDay: number | null;
+  /** The gym's freeze fee a month (18z), for the Freeze box; 0 for none. */
+  freezeFee: number;
   /** Every membership of this record given in place of another (18x), with both type names. */
   changes: HeldChange[];
 }
@@ -388,6 +396,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
       billDay: await billDayOf(tx, gymId),
+      freezeFee: await freezeFeeOf(tx, gymId),
       changes: await tx<{ new_id: string; old_id: string; new_name: string; old_name: string; starts_on: string; new_status: string; stopped: boolean }[]>`
         SELECT n.id AS new_id, n.replaces_id AS old_id, tn.name AS new_name, tt.name AS old_name,
                n.starts_on::text AS starts_on, n.status AS new_status, n.replaced_stopped AS stopped
@@ -426,6 +435,8 @@ export type HeldWriteOutcome =
   | { kind: "price_changed" }
   /** The gym's billing day (18y) is no longer the one the screen worked the first bill out on. */
   | { kind: "bill_day_changed" }
+  /** The freeze fee the screen showed is no longer the gym's (18z), or this membership has none. */
+  | { kind: "freeze_fee_changed" }
   /** The discount named is not one of this gym's. */
   | { kind: "discount_not_found" }
   /** The gym's own discount, and it cannot be used on this membership today. */
@@ -929,6 +940,10 @@ export async function moveHeld(
     confirmBookings: string | null;
     /** A cancel: the mark of the personal training sessions it was told it would end. */
     confirmPtSessions?: string | null;
+    /** A freeze: the fee a month the screen showed and staff left ticked, or 0 for none (18z). */
+    freezeFeeMinor?: number;
+    /** Whether this reader may freeze with no fee where the gym charges one (`billing.members`). */
+    mayWaiveFreezeFee?: boolean;
     actorUserId: string;
     now: Date;
   },
@@ -955,6 +970,21 @@ export async function moveHeld(
     if (!move.ok) return { kind: "not_allowed" };
     if (!move.changed) return { kind: "ok" };
     const m = move.membership;
+
+    // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
+    // another, or a fee on a membership that freezes with none (18z).
+    let freezeFee = m.status === "frozen" ? before.freezeFeeMinor : 0;
+    let freezeOffered = 0;
+    if (input.event.type === "freeze") {
+      const offered = freezeFeeApplies(before.membership) ? await freezeFeeOf(tx, input.gymId) : 0;
+      freezeOffered = offered;
+      const asked = input.freezeFeeMinor ?? 0;
+      if (asked !== 0 && asked !== offered) return { kind: "freeze_fee_changed" };
+      // Staff who do not record payments freeze with the gym's fee; for them 0 is a screen that
+      // showed none.
+      if (asked === 0 && offered > 0 && input.mayWaiveFreezeFee !== true) return { kind: "freeze_fee_changed" };
+      freezeFee = asked;
+    }
 
     // A cancel takes with it the bills for days after its last day (18a-i): nobody is left
     // owing, or reading Overdue, for a month they never had.
@@ -985,9 +1015,14 @@ export async function moveHeld(
       UPDATE gym_held_memberships
       SET status = ${m.status}, frozen_days = ${m.frozenDays}, frozen_on = ${m.frozenOn}::date,
           cancelled_on = ${m.cancelledOn}::date, paid_periods = ${m.paidPeriods}, renews = ${m.renews},
-          updated_at = ${input.now}
+          freeze_fee_minor = ${freezeFee}, updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
+    // Its first month's freeze fee, at once; an unfreeze or a cancel takes off the unpaid fees of
+    // months that begin today or later (18z).
+    const feesOpened = m.status === "frozen" && input.event.type === "freeze" && freezeFee > 0 ? await openFreezeFee(tx, input.gymId, before.id, input.now) : 0;
+    const feesRemoved =
+      before.membership.status === "frozen" && m.status !== "frozen" ? await removeFreezeFees(tx, input.gymId, before.id, input.today, input.now) : 0;
     // A change on the next payment date undone before the new one starts: the one it replaced
     // renews again, as it did before the change (18x, round one, Low-2).
     let renewsAgain = false;
@@ -1029,6 +1064,9 @@ export async function moveHeld(
         paidAfter: String(m.paidPeriods),
         renews: String(m.renews),
         ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
+        ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee), freezeFeeOffered: String(freezeOffered) } : {}),
+        ...(feesOpened === 0 ? {} : { freezeFeesOpened: String(feesOpened) }),
+        ...(feesRemoved === 0 ? {} : { freezeFeesRemoved: String(feesRemoved) }),
         ...(renewsAgain ? { replacedRenewsAgain: "true" } : {}),
         ...(ended === null
           ? {}

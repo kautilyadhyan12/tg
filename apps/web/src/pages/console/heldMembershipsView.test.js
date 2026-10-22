@@ -245,3 +245,26 @@ describe('the Add form works its line out by the rule the server gives with', ()
     expect(givePreview(monthly, '2027-10-21', false, TODAY).problem).toBeNull();
   });
 });
+
+describe('what a freeze says once done (18z)', () => {
+  const m = { id: 'a', typeName: 'Gold Monthly', currency: 'USD', freezeFeeMinor: 1000, freezeFeeFirstOn: '2026-10-22' };
+  it('reads the fee the answer holds; with no bills sent (no payments tick), the fee that was sent', async () => {
+    const { freezeDoneWords } = await import('./heldMembershipsView');
+    const fee = { fee: 'freeze', on: '2026-10-22', state: 'due', amountMinor: 1000 };
+    expect(freezeDoneWords({ memberships: [{ id: 'a', billing: { fees: [fee] } }] }, m, 'Maya Rao', '2026-10-22')).toBe("Gold Monthly is frozen. The $10.00 freeze fee is on Maya Rao's bills, due today.");
+    expect(freezeDoneWords({ memberships: [{ id: 'a', billing: { fees: [] } }] }, m, 'Maya Rao', '2026-10-22', 1000)).toBe('Gold Monthly is frozen.');
+    expect(freezeDoneWords({ memberships: [{ id: 'a', billing: null }] }, m, 'Maya Rao', '2026-10-22', 1000)).toBe("Gold Monthly is frozen. The $10.00 freeze fee is on Maya Rao's bills, due today.");
+    expect(freezeDoneWords({ memberships: [{ id: 'a', billing: null }] }, { ...m, freezeFeeFirstOn: '2026-11-22' }, 'Maya Rao', '2026-10-22', 1000)).toBe('Gold Monthly is frozen.');
+    expect(freezeDoneWords({ memberships: [{ id: 'a', billing: null }] }, m, 'Maya Rao', '2026-10-22', 0)).toBe('Gold Monthly is frozen.');
+  });
+});
+
+describe('the Freeze box on the 29th to the 31st (18z, round one High-3)', () => {
+  it('says shorter months take their last day, never a day that does not come', async () => {
+    const { freezeFeeAsk } = await import('./heldMembershipsView');
+    const m = { typeName: 'Gold Monthly', currency: 'USD', freezeFeeMinor: 1000, freezeFeeFirstOn: '2027-01-31', view: { status: 'active' } };
+    expect(freezeFeeAsk(m, 'Maya Rao', '2027-01-31').line).toBe('Freeze fee: $10.00 today, then $10.00 on the 31st of each month (the last day of shorter months) until it is unfrozen.');
+    expect(freezeFeeAsk({ ...m, freezeFeeFirstOn: '2027-01-28' }, 'Maya Rao', '2027-01-28').line).toBe('Freeze fee: $10.00 today, then $10.00 on the 28th of each month until it is unfrozen.');
+    expect(freezeFeeAsk({ ...m, freezeFeeFirstOn: null }, 'Maya Rao', '2027-01-31')).toBeNull();
+  });
+});

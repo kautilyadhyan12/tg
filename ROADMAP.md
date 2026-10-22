@@ -276,7 +276,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 18d-vi-b-ii. [x] **Take payment on Terminal at Sell**, for the whole basket — merged 2026-10-22 (PR #339).
        - 18d-vi-c. [ ] **The card kept from a Terminal payment** for a membership that renews, the member agreeing on the Terminal first. Waits for web folder 2's 18u: the gym's own agreement with the facts filled in, to which it adds the card's tick and details (Kd, 2026-10-22, `rulings/2026-10-22-18r.md`). Web folder 1.
      - 18r. [x] **UPI for gyms in India** — merged 2026-10-23 (PR #341).
-     - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge. When a charge fails (Kd, 2026-10-22): at most 3 tries over several days, never after a decline the card companies forbid, the member told in writing with 7 days to pay another way, a Failed payments list for staff with Try again. Late-cancel and no-show fees are never charged by themselves: staff take them by hand (Kd, 2026-10-22, `rulings/2026-10-22-18d-vi-b-i.md`). Two or three jobs.
+     - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge. When a charge fails (Kd, 2026-10-22): at most 3 tries over several days, never after a decline the card companies forbid, the member told in writing with 7 days to pay another way, a Failed payments list for staff with Try again. Late-cancel and no-show fees are never charged by themselves: staff take them by hand (Kd, 2026-10-22, `rulings/2026-10-22-18d-vi-b-i.md`). A freeze fee (18z) is charged to the saved card on its date like the monthly bill, and the card agreement names it (Kd, 2026-10-23, `rulings/2026-10-22-18z.md`). Two or three jobs.
      - 18d-iii-c. [ ] **A reminder before a card expires**, a gym's choice (Kd, 2026-10-22; Wodify and Mindbody do it). Web folder 1.
      - 18d-iii-b. [ ] **A payment taken in Square's own app recorded on the member** (Kd, 2026-10-21): staff pick the member in Square's Point of Sale app and take it on the Reader; Square's payment message is matched by the Square customer we made for them; tested in Square's test area.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.
@@ -302,7 +302,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
-   - 18z. [ ] **A fee while frozen**, a gym's choice (Kd, 2026-10-22). Web folder 2.
+   - 18z. [x] **A fee while frozen** · merged 2026-10-23 · PR #342
 19. **The gym's shared page** (RULINGS 2026-09-22, Part 6 of the re-plan; spec Part 3 §15) — it takes in items 1b, 6, 10 and 11. Every card Opus xhigh.
    - 19a. **The leaderboard** (re-planned 2026-10-02, RULINGS that day; spec Part 3 §15.5), in four jobs. It takes item 1b's place.
      - 19a-i. [x] **The members' board: Gym days and Streak** — merged 2026-10-03 (PR #160).

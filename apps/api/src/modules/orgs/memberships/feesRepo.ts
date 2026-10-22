@@ -38,14 +38,18 @@ import { insertAudit } from "../repo.js";
 import { lockedEntry } from "./heldRepo.js";
 import { billOf, insertPayment, terminalWaiting, type BillTax, type Voided } from "./billsSql.js";
 
-const STATUS_FOR: Record<MemberFeeKind, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
+const STATUS_FOR: Record<Exclude<MemberFeeKind, "freeze">, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
+/** A booking's or a session's own fee: a freeze fee is the membership's (`freezeFees.ts`). */
+type BookingFeeKind = Exclude<MemberFeeKind, "freeze">;
 
 /** In a statement that names a fee's bill `b`: its booking is still the late cancel or the
  *  no-show it was opened for, in a class that runs, or its personal training session still
  *  is (18h-ii). False once staff marked them came, the class was cancelled or removed, or
- *  the booking or session is gone. */
+ *  the booking or session is gone. A freeze fee (18z) is owed while its month began before the
+ *  freeze ended (`freeze_stopped`, set by an unfreeze or a cancel). */
 const stillOwedSql = (sql: Sql | TransactionSql) => sql`
-  (EXISTS (SELECT 1 FROM gym_class_bookings k
+  ((b.fee = 'freeze' AND NOT b.freeze_stopped)
+   OR EXISTS (SELECT 1 FROM gym_class_bookings k
            JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
            WHERE k.gym_id = b.gym_id AND k.id = b.class_booking_id AND s.status = 'scheduled'
              AND k.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END)
@@ -71,7 +75,7 @@ export async function setClassFees(tx: TransactionSql, gymId: string, fees: Clas
  *  the booking's own write. A booking already holding a fee that stands, or one staff
  *  waived, opens none: the same press twice, a run and a mark together, or a no-show
  *  marked again after a waive, are one fee or none. Answers how many it opened. */
-export async function openClassFees(tx: TransactionSql, gymId: string, bookingIds: readonly string[], fee: MemberFeeKind, now: Date): Promise<number> {
+export async function openClassFees(tx: TransactionSql, gymId: string, bookingIds: readonly string[], fee: BookingFeeKind, now: Date): Promise<number> {
   if (bookingIds.length === 0) return 0;
   const rows = await tx<
     {
@@ -187,7 +191,7 @@ export function ptFeeFor(trainer: { displayName: string | null; email: string | 
  *  rule says it costs something, as `openClassFees` does for a class. In the caller's
  *  transaction, under the gym's lock, after the session's own write. A session already
  *  holding a fee that stands, or one staff waived, opens none. Answers how many it opened. */
-export async function openPtFees(tx: TransactionSql, gymId: string, appointmentIds: readonly string[], fee: MemberFeeKind, now: Date): Promise<number> {
+export async function openPtFees(tx: TransactionSql, gymId: string, appointmentIds: readonly string[], fee: BookingFeeKind, now: Date): Promise<number> {
   if (appointmentIds.length === 0) return 0;
   const rows = await tx<
     {
@@ -296,10 +300,12 @@ export interface FeeRow {
   id: string;
   membershipId: string;
   fee: MemberFeeKind;
-  /** A class's fee, or a personal training session's. */
-  of: "class" | "pt";
+  /** A class's fee, a personal training session's, or the membership's own freeze fee (18z). */
+  of: "class" | "pt" | "membership";
   forName: string;
   on: string;
+  /** A freeze fee's last day of its month; null for every other. */
+  to: string | null;
   amountMinor: number;
   tax: BillTax | null;
   currency: string;
@@ -339,6 +345,7 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       fee: string;
       fee_for: string;
       covers_from: string;
+      covers_to: string | null;
       amount_minor: number;
       tax_minor: number;
       tax_bp: number;
@@ -354,10 +361,11 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       of_pt: boolean;
     }[]
   >`
-    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.of_pt, x.covers_from, x.amount_minor, x.tax_minor, x.tax_bp,
+    SELECT x.id, x.held_membership_id, x.fee, x.fee_for, x.of_pt, x.covers_from, x.covers_to, x.amount_minor, x.tax_minor, x.tax_bp,
            x.tax_name, x.tax_included, x.currency, x.due_on, x.status, x.void_reason, x.voided_on, v.display_name AS voided_by_name, x.still_owed
     FROM (
-      SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from, b.amount_minor, b.tax_minor, b.tax_bp,
+      SELECT b.id, b.held_membership_id, b.fee, b.fee_for, b.covers_from::text AS covers_from,
+             CASE WHEN b.fee = 'freeze' THEN b.covers_to::text END AS covers_to, b.amount_minor, b.tax_minor, b.tax_bp,
              b.tax_name, b.tax_included, b.currency, b.due_on::text AS due_on, b.status, b.void_reason, b.voided_on::text AS voided_on,
              b.voided_by, b.created_at, ${stillOwedSql(sql)} AS still_owed, b.pt_appointment_id IS NOT NULL AS of_pt,
              row_number() OVER (PARTITION BY b.held_membership_id, b.status = 'open' ORDER BY b.created_at DESC, b.id) AS n
@@ -402,9 +410,10 @@ export async function feesFor(sql: Sql | TransactionSql, gymId: string, membersh
       membershipId: r.held_membership_id,
       // Text under a CHECK: parsed, so a kind this build does not know fails here.
       fee: memberFeeKindSchema.parse(r.fee),
-      of: r.of_pt ? "pt" : "class",
+      of: r.fee === "freeze" ? "membership" : r.of_pt ? "pt" : "class",
       forName: r.fee_for,
       on: r.covers_from,
+      to: r.covers_to,
       amountMinor: r.amount_minor,
       tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, bp: r.tax_bp, included: r.tax_included, minor: r.tax_minor },
       currency: r.currency,

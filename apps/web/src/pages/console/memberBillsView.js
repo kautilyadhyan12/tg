@@ -187,8 +187,16 @@ const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 const FEE_TAGS = { ...STATE_TAGS, waived: { tag: 'Waived', tone: 'plain' }, removed: { tag: 'Taken off', tone: 'plain' } };
 
 /** Why a fee no longer counts: a class's can be marked Came or not run; a personal
- *  training session's (18h-ii) can only be marked Came. */
-const whyNotOwed = (fee) => (fee.of === 'pt' ? 'they were marked Came' : 'they were marked Came, or the class was cancelled');
+ *  training session's (18h-ii) can only be marked Came; a freeze fee's month (18z) began on or after
+ *  the day the membership was unfrozen or cancelled. */
+const whyNotOwed = (fee) =>
+  fee.of === 'membership' ? 'the membership was unfrozen or cancelled by the day this month began' : fee.of === 'pt' ? 'they were marked Came' : 'they were marked Came, or the class was cancelled';
+
+/** What a fee is for: "Yoga on 3 October", or a freeze fee's month (18z): "Gold Monthly, frozen 22 Oct – 21 Nov 2026". */
+export function feeForWords(fee) {
+  if (fee.fee === 'freeze' && fee.to) return `${fee.forName}, frozen ${billDays({ from: fee.on, to: fee.to })}`;
+  return `${fee.forName} on ${dayWords(fee.on)}`;
+}
 
 /** A fee paid, or taken off, after its booking stopped counting (18h-i, round one). */
 const noLongerOwed = (fee) => `No longer owed: ${whyNotOwed(fee)}.`;
@@ -203,7 +211,10 @@ export function feeRow(fee, currency, today) {
   return {
     id: fee.id,
     title: MEMBER_FEE_WORDS[fee.fee] ?? 'Fee',
-    about: `One-time fee · ${fee.forName}, ${dayWords(fee.on)}`,
+    about:
+      fee.fee === 'freeze' && fee.to
+        ? `Monthly fee while frozen · ${fee.forName}, ${billDays({ from: fee.on, to: fee.to })}`
+        : `One-time fee · ${fee.forName}, ${dayWords(fee.on)}`,
     amount: formatMinor(fee.amountMinor, currency),
     tag: state.tag,
     tone: state.tone,
@@ -254,7 +265,7 @@ const feeName = (fee) => (MEMBER_FEE_WORDS[fee.fee] ?? 'fee').toLowerCase();
 export function feeTakeWords(fee, currency) {
   return {
     title: `Take ${formatMinor(fee.amountMinor, currency)} for the ${feeName(fee)}`,
-    about: `It is for ${fee.forName} on ${dayWords(fee.on)}.`,
+    about: `It is for ${feeForWords(fee)}.`,
   };
 }
 
@@ -268,7 +279,7 @@ export function waiveFeeWords(fee, currency, name) {
   const amount = formatMinor(fee.amountMinor, currency);
   return {
     question: `Waive ${name}'s ${feeName(fee)} of ${amount}?`,
-    detail: `It is for ${fee.forName} on ${dayWords(fee.on)}. ${capital(name)} will owe nothing for it. The fee stays on this page, marked Waived, with who waived it. This can't be undone.`,
+    detail: `It is for ${feeForWords(fee)}. ${capital(name)} will owe nothing for it. The fee stays on this page, marked Waived, with who waived it. This can't be undone.`,
     button: 'Waive fee',
     done: `Fee waived. ${capital(name)} owes nothing for it.`,
   };
@@ -525,6 +536,28 @@ export function billDayExample(billDay) {
   const fullFrom = fullFromOf({ kind: 'recurring', termUnit: 'month' }, startsOn, billDay);
   const to = shortDay(addDays(fullFrom, -1), false);
   return `Somebody who joins on ${shortDay(startsOn, false)} pays for ${shortDay(startsOn, false)} to ${to} first, then the full price on the ${dayOfMonthWords(billDay)}: each month for a monthly membership, each year for a yearly one. Members who already have a membership keep their own billing day.`;
+}
+
+/** The freeze fee's box as it starts: "0" for none, else the amount. */
+export function freezeFeeText(minor, currency) {
+  return !Number.isInteger(minor) || minor === 0 || !currency ? '0' : minorToPriceText(minor, currency);
+}
+
+/** The freeze fee as typed, in minor units; null where it is not an amount. */
+export function freezeFeeFromText(text, currency) {
+  const trimmed = String(text ?? '').trim();
+  if (trimmed === '' || /^0+([.,]0*)?$/.test(trimmed)) return 0;
+  if (!currency) return null;
+  const value = priceToMinor(trimmed, currency);
+  return value === null || value < 0 || value > 99_999_999 ? null : value;
+}
+
+/** The freeze fee's box, said plainly (18z): when it is charged, and on whom. */
+export function freezeFeeHint(minor, currency) {
+  if (minor === null || minor === 0 || !currency) {
+    return 'Charged each month a membership is frozen: the first on the day it is frozen, then on that day each month until it is unfrozen. 0 means no fee.';
+  }
+  return `A member frozen on 5 March is charged ${formatMinor(minor, currency)} that day, then on 5 April, and so on until they are unfrozen. Only memberships that renew by themselves are charged; when freezing, you can untick the fee for one member. Members already frozen keep the fee they were frozen with.`;
 }
 
 /** The setting said with a real date: a bill stays Due on its due date and for the days

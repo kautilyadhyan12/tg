@@ -17,6 +17,12 @@ import {
   canRecordPayments,
   cancelBillBody,
   cancelBillWords,
+  feeForWords,
+  feeRow,
+  feeTakeWords,
+  freezeFeeFromText,
+  freezeFeeText,
+  waiveFeeWords,
   graceChoices,
   graceExample,
   paidWords,
@@ -393,5 +399,48 @@ describe('a void (18o)', () => {
       ['v1', false, 'Voided 5 October 2026 by Sam Owner · Recorded by mistake'],
       [payment().id, true, null],
     ]);
+  });
+});
+
+describe('a freeze fee on the bills (18z)', () => {
+  const fee = {
+    id: '55555555-5555-4555-8555-555555555555',
+    fee: 'freeze',
+    of: 'membership',
+    forName: 'Gold Monthly',
+    on: '2026-10-22',
+    to: '2026-11-21',
+    amountMinor: 1000,
+    tax: null,
+    dueOn: '2026-10-22',
+    state: 'due',
+    waived: null,
+    stillOwed: true,
+    payments: [],
+    voidedPayments: [],
+    can: { pay: true, waive: true, voidPaymentId: null },
+  };
+
+  it('names the month it is for, never one day, wherever it is said', () => {
+    const row = feeRow(fee, 'USD', '2026-10-22');
+    expect([row.title, row.about, row.when, row.amount]).toEqual(['Freeze fee', 'Monthly fee while frozen · Gold Monthly, 22 Oct – 21 Nov 2026', 'Due today', '$10.00']);
+    expect(feeForWords(fee)).toBe('Gold Monthly, frozen 22 Oct – 21 Nov 2026');
+    expect(waiveFeeWords(fee, 'USD', 'Maya Rao').detail).toMatch(/^It is for Gold Monthly, frozen 22 Oct – 21 Nov 2026\. Maya Rao will owe nothing for it\./);
+    expect(feeTakeWords(fee, 'USD')).toEqual({ title: 'Take $10.00 for the freeze fee', about: 'It is for Gold Monthly, frozen 22 Oct – 21 Nov 2026.' });
+  });
+
+  it('a freeze fee paid for a month the membership was unfrozen by: no longer owed, and why', () => {
+    const row = feeRow({ ...fee, state: 'paid', stillOwed: false, payments: [{ id: '77777777-7777-4777-8777-777777777777', amountMinor: 1000, method: 'cash', paidOn: '2026-10-22', by: 'Sam', receiptNumber: 3 }] }, 'USD', '2026-10-22');
+    expect(row.waived).toBe('No longer owed: the membership was unfrozen or cancelled by the day this month began. If you gave the money back, void the payment.');
+  });
+
+  it('a late cancel fee still says its one day', () => {
+    expect(feeForWords({ ...fee, fee: 'late_cancel', of: 'class', forName: 'Yoga', to: null })).toBe('Yoga on 22 October 2026');
+  });
+
+  it('the freeze fee box: typed amounts and 0 for none; anything else is not an amount', () => {
+    expect([freezeFeeFromText('10', 'USD'), freezeFeeFromText('9.99', 'USD'), freezeFeeFromText('0', 'USD'), freezeFeeFromText('', 'USD')]).toEqual([1000, 999, 0, 0]);
+    expect([freezeFeeFromText('1.2.3', 'USD'), freezeFeeFromText('10', null)]).toEqual([null, null]);
+    expect([freezeFeeText(1000, 'USD'), freezeFeeText(0, 'USD'), freezeFeeText(1000, null)]).toEqual(['10.00', '0', '0']);
   });
 });

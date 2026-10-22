@@ -17,6 +17,10 @@
 // With `BILL_DAY=1` (1 to 28) every membership is billed from that day of the month (18y), its
 // first period the part month before it.
 //
+// Then a fee while frozen (18z): every membership frozen 40 days ago with a fee of its own, so the
+// run opens this month's fee for every person at once (more than any gym will ever have frozen),
+// and every other hour opens nothing.
+//
 // LOCAL DATABASES ONLY: it writes gyms, their lists and memberships, and removes them.
 import { createHash, randomUUID } from "node:crypto";
 import { cpus } from "node:os";
@@ -24,6 +28,7 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { getHeldMemberships, recordMemberPayment } from "../src/modules/orgs/memberships/heldService.js";
+import { openDueFreezeFees } from "../src/modules/orgs/memberships/freezeFees.js";
 
 const url = process.env["DATABASE_URL"] ?? "";
 if (!/localhost|127\.0\.0\.1/.test(url)) {
@@ -181,6 +186,28 @@ for (const [name, call] of calls) {
   }
   console.log(`${name.padEnd(52)} total median ${fmt(median(walls))} (worst ${fmt(Math.max(...walls))}) · thread busy median ${fmt(median(jss))} (worst ${fmt(Math.max(...jss))})`);
 }
+// Every membership frozen 40 days ago with its fee: this month's fee is owed by every person.
+await sql`
+  UPDATE gym_held_memberships SET status = 'frozen', frozen_on = current_date - 40, freeze_fee_minor = 1000
+  WHERE gym_id = ANY(${all}::uuid[]) AND status = 'active'`;
+await sql`VACUUM ANALYZE gym_held_memberships`;
+for (const [name, gymIds] of [
+  [`the freeze fee run, one gym of ${String(PEOPLE)}, all frozen`, [ids[0] ?? ""]],
+  [`the freeze fee run, the other ${String(GYMS - 1)} gyms`, ids.slice(1)],
+  [`the freeze fee run, one gym of ${String(BIG)}, all frozen`, [big.id]],
+] as const) {
+  let fees = 0;
+  const t = await time(async () => {
+    fees = (await openDueFreezeFees({ sql, log }, { gymIds })).opened;
+  });
+  line(name, t, ` · ${String(fees)} fees`);
+}
+const idleFees: { wall: number; js: number }[] = [];
+for (let i = 0; i < RUNS; i++) idleFees.push(await time(() => openDueFreezeFees({ sql, log }, { gymIds: all })));
+console.log(
+  `${"the freeze fee run, all 21 gyms, nothing owed".padEnd(52)} total median ${fmt(median(idleFees.map((t) => t.wall)))} (worst ${fmt(Math.max(...idleFees.map((t) => t.wall)))}) · thread busy median ${fmt(median(idleFees.map((t) => t.js)))}`,
+);
+
 delay.disable();
 console.log(`longest single stall of the thread during all of it: ${fmt(delay.max / 1e6)}`);
 

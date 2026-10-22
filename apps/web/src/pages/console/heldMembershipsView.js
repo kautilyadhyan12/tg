@@ -10,6 +10,7 @@ import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   addDays,
   classBookingsEndingSchema,
+  dayOfMonthWords,
   daysBetween,
   formatMinor,
   fullFromOf,
@@ -260,6 +261,43 @@ function endingThings(n, bookings, sessions) {
   const pt = sessions === 1 ? '1 session' : `${sessions.toLocaleString('en')} sessions`;
   if (sessions === 0) return bookings;
   return n === 0 ? pt : `${bookings} and ${pt}`;
+}
+
+/** The freeze fee a Freeze box offers (18z), or null where none is charged: its line and the
+ *  tick's words. `m.freezeFeeFirstOn` is the server's: today, or a month on where a fee of an earlier
+ *  freeze still covers today. The months after are counted from today's day of the month, and a
+ *  shorter month takes its last day (frozen on the 31st: 28 Feb, then 31 Mar). */
+export function freezeFeeAsk(m, name, today) {
+  if (m.view.status === 'frozen' || !(m.freezeFeeMinor > 0) || !m.freezeFeeFirstOn) return null;
+  const amount = formatMinor(m.freezeFeeMinor, m.currency);
+  const day = Number(today.slice(8, 10));
+  const each = `on the ${dayOfMonthWords(day)} of each month${day > 28 ? ' (the last day of shorter months)' : ''}`;
+  const line =
+    m.freezeFeeFirstOn === today
+      ? `Freeze fee: ${amount} today, then ${amount} ${each} until it is unfrozen.`
+      : `No freeze fee today: this month's is already on ${name}'s bills. Then ${amount} from ${dayWords(m.freezeFeeFirstOn)}, ${each} until it is unfrozen.`;
+  return { line, tick: `Charge ${name} the freeze fee` };
+}
+
+/** What a freeze said once done, read from the server's answer: a fee is said only where one was
+ *  opened today, never from the tick alone. Staff without the payments tick are sent no bills, so for
+ *  them it is the fee they sent where the box said the first one is today (re-check, Low). */
+export function freezeDoneWords(answer, m, name, today, sentMinor = 0) {
+  const after = answer?.memberships?.find((x) => x.id === m.id) ?? null;
+  const said = (minor) => `${m.typeName} is frozen. The ${formatMinor(minor, m.currency)} freeze fee is on ${name}'s bills, due today.`;
+  if (after !== null && after.billing === null) return sentMinor > 0 && m.freezeFeeFirstOn === today ? said(sentMinor) : `${m.typeName} is frozen.`;
+  const fee = (after?.billing?.fees ?? []).find((f) => f.fee === 'freeze' && f.on === today && (f.state === 'due' || f.state === 'overdue'));
+  if (fee !== undefined) return said(fee.amountMinor);
+  return `${m.typeName} is frozen.`;
+}
+
+/** For staff who cannot freeze without the fee: who can. */
+export const FREEZE_FEE_WHO = 'Only staff who record payments can freeze without the fee.';
+
+/** A frozen membership's freeze fee (18z), or null where it was frozen with none. */
+export function freezeFeeLine(m) {
+  if (m.view.status !== 'frozen' || !(m.freezeFeeMinor > 0)) return null;
+  return `Freeze fee ${formatMinor(m.freezeFeeMinor, m.currency)} each month while frozen.`;
 }
 
 /** What each press did, said back in one line. */

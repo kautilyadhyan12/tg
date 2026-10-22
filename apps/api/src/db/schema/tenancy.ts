@@ -152,6 +152,9 @@ export const gyms = pgTable(
     /** The day of the month every new monthly or yearly membership is billed on (0154; 18y),
      *  under `gyms_bills_day_check`, 1 to 28; null bills each from the day it starts. */
     billsDay: integer("bills_day"),
+    /** Charged for each month a renewing membership is frozen (0156; 18z), under
+     *  `gyms_freeze_fee_check`: 0 is off. */
+    freezeFeeMinor: integer("freeze_fee_minor").notNull().default(0),
     /** The At risk list's two numbers (0098; spec Part 3 §16.4), under `gyms_at_risk_check`;
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),

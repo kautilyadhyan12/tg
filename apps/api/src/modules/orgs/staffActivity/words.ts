@@ -107,7 +107,10 @@ const methodWords = (s: Said): string => {
   return said === undefined ? "" : ` (${said})`;
 };
 /** "late cancel fee", from a fee's note (18h-i). */
-const feeOf = (s: Said): string => (text(s, "fee") === "no_show" ? "no-show fee" : "late cancel fee");
+const feeOf = (s: Said): string => {
+  const fee = text(s, "fee");
+  return fee === "no_show" ? "no-show fee" : fee === "freeze" ? "freeze fee" : "late cancel fee";
+};
 const membershipOf = (s: Said): string => {
   const type = text(s, "type");
   return type === null ? "membership" : `${type} membership`;
@@ -237,7 +240,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const after = count(s, "paidAfter");
     return before !== null && after !== null && after < before ? `Took back a paid mark on ${whose(s, membershipOf(s))}` : `Marked ${whose(s, membershipOf(s))} as paid`;
   },
-  "org.held_membership_frozen": (s) => `Froze ${whose(s, membershipOf(s))}`,
+  // Frozen where the gym charges a freeze fee and staff unticked it: a waiver, said so (18z).
+  "org.held_membership_frozen": (s) =>
+    `Froze ${whose(s, membershipOf(s))}${(count(s, "freezeFeeOffered") ?? 0) > 0 && count(s, "freezeFeeMinor") === 0 ? " with no freeze fee" : ""}`,
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
   "org.held_membership_changed": (s) => {
@@ -279,6 +284,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.bill_day_changed": (s) => {
     const day = count(s, "billDay");
     return day === null ? "Stopped billing new memberships on one day of the month" : `Set new memberships to be billed on the ${dayOfMonthWords(day)} of each month`;
+  },
+  "org.freeze_fee_changed": (s) => {
+    const fee = count(s, "freezeFeeMinor");
+    return fee === null || fee === 0 ? "Stopped charging a freeze fee" : "Changed the freeze fee charged each month a membership is frozen";
   },
   "org.member_fee_paid": (s) => `Recorded ${pay(s)} from ${fromWhom(s)} for a ${feeOf(s)}${methodWords(s)}`,
   "org.member_fee_waived": (s) => {

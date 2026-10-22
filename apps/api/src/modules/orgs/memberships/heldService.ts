@@ -23,8 +23,11 @@ import {
   countAfterGap,
   discountNothingOffWords,
   discountRefusalWords,
+  addTerms,
   formatMinor,
+  freezeFeeApplies,
   heldMembershipView,
+  memberCurrencyForCountry,
   heldMembershipsResponseSchema,
   memberBillState,
   memberCancelTarget,
@@ -64,6 +67,7 @@ import { friendGiftOffer } from "../referrals/friendGift.js";
 import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { billDayOf, overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 import * as feesRepo from "./feesRepo.js";
+import { freezeFeeOf } from "./freezeFees.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 
 export interface HeldDeps {
@@ -166,6 +170,17 @@ function billingOf(
   };
 }
 
+/** Where a freeze today would charge the gym's fee (18z): today, or a month on where a fee of an
+ *  earlier freeze, still owed or waived, covers today (`freezeFees.ts` opens none for those days).
+ *  Null where it would charge none. */
+function freezeFeeFirstOn(row: { id: string; membership: HeldMembership }, gymFee: number, fees: readonly FeeRow[], today: string): string | null {
+  if (gymFee === 0 || !freezeFeeApplies(row.membership) || !heldMembershipView(row.membership, today).can.freeze) return null;
+  const covered = fees.some(
+    (f) => f.membershipId === row.id && f.fee === "freeze" && f.stillOwed && (f.status !== "void" || f.waived !== null) && f.on <= today && f.to !== null && f.to >= today,
+  );
+  return covered ? addTerms(today, 1, "month", 1) : today;
+}
+
 /** One fee as a person's page draws it (18h-i): paid all at once or waived while it is owed,
  *  and its payment voided while it stands. */
 function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: string; overdueAfterDays: number }): MemberFee {
@@ -179,6 +194,7 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
     of: f.of,
     forName: f.forName,
     on: f.on,
+    to: f.to,
     amountMinor: f.amountMinor,
     tax: f.tax,
     dueOn: f.dueOn,
@@ -301,6 +317,14 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       startsOn: row.membership.startsOn,
       fullFrom: row.membership.fullFrom,
       frozenOn: row.membership.frozenOn,
+      // While frozen, what its freeze charges; else what a freeze today would (18z).
+      freezeFeeMinor:
+        row.membership.status === "frozen"
+          ? row.freezeFeeMinor
+          : heldMembershipView(row.membership, today).can.freeze && freezeFeeApplies(row.membership)
+            ? list.freezeFee
+            : 0,
+      freezeFeeFirstOn: freezeFeeFirstOn(row, list.freezeFee, list.fees, today),
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),
@@ -387,6 +411,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
     case "bill_day_changed":
       throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
+    case "freeze_fee_changed":
+      throw new OrgsError(409, "membership_freeze_fee_changed", "Your gym's freeze fee changed while this was open. Nothing was saved: check the fee and press Freeze again.");
     case "discount_not_found":
       throw new OrgsError(409, "discount_not_available", DISCOUNT_WORDS.membership_not_available);
     case "discount_refused":
@@ -493,6 +519,7 @@ export async function moveHeldMembership(
   event: HeldMembershipEvent,
   confirmBookings: string | null = null,
   confirmPtSessions: string | null = null,
+  freezeFeeMinor = 0,
 ): Promise<BookingsAnswer<HeldMembershipsResponse>> {
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   const now = deps.now();
@@ -505,6 +532,9 @@ export async function moveHeldMembership(
     today,
     confirmBookings,
     confirmPtSessions,
+    freezeFeeMinor,
+    // Freezing with no fee where the gym charges one is a waiver: staff who record payments only.
+    mayWaiveFreezeFee: privileges.includes(BILLING),
     actorUserId: userId,
     now,
   });
@@ -820,14 +850,20 @@ export async function undoPaidMark(
 }
 
 export async function getBillSettings(deps: HeldDeps, userId: string, gymId: string): Promise<BillSettingsResponse> {
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
-  return billSettingsResponseSchema.parse({ overdueAfterDays: await overdueDaysOf(deps.sql, gymId), billDay: await billDayOf(deps.sql, gymId), canChange: privileges.includes(BILLING) });
+  const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
+  return billSettingsResponseSchema.parse({
+    overdueAfterDays: await overdueDaysOf(deps.sql, gymId),
+    billDay: await billDayOf(deps.sql, gymId),
+    freezeFeeMinor: await freezeFeeOf(deps.sql, gymId),
+    currency: memberCurrencyForCountry(org.country),
+    canChange: privileges.includes(BILLING),
+  });
 }
 
 export async function saveBillSettings(deps: HeldDeps, userId: string, gymId: string, req: BillSettings): Promise<BillSettingsResponse> {
-  const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.read");
+  const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.read");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
   const days = Math.min(BILL_OVERDUE_DAYS_MAX, Math.max(0, req.overdueAfterDays));
-  const billDay = await billsRepo.saveBillSettings(deps.sql, { gymId, days, billDay: req.billDay, actorUserId: userId });
-  return billSettingsResponseSchema.parse({ overdueAfterDays: days, billDay, canChange: true });
+  const saved = await billsRepo.saveBillSettings(deps.sql, { gymId, days, billDay: req.billDay, freezeFeeMinor: req.freezeFeeMinor, actorUserId: userId });
+  return billSettingsResponseSchema.parse({ overdueAfterDays: days, ...saved, currency: memberCurrencyForCountry(org.country), canChange: true });
 }
