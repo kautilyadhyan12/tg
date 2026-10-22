@@ -259,12 +259,13 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       if (m === undefined) throw new Error("no membership");
       expect(made.canBill).toBe(true);
       expect(m.billing).toEqual({
-        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, joiningFeeMinor: 0, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [], voidedPayments: [] }],
+        bills: [{ id: expect.any(String) as string, periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, amountMinor: 4999, tax: null, joiningFeeMinor: 0, changeCreditMinor: 0, paidMinor: 0, dueOn: today, state: "due", refundedMinor: 0, cancelled: null, gift: null, payments: [], voidedPayments: [] }],
         billsNotShown: 0,
         pay: { periodIndex: 0, covers: { from: today, to: expect.any(String) as string }, leftMinor: 4999, dueOn: today, state: "due" },
         cancel: { billId: expect.any(String) as string },
         undo: null,
         fees: [],
+        change: { ok: false, reason: "unpaid" },
       });
       const payUrl = oneUrl(gymId, person, m.id, "payments");
 
@@ -1013,7 +1014,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
 
       // A free membership has nothing to pay: no bill, and nothing to record.
       const staff = (await given(gymId, person, owner.cookies, { typeId: free, startsOn: today, paid: true })).memberships.find((m) => m.typeId === free);
-      expect(staff?.billing).toEqual({ bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [] });
+      expect(staff?.billing).toEqual({ bills: [], billsNotShown: 0, pay: null, cancel: null, undo: null, fees: [], change: expect.objectContaining({ ok: true, creditMinor: 0, nextOn: null }) as unknown });
       const none = await post(oneUrl(gymId, person, staff?.id ?? "", "payments"), { requestKey: nextKey(), periodIndex: 0, amountMinor: 100, method: "cash" }, owner.cookies);
       expect([none.statusCode, errorOf(none)]).toEqual([409, "held_membership_changed"]);
       // A day pass sold unpaid is owed once; paid, it takes nothing more.
