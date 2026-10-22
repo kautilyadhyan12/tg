@@ -79,14 +79,26 @@ describe('the joining fee the desk is shown is the one the first bill charges', 
     });
   });
 
-  it('waived, nothing of it is shown or sent', () => {
+  it('waived, nothing of it is shown, and the server is told it was left off', () => {
     const fee = joiningFeeFor(GOLD, 'waive', true, false);
     const summary = membershipSummary(GOLD, null, false, null, fee.feeMinor);
     expect(summary.shows).toBe(false);
     expect(summary.totalMinor).toBe(5000);
     const body = giveBody('k-2', GOLD, { typeId: GOLD.id, startsOn: '2026-10-15', paid: false }, null, summary, null, fee.feeMinor);
-    expect(body).not.toHaveProperty('joiningFeeMinor');
+    expect(body.joiningFeeMinor).toBe(0);
     expect(body.totalMinor).toBe(5000);
+    // A type with no fee says nothing of one.
+    const plain = { ...GOLD, joiningFeeMinor: 0 };
+    expect(giveBody('k-3', plain, { typeId: plain.id, startsOn: '2026-10-15', paid: false }, null, membershipSummary(plain, null), null, 0)).not.toHaveProperty('joiningFeeMinor');
+  });
+
+  it("the person's own Refer a friend gift comes off the price, never the fee", () => {
+    const half = { id: 'g-1', kind: 'percent', percentBp: 5000, amountMinor: null, currency: null };
+    const summary = membershipSummary(GOLD, null, false, half, 2500);
+    // 50% of $50.00 is $25.00; the $25.00 fee stays: $50.00.
+    expect(summary.giftOffMinor).toBe(2500);
+    expect(summary.totalMinor).toBe(5000);
+    expect(summary.lines.find((l) => l.label === 'Joining fee')).toEqual({ label: 'Joining fee', value: '$25.00' });
   });
 
   it('with tax added on top and a first-month discount: the tax is on the fee too, the discount is off the membership alone', () => {
