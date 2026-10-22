@@ -2,7 +2,8 @@
 //
 // On a person's bill, staff holding the payments tick press Take payment on Terminal: the amount
 // goes to the gym's Square Terminal, the person taps, inserts or swipes their card there, and the
-// payment Square took is recorded on the bill as Card on Terminal, with its receipt. Nothing is
+// payment Square took is recorded on the bill as Card on Terminal, with its receipt. A late cancel
+// or no-show fee is paid the same way (18d-vi-b-i). Nothing is
 // recorded until Square says the money was taken, and a payment Square took is recorded once.
 import { z } from "zod";
 import { cardTerminalSchema } from "./memberCards.js";
@@ -22,6 +23,8 @@ export const terminalPaymentSchema = z
   .object({
     id: z.string().uuid(),
     membershipId: z.string().uuid(),
+    /** The fee it pays (18d-vi-b-i); null for a period of the membership. */
+    feeBillId: z.string().uuid().nullable(),
     amountMinor: z.number().int().min(1).max(99_999_999),
     currency: z.string().regex(/^[A-Z]{3}$/),
     /** `waiting`: on its way to the Terminal or on its screen; `done`: see `outcome`. */
@@ -62,6 +65,16 @@ export const terminalPaymentRequestSchema = z
   })
   .strict();
 export type TerminalPaymentRequest = z.infer<typeof terminalPaymentRequestSchema>;
+
+/** Take payment on Terminal for a fee (18d-vi-b-i): all of it, the amount the screen showed. */
+export const terminalFeePaymentRequestSchema = z
+  .object({
+    terminalId: z.string().uuid(),
+    requestKey: z.string().uuid(),
+    amountMinor: z.number().int().min(1).max(99_999_999),
+  })
+  .strict();
+export type TerminalFeePaymentRequest = z.infer<typeof terminalFeePaymentRequestSchema>;
 
 export const terminalPaymentResponseSchema = z.object({ payment: terminalPaymentSchema }).strict();
 export type TerminalPaymentResponse = z.infer<typeof terminalPaymentResponseSchema>;

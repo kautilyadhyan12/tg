@@ -1,4 +1,4 @@
-// Take payment on Terminal (ROADMAP 18d-vi-a): one row a press, while the amount waits on the gym's
+// Take payment on Terminal (ROADMAP 18d-vi-a; a fee, 18d-vi-b-i): one row a press, while the amount waits on the gym's
 // Square Terminal and for a day after. Every read for a screen names the gym and the record; the
 // worker's reads across gyms name the environment and hand each row back with its gym. A row is
 // asked about by one request at a time (`checking_until`), and every change names the state it was
@@ -8,6 +8,7 @@ import { memberPayTarget, terminalPaymentOutcomeSchema, type TerminalPaymentOutc
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
+import { recordFeePaymentIn } from "../memberships/feesRepo.js";
 import { billsFor } from "../memberships/billsSql.js";
 import { lockedEntry, lockedHeld, settle } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
@@ -21,7 +22,10 @@ export interface PayRow {
   /** Null once the record was deleted for good. */
   entryId: string | null;
   membershipId: string;
-  periodIndex: number;
+  /** The period it pays, or null for a fee. */
+  periodIndex: number | null;
+  /** The fee it pays (18d-vi-b-i), or null for a period. */
+  feeBillId: string | null;
   amountMinor: number;
   currency: string;
   environment: SquareEnvironment;
@@ -49,7 +53,8 @@ interface RawPay {
   gym_id: string;
   entry_id: string | null;
   held_membership_id: string;
-  period_index: number;
+  period_index: number | null;
+  fee_bill_id: string | null;
   amount_minor: number;
   currency: string;
   environment: SquareEnvironment;
@@ -77,6 +82,7 @@ const toRow = (r: RawPay): PayRow => {
     entryId: r.entry_id,
     membershipId: r.held_membership_id,
     periodIndex: r.period_index,
+    feeBillId: r.fee_bill_id,
     amountMinor: r.amount_minor,
     currency: r.currency,
     environment: r.environment,
@@ -99,7 +105,7 @@ const toRow = (r: RawPay): PayRow => {
 
 /** The row's own columns, and its payment's receipt number (the payment is on its gym). */
 const COLUMNS = (sql: SqlOrTx) =>
-  sql`t.id, t.gym_id, t.entry_id, t.held_membership_id, t.period_index, t.amount_minor, t.currency, t.environment,
+  sql`t.id, t.gym_id, t.entry_id, t.held_membership_id, t.period_index, t.fee_bill_id, t.amount_minor, t.currency, t.environment,
       t.account_id, t.location_id, t.device_id, t.state, t.outcome, t.checkout_key, t.checkout_id, t.picked_up,
       t.square_payment_id, t.started_by, t.started_at, t.cancel_wanted_at, t.cancel_too_late,
       (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = t.gym_id AND p.id = t.member_payment_id) AS receipt_number`;
@@ -118,11 +124,14 @@ export async function paymentWaitingOn(tx: TransactionSql, environment: SquareEn
   return row !== undefined;
 }
 
+/** What a press pays: a period of the membership (18d-vi-a), or one of its fees (18d-vi-b-i). */
+export type PayTarget = { kind: "period"; periodIndex: number } | { kind: "fee"; billId: string };
+
 export interface NewPay {
   gymId: string;
   entryId: string;
   membershipId: string;
-  periodIndex: number;
+  target: PayTarget;
   amountMinor: number;
   environment: SquareEnvironment;
   accountId: string;
@@ -142,15 +151,26 @@ export interface NewPay {
 export type StartOutcome =
   | { kind: "new" | "same_press" | "membership_waiting"; payment: PayRow }
   | { kind: "key_reused" | "entry_not_found" | "membership_not_found" | "not_allowed" | "terminal_busy" | "currency" }
+  /** The fee is not this membership's, or is no longer owed as the screen showed it. */
+  | { kind: "fee_not_found" | "fee_changed" }
+  /** Another payment for the membership waits on a Terminal. */
+  | { kind: "other_waiting" }
   | { kind: "too_much"; leftMinor: number; currency: string };
 
 /** A new press, or why not. Asked under the record's lock with the same rules as a payment by
- *  hand (`recordPaymentIn`), so the amount sent is one the bill can take now. */
+ *  hand (`recordPaymentIn`, `recordFeePaymentIn`), so the amount sent is one the bill can take now. */
 export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
+  const periodIndex = s.target.kind === "period" ? s.target.periodIndex : null;
+  const feeBillId = s.target.kind === "fee" ? s.target.billId : null;
   return await sql.begin(async (tx): Promise<StartOutcome> => {
     const [same] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_terminal_payments t WHERE t.gym_id = ${s.gymId} AND t.request_key = ${s.requestKey}`;
     if (same !== undefined) {
-      const repeat = same.entry_id === s.entryId && same.held_membership_id === s.membershipId && same.period_index === s.periodIndex && same.amount_minor === s.amountMinor;
+      const repeat =
+        same.entry_id === s.entryId &&
+        same.held_membership_id === s.membershipId &&
+        same.period_index === periodIndex &&
+        same.fee_bill_id === feeBillId &&
+        same.amount_minor === s.amountMinor;
       return repeat ? { kind: "same_press", payment: toRow(same) } : { kind: "key_reused" };
     }
     const entry = await lockedEntry(tx, s.gymId, s.entryId);
@@ -160,12 +180,27 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
     if (row === null) return { kind: "membership_not_found" };
     const [waiting] = await tx<RawPay[]>`
       SELECT ${COLUMNS(tx)} FROM gym_terminal_payments t WHERE t.gym_id = ${s.gymId} AND t.held_membership_id = ${row.id} AND t.state = 'waiting'`;
-    if (waiting !== undefined) return { kind: "membership_waiting", payment: toRow(waiting) };
-    const bills = await billsFor(tx, s.gymId, [row.id]);
-    const target = memberPayTarget(row.membership, row.nextBillMinor, s.today, bills, entry.past);
-    if (target === null || target.periodIndex !== s.periodIndex) return { kind: "not_allowed" };
-    if (s.amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
-    if (row.currency !== s.accountCurrency) return { kind: "currency" };
+    // The same bill already waiting is answered; another bill of the membership waits its turn.
+    if (waiting !== undefined) {
+      return waiting.period_index === periodIndex && waiting.fee_bill_id === feeBillId ? { kind: "membership_waiting", payment: toRow(waiting) } : { kind: "other_waiting" };
+    }
+    let currency = row.currency;
+    if (s.target.kind === "period") {
+      const bills = await billsFor(tx, s.gymId, [row.id]);
+      const target = memberPayTarget(row.membership, row.nextBillMinor, s.today, bills, entry.past);
+      if (target === null || target.periodIndex !== s.target.periodIndex) return { kind: "not_allowed" };
+      if (s.amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
+    } else {
+      // A fee is paid all at once, while it is owed, at the amount the screen showed.
+      const [fee] = await tx<{ status: string; amount_minor: number; currency: string }[]>`
+        SELECT status, amount_minor, currency FROM gym_member_bills
+        WHERE gym_id = ${s.gymId} AND id = ${s.target.billId} AND held_membership_id = ${row.id} AND fee IS NOT NULL
+        FOR UPDATE`;
+      if (fee === undefined) return { kind: "fee_not_found" };
+      if (fee.status !== "open" || fee.amount_minor !== s.amountMinor) return { kind: "fee_changed" };
+      currency = fee.currency;
+    }
+    if (currency !== s.accountCurrency) return { kind: "currency" };
 
     await lockTerminal(tx, s.environment, s.accountId, s.deviceId);
     const [busy] = await tx<{ id: string }[]>`
@@ -177,10 +212,10 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
       LIMIT 1`;
     if (busy !== undefined) return { kind: "terminal_busy" };
     const [made] = await tx<{ id: string }[]>`
-      INSERT INTO gym_terminal_payments (gym_id, entry_id, held_membership_id, period_index, amount_minor, currency, environment,
-                                         account_id, location_id, device_id, request_key, state, checkout_key, started_by,
-                                         started_at, checking_until, checked_at)
-      VALUES (${s.gymId}, ${s.entryId}, ${row.id}, ${s.periodIndex}, ${s.amountMinor}, ${row.currency}, ${s.environment},
+      INSERT INTO gym_terminal_payments (gym_id, entry_id, held_membership_id, period_index, fee_bill_id, amount_minor, currency,
+                                         environment, account_id, location_id, device_id, request_key, state, checkout_key,
+                                         started_by, started_at, checking_until, checked_at)
+      VALUES (${s.gymId}, ${s.entryId}, ${row.id}, ${periodIndex}, ${feeBillId}, ${s.amountMinor}, ${currency}, ${s.environment},
               ${s.accountId}, ${s.locationId}, ${s.deviceId}, ${s.requestKey}, 'waiting', ${s.checkoutKey}, ${s.startedBy},
               ${s.now}, ${s.checkingUntil}, ${s.now})
       RETURNING id`;
@@ -300,10 +335,12 @@ export async function setPickedUp(sql: SqlOrTx, id: string): Promise<void> {
  *  could not be read, so the money may have been taken) is told to the gym's Staff activity. */
 export async function finish(sql: Sql, id: string, outcome: Exclude<TerminalPaymentOutcome, "paid" | "not_recorded">, at: Date): Promise<boolean> {
   return await sql.begin(async (tx) => {
-    const [row] = await tx<{ gym_id: string; entry_id: string | null; held_membership_id: string; amount_minor: number; currency: string; started_by: string | null }[]>`
+    const [row] = await tx<
+      { gym_id: string; entry_id: string | null; held_membership_id: string; fee_bill_id: string | null; amount_minor: number; currency: string; started_by: string | null }[]
+    >`
       UPDATE gym_terminal_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
       WHERE id = ${id} AND state = 'waiting'
-      RETURNING gym_id, entry_id, held_membership_id, amount_minor, currency, started_by`;
+      RETURNING gym_id, entry_id, held_membership_id, fee_bill_id, amount_minor, currency, started_by`;
     if (row === undefined) return false;
     if (outcome === "gone") {
       await insertAudit(tx, {
@@ -312,7 +349,13 @@ export async function finish(sql: Sql, id: string, outcome: Exclude<TerminalPaym
         action: "org.terminal_payment_unchecked",
         targetType: "gym_terminal_payment",
         targetId: id,
-        meta: { ...(row.entry_id === null ? {} : { entryId: row.entry_id }), membershipId: row.held_membership_id, amountMinor: String(row.amount_minor), currency: row.currency },
+        meta: {
+          ...(row.entry_id === null ? {} : { entryId: row.entry_id }),
+          membershipId: row.held_membership_id,
+          ...(row.fee_bill_id === null ? {} : { feeBillId: row.fee_bill_id }),
+          amountMinor: String(row.amount_minor),
+          currency: row.currency,
+        },
       });
     }
     return true;
@@ -345,23 +388,26 @@ export async function recordPaid(
     if (holder !== undefined) await lockedEntry(tx, pay.gymId, holder.entry_id);
     const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_terminal_payments WHERE id = ${pay.id} AND state = 'waiting' FOR UPDATE`;
     if (still === undefined) return null;
+    // The press itself is the payment's key: the same press recorded twice is one payment.
+    const paying = {
+      gymId: pay.gymId,
+      membershipId: pay.membershipId,
+      requestKey: pay.id,
+      amountMinor: pay.amountMinor,
+      method: "terminal" as const,
+      provider: { name: "square", paymentId: p.squarePaymentId },
+      today: p.today,
+      actorUserId: pay.startedBy,
+      now: p.now,
+    };
     const done =
       holder === undefined || p.refuse !== undefined
         ? null
-        : await recordPaymentIn(tx, {
-            gymId: pay.gymId,
-            entryId: holder.entry_id,
-            membershipId: pay.membershipId,
-            // The press itself: the same press recorded twice is one payment.
-            requestKey: pay.id,
-            periodIndex: pay.periodIndex,
-            amountMinor: pay.amountMinor,
-            method: "terminal",
-            provider: { name: "square", paymentId: p.squarePaymentId },
-            today: p.today,
-            actorUserId: pay.startedBy,
-            now: p.now,
-          });
+        : pay.feeBillId !== null
+          ? await recordFeePaymentIn(tx, { ...paying, entryId: holder.entry_id, billId: pay.feeBillId })
+          : pay.periodIndex !== null
+            ? await recordPaymentIn(tx, { ...paying, entryId: holder.entry_id, periodIndex: pay.periodIndex })
+            : null;
     if (done?.kind === "recorded") {
       await tx`
         UPDATE gym_terminal_payments SET state = 'done', outcome = 'paid', square_payment_id = ${p.squarePaymentId},
@@ -382,6 +428,7 @@ export async function recordPaid(
       meta: {
         ...(holder === undefined ? {} : { entryId: holder.entry_id }),
         membershipId: pay.membershipId,
+        ...(pay.feeBillId === null ? {} : { feeBillId: pay.feeBillId }),
         amountMinor: String(pay.amountMinor),
         currency: pay.currency,
         why: p.refuse ?? done?.kind ?? "membership_not_found",

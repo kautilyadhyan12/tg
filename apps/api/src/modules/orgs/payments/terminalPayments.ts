@@ -1,6 +1,7 @@
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a; spec Part 3 §14.8; rulings/2026-10-21-money-plan.md).
 //
-// Staff holding the payments tick press Take payment on Terminal in a bill's Record payment box.
+// Staff holding the payments tick press Take payment on Terminal in a bill's Record payment box,
+// or in a late cancel or no-show fee's (18d-vi-b-i).
 // The amount goes to the gym's Square Terminal (Square's Terminal checkout, with no tip screen and
 // no receipt screen of Square's: the gym's receipt is ours); the person taps, inserts or swipes
 // their card there, and the payment Square took is recorded on the bill as Card on Terminal. The
@@ -29,6 +30,7 @@ import {
   type SquarePayment,
   type SquareTerminalCheckout,
   type TerminalPayment,
+  type TerminalFeePaymentRequest,
   type TerminalPaymentOutcome,
   type TerminalPaymentRequest,
   type TerminalPaymentResponse,
@@ -337,6 +339,7 @@ function viewOf(pay: pays.PayRow, paired: readonly (CardTerminal & { deviceId: s
   return {
     id: pay.id,
     membershipId: pay.membershipId,
+    feeBillId: pay.feeBillId,
     amountMinor: pay.amountMinor,
     currency: pay.currency,
     step: pay.state,
@@ -387,8 +390,7 @@ function startRefused(refusal: SquareResult<unknown> | undefined): OrgsError {
   return new OrgsError(409, "terminal_refused", TERMINAL_PAYMENT_WORDS.terminal_refused);
 }
 
-/** Take payment on Terminal: the amount goes to the chosen Terminal. The same press sent twice is
- *  one payment; one already waiting for the membership is answered instead of a second. */
+/** Take payment on Terminal for a period of a membership. */
 export async function startTerminalPayment(
   deps: PaymentsDeps,
   userId: string,
@@ -396,6 +398,33 @@ export async function startTerminalPayment(
   entryId: string,
   membershipId: string,
   body: TerminalPaymentRequest,
+): Promise<TerminalPaymentResponse> {
+  return await start(deps, userId, gymId, entryId, membershipId, body, { kind: "period", periodIndex: body.periodIndex });
+}
+
+/** Take payment on Terminal for a late cancel or no-show fee of a membership (18d-vi-b-i). */
+export async function startTerminalFeePayment(
+  deps: PaymentsDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  billId: string,
+  body: TerminalFeePaymentRequest,
+): Promise<TerminalPaymentResponse> {
+  return await start(deps, userId, gymId, entryId, membershipId, body, { kind: "fee", billId });
+}
+
+/** Take payment on Terminal: the amount goes to the chosen Terminal. The same press sent twice is
+ *  one payment; one already waiting for the same bill is answered instead of a second. */
+async function start(
+  deps: PaymentsDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  body: TerminalFeePaymentRequest,
+  target: pays.PayTarget,
 ): Promise<TerminalPaymentResponse> {
   const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
@@ -415,7 +444,7 @@ export async function startTerminalPayment(
       gymId,
       entryId,
       membershipId,
-      periodIndex: body.periodIndex,
+      target,
       amountMinor: body.amountMinor,
       environment: ready.square.environment,
       accountId: ready.row.accountId,
@@ -464,6 +493,12 @@ export async function startTerminalPayment(
       throw new OrgsError(409, "payment_too_much", `That is more than is left to pay. ${formatMinor(written.leftMinor, written.currency)} is left.`);
     case "currency":
       throw new OrgsError(409, "terminal_payment_currency", TERMINAL_PAYMENT_WORDS.currency);
+    case "other_waiting":
+      throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "fee_not_found":
+      throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
+    case "fee_changed":
+      throw new OrgsError(409, "member_fee_changed", "This fee has changed since you opened it. Nothing was sent: check it and try again.");
     default: {
       const never: never = written;
       throw new Error(`unhandled Terminal payment start: ${JSON.stringify(never)}`);

@@ -7,6 +7,7 @@
 //
 // The first block is the worst thing this job could do to a real person: their card charged and
 // their bill still owing, so they are charged again, or the money recorded on somebody else's bill.
+// A late cancel or no-show fee (18d-vi-b-i) is held to the same, in the blocks after them.
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -777,5 +778,179 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     expect(tooMuch.statusCode, tooMuch.body).toBe(409);
     expect(errorOf(tooMuch)).toBe("payment_too_much");
     expect(checkoutsOn(desk.deviceId)).toHaveLength(1);
+  });
+
+  // ── A late cancel or no-show fee paid on the Terminal (18d-vi-b-i) ──────────────────────────────
+
+  /** A no-show fee on the person's membership, as the class list opens one (18h-i). */
+  const feeOn = async (gym: Gym, who: { membershipId: string }, amountMinor = 1000): Promise<string> => {
+    const today = clock.toISOString().slice(0, 10);
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO gym_member_bills (gym_id, held_membership_id, fee, fee_for, covers_from, covers_to, amount_minor, currency, due_on, status)
+      VALUES (${gym.id}, ${who.membershipId}, 'no_show', 'Spin', ${today}::date, ${today}::date, ${amountMinor}, 'USD', ${today}::date, 'open')
+      RETURNING id`;
+    if (row === undefined) throw new Error("no fee");
+    return row.id;
+  };
+  const feeUrl = (gym: Gym, who: { entryId: string; membershipId: string }, billId: string) => `${entryUrl(gym, who.entryId)}/memberships/${who.membershipId}/fees/${billId}`;
+  const feePress = (gym: Gym, by: Person, who: { entryId: string; membershipId: string }, billId: string, terminalId: string, over: Record<string, unknown> = {}) =>
+    send("POST", `${feeUrl(gym, who, billId)}/terminal-payment`, by.cookies, { terminalId, requestKey: randomUUID(), amountMinor: 1000, ...over });
+  const feeOf = async (gym: Gym, who: { entryId: string }, billId: string) =>
+    (await held(gym, gym.owner, who.entryId)).memberships.flatMap((m) => m.billing?.fees ?? []).find((f) => f.id === billId);
+  const billStatus = async (billId: string) => (await sql<{ status: string }[]>`SELECT status FROM gym_member_bills WHERE id = ${billId}`)[0]?.status;
+
+  it("a fee, the worst thing: the money Square took pays this fee once, and nothing else pays or waives it meanwhile", async () => {
+    clock = new Date();
+    const gymA = await makeGym("Fee Worst A");
+    const gymB = await makeGym("Fee Worst B");
+    const accountA = account(`TFWA${uniq().slice(-6)}`);
+    const accountB = account(`TFWB${uniq().slice(-6)}`);
+    await connect(gymA, accountA);
+    await connect(gymB, accountB);
+    const manager = await signedIn("Fee Manager");
+    const trainer = await signedIn("Fee Trainer");
+    const stranger = await signedIn("Fee Stranger");
+    await staff(gymA, manager, "manager");
+    await staff(gymA, trainer, "trainer");
+    const goldA = await typeOf(gymA);
+    const tara = await owing(gymA, goldA, "Tara Singh");
+    const sam = await owing(gymA, goldA, "Sam Lee");
+    const bea = await owing(gymB, await typeOf(gymB), "Bea Brown");
+    const taraFee = await feeOn(gymA, tara);
+    const samFee = await feeOn(gymA, sam);
+    const beaFee = await feeOn(gymB, bea);
+    const deskA = await terminal(gymA, accountA);
+    const deskB = await terminal(gymB, accountB);
+
+    // Nobody who may not take it reaches a Terminal: another gym's owner, A's owner on B's Terminal
+    // or on B's fee, a trainer, a stranger; and a fee asked for under somebody else is not found.
+    for (const [gym, who, person, billId, terminalId, status] of [
+      [gymA, gymB.owner, tara, taraFee, deskA.id, 404],
+      [gymB, gymB.owner, tara, taraFee, deskB.id, 404],
+      [gymA, gymA.owner, tara, taraFee, deskB.id, 404],
+      [gymA, gymA.owner, bea, beaFee, deskA.id, 404],
+      [gymA, gymA.owner, sam, taraFee, deskA.id, 404],
+      [gymA, gymA.owner, { entryId: tara.entryId, membershipId: tara.membershipId }, samFee, deskA.id, 404],
+      [gymA, trainer, tara, taraFee, deskA.id, 403],
+      [gymA, stranger, tara, taraFee, deskA.id, 404],
+    ] as const) {
+      const res = await feePress(gym, who, person, billId, terminalId);
+      expect(res.statusCode, res.body).toBe(status);
+    }
+    expect(square.checkouts.size).toBe(0);
+
+    // The manager takes Tara's fee on the Terminal: exactly its amount, for this press.
+    const started = parsed(await feePress(gymA, manager, tara, taraFee, deskA.id));
+    expect(started.payment).toMatchObject({ step: "waiting", amountMinor: 1000, currency: "USD", membershipId: tara.membershipId, feeBillId: taraFee, terminal: { id: deskA.id } });
+    expect(checkoutsOn(deskA.deviceId)[0]).toMatchObject({ amount: 1000, currency: "USD", referenceId: started.payment.id, status: "PENDING" });
+
+    // While it waits: the fee is not paid by hand nor waived, the membership's month is not taken
+    // another way, and a second Terminal press for the month waits its turn. The same press again
+    // is the same payment.
+    for (const [path, body] of [
+      [`${feeUrl(gymA, tara, taraFee)}/payments`, { requestKey: randomUUID(), amountMinor: 1000, method: "cash" }],
+      [`${feeUrl(gymA, tara, taraFee)}/waive`, {}],
+      [`${entryUrl(gymA, tara.entryId)}/memberships/${tara.membershipId}/payments`, { requestKey: randomUUID(), periodIndex: 0, amountMinor: 4999, method: "cash" }],
+    ] as const) {
+      const res = await send("POST", path, gymA.owner.cookies, body);
+      expect(res.statusCode, `${path} ${res.body}`).toBe(409);
+      expect(errorOf(res)).toBe("terminal_payment_waiting");
+    }
+    const deskA2 = await terminal(gymA, accountA);
+    const monthToo = await payPress(gymA, gymA.owner, tara, deskA2.id);
+    expect(monthToo.statusCode, monthToo.body).toBe(409);
+    expect(errorOf(monthToo)).toBe("terminal_payment_waiting");
+    expect(parsed(await feePress(gymA, gymA.owner, tara, taraFee, deskA.id, { requestKey: randomUUID() })).payment.id).toBe(started.payment.id);
+    expect(await billStatus(taraFee)).toBe("open");
+
+    // Tara taps: the fee is paid, once, as Card on Terminal with Square's payment id; her month,
+    // Sam's fee and B's fee are untouched.
+    square.at(deskA.deviceId).taps();
+    const paid = await check(gymA, manager, tara.entryId, started.payment.id);
+    expect(paid.payment).toMatchObject({ step: "done", outcome: "paid", feeBillId: taraFee });
+    expect(paid.payment.receiptNumber).not.toBeNull();
+    const squarePaymentId = checkoutsOn(deskA.deviceId)[0]?.paymentIds[0];
+    expect(await paymentsOf(gymA.id)).toEqual([
+      { bill_id: taraFee, held_membership_id: tara.membershipId, amount_minor: 1000, method: "terminal", provider: "square", provider_payment_id: squarePaymentId, recorded_by: manager.userId },
+    ]);
+    expect(await billStatus(taraFee)).toBe("paid");
+    expect(await billStatus(samFee)).toBe("open");
+    expect(await billStatus(beaFee)).toBe("open");
+    expect((await held(gymA, gymA.owner, tara.entryId)).memberships[0]?.billing?.pay).toMatchObject({ leftMinor: 4999 });
+
+    // Asked again by the page and the worker, and as if it still waited: one payment.
+    clock = new Date(clock.getTime() + TERMINAL_PAYMENT.idleMs + 1000);
+    await work([gymA.id]);
+    await sql`UPDATE gym_terminal_payments SET state = 'waiting', outcome = NULL, member_payment_id = NULL, finished_at = NULL WHERE id = ${started.payment.id}`;
+    await work([gymA.id]);
+    expect(await paymentsOf(gymA.id)).toHaveLength(1);
+    expect((await check(gymA, manager, tara.entryId, started.payment.id)).payment.outcome).toBe("paid");
+
+    // The fee reads paid, with no Void payment: Square holds that money.
+    const fee = await feeOf(gymA, tara, taraFee);
+    expect(fee).toMatchObject({ state: "paid", can: { pay: false, waive: false, voidPaymentId: null } });
+    const paymentId = fee?.payments[0]?.id ?? "";
+    expect(fee?.payments[0]).toMatchObject({ method: "terminal", amountMinor: 1000 });
+    const voided = await send("POST", `${feeUrl(gymA, tara, taraFee)}/payments/${paymentId}/void`, gymA.owner.cookies, { reason: "mistake" });
+    expect(voided.statusCode, voided.body).toBe(409);
+    expect(errorOf(voided)).toBe("terminal_payment_void");
+    expect(await billStatus(taraFee)).toBe("paid");
+  });
+
+  it("a fee taken off while the Terminal waits (marked came): the money Square took is kept as not recorded, and told", async () => {
+    clock = new Date();
+    const gym = await makeGym("Fee Came");
+    const acct = account(`TFC${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const person = await owing(gym, await typeOf(gym), "Ravi Das");
+    const billId = await feeOn(gym, person);
+    const desk = await terminal(gym, acct);
+    const started = parsed(await feePress(gym, gym.owner, person, billId, desk.id));
+    // Staff mark them came: the unpaid fee is taken off, as `removeClassFees` does.
+    await sql`UPDATE gym_member_bills SET status = 'void' WHERE id = ${billId} AND status = 'open'`;
+    square.at(desk.deviceId).taps();
+    expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment).toMatchObject({ step: "done", outcome: "not_recorded" });
+    expect(await paymentsOf(gym.id)).toEqual([]);
+    expect(await billStatus(billId)).toBe("void");
+    const [told] = await sql<{ meta: Record<string, string> }[]>`
+      SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.terminal_payment_not_recorded'`;
+    expect(told?.meta).toMatchObject({ entryId: person.entryId, feeBillId: billId, amountMinor: "1000", why: "fee_changed" });
+    clock = new Date(clock.getTime() + TERMINAL_PAYMENT.keepMs + 60_000);
+    await work([gym.id]);
+    expect(await sql`SELECT id FROM gym_terminal_payments WHERE id = ${started.payment.id}`).toHaveLength(1);
+  });
+
+  it("a fee: another amount, a fee already paid or waived, and a bad body are refused before Square", async () => {
+    clock = new Date();
+    const gym = await makeGym("Fee Refused");
+    const acct = account(`TFR${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const person = await owing(gym, await typeOf(gym), "Mia Park");
+    const open = await feeOn(gym, person);
+    const paidByHand = await feeOn(gym, person);
+    const waived = await feeOn(gym, person);
+    const desk = await terminal(gym, acct);
+    const byHand = await send("POST", `${feeUrl(gym, person, paidByHand)}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "cash" });
+    expect(byHand.statusCode, byHand.body).toBe(200);
+    const waive = await send("POST", `${feeUrl(gym, person, waived)}/waive`, gym.owner.cookies, {});
+    expect(waive.statusCode, waive.body).toBe(200);
+    for (const [billId, over] of [
+      [open, { amountMinor: 999 }],
+      [open, { amountMinor: 1001 }],
+      [paidByHand, {}],
+      [waived, {}],
+    ] as const) {
+      const res = await feePress(gym, gym.owner, person, billId, desk.id, over);
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res)).toBe("member_fee_changed");
+    }
+    for (const over of [{ amountMinor: "10.00" }, { periodIndex: 0 }, { amountMinor: 0 }]) {
+      const res = await feePress(gym, gym.owner, person, open, desk.id, over);
+      expect(res.statusCode, res.body).toBe(400);
+    }
+    expect(checkoutsOn(desk.deviceId)).toHaveLength(0);
+    // The month's own press, with a fee open on the membership, is still the month's.
+    const month = await pay(gym, gym.owner, person, desk.id);
+    expect(month.payment).toMatchObject({ feeBillId: null, amountMinor: 4999 });
   });
 });
