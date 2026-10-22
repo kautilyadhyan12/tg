@@ -203,6 +203,8 @@ export const gymSales = pgTable(
     taxName: text("tax_name"),
     currency: text("currency").notNull(),
     method: text("method").notNull(),
+    /** Square's payment, for a sale paid on the Terminal (0152; 18d-vi-b-ii). */
+    squarePaymentId: text("square_payment_id"),
     soldOn: date("sold_on").notNull(),
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),
     stockCounted: boolean("stock_counted").notNull().default(false),
@@ -244,7 +246,11 @@ export const gymSales = pgTable(
     check("gym_sales_tax_check", sql`${t.taxBp} BETWEEN 0 AND 3000 AND (${t.taxBp} > 0 OR ${t.taxMinor} = 0)`),
     check("gym_sales_tax_name_check", sql`${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30`),
     check("gym_sales_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_sales_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer')`),
+    check("gym_sales_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','terminal')`),
+    check(
+      "gym_sales_square_payment_check",
+      sql`(${t.method} = 'terminal') = (${t.squarePaymentId} IS NOT NULL) AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+    ),
     foreignKey({
       name: "gym_sales_product_fk",
       columns: [t.gymId, t.productId],

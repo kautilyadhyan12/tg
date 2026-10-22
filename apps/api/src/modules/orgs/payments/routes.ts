@@ -31,11 +31,18 @@
 //   POST   …/member-list/entries/:entryId/memberships/:membershipId/fees/:billId/terminal-payment  a fee's (18d-vi-b-i)
 //   GET    …/member-list/entries/:entryId/terminal-payments/:paymentId              where it stands (every few seconds)
 //   POST   …/member-list/entries/:entryId/terminal-payments/:paymentId/cancel       Cancel
+//
+// Take payment on Terminal at Sell (ROADMAP 18d-vi-b-ii), `billing.members`:
+//   GET    /v1/orgs/:gymId/terminal-sales                     Square ready or not, the Terminals, and the sales waiting
+//   POST   /v1/orgs/:gymId/terminal-sales                     the basket goes to the Terminal
+//   GET    /v1/orgs/:gymId/terminal-sales/:paymentId          where it stands (every few seconds)
+//   POST   /v1/orgs/:gymId/terminal-sales/:paymentId/cancel   Cancel
 import {
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
   terminalPaymentRequestSchema,
+  terminalSaleRequestSchema,
   terminalSaveRequestSchema,
   squareFinishRequestSchema,
   squareLocationRequestSchema,
@@ -54,6 +61,7 @@ import {
   orgParamsSchema,
   squareTerminalParamsSchema,
   terminalPaymentParamsSchema,
+  terminalSaleParamsSchema,
   terminalSaveParamsSchema,
 } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
@@ -257,6 +265,39 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalPayments.cancelTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // At Sell, the same limits: a sale is one press, asked about as a bill's is.
+  const saleUrl = "/v1/orgs/:gymId/terminal-sales";
+
+  app.get(saleUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalPayments.readTerminalSales(paymentsDeps, callerId(req), params.gymId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(saleUrl, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(terminalSaleRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await terminalPayments.startTerminalSale(paymentsDeps, callerId(req), params.gymId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get(`${saleUrl}/:paymentId`, { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
+    const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalPayments.checkTerminalSale(paymentsDeps, callerId(req), params.gymId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${saleUrl}/:paymentId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(terminalSaleParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalPayments.cancelTerminalSale(paymentsDeps, callerId(req), params.gymId, params.paymentId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

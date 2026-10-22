@@ -6,7 +6,7 @@
 // or no-show fee is paid the same way (18d-vi-b-i). Nothing is
 // recorded until Square says the money was taken, and a payment Square took is recorded once.
 import { z } from "zod";
-import { cardTerminalSchema } from "./memberCards.js";
+import { cardTerminalSchema, memberCardStateSchema } from "./memberCards.js";
 import { receiptNumberSchema } from "./memberBills.js";
 import { SQUARE_TERMINALS_MAX } from "./gymPayments.js";
 
@@ -22,7 +22,10 @@ export type TerminalPaymentOutcome = z.infer<typeof terminalPaymentOutcomeSchema
 export const terminalPaymentSchema = z
   .object({
     id: z.string().uuid(),
-    membershipId: z.string().uuid(),
+    /** Null for a basket at Sell (18d-vi-b-ii). */
+    membershipId: z.string().uuid().nullable(),
+    /** A basket at Sell: recorded as that sale once Square takes the money (18d-vi-b-ii). */
+    forSale: z.boolean(),
     /** The fee it pays (18d-vi-b-i); null for a period of the membership. */
     feeBillId: z.string().uuid().nullable(),
     amountMinor: z.number().int().min(1).max(99_999_999),
@@ -39,7 +42,7 @@ export const terminalPaymentSchema = z
     /** Null once the gym has removed the Terminal. */
     terminal: cardTerminalSchema.nullable(),
     startedAt: z.string().datetime(),
-    /** The payment's receipt, once it is on the bill. */
+    /** The payment's receipt once it is on the bill, or the sale's once it is recorded. */
     receiptNumber: receiptNumberSchema.nullable(),
   })
   .strict();
@@ -53,6 +56,20 @@ export const terminalPaymentsResponseSchema = z
   })
   .strict();
 export type TerminalPaymentsResponse = z.infer<typeof terminalPaymentsResponseSchema>;
+
+/** Take payment on Terminal at Sell (18d-vi-b-ii): whether the gym can (`square`, as Card on file
+ *  says it), its paired Terminals, whether the owner is asked to pair one, and the sales waiting on
+ *  one. `isOwner`: the asker may connect Square; anybody else is told who can. */
+export const terminalSalesResponseSchema = z
+  .object({
+    square: memberCardStateSchema,
+    isOwner: z.boolean(),
+    terminals: z.array(cardTerminalSchema).max(SQUARE_TERMINALS_MAX),
+    pairTerminal: z.boolean(),
+    waiting: z.array(terminalPaymentSchema).max(50),
+  })
+  .strict();
+export type TerminalSalesResponse = z.infer<typeof terminalSalesResponseSchema>;
 
 /** Take payment on Terminal: the period the screen showed, and the amount. `requestKey`: the same
  *  press sent twice is one payment. */
@@ -85,8 +102,10 @@ export const TERMINAL_PAYMENT_WORDS = {
   terminal_busy: "This Terminal is busy. Try again in a minute, or choose another Terminal.",
   terminal_refused: "Square couldn't send this to the Terminal. Check it's on and signed in, then try again.",
   currency: "This membership is priced in another currency from your Square account, so it can't be paid on the Terminal.",
+  sale_currency: "Your products are priced in another currency from your Square account, so this sale can't be paid on the Terminal.",
   waiting: "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.",
   payment_gone: "This payment is no longer active.",
   disconnect_waiting: "A payment is waiting on a Square Terminal. Let it finish, or cancel it, then disconnect.",
   void_terminal: "This was paid by card on the Terminal. To give the money back, refund it in your Square Dashboard, then note the refund here.",
+  void_terminal_sale: "This sale was paid by card on the Terminal, so it can't be voided. Refund it in your Square Dashboard, then press Refund sale to note it here.",
 } as const;

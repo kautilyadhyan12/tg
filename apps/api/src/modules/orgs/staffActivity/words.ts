@@ -88,6 +88,11 @@ function renamedOrRepriced(s: Said, noun: string): string {
   return `Changed the ${noun}${quoted(after)}`;
 }
 
+/** " of $20.00", or nothing. */
+const amountOf = (s: Said): string => {
+  const amount = money(s, "amountMinor");
+  return amount === null ? "" : ` of ${amount}`;
+};
 const pay = (s: Said): string => {
   const amount = money(s, "amountMinor");
   return amount === null ? "a payment" : `a payment of ${amount}`;
@@ -238,9 +243,15 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.member_payment_recorded": (s) => `Recorded ${pay(s)} from ${fromWhom(s)}${methodWords(s)}`,
   // Square took the money on the Terminal, and the bill had changed meanwhile (18d-vi-a).
   // Square's answer could not be read past its time, so the money may have been taken (18d-vi-a).
-  "org.terminal_payment_unchecked": (s) => `Started ${pay(s)} from ${person(s)} on a Square Terminal that couldn't be checked. Check it in Square`,
+  // A sale at Sell (18d-vi-b-ii) is named as one: it may be a walk-in's.
+  "org.terminal_payment_unchecked": (s) =>
+    text(s, "sale") === "true"
+      ? `Started a sale${amountOf(s)} on a Square Terminal that couldn't be checked. Check it in Square`
+      : `Started ${pay(s)} from ${person(s)} on a Square Terminal that couldn't be checked. Check it in Square`,
   "org.terminal_payment_not_recorded": (s) =>
-    text(s, "why") === "amount_differs"
+    text(s, "sale") === "true"
+      ? `Square took another amount than asked for a sale on a Square Terminal, so the sale isn't recorded. Refund it in Square`
+      : text(s, "why") === "amount_differs"
       ? `Square took another amount than asked from ${person(s)} on a Square Terminal, so it isn't recorded. Refund it in Square`
       : text(s, "feeBillId") === null
         ? `Took ${pay(s)} from ${person(s)} on a Square Terminal, but the bill had changed, so it isn't recorded. Check it in Square`

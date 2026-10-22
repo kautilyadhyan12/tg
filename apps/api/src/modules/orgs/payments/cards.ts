@@ -73,7 +73,8 @@ export const connectionRefused = (): OrgsError => new OrgsError(409, "card_conne
 export const paidBy = (payer: string, person: string): OrgsError =>
   new OrgsError(409, "card_paid_by_payer", cardPaidByLine(payer === "" ? "Somebody else on your list" : payer, person === "" ? "this person" : person));
 
-function stateOf(square: SquareSettings | null, gym: repo.GymForPayments, row: repo.ConnectionRow | null): MemberCardState {
+/** Whether the gym can take a card through Square here, as Card on file and Sell (18d-vi-b-ii) say it. */
+export function cardStateOf(square: SquareSettings | null, gym: repo.GymForPayments, row: repo.ConnectionRow | null): MemberCardState {
   if (square === null || gymPaymentsAvailability(gym.country) !== "square") return "not_offered";
   if (row?.state !== "connected") return "connect";
   return row.locationId === null ? "choose_location" : "ready";
@@ -123,7 +124,7 @@ export interface Ready {
 export async function readyOrThrow(deps: PaymentsDeps, gymId: string, gym: repo.GymForPayments): Promise<Ready> {
   const square = deps.square;
   const row = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
-  if (square === null || stateOf(square, gym, row) !== "ready" || row === null || row.accessToken === null) throw notReady();
+  if (square === null || cardStateOf(square, gym, row) !== "ready" || row === null || row.accessToken === null) throw notReady();
   const token = square.tokens.open(row.accessToken, accessContext(gymId));
   if (token === null) {
     deps.log.error({ event: "square.token_unreadable", gymId }, "a gym's Square token could not be opened");
@@ -145,7 +146,7 @@ export async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string,
   if (gym === null) throw orgNotFound();
   if (person === null) throw entryNotFound();
   const row = deps.square === null ? null : await repo.readConnection(deps.sql, org.id, deps.square.environment);
-  const state = stateOf(deps.square, gym, row);
+  const state = cardStateOf(deps.square, gym, row);
   const [card, payer, live] = await Promise.all([cards.readCard(deps.sql, org.id, entryId), payerOf(deps.sql, org.id, entryId), gymHasLivePlan(deps.sql, org.id)]);
   const canChange = state === "ready" && live && org.status === "active";
   const shown = shownCard(card, deps.square, row);
@@ -250,7 +251,7 @@ async function myView(deps: PaymentsDeps, gymId: string, mine: { own: string | n
   const gym = await repo.readGym(deps.sql, gymId);
   if (gym === null) throw orgNotFound();
   const row = deps.square === null ? null : await repo.readConnection(deps.sql, gymId, deps.square.environment);
-  const state = stateOf(deps.square, gym, row);
+  const state = cardStateOf(deps.square, gym, row);
   const base = { record: mine.record, state, card: null, earlierCard: null, paidBy: null, canSave: false, gymName: gym.name, agreement: cardAgreementWords(gym.name), form: null };
   if (mine.own === null) return myCardResponseSchema.parse({ myCard: base });
   const [person, card, payer, live] = await Promise.all([
