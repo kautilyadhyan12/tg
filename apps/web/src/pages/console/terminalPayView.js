@@ -69,7 +69,7 @@ export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
       return `This payment can't be checked here any more. Look in your Square Dashboard before taking it again.`;
     case 'not_recorded':
       return fee
-        ? `Square took ${amount} from ${who}'s card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then refund it there or record it by hand.`
+        ? `Square took ${amount} from ${who}'s card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Refund it in your Square Dashboard.`
         : `Square took ${amount} from ${who}'s card, but this bill changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then record it by hand or refund it there.`;
     default:
       return 'Not paid. Try again.';

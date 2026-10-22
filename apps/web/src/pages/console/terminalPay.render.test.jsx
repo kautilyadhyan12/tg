@@ -349,15 +349,33 @@ describe('Take payment on Terminal for a fee', () => {
     expect(orgService.startTerminalPayment).not.toHaveBeenCalled();
   });
 
-  it('money Square took for a fee taken off meanwhile: says so under the fee, with no Try again', async () => {
-    orgService.getHeldMemberships.mockResolvedValue(page([owingFee()]));
+  // Marked Came while the Terminal waits: the server no longer lists the fee (it was taken off
+  // with no payment), while the payment still waits for it.
+  const feeTakenOff = () => page([held(1, true)]);
+
+  it('a fee taken off while its payment waits: the box, with Cancel, stays on the membership', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(feeTakenOff());
+    orgService.getTerminalPayments.mockReturnValue(terminals([DESK], [feePayment({ pickedUp: true })]));
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: feePayment({ pickedUp: true }) } });
+    orgService.cancelTerminalPayment.mockResolvedValue({ data: { payment: feePayment({ pickedUp: true, step: 'done', outcome: 'cancelled' }) } });
+    draw();
+    const row = within(await rowSoon());
+    expect(row.queryByTestId('held-fee')).toBeNull();
+    const wait = within(await row.findByTestId('terminal-pay-wait'));
+    expect(wait.getByText('Waiting for Tara to pay $10.00 on the Terminal')).toBeTruthy();
+    fireEvent.click(wait.getByRole('button', { name: 'Cancel' }));
+    expect((await row.findByTestId('terminal-pay-ended')).textContent).toContain('Cancelled. Nothing was charged.');
+    expect(orgService.cancelTerminalPayment).toHaveBeenCalledWith(GYM, TARA, PAY_ID);
+  });
+
+  it('money Square took for a fee taken off meanwhile: says so on the membership, refund it in Square, with no Try again', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(feeTakenOff());
     orgService.getTerminalPayments.mockReturnValue(terminals([DESK], [feePayment({ pickedUp: true })]));
     orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: feePayment({ pickedUp: true, step: 'done', outcome: 'not_recorded' }) } });
     draw();
-    const item = within(await screen.findByTestId('held-fee'));
-    const ended = within(await item.findByTestId('terminal-pay-ended'));
+    const ended = within(await within(await rowSoon()).findByTestId('terminal-pay-ended'));
     expect(ended.getByRole('alert').textContent).toBe(
-      "Square took $10.00 from Tara's card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then refund it there or record it by hand.",
+      "Square took $10.00 from Tara's card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Refund it in your Square Dashboard.",
     );
     expect(ended.getAllByRole('button').map((b) => b.textContent)).toEqual(['Done']);
   });

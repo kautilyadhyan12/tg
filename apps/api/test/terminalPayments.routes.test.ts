@@ -72,6 +72,7 @@ interface FakeCheckout {
   amount: number;
   currency: string;
   referenceId: string | null;
+  note: string | null;
   status: string;
   cancelReason: string | null;
   paymentIds: string[];
@@ -189,6 +190,7 @@ function fakeSquare() {
         amount: c.amountMinor,
         currency: c.currency,
         referenceId: c.referenceId,
+        note: c.note,
         status: "PENDING",
         cancelReason: null,
         paymentIds: [],
@@ -310,6 +312,9 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'tpay-t-%@example.com'`;
     await sql`DELETE FROM gym_terminal_payments WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_class_bookings WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_class_sessions WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_class_types WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_square_terminals WHERE gym_id IN (${mineSql})`;
@@ -904,11 +909,41 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     const acct = account(`TFC${uniq().slice(-6)}`);
     await connect(gym, acct);
     const person = await owing(gym, await typeOf(gym), "Ravi Das");
-    const billId = await feeOn(gym, person);
+    // Ravi, booked on yesterday's Spin with his membership, marked No-show on the class list: the
+    // gym's $10.00 opens his fee.
+    await sql`UPDATE gyms SET class_no_show_fee_minor = 1000 WHERE id = ${gym.id}`;
+    const ravi = await signedIn("Ravi Das");
+    await sql`INSERT INTO gym_members (gym_id, user_id, joined_at, entry_id) VALUES (${gym.id}, ${ravi.userId}, ${clock}, ${person.entryId})`;
+    const [classType] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_types (gym_id, name, minutes, places, colour, open_gym) VALUES (${gym.id}, 'Spin', 45, NULL, 'blue', false) RETURNING id`;
+    const startsAt = new Date(clock.getTime() - 24 * 60 * 60_000);
+    const [session] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_sessions (gym_id, class_type_id, local_date, local_start_minute, starts_at, minutes, places, status)
+      SELECT ${gym.id}, ${classType?.id ?? ""}, l::date, (EXTRACT(HOUR FROM l) * 60 + EXTRACT(MINUTE FROM l))::int, ${startsAt}, 45, NULL, 'scheduled'
+      FROM (SELECT ${startsAt}::timestamptz AT TIME ZONE 'America/Chicago' AS l) x
+      RETURNING id`;
+    const [booking] = await sql<{ id: string }[]>`
+      INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, held_membership_id, status, request_key, booked_at)
+      VALUES (${gym.id}, ${session?.id ?? ""}, ${ravi.userId}, ${person.entryId}, ${person.membershipId}, 'booked', ${randomUUID()}, ${new Date(startsAt.getTime() - 60 * 60_000)})
+      RETURNING id`;
+    const mark = (status: "no_show" | "attended") =>
+      send("POST", `/v1/orgs/${gym.id}/class-sessions/${session?.id ?? ""}/bookings/${booking?.id ?? ""}/mark`, gym.owner.cookies, { status });
+    const noShow = await mark("no_show");
+    expect(noShow.statusCode, noShow.body).toBe(200);
+    const billId = (await held(gym, gym.owner, person.entryId)).memberships[0]?.billing?.fees[0]?.id ?? "";
+    expect(await billStatus(billId)).toBe("open");
     const desk = await terminal(gym, acct);
     const started = parsed(await feePress(gym, gym.owner, person, billId, desk.id));
-    // Staff mark them came: the unpaid fee is taken off, as `removeClassFees` does.
-    await sql`UPDATE gym_member_bills SET status = 'void' WHERE id = ${billId} AND status = 'open'`;
+    // Square's Dashboard lists it as the fee it is, with no name of the person.
+    expect(checkoutsOn(desk.deviceId)[0]?.note).toBe("No-show fee");
+    // Staff mark him Came while the Terminal waits: the fee is taken off and leaves the page's list
+    // of fees, while the payment still waits for it (the page draws its box in the membership).
+    const came = await mark("attended");
+    expect(came.statusCode, came.body).toBe(200);
+    expect(await billStatus(billId)).toBe("void");
+    expect((await held(gym, gym.owner, person.entryId)).memberships[0]?.billing?.fees).toEqual([]);
+    const listed = terminalPaymentsResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, person.entryId)}/terminal-payments`, gym.owner.cookies)).body));
+    expect(listed.waiting.map((w) => [w.id, w.feeBillId, w.step])).toEqual([[started.payment.id, billId, "waiting"]]);
     square.at(desk.deviceId).taps();
     expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment).toMatchObject({ step: "done", outcome: "not_recorded" });
     expect(await paymentsOf(gym.id)).toEqual([]);
@@ -950,6 +985,21 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
       expect(res.statusCode, res.body).toBe(400);
     }
     expect(checkoutsOn(desk.deviceId)).toHaveLength(0);
+
+    // While any payment of the membership waits on the Terminal, another fee of it is not recorded
+    // by hand, and a fee's payment by hand is not voided.
+    const second = await feeOn(gym, person);
+    const waiting = parsed(await feePress(gym, gym.owner, person, open, desk.id));
+    const other = await send("POST", `${feeUrl(gym, person, second)}/payments`, gym.owner.cookies, { requestKey: randomUUID(), amountMinor: 1000, method: "cash" });
+    expect(other.statusCode, other.body).toBe(409);
+    expect(errorOf(other)).toBe("terminal_payment_waiting");
+    const handPaymentId = (await feeOf(gym, person, paidByHand))?.payments[0]?.id ?? "";
+    const voidByHand = await send("POST", `${feeUrl(gym, person, paidByHand)}/payments/${handPaymentId}/void`, gym.owner.cookies, { reason: "mistake" });
+    expect(voidByHand.statusCode, voidByHand.body).toBe(409);
+    expect(errorOf(voidByHand)).toBe("terminal_payment_waiting");
+    expect(await billStatus(second)).toBe("open");
+    expect(await billStatus(paidByHand)).toBe("paid");
+    expect((await cancel(gym, gym.owner, person.entryId, waiting.payment.id)).payment.outcome).toBe("cancelled");
     // The month's own press, with a fee open on the membership, is still the month's.
     const month = await pay(gym, gym.owner, person, desk.id);
     expect(month.payment).toMatchObject({ feeBillId: null, amountMinor: 4999 });

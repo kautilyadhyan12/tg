@@ -22,6 +22,7 @@
 import { randomUUID } from "node:crypto";
 import {
   GYM_PAYMENTS_WORDS,
+  MEMBER_FEE_WORDS,
   TERMINAL_PAYMENT_WORDS,
   formatMinor,
   terminalPaymentResponseSchema,
@@ -134,7 +135,8 @@ async function checkoutOf(a: Asking): Promise<SquareResult<SquareTerminalCheckou
     currency: pay.currency,
     // Square's own field for the app's record of it: the press, never the person.
     referenceId: pay.id,
-    note: TERMINAL_PAYMENT.note,
+    // A fee is named as one ("No-show fee"), so staff refunding it in Square find it (18d-vi-b-i).
+    note: pay.feeKind === null ? TERMINAL_PAYMENT.note : MEMBER_FEE_WORDS[pay.feeKind],
     deadline: TERMINAL_PAYMENT.deadline,
   });
   if (made.kind !== "ok") return made;

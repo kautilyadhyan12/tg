@@ -1406,7 +1406,9 @@ export default function MemberMemberships({
         ) : null}
         {asking ? (
           open.what === 'terminalPay' && terminalPay !== null ? (
-            terminalPay.feeBillId === null ? renderTerminalWait(m) : null
+            // A fee's box is under that fee; one taken off meanwhile (marked Came) is no longer
+            // listed, so its box is drawn here, with Cancel and how it ended.
+            terminalPay.feeBillId === null || !(m.billing?.fees ?? []).some((f) => f.id === terminalPay.feeBillId) ? renderTerminalWait(m) : null
           ) : open.what === 'pay' && payForm !== null ? (
             renderPay(m)
           ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (

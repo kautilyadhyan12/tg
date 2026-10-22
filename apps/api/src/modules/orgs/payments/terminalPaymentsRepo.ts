@@ -4,7 +4,7 @@
 // asked about by one request at a time (`checking_until`), and every change names the state it was
 // read in, so two requests never both act on one answer. A press is written under the record's lock
 // (as a payment by hand is) and the Terminal's, which a save on it (18d-ii-b-ii) takes too.
-import { memberPayTarget, terminalPaymentOutcomeSchema, type TerminalPaymentOutcome } from "@app/shared";
+import { memberFeeKindSchema, memberPayTarget, terminalPaymentOutcomeSchema, type MemberFeeKind, type TerminalPaymentOutcome } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
@@ -26,6 +26,8 @@ export interface PayRow {
   periodIndex: number | null;
   /** The fee it pays (18d-vi-b-i), or null for a period. */
   feeBillId: string | null;
+  /** That fee's kind, while its bill is kept. */
+  feeKind: MemberFeeKind | null;
   amountMinor: number;
   currency: string;
   environment: SquareEnvironment;
@@ -55,6 +57,7 @@ interface RawPay {
   held_membership_id: string;
   period_index: number | null;
   fee_bill_id: string | null;
+  fee_kind: string | null;
   amount_minor: number;
   currency: string;
   environment: SquareEnvironment;
@@ -76,6 +79,7 @@ interface RawPay {
 
 const toRow = (r: RawPay): PayRow => {
   const outcome = terminalPaymentOutcomeSchema.safeParse(r.outcome);
+  const feeKind = memberFeeKindSchema.safeParse(r.fee_kind);
   return {
     id: r.id,
     gymId: r.gym_id,
@@ -83,6 +87,7 @@ const toRow = (r: RawPay): PayRow => {
     membershipId: r.held_membership_id,
     periodIndex: r.period_index,
     feeBillId: r.fee_bill_id,
+    feeKind: feeKind.success ? feeKind.data : null,
     amountMinor: r.amount_minor,
     currency: r.currency,
     environment: r.environment,
@@ -108,7 +113,8 @@ const COLUMNS = (sql: SqlOrTx) =>
   sql`t.id, t.gym_id, t.entry_id, t.held_membership_id, t.period_index, t.fee_bill_id, t.amount_minor, t.currency, t.environment,
       t.account_id, t.location_id, t.device_id, t.state, t.outcome, t.checkout_key, t.checkout_id, t.picked_up,
       t.square_payment_id, t.started_by, t.started_at, t.cancel_wanted_at, t.cancel_too_late,
-      (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = t.gym_id AND p.id = t.member_payment_id) AS receipt_number`;
+      (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = t.gym_id AND p.id = t.member_payment_id) AS receipt_number,
+      (SELECT b.fee FROM gym_member_bills b WHERE b.gym_id = t.gym_id AND b.id = t.fee_bill_id) AS fee_kind`;
 
 /** Both kinds of Terminal work (a payment here, a card save in `terminalCardsRepo.ts`) take this
  *  lock before looking whether the Terminal is free, so one Terminal is never given both. */
