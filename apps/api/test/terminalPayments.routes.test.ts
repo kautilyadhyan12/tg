@@ -822,6 +822,7 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     const deskA = await terminal(gymA, accountA);
     const deskB = await terminal(gymB, accountB);
 
+    const checkoutsBefore = square.checkouts.size;
     // Nobody who may not take it reaches a Terminal: another gym's owner, A's owner on B's Terminal
     // or on B's fee, a trainer, a stranger; and a fee asked for under somebody else is not found.
     for (const [gym, who, person, billId, terminalId, status] of [
@@ -837,7 +838,7 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
       const res = await feePress(gym, who, person, billId, terminalId);
       expect(res.statusCode, res.body).toBe(status);
     }
-    expect(square.checkouts.size).toBe(0);
+    expect(square.checkouts.size).toBe(checkoutsBefore);
 
     // The manager takes Tara's fee on the Terminal: exactly its amount, for this press.
     const started = parsed(await feePress(gymA, manager, tara, taraFee, deskA.id));
