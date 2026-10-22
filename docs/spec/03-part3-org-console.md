@@ -4182,6 +4182,91 @@ that gym; nothing here moves it.
 
 ---
 
+### 14.8 The money plan (2026-10-22)
+
+*(Planned with Kd in web folder 1, 21–22 October 2026; `rulings/2026-10-21-money-plan.md`.
+It replaces 14.5's order and its "desk readers later" where they differ. The jobs, their order
+and which web folder builds each are in ROADMAP, Stage 2's header and item 18.)*
+
+**First launch: India, the US and Canada.** Square in the US and Canada; Razorpay in India
+(18f), before launch. No bank debit: Square offers it in the US only, switched on by Square
+for an app that asks, and GoCardless is closed to Kd (RULINGS 2026-10-20).
+
+**At the desk, three ways, each recorded on the bill or the sale:**
+- **The Square Terminal** (18d-vi): KWAZO sends the amount, on a bill or at Sell. For a
+  membership that renews, the Terminal shows the card agreement first, and the card is kept
+  from that payment (CreateCard with the payment's id, within 24 hours; tried 2026-10-21 in
+  Square's US test area on the simulated Terminal `9fa747a2-…`: an EMV payment, VISA ending
+  1111 kept).
+- **The Square Reader, in Square's own app** (18d-iii-b): Square's payment message, matched by
+  the Square customer KWAZO made for the member, records it; a payment with no member on it
+  waits for staff to match, never guessed. Staff type the bill's total, so the gym keeps
+  Square's "Apply tax to custom amounts" off and "Add a customer before checkout" on;
+  Settings → Payments shows both. KWAZO never charges a card Square's own app saved.
+- **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
+
+Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the
+Reader inside its own app.
+
+**A card is kept only for a membership that renews by itself**, after the member agrees; never
+for a membership paid once, a day pass or a product; never Apple Pay or Google Pay.
+
+**The agreement for keeping a card** (Visa Core Rules, 18 April 2026, Table 5-20), shown apart
+from other terms and kept while it runs: what is bought and its price; how often and when; the
+amount or how it is worked out, and the currency; the cancellation and refund policy; the
+gym's address and contact; how changes are told; the card's last 4 digits; any end date or
+trial. The same words typed, on the Terminal and in the app; 18d-vi changes them first.
+
+**A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
+3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card
+companies forbid (Visa's Category 1, such as a stolen card, a closed account or a stopped
+payment; Mastercard's advice codes 03 and 21); the member told in writing at once with at least
+7 days to pay another way (Visa, Table 5-22); a Failed payments list for staff with Try again;
+at the desk the gym's own choice (16d) and, where the gym switches it on, no new bookings
+while a payment is overdue (17i).
+
+**Cancelling** (18l): every member can cancel in the app, including those who joined at the
+desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Visa's dispute
+13.2 is a charge after a cancel); an offer to stay appears only beside the cancel button
+(California). The gym's switch to turn the button off is gone.
+
+**Each place's rules** (18u, 18v; the lawyer's words): renewal on or off per type (Quebec: no
+paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years
+without a 30-day exit; California, New York and Texas 3 years; Illinois a first term of 1
+year); days to cancel after signing (California 5 business days; New York, Texas and Illinois
+3 business days; Florida 3 days; Ontario and British Columbia 10 days); release on death,
+disability or a move; reminders before a renewal (Ontario 30 to 90 days; New York 15 to 45), a
+price change (California 7 to 30 days) or a trial's end (Visa 7 days, Mastercard 3 to 7); the
+copy sent. India (RBI's e-mandate framework, 21 April 2026): the first charge approved with
+extra security, at most ₹15,000 a charge without it, the bank's notice at least 24 hours before
+each charge, withdrawal at any time; no card number kept but by the card companies. Registering
+and bonds (Texas, Florida, New York) are the gym's own.
+
+**Also before launch:** a joining fee on the first bill (18t), moving to another membership with
+the difference worked out (18x), raising the price for existing members with each place's
+notice (18w), and the gym's own choices of billing everyone on one day with the first payment
+for the part month (18y), a fee while frozen (18z) and a reminder before a card expires
+(18d-iii-c); members buying, and paying what they owe, in the app (18k); refunds to the card and
+chargebacks shown with Square's 7-day deadline (18d-iv). **After launch:** members freezing
+themselves in the app, account credit, gift cards, a list of what is due next, a fee for a
+failed payment where the law allows it.
+
+**Where the facts came from (read 21–22 October 2026).** Gym apps' own help pages: Wodify,
+GymMaster, Momence, Glofox, Mindbody (through a search tool; its help pages would not load) and
+TeamUp, line by line; PushPress, Gymdesk, HOTWORX (Square's press page), Mariana Tek, Subport
+and Appointy on single points. Card companies and Square: Visa Core Rules (18 April 2026),
+Mastercard AN 4934 (a copy hosted elsewhere), Square's Cards API, its card-on-file declines
+page, its Customers API best practices, help articles 6114 and 3882. US: the FTC's notice of
+12 February 2026 restoring the rule as it was before 2024 (the Eighth Circuit vacated the 2024
+rule in July 2025), ROSCA (15 U.S.C. 8403), Regulation E (12 CFR 1005.10), California Business
+and Professions Code 17602 and Civil Code 1812.84–1812.89, New York General Business Law 527-a
+and 622–624, Minnesota 325G.56–62, Illinois 815 ILCS 601 and 645, Virginia 59.1-207.46,
+Connecticut, Massachusetts, Maryland, Colorado and New York City, Texas Occupations Code 702,
+Florida 501.015–501.017. Canada: Ontario's and Quebec's consumer pages, British Columbia's
+Business Practices and Consumer Protection Act. India: RBI's e-mandate framework (2026) and
+tokenisation circulars, NPCI's UPI AutoPay rules (through a news report). The UK and Australia
+were read for later launches. The page Kd read: https://claude.ai/artifact/LozrQsQoCoRHpR9iEu32nz.
+
 ## 15. The gym's shared page
 
 *(ADDED 2026-09-22, the same planning chat: Part 6 of Kd's planning document — his
