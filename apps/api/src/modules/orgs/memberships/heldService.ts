@@ -104,6 +104,7 @@ function billingOf(
       covers: b.covers,
       amountMinor: b.amountMinor,
       tax: b.tax,
+      joiningFeeMinor: b.joiningFeeMinor,
       paidMinor: b.paidMinor,
       dueOn: b.dueOn,
       state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
@@ -431,6 +432,9 @@ export async function giveHeldMembership(
       method: req.method ?? null,
       shownPriceMinor: req.priceMinor ?? null,
       shownTotalMinor: req.totalMinor ?? null,
+      joiningFeeMinor: req.joiningFeeMinor ?? null,
+      // Leaving the fee off is waiving it, which is where payments are taken, as a discount is.
+      mayWaiveJoiningFee: canBill,
       discount: req.discountId === undefined || req.discountMinor === undefined ? null : { id: req.discountId, shownOffMinor: req.discountMinor },
       memberGift: req.memberGiftId === undefined || req.memberGiftMinor === undefined ? null : { id: req.memberGiftId, shownOffMinor: req.memberGiftMinor },
       today,

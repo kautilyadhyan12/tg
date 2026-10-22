@@ -759,6 +759,8 @@ export const heldMembershipTypeChoiceSchema = z
     packDays: z.number().int().nullable(),
     /** The tax rate its bills charge (18b-iii); null for no tax. */
     tax: heldTaxSchema.nullable(),
+    /** Charged on the first bill (18t); 0 for none. */
+    joiningFeeMinor: z.number().int().min(0).default(0),
   })
   .strict();
 export type HeldMembershipTypeChoice = z.infer<typeof heldMembershipTypeChoiceSchema>;
@@ -842,6 +844,10 @@ export const giveHeldMembershipRequestSchema = z
      *  `priceMinor`. */
     memberGiftId: z.string().uuid().optional(),
     memberGiftMinor: z.number().int().min(1).max(99_999_999).optional(),
+    /** The type's joining fee the screen showed and charges on the first bill (18t): a type
+     *  whose fee is now anything else is not given. Left out: no joining fee is charged,
+     *  which only somebody who records payments may choose. Sent with `priceMinor`. */
+    joiningFeeMinor: z.number().int().min(1).max(99_999_999).optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
@@ -850,7 +856,8 @@ export const giveHeldMembershipRequestSchema = z
   .refine((v) => (v.memberGiftId === undefined) === (v.memberGiftMinor === undefined) && (v.memberGiftId === undefined || v.priceMinor !== undefined), {
     message: "member_gift_needs_price",
   })
-  .refine((v) => v.totalMinor === undefined || v.priceMinor !== undefined, { message: "total_needs_price" });
+  .refine((v) => v.totalMinor === undefined || v.priceMinor !== undefined, { message: "total_needs_price" })
+  .refine((v) => v.joiningFeeMinor === undefined || v.priceMinor !== undefined, { message: "joining_fee_needs_price" });
 export type GiveHeldMembershipRequest = z.infer<typeof giveHeldMembershipRequestSchema>;
 
 /** `confirmBookings`: the number of bookings the screen was told the cancel would end

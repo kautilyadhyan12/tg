@@ -53,6 +53,8 @@ export const gymMembershipTypes = pgTable(
     ptPeriod: text("pt_period"),
     /** The gym's tax rate its bills charge (0112); null for none. */
     taxRateId: uuid("tax_rate_id"),
+    /** Charged on the first bill of a membership given from it (0149; 18t); 0 for none. */
+    joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -65,6 +67,10 @@ export const gymMembershipTypes = pgTable(
     ),
     check("gym_membership_types_kind_check", sql`${t.kind} IN ('recurring','one_time','pack','trial')`),
     check("gym_membership_types_price_check", sql`${t.priceMinor} BETWEEN 0 AND 99999999`),
+    check(
+      "gym_membership_types_joining_fee_check",
+      sql`${t.joiningFeeMinor} BETWEEN 0 AND 99999999 AND (${t.joiningFeeMinor} = 0 OR (${t.kind} IN ('recurring','one_time') AND ${t.priceMinor} > 0))`,
+    ),
     check("gym_membership_types_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check("gym_membership_types_access_check", sql`${t.access} IN ('all_classes','limited','gym_only')`),
     check(
@@ -284,10 +290,17 @@ export const gymMemberBills = pgTable(
     classBookingId: uuid("class_booking_id"),
     /** A personal training session's fee (0138; 18h-ii): the session while it stands. */
     ptAppointmentId: uuid("pt_appointment_id"),
+    /** The type's joining fee inside `amount_minor`, before any tax added on top (0149; 18t):
+     *  on the bill opened when the membership was given; 0 on every other. */
+    joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check(
+      "gym_member_bills_joining_fee_check",
+      sql`${t.joiningFeeMinor} >= 0 AND ${t.joiningFeeMinor} <= ${t.amountMinor} AND (${t.joiningFeeMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,
+    ),
     check(
       "gym_member_bills_fee_check",
       sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL)`,

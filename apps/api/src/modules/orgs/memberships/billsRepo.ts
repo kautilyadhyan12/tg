@@ -135,7 +135,7 @@ export async function recordPayment(
         input.now,
       );
       if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
-      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
+      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, joiningFeeMinor: 0, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
     }
 
     const recorded = await insertPayment(
