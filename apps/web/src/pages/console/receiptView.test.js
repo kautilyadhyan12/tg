@@ -73,6 +73,7 @@ describe('receiptLines', () => {
       'Includes GST 18% | ₹305.08',
       'Paid by bank transfer | ₹2,000.00',
     ]);
+    expect(drawn({ ...gst, method: 'upi' }).at(-1)).toBe('Paid by UPI | ₹2,000.00');
   });
 
   it('a bill paid in parts says what was paid before and what is left', () => {

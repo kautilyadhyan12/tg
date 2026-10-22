@@ -7,7 +7,8 @@ import { billDays, shortDay } from './memberBillsView';
 // to, how it was paid and who took it.
 
 const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? String(method);
-const lower = (words) => `${words.charAt(0).toLowerCase()}${words.slice(1)}`;
+/** Inside a sentence: "Card at the desk" reads "card at the desk", and "UPI" stays "UPI". */
+const lower = (words) => (/^[A-Z]{2,}\b/.test(words) ? words : `${words.charAt(0).toLowerCase()}${words.slice(1)}`);
 
 /** "Receipt #12", or "Refund receipt #13". */
 export function receiptTitle(receipt) {

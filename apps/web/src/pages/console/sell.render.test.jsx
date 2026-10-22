@@ -168,6 +168,26 @@ afterEach(() => {
 });
 
 describe('a product sale', () => {
+  it('a gym in India offers UPI after Cash and sends it; a gym elsewhere never offers it (18r)', async () => {
+    open({ ...ORG, country: 'IN' });
+    await screen.findByRole('region', { name: 'New sale' });
+    expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
+    pick('Add a product', 'p-water');
+    pick('Payment method', 'upi');
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    expect(svc.sell.mock.calls[0][1]).toMatchObject({ method: 'upi' });
+    cleanup();
+
+    for (const country of ['US', 'CA', undefined]) {
+      resetConsoleOrgs();
+      open(country === undefined ? ORG : { ...ORG, country });
+      await screen.findByRole('region', { name: 'New sale' });
+      expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Cash', 'Card at the desk', 'Bank transfer']);
+      cleanup();
+    }
+  });
+
   it('shows the price, the tax and the total before the press, and sends exactly that total once', async () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });

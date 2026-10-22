@@ -67,7 +67,7 @@ const sale = (over = {}) => ({
   receiptNumber: 40 + Number(String(over.id ?? 's1').replace(/\D/g, '') || '0'),
   ...over,
 });
-const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
+const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
 const page = (over = {}) => ({ currency: 'USD', sales: [], payments: [], salesNotShown: 0, paymentsNotShown: 0, totals: totals(), ...over });
 
 describe('who may', () => {
@@ -169,6 +169,7 @@ describe('the sale as it is shown', () => {
   it('what is said once it is sold', () => {
     expect(soldWords(sale())).toBe('Sold: 2 × Water to Maya Patel. $4.31, cash.');
     expect(soldWords(sale({ person: null, method: 'card_at_desk', quantity: 1, totalMinor: 215 }))).toBe('Sold: 1 × Water to a walk-in. $2.15, card at the desk.');
+    expect(soldWords(sale({ person: null, method: 'upi', quantity: 1, totalMinor: 215, currency: 'INR' }))).toBe('Sold: 1 × Water to a walk-in. ₹2.15, UPI.');
   });
   it('a person the search found', () => {
     expect(personOption({ name: 'Maya Patel', email: null, memberNumber: null, past: false })).toBe('Maya Patel');
@@ -189,6 +190,7 @@ describe('today', () => {
   it('says nothing was taken, or how much and how', () => {
     expect(takingsWords(page())).toBe('Nothing taken yet today.');
     expect(takingsWords(page({ totals: totals({ count: 1, totalMinor: 199, cash: 199 }) }))).toBe('Taken today: $1.99 from 1 sale. Cash $1.99.');
+    expect(takingsWords(page({ currency: 'INR', totals: totals({ count: 2, totalMinor: 350000, cash: 50000, upi: 300000 }) }))).toBe('Taken today: ₹3,500.00 from 2 sales. Cash ₹500.00 · UPI ₹3,000.00.');
     expect(takingsWords(page({ totals: totals({ count: 3, payments: 1, totalMinor: 5596, cash: 398, card_at_desk: 4999, bank_transfer: 199 }) }))).toBe(
       'Taken today: $55.96 from 3 sales and 1 membership payment. Cash $3.98 · Card at the desk $49.99 · Bank transfer $1.99.',
     );

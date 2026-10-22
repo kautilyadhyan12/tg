@@ -2,7 +2,7 @@ import DatePick from '../../components/console/DatePick';
 import { Tick } from './MemberListUpload';
 import { termLine } from './membershipTypesView';
 import { membershipChoice, startRange } from './heldMembershipsView';
-import { NO_PAYMENTS_LINE, PAYMENT_METHODS } from './memberBillsView';
+import { NO_PAYMENTS_LINE, paymentMethodsFor } from './memberBillsView';
 
 // THE CHOICE OF A MEMBERSHIP TO GIVE (ROADMAP 17a-ii): a type from the gym's price list, a
 // start date, the dates it will have, and whether it is paid. Used where a membership is
@@ -11,7 +11,7 @@ import { NO_PAYMENTS_LINE, PAYMENT_METHODS } from './memberBillsView';
 // '' for the method that how they paid is not picked yet. Saying it is paid records a
 // payment (18a-i), so the tick is offered only to staff who may record one (`canBill`).
 
-export default function MembershipChoice({ types, today, value, onChange, allowNone = false, canBill = true, paidMinor = null }) {
+export default function MembershipChoice({ types, today, value, onChange, allowNone = false, canBill = true, paidMinor = null, country = null }) {
   const { type, line, paidLabel, problem } = membershipChoice(types, value, today, paidMinor);
   const range = startRange(today);
   return (
@@ -63,7 +63,7 @@ export default function MembershipChoice({ types, today, value, onChange, allowN
               <span className="c-label">Payment method</span>
               <select className="c-sel" value={value.method ?? ''} onChange={(e) => onChange({ ...value, method: e.target.value })}>
                 <option value="">Choose one</option>
-                {PAYMENT_METHODS.map((method) => (
+                {paymentMethodsFor(country).map((method) => (
                   <option key={method.value} value={method.value}>
                     {method.label}
                   </option>

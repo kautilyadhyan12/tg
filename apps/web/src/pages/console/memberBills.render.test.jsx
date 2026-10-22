@@ -145,6 +145,30 @@ describe('each bill reads the word the server sent, under its own membership', (
     expect(within(packRow).queryByText('Paid')).toBeNull();
   });
 
+  it('Record payment offers UPI at a gym in India, and sends it; never at a gym elsewhere (18r)', async () => {
+    const pack = held(2, PACK, '2026-10-10', false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([pack]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([pack]));
+    const methodsShown = (row) =>
+      Array.from(within(within(row).getByTestId('held-pay')).getByLabelText('Payment method').options).map((o) => o.textContent);
+    render(draw({ gym: { country: 'GB' } }));
+    const [elsewhere] = await rowsSoon();
+    fireEvent.click(within(elsewhere).getByRole('button', { name: 'Record payment' }));
+    expect(methodsShown(elsewhere)).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
+    cleanup();
+
+    render(draw({ gym: { country: 'IN' } }));
+    const [row] = await rowsSoon();
+    fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
+    expect(methodsShown(row)).toEqual(['Choose one', 'Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
+    const form = within(within(row).getByTestId('held-pay'));
+    fireEvent.change(form.getByLabelText('Amount paid (GBP)'), { target: { value: '40' } });
+    fireEvent.change(form.getByLabelText('Payment method'), { target: { value: 'upi' } });
+    fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
+    expect(orgService.changeHeldMembership.mock.calls[0][4]).toMatchObject({ amountMinor: 4000, method: 'upi' });
+  });
+
   it('a payment is sent for the membership and the period its form named, with the amount typed', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const pack = held(2, PACK, '2026-10-10', false);

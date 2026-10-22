@@ -63,6 +63,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { MEMBER_LIST_BY_HAND_WORDS } from "@app/shared";
 import { OrgsError, requireStaff, requireWritablePrivilege } from "../service.js";
 import { paymentsOn } from "../memberships/billsSql.js";
+import { refuseMethodElsewhere } from "../memberships/heldService.js";
 import * as discounts from "./discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
@@ -79,6 +80,7 @@ const MANAGE: OrgPrivilege = "memberships.manage";
 
 interface Viewer {
   timezone: string;
+  country: string | null;
   canSell: boolean;
   canManage: boolean;
   /** Keeps the gym's list, so is sent a record's email. */
@@ -89,7 +91,7 @@ interface Viewer {
  *  `requireStaff`'s 404. */
 export async function requireReader(deps: RegisterDeps, userId: string, gymId: string): Promise<Viewer> {
   const { org, privileges } = await requireStaff(deps, gymId, userId);
-  const viewer = { timezone: org.timezone, canSell: privileges.includes(SELL), canManage: privileges.includes(MANAGE), seesEmail: privileges.includes("members.confirm") };
+  const viewer = { timezone: org.timezone, country: org.country, canSell: privileges.includes(SELL), canManage: privileges.includes(MANAGE), seesEmail: privileges.includes("members.confirm") };
   if (!viewer.canSell && !viewer.canManage) throw new OrgsError(403, "forbidden", REGISTER_WORDS.no_selling);
   return viewer;
 }
@@ -194,6 +196,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
       totalMinor: (sold?.totalMinor ?? 0) + paidMinor,
       taxMinor: sold?.taxMinor ?? 0,
       cash: (sold?.cash ?? 0) + of("cash"),
+      upi: (sold?.upi ?? 0) + of("upi"),
       card_at_desk: (sold?.card_at_desk ?? 0) + of("card_at_desk"),
       bank_transfer: (sold?.bank_transfer ?? 0) + of("bank_transfer"),
       link: of("link"),
@@ -322,6 +325,7 @@ export async function removeTaxRate(deps: RegisterDeps, userId: string, gymId: s
 }
 
 export async function sellProduct(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, req: SellProductRequest): Promise<SellProductResponse> {
+  refuseMethodElsewhere(viewer.country, req.method);
   const now = deps.now();
   const outcome = await repo.sell(deps.sql, {
     gymId,
@@ -466,6 +470,7 @@ export async function voidSale(deps: RegisterDeps, userId: string, gymId: string
 
 /** Refund sale (18p): on any day, for whoever may sell. */
 export async function refundSale(deps: RegisterDeps, userId: string, gymId: string, viewer: Viewer, saleId: string, req: RefundSaleRequest): Promise<RefundSaleResponse> {
+  refuseMethodElsewhere(viewer.country, req.method);
   const now = deps.now();
   const outcome = await repo.refundSale(deps.sql, {
     gymId,

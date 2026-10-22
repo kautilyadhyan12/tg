@@ -1249,6 +1249,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           <span className="c-s15 c-w6 c-t1">Membership</span>
           <MembershipChoice
             allowNone
+            country={gym?.country}
             types={giveTypes}
             today={gymToday(gym?.timezone)}
             value={giving}

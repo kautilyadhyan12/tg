@@ -11,6 +11,7 @@ import {
   MEMBER_FEE_WORDS,
   MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
+  paymentMethodsByHand,
   PAYMENT_VOID_REASONS,
   PAYMENT_VOID_REASON_WORDS,
   REFUND_REASONS,
@@ -33,8 +34,9 @@ export function canRecordPayments(privileges) {
 /** Said to staff who can open a person's page and cannot record a payment. */
 export const NO_PAYMENTS_LINE = "You can't record payments. Ask the owner to turn on \"Record members' payments\" for you.";
 
-/** The ways staff record a payment by hand, for a list to pick from. */
-export const PAYMENT_METHODS = MEMBER_PAYMENT_BY_HAND.map((value) => ({ value, label: MEMBER_PAYMENT_METHOD_WORDS[value] }));
+/** The ways staff record a payment by hand at a gym in this country, for a list to pick from:
+ *  UPI in India alone (18r). */
+export const paymentMethodsFor = (country) => paymentMethodsByHand(country ?? null).map((value) => ({ value, label: MEMBER_PAYMENT_METHOD_WORDS[value] }));
 
 /** Each state has a colour of its own, so a column of bills is read at a glance: paid
  *  green, owed yellow, overdue red, money given back orange, cancelled grey. */

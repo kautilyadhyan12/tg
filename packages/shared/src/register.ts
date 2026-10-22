@@ -363,6 +363,7 @@ export const saleTotalsSchema = z
     /** The tax inside the product sales. */
     taxMinor: z.number().int().min(0),
     cash: z.number().int().min(0),
+    upi: z.number().int().min(0),
     card_at_desk: z.number().int().min(0),
     bank_transfer: z.number().int().min(0),
     link: z.number().int().min(0),

@@ -19,14 +19,28 @@ export type MemberBillStatus = z.infer<typeof memberBillStatusSchema>;
 
 /** How a payment was made. `link` is the gym's own payment link (18c), `company` a
  *  connected payment company (18d) and `terminal` a card on the gym's Square Terminal
- *  (18d-vi-a); staff record the first three by hand. */
-export const MEMBER_PAYMENT_METHODS = ["cash", "card_at_desk", "bank_transfer", "link", "company", "terminal"] as const;
+ *  (18d-vi-a); staff record the others by hand. `upi` is paid to the gym's own UPI ID or QR
+ *  code (18r), in India only. */
+export const MEMBER_PAYMENT_METHODS = ["cash", "upi", "card_at_desk", "bank_transfer", "link", "company", "terminal"] as const;
 export const memberPaymentMethodSchema = z.enum(MEMBER_PAYMENT_METHODS);
 export type MemberPaymentMethod = z.infer<typeof memberPaymentMethodSchema>;
 
-export const MEMBER_PAYMENT_BY_HAND = ["cash", "card_at_desk", "bank_transfer"] as const;
+export const MEMBER_PAYMENT_BY_HAND = ["cash", "upi", "card_at_desk", "bank_transfer"] as const;
 export const memberPaymentByHandSchema = z.enum(MEMBER_PAYMENT_BY_HAND);
 export type MemberPaymentByHand = z.infer<typeof memberPaymentByHandSchema>;
+
+/** The ways staff record by hand for a gym in this country: UPI in India alone (18r). */
+export function paymentMethodsByHand(country: string | null): readonly MemberPaymentByHand[] {
+  return MEMBER_PAYMENT_BY_HAND.filter((method) => method !== "upi" || country === "IN");
+}
+
+/** Whether a gym in this country records payments this way. Any method but UPI, anywhere. */
+export function paymentMethodOffered(country: string | null, method: MemberPaymentMethod): boolean {
+  return method !== "upi" || country === "IN";
+}
+
+/** The server's answer to UPI sent for a gym outside India. */
+export const UPI_ONLY_IN_INDIA = "UPI can be recorded only by a gym in India. Choose another payment method.";
 
 /** How a sale at the desk was paid: by hand, or on the gym's Square Terminal (18d-vi-b-ii). */
 export const SALE_PAYMENT_METHODS = [...MEMBER_PAYMENT_BY_HAND, "terminal"] as const;
@@ -35,6 +49,7 @@ export type SalePaymentMethod = z.infer<typeof salePaymentMethodSchema>;
 
 export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, string>> = {
   cash: "Cash",
+  upi: "UPI",
   card_at_desk: "Card at the desk",
   bank_transfer: "Bank transfer",
   link: "Payment link",

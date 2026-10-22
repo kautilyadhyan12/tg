@@ -416,7 +416,7 @@ export const gymMemberPayments = pgTable(
     unique("gym_member_payments_gym_id_uq").on(t.gymId, t.id),
     check("gym_member_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','link','company','terminal')`),
+    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','link','company','terminal')`),
     check(
       "gym_member_payments_provider_check",
       sql`(${t.method} IN ('company','terminal')) = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
@@ -466,7 +466,7 @@ export const gymMemberRefunds = pgTable(
     unique("gym_member_refunds_request_uq").on(t.gymId, t.requestKey),
     check("gym_member_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer')`),
+    check("gym_member_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer')`),
     check("gym_member_refunds_reason_check", sql`${t.reason} IN ('paid_twice','charged_too_much','leaving','other')`),
     foreignKey({
       name: "gym_member_refunds_payment_fk",
