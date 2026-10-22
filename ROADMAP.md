@@ -302,7 +302,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
    - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
-   - 18z. [ ] **A fee while frozen**, a gym's choice (Kd, 2026-10-22). Web folder 2.
+   - 18z. [x] **A fee while frozen** · merged 2026-10-23 · PR #342
 19. **The gym's shared page** (RULINGS 2026-09-22, Part 6 of the re-plan; spec Part 3 §15) — it takes in items 1b, 6, 10 and 11. Every card Opus xhigh.
    - 19a. **The leaderboard** (re-planned 2026-10-02, RULINGS that day; spec Part 3 §15.5), in four jobs. It takes item 1b's place.
      - 19a-i. [x] **The members' board: Gym days and Streak** — merged 2026-10-03 (PR #160).
