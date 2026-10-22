@@ -230,6 +230,15 @@ describe('Take payment on Terminal: how it ends', () => {
     expect(ended.getAllByRole('button').map((b) => b.textContent)).toEqual(['Done']);
   });
 
+  it('part of a bill paid in a box opened again: says what is still left, never that the bill is paid', async () => {
+    const part = { amountMinor: 1000, pickedUp: true };
+    orgService.getTerminalPayments.mockReturnValue(terminals([DESK], [payment(part)]));
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: payment({ ...part, step: 'done', outcome: 'paid', receiptNumber: 3 }) } });
+    draw();
+    expect(await screen.findByText('$10.00 paid by card on the Terminal. $39.99 is still left to pay.')).toBeTruthy();
+    expect(screen.queryByText(/That bill is paid/)).toBeNull();
+  });
+
   it('Cancel stops it; a payment already waiting when the page opens is shown in its box', async () => {
     orgService.getTerminalPayments.mockReturnValue(terminals([DESK], [payment({ pickedUp: true })]));
     orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: payment({ pickedUp: true }) } });

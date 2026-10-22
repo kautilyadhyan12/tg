@@ -184,7 +184,7 @@ export default function MemberMemberships({
   const [feeForm, setFeeForm] = useState(null);
   const addedNow = useRef(false);
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
-   *  open box follows, { membershipId, payment, leftMinor }, until it ends. */
+   *  open box follows, { membershipId, payment, terminalId }, until it ends. */
   const [terminals, setTerminals] = useState({ entryId: null, list: [] });
   const [terminalPay, setTerminalPay] = useState(null);
 
@@ -215,7 +215,7 @@ export default function MemberMemberships({
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
-          setTerminalPay((was) => was ?? { membershipId: waiting.membershipId, payment: waiting, leftMinor: null });
+          setTerminalPay((was) => was ?? { membershipId: waiting.membershipId, payment: waiting });
           setOpen((was) => was ?? { what: 'terminalPay', id: waiting.membershipId });
         }
       },
@@ -798,7 +798,7 @@ export default function MemberMemberships({
     setRefusal(null);
     try {
       const res = await orgService.startTerminalPayment(gymId, entryId, m.id, { terminalId, requestKey: body.requestKey, periodIndex: body.periodIndex, amountMinor: body.amountMinor });
-      setTerminalPay({ membershipId: m.id, payment: res.data.payment, leftMinor: m.billing.pay.leftMinor, terminalId });
+      setTerminalPay({ membershipId: m.id, payment: res.data.payment, terminalId });
       setOpen({ what: 'terminalPay', id: m.id });
     } catch (err) {
       setRefusal(errorText(err, "We couldn't reach the Terminal. Try again."));
@@ -819,7 +819,9 @@ export default function MemberMemberships({
     setTerminalPay(null);
     setOpen(null);
     setPayForm(null);
-    setNotice(terminalPayOutcomeLine(payment, name, terminalPay?.leftMinor ?? payment.amountMinor));
+    // What was left on the bill, as on screen while it waited: the bill is read again only after.
+    const owedOn = shown?.memberships.find((x) => x.id === payment.membershipId)?.billing?.pay;
+    setNotice(terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor));
     setAttempt((n) => n + 1);
     onChanged?.();
   };
@@ -834,7 +836,7 @@ export default function MemberMemberships({
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
         <p className="c-s14 m-0" style={{ color: paidMaybe ? 'var(--t1)' : 'var(--bad)' }} role="alert">
-          {terminalPayOutcomeLine(payment, name, terminalPay.leftMinor ?? payment.amountMinor)}
+          {terminalPayOutcomeLine(payment, name, owed?.leftMinor ?? payment.amountMinor)}
         </p>
         <div className="flex flex-wrap gap-2">
           {canAgain ? (

@@ -31,7 +31,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { lockGym } from "../memberList/repo.js";
-import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
+import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, terminalWaiting, type NewBill } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
 export type BillWriteOutcome =
@@ -58,14 +58,6 @@ export type BillWriteOutcome =
   | { kind: "terminal_waiting" }
   /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
   | { kind: "terminal_payment" };
-
-/** Whether a payment for this membership waits on a Terminal, read under the record's lock: the
- *  Terminal's own start takes that lock too, so the two are never both let through. */
-async function terminalWaiting(tx: TransactionSql, gymId: string, membershipId: string): Promise<boolean> {
-  const [row] = await tx<{ id: string }[]>`
-    SELECT id FROM gym_terminal_payments WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND state = 'waiting'`;
-  return row !== undefined;
-}
 
 export interface RecordPaymentInput {
   gymId: string;
@@ -279,6 +271,7 @@ export async function undoMark(
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
     if (entry.past) return { kind: "past_member" };
+    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
 
     const before = row.membership.paidPeriods;
     // Only ever back, and only by the rule's one step.

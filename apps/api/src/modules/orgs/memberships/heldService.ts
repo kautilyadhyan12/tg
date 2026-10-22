@@ -373,6 +373,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
     case "member_gift_changed":
       throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
+    case "terminal_waiting":
+      throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
     case "early_payment":
       throw new OrgsError(
         409,

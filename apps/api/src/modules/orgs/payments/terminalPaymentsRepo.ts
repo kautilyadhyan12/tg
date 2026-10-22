@@ -296,13 +296,33 @@ export async function setPickedUp(sql: SqlOrTx, id: string): Promise<void> {
   await sql`UPDATE gym_terminal_payments SET picked_up = true WHERE id = ${id} AND NOT picked_up`;
 }
 
-/** Done without money taken. False when it was not waiting any more. */
-export async function finish(sql: SqlOrTx, id: string, outcome: Exclude<TerminalPaymentOutcome, "paid" | "not_recorded">, at: Date): Promise<boolean> {
-  const rows = await sql<{ id: string }[]>`
-    UPDATE gym_terminal_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
-    WHERE id = ${id} AND state = 'waiting'
-    RETURNING id`;
-  return rows.length === 1;
+/** Done with no money recorded. False when it was not waiting any more. `gone` (Square's answer
+ *  could not be read, so the money may have been taken) is told to the gym's Staff activity. */
+export async function finish(sql: Sql, id: string, outcome: Exclude<TerminalPaymentOutcome, "paid" | "not_recorded">, at: Date): Promise<boolean> {
+  return await sql.begin(async (tx) => {
+    const [row] = await tx<{ gym_id: string; entry_id: string | null; held_membership_id: string; amount_minor: number; currency: string; started_by: string | null }[]>`
+      UPDATE gym_terminal_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
+      WHERE id = ${id} AND state = 'waiting'
+      RETURNING gym_id, entry_id, held_membership_id, amount_minor, currency, started_by`;
+    if (row === undefined) return false;
+    if (outcome === "gone") {
+      await insertAudit(tx, {
+        actorUserId: row.started_by,
+        gymId: row.gym_id,
+        action: "org.terminal_payment_unchecked",
+        targetType: "gym_terminal_payment",
+        targetId: id,
+        meta: { ...(row.entry_id === null ? {} : { entryId: row.entry_id }), membershipId: row.held_membership_id, amountMinor: String(row.amount_minor), currency: row.currency },
+      });
+    }
+    return true;
+  });
+}
+
+/** Whether a payment waits on one of the gym's Terminals: Disconnect Square waits for it. */
+export async function anyWaitingIn(tx: TransactionSql, gymId: string, environment: SquareEnvironment): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`SELECT id FROM gym_terminal_payments WHERE gym_id = ${gymId} AND environment = ${environment} AND state = 'waiting' LIMIT 1`;
+  return row !== undefined;
 }
 
 /** Square took the money: it is recorded on the bill, on whichever record holds the membership now,
@@ -315,12 +335,14 @@ export async function recordPaid(
 ): Promise<{ outcome: "paid" | "not_recorded" } | null> {
   return await sql.begin(async (tx) => {
     const { pay } = p;
+    // The gym's lock first: a join moving the membership to another record takes it too, so the
+    // record read under it holds the membership while it is locked (review round one, Low 3).
     // A membership whose record was deleted for good has none.
+    await lockGym(tx, pay.gymId);
     const [held] = await tx<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${pay.gymId} AND id = ${pay.membershipId}`;
     const holder = held?.entry_id == null ? undefined : { entry_id: held.entry_id };
-    // The gym's lock, then the record's, then the press: the order a payment by hand takes.
-    if (holder === undefined) await lockGym(tx, pay.gymId);
-    else await lockedEntry(tx, pay.gymId, holder.entry_id);
+    // Then the record's, then the press: the order a payment by hand takes.
+    if (holder !== undefined) await lockedEntry(tx, pay.gymId, holder.entry_id);
     const [still] = await tx<{ id: string }[]>`SELECT id FROM gym_terminal_payments WHERE id = ${pay.id} AND state = 'waiting' FOR UPDATE`;
     if (still === undefined) return null;
     const done =
@@ -370,11 +392,11 @@ export async function recordPaid(
 }
 
 /** Done ones are kept a day, for the page that asks how one ended; one Square took money for but
- *  could not be recorded is kept. */
+ *  could not be recorded, and one whose end Square never said, are kept. */
 export async function forgetDone(sql: Sql, before: Date, gymIds: readonly string[] | null): Promise<number> {
   const rows = await sql<{ id: string }[]>`
     DELETE FROM gym_terminal_payments
-    WHERE finished_at IS NOT NULL AND finished_at < ${before} AND outcome <> 'not_recorded'
+    WHERE finished_at IS NOT NULL AND finished_at < ${before} AND outcome NOT IN ('not_recorded','gone')
       AND (${gymIds === null}::boolean OR gym_id = ANY(${[...(gymIds ?? [])]}::uuid[]))
     RETURNING id`;
   return rows.length;

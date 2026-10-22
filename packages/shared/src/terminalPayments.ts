@@ -74,5 +74,6 @@ export const TERMINAL_PAYMENT_WORDS = {
   currency: "This membership is priced in another currency from your Square account, so it can't be paid on the Terminal.",
   waiting: "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.",
   payment_gone: "This payment is no longer active.",
+  disconnect_waiting: "A payment is waiting on a Square Terminal. Let it finish, or cancel it, then disconnect.",
   void_terminal: "This was paid by card on the Terminal. To give the money back, refund it in your Square Dashboard, then note the refund here.",
 } as const;

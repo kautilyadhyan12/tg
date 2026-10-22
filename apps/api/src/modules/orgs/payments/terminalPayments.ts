@@ -61,8 +61,6 @@ export const TERMINAL_PAYMENT = {
   cancelWaitMs: 2_000,
   /** Nobody has asked for this long: the worker asks. */
   idleMs: 20_000,
-  /** Square giving no answer at all for a day: given up, and said so. */
-  giveUpMs: 24 * 60 * 60_000,
   /** A done one is kept this long, for the page that asks how it ended. */
   keepMs: 24 * 60 * 60_000,
   perRun: 50,
@@ -253,10 +251,12 @@ async function stopping(a: Asking, checkout: SquareTerminalCheckout): Promise<St
   return null;
 }
 
-/** No answer to go on yet: asked again, for a day at most, then given up and said so. */
+/** No answer to go on yet: asked again until Square's own time and a minute more are past. By then
+ *  Square has cancelled it or taken the money, so the payment ends as one to check in Square (told
+ *  to Staff activity), and the bill and the Terminal are not held any longer (review round one, Low 1). */
 async function notYet(a: Asking): Promise<Step> {
-  if (a.now.getTime() <= a.pay.startedAt.getTime() + TERMINAL_PAYMENT.giveUpMs) return null;
-  a.deps.log.error({ event: "square.terminal_payment_given_up", gymId: a.pay.gymId }, "Square gave no answer about a Terminal payment for a day");
+  if (a.now.getTime() <= a.pay.startedAt.getTime() + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs) return null;
+  a.deps.log.error({ event: "square.terminal_payment_unchecked", gymId: a.pay.gymId }, "a Terminal payment could not be read from Square past its time");
   return await ended(a, "gone");
 }
 
@@ -264,8 +264,9 @@ async function notYet(a: Asking): Promise<Step> {
 async function step(a: Asking): Promise<Step> {
   const { deps, pay } = a;
   pay.cancelWantedAt ??= await pays.readCancelWanted(deps.sql, pay.id);
-  // Cancel pressed before anything reached Square: nothing ever does.
-  if (pay.cancelWantedAt !== null && pay.checkoutId === null) return await ended(a, "cancelled");
+  // Even with Cancel pressed and no checkout id kept, Square may have made the checkout and its
+  // answer been lost: asking with the press's own key gives it back (or makes it), and `stopping`
+  // cancels it. "Cancelled" is said only on Square's own word (review round one, Critical 1).
   const got = await checkoutOf(a);
   if (got.kind === "unavailable") return await notYet(a);
   if (got.kind === "refused") {

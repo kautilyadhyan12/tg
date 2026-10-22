@@ -594,6 +594,15 @@ export async function overdueDaysOf(sql: Sql | TransactionSql, gymId: string): P
   return row?.bills_overdue_days ?? 0;
 }
 
+/** Whether a payment for this membership waits on the gym's Square Terminal (18d-vi-a), read under
+ *  the record's lock: the Terminal's own start takes that lock too, so a change to the membership
+ *  and the payment are never both let through. */
+export async function terminalWaiting(tx: TransactionSql, gymId: string, membershipId: string): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`
+    SELECT id FROM gym_terminal_payments WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND state = 'waiting'`;
+  return row !== undefined;
+}
+
 export async function setOverdueDays(tx: TransactionSql, gymId: string, days: number): Promise<void> {
   await tx`UPDATE gyms SET bills_overdue_days = ${days} WHERE id = ${gymId}`;
 }

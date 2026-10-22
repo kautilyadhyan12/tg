@@ -86,7 +86,9 @@ function fakeSquare() {
   const checkoutKeys = new Map<string, string>();
   const payments = new Map<string, SquarePayment & { accountId: string }>();
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
-  const state: { down: boolean; refuseNew: boolean } = { down: false, refuseNew: false };
+  // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
+  // refuses to show a checkout (a permission taken away).
+  const state: { down: boolean; refuseNew: boolean; loseAnswers: boolean; refuseRead: boolean } = { down: false, refuseNew: false, loseAnswers: false, refuseRead: false };
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
   const unauthorized = { kind: "refused", status: 401, code: "UNAUTHORIZED" } as const;
@@ -193,6 +195,7 @@ function fakeSquare() {
       };
       checkouts.set(made.id, made);
       checkoutKeys.set(`${a.merchantId}:${c.idempotencyKey}`, made.id);
+      if (state.loseAnswers) return Promise.resolve(unavailable);
       return Promise.resolve({ kind: "ok", value: json(made) });
     },
     getTerminalCheckout(token, id) {
@@ -201,6 +204,7 @@ function fakeSquare() {
       if (a === undefined) return Promise.resolve(unauthorized);
       const c = checkouts.get(id);
       if (c?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (state.refuseRead) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
       play(c);
       return Promise.resolve({ kind: "ok", value: json(c) });
     },
@@ -515,6 +519,35 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     const billId = (await held(gymA, gymA.owner, tara.entryId)).memberships[0]?.billing?.bills[0]?.id ?? "";
     const voidBill = await send("POST", `${entryUrl(gymA, tara.entryId)}/memberships/${tara.membershipId}/bills/${billId}/cancel`, gymA.owner.cookies, { reason: "mistake" });
     expect(voidBill.statusCode, voidBill.body).toBe(409);
+    expect(errorOf(voidBill)).toBe("terminal_payment_waiting");
+    // Cancelled, frozen or a mark taken back while it waits: the member would pay for it anyway.
+    for (const [what, body] of [
+      ["cancel", { when: "today" }],
+      ["freeze", {}],
+      ["paid", { paidPeriods: 0 }],
+    ] as const) {
+      const res = await send("POST", `${entryUrl(gymA, tara.entryId)}/memberships/${tara.membershipId}/${what}`, gymA.owner.cookies, body);
+      expect(res.statusCode, `${what} ${res.body}`).toBe(409);
+      expect(errorOf(res), what).toBe("terminal_payment_waiting");
+    }
+    expect((await held(gymA, gymA.owner, tara.entryId)).memberships[0]?.view.status).toBe("active");
+    // Where it stands, and Cancel, are this gym's payments staff's alone.
+    for (const [gym, who, status] of [
+      [gymB, gymB.owner, 404],
+      [gymA, gymB.owner, 404],
+      [gymA, trainer, 403],
+      [gymA, stranger, 404],
+    ] as const) {
+      const look = await send("GET", `${entryUrl(gym, tara.entryId)}/terminal-payments/${started.payment.id}`, who.cookies);
+      expect(look.statusCode, look.body).toBe(status);
+      const stop = await send("POST", `${entryUrl(gym, tara.entryId)}/terminal-payments/${started.payment.id}/cancel`, who.cookies);
+      expect(stop.statusCode, stop.body).toBe(status);
+    }
+    expect(checkoutsOn(deskA.deviceId)[0]?.status).toBe("PENDING");
+    // Disconnect Square waits for it: the amount would stay on the Terminal with nothing to record it.
+    const off = await send("DELETE", `/v1/orgs/${gymA.id}/payments/square`, gymA.owner.cookies);
+    expect(off.statusCode, off.body).toBe(409);
+    expect(errorOf(off)).toBe("terminal_payment_waiting");
     expect((await pay(gymA, gymA.owner, tara, deskA.id)).payment.id).toBe(started.payment.id);
     const busy = await payPress(gymA, manager, sam, deskA.id);
     expect(busy.statusCode, busy.body).toBe(409);
@@ -585,6 +618,7 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     expect((await check(gym, gym.owner, person.entryId, byPerson.payment.id)).payment).toMatchObject({ step: "done", outcome: "cancelled_on_terminal" });
     const byStaff = await pay(gym, gym.owner, person, desk.id);
     expect((await cancel(gym, gym.owner, person.entryId, byStaff.payment.id)).payment).toMatchObject({ step: "done", outcome: "cancelled" });
+    expect(checkoutsOn(desk.deviceId).at(-1)?.status).toBe("CANCELED");
     // Square refuses a new checkout: said at once, nothing waits.
     square.state.refuseNew = true;
     const refused = await payPress(gym, gym.owner, person, desk.id);
@@ -647,6 +681,53 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     expect((await work([gym.id])).terminalPayments.asked).toBe(1);
     expect(await paymentsOf(gym.id)).toHaveLength(1);
     expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment.outcome).toBe("paid");
+  });
+
+  it("Square's answer lost on the way: Cancel stops the checkout Square made, and only Square's word says Cancelled", async () => {
+    clock = new Date();
+    const gym = await makeGym("Pay Lost");
+    const acct = account(`TPX${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const person = await owing(gym, await typeOf(gym), "Ivy Cole");
+    const desk = await terminal(gym, acct);
+    // Square makes the checkout and the answer never arrives: the payment waits, with no id kept.
+    square.state.loseAnswers = true;
+    const started = await pay(gym, gym.owner, person, desk.id);
+    square.state.loseAnswers = false;
+    expect(started.payment.step).toBe("waiting");
+    expect(checkoutsOn(desk.deviceId)).toHaveLength(1);
+    // Square down while Cancel is pressed: not said Cancelled, still waiting, the bill still held.
+    square.state.down = true;
+    expect((await cancel(gym, gym.owner, person.entryId, started.payment.id)).payment).toMatchObject({ step: "waiting", stopping: true });
+    const byHand = await send("POST", `${entryUrl(gym, person.entryId)}/memberships/${person.membershipId}/payments`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: 0, amountMinor: 4999, method: "cash" });
+    expect(byHand.statusCode).toBe(409);
+    // Square back: asked with the press's own key, the same checkout comes back and is stopped.
+    square.state.down = false;
+    expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment).toMatchObject({ step: "done", outcome: "cancelled" });
+    expect(checkoutsOn(desk.deviceId).map((c) => c.status)).toEqual(["CANCELED"]);
+    expect(await paymentsOf(gym.id)).toEqual([]);
+  });
+
+  it("a checkout Square will not show: kept waiting until Square's own time is past, then left to check in Square, and told", async () => {
+    clock = new Date();
+    const gym = await makeGym("Pay Unread");
+    const acct = account(`TPU${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const person = await owing(gym, await typeOf(gym), "Max Hart");
+    const desk = await terminal(gym, acct);
+    const started = await pay(gym, gym.owner, person, desk.id);
+    square.state.refuseRead = true;
+    try {
+      expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment.step).toBe("waiting");
+      clock = new Date(clock.getTime() + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs + 1000);
+      expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment).toMatchObject({ step: "done", outcome: "gone" });
+    } finally {
+      square.state.refuseRead = false;
+    }
+    expect(await sql`SELECT action FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.terminal_payment_unchecked'`).toHaveLength(1);
+    // The bill is not held any longer.
+    const byHand = await send("POST", `${entryUrl(gym, person.entryId)}/memberships/${person.membershipId}/payments`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: 0, amountMinor: 4999, method: "cash" });
+    expect(byHand.statusCode, byHand.body).toBe(200);
   });
 
   it("the page's list: the Terminals to choose and what waits; a refused body and too much are refused before Square", async () => {
