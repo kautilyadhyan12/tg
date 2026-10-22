@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
@@ -18,7 +19,9 @@ import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift'
 import { useCameBack } from './useCameBack';
 import { ENDING_NOT_TOLD } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
-import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange } from './membershipChangeView';
+import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
+import { viewerPrivileges } from './consoleView';
+import { placeFor } from './consolePlaces';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
@@ -190,7 +193,9 @@ export default function MemberMemberships({
   const addedNow = useRef(false);
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
    *  open box follows, { membershipId, payment, terminalId }, until it ends. */
-  const [terminals, setTerminals] = useState({ entryId: null, list: [] });
+  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false });
+  const routed = useInRouterContext();
+  const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   const [terminalPay, setTerminalPay] = useState(null);
 
   useEffect(() => {
@@ -216,7 +221,7 @@ export default function MemberMemberships({
     orgService.getTerminalPayments(gymId, entryId).then(
       (res) => {
         if (!live) return;
-        setTerminals({ entryId, list: res.data.terminals });
+        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner });
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
@@ -232,6 +237,19 @@ export default function MemberMemberships({
     };
   }, [gymId, entryId, canBillHere, attempt]);
   const terminalList = terminals.entryId === entryId ? terminals.list : [];
+  // Square not set up yet (18x, Kd 2026-10-22): the payment forms say so, with Connect Square for the owner.
+  const squareLine = terminals.entryId === entryId ? squareSetUpLine(terminals.square, terminals.isOwner, gym?.name ?? 'this gym') : null;
+  const renderSquareLine = () =>
+    squareLine === null ? null : (
+      <div className="flex flex-wrap items-center gap-2" data-testid="held-connect-square">
+        <span className="c-s14 c-t2">{squareLine.line}</span>
+        {squareLine.button !== null && paymentsTo !== null ? (
+          <Link to={paymentsTo} className={SMALL}>
+            {squareLine.button}
+          </Link>
+        ) : null}
+      </div>
+    );
   // Opened by "Add membership" on the Members list's own row (21c-iii): the form is open
   // already, once, when their memberships have loaded.
   const addsNow = addNow && !readOnly && shown !== null && !shown.past;
@@ -947,6 +965,7 @@ export default function MemberMemberships({
             ))}
           </select>
         </label>
+        {renderSquareLine()}
         {onTerminal && terminalList.length > 1 ? (
           <label className="c-field">
             <span className="c-label">Terminal</span>
@@ -1384,6 +1403,7 @@ export default function MemberMemberships({
                     </select>
                   </label>
                 ) : null}
+                {renderSquareLine()}
               </div>
             ) : null}
             <MembershipTotal summary={choice.summary} />

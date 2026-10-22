@@ -4,7 +4,7 @@
 // shared rule the server checks again (`changeTo`), so the box never offers what the server
 // refuses. A cheaper move today would leave money over: it waits for the next payment date
 // (Kd, 2026-10-22, "go B").
-import { MEMBERSHIP_CHANGE_WORDS, addDays, changeTo, formatMinor } from '@app/shared';
+import { MEMBERSHIP_CHANGE_WORDS, addDays, cardOwnerOnlyLine, changeTo, formatMinor } from '@app/shared';
 import { dayWords } from './memberListView';
 import { changeSummary } from './sellDiscountsView';
 import { newRequestKey } from './heldMembershipsView';
@@ -124,4 +124,13 @@ export function changeCreditLine(bill, m) {
   if (!(bill.changeCreditMinor > 0)) return null;
   const from = m.changedFrom?.typeName ?? 'their earlier membership';
   return `${formatMinor(bill.changeCreditMinor, m.currency)} off for the unused days of ${from}`;
+}
+
+/** Said on the payment forms while the gym has not set up Square (Kd, 2026-10-22): the owner, who
+ *  alone can connect it, has the button to Settings → Payments; other staff are told who can.
+ *  Null once it is set up, and where Square does not work. */
+export function squareSetUpLine(square, isOwner, gymName) {
+  if (square !== 'connect' && square !== 'choose_location') return null;
+  if (!isOwner) return { line: cardOwnerOnlyLine(gymName), button: null };
+  return square === 'connect' ? { line: 'Take cards with Square.', button: 'Connect Square' } : { line: 'Choose your Square location to take cards.', button: 'Choose location' };
 }

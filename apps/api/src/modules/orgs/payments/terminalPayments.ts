@@ -36,7 +36,7 @@ import {
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
-import { BILLING, connectionRefused, entryNotFound, notReady, orgNotFound, readyOrThrow } from "./cards.js";
+import { BILLING, connectionRefused, entryNotFound, notReady, orgNotFound, readyOrThrow, stateOf } from "./cards.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
 import { accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
@@ -363,10 +363,12 @@ export async function readTerminalPayments(deps: PaymentsDeps, userId: string, g
   await requirePrivilege(deps, gymId, userId, BILLING);
   if ((await cards.readPerson(deps.sql, gymId, entryId)) === null) throw entryNotFound();
   const square = deps.square;
-  const empty = terminalPaymentsResponseSchema.parse({ terminals: [], waiting: [] });
-  if (square === null) return empty;
-  const [gym, row] = await Promise.all([repo.readGym(deps.sql, gymId), repo.readConnection(deps.sql, gymId, square.environment)]);
+  const gym = await repo.readGym(deps.sql, gymId);
   if (gym === null) throw orgNotFound();
+  // Whether the gym has set up Square, for the payment forms' Connect Square (18x, Kd 2026-10-22).
+  const isOwner = gym.ownerUserId === userId;
+  if (square === null) return terminalPaymentsResponseSchema.parse({ terminals: [], waiting: [], square: "not_offered", isOwner });
+  const row = await repo.readConnection(deps.sql, gymId, square.environment);
   const waitingRows = await pays.readWaitingOf(deps.sql, gymId, entryId, square.environment);
   const accountId = row?.state === "connected" ? row.accountId : null;
   const usable = row !== null && accountId !== null && row.locationId !== null && terminalsOffered(row) && !missingScopes(row);
@@ -377,6 +379,8 @@ export async function readTerminalPayments(deps: PaymentsDeps, userId: string, g
   return terminalPaymentsResponseSchema.parse({
     terminals: usable ? paired.map((t) => ({ id: t.id, serial: t.serial, practice: t.practice })) : [],
     waiting,
+    square: stateOf(square, gym, row),
+    isOwner,
   });
 }
 

@@ -25,7 +25,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
 const { billingFor } = await import('./billingFixture');
 const { orgService } = await import('../../api/orgsApi');
 const MemberMemberships = (await import('./MemberMemberships')).default;
-const { changeCreditLine, changeLine } = await import('./membershipChangeView');
+const { changeCreditLine, changeLine, squareSetUpLine } = await import('./membershipChangeView');
 const { receiptLines } = await import('./receiptView');
 
 const GYM = '11111111-1111-4111-8111-111111111111';
@@ -95,9 +95,9 @@ const answer = (memberships) => ({
   }),
 });
 const refusal = (status, data) => Object.assign(new Error('refused'), { response: { status, data } });
-const draw = () => (
+const draw = (gym = null) => (
   <MemoryRouter>
-    <MemberMemberships gymId={GYM} entryId={ADA} name="Ada Lovelace" readOnly={false} />
+    <MemberMemberships gymId={GYM} gym={gym} entryId={ADA} name="Ada Lovelace" readOnly={false} />
   </MemoryRouter>
 );
 const openBox = async () => {
@@ -248,5 +248,55 @@ describe('what a changed membership says', () => {
     expect(printed).toContain('Unused days of Basic Monthly: −£25.80');
     expect(printed.some((l) => l.endsWith('£80.00'))).toBe(true);
     expect(printed).toContain('Total: £54.20');
+  });
+});
+
+// SQUARE NOT SET UP (Kd, 2026-10-22): the payment forms say so, with Connect Square for the owner
+// alone, and nothing once it is set up.
+describe('Connect Square on the payment forms', () => {
+  const IRON = { name: 'Iron Temple', slug: 'iron-temple', staffRole: 'owner' };
+  const squareIs = (square, isOwner) => orgService.getTerminalPayments.mockResolvedValue({ data: { terminals: [], waiting: [], square, isOwner } });
+  const payForm = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
+    return within(screen.getByTestId('held-pay'));
+  };
+
+  it('the owner of a gym without Square: one line and Connect Square, to Settings, on Record payment and in Change membership', async () => {
+    squareIs('connect', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([basic(false)]));
+    render(draw(IRON));
+    const form = await payForm();
+    expect(await form.findByText('Take cards with Square.')).toBeTruthy();
+    expect(form.getByRole('link', { name: 'Connect Square' }).getAttribute('href')).toMatch(/payments/);
+    cleanup();
+
+    squareIs('connect', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([basic(true)]));
+    render(draw(IRON));
+    const change = await openBox();
+    fireEvent.change(change.getByLabelText('New membership'), { target: { value: GOLD.id } });
+    fireEvent.click(change.getByText('They have paid the £54.20'));
+    expect(change.getByRole('link', { name: 'Connect Square' })).toBeTruthy();
+  });
+
+  it('staff who are not the owner are told who can, with no button', async () => {
+    squareIs('connect', false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([basic(false)]));
+    render(draw({ ...IRON, staffRole: 'manager' }));
+    const form = await payForm();
+    expect(await form.findByText('Only the owner of Iron Temple can connect Square.')).toBeTruthy();
+    expect(form.queryByRole('link', { name: 'Connect Square' })).toBeNull();
+  });
+
+  it('a location still to choose says so; once Square is set up, and where it does not work, nothing is said', async () => {
+    expect(squareSetUpLine('choose_location', true, 'Iron Temple')).toEqual({ line: 'Choose your Square location to take cards.', button: 'Choose location' });
+    expect(squareSetUpLine('ready', true, 'Iron Temple')).toBeNull();
+    expect(squareSetUpLine('not_offered', true, 'Iron Temple')).toBeNull();
+    squareIs('ready', true);
+    orgService.getHeldMemberships.mockResolvedValue(answer([basic(false)]));
+    render(draw(IRON));
+    const form = await payForm();
+    await waitFor(() => expect(orgService.getTerminalPayments).toHaveBeenCalled());
+    expect(form.queryByTestId('held-connect-square')).toBeNull();
   });
 });

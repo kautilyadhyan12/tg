@@ -73,7 +73,7 @@ export const connectionRefused = (): OrgsError => new OrgsError(409, "card_conne
 export const paidBy = (payer: string, person: string): OrgsError =>
   new OrgsError(409, "card_paid_by_payer", cardPaidByLine(payer === "" ? "Somebody else on your list" : payer, person === "" ? "this person" : person));
 
-function stateOf(square: SquareSettings | null, gym: repo.GymForPayments, row: repo.ConnectionRow | null): MemberCardState {
+export function stateOf(square: SquareSettings | null, gym: repo.GymForPayments, row: repo.ConnectionRow | null): MemberCardState {
   if (square === null || gymPaymentsAvailability(gym.country) !== "square") return "not_offered";
   if (row?.state !== "connected") return "connect";
   return row.locationId === null ? "choose_location" : "ready";
