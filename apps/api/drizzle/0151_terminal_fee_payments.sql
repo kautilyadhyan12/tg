@@ -1,6 +1,6 @@
 -- Take payment on Terminal on a late cancel or no-show fee (ROADMAP Stage 2 item 18d-vi-b-i;
 -- spec Part 3 §14.8). Forward-only. Hand-written, as `0016` onwards are; its journal entry is
--- part of this commit.
+-- part of this commit. Renumbered from 0150 when 18t's `0150_joining_fee` merged first.
 --
 -- A press is for a period of a membership (`period_index`, 18d-vi-a) or for one of its fees
 -- (`fee_bill_id`), never both. The fee has no link, as the membership has none: the payment is
