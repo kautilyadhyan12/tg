@@ -54,6 +54,7 @@ import {
   feePaidWords,
   feePayBody,
   feePayDraft,
+  feeTakeWords,
   feeRow,
   feesOwed,
   paidWords,
@@ -185,7 +186,8 @@ export default function MemberMemberships({
   const [feeForm, setFeeForm] = useState(null);
   const addedNow = useRef(false);
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
-   *  open box follows, { membershipId, payment, terminalId }, until it ends. */
+   *  open box follows, { membershipId, feeBillId, payment, terminalId }, until it ends. `feeBillId`:
+   *  a late cancel or no-show fee's (18d-vi-b-i), whose box is drawn under that fee. */
   const [terminals, setTerminals] = useState({ entryId: null, list: [] });
   const [terminalPay, setTerminalPay] = useState(null);
 
@@ -216,7 +218,7 @@ export default function MemberMemberships({
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
-          setTerminalPay((was) => was ?? { membershipId: waiting.membershipId, payment: waiting });
+          setTerminalPay((was) => was ?? { membershipId: waiting.membershipId, feeBillId: waiting.feeBillId, payment: waiting });
           setOpen((was) => was ?? { what: 'terminalPay', id: waiting.membershipId });
         }
       },
@@ -423,7 +425,12 @@ export default function MemberMemberships({
   const renderFeeBox = (m, fee) => {
     const path = `fees/${encodeURIComponent(fee.id)}`;
     if (feeForm.what === 'payFee') {
-      const { problem, body } = feePayBody(feeForm, fee);
+      const onTerminal = feeForm.method === TERMINAL_METHOD;
+      const { problem, body } = onTerminal ? { problem: null, body: { requestKey: feeForm.requestKey, amountMinor: fee.amountMinor } } : feePayBody(feeForm, fee);
+      const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === feeForm.terminalId);
+      const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
+      const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...PAYMENT_METHODS] : PAYMENT_METHODS;
+      const take = feeTakeWords(fee, m.currency);
       return (
         <form
           noValidate
@@ -433,34 +440,56 @@ export default function MemberMemberships({
           onSubmit={(e) => {
             e.preventDefault();
             if (busy) return;
-            if (body === null) {
+            if (body === null || terminalProblem !== null) {
               setFeeForm((f) => ({ ...f, tried: true }));
+              return;
+            }
+            if (onTerminal) {
+              void startTerminalFee(m, fee, pickedTerminal.id, body.requestKey);
               return;
             }
             void run('payFee', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/payments`, body), feePaidWords(fee, m.currency));
           }}
         >
-          <p className="c-s15 c-w6 c-t1 m-0">{`Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
+          <p className="c-s15 c-w6 c-t1 m-0">{onTerminal ? take.title : `Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
+          {onTerminal ? <p className="c-s14 c-t2 m-0">{terminalPayDetail(name, take.about)}</p> : null}
           <label className="c-field">
             <span className="c-label">Payment method</span>
             <select className="c-sel" value={feeForm.method} onChange={(e) => setFeeForm((f) => ({ ...f, method: e.target.value }))}>
               <option value="">Choose one</option>
-              {PAYMENT_METHODS.map((method) => (
+              {methods.map((method) => (
                 <option key={method.value} value={method.value}>
                   {method.label}
                 </option>
               ))}
             </select>
           </label>
-          {feeForm.tried && problem !== null ? (
+          {onTerminal && terminalList.length > 1 ? (
+            <label className="c-field">
+              <span className="c-label">Terminal</span>
+              <select className="c-sel" value={feeForm.terminalId ?? ''} onChange={(e) => setFeeForm((f) => ({ ...f, terminalId: e.target.value }))}>
+                <option value="">Choose one</option>
+                {terminalList.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {cardTerminalSerial(t) === null ? payTerminalName(t) : `${payTerminalName(t)} · ${cardTerminalSerial(t)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {feeForm.tried && (problem ?? terminalProblem) !== null ? (
             <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
-              {problem}
+              {problem ?? terminalProblem}
             </span>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={MAIN} disabled={busy}>
-              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-              Record payment
+              {busy ? (
+                <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+              ) : onTerminal ? (
+                <CreditCard aria-hidden="true" className="w-4 h-4" />
+              ) : null}
+              {onTerminal ? 'Take payment on Terminal' : 'Record payment'}
             </button>
             <button type="button" className={PLAIN} disabled={busy} onClick={close}>
               Cancel
@@ -590,6 +619,11 @@ export default function MemberMemberships({
                 {here !== null && here.billId === fee.id ? (
                   <div className="px-3 py-2.5" style={SPLIT}>
                     {renderFeeBox(m, fee)}
+                  </div>
+                ) : null}
+                {open?.what === 'terminalPay' && open.id === m.id && terminalPay?.feeBillId === fee.id ? (
+                  <div className="px-3 py-2.5" style={SPLIT}>
+                    {renderTerminalWait(m)}
                   </div>
                 ) : null}
               </li>
@@ -799,7 +833,29 @@ export default function MemberMemberships({
     setRefusal(null);
     try {
       const res = await orgService.startTerminalPayment(gymId, entryId, m.id, { terminalId, requestKey: body.requestKey, periodIndex: body.periodIndex, amountMinor: body.amountMinor });
-      setTerminalPay({ membershipId: m.id, payment: res.data.payment, terminalId });
+      setTerminalPay({ membershipId: m.id, feeBillId: null, payment: res.data.payment, terminalId });
+      setOpen({ what: 'terminalPay', id: m.id });
+    } catch (err) {
+      setRefusal(errorText(err, "We couldn't reach the Terminal. Try again."));
+      if (STALE_CODES.includes(errorCode(err))) {
+        close();
+        setAttempt((n) => n + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Take payment on Terminal for a late cancel or no-show fee (18d-vi-b-i): all of it, and the box
+   *  under the fee waits for the person. */
+  const startTerminalFee = async (m, fee, terminalId, requestKey) => {
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    try {
+      const res = await orgService.startTerminalFeePayment(gymId, entryId, m.id, fee.id, { terminalId, requestKey, amountMinor: fee.amountMinor });
+      setFeeForm(null);
+      setTerminalPay({ membershipId: m.id, feeBillId: fee.id, payment: res.data.payment, terminalId });
       setOpen({ what: 'terminalPay', id: m.id });
     } catch (err) {
       setRefusal(errorText(err, "We couldn't reach the Terminal. Try again."));
@@ -820,6 +876,7 @@ export default function MemberMemberships({
     setTerminalPay(null);
     setOpen(null);
     setPayForm(null);
+    setFeeForm(null);
     // What was left on the bill, as on screen while it waited: the bill is read again only after.
     const owedOn = shown?.memberships.find((x) => x.id === payment.membershipId)?.billing?.pay;
     setNotice(terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor));
@@ -827,13 +884,37 @@ export default function MemberMemberships({
     onChanged?.();
   };
 
+  /** The Terminal's box: waiting for the person, or how it ended. */
+  const renderTerminalWait = (m) =>
+    terminalPay.payment.step === 'done' ? (
+      renderTerminalEnded(m)
+    ) : (
+      <TerminalPayBox
+        gymId={gymId}
+        entryId={entryId}
+        payment={terminalPay.payment}
+        name={name}
+        showName={terminalList.length > 1}
+        notOwed={terminalPay.feeBillId !== null && !(m.billing?.fees ?? []).some((f) => f.id === terminalPay.feeBillId)}
+        onAnswer={onTerminalAnswer}
+        checkEveryMs={checkEveryMs}
+        onEnded={(line) => {
+          close();
+          setRefusal(line);
+        }}
+      />
+    );
+
   /** A payment on the Terminal that ended without being paid: why, and what next. */
   const renderTerminalEnded = (m) => {
     const { payment } = terminalPay;
     const paidMaybe = mayHavePaid(payment);
     const again = terminalList.find((t) => t.id === (terminalPay.terminalId ?? payment.terminal?.id));
-    const owed = m.billing?.pay ?? null;
-    const canAgain = !paidMaybe && again !== undefined && owed !== null && owed.leftMinor >= payment.amountMinor;
+    const fee = terminalPay.feeBillId === null ? null : ((m.billing?.fees ?? []).find((f) => f.id === terminalPay.feeBillId) ?? null);
+    // A fee still owed, at the amount sent: the same again, or another way in its own box.
+    const feeOwed = fee !== null && fee.can.pay && fee.amountMinor === payment.amountMinor;
+    const owed = terminalPay.feeBillId === null ? (m.billing?.pay ?? null) : null;
+    const canAgain = !paidMaybe && again !== undefined && ((owed !== null && owed.leftMinor >= payment.amountMinor) || feeOwed);
     return (
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
         <p className="c-s14 m-0" style={{ color: paidMaybe ? 'var(--t1)' : 'var(--bad)' }} role="alert">
@@ -845,20 +926,25 @@ export default function MemberMemberships({
               type="button"
               className={PAY}
               disabled={busy}
-              onClick={() => void startTerminal(m, again.id, { requestKey: newRequestKey(), periodIndex: owed.periodIndex, amountMinor: payment.amountMinor })}
+              onClick={() =>
+                void (feeOwed
+                  ? startTerminalFee(m, fee, again.id, newRequestKey())
+                  : startTerminal(m, again.id, { requestKey: newRequestKey(), periodIndex: owed.periodIndex, amountMinor: payment.amountMinor }))
+              }
             >
               {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               Try again
             </button>
           ) : null}
-          {!paidMaybe && owed !== null ? (
+          {!paidMaybe && (owed !== null || feeOwed) ? (
             <button
               type="button"
               className={SMALL}
               disabled={busy}
               onClick={() => {
                 setTerminalPay(null);
-                startPay(m);
+                if (feeOwed) startFee(m, 'payFee', fee);
+                else startPay(m);
               }}
             >
               Record another way
@@ -1321,23 +1407,9 @@ export default function MemberMemberships({
         ) : null}
         {asking ? (
           open.what === 'terminalPay' && terminalPay !== null ? (
-            terminalPay.payment.step === 'done' ? (
-              renderTerminalEnded(m)
-            ) : (
-              <TerminalPayBox
-                gymId={gymId}
-                entryId={entryId}
-                payment={terminalPay.payment}
-                name={name}
-                showName={terminalList.length > 1}
-                onAnswer={onTerminalAnswer}
-                checkEveryMs={checkEveryMs}
-                onEnded={(line) => {
-                  close();
-                  setRefusal(line);
-                }}
-              />
-            )
+            // A fee's box is under that fee; one taken off meanwhile (marked Came) is no longer
+            // listed, so its box is drawn here, with Cancel and how it ended.
+            terminalPay.feeBillId === null || !(m.billing?.fees ?? []).some((f) => f.id === terminalPay.feeBillId) ? renderTerminalWait(m) : null
           ) : open.what === 'pay' && payForm !== null ? (
             renderPay(m)
           ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (

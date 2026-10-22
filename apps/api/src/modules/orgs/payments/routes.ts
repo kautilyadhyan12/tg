@@ -28,11 +28,13 @@
 // Take payment on Terminal (ROADMAP 18d-vi-a), `billing.members`:
 //   GET    …/member-list/entries/:entryId/terminal-payments                          the Terminals, and what waits
 //   POST   …/member-list/entries/:entryId/memberships/:membershipId/terminal-payment the amount goes to the Terminal
+//   POST   …/member-list/entries/:entryId/memberships/:membershipId/fees/:billId/terminal-payment  a fee's (18d-vi-b-i)
 //   GET    …/member-list/entries/:entryId/terminal-payments/:paymentId              where it stands (every few seconds)
 //   POST   …/member-list/entries/:entryId/terminal-payments/:paymentId/cancel       Cancel
 import {
   saveCardRequestSchema,
   squareCardIdSchema,
+  terminalFeePaymentRequestSchema,
   terminalPaymentRequestSchema,
   terminalSaveRequestSchema,
   squareFinishRequestSchema,
@@ -47,6 +49,7 @@ import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as webhooks from "../../webhooks/repo.js";
 import {
   heldMembershipParamsSchema,
+  memberBillParamsSchema,
   memberListEntryParamsSchema,
   orgParamsSchema,
   squareTerminalParamsSchema,
@@ -231,6 +234,15 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const body = parseOr400(terminalPaymentRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await terminalPayments.startTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(terminalFeePaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await terminalPayments.startTerminalFeePayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, params.billId, body);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

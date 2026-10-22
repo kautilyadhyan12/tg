@@ -1818,6 +1818,16 @@ export const orgService = {
         body,
       ),
     ),
+  /** A late cancel or no-show fee taken on the Terminal (18d-vi-b-i): all of it. */
+  startTerminalFeePayment: (gymId, entryId, membershipId, billId, body) =>
+    readThrough(
+      terminalPaymentResponseSchema,
+      "this person's payments",
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/fees/${encodeURIComponent(billId)}/terminal-payment`,
+        body,
+      ),
+    ),
   checkTerminalPayment: (gymId, entryId, paymentId) =>
     readThrough(
       terminalPaymentResponseSchema,

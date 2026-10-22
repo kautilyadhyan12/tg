@@ -352,7 +352,9 @@ export const gymTerminalPayments = pgTable(
       .references(() => gyms.id, { onDelete: "cascade" }),
     entryId: uuid("entry_id"),
     heldMembershipId: uuid("held_membership_id").notNull(),
-    periodIndex: integer("period_index").notNull(),
+    periodIndex: integer("period_index"),
+    /** A fee of the membership (18d-vi-b-i), in place of a period. */
+    feeBillId: uuid("fee_bill_id"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     environment: text("environment").notNull(),
@@ -381,7 +383,8 @@ export const gymTerminalPayments = pgTable(
       "gym_terminal_payments_ids_check",
       sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$' AND (${t.checkoutId} IS NULL OR ${t.checkoutId} ~ '^[A-Za-z0-9:_-]{1,255}$') AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
     ),
-    check("gym_terminal_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND ${t.periodIndex} >= 0`),
+    check("gym_terminal_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0)`),
+    check("gym_terminal_payments_bill_check", sql`(${t.feeBillId} IS NULL) = (${t.periodIndex} IS NOT NULL)`),
     check("gym_terminal_payments_state_check", sql`${t.state} IN ('waiting','done')`),
     check(
       "gym_terminal_payments_outcome_check",

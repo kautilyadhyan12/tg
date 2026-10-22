@@ -35,6 +35,9 @@ describe("a session's fee on the person's page", () => {
     expect(feeRow(paid, 'GBP', '2026-10-10').waived).toBe('No longer owed: they were marked Came. If you gave the money back, void the payment.');
     expect(feeRow(fee({ state: 'removed', stillOwed: false }), 'GBP', '2026-10-10').waived).toBe('No longer owed: they were marked Came.');
     expect(voidFeePaymentWords(paid, 'GBP', 'Kim Page').detail).toMatch(/^Kim Page no longer owes this fee: they were marked Came\. Voiding/);
+    // Paid on the Terminal (18d-vi-b-i): Square holds the money, so it is refunded there.
+    const onTerminal = { ...paid, payments: [{ ...paid.payments[0], method: 'terminal' }], can: { pay: false, waive: false, voidPaymentId: null } };
+    expect(feeRow(onTerminal, 'GBP', '2026-10-10').waived).toBe('No longer owed: they were marked Came. To give the money back, refund it in your Square Dashboard.');
     // A class's fee keeps its own words.
     expect(feeRow({ ...fee({ state: 'removed', stillOwed: false }), of: 'class' }, 'GBP', '2026-10-10').waived).toBe(
       'No longer owed: they were marked Came, or the class was cancelled.',

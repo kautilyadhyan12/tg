@@ -208,7 +208,10 @@ export function feeRow(fee, currency, today) {
         : fee.state === 'removed'
           ? noLongerOwed(fee)
           : fee.state === 'paid' && fee.stillOwed === false
-            ? `${noLongerOwed(fee)} If you gave the money back, void the payment.`
+            ? // Paid on the Terminal: Square holds the money, and Void payment is not offered (18d-vi-b-i).
+              fee.payments.some((p) => p.method === 'terminal')
+              ? `${noLongerOwed(fee)} To give the money back, refund it in your Square Dashboard.`
+              : `${noLongerOwed(fee)} If you gave the money back, void the payment.`
             : null,
     payments: [
       ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: null })),
@@ -238,6 +241,15 @@ export function feePayBody(draft, fee) {
 }
 
 const feeName = (fee) => (MEMBER_FEE_WORDS[fee.fee] ?? 'fee').toLowerCase();
+
+/** A fee's Record payment box when the Terminal takes the money (18d-vi-b-i): its title, and
+ *  what the fee is for. */
+export function feeTakeWords(fee, currency) {
+  return {
+    title: `Take ${formatMinor(fee.amountMinor, currency)} for the ${feeName(fee)}`,
+    about: `It is for ${fee.forName} on ${dayWords(fee.on)}.`,
+  };
+}
 
 /** Said once a fee's payment is recorded. */
 export function feePaidWords(fee, currency) {

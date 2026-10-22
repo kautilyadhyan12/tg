@@ -187,7 +187,8 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
     stillOwed: f.stillOwed,
     payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0 })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
-    can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" ? (standing[0]?.id ?? null) : null },
+    // A payment taken on the Terminal is refunded in Square, never voided here (18d-vi-b-i).
+    can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" && standing[0] !== undefined && standing[0].method !== "terminal" ? standing[0].id : null },
   };
 }
 
@@ -680,6 +681,10 @@ function throwOnFeeFailure(outcome: feesRepo.FeeWriteOutcome): void {
       throw new OrgsError(409, "past_member", "This is a past member. Put them back on your list first.");
     case "fee_changed":
       throw new OrgsError(409, "member_fee_changed", "This fee has changed since you opened it. Nothing was saved: check it and try again.");
+    case "terminal_waiting":
+      throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "terminal_payment":
+      throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled fee outcome: ${JSON.stringify(never)}`);

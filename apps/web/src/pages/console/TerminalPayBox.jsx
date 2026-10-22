@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Circle, Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { TERMINAL_STOPPING, cardTerminalSerial } from './memberCardView';
-import { payTerminalName, terminalPayWaitWords } from './terminalPayView';
+import { TERMINAL_FEE_NOT_OWED, payTerminalName, terminalPayWaitWords } from './terminalPayView';
 
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a): the box on a bill while the amount waits on the
 // gym's Square Terminal. It asks the server every few seconds and hands each answer up; the
@@ -29,8 +29,8 @@ function Step({ state, children }) {
 }
 
 /** While the Terminal waits for the person: its two steps, and Cancel. `showName`: the gym has more
- *  than one Terminal, so the box says which. */
-export default function TerminalPayBox({ gymId, entryId, payment, name, showName, onAnswer, onEnded, checkEveryMs = CHECK_EVERY_MS }) {
+ *  than one Terminal, so the box says which. `notOwed`: its fee was taken off meanwhile (18d-vi-b-i). */
+export default function TerminalPayBox({ gymId, entryId, payment, name, showName, notOwed = false, onAnswer, onEnded, checkEveryMs = CHECK_EVERY_MS }) {
   const words = terminalPayWaitWords(payment, name);
   const [cancelling, setCancelling] = useState(false);
   const [problem, setProblem] = useState(null);
@@ -125,6 +125,7 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
       </ol>
       {slow && !payment.pickedUp && !payment.stopping ? <p className="c-s14 c-t2 m-0">{words.notShown}</p> : null}
       {payment.tooLate ? <p className="c-s14 c-t1 m-0">{words.tooLate}</p> : null}
+      {notOwed && !payment.stopping && !payment.tooLate ? <p className="c-s14 c-t1 m-0">{TERMINAL_FEE_NOT_OWED}</p> : null}
       {payment.stopping ? (
         <p className="c-s14 c-t1 m-0 flex items-center gap-2" data-testid="terminal-pay-stopping">
           <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
