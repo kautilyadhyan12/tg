@@ -16,6 +16,7 @@ import {
   isVisibleText,
   minorToPriceText,
   priceToMinor,
+  MEMBERSHIP_PRICE_MINOR_MAX,
   TAXED_PRICE_MINOR_MAX,
   bpToTaxRateText,
 } from '@app/shared';
@@ -196,6 +197,15 @@ export function typeTaxLine(type, list) {
   return list.taxIncluded ? `Includes ${label}` : `Plus ${label} on each payment`;
 }
 
+/** Whether a kind can have a joining fee (18t): one that opens a first bill to carry it. */
+export const usesJoiningFee = (choice) => choice === 'recurring' || choice === 'one_time';
+
+/** "Joining fee $25.00, on the first bill"; null for none. */
+export function joiningFeeLine(type) {
+  if (!(type.joiningFeeMinor > 0)) return null;
+  return `Joining fee ${formatMinor(type.joiningFeeMinor, type.currency)}, on the first bill`;
+}
+
 /** A new type's form, before anything is typed. */
 export function emptyDraft() {
   return {
@@ -219,6 +229,7 @@ export function emptyDraft() {
     ptLimit: '4',
     ptPeriod: 'month',
     taxRateId: '',
+    joiningFee: '',
   };
 }
 
@@ -248,6 +259,7 @@ export function draftFromType(type) {
     ptLimit: hasPtLimit(type) ? String(type.ptLimit) : base.ptLimit,
     ptPeriod: hasPtLimit(type) ? type.ptPeriod : base.ptPeriod,
     taxRateId: type.taxRateId ?? '',
+    joiningFee: type.joiningFeeMinor > 0 ? minorToPriceText(type.joiningFeeMinor, type.currency) : '',
   };
 }
 
@@ -277,11 +289,23 @@ export function priceExample(currency) {
   return currencyDecimals(currency) === 0 ? '5000' : '49.99';
 }
 
+/** "25.00" for dollars, "2500" for a currency with no decimals. */
+export function joiningFeeExample(currency) {
+  return currencyDecimals(currency) === 0 ? '2500' : '25.00';
+}
+
+/** The joining fee the form holds in minor units: 0 where it is empty or the kind has none,
+ *  null where what is typed is not an amount. */
+function draftJoiningFee(draft, currency) {
+  if (!usesJoiningFee(draft.choice) || draft.joiningFee.trim() === '') return 0;
+  return priceToMinor(draft.joiningFee, currency);
+}
+
 const usesTerm = (choice) => choice === 'recurring' || choice === 'one_time' || choice === 'trial';
 const usesAccess = usesTerm;
 
 /** The boxes in the order the form draws them, so the first wrong one can be shown. */
-export const PROBLEM_ORDER = ['name', 'description', 'price', 'tax', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
+export const PROBLEM_ORDER = ['name', 'description', 'price', 'joiningFee', 'tax', 'termCount', 'packClasses', 'packDays', 'bookingsLimit', 'classes', 'ptLimit'];
 
 /** The first box that is wrong, top to bottom, or null. */
 export function firstProblem(problems) {
@@ -318,6 +342,15 @@ export function draftProblems(draft, currency) {
     problems.price = `A price with tax can be at most ${formatMinor(TAXED_PRICE_MINOR_MAX, currency)}. Lower the price, or choose No tax.`;
   } else if (draft.taxRateId !== '' && priceMinor === 0) {
     problems.tax = 'A free membership charges no tax. Choose No tax.';
+  }
+  const feeMinor = draftJoiningFee(draft, currency);
+  if (feeMinor === null) {
+    problems.joiningFee = `Type the joining fee as a number, like ${joiningFeeExample(currency)}, or leave it empty.`;
+  } else if (feeMinor > 0 && priceMinor === 0) {
+    problems.joiningFee = 'A free membership has no joining fee. Leave it empty.';
+  } else if (feeMinor > 0 && priceMinor !== null) {
+    const cap = draft.taxRateId === '' ? MEMBERSHIP_PRICE_MINOR_MAX : TAXED_PRICE_MINOR_MAX;
+    if (priceMinor + feeMinor > cap) problems.joiningFee = `The price and joining fee together can be at most ${formatMinor(cap, currency)}.`;
   }
   if (usesTerm(draft.choice) && wholeNumber(draft.termCount, 1, MEMBERSHIP_TERM_COUNT_MAX) === null) {
     problems.termCount = `Type a whole number from 1 to ${String(MEMBERSHIP_TERM_COUNT_MAX)}.`;
@@ -399,6 +432,7 @@ export function draftBody(draft, currency) {
     ptLimit: draftLimitsPt(draft) ? wholeNumber(draft.ptLimit, 1, MEMBERSHIP_PT_LIMIT_MAX) : null,
     ptPeriod: draftLimitsPt(draft) ? draft.ptPeriod : null,
     taxRateId: draft.taxRateId === '' ? null : draft.taxRateId,
+    joiningFeeMinor: draftJoiningFee(draft, currency),
     // A change says which version of the type the form read.
     ...(draft.id === null ? {} : { updatedAt: draft.updatedAt }),
   };

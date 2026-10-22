@@ -114,6 +114,8 @@ export const gymMembershipTypeSchema = z
     ptPeriod: membershipLimitPeriodSchema.nullable(),
     /** The gym's tax rate its bills charge (18b-iii); null for no tax. */
     taxRateId: z.string().uuid().nullable(),
+    /** Charged on the first bill of a membership given from it (18t); 0 for none. */
+    joiningFeeMinor: priceMinorSchema,
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -160,6 +162,8 @@ const membershipTypeFields = {
   ptPeriod: membershipLimitPeriodSchema.nullable().default(null),
   /** Left out of a NEW type is "no tax"; a change must say it (below). */
   taxRateId: z.string().uuid().nullable().default(null),
+  /** Left out of a NEW type is "no joining fee"; a change must say it (below). */
+  joiningFeeMinor: priceMinorSchema.default(0),
 };
 const membershipTypeObject = z.object(membershipTypeFields);
 
@@ -196,6 +200,13 @@ function refineMembershipType(value: z.infer<typeof membershipTypeObject>, ctx: 
   if (value.taxRateId !== null && value.priceMinor > TAXED_PRICE_MINOR_MAX) wrong("priceMinor");
   // A free type opens no bill: it charges no tax.
   if (value.taxRateId !== null && value.priceMinor === 0) wrong("taxRateId");
+  // A joining fee rides on the first bill: only a repeating or paid-once type with a price
+  // opens one, and the two together are one bill, capped as one price.
+  if (value.joiningFeeMinor > 0) {
+    if ((value.kind !== "recurring" && value.kind !== "one_time") || value.priceMinor === 0) wrong("joiningFeeMinor");
+    const cap = value.taxRateId === null ? MEMBERSHIP_PRICE_MINOR_MAX : TAXED_PRICE_MINOR_MAX;
+    if (value.priceMinor + value.joiningFeeMinor > cap) wrong("joiningFeeMinor");
+  }
 }
 
 /** What a gym types. Every field every time: an update replaces, it never merges,
@@ -214,6 +225,7 @@ export const updateGymMembershipTypeRequestSchema = membershipTypeObject
     ptLimit: ptLimitSchema.nullable(),
     ptPeriod: membershipLimitPeriodSchema.nullable(),
     taxRateId: z.string().uuid().nullable(),
+    joiningFeeMinor: priceMinorSchema,
   })
   .strict()
   .superRefine(refineMembershipType);

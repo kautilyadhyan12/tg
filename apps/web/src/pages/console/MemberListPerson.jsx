@@ -33,10 +33,10 @@ import MemberPayer from './MemberPayer';
 import MemberCard from './MemberCard';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
-import { METHOD_NEEDED, giveBody, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
+import { METHOD_NEEDED, giveBody, joiningFeeFor, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
 import { discountsForType, membershipSummary } from './sellDiscountsView';
 import { FriendGiftNote } from './FriendGift';
-import { MembershipTotal } from './MembershipDiscount';
+import { JoiningFeeTick, MembershipTotal } from './MembershipDiscount';
 import { leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
 import { canManageMemberships } from './membershipTypesView';
@@ -441,7 +441,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [priceList, setPriceList] = useState(undefined);
   const [priceAsk, setPriceAsk] = useState(0);
   const giveTypes = Array.isArray(priceList) && priceList.length > 0 ? priceList : null;
-  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false, method: '' }));
+  const [giving, setGiving] = useState(() => ({ requestKey: newRequestKey(), typeId: '', startsOn: gymToday(gym?.timezone), paid: false, method: '', joiningFee: 'auto' }));
   /** Add member finds the person in Leads (20e-ii-b-i): the lead with the email or phone typed;
    *  whether staff ticked that a lead with another name is this person; and whether they
    *  removed Refer a friend's gift from the membership. */
@@ -776,7 +776,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const givenType = giveTypes === null ? null : (giveTypes.find((t) => t.id === giving.typeId) ?? null);
     const givenGift = giftOff ? null : giftOf(givenType);
     const givenDiscount = givenGift === null ? null : givenGift.discount;
-    const givenSummary = givenType === null ? null : membershipSummary(givenType, givenDiscount, givenType.taxIncluded);
+    // Somebody just added has no membership here yet: a joining fee starts ticked.
+    const givenFee = joiningFeeFor(givenType, giving.joiningFee, canRecordPayments(viewerPrivileges(gym)), false);
+    const givenSummary = givenType === null ? null : membershipSummary(givenType, givenDiscount, givenType.taxIncluded, null, givenFee.feeMinor);
     const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone), givenSummary === null || !givenSummary.shows ? null : givenSummary.totalMinor);
     if (choice !== null && choice.type !== null && choice.problem !== null) {
       setRefusal({ message: choice.problem, openId: null, ack: null });
@@ -800,7 +802,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           notGiven = `${who} ${why}, so the ${choice.type.name} membership was not added. Add it under Memberships below.`;
         } else {
           try {
-            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, givenDiscount, givenSummary));
+            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, givenDiscount, givenSummary, null, givenFee.feeMinor));
             // Once it is given, and only then, the type's name becomes their Membership word,
             // so the list's Membership column and filter show it as they show a file's word.
             if (input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS) {
@@ -1240,7 +1242,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       // The paid tick says what the first bill comes to, its tax in (18b-iii).
       const picked = giveTypes.find((t) => t.id === giving.typeId) ?? null;
       const gift = giftOf(picked);
-      const total = picked === null ? null : membershipSummary(picked, gift === null || giftOff ? null : gift.discount, picked.taxIncluded);
+      const fee = joiningFeeFor(picked, giving.joiningFee, canRecordPayments(viewerPrivileges(gym)), false);
+      const total = picked === null ? null : membershipSummary(picked, gift === null || giftOff ? null : gift.discount, picked.taxIncluded, null, fee.feeMinor);
       return (
         <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
           <span className="c-s15 c-w6 c-t1">Membership</span>
@@ -1253,13 +1256,14 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             canBill={canRecordPayments(viewerPrivileges(gym))}
             onChange={(next) => {
               setRefusal(null);
-              setGiving(next);
+              setGiving(next.typeId !== giving.typeId ? { ...next, joiningFee: 'auto' } : next);
             }}
           />
+          <JoiningFeeTick type={picked} fee={fee} onChange={(joiningFee) => setGiving((g) => ({ ...g, joiningFee }))} />
           {gift !== null ? (
             <FriendGiftNote gift={gift} applied={!giftOff} onRemove={() => setGiftOff(true)} onPutBack={() => setGiftOff(false)} disabled={busy} />
           ) : null}
-          {gift !== null && !giftOff && total !== null && total.shows ? <MembershipTotal summary={total} /> : null}
+          {total !== null && total.shows && ((gift !== null && !giftOff) || total.joiningFeeMinor > 0) ? <MembershipTotal summary={total} /> : null}
           {HELD_ANSWERS.some((key) => (form[key] ?? '').trim() !== '') ? (
             <p className="c-hint m-0" data-testid="typed-not-saved">
               You can now pick a membership. The status and payment you typed won&apos;t be saved.

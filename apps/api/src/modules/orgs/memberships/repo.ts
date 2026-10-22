@@ -30,6 +30,8 @@ export interface MembershipTypeRow {
   ptLimit: number | null;
   ptPeriod: string | null;
   taxRateId: string | null;
+  /** Charged on the first bill of a membership given from it (18t); 0 for none. */
+  joiningFeeMinor: number;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -64,6 +66,7 @@ interface RawType {
   pt_limit: number | null;
   pt_period: string | null;
   tax_rate_id: string | null;
+  joining_fee_minor: number;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -75,7 +78,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, archived_at, updated_at
+           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
@@ -129,6 +132,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     ptLimit: r.pt_limit,
     ptPeriod: r.pt_period,
     taxRateId: r.tax_rate_id,
+    joiningFeeMinor: r.joining_fee_minor,
     archivedAt: r.archived_at,
     updatedAt: r.updated_at,
   });
@@ -163,6 +167,8 @@ export interface MembershipTypeInput {
   ptPeriod: string | null;
   /** The gym's tax rate its bills charge; null for none. */
   taxRateId: string | null;
+  /** Charged on the first bill of a membership given from it; 0 for none. */
+  joiningFeeMinor: number;
 }
 
 export type MembershipWriteOutcome =
@@ -254,11 +260,11 @@ export async function createMembershipType(
       INSERT INTO gym_membership_types
         (gym_id, name, description, kind, price_minor, currency, term_count, term_unit,
          pack_classes, pack_days, access, bookings_limit, bookings_period, covers_all_classes, includes_pt,
-         pt_limit, pt_period, tax_rate_id)
+         pt_limit, pt_period, tax_rate_id, joining_fee_minor)
       VALUES (${input.gymId}, ${input.name}, ${input.description}, ${input.kind}, ${input.priceMinor},
               ${currency}, ${input.termCount}, ${input.termUnit}, ${input.packClasses},
               ${input.packDays}, ${input.access}, ${input.bookingsLimit}, ${input.bookingsPeriod},
-              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId})
+              ${input.classTypeIds === null}, ${input.includesPt}, ${input.ptLimit}, ${input.ptPeriod}, ${input.taxRateId}, ${input.joiningFeeMinor})
       RETURNING id`;
     if (created === undefined) throw new Error("membership type insert returned no row");
     await writeCoveredClasses(tx, input.gymId, created.id, input.classTypeIds);
@@ -274,6 +280,7 @@ export async function createMembershipType(
         kind: input.kind,
         priceMinor: String(input.priceMinor),
         currency,
+        ...(input.joiningFeeMinor > 0 ? { joiningFeeMinor: String(input.joiningFeeMinor) } : {}),
       },
     });
     return { kind: "ok" };
@@ -296,8 +303,8 @@ export async function updateMembershipType(
 ): Promise<MembershipWriteOutcome> {
   return await sql.begin(async (tx) => {
     await lockOrgRow(tx, input.gymId);
-    const [before] = await tx<{ name: string; kind: string; price_minor: number; updated_at: Date }[]>`
-      SELECT name, kind, price_minor, updated_at FROM gym_membership_types
+    const [before] = await tx<{ name: string; kind: string; price_minor: number; joining_fee_minor: number; updated_at: Date }[]>`
+      SELECT name, kind, price_minor, joining_fee_minor, updated_at FROM gym_membership_types
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId} AND archived_at IS NULL`;
     if (before === undefined) return { kind: "not_found" };
     // To the millisecond, which is what the list sends and a form can send back.
@@ -318,7 +325,7 @@ export async function updateMembershipType(
           bookings_period = ${input.bookingsPeriod},
           covers_all_classes = ${input.classTypeIds === null}, includes_pt = ${input.includesPt},
           pt_limit = ${input.ptLimit}, pt_period = ${input.ptPeriod},
-          tax_rate_id = ${input.taxRateId}, updated_at = ${input.now}
+          tax_rate_id = ${input.taxRateId}, joining_fee_minor = ${input.joiningFeeMinor}, updated_at = ${input.now}
       WHERE id = ${input.typeId} AND gym_id = ${input.gymId}`;
     await writeCoveredClasses(tx, input.gymId, input.typeId, input.classTypeIds);
 
@@ -333,6 +340,9 @@ export async function updateMembershipType(
         after: input.name,
         priceBefore: String(before.price_minor),
         priceAfter: String(input.priceMinor),
+        ...(before.joining_fee_minor === input.joiningFeeMinor
+          ? {}
+          : { joiningFeeBefore: String(before.joining_fee_minor), joiningFeeAfter: String(input.joiningFeeMinor) }),
       },
     });
     return { kind: "ok" };

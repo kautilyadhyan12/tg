@@ -138,6 +138,7 @@ describe('adding a type', () => {
       ptLimit: null,
       ptPeriod: null,
       taxRateId: null,
+      joiningFeeMinor: 0,
     });
     expect(await screen.findByText('£49.99 every month')).toBeTruthy();
     // The form closes on a save.

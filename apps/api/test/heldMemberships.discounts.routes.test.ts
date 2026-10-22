@@ -412,7 +412,7 @@ d("discounts on memberships (real Postgres)", () => {
       const types = JSON.parse((await get(`/v1/orgs/${gymId}/membership-types`, owner.cookies)).body) as GymMembershipTypesResponse;
       const goldNow = types.types.find((t) => t.id === gold);
       if (goldNow === undefined) throw new Error("no Gold");
-      expect((await put(`/v1/orgs/${gymId}/membership-types/${gold}`, { ...monthly({ priceMinor: 6000 }), taxRateId: null, updatedAt: goldNow.updatedAt }, owner.cookies)).statusCode).toBe(200);
+      expect((await put(`/v1/orgs/${gymId}/membership-types/${gold}`, { ...monthly({ priceMinor: 6000 }), taxRateId: null, joiningFeeMinor: 0, updatedAt: goldNow.updatedAt }, owner.cookies)).statusCode).toBe(200);
       await run(gymId, "2026-11-15T17:00:00Z");
       expect((await billsOf(gymId, ours.id)).map((b) => b.amount_minor)).toEqual([4000, 5000]);
       // A screen still showing 50.00 gives nobody Gold now.

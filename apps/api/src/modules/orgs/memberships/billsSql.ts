@@ -64,6 +64,8 @@ export interface BillRow {
   amountMinor: number;
   /** The tax in `amountMinor`, as it was opened; null for none. */
   tax: BillTax | null;
+  /** The joining fee in `amountMinor`, before any tax added on top (18t); 0 for none. */
+  joiningFeeMinor: number;
   currency: string;
   dueOn: string;
   /** The days it was opened for; null for a membership of one period. */
@@ -87,6 +89,7 @@ interface RawBill {
   tax_bp: number;
   tax_name: string | null;
   tax_included: boolean | null;
+  joining_fee_minor: number;
   currency: string;
   due_on: string;
   covers_from: string | null;
@@ -105,6 +108,7 @@ const bill = (r: RawBill): BillRow => ({
   periodIndex: r.period_index,
   amountMinor: r.amount_minor,
   tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, bp: r.tax_bp, included: r.tax_included, minor: r.tax_minor },
+  joiningFeeMinor: r.joining_fee_minor,
   currency: r.currency,
   dueOn: r.due_on,
   covers: r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to },
@@ -120,7 +124,7 @@ const bill = (r: RawBill): BillRow => ({
 export async function billsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<BillRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<RawBill[]>`
-    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.currency,
+    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.joining_fee_minor, b.currency,
            b.due_on::text AS due_on, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, b.status,
            COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p
                      WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0)::int AS paid_minor,
@@ -364,6 +368,8 @@ export interface NewBill {
   /** What the person pays, its tax in (`billOf`). */
   amountMinor: number;
   tax: BillTax | null;
+  /** The joining fee in `amountMinor` (18t): on the bill a membership is given with alone. */
+  joiningFeeMinor?: number;
   currency: string;
   dueOn: string;
   covers: { from: string; to: string } | null;
@@ -386,6 +392,7 @@ export async function insertBills(
     tb: b.tax?.bp ?? 0,
     tn: b.tax?.name ?? null,
     ti: b.tax?.included ?? null,
+    j: b.joiningFeeMinor ?? 0,
     c: b.currency,
     d: b.dueOn,
     f: b.covers?.from ?? null,
@@ -393,9 +400,9 @@ export async function insertBills(
   }));
   const rows = await tx<{ id: string; held_membership_id: string; period_index: number }[]>`
     INSERT INTO gym_member_bills
-      (gym_id, held_membership_id, period_index, amount_minor, tax_minor, tax_bp, tax_name, tax_included, currency, due_on, covers_from, covers_to, created_at, updated_at)
-    SELECT ${gymId}, r.m, r.i, r.a, r.tm, r.tb, r.tn, r.ti, r.c, r.d, r.f, r.t, ${now}, ${now}
-    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, tm int, tb int, tn text, ti boolean, c text, d date, f date, t date)
+      (gym_id, held_membership_id, period_index, amount_minor, tax_minor, tax_bp, tax_name, tax_included, joining_fee_minor, currency, due_on, covers_from, covers_to, created_at, updated_at)
+    SELECT ${gymId}, r.m, r.i, r.a, r.tm, r.tb, r.tn, r.ti, r.j, r.c, r.d, r.f, r.t, ${now}, ${now}
+    FROM jsonb_to_recordset(${tx.json(payload)}) AS r(m uuid, i int, a int, tm int, tb int, tn text, ti boolean, j int, c text, d date, f date, t date)
     ON CONFLICT (held_membership_id, period_index) DO NOTHING
     RETURNING id, held_membership_id, period_index`;
   return rows.map((r) => ({ id: r.id, membershipId: r.held_membership_id, periodIndex: r.period_index }));

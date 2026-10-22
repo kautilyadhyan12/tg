@@ -92,6 +92,8 @@ export const paymentReceiptSchema = z
     item: z.object({ name: z.string(), covers: z.object({ from: daySchema, to: daySchema }).strict().nullable() }).strict(),
     /** The bill this payment was for. */
     amounts: receiptAmountsSchema,
+    /** The joining fee inside `amounts.listedMinor` (18t): printed as a line of its own. */
+    joiningFeeMinor: minorSchema.default(0),
     /** What this payment was. */
     paidMinor: minorSchema,
     method: memberPaymentMethodSchema,
