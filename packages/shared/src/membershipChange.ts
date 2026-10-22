@@ -8,6 +8,7 @@
 // charged on a change. The credit is worked out from the money that stands on each paid
 // period's bill, never from the price list, so nobody is paid back what they never paid.
 import { addDays, daysBetween, heldMembershipView, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
+import { bookingPeriod } from "./classBookings.js";
 import type { MembershipKind } from "./memberships.js";
 
 /** What the rule reads of one bill of the membership being changed. */
@@ -36,10 +37,12 @@ export type ChangeFrom =
       ok: true;
       /** The days paid for and not yet used, as money before tax: what a change today takes off. */
       creditMinor: number;
-      /** Days left of the period today falls in, today among them. */
+      /** Paid-for days left of the period today falls in, today among them. */
       daysLeft: number;
       /** The first day of a change on the next payment date; null where there is none. */
       nextOn: string | null;
+      /** The credit by period, for the periods that have a bill: what each one's money moves. */
+      byPeriod: { periodIndex: number; creditMinor: number }[];
     };
 
 /** What a paid period's bill holds for its days, before tax: the money that stands on it,
@@ -70,14 +73,20 @@ export function changeFrom(m: HeldMembership, heldPriceMinor: number, bills: rea
 
   const from = periodStart(m, current);
   const to = periodStart(m, current + 1);
-  const daysLeft = daysBetween(today, to);
-  const periodDays = daysBetween(from, to);
+  // Refer a friend's free days (20e-ii-b-ii-b) lengthen the period before `giftFrom` at its end:
+  // nobody paid for them, so they are neither counted in the period nor credited (round one, High-1).
+  const free = m.giftDays > 0 && m.giftFrom >= 1 && current === m.giftFrom - 1 ? m.giftDays : 0;
+  const daysLeft = Math.max(0, daysBetween(today, to) - free);
+  const periodDays = daysBetween(from, to) - free;
   let creditMinor = 0;
+  const byPeriod: { periodIndex: number; creditMinor: number }[] = [];
   if (!m.free) {
     for (let index = current; index <= lastPaid; index += 1) {
       const bill = bills.find((b) => b.periodIndex === index);
       const paid = bill === undefined ? heldPriceMinor : billDaysMinor(bill);
-      creditMinor += index === current ? Math.floor((paid * daysLeft) / periodDays) : paid;
+      const credit = index === current ? (periodDays <= 0 ? 0 : Math.floor((paid * daysLeft) / periodDays)) : paid;
+      creditMinor += credit;
+      if (bill !== undefined) byPeriod.push({ periodIndex: index, creditMinor: credit });
     }
   }
 
@@ -85,7 +94,46 @@ export function changeFrom(m: HeldMembership, heldPriceMinor: number, bills: rea
   let nextOn: string | null = null;
   if (view.can.cancelAtPeriodEnd !== null) nextOn = addDays(view.can.cancelAtPeriodEnd, 1);
   else if (view.endsOn !== null && view.endsOn >= today) nextOn = addDays(view.endsOn, 1);
-  return { ok: true, creditMinor, daysLeft, nextOn };
+  return { ok: true, creditMinor, daysLeft, nextOn, byPeriod };
+}
+
+/** THE MONEY ON A BILL WHOSE DAYS A CHANGE MOVED to the membership that replaced it (round one,
+ *  High-2): never refunded from this bill, as the new one's first bill already took it off.
+ *  `creditMinor` is what the change credited for this bill's period (`byPeriod`). The part of
+ *  the money standing that paid for days, in the share the credit is of those days' value;
+ *  rounded up, so a refund never gives back a cent that moved. */
+export function movedMoneyMinor(b: ChangeBillFacts, creditMinor: number): number {
+  const value = billDaysMinor(b);
+  const stands = b.status === "void" ? 0 : Math.min(b.amountMinor, Math.max(0, b.paidMinor - b.refundedMinor));
+  if (creditMinor <= 0 || value <= 0 || stands === 0) return 0;
+  const beforeTax = b.tax !== null && !b.tax.included ? b.amountMinor - b.tax.minor : b.amountMinor;
+  if (beforeTax <= 0) return 0;
+  // credit × stands × (days part of the price) / (price × value), in whole numbers that cannot overflow.
+  const top = BigInt(Math.min(creditMinor, value)) * BigInt(stands) * BigInt(Math.max(0, beforeTax - b.joiningFeeMinor));
+  const bottom = BigInt(beforeTax) * BigInt(value);
+  const moved = Number((top + bottom - 1n) / bottom);
+  return Math.min(stands, moved);
+}
+
+/** The classes or sessions booked on the old membership that move to the new one (round one,
+ *  Low-3): those it covers, earliest first, while the new type's limit for each of its weeks or
+ *  months has room. The rest end, once the screen has named them. */
+export function withinLimit<T extends { id: string; day: string }>(
+  booked: readonly T[],
+  limit: number | null,
+  period: "week" | "month" | null,
+): string[] {
+  if (limit === null || period === null) return booked.map((b) => b.id);
+  const used = new Map<string, number>();
+  const moved: string[] = [];
+  for (const b of [...booked].sort((x, y) => (x.day < y.day ? -1 : x.day > y.day ? 1 : 0))) {
+    const key = bookingPeriod(b.day, period).from;
+    const n = used.get(key) ?? 0;
+    if (n >= limit) continue;
+    used.set(key, n + 1);
+    moved.push(b.id);
+  }
+  return moved;
 }
 
 /** The type it would change to, as the rule reads it. */

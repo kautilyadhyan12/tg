@@ -26,6 +26,8 @@ const { billingFor } = await import('./billingFixture');
 const { orgService } = await import('../../api/orgsApi');
 const MemberMemberships = (await import('./MemberMemberships')).default;
 const { changeCreditLine, changeLine, squareSetUpLine } = await import('./membershipChangeView');
+const { refundWords } = await import('./memberBillsView');
+const { askWords } = await import('./heldMembershipsView');
 const { receiptLines } = await import('./receiptView');
 
 const GYM = '11111111-1111-4111-8111-111111111111';
@@ -142,6 +144,7 @@ describe('the worst thing: the box sends what it shows', () => {
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       typeId: GOLD.id,
       when: 'today',
+      startsOn: '2026-10-16',
       priceMinor: 8000,
       creditMinor: 2580,
       totalMinor: 5420,
@@ -170,6 +173,7 @@ describe('the worst thing: the box sends what it shows', () => {
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       typeId: OFF_PEAK.id,
       when: 'next_payment',
+      startsOn: '2026-11-01',
       priceMinor: 2000,
       creditMinor: 0,
       totalMinor: 2000,
@@ -248,6 +252,20 @@ describe('what a changed membership says', () => {
     expect(printed).toContain('Unused days of Basic Monthly: −£25.80');
     expect(printed.some((l) => l.endsWith('£80.00'))).toBe(true);
     expect(printed).toContain('Total: £54.20');
+  });
+});
+
+describe('after a change (round one)', () => {
+  it('the refund box says why less can be refunded: the money that paid for the new membership', () => {
+    const payment = { id: 'p1', amountMinor: 5000, refundableMinor: 2420, paidOn: '2026-10-01', method: 'cash' };
+    const m = { typeName: 'Basic Monthly', currency: 'GBP', changedTo: { typeName: 'Gold Monthly', startsOn: '2026-10-16' }, billing: { bills: [{ movedMinor: 2580, payments: [payment] }] } };
+    expect(refundWords(m, 'Ada Lovelace', payment, false).detail).toContain('£24.20 of it can still be refunded. £25.80 of this bill paid for Gold Monthly when the membership was changed.');
+  });
+
+  it('cancelling the new one of a change on the next payment date, before it starts, says the old one renews again', () => {
+    const m = { typeName: 'Off Peak', changedFrom: { typeName: 'Basic Monthly', stopped: true }, view: { status: 'upcoming', can: { cancelAtPeriodEnd: null } } };
+    expect(askWords('cancel', m, 'Ada Lovelace', TODAY).detail).toBe("It stops today. Basic Monthly renews again, as it did before the change. This can't be undone, but you can add a membership again.");
+    expect(askWords('cancel', { ...m, changedFrom: { typeName: 'Basic Monthly', stopped: false } }, 'Ada Lovelace', TODAY).detail).not.toContain('renews again');
   });
 });
 

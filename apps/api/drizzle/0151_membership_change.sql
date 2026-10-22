@@ -16,3 +16,11 @@ ALTER TABLE "gym_member_bills" ADD CONSTRAINT "gym_member_bills_change_credit_ch
   "change_credit_minor" BETWEEN 0 AND 99999999
   AND ("change_credit_minor" = 0 OR "period_index" IS NOT NULL)
 );
+--> statement-breakpoint
+-- Set on the new one when the change set the one it replaced to stop at the end of what is paid:
+-- cancelling the new one before it starts sets the old one renewing again (round one, Low-2).
+ALTER TABLE "gym_held_memberships" ADD COLUMN "replaced_stopped" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+-- The money on a bill of the membership changed whose days the change moved to the new one: never
+-- refunded from this bill, as the new one's first bill took it off already (round one, High-2).
+ALTER TABLE "gym_member_bills" ADD COLUMN "moved_minor" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "gym_member_bills" ADD CONSTRAINT "gym_member_bills_moved_check" CHECK ("moved_minor" BETWEEN 0 AND "amount_minor");

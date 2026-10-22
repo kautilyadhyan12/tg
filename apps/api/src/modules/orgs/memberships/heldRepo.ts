@@ -293,6 +293,8 @@ export interface HeldChange {
   oldName: string;
   startsOn: string;
   newStatus: string;
+  /** The change set the old one to stop: cancelling the new one before it starts undoes that. */
+  stopped: boolean;
 }
 
 /** What the list says this record's membership is, and how that name stands with the
@@ -370,15 +372,15 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       ...(await feesOf(tx, gymId, ids)),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
-      changes: await tx<{ new_id: string; old_id: string; new_name: string; old_name: string; starts_on: string; new_status: string }[]>`
+      changes: await tx<{ new_id: string; old_id: string; new_name: string; old_name: string; starts_on: string; new_status: string; stopped: boolean }[]>`
         SELECT n.id AS new_id, n.replaces_id AS old_id, tn.name AS new_name, tt.name AS old_name,
-               n.starts_on::text AS starts_on, n.status AS new_status
+               n.starts_on::text AS starts_on, n.status AS new_status, n.replaced_stopped AS stopped
         FROM gym_held_memberships n
         JOIN gym_held_memberships o ON o.gym_id = n.gym_id AND o.id = n.replaces_id
         JOIN gym_membership_types tn ON tn.gym_id = n.gym_id AND tn.id = n.membership_type_id
         JOIN gym_membership_types tt ON tt.gym_id = o.gym_id AND tt.id = o.membership_type_id
         WHERE n.gym_id = ${gymId} AND n.entry_id = ${entryId} AND n.replaces_id IS NOT NULL`.then((rows) =>
-        rows.map((r) => ({ newId: r.new_id, oldId: r.old_id, newName: r.new_name, oldName: r.old_name, startsOn: r.starts_on, newStatus: r.new_status })),
+        rows.map((r) => ({ newId: r.new_id, oldId: r.old_id, newName: r.new_name, oldName: r.old_name, startsOn: r.starts_on, newStatus: r.new_status, stopped: r.stopped })),
       ),
     };
   });
@@ -622,7 +624,7 @@ export interface GiveHeldInput {
   /** Given in place of another membership (18x, `changeRepo.ts`): the one it replaces and
    *  the credit off its first bill, before tax. No joining fee, discount or gift with it;
    *  `paidByChange` where the credit pays the whole first period, which then opens no bill. */
-  change?: { fromId: string; creditMinor: number; paidByChange: boolean } | null;
+  change?: { fromId: string; creditMinor: number; paidByChange: boolean; stoppedOld?: boolean } | null;
   /** The gym's own day. */
   today: string;
   actorUserId: string;
@@ -745,13 +747,13 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
-       discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id)
+       discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
             ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
-            ${change?.fromId ?? null})
+            ${change?.fromId ?? null}, ${change?.stoppedOld ?? false})
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -957,6 +959,19 @@ export async function moveHeld(
           updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND entry_id = ${input.entryId} AND id = ${input.membershipId}`;
     const ended = ends === null ? null : await bookings.end(tx, input.gymId, ends, input.now);
+    // A change on the next payment date undone before the new one starts: the one it replaced
+    // renews again, as it did before the change (18x, round one, Low-2).
+    let renewsAgain = false;
+    if (input.event.type === "cancel" && m.status === "cancelled" && before.membership.startsOn > input.today) {
+      const back = await tx`
+        UPDATE gym_held_memberships o SET renews = true, updated_at = ${input.now}
+        FROM gym_held_memberships n
+        WHERE n.gym_id = ${input.gymId} AND n.id = ${before.id} AND n.replaced_stopped
+          AND o.gym_id = n.gym_id AND o.id = n.replaces_id AND o.entry_id = ${input.entryId}
+          AND o.status = 'active' AND o.kind = 'recurring' AND NOT o.renews
+        RETURNING o.id`;
+      renewsAgain = back.length > 0;
+    }
     await voidBills(tx, input.gymId, voided, input.now);
     // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
     await giftUseUndone(tx, input.gymId, { billIds: voided }, input.today, input.now);
@@ -977,6 +992,7 @@ export async function moveHeld(
         paidAfter: String(m.paidPeriods),
         renews: String(m.renews),
         ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
+        ...(renewsAgain ? { replacedRenewsAgain: "true" } : {}),
         ...(ended === null
           ? {}
           : {

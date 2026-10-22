@@ -184,6 +184,9 @@ export const gymHeldMemberships = pgTable(
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
     /** The membership this one replaced when staff changed one for the other (0151; 18x). */
     replacesId: uuid("replaces_id"),
+    /** The change set the one it replaced to stop at the end of what is paid (0151): cancelling
+     *  this one before it starts sets that one renewing again. */
+    replacedStopped: boolean("replaced_stopped").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -308,6 +311,9 @@ export const gymMemberBills = pgTable(
     /** What the membership it replaced had paid for the days not yet used, before tax, taken off
      *  this first bill (0151; 18x): not inside `amount_minor`; 0 on every other. */
     changeCreditMinor: integer("change_credit_minor").notNull().default(0),
+    /** On a bill of a membership changed for another (0151; 18x): the money whose days moved to
+     *  the new one, never refunded from this bill. 0 on every other. */
+    movedMinor: integer("moved_minor").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -316,6 +322,7 @@ export const gymMemberBills = pgTable(
       "gym_member_bills_joining_fee_check",
       sql`${t.joiningFeeMinor} >= 0 AND ${t.joiningFeeMinor} <= ${t.amountMinor} AND (${t.joiningFeeMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,
     ),
+    check("gym_member_bills_moved_check", sql`${t.movedMinor} BETWEEN 0 AND ${t.amountMinor}`),
     check(
       "gym_member_bills_change_credit_check",
       sql`${t.changeCreditMinor} BETWEEN 0 AND 99999999 AND (${t.changeCreditMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,

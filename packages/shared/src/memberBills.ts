@@ -191,6 +191,9 @@ export const memberBillSchema = z
     /** A change's credit taken off it, before tax (18x): what the membership it replaced had
      *  paid for the days not yet used. Not inside `amountMinor`; 0 on every other bill. */
     changeCreditMinor: minorSchema.default(0),
+    /** The money on it whose days a change moved to the membership that replaced this one (18x):
+     *  never refunded from this bill. 0 on every other bill. */
+    movedMinor: minorSchema.default(0),
     paidMinor: minorSchema,
     dueOn: daySchema,
     state: memberBillStateSchema,

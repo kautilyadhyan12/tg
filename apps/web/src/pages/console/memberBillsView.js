@@ -342,7 +342,10 @@ export function refundDraft(m, payment, newKey) {
 export function refundWords(m, name, payment, live) {
   const paid = `${formatMinor(payment.amountMinor, m.currency)} paid on ${dayWords(payment.paidOn)}`;
   const left = formatMinor(payment.refundableMinor, m.currency);
-  const some = payment.refundableMinor < payment.amountMinor ? ` ${left} of it can still be refunded.` : '';
+  // Money a change of membership moved to the new one (18x) paid for that one: never refunded here.
+  const bill = (m.billing?.bills ?? []).find((b) => b.payments.some((p) => p.id === payment.id));
+  const moved = bill !== undefined && bill.movedMinor > 0 ? ` ${formatMinor(bill.movedMinor, m.currency)} of this bill paid for ${m.changedTo?.typeName ?? 'the new membership'} when the membership was changed.` : '';
+  const some = payment.refundableMinor < payment.amountMinor ? ` ${left} of it can still be refunded.${moved}` : '';
   const keeps = live
     ? ` ${capital(name)} keeps the membership and its dates: to end it, use Cancel membership.`
     : '';

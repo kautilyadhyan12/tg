@@ -68,6 +68,9 @@ export interface BillRow {
   joiningFeeMinor: number;
   /** A change's credit taken off it, before tax, not inside `amountMinor` (18x); 0 for none. */
   changeCreditMinor: number;
+  /** The money on it whose days a change moved to the membership that replaced this one (18x):
+   *  never refunded from this bill. 0 for none. */
+  movedMinor: number;
   currency: string;
   dueOn: string;
   /** The days it was opened for; null for a membership of one period. */
@@ -93,6 +96,7 @@ interface RawBill {
   tax_included: boolean | null;
   joining_fee_minor: number;
   change_credit_minor: number;
+  moved_minor: number;
   currency: string;
   due_on: string;
   covers_from: string | null;
@@ -113,6 +117,7 @@ const bill = (r: RawBill): BillRow => ({
   tax: r.tax_name === null || r.tax_included === null ? null : { name: r.tax_name, bp: r.tax_bp, included: r.tax_included, minor: r.tax_minor },
   joiningFeeMinor: r.joining_fee_minor,
   changeCreditMinor: r.change_credit_minor,
+  movedMinor: r.moved_minor,
   currency: r.currency,
   dueOn: r.due_on,
   covers: r.covers_from === null || r.covers_to === null ? null : { from: r.covers_from, to: r.covers_to },
@@ -128,7 +133,7 @@ const bill = (r: RawBill): BillRow => ({
 export async function billsFor(sql: Sql | TransactionSql, gymId: string, membershipIds: readonly string[]): Promise<BillRow[]> {
   if (membershipIds.length === 0) return [];
   const rows = await sql<RawBill[]>`
-    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.joining_fee_minor, b.change_credit_minor, b.currency,
+    SELECT b.id, b.held_membership_id, b.period_index, b.amount_minor, b.tax_minor, b.tax_bp, b.tax_name, b.tax_included, b.joining_fee_minor, b.change_credit_minor, b.moved_minor, b.currency,
            b.due_on::text AS due_on, b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, b.status,
            COALESCE((SELECT sum(p.amount_minor) FROM gym_member_payments p
                      WHERE p.gym_id = b.gym_id AND p.bill_id = b.id AND p.undone_at IS NULL), 0)::int AS paid_minor,

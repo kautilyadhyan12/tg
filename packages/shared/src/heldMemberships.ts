@@ -739,7 +739,7 @@ export const heldMembershipSchema = z
     tax: heldTaxSchema.nullable(),
     view: heldMembershipViewSchema,
     /** Change membership (18x): the one it was changed from, by its type's name now. */
-    changedFrom: z.object({ typeName: z.string() }).strict().nullable().default(null),
+    changedFrom: z.object({ typeName: z.string(), stopped: z.boolean().default(false) }).strict().nullable().default(null),
     /** The one it was changed to, while that one stands, and the day it starts. */
     changedTo: z.object({ typeName: z.string(), startsOn: daySchema }).strict().nullable().default(null),
     /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
@@ -891,6 +891,8 @@ export const changeHeldMembershipRequestSchema = z
     requestKey: z.string().uuid(),
     typeId: z.string().uuid(),
     when: z.enum(["today", "next_payment"]),
+    /** The day the screen said the new one starts: a change on any other day is refused. */
+    startsOn: daySchema,
     priceMinor: z.number().int().min(0).max(99_999_999),
     creditMinor: z.number().int().min(0).max(99_999_999),
     totalMinor: z.number().int().min(0).max(99_999_999),

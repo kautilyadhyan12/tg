@@ -13,6 +13,8 @@ import {
   changeFrom,
   changeTo,
   moveHeldMembership,
+  movedMoneyMinor,
+  withinLimit,
   type ChangeBillFacts,
   type ChangeFromRefusal,
   type ChangeToRefusal,
@@ -72,10 +74,12 @@ export async function changeHeld(
     typeId: string;
     when: "today" | "next_payment";
     requestKey: string;
-    /** What the screen showed: the new type's price, the credit, and the first bill's total. */
+    /** What the screen showed: the new type's price, the credit, the first bill's total, and the
+     *  day the new one starts. */
     shownPriceMinor: number;
     shownCreditMinor: number;
     shownTotalMinor: number;
+    shownStartsOn: string;
     paid: boolean;
     method: MemberPaymentByHand | null;
     confirmBookings: string | null;
@@ -111,7 +115,9 @@ export async function changeHeld(
       const type = typeChoice(rawType);
       const to = changeTo(from, before.typeId, type, input.when, input.today);
       if (!to.ok) return { kind: "change_refused", reason: to.reason };
-      if (to.creditMinor !== input.shownCreditMinor) return { kind: "credit_changed" };
+      // A payment ahead recorded while the box was open moves the next payment date: the change
+      // is never written on a day the screen did not say (round one, Low-1).
+      if (to.creditMinor !== input.shownCreditMinor || to.startsOn !== input.shownStartsOn) return { kind: "credit_changed" };
 
       // The membership changed: today it ends now; later it stops at the end of what is paid.
       const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end" };
@@ -143,33 +149,64 @@ export async function changeHeld(
         shownTotalMinor: input.shownTotalMinor,
         joiningFeeMinor: null,
         mayWaiveJoiningFee: false,
-        change: { fromId: before.id, creditMinor: to.creditMinor, paidByChange: to.paidByChange },
+        // Set to stop by this change: cancelling the new one before it starts undoes that (Low-2).
+        change: { fromId: before.id, creditMinor: to.creditMinor, paidByChange: to.paidByChange, stoppedOld: before.membership.renews && !stops.renews && stops.status !== "cancelled" },
         today: input.today,
         actorUserId: input.actorUserId,
         now: input.now,
       });
       if (given.kind !== "given") throw new Undo(given.kind === "ok" ? { kind: "request_reused" } : given);
 
-      // Booked on the old one after its last day: moved where the new type covers them.
+      // The money on the old bills whose days moved is never refunded from them (round one, High-2).
+      const moves = (to.creditMinor > 0 ? from.byPeriod : []).flatMap((p) => {
+          const bill = bills.find((b) => b.periodIndex === p.periodIndex);
+          const moved = bill === undefined ? 0 : movedMoneyMinor(changeBillFacts(bill), p.creditMinor);
+          return bill === undefined || moved === 0 ? [] : [{ id: bill.id, moved }];
+        });
+      if (moves.length > 0) {
+        await tx`
+          UPDATE gym_member_bills b SET moved_minor = r.moved, updated_at = ${input.now}
+          FROM jsonb_to_recordset(${tx.json(moves)}) AS r(id uuid, moved int)
+          WHERE b.gym_id = ${input.gymId} AND b.held_membership_id = ${before.id} AND b.id = r.id`;
+      }
+
+      // Booked on the old one after its last day: moved where the new type covers them, within its
+      // own limit for each week or month (round one, Low-3); the rest end once confirmed.
       const scope: MembershipScope = { membership: before.id, now: input.now, afterDay: input.when === "today" ? null : lastDay };
-      const movedClasses = await tx`
-        UPDATE gym_class_bookings b SET held_membership_id = ${given.id}
-        FROM gym_class_sessions s, gym_membership_types t
+      const [limits] = await tx<{ bookings_limit: number | null; bookings_period: string | null; pt_limit: number | null; pt_period: string | null }[]>`
+        SELECT bookings_limit, bookings_period, pt_limit, pt_period FROM gym_membership_types WHERE gym_id = ${input.gymId} AND id = ${type.id}`;
+      const periodOf = (p: string | null | undefined): "week" | "month" | null => (p === "week" || p === "month" ? p : null);
+      const classesCovered = await tx<{ id: string; day: string }[]>`
+        SELECT b.id, s.local_date::text AS day
+        FROM gym_class_bookings b
+        JOIN gym_class_sessions s ON s.gym_id = b.gym_id AND s.id = b.session_id
+        JOIN gym_membership_types t ON t.gym_id = b.gym_id AND t.id = ${type.id}
         WHERE b.gym_id = ${input.gymId} AND b.held_membership_id = ${before.id} AND b.status IN ('booked','attended')
-          AND s.gym_id = b.gym_id AND s.id = b.session_id AND s.starts_at > ${input.now}
+          AND s.starts_at > ${input.now}
           AND (${scope.afterDay}::date IS NULL OR s.local_date > ${scope.afterDay}::date)
-          AND t.gym_id = b.gym_id AND t.id = ${type.id} AND t.access <> 'gym_only'
+          AND t.access <> 'gym_only'
           AND (t.covers_all_classes OR EXISTS (
             SELECT 1 FROM gym_membership_type_classes c
-            WHERE c.gym_id = t.gym_id AND c.membership_type_id = t.id AND c.class_type_id = s.class_type_id))
-        RETURNING b.id`;
-      const movedPt = await tx`
-        UPDATE gym_pt_appointments a SET held_membership_id = ${given.id}
-        FROM gym_membership_types t
+            WHERE c.gym_id = t.gym_id AND c.membership_type_id = t.id AND c.class_type_id = s.class_type_id))`;
+      const movedClasses = withinLimit(classesCovered, limits?.bookings_limit ?? null, periodOf(limits?.bookings_period));
+      if (movedClasses.length > 0) {
+        await tx`
+          UPDATE gym_class_bookings SET held_membership_id = ${given.id}
+          WHERE gym_id = ${input.gymId} AND held_membership_id = ${before.id} AND id = ANY(${movedClasses}::uuid[])`;
+      }
+      const ptCovered = await tx<{ id: string; day: string }[]>`
+        SELECT a.id, a.local_date::text AS day
+        FROM gym_pt_appointments a
+        JOIN gym_membership_types t ON t.gym_id = a.gym_id AND t.id = ${type.id}
         WHERE a.gym_id = ${input.gymId} AND a.held_membership_id = ${before.id} AND a.status = 'booked' AND a.starts_at > ${input.now}
           AND (${scope.afterDay}::date IS NULL OR a.local_date > ${scope.afterDay}::date)
-          AND t.gym_id = a.gym_id AND t.id = ${type.id} AND t.includes_pt
-        RETURNING a.id`;
+          AND t.includes_pt`;
+      const movedPt = withinLimit(ptCovered, limits?.pt_limit ?? null, periodOf(limits?.pt_period));
+      if (movedPt.length > 0) {
+        await tx`
+          UPDATE gym_pt_appointments SET held_membership_id = ${given.id}
+          WHERE gym_id = ${input.gymId} AND held_membership_id = ${before.id} AND id = ANY(${movedPt}::uuid[])`;
+      }
       // What the new one does not cover ends, once the screen has been told which.
       const ask = await bookings.ask(tx, input.gymId, scope, { bookings: input.confirmBookings, ptSessions: input.confirmPtSessions });
       if (ask !== null) throw new Undo(ask);

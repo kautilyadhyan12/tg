@@ -12,6 +12,10 @@ import {
   changeTo,
   giveHeldMembership,
   moveHeldMembership,
+  movedMoneyMinor,
+  paymentRefundableMinor,
+  refundMemberPayment,
+  withinLimit,
   type ChangeBillFacts,
   type ChangeFrom,
   type HeldMembership,
@@ -173,6 +177,62 @@ describe("every kind of membership in use", () => {
     const cancelled = moveHeldMembership(m, { type: "cancel", when: "today" }, "2026-10-10");
     if (!cancelled.ok) throw new Error("not cancelled");
     expect(changeFrom(cancelled.membership, 5000, [], "2026-10-16")).toEqual({ ok: false, reason: "not_changeable" });
+  });
+});
+
+describe("Refer a friend's free days are never credited (round one, High-1)", () => {
+  // Basic at $50.00 paid for October, with 10 free days: the period runs 1 Oct to 10 Nov, and only
+  // its first 31 days were paid for.
+  const m = { ...given(monthly, "2026-10-01", true, "2026-10-01"), giftDays: 10, giftFrom: 1 };
+
+  it("on 16 Oct, the 16 paid days left are credited, never the free ones", () => {
+    expect(ok(changeFrom(m, 5000, [paidBill(0, 5000)], "2026-10-16"))).toMatchObject({ creditMinor: 2580, daysLeft: 16, nextOn: "2026-11-11" });
+  });
+
+  it("on 5 Nov, inside the free days, nothing paid is left", () => {
+    const from = ok(changeFrom(m, 5000, [paidBill(0, 5000)], "2026-11-05"));
+    expect([from.creditMinor, from.daysLeft]).toEqual([0, 0]);
+    expect(changeTo(from, "basic-monthly", gold, "today", "2026-11-05")).toMatchObject({ ok: true, firstListedMinor: 8000 });
+  });
+});
+
+describe("the money a change moved is never refunded from the old bill (round one, High-2)", () => {
+  it.each([
+    ["no tax: the $25.80 credited", paidBill(0, 5000), 2580, 2580],
+    ["tax on top: the credit and its tax", paidBill(0, 5500, { tax: { minor: 500, included: false } }), 2580, 2838],
+    ["a joining fee stays refundable", paidBill(0, 7500, { joiningFeeMinor: 2500 }), 2580, 2580],
+    ["a partial refund before the change: only what stands", paidBill(0, 5000, { refundedMinor: 2000 }), 1548, 1548],
+    ["a month paid ahead moves whole", paidBill(1, 5000), 5000, 5000],
+    ["an earlier change's credit was never money on this bill", paidBill(0, 2420, { changeCreditMinor: 2580 }), 2580, 1249], // 2580 × 2420 / 5000 = 1248.7
+    ["a bill staff cancelled moved nothing", paidBill(0, 5000, { status: "void", paidMinor: 0 }), 2580, 0],
+  ])("%s", (_name, bill, credit, moved) => {
+    expect(movedMoneyMinor(bill, credit)).toBe(moved);
+  });
+
+  it("$50.00 paid, $25.80 moved: $24.20 can be refunded and not a cent more", () => {
+    const bill = { status: "paid" as const, paidMinor: 5000, refundedMinor: 0, movedMinor: 2580 };
+    const payment = { amountMinor: 5000, refundedMinor: 0 };
+    expect(paymentRefundableMinor(bill, payment)).toBe(2420);
+    expect(refundMemberPayment(bill, payment, 2421)).toEqual({ ok: false, reason: "too_much", leftMinor: 2420 });
+    expect(refundMemberPayment(bill, payment, 2420)).toEqual({ ok: true, billStatus: "paid" });
+    expect(paymentRefundableMinor({ ...bill, refundedMinor: 2420 }, { amountMinor: 5000, refundedMinor: 2420 })).toBe(0);
+  });
+});
+
+describe("bookings moved within the new type's own limit (round one, Low-3)", () => {
+  // Monday 19 Oct to Sunday 25 Oct is one week; Monday 26 Oct starts the next.
+  const booked = [
+    { id: "wed", day: "2026-10-21" },
+    { id: "mon", day: "2026-10-19" },
+    { id: "fri", day: "2026-10-23" },
+    { id: "next-mon", day: "2026-10-26" },
+  ];
+  it.each([
+    ["no limit: all of them", null, null, ["wed", "mon", "fri", "next-mon"]],
+    ["two a week: the first two of each week", 2, "week", ["mon", "wed", "next-mon"]],
+    ["one a month: the first in October only", 1, "month", ["mon"]],
+  ] as const)("%s", (_name, limit, period, moved) => {
+    expect(withinLimit(booked, limit, period)).toEqual(moved);
   });
 });
 

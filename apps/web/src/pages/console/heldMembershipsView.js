@@ -166,11 +166,13 @@ export function askWords(what, m, name, today) {
     }
     case 'cancel': {
       const last = m.view.can.cancelAtPeriodEnd;
+      // Cancelled before it starts, a change on the next payment date is undone (18x).
+      const back = m.view.status === 'upcoming' && m.changedFrom?.stopped === true ? ` ${m.changedFrom.typeName} renews again, as it did before the change.` : '';
       return {
         question: `Cancel ${whose}?`,
         detail:
           last === null
-            ? `It stops today. This can't be undone, but you can add a membership again.`
+            ? `It stops today.${back} This can't be undone, but you can add a membership again.`
             : `${name} has paid up to ${dayWords(last)}. Cancel it on that day and they keep it until then, with no more payments; or stop it today. This can't be undone, but you can add a membership again.`,
         button: 'Cancel today',
         laterButton: last === null ? null : `Cancel on ${dayWords(last)}`,

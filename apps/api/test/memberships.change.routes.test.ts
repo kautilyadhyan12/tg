@@ -178,6 +178,7 @@ d("move to another membership (real Postgres)", () => {
     requestKey: nextForm(),
     typeId,
     when: "today",
+    startsOn: "2026-10-16",
     priceMinor,
     creditMinor,
     totalMinor,
@@ -283,7 +284,7 @@ d("move to another membership (real Postgres)", () => {
       ]);
       clock = new Date("2026-10-16T18:00:00Z");
       const shown = await page(gymId, maya, owner.cookies);
-      expect(shown.memberships.find((m) => m.id === now.id)?.changedFrom).toEqual({ typeName: "Basic Monthly" });
+      expect(shown.memberships.find((m) => m.id === now.id)?.changedFrom).toEqual({ typeName: "Basic Monthly", stopped: false });
       expect(shown.memberships.find((m) => m.id === mayaBasic)?.changedTo).toEqual({ typeName: "Gold Monthly", startsOn: "2026-10-16" });
       expect(changeOf(shown, mayaBasic)).toBeNull();
 
@@ -296,8 +297,14 @@ d("move to another membership (real Postgres)", () => {
       expect([left.statusCode, errorOf(left)]).toEqual([409, "membership_change_left_over"]);
       expect((await rows(gymId, noah)).map((r) => [r.status, r.renews])).toEqual([["active", true]]);
       // On the next payment date: October runs out on Gold, and Off Peak starts on 1 November at $30.00.
-      const later = await change(gymId, noah, noahGold, owner.cookies, changeBody(cheap, 3000, 0, 3000, { when: "next_payment", paid: false }));
+      // A screen that said another day (a payment ahead recorded meanwhile) changes nothing (Low-1).
+      const stale = await change(gymId, noah, noahGold, owner.cookies, changeBody(cheap, 3000, 0, 3000, { when: "next_payment", startsOn: "2026-12-01", paid: false }));
+      expect([stale.statusCode, errorOf(stale)]).toEqual([409, "membership_change_credit_changed"]);
+      expect((await rows(gymId, noah)).map((r) => [r.status, r.renews])).toEqual([["active", true]]);
+      const later = await change(gymId, noah, noahGold, owner.cookies, changeBody(cheap, 3000, 0, 3000, { when: "next_payment", startsOn: "2026-11-01", paid: false }));
       expect(later.statusCode, later.body).toBe(200);
+      // The page no longer offers a second change of Gold, which runs to 31 October.
+      expect(changeOf(await page(gymId, noah, owner.cookies), noahGold)).toEqual({ ok: false, reason: "changed_already" });
       const [noahOld, noahNew] = await rows(gymId, noah);
       expect(noahOld).toMatchObject({ status: "active", renews: false, cancelled_on: null });
       expect(noahNew).toMatchObject({ type: "Off Peak", starts_on: "2026-11-01", replaces_id: noahGold });
@@ -424,6 +431,31 @@ d("move to another membership (real Postgres)", () => {
       const [audit] = await sql<{ meta: Record<string, string> }[]>`
         SELECT meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.held_membership_changed'`;
       expect(audit?.meta).toMatchObject({ type: "All Classes", toType: "Spin Only", changeCreditMinor: "2580", bookingsMoved: "1", bookingsEnded: "1" });
+
+      // Moved within the new type's own limit (Low-3): Once a Week takes the first of the two
+      // classes in the week of 19 Oct, and the second goes through the same question.
+      clock = OCT_1;
+      const once = await addType(gymId, owner.cookies, monthly("Once a Week", 4000, { access: "limited", bookingsLimit: 1, bookingsPeriod: "week" }));
+      const noah = await addPerson(gymId, owner.cookies, "Noah Limits");
+      const noahAll = await givePaid(gymId, noah, owner.cookies, all, 5000, "2026-10-01");
+      const first = await session(spin, "2026-10-20");
+      const second = await session(spin, "2026-10-22");
+      for (const s of [first, second]) {
+        await sql`
+          INSERT INTO gym_class_bookings (gym_id, session_id, user_id, entry_id, request_key, status, held_membership_id, pack_charged, created_at, booked_at)
+          VALUES (${gymId}, ${s}, ${member.userId}, ${noah}, gen_random_uuid(), 'booked', ${noahAll}, false, now(), now())`;
+      }
+      clock = OCT_16;
+      // $40.00 less $25.80: $14.20.
+      const limitBody = changeBody(once, 4000, 2580, 1420);
+      const limitAsk = await change(gymId, noah, noahAll, owner.cookies, limitBody);
+      expect([limitAsk.statusCode, errorOf(limitAsk)], limitAsk.body).toEqual([409, "membership_has_bookings"]);
+      const limitEnding = (JSON.parse(limitAsk.body) as { ending: ClassBookingsEnding }).ending;
+      expect(limitEnding.booked).toBe(1);
+      expect((await change(gymId, noah, noahAll, owner.cookies, { ...limitBody, confirmBookings: limitEnding.mark })).statusCode).toBe(200);
+      const noahOnce = (await rows(gymId, noah))[1]?.id ?? "";
+      expect(await bookingOf(first)).toEqual([["booked", noahOnce]]);
+      expect((await bookingOf(second)).map(([status]) => status)).toEqual(["cancelled"]);
     },
     T,
   );
@@ -469,6 +501,67 @@ d("move to another membership (real Postgres)", () => {
         ["Gold Monthly", "active"],
       ]);
       expect(await paymentsOf(gymId)).toEqual([5000, 5420]);
+    },
+    T,
+  );
+
+  it(
+    "after a change: the old payment refunds only what did not move, a bill for days after it goes, and cancelling a later change before it starts sets the old one renewing again",
+    async () => {
+      clock = OCT_1;
+      const owner = await makeUser("after-owner");
+      const gymId = (await makeGym(owner, "Chg After Gym")).org.id;
+      const basic = await addType(gymId, owner.cookies, monthly("Basic Monthly", 5000));
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 8000));
+      const cheap = await addType(gymId, owner.cookies, monthly("Off Peak", 3000));
+      const maya = await addPerson(gymId, owner.cookies, "Maya After");
+      const mayaBasic = await givePaid(gymId, maya, owner.cookies, basic, 5000, "2026-10-01");
+      const lee = await addPerson(gymId, owner.cookies, "Lee Open");
+      const leeBasic = await givePaid(gymId, lee, owner.cookies, basic, 5000, "2026-10-01");
+      const noah = await addPerson(gymId, owner.cookies, "Noah Undo");
+      const noahGold = await givePaid(gymId, noah, owner.cookies, gold, 8000, "2026-10-01");
+      clock = OCT_16;
+
+      // High-2: $25.80 of Maya's $50.00 moved to Gold. $24.20 can be refunded, never the whole $50.00.
+      expect((await change(gymId, maya, mayaBasic, owner.cookies, changeBody(gold, 8000, 2580, 5420))).statusCode).toBe(200);
+      const shown = (await page(gymId, maya, owner.cookies)).memberships.find((m) => m.id === mayaBasic)?.billing?.bills[0];
+      expect([shown?.movedMinor, shown?.payments[0]?.refundableMinor]).toEqual([2580, 2420]);
+      const paymentId = shown?.payments[0]?.id ?? "";
+      const refund = (amountMinor: number) =>
+        post(`${heldUrl(gymId, maya)}/${mayaBasic}/payments/${paymentId}/refunds`, { requestKey: nextForm(), amountMinor, method: "cash", reason: "leaving" }, owner.cookies);
+      const whole = await refund(5000);
+      expect([whole.statusCode, errorOf(whole)]).toEqual([409, "refund_too_much"]);
+      expect((await refund(2420)).statusCode).toBe(200);
+      const more = await refund(1);
+      expect([more.statusCode, errorOf(more)]).toEqual([409, "refund_too_much"]);
+      expect((await sql<{ n: number }[]>`SELECT coalesce(sum(r.amount_minor), 0)::int AS n FROM gym_member_refunds r WHERE r.gym_id = ${gymId} AND r.undone_at IS NULL`)[0]?.n).toBe(2420);
+
+      // A bill already open for November on Lee's Basic goes with the change: nobody owes for it.
+      await sql`
+        INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to)
+        VALUES (${gymId}, ${leeBasic}, 1, 5000, 'USD', '2026-11-01', '2026-11-01', '2026-11-30')`;
+      expect((await change(gymId, lee, leeBasic, owner.cookies, changeBody(gold, 8000, 2580, 5420))).statusCode).toBe(200);
+      expect(await bills(gymId, leeBasic)).toEqual([
+        ["2026-10-01", 5000, 0, "paid"],
+        ["2026-11-01", 5000, 0, "void"],
+      ]);
+
+      // Low-2: Noah moves to Off Peak on 1 November; staff then cancel Off Peak before it starts, and
+      // Gold renews again as it did before.
+      expect((await change(gymId, noah, noahGold, owner.cookies, changeBody(cheap, 3000, 0, 3000, { when: "next_payment", startsOn: "2026-11-01", paid: false }))).statusCode).toBe(200);
+      const offPeak = (await rows(gymId, noah))[1]?.id ?? "";
+      expect((await page(gymId, noah, owner.cookies)).memberships.find((m) => m.id === offPeak)?.changedFrom).toEqual({ typeName: "Gold Monthly", stopped: true });
+      expect((await rows(gymId, noah)).map((r) => [r.type, r.renews])).toEqual([
+        ["Gold Monthly", false],
+        ["Off Peak", true],
+      ]);
+      const undo = await post(`${heldUrl(gymId, noah)}/${offPeak}/cancel`, { when: "today" }, owner.cookies);
+      expect(undo.statusCode, undo.body).toBe(200);
+      expect((await rows(gymId, noah)).map((r) => [r.type, r.status, r.renews])).toEqual([
+        ["Gold Monthly", "active", true],
+        ["Off Peak", "cancelled", true],
+      ]);
+      expect(changeOf(await page(gymId, noah, owner.cookies), noahGold)).toMatchObject({ ok: true, nextOn: "2026-11-01" });
     },
     T,
   );

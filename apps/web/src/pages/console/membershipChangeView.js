@@ -80,6 +80,7 @@ export function changeBody(form, choice) {
     requestKey: form.requestKey,
     typeId: choice.type.id,
     when: choice.when,
+    startsOn: choice.picked.startsOn,
     priceMinor: choice.type.priceMinor,
     creditMinor: choice.picked.creditMinor,
     totalMinor: choice.summary.totalMinor,

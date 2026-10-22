@@ -30,7 +30,7 @@ import {
   memberCancelTarget,
   memberPayTarget,
   memberUndoTarget,
-  refundableMinor,
+  paymentRefundableMinor,
   type BillSettings,
   type BillSettingsResponse,
   type CancelMemberBillRequest,
@@ -113,6 +113,7 @@ function billingOf(
       tax: b.tax,
       joiningFeeMinor: b.joiningFeeMinor,
       changeCreditMinor: b.changeCreditMinor,
+      movedMinor: b.movedMinor,
       paidMinor: b.paidMinor,
       dueOn: b.dueOn,
       state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
@@ -129,7 +130,7 @@ function billingOf(
           by: p.by,
           refunds: refunds.filter((r) => r.paymentId === p.id).map(refundOf),
           voidedRefunds: voidedRefundsOf(p.id),
-          refundableMinor: refundableMinor(b.status, p),
+          refundableMinor: paymentRefundableMinor(b, p),
           receiptNumber: p.receiptNumber,
         })),
       voidedPayments: voided.payments
@@ -303,7 +304,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       freeDays: freeDays.get(row.id) ?? [],
       tax: row.tax,
       view: viewOf(row, list.bills, list.fees, today, list.past),
-      changedFrom: ((c) => (c === undefined ? null : { typeName: c.oldName }))(changedFrom(row.id)),
+      changedFrom: ((c) => (c === undefined ? null : { typeName: c.oldName, stopped: c.stopped }))(changedFrom(row.id)),
       changedTo: ((c) => (c === undefined ? null : { typeName: c.newName, startsOn: c.startsOn }))(changedTo(row.id)),
     }))
     .sort(
@@ -526,6 +527,7 @@ export async function changeHeldMembership(
     shownPriceMinor: req.priceMinor,
     shownCreditMinor: req.creditMinor,
     shownTotalMinor: req.totalMinor,
+    shownStartsOn: req.startsOn,
     paid: req.paid,
     method: req.method ?? null,
     confirmBookings: req.confirmBookings ?? null,
