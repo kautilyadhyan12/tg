@@ -29,7 +29,7 @@ import { TERMINAL_METHOD, TERMINAL_SALE_HINT, TERMINAL_SALE_LOST, mayHavePaid, p
 import { SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
 import {
   NO_SELLING_LINE,
-  PAY_CHOICES,
+  payChoicesFor,
   SALE_HINT,
   SELL_REFUSED,
   canOpenSell,
@@ -288,7 +288,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   const [lines, setLines] = useState([]);
   const [who, setWho] = useState(firstPerson === null ? 'walkin' : 'member');
   const [person, setPerson] = useState(firstPerson);
-  const [method, setMethod] = useState(PAY_CHOICES[0]?.value ?? 'cash');
+  const [method, setMethod] = useState('cash');
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   /** The gym's Square and Terminals (18d-vi-b-ii), as the server says them; null until it does. */
@@ -353,9 +353,10 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
     };
   }, [gymId]);
   const terminals = till?.terminals ?? [];
-  const methodChoices = terminals.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...PAY_CHOICES] : PAY_CHOICES;
+  const payChoices = payChoicesFor(org.country);
+  const methodChoices = terminals.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...payChoices] : payChoices;
   const wanted = methodPicked ? method : terminals.length > 0 ? TERMINAL_METHOD : method;
-  const chosen = wanted === TERMINAL_METHOD && terminals.length === 0 ? (PAY_CHOICES[0]?.value ?? 'cash') : wanted;
+  const chosen = wanted === TERMINAL_METHOD && terminals.length === 0 ? 'cash' : wanted;
   const onTerminal = chosen === TERMINAL_METHOD;
   const pickedTerminal = terminals.length === 1 ? terminals[0] : terminals.find((t) => t.id === terminalId);
   const waiting = onTill !== null && onTill.payment.step !== 'done';
@@ -753,7 +754,7 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
                 setOnTill(null);
                 setKey(newKey());
                 if (!mayHavePaid(onTill.payment)) {
-                  setMethod(PAY_CHOICES[0]?.value ?? 'cash');
+                  setMethod('cash');
                   setMethodPicked(true);
                 }
               }}
@@ -986,7 +987,7 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
                 ) : null}
                 {receiptFor === row.key ? <ReceiptBox gymId={gymId} gym={org} number={row.receiptNumber} onClose={() => setReceiptFor(null)} /> : null}
                 {refunding === row.key && row.basket !== null ? (
-                  <BasketRefundBox gymId={gymId} basket={row.basket} who={row.sale.person?.name ?? null} onDone={doneHere(row.key)} onClose={() => setRefunding(null)} />
+                  <BasketRefundBox gymId={gymId} country={org.country} basket={row.basket} who={row.sale.person?.name ?? null} onDone={doneHere(row.key)} onClose={() => setRefunding(null)} />
                 ) : null}
                 {asking === row.key && row.sale !== null ? (
                   <form

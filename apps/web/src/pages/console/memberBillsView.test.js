@@ -8,7 +8,7 @@ import {
   billTaxLine,
   CANCEL_REASONS,
   NO_PAYMENTS_LINE,
-  PAYMENT_METHODS,
+  paymentMethodsFor,
   REFUND_REASON_CHOICES,
   billDays,
   billRow,
@@ -172,9 +172,16 @@ describe('who may, and the gym\'s own days of grace', () => {
     expect(NO_PAYMENTS_LINE).toBe(`You can't record payments. Ask the owner to turn on "Record members' payments" for you.`);
   });
 
-  it('offers the three ways staff record by hand', () => {
-    expect(PAYMENT_METHODS).toEqual([
+  it('offers the three ways staff record by hand, and UPI after Cash in India alone', () => {
+    const elsewhere = [
       { value: 'cash', label: 'Cash' },
+      { value: 'card_at_desk', label: 'Card at the desk' },
+      { value: 'bank_transfer', label: 'Bank transfer' },
+    ];
+    for (const country of ['US', 'CA', 'GB', 'in', null, undefined]) expect(paymentMethodsFor(country)).toEqual(elsewhere);
+    expect(paymentMethodsFor('IN')).toEqual([
+      { value: 'cash', label: 'Cash' },
+      { value: 'upi', label: 'UPI' },
       { value: 'card_at_desk', label: 'Card at the desk' },
       { value: 'bank_transfer', label: 'Bank transfer' },
     ]);

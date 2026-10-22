@@ -168,6 +168,26 @@ afterEach(() => {
 });
 
 describe('a product sale', () => {
+  it('a gym in India offers UPI after Cash and sends it; a gym elsewhere never offers it (18r)', async () => {
+    open({ ...ORG, country: 'IN' });
+    await screen.findByRole('region', { name: 'New sale' });
+    expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
+    pick('Add a product', 'p-water');
+    pick('Payment method', 'upi');
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    expect(svc.sell.mock.calls[0][1]).toMatchObject({ method: 'upi' });
+    cleanup();
+
+    for (const country of ['US', 'CA', undefined]) {
+      resetConsoleOrgs();
+      open(country === undefined ? ORG : { ...ORG, country });
+      await screen.findByRole('region', { name: 'New sale' });
+      expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Cash', 'Card at the desk', 'Bank transfer']);
+      cleanup();
+    }
+  });
+
   it('shows the price, the tax and the total before the press, and sends exactly that total once', async () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
@@ -780,6 +800,22 @@ describe('who sees what', () => {
 describe('refund a sale (18p)', () => {
   const sold = (over = {}) => sale({ canRefund: true, canUndo: false, stockCounted: true, refunds: [], refundedMinor: 0, person: { entryId: 'e-maya', name: 'Maya Patel' }, ...over });
   const moreOf = (row) => within(row).getByRole('button', { name: 'More for the sale of 2 × Water' });
+
+  it('a gym in India can note money given back by UPI; a gym elsewhere never sees it (18r)', async () => {
+    svc.get.mockResolvedValue(withSale(sold()));
+    const given = async (org) => {
+      resetConsoleOrgs();
+      open(org);
+      const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
+      fireEvent.click(moreOf(row));
+      fireEvent.click(within(row).getByRole('menuitem', { name: /^Refund sale/ }));
+      const shown = Array.from(within(within(row).getByTestId('sale-refund-form')).getByLabelText('How you gave it back').options).map((o) => o.textContent);
+      cleanup();
+      return shown;
+    };
+    expect(await given({ ...ORG, country: 'IN' })).toEqual(['Choose one', 'Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
+    expect(await given({ ...ORG, country: 'US' })).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
+  });
 
   it('opens inside the sale, filled with all that is left and how it was paid, sends nothing until a reason is picked, and says what it did under the sale', async () => {
     svc.get.mockResolvedValue(withSale(sold()));

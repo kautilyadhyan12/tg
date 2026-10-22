@@ -246,7 +246,7 @@ export const gymSales = pgTable(
     check("gym_sales_tax_check", sql`${t.taxBp} BETWEEN 0 AND 3000 AND (${t.taxBp} > 0 OR ${t.taxMinor} = 0)`),
     check("gym_sales_tax_name_check", sql`${t.taxName} IS NULL OR char_length(${t.taxName}) BETWEEN 1 AND 30`),
     check("gym_sales_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_sales_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','terminal')`),
+    check("gym_sales_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','terminal')`),
     check(
       "gym_sales_square_payment_check",
       sql`(${t.method} = 'terminal') = (${t.squarePaymentId} IS NOT NULL) AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
@@ -313,7 +313,7 @@ export const gymSaleRefunds = pgTable(
     check("gym_sale_refunds_receipt_check", sql`${t.receiptNumber} >= 1`),
     check("gym_sale_refunds_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_sale_refunds_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_sale_refunds_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer')`),
+    check("gym_sale_refunds_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer')`),
     check("gym_sale_refunds_reason_check", sql`${t.reason} IN ('returned','charged_too_much','faulty','other')`),
     check("gym_sale_refunds_restocked_check", sql`${t.restocked} BETWEEN 0 AND 99`),
     check(

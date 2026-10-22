@@ -956,6 +956,20 @@ describe('Add member gives a membership in the same form', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
   });
 
+  it('a gym in India offers UPI after Cash for a membership given as paid; a gym elsewhere never (18r)', async () => {
+    const methods = async (gym) => {
+      openAdd({ ...IRON, ...gym, privileges: ['members.confirm', 'billing.members'] });
+      const choice = within(await screen.findByTestId('add-membership'));
+      fireEvent.change(choice.getByLabelText('Membership type'), { target: { value: GOLD.id } });
+      fireEvent.click(choice.getByRole('checkbox'));
+      const shown = Array.from(choice.getByLabelText('Payment method').options).map((o) => o.textContent);
+      cleanup();
+      return shown;
+    };
+    expect(await methods({ country: 'IN' })).toEqual(['Choose one', 'Cash', 'UPI', 'Card at the desk', 'Bank transfer']);
+    expect(await methods({ country: 'GB' })).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
+  });
+
   it('offers the price list with "No membership" chosen, and adds nobody a membership unless one is picked', async () => {
     openAdd();
     const choice = within(await screen.findByTestId('add-membership'));

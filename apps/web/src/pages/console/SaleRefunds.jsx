@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { errorText } from '../../api/orgsApi';
-import { PAYMENT_METHODS } from './memberBillsView';
+import { paymentMethodsFor } from './memberBillsView';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import {
   SALE_MENU_WORDS,
@@ -36,7 +36,7 @@ const BOX = { background: 'var(--raise)' };
 const newKey = () => globalThis.crypto.randomUUID();
 
 /** The Refund sale box. `who` is the buyer's name, or null for a walk-in. */
-export function SaleRefundBox({ gymId, sale, who, onDone, onClose }) {
+export function SaleRefundBox({ gymId, country = null, sale, who, onDone, onClose }) {
   const [draft, setDraft] = useState(() => saleRefundDraft(sale, newKey));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -82,7 +82,7 @@ export function SaleRefundBox({ gymId, sale, who, onDone, onClose }) {
         <span className="c-label">How you gave it back</span>
         <select className="c-sel" value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value }))}>
           <option value="">Choose one</option>
-          {PAYMENT_METHODS.map((method) => (
+          {paymentMethodsFor(country).map((method) => (
             <option key={method.value} value={method.value}>
               {method.label}
             </option>
@@ -137,11 +137,11 @@ export function SaleRefundBox({ gymId, sale, who, onDone, onClose }) {
 
 /** Refund sale on a sale (18q): on a sale of several products, which one the money went back
  *  for is picked first, from those with something left to refund; then that product's box. */
-export function BasketRefundBox({ gymId, basket, who, onDone, onClose }) {
+export function BasketRefundBox({ gymId, country = null, basket, who, onDone, onClose }) {
   const open = basket.lines.filter((line) => line.canRefund === true);
   const [lineId, setLineId] = useState(open.length === 1 ? (open[0]?.id ?? '') : '');
   const line = open.find((l) => l.id === lineId) ?? null;
-  if (basket.lines.length === 1) return <SaleRefundBox gymId={gymId} sale={basket.first} who={who} onDone={onDone} onClose={onClose} />;
+  if (basket.lines.length === 1) return <SaleRefundBox gymId={gymId} country={country} sale={basket.first} who={who} onDone={onDone} onClose={onClose} />;
   return (
     <div className="flex flex-col gap-3" data-testid="basket-refund">
       <div className="rounded-[14px] p-3 flex flex-col gap-3" style={BOX}>
@@ -164,7 +164,7 @@ export function BasketRefundBox({ gymId, basket, who, onDone, onClose }) {
           </div>
         ) : null}
       </div>
-      {line !== null ? <SaleRefundBox key={line.id} gymId={gymId} sale={line} who={who} onDone={onDone} onClose={onClose} /> : null}
+      {line !== null ? <SaleRefundBox key={line.id} gymId={gymId} country={country} sale={line} who={who} onDone={onDone} onClose={onClose} /> : null}
     </div>
   );
 }

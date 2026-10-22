@@ -132,7 +132,7 @@ try {
   for (const table of ["gym_member_list_entries", "gym_sales", "gym_products", "users"]) await sql`ANALYZE ${sql(table)}`;
 
   const deps: RegisterDeps = { sql, now: () => now };
-  const viewer = { timezone: TZ, canSell: true, canManage: true, seesEmail: true };
+  const viewer = { timezone: TZ, country: "GB", canSell: true, canManage: true, seesEmail: true };
   const open = async (gym: Made, salesADay: number): Promise<number> => {
     const page = await getRegister(deps, gym.gymId, viewer);
     if (page.discounts.length !== DISCOUNTS_MAX) throw new Error(`read ${String(page.discounts.length)} discounts`);
