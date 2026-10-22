@@ -168,7 +168,7 @@ describe('a product sale', () => {
 
     pick('Add a product', 'p-water');
     fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
-    pick('How did they pay?', 'card_at_desk');
+    pick('Payment method', 'card_at_desk');
     expect(within(newSale()).getByTestId('sale-summary').textContent).toBe('Price$3.98Sales tax 8.25%$0.33Total$4.31');
     expect(takeButton().textContent).toBe('Take payment · $4.31');
     expect(within(newSale()).getByText('This records the sale. Take the money yourself: the app does not charge anybody.')).toBeTruthy();
@@ -471,7 +471,7 @@ describe('receipts (18g-i)', () => {
     await screen.findByRole('region', { name: 'New sale' });
     pick('Add a product', 'p-water');
     fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
-    pick('How did they pay?', 'card_at_desk');
+    pick('Payment method', 'card_at_desk');
     svc.sell.mockResolvedValue({ saleId: 's1', receiptNumber: 41, register: withSale(sale({ method: 'card_at_desk' })) });
     fireEvent.click(takeButton());
     const done = await within(newSale()).findByTestId('sale-done');
@@ -507,7 +507,7 @@ describe('a membership', () => {
     expect(within(newSale()).queryByRole('button', { name: 'A membership' })).toBeNull();
     expect(within(newSale()).getByLabelText('Add a product')).toBeTruthy();
     const box = screen.getByRole('region', { name: 'Sell a membership' });
-    expect(within(box).getByText("Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and how they paid.")).toBeTruthy();
+    expect(within(box).getByText("Memberships are sold on the member's own page, where you pick the membership, a discount if there is one, and the payment method.")).toBeTruthy();
     fireEvent.change(within(box).getByLabelText('Find them by name or member number'), { target: { value: 'maya' } });
     fireEvent.click(await within(box).findByRole('button', { name: 'Maya Patel · No. 1042' }));
     fireEvent.click(within(box).getByRole('button', { name: 'Add a membership for Maya Patel' }));

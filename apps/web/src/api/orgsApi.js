@@ -112,6 +112,8 @@ import {
   memberPayersResponseSchema,
   memberCardResponseSchema,
   terminalSaveResponseSchema,
+  terminalPaymentResponseSchema,
+  terminalPaymentsResponseSchema,
   memberNotesAndTagsSchema,
   memberNotesOlderResponseSchema,
   memberTagsDoneResponseSchema,
@@ -1798,6 +1800,35 @@ export const orgService = {
       terminalSaveResponseSchema,
       'their card on file',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/card/terminal/${encodeURIComponent(saveId)}/cancel`),
+    ),
+  /** Take payment on Terminal (ROADMAP 18d-vi-a): the Terminals a bill can be paid on, and what
+   *  waits on one; the amount sent to one; asked about every few seconds until it ends. */
+  getTerminalPayments: (gymId, entryId) =>
+    readThrough(
+      terminalPaymentsResponseSchema,
+      "this person's payments",
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/terminal-payments`),
+    ),
+  startTerminalPayment: (gymId, entryId, membershipId, body) =>
+    readThrough(
+      terminalPaymentResponseSchema,
+      "this person's payments",
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/terminal-payment`,
+        body,
+      ),
+    ),
+  checkTerminalPayment: (gymId, entryId, paymentId) =>
+    readThrough(
+      terminalPaymentResponseSchema,
+      "this person's payments",
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/terminal-payments/${encodeURIComponent(paymentId)}`),
+    ),
+  cancelTerminalPayment: (gymId, entryId, paymentId) =>
+    readThrough(
+      terminalPaymentResponseSchema,
+      "this person's payments",
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/terminal-payments/${encodeURIComponent(paymentId)}/cancel`),
     ),
   giveHeldMembership: (gymId, entryId, body) =>
     readThrough(

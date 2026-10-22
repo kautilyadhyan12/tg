@@ -196,6 +196,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
       bank_transfer: (sold?.bank_transfer ?? 0) + of("bank_transfer"),
       link: of("link"),
       company: of("company"),
+      terminal: of("terminal"),
       refundedMinor: [...(paid?.refunds ?? []), ...row.refunds].filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
       discountMinor: sold?.discountMinor ?? 0,
       otherCurrency,

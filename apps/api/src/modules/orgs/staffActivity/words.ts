@@ -236,6 +236,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
   "org.member_payment_recorded": (s) => `Recorded ${pay(s)} from ${fromWhom(s)}${methodWords(s)}`,
+  // Square took the money on the Terminal, and the bill had changed meanwhile (18d-vi-a).
+  // Square's answer could not be read past its time, so the money may have been taken (18d-vi-a).
+  "org.terminal_payment_unchecked": (s) => `Started ${pay(s)} from ${person(s)} on a Square Terminal that couldn't be checked. Check it in Square`,
+  "org.terminal_payment_not_recorded": (s) => `Took ${pay(s)} from ${person(s)} on a Square Terminal, but the bill had changed, so it isn't recorded. Check it in Square`,
   "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");

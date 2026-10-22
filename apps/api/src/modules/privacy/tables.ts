@@ -540,6 +540,11 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // null`. It holds Square's ids and the agreement's words, no card number, and is forgotten a
   // day after the save ends.
   "gym_terminal_card_saves",
+  // gym_terminal_payments.started_by — which member of staff pressed Take payment on Terminal
+  // (`0149`; 18d-vi-a), on gym_member_payments' footing: the gym's record; `ON DELETE set null`.
+  // It holds Square's ids and the amount, no card number, and is forgotten a day after it ends
+  // unless Square took money it could not record.
+  "gym_terminal_payments",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
   "gym_waivers",

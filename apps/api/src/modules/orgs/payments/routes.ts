@@ -24,9 +24,16 @@
 //   POST   …/member-list/entries/:entryId/card/terminal                 the agreement goes to the Terminal
 //   GET    …/member-list/entries/:entryId/card/terminal/:saveId         where it stands (asked every few seconds)
 //   POST   …/member-list/entries/:entryId/card/terminal/:saveId/cancel  Cancel
+//
+// Take payment on Terminal (ROADMAP 18d-vi-a), `billing.members`:
+//   GET    …/member-list/entries/:entryId/terminal-payments                          the Terminals, and what waits
+//   POST   …/member-list/entries/:entryId/memberships/:membershipId/terminal-payment the amount goes to the Terminal
+//   GET    …/member-list/entries/:entryId/terminal-payments/:paymentId              where it stands (every few seconds)
+//   POST   …/member-list/entries/:entryId/terminal-payments/:paymentId/cancel       Cancel
 import {
   saveCardRequestSchema,
   squareCardIdSchema,
+  terminalPaymentRequestSchema,
   terminalSaveRequestSchema,
   squareFinishRequestSchema,
   squareLocationRequestSchema,
@@ -38,12 +45,20 @@ import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as webhooks from "../../webhooks/repo.js";
-import { memberListEntryParamsSchema, orgParamsSchema, squareTerminalParamsSchema, terminalSaveParamsSchema } from "../schemas.js";
+import {
+  heldMembershipParamsSchema,
+  memberListEntryParamsSchema,
+  orgParamsSchema,
+  squareTerminalParamsSchema,
+  terminalPaymentParamsSchema,
+  terminalSaveParamsSchema,
+} from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
 import * as cards from "./cards.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import * as terminalCards from "./terminalCards.js";
+import * as terminalPayments from "./terminalPayments.js";
 import * as terminals from "./terminals.js";
 import { SQUARE_REVOKED_EVENT } from "./work.js";
 
@@ -193,6 +208,43 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(terminalSaveParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalCards.cancelTerminalSave(paymentsDeps, callerId(req), params.gymId, params.entryId, params.saveId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Take payment on Terminal: a press is a trip to Square, and a busy desk takes many in an hour;
+  // while one waits the page asks every 3 seconds, six minutes at most (Square's five and a minute
+  // more): about a hundred and twenty asks a press. Staff at one desk share an address.
+  const payStartLimit = createDualRateLimit({ name: "terminal_payment", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const payCheckLimit = createDualRateLimit({ name: "terminal_payment_check", max: 4800, ipMax: 24_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const entryUrl = "/v1/orgs/:gymId/member-list/entries/:entryId";
+
+  app.get(`${entryUrl}/terminal-payments`, { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalPayments.readTerminalPayments(paymentsDeps, callerId(req), params.gymId, params.entryId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${entryUrl}/memberships/:membershipId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(terminalPaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await terminalPayments.startTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get(`${entryUrl}/terminal-payments/:paymentId`, { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
+    const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalPayments.checkTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${entryUrl}/terminal-payments/:paymentId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+    const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await terminalPayments.cancelTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

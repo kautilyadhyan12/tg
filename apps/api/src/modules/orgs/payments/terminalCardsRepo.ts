@@ -6,6 +6,7 @@
 import { terminalSaveOutcomeSchema, type TerminalSaveOutcome } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import type { SquareEnvironment } from "./square.js";
+import { lockTerminal, paymentWaitingOn } from "./terminalPaymentsRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
@@ -111,8 +112,19 @@ export interface NewSave {
 }
 
 /** A new press, or why not: the same press already written, a save already waiting for this
- *  person, or the Terminal busy with another. */
-export async function insertSave(sql: SqlOrTx, s: NewSave): Promise<{ kind: "new" | "same_press" | "person_waiting"; save: SaveRow } | { kind: "terminal_busy" } | { kind: "key_reused" }> {
+ *  person, or the Terminal busy with another save or a payment (18d-vi-a), asked under the
+ *  Terminal's lock that a payment takes too. */
+export async function insertSave(sql: Sql, s: NewSave): Promise<{ kind: "new" | "same_press" | "person_waiting"; save: SaveRow } | { kind: "terminal_busy" } | { kind: "key_reused" }> {
+  return await sql.begin(async (tx) => {
+    await lockTerminal(tx, s.environment, s.accountId, s.deviceId);
+    const [same] = await tx<RawSave[]>`
+      SELECT ${COLUMNS(tx)} FROM gym_terminal_card_saves WHERE gym_id = ${s.gymId} AND request_key = ${s.requestKey}`;
+    if (same === undefined && (await paymentWaitingOn(tx, s.environment, s.accountId, s.deviceId))) return { kind: "terminal_busy" as const };
+    return await insertSaveIn(tx, s);
+  });
+}
+
+async function insertSaveIn(sql: TransactionSql, s: NewSave): Promise<{ kind: "new" | "same_press" | "person_waiting"; save: SaveRow } | { kind: "terminal_busy" } | { kind: "key_reused" }> {
   const rows = await sql<RawSave[]>`
     INSERT INTO gym_terminal_card_saves (gym_id, entry_id, environment, account_id, device_id, customer_id,
                                          request_key, state, words, confirm_key, save_key, started_by, started_at,

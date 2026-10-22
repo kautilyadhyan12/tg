@@ -1037,6 +1037,13 @@
       "when": 1790726400148,
       "tag": "0148_terminal_card_saves",
       "breakpoints": true
+    },
+    {
+      "idx": 148,
+      "version": "7",
+      "when": 1790726400149,
+      "tag": "0149_terminal_payments",
+      "breakpoints": true
     }
   ]
 }

@@ -169,6 +169,10 @@ function fakeSquare(clock: () => Date) {
     createTerminalAction: () => Promise.resolve(unavailable),
     getTerminalAction: () => Promise.resolve(unavailable),
     cancelTerminalAction: () => Promise.resolve(unavailable),
+    createTerminalCheckout: () => Promise.resolve(unavailable),
+    getTerminalCheckout: () => Promise.resolve(unavailable),
+    cancelTerminalCheckout: () => Promise.resolve(unavailable),
+    getPayment: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgb-${randomBytes(8).toString("hex")}`;

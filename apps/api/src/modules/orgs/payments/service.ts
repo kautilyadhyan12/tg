@@ -35,6 +35,7 @@ import {
   type SquareFinishResponse,
   type SquareRefusal,
   type SquareTerminals,
+  TERMINAL_PAYMENT_WORDS,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit, lockOrgRow } from "../repo.js";
@@ -42,6 +43,7 @@ import { OrgsError, requireStaff, requireWritableGym } from "../service.js";
 import * as repo from "./repo.js";
 import type { SquareSettings } from "./settings.js";
 import { SQUARE_SCOPES } from "./square.js";
+import { anyWaitingIn } from "./terminalPaymentsRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 import type { TokenContext } from "./tokenBox.js";
 
@@ -416,6 +418,8 @@ export async function disconnectSquare(deps: PaymentsDeps, userId: string, gymId
     await lockOrgRow(tx, gymId);
     const row = await repo.readConnection(tx, gymId, square.environment, true);
     if (row === null) return null;
+    // The amount would stay on the Terminal with nothing here to record it (review round one, Low 2).
+    if (await anyWaitingIn(tx, gymId, square.environment)) throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.disconnect_waiting);
     await repo.deleteConnection(tx, gymId, square.environment);
     if (row.state !== "connected" || row.accessToken === null) return null;
     await insertAudit(tx, {

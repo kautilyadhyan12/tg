@@ -60,7 +60,7 @@ export default function MembershipChoice({ types, today, value, onChange, allowN
           </div>
           {value.paid ? (
             <label className="c-field">
-              <span className="c-label">How they paid</span>
+              <span className="c-label">Payment method</span>
               <select className="c-sel" value={value.method ?? ''} onChange={(e) => onChange({ ...value, method: e.target.value })}>
                 <option value="">Choose one</option>
                 {PAYMENT_METHODS.map((method) => (

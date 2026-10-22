@@ -88,3 +88,4 @@ export * from "./memberPayers.js";
 export * from "./square.js";
 export * from "./gymPayments.js";
 export * from "./memberCards.js";
+export * from "./terminalPayments.js";

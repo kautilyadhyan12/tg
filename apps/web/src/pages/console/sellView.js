@@ -216,6 +216,7 @@ export function takingsWords(page) {
   // Named as each payment's own row names it.
   if (totals.link > 0) how.push(`${methodWords('link')} ${money(totals.link)}`);
   if (totals.company > 0) how.push(`${methodWords('company')} ${money(totals.company)}`);
+  if (totals.terminal > 0) how.push(`${methodWords('terminal')} ${money(totals.terminal)}`);
   return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(totals.totalMinor)} from ${what.join(' and ')}. ${how.join(' · ')}.`;
 }
 
