@@ -273,7 +273,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-vi-a. [x] **Take payment on Terminal on a member's bill** — merged 2026-10-22 (PR #335).
        - 18d-vi-b. **At Sell and on fees**, in two parts since 2026-10-22 (`handoff/2026-10-22-18d-vi-b-i.md` keeps its line as first written):
          - 18d-vi-b-i. [x] **Take payment on Terminal on a late cancel or no-show fee** — merged 2026-10-22 (PR #337).
-         - 18d-vi-b-ii. [ ] **At Sell**, for the whole basket. Web folder 1.
+         - 18d-vi-b-ii. [x] **Take payment on Terminal at Sell**, for the whole basket — merged 2026-10-22 (PR #339).
        - 18d-vi-c. [ ] **The card kept from a Terminal payment** for a membership that renews: the agreement grows to Visa's list on all three screens, the member agrees on the Terminal first. Web folder 1.
      - 18r. [ ] **UPI for gyms in India**, wherever a payment is recorded: Sell, Record payment and Add member's "how they paid", beside Cash, Card at the desk and Bank transfer. Web folder 1, after 18d-vi.
      - 18d-iii. [ ] **Bills charged to the saved card on their date** (the bill's id as Square's idempotency key, `rulings/2026-10-17-18h-i.md`), Square's messages marking them paid or failed; a membership's dates moving moves the charge. When a charge fails (Kd, 2026-10-22): at most 3 tries over several days, never after a decline the card companies forbid, the member told in writing with 7 days to pay another way, a Failed payments list for staff with Try again. Late-cancel and no-show fees are never charged by themselves: staff take them by hand (Kd, 2026-10-22, `rulings/2026-10-22-18d-vi-b-i.md`). Two or three jobs.

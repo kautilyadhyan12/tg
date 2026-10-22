@@ -176,6 +176,12 @@ export async function takeUse(tx: TransactionSql, gymId: string, discountId: str
   return rows.length === 1;
 }
 
+/** Counts one use whatever its limit: a sale paid on the Terminal (18d-vi-b-ii) that took it when
+ *  the card was asked for, and the person has paid. */
+export async function countUse(tx: TransactionSql, gymId: string, discountId: string): Promise<void> {
+  await tx`UPDATE gym_discounts SET uses = uses + 1 WHERE gym_id = ${gymId} AND id = ${discountId}`;
+}
+
 /** Gives one use back: the sale that took it was undone. */
 export async function returnUse(tx: TransactionSql, gymId: string, discountId: string): Promise<void> {
   await tx`UPDATE gym_discounts SET uses = GREATEST(uses - 1, 0) WHERE gym_id = ${gymId} AND id = ${discountId}`;

@@ -168,7 +168,8 @@ export function soldWords(sale) {
   const basket = asBasket(sale);
   const first = basket.first;
   const to = first.person === null ? 'a walk-in' : first.person.name;
-  const sold = `Sold: ${basketTitle(basket)} to ${to}. ${formatMinor(basket.totalMinor, first.currency)}, ${methodWords(first.method).toLowerCase()}.`;
+  // "Terminal" is the device's name, kept as Square writes it (18d-vi-b-ii).
+  const sold = `Sold: ${basketTitle(basket)} to ${to}. ${formatMinor(basket.totalMinor, first.currency)}, ${first.method === 'terminal' ? 'card on the Terminal' : methodWords(first.method).toLowerCase()}.`;
   const off = basketDiscountWords(basket);
   return off === null ? sold : `${sold} ${off}.`;
 }

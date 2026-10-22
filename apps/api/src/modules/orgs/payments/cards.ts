@@ -73,6 +73,7 @@ export const connectionRefused = (): OrgsError => new OrgsError(409, "card_conne
 export const paidBy = (payer: string, person: string): OrgsError =>
   new OrgsError(409, "card_paid_by_payer", cardPaidByLine(payer === "" ? "Somebody else on your list" : payer, person === "" ? "this person" : person));
 
+/** Whether the gym can take a card through Square here, as Card on file and Sell (18d-vi-b-ii) say it. */
 export function stateOf(square: SquareSettings | null, gym: repo.GymForPayments, row: repo.ConnectionRow | null): MemberCardState {
   if (square === null || gymPaymentsAvailability(gym.country) !== "square") return "not_offered";
   if (row?.state !== "connected") return "connect";

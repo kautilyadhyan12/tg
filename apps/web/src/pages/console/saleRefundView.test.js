@@ -35,6 +35,12 @@ describe('the Refund sale box', () => {
     expect(saleRefundDraft(sale({ refundedMinor: 250 }), () => 'k1')).toEqual({ requestKey: 'k1', amount: '5.00', method: 'card_at_desk', reason: '', restock: '0', tried: false });
   });
 
+  it('a sale paid on the Terminal: refunded in Square, so the box says so and staff pick how it went back', () => {
+    const paid = sale({ method: 'terminal' });
+    expect(saleRefundDraft(paid, () => 'k1').method).toBe('');
+    expect(saleRefundWords(paid, null).detail).toBe('Sold on 15 Oct 2026 to a walk-in for $7.50. This only writes the refund in your records: refund the card in your Square Dashboard.');
+  });
+
   it('asks about the shelf only where the sale took from a count and some are not back', () => {
     expect(asksRestock(sale())).toBe(true);
     expect(asksRestock(sale({ stockCounted: false }))).toBe(false);

@@ -47,7 +47,8 @@ export function saleRefundTag(sale) {
 
 /** A fresh Refund sale box: all that is left, given back the way it was paid. */
 export function saleRefundDraft(sale, newKey) {
-  return { requestKey: newKey(), amount: minorToPriceText(refundableMinor(sale), sale.currency), method: sale.method, reason: '', restock: '0', tried: false };
+  // A sale paid on the Terminal (18d-vi-b-ii) went back through Square: staff pick how, as on a membership.
+  return { requestKey: newKey(), amount: minorToPriceText(refundableMinor(sale), sale.currency), method: sale.method === 'terminal' ? '' : sale.method, reason: '', restock: '0', tried: false };
 }
 
 /** Whether the box asks how many went back on the shelf: only where the sale took from a count. */
@@ -66,7 +67,8 @@ export function saleRefundWords(sale, who) {
   const some = left < sale.totalMinor ? ` ${formatMinor(left, sale.currency)} of it can still be refunded.` : '';
   return {
     title: `Refund sale: ${String(sale.quantity)} × ${sale.itemName}`,
-    detail: `Sold on ${shortDay(sale.soldOn)} ${to} for ${formatMinor(sale.totalMinor, sale.currency)}.${some} This only writes the refund in your records: give the money back yourself.`,
+    // A sale paid on the Terminal (18d-vi-b-ii) is refunded in Square, where its money is.
+    detail: `Sold on ${shortDay(sale.soldOn)} ${to} for ${formatMinor(sale.totalMinor, sale.currency)}.${some} This only writes the refund in your records: ${sale.method === 'terminal' ? 'refund the card in your Square Dashboard' : 'give the money back yourself'}.`,
   };
 }
 

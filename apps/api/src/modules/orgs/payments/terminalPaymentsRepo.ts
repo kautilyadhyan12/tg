@@ -6,7 +6,9 @@
 // (as a payment by hand is) and the Terminal's, which a save on it (18d-ii-b-ii) takes too.
 import { memberFeeKindSchema, memberPayTarget, terminalPaymentOutcomeSchema, type MemberFeeKind, type TerminalPaymentOutcome } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
-import { insertAudit } from "../repo.js";
+import { z } from "zod";
+import { insertAudit, lockOrgRow } from "../repo.js";
+import { priceBasket, pricedSaleSchema, recordTakenSale, type SaleRefusal, type SellLineInput } from "../register/repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
 import { billsFor } from "../memberships/billsSql.js";
@@ -16,12 +18,20 @@ import type { SquareEnvironment } from "./square.js";
 
 type SqlOrTx = Sql | TransactionSql;
 
+/** A basket at Sell kept on its press (18d-vi-b-ii): as it was priced, and whether it was sold to
+ *  somebody on the gym's list (who is the row's own `entry_id`). */
+export const saleOnTerminalSchema = pricedSaleSchema.extend({ forMember: z.boolean() });
+export type SaleOnTerminal = z.infer<typeof saleOnTerminalSchema>;
+
 export interface PayRow {
   id: string;
   gymId: string;
-  /** Null once the record was deleted for good. */
+  /** Null once the record was deleted for good, and for a sale to a walk-in. */
   entryId: string | null;
-  membershipId: string;
+  /** Null for a basket at Sell. */
+  membershipId: string | null;
+  /** A basket at Sell (18d-vi-b-ii), in place of a membership's period or fee. */
+  sale: SaleOnTerminal | null;
   /** The period it pays, or null for a fee. */
   periodIndex: number | null;
   /** The fee it pays (18d-vi-b-i), or null for a period. */
@@ -48,13 +58,16 @@ export interface PayRow {
   cancelTooLate: boolean;
   /** The payment's receipt, once it is on the bill. */
   receiptNumber: number | null;
+  /** Who pressed it, as their name reads now: read only for Sell's waiting sales. */
+  startedByName?: string | null;
 }
 
 interface RawPay {
   id: string;
   gym_id: string;
   entry_id: string | null;
-  held_membership_id: string;
+  held_membership_id: string | null;
+  sale: unknown;
   period_index: number | null;
   fee_bill_id: string | null;
   fee_kind: string | null;
@@ -85,6 +98,8 @@ const toRow = (r: RawPay): PayRow => {
     gymId: r.gym_id,
     entryId: r.entry_id,
     membershipId: r.held_membership_id,
+    // Our own column, written by `startSalePayment`: parsed, so a shape this build does not know fails here.
+    sale: r.sale === null ? null : saleOnTerminalSchema.parse(r.sale),
     periodIndex: r.period_index,
     feeBillId: r.fee_bill_id,
     feeKind: feeKind.success ? feeKind.data : null,
@@ -110,10 +125,10 @@ const toRow = (r: RawPay): PayRow => {
 
 /** The row's own columns, and its payment's receipt number (the payment is on its gym). */
 const COLUMNS = (sql: SqlOrTx) =>
-  sql`t.id, t.gym_id, t.entry_id, t.held_membership_id, t.period_index, t.fee_bill_id, t.amount_minor, t.currency, t.environment,
+  sql`t.id, t.gym_id, t.entry_id, t.held_membership_id, t.sale, t.period_index, t.fee_bill_id, t.amount_minor, t.currency, t.environment,
       t.account_id, t.location_id, t.device_id, t.state, t.outcome, t.checkout_key, t.checkout_id, t.picked_up,
       t.square_payment_id, t.started_by, t.started_at, t.cancel_wanted_at, t.cancel_too_late,
-      (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = t.gym_id AND p.id = t.member_payment_id) AS receipt_number,
+      COALESCE((SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = t.gym_id AND p.id = t.member_payment_id), t.sale_receipt_number) AS receipt_number,
       (SELECT b.fee FROM gym_member_bills b WHERE b.gym_id = t.gym_id AND b.id = t.fee_bill_id) AS fee_kind`;
 
 /** Both kinds of Terminal work (a payment here, a card save in `terminalCardsRepo.ts`) take this
@@ -128,6 +143,19 @@ export async function paymentWaitingOn(tx: TransactionSql, environment: SquareEn
     SELECT id FROM gym_terminal_payments
     WHERE environment = ${environment} AND account_id = ${accountId} AND device_id = ${deviceId} AND state = 'waiting'`;
   return row !== undefined;
+}
+
+/** The Terminal, locked, when nothing waits on it: no payment, and no card save. */
+async function lockFreeTerminal(tx: TransactionSql, s: { environment: SquareEnvironment; accountId: string; deviceId: string }): Promise<boolean> {
+  await lockTerminal(tx, s.environment, s.accountId, s.deviceId);
+  const [busy] = await tx<{ id: string }[]>`
+    SELECT id FROM gym_terminal_payments
+    WHERE environment = ${s.environment} AND account_id = ${s.accountId} AND device_id = ${s.deviceId} AND state = 'waiting'
+    UNION ALL
+    SELECT id FROM gym_terminal_card_saves
+    WHERE environment = ${s.environment} AND account_id = ${s.accountId} AND device_id = ${s.deviceId} AND state IN ('agreeing','saving')
+    LIMIT 1`;
+  return busy === undefined;
 }
 
 /** What a press pays: a period of the membership (18d-vi-a), or one of its fees (18d-vi-b-i). */
@@ -208,15 +236,7 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
     }
     if (currency !== s.accountCurrency) return { kind: "currency" };
 
-    await lockTerminal(tx, s.environment, s.accountId, s.deviceId);
-    const [busy] = await tx<{ id: string }[]>`
-      SELECT id FROM gym_terminal_payments
-      WHERE environment = ${s.environment} AND account_id = ${s.accountId} AND device_id = ${s.deviceId} AND state = 'waiting'
-      UNION ALL
-      SELECT id FROM gym_terminal_card_saves
-      WHERE environment = ${s.environment} AND account_id = ${s.accountId} AND device_id = ${s.deviceId} AND state IN ('agreeing','saving')
-      LIMIT 1`;
-    if (busy !== undefined) return { kind: "terminal_busy" };
+    if (!(await lockFreeTerminal(tx, s))) return { kind: "terminal_busy" };
     const [made] = await tx<{ id: string }[]>`
       INSERT INTO gym_terminal_payments (gym_id, entry_id, held_membership_id, period_index, fee_bill_id, amount_minor, currency,
                                          environment, account_id, location_id, device_id, request_key, state, checkout_key,
@@ -232,9 +252,72 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
   });
 }
 
-/** One of the record's payments. */
-export async function readPayment(sql: SqlOrTx, gymId: string, entryId: string, id: string): Promise<PayRow | null> {
-  const [row] = await sql<RawPay[]>`SELECT ${COLUMNS(sql)} FROM gym_terminal_payments t WHERE t.id = ${id} AND t.gym_id = ${gymId} AND t.entry_id = ${entryId}`;
+/** Whose payments a request reaches: a record's bills (its page), or the gym's sales (Sell). A
+ *  sale is never reached from a person's page, nor a bill from Sell. */
+export type Scope = { entryId: string } | { sale: true };
+
+const scoped = (sql: SqlOrTx, of: Scope) => ("entryId" in of ? sql`t.entry_id = ${of.entryId} AND t.sale IS NULL` : sql`t.sale IS NOT NULL`);
+
+export interface NewSalePay {
+  gymId: string;
+  /** The buyer; null for a walk-in. */
+  entryId: string | null;
+  totalMinor: number;
+  lines: readonly SellLineInput[];
+  environment: SquareEnvironment;
+  accountId: string;
+  locationId: string;
+  /** The Square account's own money: a sale in another is not sent. */
+  accountCurrency: string;
+  deviceId: string;
+  requestKey: string;
+  checkoutKey: string;
+  startedBy: string;
+  today: string;
+  now: Date;
+  checkingUntil: Date;
+}
+
+export type StartSaleOutcome =
+  | { kind: "new" | "same_press"; payment: PayRow }
+  | { kind: "key_reused" | "terminal_busy" | "currency" }
+  | { kind: "refused"; refusal: SaleRefusal };
+
+/** A basket sent to the Terminal (18d-vi-b-ii), or why not. Priced under the gym's lock exactly as
+ *  a sale by hand is (`priceBasket`), and kept as priced: Square is asked for that total, and the
+ *  sale recorded when it is taken is that one. Nothing is sold, counted or used until then. */
+export async function startSalePayment(sql: Sql, s: NewSalePay): Promise<StartSaleOutcome> {
+  return await sql.begin(async (tx): Promise<StartSaleOutcome> => {
+    await lockOrgRow(tx, s.gymId);
+    const [same] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_terminal_payments t WHERE t.gym_id = ${s.gymId} AND t.request_key = ${s.requestKey}`;
+    if (same !== undefined) {
+      const repeat = same.sale !== null && same.entry_id === s.entryId && same.amount_minor === s.totalMinor;
+      return repeat ? { kind: "same_press", payment: toRow(same) } : { kind: "key_reused" };
+    }
+    const priced = await priceBasket(tx, { gymId: s.gymId, entryId: s.entryId, totalMinor: s.totalMinor, lines: s.lines, today: s.today });
+    if (priced.kind !== "priced") return { kind: "refused", refusal: priced };
+    const currency = priced.sale.lines[0]?.currency;
+    if (currency !== s.accountCurrency) return { kind: "currency" };
+    if (!(await lockFreeTerminal(tx, s))) return { kind: "terminal_busy" };
+    const sale: SaleOnTerminal = { ...priced.sale, forMember: s.entryId !== null };
+    const [made] = await tx<{ id: string }[]>`
+      INSERT INTO gym_terminal_payments (gym_id, entry_id, held_membership_id, sale, amount_minor, currency,
+                                         environment, account_id, location_id, device_id, request_key, state, checkout_key,
+                                         started_by, started_at, checking_until, checked_at)
+      VALUES (${s.gymId}, ${s.entryId}, NULL, ${tx.json(sale)}, ${s.totalMinor}, ${currency}, ${s.environment},
+              ${s.accountId}, ${s.locationId}, ${s.deviceId}, ${s.requestKey}, 'waiting', ${s.checkoutKey}, ${s.startedBy},
+              ${s.now}, ${s.checkingUntil}, ${s.now})
+      RETURNING id`;
+    if (made === undefined) throw new Error("a Terminal sale was not written under its locks");
+    const [written] = await tx<RawPay[]>`SELECT ${COLUMNS(tx)} FROM gym_terminal_payments t WHERE t.id = ${made.id}`;
+    if (written === undefined) throw new Error("a Terminal sale just written was not read back");
+    return { kind: "new", payment: toRow(written) };
+  });
+}
+
+/** One of the record's payments, or one of the gym's sales. */
+export async function readPayment(sql: SqlOrTx, gymId: string, of: Scope, id: string): Promise<PayRow | null> {
+  const [row] = await sql<RawPay[]>`SELECT ${COLUMNS(sql)} FROM gym_terminal_payments t WHERE t.id = ${id} AND t.gym_id = ${gymId} AND ${scoped(sql, of)}`;
   return row === undefined ? null : toRow(row);
 }
 
@@ -242,18 +325,28 @@ export async function readPayment(sql: SqlOrTx, gymId: string, entryId: string, 
 export async function readWaitingOf(sql: SqlOrTx, gymId: string, entryId: string, environment: SquareEnvironment): Promise<PayRow[]> {
   const rows = await sql<RawPay[]>`
     SELECT ${COLUMNS(sql)} FROM gym_terminal_payments t
-    WHERE t.gym_id = ${gymId} AND t.entry_id = ${entryId} AND t.environment = ${environment} AND t.state = 'waiting'
+    WHERE t.gym_id = ${gymId} AND t.entry_id = ${entryId} AND t.sale IS NULL AND t.environment = ${environment} AND t.state = 'waiting'
     ORDER BY t.started_at
     LIMIT 50`;
   return rows.map(toRow);
 }
 
+/** The gym's sales waiting on a Terminal, for Sell (18d-vi-b-ii): one a Terminal at most. */
+export async function readWaitingSales(sql: SqlOrTx, gymId: string, environment: SquareEnvironment): Promise<PayRow[]> {
+  const rows = await sql<(RawPay & { started_by_name: string | null })[]>`
+    SELECT ${COLUMNS(sql)}, (SELECT u.display_name FROM users u WHERE u.id = t.started_by) AS started_by_name FROM gym_terminal_payments t
+    WHERE t.gym_id = ${gymId} AND t.sale IS NOT NULL AND t.environment = ${environment} AND t.state = 'waiting'
+    ORDER BY t.started_at
+    LIMIT 50`;
+  return rows.map((r) => ({ ...toRow(r), startedByName: r.started_by_name }));
+}
+
 /** This request asks Square about the payment, and nobody else does until `until` or `release`.
  *  Null while another request holds it, or once it is done. */
-export async function claimCheck(sql: SqlOrTx, gymId: string, entryId: string, id: string, now: Date, until: Date): Promise<PayRow | null> {
+export async function claimCheck(sql: SqlOrTx, gymId: string, of: Scope, id: string, now: Date, until: Date): Promise<PayRow | null> {
   const [row] = await sql<RawPay[]>`
     UPDATE gym_terminal_payments t SET checking_until = ${until}, checked_at = ${now}
-    WHERE t.id = ${id} AND t.gym_id = ${gymId} AND t.entry_id = ${entryId} AND t.state = 'waiting'
+    WHERE t.id = ${id} AND t.gym_id = ${gymId} AND ${scoped(sql, of)} AND t.state = 'waiting'
       AND (t.checking_until IS NULL OR t.checking_until <= ${now})
     RETURNING ${COLUMNS(sql)}`;
   return row === undefined ? null : toRow(row);
@@ -278,10 +371,10 @@ export async function release(sql: SqlOrTx, id: string, until: Date): Promise<vo
 
 /** Staff pressed Cancel: kept on the payment, so whichever request asks Square next stops the
  *  Terminal first. False when there is no such payment waiting. */
-export async function wantCancel(sql: SqlOrTx, gymId: string, entryId: string, id: string, now: Date): Promise<boolean> {
+export async function wantCancel(sql: SqlOrTx, gymId: string, of: Scope, id: string, now: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
-    UPDATE gym_terminal_payments SET cancel_wanted_at = COALESCE(cancel_wanted_at, ${now})
-    WHERE id = ${id} AND gym_id = ${gymId} AND entry_id = ${entryId} AND state = 'waiting'
+    UPDATE gym_terminal_payments t SET cancel_wanted_at = COALESCE(t.cancel_wanted_at, ${now})
+    WHERE t.id = ${id} AND t.gym_id = ${gymId} AND ${scoped(sql, of)} AND t.state = 'waiting'
     RETURNING id`;
   return rows.length === 1;
 }
@@ -342,11 +435,11 @@ export async function setPickedUp(sql: SqlOrTx, id: string): Promise<void> {
 export async function finish(sql: Sql, id: string, outcome: Exclude<TerminalPaymentOutcome, "paid" | "not_recorded">, at: Date): Promise<boolean> {
   return await sql.begin(async (tx) => {
     const [row] = await tx<
-      { gym_id: string; entry_id: string | null; held_membership_id: string; fee_bill_id: string | null; amount_minor: number; currency: string; started_by: string | null }[]
+      { gym_id: string; entry_id: string | null; held_membership_id: string | null; fee_bill_id: string | null; for_sale: boolean; amount_minor: number; currency: string; started_by: string | null }[]
     >`
       UPDATE gym_terminal_payments SET state = 'done', outcome = ${outcome}, finished_at = ${at}, checking_until = NULL
       WHERE id = ${id} AND state = 'waiting'
-      RETURNING gym_id, entry_id, held_membership_id, fee_bill_id, amount_minor, currency, started_by`;
+      RETURNING gym_id, entry_id, held_membership_id, fee_bill_id, sale IS NOT NULL AS for_sale, amount_minor, currency, started_by`;
     if (row === undefined) return false;
     if (outcome === "gone") {
       await insertAudit(tx, {
@@ -357,8 +450,9 @@ export async function finish(sql: Sql, id: string, outcome: Exclude<TerminalPaym
         targetId: id,
         meta: {
           ...(row.entry_id === null ? {} : { entryId: row.entry_id }),
-          membershipId: row.held_membership_id,
+          ...(row.held_membership_id === null ? {} : { membershipId: row.held_membership_id }),
           ...(row.fee_bill_id === null ? {} : { feeBillId: row.fee_bill_id }),
+          ...(row.for_sale ? { sale: "true" } : {}),
           amountMinor: String(row.amount_minor),
           currency: row.currency,
         },
@@ -376,19 +470,22 @@ export async function anyWaitingIn(tx: TransactionSql, gymId: string, environmen
 
 /** Square took the money: it is recorded on the bill, on whichever record holds the membership now,
  *  in the same transaction that marks the press paid. Where the bill can no longer take it, the
- *  press is marked not recorded, kept, and told to the gym's Staff activity. Null when another
- *  request finished it first. */
+ *  press is marked not recorded, kept, and told to the gym's Staff activity. A basket at Sell
+ *  (18d-vi-b-ii) is recorded as its sale. Null when another request finished it first. */
 export async function recordPaid(
   sql: Sql,
   p: { pay: PayRow; squarePaymentId: string; today: string; now: Date; /** Square took other than asked: kept, never recorded. */ refuse?: string },
 ): Promise<{ outcome: "paid" | "not_recorded" } | null> {
+  if (p.pay.sale !== null) return await recordSalePaid(sql, { ...p, sale: p.pay.sale });
+  const membershipId = p.pay.membershipId;
+  if (membershipId === null) throw new Error("a Terminal payment for neither a membership nor a sale");
   return await sql.begin(async (tx) => {
     const { pay } = p;
     // The gym's lock first: a join moving the membership to another record takes it too, so the
     // record read under it holds the membership while it is locked (review round one, Low 3).
     // A membership whose record was deleted for good has none.
     await lockGym(tx, pay.gymId);
-    const [held] = await tx<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${pay.gymId} AND id = ${pay.membershipId}`;
+    const [held] = await tx<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${pay.gymId} AND id = ${membershipId}`;
     const holder = held?.entry_id == null ? undefined : { entry_id: held.entry_id };
     // Then the record's, then the press: the order a payment by hand takes.
     if (holder !== undefined) await lockedEntry(tx, pay.gymId, holder.entry_id);
@@ -397,7 +494,7 @@ export async function recordPaid(
     // The press itself is the payment's key: the same press recorded twice is one payment.
     const paying = {
       gymId: pay.gymId,
-      membershipId: pay.membershipId,
+      membershipId,
       requestKey: pay.id,
       amountMinor: pay.amountMinor,
       method: "terminal" as const,
@@ -433,7 +530,7 @@ export async function recordPaid(
       targetId: pay.id,
       meta: {
         ...(holder === undefined ? {} : { entryId: holder.entry_id }),
-        membershipId: pay.membershipId,
+        membershipId,
         ...(pay.feeBillId === null ? {} : { feeBillId: pay.feeBillId }),
         amountMinor: String(pay.amountMinor),
         currency: pay.currency,
@@ -442,6 +539,71 @@ export async function recordPaid(
     });
     return { outcome: "not_recorded" as const };
   });
+}
+
+/** Square took the money for a basket at Sell (18d-vi-b-ii): the sale is recorded as it was priced,
+ *  sold to whichever record holds the press now (a join moves it), in the same transaction that
+ *  marks the press paid. Square taking another amount than asked is never recorded: kept, and told
+ *  to the gym's Staff activity. */
+async function recordSalePaid(
+  sql: Sql,
+  p: { pay: PayRow; sale: SaleOnTerminal; squarePaymentId: string; today: string; now: Date; refuse?: string },
+): Promise<{ outcome: "paid" | "not_recorded" } | null> {
+  return await sql.begin(async (tx) => {
+    const { pay } = p;
+    // The gym's lock, which a sale by hand and a join take first too.
+    await lockGym(tx, pay.gymId);
+    const [still] = await tx<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_terminal_payments WHERE id = ${pay.id} AND state = 'waiting' FOR UPDATE`;
+    if (still === undefined) return null;
+    if (p.refuse === undefined) {
+      // The press itself is the sale's key: the same press recorded twice is one sale.
+      const [made] = await tx<{ receipt_number: number; method: string; square_payment_id: string | null }[]>`
+        SELECT receipt_number, method, square_payment_id FROM gym_sales WHERE gym_id = ${pay.gymId} AND request_key = ${pay.id} ORDER BY line_no LIMIT 1`;
+      // A sale by hand sent with this press's id as its own key is not the money Square took.
+      if (made !== undefined && (made.method !== "terminal" || made.square_payment_id !== p.squarePaymentId)) return await saleNotRecorded(tx, p, still.entry_id, "key_taken");
+      const sold = made !== undefined ? { receiptNumber: made.receipt_number } : await recordTakenSale(tx, {
+        gymId: pay.gymId,
+        requestKey: pay.id,
+        entryId: still.entry_id,
+        forMember: p.sale.forMember,
+        squarePaymentId: p.squarePaymentId,
+        sale: p.sale,
+        today: p.today,
+        actorUserId: pay.startedBy,
+        now: p.now,
+      });
+      await tx`
+        UPDATE gym_terminal_payments SET state = 'done', outcome = 'paid', square_payment_id = ${p.squarePaymentId},
+               sale_receipt_number = ${sold.receiptNumber}, finished_at = ${p.now}, checking_until = NULL
+        WHERE id = ${pay.id}`;
+      return { outcome: "paid" as const };
+    }
+    return await saleNotRecorded(tx, p, still.entry_id, p.refuse);
+  });
+}
+
+/** Money Square took for a sale that is not recorded: kept, and told to the gym's Staff activity. */
+async function saleNotRecorded(tx: TransactionSql, p: { pay: PayRow; squarePaymentId: string; now: Date }, entryId: string | null, why: string): Promise<{ outcome: "not_recorded" }> {
+  const { pay } = p;
+  await tx`
+    UPDATE gym_terminal_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
+           finished_at = ${p.now}, checking_until = NULL
+    WHERE id = ${pay.id}`;
+  await insertAudit(tx, {
+    actorUserId: pay.startedBy,
+    gymId: pay.gymId,
+    action: "org.terminal_payment_not_recorded",
+    targetType: "gym_terminal_payment",
+    targetId: pay.id,
+    meta: {
+      ...(entryId === null ? {} : { entryId }),
+      sale: "true",
+      amountMinor: String(pay.amountMinor),
+      currency: pay.currency,
+      why,
+    },
+  });
+  return { outcome: "not_recorded" as const };
 }
 
 /** Done ones are kept a day, for the page that asks how one ended; one Square took money for but

@@ -28,6 +28,11 @@ export const MEMBER_PAYMENT_BY_HAND = ["cash", "card_at_desk", "bank_transfer"] 
 export const memberPaymentByHandSchema = z.enum(MEMBER_PAYMENT_BY_HAND);
 export type MemberPaymentByHand = z.infer<typeof memberPaymentByHandSchema>;
 
+/** How a sale at the desk was paid: by hand, or on the gym's Square Terminal (18d-vi-b-ii). */
+export const SALE_PAYMENT_METHODS = [...MEMBER_PAYMENT_BY_HAND, "terminal"] as const;
+export const salePaymentMethodSchema = z.enum(SALE_PAYMENT_METHODS);
+export type SalePaymentMethod = z.infer<typeof salePaymentMethodSchema>;
+
 export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, string>> = {
   cash: "Cash",
   card_at_desk: "Card at the desk",
