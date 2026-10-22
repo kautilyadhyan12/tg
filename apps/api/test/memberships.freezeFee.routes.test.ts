@@ -381,6 +381,109 @@ d("a fee while frozen (real Postgres)", () => {
   );
 
   it(
+    "a month's fee paid, then unfrozen the day that month began: it reads no longer owed, and voiding its payment takes it off, never owed again (round one, High-1)",
+    async () => {
+      clock = at("2026-10-15");
+      const owner = await makeUser("void-owner");
+      const gymId = (await makeGym(owner, "Ffee Void Gym")).org.id;
+      const gold = await addType(gymId, owner.cookies, typeBody("Gold Monthly", 5000));
+      await setFreezeFee(gymId, owner.cookies, 1000);
+      const ivy = await addPerson(gymId, owner.cookies, "Ivy Voided");
+      const id = await give(gymId, ivy, owner.cookies, gold, 5000);
+      expect((await freeze(gymId, ivy, id, owner.cookies, { feeMinor: 1000 })).statusCode).toBe(200);
+      await run(gymId, "2026-11-15");
+      const [nov] = await sql<{ id: string }[]>`SELECT id FROM gym_member_bills WHERE held_membership_id = ${id} AND fee = 'freeze' AND covers_from = '2026-11-15'`;
+      if (nov === undefined) throw new Error("no November fee");
+      const paid = await post(`${heldUrl(gymId, ivy)}/${id}/fees/${nov.id}/payments`, { requestKey: nextForm(), amountMinor: 1000, method: "cash" }, owner.cookies);
+      expect(paid.statusCode, paid.body).toBe(200);
+
+      // Unfrozen that same day: the paid fee stays paid, and reads no longer owed.
+      expect((await unfreeze(gymId, ivy, id, owner.cookies)).statusCode).toBe(200);
+      const after = held(await get(heldUrl(gymId, ivy), owner.cookies)).memberships[0]?.billing?.fees.find((f) => f.id === nov.id);
+      expect([after?.state, after?.stillOwed]).toEqual(["paid", false]);
+      // Its payment voided: taken off, not owed again; October's stays owed.
+      const [payment] = await sql<{ id: string }[]>`SELECT id FROM gym_member_payments WHERE bill_id = ${nov.id}`;
+      const voided = await post(`${heldUrl(gymId, ivy)}/${id}/fees/${nov.id}/payments/${payment?.id ?? ""}/void`, { reason: "mistake" }, owner.cookies);
+      expect(voided.statusCode, voided.body).toBe(200);
+      expect(await fees(id)).toEqual([
+        ["2026-10-15", "2026-11-14", 1000, "open"],
+        ["2026-11-15", "2026-12-14", 1000, "void"],
+      ]);
+      const page = held(await get(heldUrl(gymId, ivy), owner.cookies)).memberships[0];
+      expect(page?.billing?.fees.filter((f) => f.state === "due" || f.state === "overdue").map((f) => f.on)).toEqual(["2026-10-15"]);
+    },
+    T,
+  );
+
+  it(
+    "unfrozen and frozen again inside a month: those days are not charged twice; the first fee of the new freeze is a month on, and the page says so first (round one, High-2)",
+    async () => {
+      clock = at("2026-10-15");
+      const owner = await makeUser("again-owner");
+      const gymId = (await makeGym(owner, "Ffee Again Gym")).org.id;
+      const gold = await addType(gymId, owner.cookies, typeBody("Gold Monthly", 5000));
+      await setFreezeFee(gymId, owner.cookies, 1000);
+      const jon = await addPerson(gymId, owner.cookies, "Jon Twice");
+      const id = await give(gymId, jon, owner.cookies, gold, 5000);
+      expect(held(await get(heldUrl(gymId, jon), owner.cookies)).memberships[0]?.freezeFeeFirstOn).toBe("2026-10-15");
+      expect((await freeze(gymId, jon, id, owner.cookies, { feeMinor: 1000 })).statusCode).toBe(200);
+      clock = at("2026-10-20");
+      expect((await unfreeze(gymId, jon, id, owner.cookies)).statusCode).toBe(200);
+
+      clock = at("2026-10-25");
+      expect(held(await get(heldUrl(gymId, jon), owner.cookies)).memberships[0]?.freezeFeeFirstOn).toBe("2026-11-25");
+      expect((await freeze(gymId, jon, id, owner.cookies, { feeMinor: 1000 })).statusCode).toBe(200);
+      for (const day of ["2026-10-25", "2026-11-14", "2026-11-24"]) await run(gymId, day);
+      expect(await fees(id)).toEqual([["2026-10-15", "2026-11-14", 1000, "open"]]);
+      await run(gymId, "2026-11-25");
+      expect(await fees(id)).toEqual([
+        ["2026-10-15", "2026-11-14", 1000, "open"],
+        ["2026-11-25", "2026-12-24", 1000, "open"],
+      ]);
+    },
+    T,
+  );
+
+  it(
+    "eight presses by two staff and four runs at one instant open one fee; the index alone refuses a second fee for a waived month; an unticked freeze is said in Staff activity",
+    async () => {
+      clock = at("2026-10-15");
+      const owner = await makeUser("race-owner");
+      const org = await makeGym(owner, "Ffee Race Gym");
+      const gymId = org.org.id;
+      const desk = await makeUser("race-desk");
+      await makeDeskStaff(org, owner, desk);
+      const gold = await addType(gymId, owner.cookies, typeBody("Gold Monthly", 5000));
+      await setFreezeFee(gymId, owner.cookies, 1000);
+      const kim = await addPerson(gymId, owner.cookies, "Kim Race");
+      const id = await give(gymId, kim, owner.cookies, gold, 5000);
+      const answers = await Promise.all([
+        ...Array.from({ length: 8 }, (_, i) => freeze(gymId, kim, id, i % 2 === 0 ? owner.cookies : desk.cookies, { feeMinor: 1000 })),
+        ...Array.from({ length: 4 }, () => openDueFreezeFees({ sql, log }, { now: at("2026-10-15"), gymIds: [gymId] })),
+      ]);
+      expect(answers.slice(0, 8).map((a) => ("statusCode" in a ? a.statusCode : 0))).toEqual([200, 200, 200, 200, 200, 200, 200, 200]);
+      expect(await fees(id)).toEqual([["2026-10-15", "2026-11-14", 1000, "open"]]);
+
+      // Waived, the month stands in the index: a second fee for it is refused by the database itself.
+      const [fee] = await sql<{ id: string; gym_id: string }[]>`SELECT id, gym_id FROM gym_member_bills WHERE held_membership_id = ${id} AND fee = 'freeze'`;
+      expect((await post(`${heldUrl(gymId, kim)}/${id}/fees/${fee?.id ?? ""}/waive`, {}, owner.cookies)).statusCode).toBe(200);
+      await expect(
+        sql`INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, fee, fee_for, amount_minor, currency, due_on, covers_from, covers_to)
+            VALUES (${gymId}, ${id}, NULL, 'freeze', 'Gold Monthly', 1000, 'USD', '2026-10-15', '2026-10-15', '2026-11-14')`,
+      ).rejects.toMatchObject({ code: "23505" });
+
+      // Frozen with no fee where the gym charges one: Staff activity keeps what was offered.
+      const lee = await addPerson(gymId, owner.cookies, "Lee Unticked");
+      const leeGold = await give(gymId, lee, owner.cookies, gold, 5000);
+      expect((await freeze(gymId, lee, leeGold, owner.cookies, { feeMinor: 0 })).statusCode).toBe(200);
+      const [audit] = await sql<{ meta: Record<string, string> }[]>`
+        SELECT meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.held_membership_frozen' AND target_id = ${leeGold}`;
+      expect([audit?.meta["freezeFeeMinor"], audit?.meta["freezeFeeOffered"]]).toEqual(["0", "1000"]);
+    },
+    T,
+  );
+
+  it(
     "staff without the payments tick freeze with the gym's fee and cannot untick it or change it; strangers get 404",
     async () => {
       clock = at("2026-10-15");

@@ -23,6 +23,7 @@ import {
   countAfterGap,
   discountNothingOffWords,
   discountRefusalWords,
+  addTerms,
   formatMinor,
   freezeFeeApplies,
   heldMembershipView,
@@ -165,6 +166,17 @@ function billingOf(
     undo: back !== null ? { kind: "payment", paymentId: back.paymentId } : mark !== null ? { kind: "mark", paidPeriods: mark.paidPeriods } : null,
     fees: fees.fees.map((f) => feeOf(f, fees.payments, ctx)),
   };
+}
+
+/** Where a freeze today would charge the gym's fee (18z): today, or a month on where a fee of an
+ *  earlier freeze, still owed or waived, covers today (`freezeFees.ts` opens none for those days).
+ *  Null where it would charge none. */
+function freezeFeeFirstOn(row: { id: string; membership: HeldMembership }, gymFee: number, fees: readonly FeeRow[], today: string): string | null {
+  if (gymFee === 0 || !freezeFeeApplies(row.membership) || !heldMembershipView(row.membership, today).can.freeze) return null;
+  const covered = fees.some(
+    (f) => f.membershipId === row.id && f.fee === "freeze" && f.stillOwed && (f.status !== "void" || f.waived !== null) && f.on <= today && f.to !== null && f.to >= today,
+  );
+  return covered ? addTerms(today, 1, "month", 1) : today;
 }
 
 /** One fee as a person's page draws it (18h-i): paid all at once or waived while it is owed,
@@ -310,6 +322,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
           : heldMembershipView(row.membership, today).can.freeze && freezeFeeApplies(row.membership)
             ? list.freezeFee
             : 0,
+      freezeFeeFirstOn: freezeFeeFirstOn(row, list.freezeFee, list.fees, today),
       classesLeft: row.membership.classesLeft,
       fromList: row.fromList,
       notCharged: list.bills.some((b) => b.membershipId === row.id && b.cancelled !== null && b.periodIndex === row.membership.paidPeriods - 1),

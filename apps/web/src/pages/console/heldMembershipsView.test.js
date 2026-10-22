@@ -245,3 +245,13 @@ describe('the Add form works its line out by the rule the server gives with', ()
     expect(givePreview(monthly, '2027-10-21', false, TODAY).problem).toBeNull();
   });
 });
+
+describe('the Freeze box on the 29th to the 31st (18z, round one High-3)', () => {
+  it('says shorter months take their last day, never a day that does not come', async () => {
+    const { freezeFeeAsk } = await import('./heldMembershipsView');
+    const m = { typeName: 'Gold Monthly', currency: 'USD', freezeFeeMinor: 1000, freezeFeeFirstOn: '2027-01-31', view: { status: 'active' } };
+    expect(freezeFeeAsk(m, 'Maya Rao', '2027-01-31').line).toBe('Freeze fee: $10.00 today, then $10.00 on the 31st of each month (the last day of shorter months) until it is unfrozen.');
+    expect(freezeFeeAsk({ ...m, freezeFeeFirstOn: '2027-01-28' }, 'Maya Rao', '2027-01-28').line).toBe('Freeze fee: $10.00 today, then $10.00 on the 28th of each month until it is unfrozen.');
+    expect(freezeFeeAsk({ ...m, freezeFeeFirstOn: null }, 'Maya Rao', '2027-01-31')).toBeNull();
+  });
+});

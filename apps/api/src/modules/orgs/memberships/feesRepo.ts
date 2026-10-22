@@ -45,9 +45,10 @@ type BookingFeeKind = Exclude<MemberFeeKind, "freeze">;
 /** In a statement that names a fee's bill `b`: its booking is still the late cancel or the
  *  no-show it was opened for, in a class that runs, or its personal training session still
  *  is (18h-ii). False once staff marked them came, the class was cancelled or removed, or
- *  the booking or session is gone. A freeze fee (18z) stays owed: its month was frozen. */
+ *  the booking or session is gone. A freeze fee (18z) is owed while its month began before the
+ *  freeze ended (`freeze_stopped`, set by an unfreeze or a cancel). */
 const stillOwedSql = (sql: Sql | TransactionSql) => sql`
-  (b.fee = 'freeze'
+  ((b.fee = 'freeze' AND NOT b.freeze_stopped)
    OR EXISTS (SELECT 1 FROM gym_class_bookings k
            JOIN gym_class_sessions s ON s.gym_id = k.gym_id AND s.id = k.session_id
            WHERE k.gym_id = b.gym_id AND k.id = b.class_booking_id AND s.status = 'scheduled'

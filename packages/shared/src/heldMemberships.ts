@@ -692,9 +692,10 @@ export function freezeFeeApplies(m: Pick<HeldMembership, "kind" | "renews" | "fr
  *  charged for: the first from the day it was frozen, then one each month on that day while it
  *  stays frozen. Each is counted from the freeze day (31 Jan, 28 Feb, 31 Mar), never from the month
  *  before, and each ends the day before the next begins, so no day is charged twice or missed.
- *  Only this month is ever opened: one that began earlier with no fee was never asked for (the
- *  person was a past member then) and is never charged afterwards, as a period's bill is not
- *  (`countAfterGap`). Null before the freeze. */
+ *  Only this month is ever opened: one that began before the month today falls in with no fee was
+ *  never asked for (the person was a past member then) and is never charged afterwards, as a
+ *  period's bill is not (`countAfterGap`); the month today falls in is, even where it began while
+ *  they were away. Null before the freeze. */
 export function freezeFeeMonth(frozenOn: string, today: string): { from: string; to: string } | null {
   const p = parts(frozenOn);
   const q = parts(today);
@@ -811,6 +812,9 @@ export const heldMembershipSchema = z
      *  frozen with none); else what a freeze today would charge, 0 where the gym has no fee or it
      *  does not apply (`freezeFeeApplies`). */
     freezeFeeMinor: z.number().int().min(0).default(0),
+    /** Where a freeze today would charge a fee: the day its first fee falls due, today, or a month on
+     *  where a fee of an earlier freeze still covers today (18z). Null where none would be charged. */
+    freezeFeeFirstOn: daySchema.nullable().default(null),
     classesLeft: z.number().int().min(0).nullable(),
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
      *  list's day, so a screen does not print it as the day the person started. */

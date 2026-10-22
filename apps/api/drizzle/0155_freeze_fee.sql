@@ -24,3 +24,8 @@ ALTER TABLE "gym_member_bills" ADD CONSTRAINT "gym_member_bills_fee_check" CHECK
 -- twice, open one. A waived one counts, so it is never opened again; one taken off by an unfreeze
 -- does not, so a membership frozen again that day is charged again.
 CREATE UNIQUE INDEX "gym_member_bills_freeze_fee_uq" ON "gym_member_bills" USING btree ("held_membership_id","covers_from") WHERE "fee" = 'freeze' AND ("status" <> 'void' OR "void_reason" = 'waived');
+--> statement-breakpoint
+-- A freeze fee whose month began on or after the day the freeze ended (an unfreeze or a cancel):
+-- never owed, paid or not, so voiding its payment takes it off instead of owing it again.
+ALTER TABLE "gym_member_bills" ADD COLUMN "freeze_stopped" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "gym_member_bills" ADD CONSTRAINT "gym_member_bills_freeze_stopped_check" CHECK (NOT "freeze_stopped" OR "fee" = 'freeze');

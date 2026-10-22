@@ -185,8 +185,10 @@ const capital = (name) => `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
 const FEE_TAGS = { ...STATE_TAGS, waived: { tag: 'Waived', tone: 'plain' }, removed: { tag: 'Taken off', tone: 'plain' } };
 
 /** Why a fee no longer counts: a class's can be marked Came or not run; a personal
- *  training session's (18h-ii) can only be marked Came. */
-const whyNotOwed = (fee) => (fee.of === 'pt' ? 'they were marked Came' : 'they were marked Came, or the class was cancelled');
+ *  training session's (18h-ii) can only be marked Came; a freeze fee's month (18z) began on or after
+ *  the day the membership was unfrozen or cancelled. */
+const whyNotOwed = (fee) =>
+  fee.of === 'membership' ? 'the membership was unfrozen or cancelled by the day this month began' : fee.of === 'pt' ? 'they were marked Came' : 'they were marked Came, or the class was cancelled';
 
 /** What a fee is for: "Yoga on 3 October", or a freeze fee's month (18z): "Gold Monthly, frozen 22 Oct – 21 Nov 2026". */
 export function feeForWords(fee) {

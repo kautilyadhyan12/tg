@@ -901,8 +901,27 @@ describe('changing a membership', () => {
   });
 
   it("Freeze with the gym's freeze fee (18z): the box says what it charges and when, ticked; unticked sends none; staff who cannot record payments have no tick", async () => {
-    const gold = { ...held(1, GOLD, '2026-10-04', true), freezeFeeMinor: 1000 };
-    const frozen = { ...held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, TODAY]]), freezeFeeMinor: 1000 };
+    const gold = { ...held(1, GOLD, '2026-10-04', true), freezeFeeMinor: 1000, freezeFeeFirstOn: TODAY };
+    const frozenNoFee = { ...held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, TODAY]]), freezeFeeMinor: 1000 };
+    // The server's answer holds the fee it opened today: the message reads it from there.
+    const fee = {
+      id: '66666666-6666-4666-8666-666666666666',
+      fee: 'freeze',
+      of: 'membership',
+      forName: 'Gold Monthly',
+      on: TODAY,
+      to: '2026-11-19',
+      amountMinor: 1000,
+      tax: null,
+      dueOn: TODAY,
+      state: 'due',
+      waived: null,
+      stillOwed: true,
+      payments: [],
+      voidedPayments: [],
+      can: { pay: true, waive: true, voidPaymentId: null },
+    };
+    const frozen = { ...frozenNoFee, billing: { ...frozenNoFee.billing, fees: [fee] } };
     orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
     orgService.changeHeldMembership.mockResolvedValue(answer([frozen]));
     render(draw(ADA, 'Ada Lovelace'));
@@ -920,7 +939,7 @@ describe('changing a membership', () => {
     cleanup();
 
     // Unticked: frozen with no fee.
-    orgService.changeHeldMembership.mockResolvedValue(answer([{ ...frozen, freezeFeeMinor: 0 }]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([{ ...frozenNoFee, freezeFeeMinor: 0 }]));
     render(draw(ADA, 'Ada Lovelace'));
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
     fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('checkbox', { name: 'Charge Ada Lovelace the freeze fee' }));
@@ -938,8 +957,30 @@ describe('changing a membership', () => {
     const theirs = within(screen.getByTestId('held-ask-freeze'));
     expect(theirs.getByText(/^Freeze fee: £10\.00 today/)).toBeTruthy();
     expect(theirs.queryByRole('checkbox')).toBeNull();
+    expect(theirs.getByText('Only staff who record payments can freeze without the fee.')).toBeTruthy();
     fireEvent.click(theirs.getByRole('button', { name: 'Freeze' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'freeze', { feeMinor: 1000 }));
+    cleanup();
+
+    // Ticked, but the server opened no fee today (a month already waived): no fee is said.
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([frozenNoFee]));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    expect(await (await boxSoon()).findByText('Gold Monthly is frozen.')).toBeTruthy();
+    expect(box().queryByText(/freeze fee is on/)).toBeNull();
+    cleanup();
+
+    // Frozen again inside a month whose fee is on the bills: none today, the first a month on.
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...gold, freezeFeeFirstOn: '2026-11-20' }]));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    expect(
+      within(screen.getByTestId('held-ask-freeze')).getByText(
+        "No freeze fee today: this month's is already on Ada Lovelace's bills. Then £10.00 from 20 November 2026, on the 20th of each month until it is unfrozen.",
+      ),
+    ).toBeTruthy();
   });
 
   it('a membership somebody else changed first is said so, and read again', async () => {

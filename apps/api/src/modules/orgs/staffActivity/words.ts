@@ -240,7 +240,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const after = count(s, "paidAfter");
     return before !== null && after !== null && after < before ? `Took back a paid mark on ${whose(s, membershipOf(s))}` : `Marked ${whose(s, membershipOf(s))} as paid`;
   },
-  "org.held_membership_frozen": (s) => `Froze ${whose(s, membershipOf(s))}`,
+  // Frozen where the gym charges a freeze fee and staff unticked it: a waiver, said so (18z).
+  "org.held_membership_frozen": (s) =>
+    `Froze ${whose(s, membershipOf(s))}${(count(s, "freezeFeeOffered") ?? 0) > 0 && count(s, "freezeFeeMinor") === 0 ? " with no freeze fee" : ""}`,
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
   "org.held_membership_changed": (s) => {

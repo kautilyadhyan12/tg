@@ -974,8 +974,10 @@ export async function moveHeld(
     // A freeze charges the gym's fee where staff left it ticked: refused where the screen showed
     // another, or a fee on a membership that freezes with none (18z).
     let freezeFee = m.status === "frozen" ? before.freezeFeeMinor : 0;
+    let freezeOffered = 0;
     if (input.event.type === "freeze") {
       const offered = freezeFeeApplies(before.membership) ? await freezeFeeOf(tx, input.gymId) : 0;
+      freezeOffered = offered;
       const asked = input.freezeFeeMinor ?? 0;
       if (asked !== 0 && asked !== offered) return { kind: "freeze_fee_changed" };
       // Staff who do not record payments freeze with the gym's fee; for them 0 is a screen that
@@ -1062,7 +1064,7 @@ export async function moveHeld(
         paidAfter: String(m.paidPeriods),
         renews: String(m.renews),
         ...(voided.length === 0 ? {} : { billsCancelled: String(voided.length) }),
-        ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee) } : {}),
+        ...(input.event.type === "freeze" ? { freezeFeeMinor: String(freezeFee), freezeFeeOffered: String(freezeOffered) } : {}),
         ...(feesOpened === 0 ? {} : { freezeFeesOpened: String(feesOpened) }),
         ...(feesRemoved === 0 ? {} : { freezeFeesRemoved: String(feesRemoved) }),
         ...(renewsAgain ? { replacedRenewsAgain: "true" } : {}),

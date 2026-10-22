@@ -40,6 +40,9 @@ type Frozen = {
   tax_bp: number | null;
   /** The months of this freeze that already have a fee that stands, or one staff waived. */
   billed: string[];
+  /** An earlier freeze's fee still owed covers the freeze day: unfrozen and frozen again inside
+   *  its month, those days are not charged twice, so this freeze's first month opens no fee. */
+  covered: boolean;
 };
 
 /** The memberships owed a freeze fee: stored frozen with a fee of their own, of a current record of
@@ -52,7 +55,11 @@ const frozen = (sql: Sql | TransactionSql, gymIds: readonly string[] | null, mem
            left(t.name, 80) AS type_name, g.timezone, r.name AS tax_name, r.rate_bp AS tax_bp,
            ARRAY(SELECT b.covers_from::text FROM gym_member_bills b
                  WHERE b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.fee = 'freeze'
-                   AND b.covers_from >= h.frozen_on AND (b.status <> 'void' OR b.void_reason = 'waived')) AS billed
+                   AND b.covers_from >= h.frozen_on AND (b.status <> 'void' OR b.void_reason = 'waived')) AS billed,
+           EXISTS (SELECT 1 FROM gym_member_bills c
+                   WHERE c.gym_id = h.gym_id AND c.held_membership_id = h.id AND c.fee = 'freeze' AND NOT c.freeze_stopped
+                     AND c.covers_from < h.frozen_on AND c.covers_to >= h.frozen_on
+                     AND (c.status <> 'void' OR c.void_reason = 'waived')) AS covered
     FROM gym_held_memberships h
     JOIN gyms g ON g.id = h.gym_id AND g.status = 'active'
     JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
@@ -81,6 +88,7 @@ function owedFees(rows: readonly Frozen[], now: Date): Map<string, Opening[]> {
   for (const row of rows) {
     const month = freezeFeeMonth(row.frozen_on, dayIn(row.timezone));
     if (month === null || row.billed.includes(month.from)) continue;
+    if (row.covered && month.from === row.frozen_on) continue;
     // The amount the gym set is what the person pays: the membership's rate is inside it, as a late cancel's is.
     const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
     const bill = billOf(row.fee, tax);
@@ -129,30 +137,41 @@ async function insertFreezeFees(tx: TransactionSql, gymId: string, opening: read
 /** THIS MEMBERSHIP WAS JUST FROZEN WITH A FEE: its first month's fee, in the freeze's own
  *  transaction, so the page shows it at once. Answers how many it opened. */
 export async function openFreezeFee(tx: TransactionSql, gymId: string, membershipId: string, now: Date): Promise<number> {
+  // Unfrozen and frozen again on the day a month began: that month's fee, paid and marked no longer
+  // owed by the unfreeze, is owed again, and stands for this freeze's first month.
+  await tx`
+    UPDATE gym_member_bills b SET freeze_stopped = false, updated_at = ${now}
+    FROM gym_held_memberships h
+    WHERE h.gym_id = ${gymId} AND h.id = ${membershipId} AND h.status = 'frozen'
+      AND b.gym_id = h.gym_id AND b.held_membership_id = h.id AND b.fee = 'freeze' AND b.freeze_stopped
+      AND b.status = 'paid' AND b.covers_from = h.frozen_on`;
   const work = owedFees(await frozen(tx, [gymId], [membershipId]), now).get(gymId) ?? [];
   return await insertFreezeFees(tx, gymId, work, now);
 }
 
-/** THIS MEMBERSHIP IS NO LONGER FROZEN (unfrozen or cancelled): the unpaid fees of months that
- *  begin `fromDay` or later come off, kept and marked. One paid stays paid, for staff to void its
- *  payment if they mean to. In the caller's transaction. Answers how many it took off. */
+/** THIS MEMBERSHIP IS NO LONGER FROZEN (unfrozen or cancelled): the fees of months that begin
+ *  `fromDay` or later are no longer owed (`freeze_stopped`). An unpaid one comes off, kept and
+ *  marked; one paid stays paid, reads No longer owed, and voiding its payment takes it off instead
+ *  of owing it again. In the caller's transaction. Answers how many it took off unpaid. */
 export async function removeFreezeFees(tx: TransactionSql, gymId: string, membershipId: string, fromDay: string, now: Date): Promise<number> {
-  const rows = await tx<{ id: string }[]>`
-    UPDATE gym_member_bills SET status = 'void', updated_at = ${now}
-    WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND fee = 'freeze' AND status = 'open'
-      AND covers_from >= ${fromDay}::date
-    RETURNING id`;
-  if (rows.length > 0) {
+  const rows = await tx<{ id: string; was: string }[]>`
+    UPDATE gym_member_bills b SET status = CASE WHEN b.status = 'open' THEN 'void' ELSE b.status END, freeze_stopped = true, updated_at = ${now}
+    FROM gym_member_bills old
+    WHERE old.id = b.id AND b.gym_id = ${gymId} AND b.held_membership_id = ${membershipId} AND b.fee = 'freeze'
+      AND b.status IN ('open','paid') AND NOT b.freeze_stopped AND b.covers_from >= ${fromDay}::date
+    RETURNING b.id, old.status AS was`;
+  const removed = rows.filter((r) => r.was === "open");
+  if (removed.length > 0) {
     await insertAudit(tx, {
       actorUserId: null,
       gymId,
       action: "org.member_fees_removed",
       targetType: "gym",
       targetId: gymId,
-      meta: { bills: String(rows.length), fee: "freeze" },
+      meta: { bills: String(removed.length), fee: "freeze" },
     });
   }
-  return rows.length;
+  return removed.length;
 }
 
 /** Opens every freeze fee that has fallen due, on each gym's own day, beside `openDueBills`. A

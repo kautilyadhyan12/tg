@@ -42,6 +42,8 @@ import {
   paymentLine,
   statusTag,
   firstBillPart,
+  FREEZE_FEE_WHO,
+  freezeDoneWords,
   freezeFeeAsk,
   freezeFeeLine,
 } from './heldMembershipsView';
@@ -1544,7 +1546,9 @@ export default function MemberMemberships({
       freeze: () => {
         const fee = freezeFeeAsk(m, name, today);
         const charged = fee !== null && (freezeCharge || !shown.canBill);
-        return run('freeze', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'freeze', { feeMinor: charged ? m.freezeFeeMinor : 0 }), charged ? fee.done : null);
+        return run('freeze', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'freeze', { feeMinor: charged ? m.freezeFeeMinor : 0 }), (data) =>
+          freezeDoneWords(data, m, name, today),
+        );
       },
       unfreeze: () => change('unfreeze', m, 'unfreeze'),
       cancel: () => change('cancel', m, 'cancel', { when: 'today' }),
@@ -1572,7 +1576,9 @@ export default function MemberMemberships({
                 </span>
                 <span className="c-s15 c-w5 c-t1">{freezeFeeAsk(m, name, today).tick}</span>
               </button>
-            ) : null}
+            ) : (
+              <p className="c-s13 c-t2 m-0">{FREEZE_FEE_WHO}</p>
+            )}
           </div>
         ) : null}
         <div className="flex flex-wrap gap-2">

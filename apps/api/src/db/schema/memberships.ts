@@ -325,6 +325,9 @@ export const gymMemberBills = pgTable(
     /** On a bill of a membership changed for another (0152; 18x): the money whose days moved to
      *  the new one, never refunded from this bill. 0 on every other. */
     movedMinor: integer("moved_minor").notNull().default(0),
+    /** A freeze fee whose month began on or after the day its freeze ended (0155; 18z): never owed,
+     *  paid or not. False on every other bill. */
+    freezeStopped: boolean("freeze_stopped").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -333,6 +336,7 @@ export const gymMemberBills = pgTable(
       "gym_member_bills_joining_fee_check",
       sql`${t.joiningFeeMinor} >= 0 AND ${t.joiningFeeMinor} <= ${t.amountMinor} AND (${t.joiningFeeMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,
     ),
+    check("gym_member_bills_freeze_stopped_check", sql`NOT ${t.freezeStopped} OR ${t.fee} = 'freeze'`),
     check("gym_member_bills_moved_check", sql`${t.movedMinor} BETWEEN 0 AND ${t.amountMinor}`),
     check(
       "gym_member_bills_change_credit_check",

@@ -422,6 +422,11 @@ describe('a freeze fee on the bills (18z)', () => {
     expect(feeTakeWords(fee, 'USD')).toEqual({ title: 'Take $10.00 for the freeze fee', about: 'It is for Gold Monthly, frozen 22 Oct – 21 Nov 2026.' });
   });
 
+  it('a freeze fee paid for a month the membership was unfrozen by: no longer owed, and why', () => {
+    const row = feeRow({ ...fee, state: 'paid', stillOwed: false, payments: [{ id: '77777777-7777-4777-8777-777777777777', amountMinor: 1000, method: 'cash', paidOn: '2026-10-22', by: 'Sam', receiptNumber: 3 }] }, 'USD', '2026-10-22');
+    expect(row.waived).toBe('No longer owed: the membership was unfrozen or cancelled by the day this month began. If you gave the money back, void the payment.');
+  });
+
   it('a late cancel fee still says its one day', () => {
     expect(feeForWords({ ...fee, fee: 'late_cancel', of: 'class', forName: 'Yoga', to: null })).toBe('Yoga on 22 October 2026');
   });

@@ -95,6 +95,10 @@ describe("Staff activity's sentences", () => {
 
   it("says money, roles, dates and statuses in the gym's words", () => {
     const cases: [string, Partial<Said>, string][] = [
+      // A freeze with no fee where the gym charges one is a waiver (18z, round one Low-1); one the fee never applied to is not.
+      ["org.held_membership_frozen", { about: "Amit Rao", meta: { type: "Gold", freezeFeeMinor: "0", freezeFeeOffered: "1000" } }, "Froze Amit Rao's Gold membership with no freeze fee"],
+      ["org.held_membership_frozen", { about: "Amit Rao", meta: { type: "Gold", freezeFeeMinor: "1000", freezeFeeOffered: "1000" } }, "Froze Amit Rao's Gold membership"],
+      ["org.held_membership_frozen", { about: "Amit Rao", meta: { type: "Gold", freezeFeeMinor: "0", freezeFeeOffered: "0" } }, "Froze Amit Rao's Gold membership"],
       ["org.member_payment_recorded", { about: "Amit Rao", meta: { amountMinor: "100000", currency: "INR", method: "cash" } }, "Recorded a payment of ₹1,000.00 from Amit Rao (Cash)"],
       ["org.membership_type_updated", { meta: { before: "Gold monthly", after: "Gold monthly", priceBefore: "100000", priceAfter: "120000" } }, "Changed the price of “Gold monthly” from ₹1,000.00 to ₹1,200.00"],
       ["org.membership_type_updated", { meta: { before: "Gold", after: "Gold monthly", priceBefore: "100000", priceAfter: "100000" } }, "Renamed the membership “Gold” to “Gold monthly”"],
