@@ -1,4 +1,6 @@
 import { useId } from 'react';
+import { formatMinor } from '@app/shared';
+import { Tick } from './MemberListUpload';
 import { applyPromoCodeToType, discountOption, discountsForType, membershipPromoCodeNote, offeredDiscounts, oldMoneySaleLine } from './sellDiscountsView';
 
 // A DISCOUNT ON A MEMBERSHIP (spec Part 3 §14.3; ROADMAP 18b-ii-b): the Discount list and
@@ -92,6 +94,20 @@ export function MembershipDiscountPicker({ page, type, discountId, setDiscountId
 }
 
 /** The lines above the button: Price, Discount, Total, and what each later payment is. */
+/** The joining fee's tick (18t), for staff who take payments, on a type that has one:
+ *  ticked, it is charged on the first bill. `fee` is `joiningFeeFor`'s answer. */
+export function JoiningFeeTick({ type, fee, onChange }) {
+  if (type === null || !fee.tick) return null;
+  return (
+    <div className="flex flex-col" data-testid="joining-fee">
+      <Tick checked={fee.feeMinor > 0} onChange={(on) => onChange(on ? 'charge' : 'waive')}>
+        {`Charge the joining fee of ${formatMinor(type.joiningFeeMinor, type.currency)}`}
+      </Tick>
+      {fee.note !== null ? <span className="c-hint">{fee.note}</span> : null}
+    </div>
+  );
+}
+
 export function MembershipTotal({ summary }) {
   if (summary === null) return null;
   return (

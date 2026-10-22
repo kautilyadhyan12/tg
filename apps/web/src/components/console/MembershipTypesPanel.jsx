@@ -30,6 +30,8 @@ import {
   priceExample,
   termLine,
   typeTaxLine,
+  joiningFeeLine,
+  usesJoiningFee,
   termUnitOptions,
   typesSummary,
   withChoice,
@@ -215,6 +217,22 @@ function TypeForm({ gymId, orgType, currency, options, taxRates, onRateAdded, dr
             style={{ maxWidth: 240 }}
           />
         </Field>
+
+        {usesJoiningFee(choice) ? (
+          <Field id={id('joining-fee')} label={`Joining fee (${currency})`} problem={problems?.joiningFee}>
+            <input
+              id={id('joining-fee')}
+              aria-invalid={problems?.joiningFee ? 'true' : undefined}
+              value={draft.joiningFee}
+              inputMode="decimal"
+              onChange={text('joiningFee')}
+              placeholder="None"
+              className="c-input"
+              style={{ maxWidth: 240 }}
+            />
+            <p className="c-s13 c-t3 m-0">Charged once, on the first bill. Leave it empty for none.</p>
+          </Field>
+        ) : null}
 
         <Field id={id('tax')} label="Tax" problem={problems?.tax}>
           <select id={id('tax')} aria-invalid={problems?.tax ? 'true' : undefined} value={draft.taxRateId} onChange={text('taxRateId')} className="c-input" style={{ maxWidth: 280 }}>
@@ -469,6 +487,7 @@ function TypeRow({ type, orgType, taxLine = null, readOnly, busy, formOpen, ties
           </div>
           {type.description ? <p className="c-s14 c-t2 m-0 break-words">{type.description}</p> : null}
           <p className="c-s14 c-t1 m-0">{termLine(type)}</p>
+          {joiningFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{joiningFeeLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
         </div>

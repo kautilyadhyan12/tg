@@ -239,7 +239,7 @@ describe("a membership type's limit, as a gym sends it", () => {
     expect(saveGymMembershipTypeRequestSchema.safeParse({ ...aPack, ptLimit: 4, ptPeriod: "week" }).success).toBe(false);
   });
   it("a change must say the limit outright: left out, it would take the limit off everybody who holds the type", () => {
-    const stamped = { ...type, taxRateId: null, updatedAt: "2026-10-08T10:00:00.000Z" };
+    const stamped = { ...type, taxRateId: null, joiningFeeMinor: 0, updatedAt: "2026-10-08T10:00:00.000Z" };
     expect(updateGymMembershipTypeRequestSchema.safeParse(stamped).success).toBe(false);
     expect(updateGymMembershipTypeRequestSchema.safeParse({ ...stamped, ptLimit: null }).success).toBe(false);
     expect(updateGymMembershipTypeRequestSchema.safeParse({ ...stamped, ptLimit: null, ptPeriod: null }).success).toBe(true);

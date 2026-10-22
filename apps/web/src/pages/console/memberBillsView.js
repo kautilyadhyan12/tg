@@ -150,6 +150,8 @@ export function billRow(bill, currency, today) {
     tag: state.tag,
     tone: state.tone,
     tax: billTaxLine(bill, currency),
+    // The joining fee on the first bill (18t).
+    joiningFee: bill.joiningFeeMinor > 0 ? `Includes the joining fee of ${formatMinor(bill.joiningFeeMinor, currency)}` : null,
     // A member's Refer a friend gift taken off it (20e-ii-b-ii-a).
     gift: bill.gift === null || bill.gift === undefined ? null : memberGiftBillLine(bill.gift.offMinor, bill.gift.currency, bill.gift.friendName ?? null),
     when,

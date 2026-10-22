@@ -47,12 +47,15 @@ export function receiptLines(receipt) {
   }
   if (receipt.kind === 'sale' && receipt.lines.length > 1) return basketLines(receipt, money);
   const amounts = receipt.kind === 'sale' ? receipt.lines[0].amounts : receipt.amounts;
+  // A joining fee (18t) is a line of its own, after the membership and its discount.
+  const fee = receipt.kind === 'payment' && receipt.joiningFeeMinor > 0 ? receipt.joiningFeeMinor : 0;
   if (receipt.kind === 'sale') {
     lines.push(productLine(receipt.lines[0], money));
   } else {
-    lines.push({ label: membershipLabel(receipt.item), amount: money(amounts.listedMinor) });
+    lines.push({ label: membershipLabel(receipt.item), amount: money(amounts.listedMinor - fee) });
   }
   if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
+  if (fee > 0) lines.push({ label: 'Joining fee', amount: money(fee) });
   if (amounts.tax !== null && !amounts.tax.included) lines.push({ label: tax(amounts.tax), amount: money(amounts.tax.minor) });
   lines.push({ label: receipt.kind === 'payment' && receipt.balance !== null ? 'Bill total' : 'Total', amount: money(amounts.totalMinor), total: true });
   if (amounts.tax !== null && amounts.tax.included) lines.push({ label: `Includes ${tax(amounts.tax)}`, amount: money(amounts.tax.minor) });

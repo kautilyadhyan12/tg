@@ -190,6 +190,7 @@ const typeSchema = z.object({
   tax_rate_id: z.string().nullable(),
   tax_name: z.string().nullable(),
   tax_bp: z.number().int().nullable(),
+  joining_fee_minor: z.number().int(),
 });
 
 /** The tax rate a type charges, by id: what a membership given from it keeps. None for a
@@ -214,12 +215,13 @@ export function typeChoice(row: unknown): HeldMembershipTypeChoice {
     termUnit: t.term_unit,
     packClasses: t.pack_classes,
     packDays: t.pack_days,
+    joiningFeeMinor: t.joining_fee_minor,
   };
 }
 
 /** A gym's live types, or the one named; a gym has at most 60. */
 export const liveTypes = (sql: Sql | TransactionSql, gymId: string, typeId: string | null) => sql`
-  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id,
+  SELECT id, name, kind, price_minor, currency, term_count, term_unit, pack_classes, pack_days, updated_at, tax_rate_id, joining_fee_minor,
          (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_name,
          (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = gym_membership_types.gym_id AND r.id = gym_membership_types.tax_rate_id) AS tax_bp
   FROM gym_membership_types
@@ -591,6 +593,11 @@ export async function giveHeld(
     memberGift: { id: string; shownOffMinor: number } | null;
     /** What the screen showed its first bill comes to, tax in; null where it showed none. */
     shownTotalMinor: number | null;
+    /** The type's joining fee the screen showed and charges (18t), 0 where it showed it waived;
+     *  null where it showed none. */
+    joiningFeeMinor: number | null;
+    /** Whether this reader may give a type that has a joining fee without it. */
+    mayWaiveJoiningFee: boolean;
     /** The gym's own day. */
     today: string;
     actorUserId: string;
@@ -654,9 +661,17 @@ export async function giveHeld(
       if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
       gift = { id: found.id, offMinor: off };
     }
-    // The first bill: its price after any discount and gift, with its tax. Nothing is given at
-    // a total the screen did not show.
-    const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0), tax);
+    // The joining fee (18t): the type's own as it is now, and only where the screen showed that
+    // very amount. 0 is waived, which only a reader who takes payments may do. A screen that
+    // said nothing of a fee the type has was opened before it was set: sent back to look again.
+    const joiningFeeMinor = input.joiningFeeMinor ?? 0;
+    if (input.joiningFeeMinor === null && type.joiningFeeMinor > 0) return { kind: "price_changed" };
+    if (joiningFeeMinor > 0 && joiningFeeMinor !== type.joiningFeeMinor) return { kind: "price_changed" };
+    if (input.joiningFeeMinor === 0 && type.joiningFeeMinor > 0 && !input.mayWaiveJoiningFee) return { kind: "price_changed" };
+    const waivedFeeMinor = joiningFeeMinor === 0 ? type.joiningFeeMinor : 0;
+    // The first bill: its price after any discount and gift, the joining fee, and its tax.
+    // Nothing is given at a total the screen did not show.
+    const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0) + joiningFeeMinor, tax);
     if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
 
     // Worked out unpaid: the bill of the period owed is opened first, and a payment
@@ -710,6 +725,8 @@ export async function giveHeld(
         currency: type.currency,
         ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
         ...(tax === null ? {} : { tax: tax.name, taxBp: String(tax.bp) }),
+        ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
+        ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
       },
     });
 
@@ -718,7 +735,7 @@ export async function giveHeld(
       const [opened] = await insertBills(
         tx,
         input.gymId,
-        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, tax: firstBill.tax, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
+        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, tax: firstBill.tax, joiningFeeMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
         input.now,
       );
       if (opened === undefined) throw new Error("a new membership's bill was not opened");
@@ -769,6 +786,8 @@ export async function giveHeld(
       throw new Error("a membership given with a first-payment discount had no bill to carry it");
     } else if (gift !== null) {
       throw new Error("a membership given with a Refer a friend gift had no bill to carry it");
+    } else if (joiningFeeMinor > 0) {
+      throw new Error("a membership given with a joining fee had no bill to carry it");
     }
     return { kind: "ok" };
   });

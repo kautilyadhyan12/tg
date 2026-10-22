@@ -185,6 +185,9 @@ export const memberBillSchema = z
       .object({ name: z.string(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
       .strict()
       .nullable(),
+    /** The joining fee in `amountMinor`, before any tax added on top (18t): on the bill the
+     *  membership was given with; 0 on every other. */
+    joiningFeeMinor: minorSchema.default(0),
     paidMinor: minorSchema,
     dueOn: daySchema,
     state: memberBillStateSchema,

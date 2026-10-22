@@ -11,7 +11,7 @@ import MembershipChoice from './MembershipChoice';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
 import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
-import { MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
+import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
 import { useCameBack } from './useCameBack';
@@ -27,6 +27,7 @@ import {
   doneWords,
   endingWords,
   giveBody,
+  joiningFeeFor,
   isLive,
   listedRow,
   endingConfirm,
@@ -136,7 +137,7 @@ const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bi
 /** The Add membership form as it opens: the gym's one type already picked, from today. */
 /** Refer a friend's gift is filled in for the friend it is for (20e-ii-b-i), with Remove. */
 const giftId = (shown) => (shown?.friendGift?.discount.forMemberships === true ? shown.friendGift.discount.id : '');
-const addForm = (types, today, discountId = '') => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '', discountId, code: NO_CODE });
+const addForm = (types, today, discountId = '') => ({ requestKey: newRequestKey(), typeId: types.length === 1 ? types[0].id : '', startsOn: today, paid: false, method: '', discountId, code: NO_CODE, joiningFee: 'auto' });
 
 export default function MemberMemberships({
   gymId,
@@ -1087,7 +1088,7 @@ export default function MemberMemberships({
         <ul className="m-0 p-0 list-none flex flex-col gap-2">
           {rows.map((row) => {
             const pays = acts && payHere && billing.pay !== null && billing.pay.periodIndex === row.periodIndex;
-            const notes = [row.gift, row.tax, row.when, row.cancelled].filter((line) => line !== null);
+            const notes = [row.joiningFee, row.gift, row.tax, row.when, row.cancelled].filter((line) => line !== null && line !== undefined);
             return (
               <li
                 key={row.id}
@@ -1460,7 +1461,8 @@ export default function MemberMemberships({
     const memberGift = shown.canBill && !free && shown.memberGift !== null && shown.memberGift !== undefined ? shown.memberGift : null;
     const giftFits = memberGift !== null && choice.type !== null && membershipSummary(choice.type, discount, shown.taxIncluded, memberGift)?.giftOffMinor > 0;
     const giftUsed = giftFits && form.memberGiftOff !== true ? memberGift : null;
-    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed);
+    const fee = joiningFeeFor(choice.type, form.joiningFee, shown.canBill, shown.memberships.some(isLive));
+    const summary = choice.type === null ? null : membershipSummary(choice.type, discount, shown.taxIncluded, giftUsed, fee.feeMinor);
     const ready = choice.type !== null && choice.problem === null && !choice.methodNeeded && summary !== null;
     return (
       <form
@@ -1471,7 +1473,7 @@ export default function MemberMemberships({
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready || busy) return;
-          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed)));
+          void run('give', null, () => orgService.giveHeldMembership(gymId, entryId, giveBody(form.requestKey, choice.type, form, discount, summary, giftUsed, fee.feeMinor)));
         }}
       >
         <p className="c-s15 c-w6 c-t1 m-0">Add a membership for {name}</p>
@@ -1490,8 +1492,9 @@ export default function MemberMemberships({
               value={form}
               canBill={shown.canBill}
               paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
-              onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null } } : {}) }))}
+              onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />
+            <JoiningFeeTick type={choice.type} fee={fee} onChange={(joiningFee) => setForm((f) => ({ ...f, joiningFee }))} />
             {gift !== null && choice.type !== null && !free ? (
               <FriendGiftNote
                 gift={gift}

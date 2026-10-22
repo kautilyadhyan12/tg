@@ -268,12 +268,13 @@ function typeTax(type, taxIncluded) {
 const taxLabel = (tax) => `${tax.name} ${bpToTaxRateText(tax.bp)}%`;
 
 /** What a membership comes to, as the lines above its button read: Price, Discount, its
- *  tax, Total, and what every later payment is (18b-ii-b, 18b-iii). `discount` null is none.
+ *  joining fee, its tax, Total, and what every later payment is (18b-ii-b, 18b-iii, 18t).
+ *  `discount` null is none; `joiningFeeMinor` is the fee charged on the first bill, 0 for none.
  *  `offMinor` is what the server is sent as coming off, `totalMinor` what its first bill
  *  comes to: the server gives nothing where either is no longer so. `shows` is whether
  *  there is anything to show beyond the price itself. Null where the discount cannot be
  *  used on this type. */
-export function membershipSummary(type, discount, taxIncluded = false, memberGift = null) {
+export function membershipSummary(type, discount, taxIncluded = false, memberGift = null, joiningFeeMinor = 0) {
   if (type === null || type === undefined) return null;
   const money = (minor) => formatMinor(minor, type.currency);
   if (type.priceMinor === 0) {
@@ -289,25 +290,37 @@ export function membershipSummary(type, discount, taxIncluded = false, memberGif
   // discount, where it fits: 0 where it does not, and it waits for their next payment.
   const giftOffMinor = memberGift === null || memberGift === undefined ? 0 : memberGiftOff(memberGift, costs.firstBillMinor, type.currency);
   const tax = typeTax(type, taxIncluded);
-  const first = billAmounts(costs.firstBillMinor - giftOffMinor, tax);
+  // The joining fee is on the first bill alone, and no discount or gift comes off it.
+  const fee = joiningFeeMinor > 0 ? joiningFeeMinor : 0;
+  const first = billAmounts(costs.firstBillMinor - giftOffMinor + fee, tax);
   const next = billAmounts(costs.payments === 'first' ? type.priceMinor : costs.heldPriceMinor, tax);
   if (!first.ok || !next.ok) return null;
   const onTop = tax !== null && !tax.included;
   const lines = [];
-  if (costs.offMinor !== null || giftOffMinor > 0 || onTop) lines.push({ label: 'Price', value: money(type.priceMinor) });
+  if (costs.offMinor !== null || giftOffMinor > 0 || onTop || fee > 0) lines.push({ label: 'Price', value: money(type.priceMinor) });
   if (costs.offMinor !== null) lines.push({ label: `Discount (${discount.name})`, value: `-${money(costs.offMinor)}` });
   if (giftOffMinor > 0) lines.push({ label: MEMBER_GIFT_SALE_NAME, value: `-${money(giftOffMinor)}` });
+  if (fee > 0) lines.push({ label: 'Joining fee', value: money(fee) });
   if (onTop) lines.push({ label: taxLabel(tax), value: money(first.taxMinor) });
   lines.push({ label: 'Total', value: money(first.totalMinor), strong: true });
   if (tax !== null && tax.included) lines.push({ label: `Includes ${taxLabel(tax)}`, value: money(first.taxMinor) });
   let later = null;
-  if (type.kind === 'recurring' && (costs.offMinor !== null || giftOffMinor > 0)) {
+  if (type.kind === 'recurring' && (costs.offMinor !== null || giftOffMinor > 0 || fee > 0)) {
     later =
-      costs.payments === 'first' || giftOffMinor > 0
+      costs.payments === 'first' || giftOffMinor > 0 || fee > 0
         ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.`
         : `Every payment is ${money(next.totalMinor)} while the membership lasts.`;
   }
-  return { totalMinor: first.totalMinor, offMinor: costs.offMinor, giftOffMinor, total: money(first.totalMinor), lines, later, shows: costs.offMinor !== null || giftOffMinor > 0 || tax !== null };
+  return {
+    totalMinor: first.totalMinor,
+    offMinor: costs.offMinor,
+    giftOffMinor,
+    joiningFeeMinor: fee,
+    total: money(first.totalMinor),
+    lines,
+    later,
+    shows: costs.offMinor !== null || giftOffMinor > 0 || tax !== null || fee > 0,
+  };
 }
 
 /** A held membership's tax, said on a person's page (18b-iii); null where it has none. */
