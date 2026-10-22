@@ -98,6 +98,9 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
   const [problem, setProblem] = useState(null);
   const [slow, setSlow] = useState(false);
   const live = useRef(true);
+  // Cancel's own answer is newer than any ask already on its way: such an ask's answer is
+  // dropped and the server asked again, so it never brings Cancel back while the Terminal stops.
+  const cancelAnswers = useRef(0);
 
   useEffect(() => {
     live.current = true;
@@ -119,11 +122,16 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
     let timer = null;
     let faults = 0;
     const ask = async () => {
+      const cancelsBefore = cancelAnswers.current;
       try {
         const res = await orgService.checkTerminalSave(gymId, entryId, save.id);
         if (stopped) return;
         faults = 0;
         setProblem(null);
+        if (cancelAnswers.current !== cancelsBefore) {
+          timer = setTimeout(ask, checkEveryMs);
+          return;
+        }
         onAnswer(res.data);
         if (res.data.save.step !== 'done') timer = setTimeout(ask, checkEveryMs);
       } catch (err) {
@@ -152,7 +160,10 @@ function TerminalWait({ gymId, entryId, save, name, showName, onAnswer, onEnded,
     setProblem(null);
     try {
       const res = await orgService.cancelTerminalSave(gymId, entryId, save.id);
-      if (live.current) onAnswer(res.data);
+      if (live.current) {
+        cancelAnswers.current += 1;
+        onAnswer(res.data);
+      }
     } catch (err) {
       if (live.current) setProblem(errorText(err, "We couldn't cancel. Try again, or cancel on the Terminal."));
     } finally {
