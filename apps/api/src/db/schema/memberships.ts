@@ -182,6 +182,8 @@ export const gymHeldMemberships = pgTable(
     taxIncluded: boolean("tax_included"),
     /** When its record was deleted for good (0116); set exactly when `entry_id` is null. */
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
+    /** The membership this one replaced when staff changed one for the other (0151; 18x). */
+    replacesId: uuid("replaces_id"),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -191,6 +193,16 @@ export const gymHeldMemberships = pgTable(
       sql`(${t.entryId} IS NULL) = (${t.recordDeletedAt} IS NOT NULL) AND (${t.entryId} IS NOT NULL OR ${t.status} IN ('ended','cancelled'))`,
     ),
     check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
+    check("gym_held_memberships_replaces_check", sql`${t.replacesId} IS NULL OR ${t.replacesId} <> ${t.id}`),
+    // `0151` clears only `replaces_id` when that row goes; Drizzle cannot say which column.
+    foreignKey({
+      name: "gym_held_memberships_replaces_fk",
+      columns: [t.gymId, t.replacesId],
+      foreignColumns: [t.gymId, t.id],
+    }),
+    index("gym_held_memberships_replaces_idx")
+      .on(t.gymId, t.replacesId)
+      .where(sql`${t.replacesId} IS NOT NULL`),
     unique("gym_held_memberships_request_uq").on(t.gymId, t.requestKey),
     // What a bill's key points at, with its gym (0093).
     unique("gym_held_memberships_gym_id_uq").on(t.gymId, t.id),
@@ -293,6 +305,9 @@ export const gymMemberBills = pgTable(
     /** The type's joining fee inside `amount_minor`, before any tax added on top (0150; 18t):
      *  on the bill opened when the membership was given; 0 on every other. */
     joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
+    /** What the membership it replaced had paid for the days not yet used, before tax, taken off
+     *  this first bill (0151; 18x): not inside `amount_minor`; 0 on every other. */
+    changeCreditMinor: integer("change_credit_minor").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -300,6 +315,10 @@ export const gymMemberBills = pgTable(
     check(
       "gym_member_bills_joining_fee_check",
       sql`${t.joiningFeeMinor} >= 0 AND ${t.joiningFeeMinor} <= ${t.amountMinor} AND (${t.joiningFeeMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,
+    ),
+    check(
+      "gym_member_bills_change_credit_check",
+      sql`${t.changeCreditMinor} BETWEEN 0 AND 99999999 AND (${t.changeCreditMinor} = 0 OR ${t.periodIndex} IS NOT NULL)`,
     ),
     check(
       "gym_member_bills_fee_check",

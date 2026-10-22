@@ -94,6 +94,9 @@ export const paymentReceiptSchema = z
     amounts: receiptAmountsSchema,
     /** The joining fee inside `amounts.listedMinor` (18t): printed as a line of its own. */
     joiningFeeMinor: minorSchema.default(0),
+    /** A change's credit off this bill (18x), and the membership it came from: printed as a line
+     *  of its own. Not inside `amounts`. Null for none. */
+    changeCredit: z.object({ minor: minorSchema, fromName: z.string() }).strict().nullable().default(null),
     /** What this payment was. */
     paidMinor: minorSchema,
     method: memberPaymentMethodSchema,

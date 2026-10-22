@@ -738,6 +738,10 @@ export const heldMembershipSchema = z
      *  here on charges it. Null for no tax. */
     tax: heldTaxSchema.nullable(),
     view: heldMembershipViewSchema,
+    /** Change membership (18x): the one it was changed from, by its type's name now. */
+    changedFrom: z.object({ typeName: z.string() }).strict().nullable().default(null),
+    /** The one it was changed to, while that one stands, and the day it starts. */
+    changedTo: z.object({ typeName: z.string(), startsOn: daySchema }).strict().nullable().default(null),
     /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
     billing: memberBillingSchema.nullable(),
   })
@@ -877,3 +881,24 @@ export const paidHeldMembershipRequestSchema = z
   .object({ paidPeriods: z.number().int().min(0).max(100_000) })
   .strict();
 export type PaidHeldMembershipRequest = z.infer<typeof paidHeldMembershipRequestSchema>;
+
+/** Change a membership for another type (18x): today, with the credit off the new first bill,
+ *  or on the next payment date. `priceMinor`, `creditMinor` and `totalMinor` are what the
+ *  screen showed, worked out again on the server: nothing is changed at any other amount.
+ *  `requestKey` is the new membership's, and its payment's where `paid`. */
+export const changeHeldMembershipRequestSchema = z
+  .object({
+    requestKey: z.string().uuid(),
+    typeId: z.string().uuid(),
+    when: z.enum(["today", "next_payment"]),
+    priceMinor: z.number().int().min(0).max(99_999_999),
+    creditMinor: z.number().int().min(0).max(99_999_999),
+    totalMinor: z.number().int().min(0).max(99_999_999),
+    paid: z.boolean(),
+    method: memberPaymentByHandSchema.optional(),
+    confirmBookings: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    confirmPtSessions: confirmPtSessionsField.optional(),
+  })
+  .strict()
+  .refine((v) => v.when === "today" || v.creditMinor === 0, { message: "credit_only_today" });
+export type ChangeHeldMembershipRequest = z.infer<typeof changeHeldMembershipRequestSchema>;

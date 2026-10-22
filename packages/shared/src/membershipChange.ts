@@ -127,3 +127,18 @@ export function changeTo(from: Extract<ChangeFrom, { ok: true }>, fromTypeId: st
   if (paidByChange && target.kind !== "recurring") return { ok: false, reason: "nothing_to_pay" };
   return { ok: true, startsOn: today, creditMinor: from.creditMinor, firstListedMinor: first, paidByChange };
 }
+
+/** What staff read where a change cannot be made: the same words on the screen and from the server. */
+export const MEMBERSHIP_CHANGE_WORDS: Readonly<Record<ChangeFromRefusal | ChangeToRefusal | "changed_already" | "credit_changed", string>> = {
+  not_changeable: "Only a membership in use that renews or is paid once can be changed. For a class pack or a trial, add a new membership instead.",
+  frozen: "This membership is frozen. Unfreeze it first, then change it.",
+  not_started: "This membership hasn't started yet. Cancel it and add the one they want instead.",
+  unpaid: "This membership has a payment due. Record the payment first, then change it.",
+  changed_already: "This membership has already been changed to another one.",
+  same_type: "They already have this membership. Pick another one.",
+  kind_not_allowed: "A class pack or a trial can't be changed to. Add it as a new membership instead.",
+  left_over: "What they have paid for the rest of this period is more than the new price. Change it on the next payment date instead.",
+  nothing_to_pay: "What they have paid for the rest of this period covers the whole new price. Change it on the next payment date instead.",
+  no_next_payment: "This membership has no next payment date. Change it today instead.",
+  credit_changed: "What they have paid changed while this was open. Nothing was saved: check the total and press again.",
+};

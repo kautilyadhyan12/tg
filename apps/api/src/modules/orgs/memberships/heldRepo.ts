@@ -281,6 +281,18 @@ export interface HeldList {
   overdueAfterDays: number;
   /** Whether the gym's prices hold its tax (18b-iii), for the Add form's total. */
   taxIncluded: boolean;
+  /** Every membership of this record given in place of another (18x), with both type names. */
+  changes: HeldChange[];
+}
+
+/** One change of membership (18x): the new one, the one it replaced, and their types' names. */
+export interface HeldChange {
+  newId: string;
+  oldId: string;
+  newName: string;
+  oldName: string;
+  startsOn: string;
+  newStatus: string;
 }
 
 /** What the list says this record's membership is, and how that name stands with the
@@ -358,6 +370,16 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       ...(await feesOf(tx, gymId, ids)),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
+      changes: await tx<{ new_id: string; old_id: string; new_name: string; old_name: string; starts_on: string; new_status: string }[]>`
+        SELECT n.id AS new_id, n.replaces_id AS old_id, tn.name AS new_name, tt.name AS old_name,
+               n.starts_on::text AS starts_on, n.status AS new_status
+        FROM gym_held_memberships n
+        JOIN gym_held_memberships o ON o.gym_id = n.gym_id AND o.id = n.replaces_id
+        JOIN gym_membership_types tn ON tn.gym_id = n.gym_id AND tn.id = n.membership_type_id
+        JOIN gym_membership_types tt ON tt.gym_id = o.gym_id AND tt.id = o.membership_type_id
+        WHERE n.gym_id = ${gymId} AND n.entry_id = ${entryId} AND n.replaces_id IS NOT NULL`.then((rows) =>
+        rows.map((r) => ({ newId: r.new_id, oldId: r.old_id, newName: r.new_name, oldName: r.old_name, startsOn: r.starts_on, newStatus: r.new_status })),
+      ),
     };
   });
 }
@@ -573,224 +595,249 @@ export async function typeHeldByBoth(tx: TransactionSql, gymId: string, goneId: 
   return null;
 }
 
-export async function giveHeld(
-  sql: Sql,
-  input: {
-    gymId: string;
-    entryId: string;
-    typeId: string;
-    requestKey: string;
-    startsOn: string;
-    paid: boolean;
-    /** How they paid, where `paid`. */
-    method: MemberPaymentByHand | null;
-    /** The price the screen showed; null where it showed none. */
-    shownPriceMinor: number | null;
-    /** The gym's discount it is given with, and what the screen showed coming off. */
-    discount: { id: string; shownOffMinor: number } | null;
-    /** The person's own Refer a friend gift filled in (20e-ii-b-ii-a), off its first bill, and
-     *  what the screen showed it takes off. */
-    memberGift: { id: string; shownOffMinor: number } | null;
-    /** What the screen showed its first bill comes to, tax in; null where it showed none. */
-    shownTotalMinor: number | null;
-    /** The type's joining fee the screen showed and charges (18t), 0 where it showed it waived;
-     *  null where it showed none. */
-    joiningFeeMinor: number | null;
-    /** Whether this reader may give a type that has a joining fee without it. */
-    mayWaiveJoiningFee: boolean;
-    /** The gym's own day. */
-    today: string;
-    actorUserId: string;
-    now: Date;
-  },
-): Promise<HeldWriteOutcome> {
+/** What `giveHeld` is given. */
+export interface GiveHeldInput {
+  gymId: string;
+  entryId: string;
+  typeId: string;
+  requestKey: string;
+  startsOn: string;
+  paid: boolean;
+  /** How they paid, where `paid`. */
+  method: MemberPaymentByHand | null;
+  /** The price the screen showed; null where it showed none. */
+  shownPriceMinor: number | null;
+  /** The gym's discount it is given with, and what the screen showed coming off. */
+  discount: { id: string; shownOffMinor: number } | null;
+  /** The person's own Refer a friend gift filled in (20e-ii-b-ii-a), off its first bill, and
+   *  what the screen showed it takes off. */
+  memberGift: { id: string; shownOffMinor: number } | null;
+  /** What the screen showed its first bill comes to, tax in; null where it showed none. */
+  shownTotalMinor: number | null;
+  /** The type's joining fee the screen showed and charges (18t), 0 where it showed it waived;
+   *  null where it showed none. */
+  joiningFeeMinor: number | null;
+  /** Whether this reader may give a type that has a joining fee without it. */
+  mayWaiveJoiningFee: boolean;
+  /** Given in place of another membership (18x, `changeRepo.ts`): the one it replaces and
+   *  the credit off its first bill, before tax. No joining fee, discount or gift with it;
+   *  `paidByChange` where the credit pays the whole first period, which then opens no bill. */
+  change?: { fromId: string; creditMinor: number; paidByChange: boolean } | null;
+  /** The gym's own day. */
+  today: string;
+  actorUserId: string;
+  now: Date;
+}
+
+export async function giveHeld(sql: Sql, input: GiveHeldInput): Promise<HeldWriteOutcome> {
   return await sql.begin(async (tx): Promise<HeldWriteOutcome> => {
-    const entry = await lockedEntry(tx, input.gymId, input.entryId);
-    if (entry === null) return { kind: "entry_not_found" };
+    const given = await giveHeldIn(tx, input);
+    return given.kind === "given" ? { kind: "ok" } : given;
+  });
+}
 
-    // The same request again: the membership it gave stands, and nothing is added.
-    const [again] = await tx<{ entry_id: string }[]>`
-      SELECT entry_id FROM gym_held_memberships
-      WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
-    if (again !== undefined) return again.entry_id === input.entryId ? { kind: "ok" } : { kind: "request_reused" };
-    // The key also names the payment a paid give records.
-    const [spent] = await tx<{ id: string }[]>`
-      SELECT id FROM gym_member_payments WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
-    if (spent !== undefined) return { kind: "request_reused" };
+/** `giveHeld` in the caller's transaction: answers the membership it made, or `ok` where the
+ *  same request had already made it. */
+export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Promise<HeldWriteOutcome | { kind: "given"; id: string }> {
+  const change = input.change ?? null;
+  const entry = await lockedEntry(tx, input.gymId, input.entryId);
+  if (entry === null) return { kind: "entry_not_found" };
 
-    if (entry.past) return { kind: "past_member" };
-    const inUse = await settle(tx, input.gymId, input.entryId, input.today, input.now);
-    if (inUse >= HELD_LIVE_MAX) return { kind: "too_many", cap: HELD_LIVE_MAX };
+  // The same request again: the membership it gave stands, and nothing is added.
+  const [again] = await tx<{ entry_id: string }[]>`
+    SELECT entry_id FROM gym_held_memberships
+    WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
+  if (again !== undefined) return again.entry_id === input.entryId ? { kind: "ok" } : { kind: "request_reused" };
+  // The key also names the payment a paid give records.
+  const [spent] = await tx<{ id: string }[]>`
+    SELECT id FROM gym_member_payments WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
+  if (spent !== undefined) return { kind: "request_reused" };
 
-    const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
-    if (rawType === undefined) return { kind: "type_not_found" };
-    const type = typeChoice(rawType);
-    if (input.shownPriceMinor !== null && input.shownPriceMinor !== type.priceMinor) return { kind: "price_changed" };
-    // The type's rate as it is now, read under the gym's lock that its changes take: the
-    // membership keeps it, and its first bill charges it.
-    const taxRateId = typeTaxRateId(rawType);
-    // A free membership opens no bill, so it charges no tax.
-    const rate = taxRateId === null || rawTypePrice(rawType) === 0 ? null : await rateOf(tx, input.gymId, taxRateId);
-    const included = await taxIncludedOf(tx, input.gymId);
-    const tax: TaxApplied | null = rate === null || included === null ? null : { name: rate.name, bp: rate.bp, included };
+  if (entry.past) return { kind: "past_member" };
+  const inUse = await settle(tx, input.gymId, input.entryId, input.today, input.now);
+  if (inUse >= HELD_LIVE_MAX) return { kind: "too_many", cap: HELD_LIVE_MAX };
 
-    // The discount is this gym's own, read under its lock, judged on the gym's own day,
-    // and what it takes off is worked out again here: nothing is given at any other price.
-    let used: { id: string; name: string; offMinor: number; payments: MembershipPayments; heldPriceMinor: number; firstBillMinor: number } | null = null;
-    if (input.discount !== null) {
-      const found = await lockedDiscount(tx, input.gymId, input.discount.id);
-      if (found === null) return { kind: "discount_not_found" };
-      const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, membershipTypeId: type.id, currency: type.currency });
-      if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
-      // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i).
-      if (found.referralGift && !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today))) return { kind: "friend_gift_not_theirs" };
-      const costs = membershipDiscount(found, type);
-      if (!costs.ok) return costs.reason === "nothing_off" ? { kind: "discount_nothing_off", name: found.name } : { kind: "discount_nothing_to_pay" };
-      if (costs.offMinor !== input.discount.shownOffMinor) return { kind: "discount_changed" };
-      used = { id: found.id, name: found.name, ...costs };
-    }
-    const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
-    const firstListed = used === null ? type.priceMinor : used.firstBillMinor;
-    // The member's own Refer a friend gift comes off the first bill, after any discount: this
-    // record's, still waiting, read under its lock, and taking off what the screen showed.
-    let gift: { id: string; offMinor: number } | null = null;
-    if (input.memberGift !== null) {
-      const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "membership");
-      if (found === null || type.priceMinor === 0) return { kind: "member_gift_not_theirs" };
-      const off = memberGiftOff(found, firstListed, type.currency);
-      if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
-      gift = { id: found.id, offMinor: off };
-    }
-    // The joining fee (18t): the type's own as it is now, and only where the screen showed that
-    // very amount. 0 is waived, which only a reader who takes payments may do. A screen that
-    // said nothing of a fee the type has was opened before it was set: sent back to look again.
-    const joiningFeeMinor = input.joiningFeeMinor ?? 0;
+  const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
+  if (rawType === undefined) return { kind: "type_not_found" };
+  const type = typeChoice(rawType);
+  if (input.shownPriceMinor !== null && input.shownPriceMinor !== type.priceMinor) return { kind: "price_changed" };
+  // The type's rate as it is now, read under the gym's lock that its changes take: the
+  // membership keeps it, and its first bill charges it.
+  const taxRateId = typeTaxRateId(rawType);
+  // A free membership opens no bill, so it charges no tax.
+  const rate = taxRateId === null || rawTypePrice(rawType) === 0 ? null : await rateOf(tx, input.gymId, taxRateId);
+  const included = await taxIncludedOf(tx, input.gymId);
+  const tax: TaxApplied | null = rate === null || included === null ? null : { name: rate.name, bp: rate.bp, included };
+
+  // The discount is this gym's own, read under its lock, judged on the gym's own day,
+  // and what it takes off is worked out again here: nothing is given at any other price.
+  let used: { id: string; name: string; offMinor: number; payments: MembershipPayments; heldPriceMinor: number; firstBillMinor: number } | null = null;
+  if (input.discount !== null) {
+    const found = await lockedDiscount(tx, input.gymId, input.discount.id);
+    if (found === null) return { kind: "discount_not_found" };
+    const fits = discountFits({ ...found, archived: found.archivedAt !== null }, { today: input.today, membershipTypeId: type.id, currency: type.currency });
+    if (!fits.ok) return { kind: "discount_refused", name: found.name, reason: fits.reason };
+    // Refer a friend's gift goes only to the friend it is for, once (20e-ii-b-i).
+    if (found.referralGift && !(await friendGiftOpen(tx, input.gymId, input.entryId, found.id, input.today))) return { kind: "friend_gift_not_theirs" };
+    const costs = membershipDiscount(found, type);
+    if (!costs.ok) return costs.reason === "nothing_off" ? { kind: "discount_nothing_off", name: found.name } : { kind: "discount_nothing_to_pay" };
+    if (costs.offMinor !== input.discount.shownOffMinor) return { kind: "discount_changed" };
+    used = { id: found.id, name: found.name, ...costs };
+  }
+  const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
+  const firstListed = used === null ? type.priceMinor : used.firstBillMinor;
+  // The member's own Refer a friend gift comes off the first bill, after any discount: this
+  // record's, still waiting, read under its lock, and taking off what the screen showed.
+  let gift: { id: string; offMinor: number } | null = null;
+  if (input.memberGift !== null) {
+    const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "membership");
+    if (found === null || type.priceMinor === 0) return { kind: "member_gift_not_theirs" };
+    const off = memberGiftOff(found, firstListed, type.currency);
+    if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
+    gift = { id: found.id, offMinor: off };
+  }
+  // The joining fee (18t): the type's own as it is now, and only where the screen showed that
+  // very amount. 0 is waived, which only a reader who takes payments may do. A screen that
+  // said nothing of a fee the type has was opened before it was set: sent back to look again.
+  // A change (18x) is no joining: no fee is charged, and none is waived.
+  const joiningFeeMinor = change !== null ? 0 : (input.joiningFeeMinor ?? 0);
+  if (change === null) {
     if (input.joiningFeeMinor === null && type.joiningFeeMinor > 0) return { kind: "price_changed" };
     if (joiningFeeMinor > 0 && joiningFeeMinor !== type.joiningFeeMinor) return { kind: "price_changed" };
     if (input.joiningFeeMinor === 0 && type.joiningFeeMinor > 0 && !input.mayWaiveJoiningFee) return { kind: "price_changed" };
-    const waivedFeeMinor = joiningFeeMinor === 0 ? type.joiningFeeMinor : 0;
-    // The first bill: its price after any discount and gift, the joining fee, and its tax.
-    // Nothing is given at a total the screen did not show.
-    const firstBill = type.priceMinor === 0 ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0) + joiningFeeMinor, tax);
-    if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
+  }
+  const waivedFeeMinor = change === null && joiningFeeMinor === 0 ? type.joiningFeeMinor : 0;
+  // A change's credit comes off the first bill before tax, as a gift does (18x).
+  const creditMinor = change?.creditMinor ?? 0;
+  const paidByChange = change?.paidByChange ?? false;
+  // The first bill: its price after any discount, gift and credit, the joining fee, and its
+  // tax. Nothing is given at a total the screen did not show.
+  const firstBill =
+    type.priceMinor === 0 || paidByChange ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0) + joiningFeeMinor - creditMinor, tax);
+  if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
 
-    // Worked out unpaid: the bill of the period owed is opened first, and a payment
-    // recorded against it is what moves the count of paid periods on.
-    const given = giveHeldMembership(type, input.startsOn, false, input.today);
-    if (!given.ok) return { kind: given.reason };
-    const owed = given.membership;
-    const pays = input.paid && !owed.free;
-    if (pays && input.method === null) return { kind: "method_needed" };
-    const paidMove = pays ? moveHeldMembership(owed, { type: "paid", paidPeriods: owed.paidPeriods + 1 }, input.today) : null;
-    if (paidMove !== null && !paidMove.ok) return { kind: "not_allowed" };
-    const m = paidMove === null ? owed : paidMove.membership;
+  // Worked out unpaid: the bill of the period owed is opened first, and a payment
+  // recorded against it is what moves the count of paid periods on.
+  const given = giveHeldMembership(type, input.startsOn, false, input.today);
+  if (!given.ok) return { kind: given.reason };
+  // Paid by the change: its first period counts as paid as one before it was given does, so
+  // no mark is ever taken back into it and no bill is asked for it.
+  const owed = paidByChange ? { ...given.membership, paidPeriods: 1, paidFloor: 1 } : given.membership;
+  const pays = input.paid && !owed.free && !paidByChange;
+  if (pays && input.method === null) return { kind: "method_needed" };
+  const paidMove = pays ? moveHeldMembership(owed, { type: "paid", paidPeriods: owed.paidPeriods + 1 }, input.today) : null;
+  if (paidMove !== null && !paidMove.ok) return { kind: "not_allowed" };
+  const m = paidMove === null ? owed : paidMove.membership;
 
-    // Asked under the record's lock, so two staff pressing Add at one instant give one.
-    const running = (await held(tx, input.gymId, input.entryId, IN_USE, IN_USE_READ)).map(shape);
-    const clash = running.filter((row) => row.typeId === input.typeId && sameTypeTwice(row.membership, m, input.today));
-    if (clash.length > 0) {
-      const ends = clash.every((row) => heldMembershipView(row.membership, input.today).endsOn !== null);
-      return { kind: "already_held", typeName: type.name, ends };
-    }
+  // Asked under the record's lock, so two staff pressing Add at one instant give one.
+  const running = (await held(tx, input.gymId, input.entryId, IN_USE, IN_USE_READ)).map(shape);
+  const clash = running.filter((row) => row.typeId === input.typeId && sameTypeTwice(row.membership, m, input.today));
+  if (clash.length > 0) {
+    const ends = clash.every((row) => heldMembershipView(row.membership, input.today).endsOn !== null);
+    return { kind: "already_held", typeName: type.name, ends };
+  }
 
-    // One use, in one statement that will not pass the limit, in this same transaction.
-    if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
+  // One use, in one statement that will not pass the limit, in this same transaction.
+  if (used !== null && !(await takeUse(tx, input.gymId, used.id))) return { kind: "discount_refused", name: used.name, reason: "used_up" };
 
-    const [created] = await tx<{ id: string }[]>`
-      INSERT INTO gym_held_memberships
-        (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
-         term_count, term_unit, pack_classes, pack_days, starts_on, status,
-         paid_periods, paid_floor, renews, classes_left,
-         discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included)
-      VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
-              ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
-              ${m.packDays}, ${m.startsOn}::date, ${m.status},
-              ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
-              ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null})
-      RETURNING id`;
-    if (created === undefined) throw new Error("held membership insert returned no row");
+  const [created] = await tx<{ id: string }[]>`
+    INSERT INTO gym_held_memberships
+      (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
+       term_count, term_unit, pack_classes, pack_days, starts_on, status,
+       paid_periods, paid_floor, renews, classes_left,
+       discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id)
+    VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
+            ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
+            ${m.packDays}, ${m.startsOn}::date, ${m.status},
+            ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
+            ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
+            ${change?.fromId ?? null})
+    RETURNING id`;
+  if (created === undefined) throw new Error("held membership insert returned no row");
 
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.held_membership_given",
-      targetType: "gym_held_membership",
-      targetId: created.id,
-      meta: {
-        entryId: input.entryId,
-        type: type.name,
-        startsOn: m.startsOn,
-        paidPeriods: String(m.paidPeriods),
-        priceMinor: String(priceMinor),
-        currency: type.currency,
-        ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
-        ...(tax === null ? {} : { tax: tax.name, taxBp: String(tax.bp) }),
-        ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
-        ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
-      },
-    });
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.held_membership_given",
+    targetType: "gym_held_membership",
+    targetId: created.id,
+    meta: {
+      entryId: input.entryId,
+      type: type.name,
+      startsOn: m.startsOn,
+      paidPeriods: String(m.paidPeriods),
+      priceMinor: String(priceMinor),
+      currency: type.currency,
+      ...(used === null ? {} : { discountId: used.id, discount: used.name, discountMinor: String(used.offMinor), discountPayments: used.payments }),
+      ...(tax === null ? {} : { tax: tax.name, taxBp: String(tax.bp) }),
+      ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
+      ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
+      ...(change === null ? {} : { replaces: change.fromId, changeCreditMinor: String(creditMinor) }),
+    },
+  });
 
-    const [due] = billsToOpen(owed, input.today, new Set());
-    if (due !== undefined) {
-      const [opened] = await insertBills(
+  const [due] = billsToOpen(owed, input.today, new Set());
+  if (due !== undefined) {
+    const [opened] = await insertBills(
+      tx,
+      input.gymId,
+      [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, tax: firstBill.tax, joiningFeeMinor, changeCreditMinor: creditMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
+      input.now,
+    );
+    if (opened === undefined) throw new Error("a new membership's bill was not opened");
+    if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: opened.id, saleId: null, offMinor: gift.offMinor, currency: type.currency, now: input.now });
+    if (pays && input.method !== null) {
+      const recorded = await insertPayment(
         tx,
-        input.gymId,
-        [{ membershipId: created.id, periodIndex: due.periodIndex, amountMinor: firstBill.amountMinor, tax: firstBill.tax, joiningFeeMinor, currency: type.currency, dueOn: due.dueOn, covers: due.covers }],
+        {
+          gymId: input.gymId,
+          billId: opened.id,
+          amountMinor: firstBill.amountMinor,
+          currency: type.currency,
+          method: input.method,
+          requestKey: input.requestKey,
+          paidOn: input.today,
+          recordedBy: input.actorUserId,
+          provider: null,
+        },
         input.now,
       );
-      if (opened === undefined) throw new Error("a new membership's bill was not opened");
-      if (gift !== null) await markUsed(tx, { gymId: input.gymId, giftId: gift.id, billId: opened.id, saleId: null, offMinor: gift.offMinor, currency: type.currency, now: input.now });
-      if (pays && input.method !== null) {
-        const recorded = await insertPayment(
-          tx,
-          {
-            gymId: input.gymId,
-            billId: opened.id,
-            amountMinor: firstBill.amountMinor,
-            currency: type.currency,
-            method: input.method,
-            requestKey: input.requestKey,
-            paidOn: input.today,
-            recordedBy: input.actorUserId,
-            provider: null,
-          },
-          input.now,
-        );
-        if (recorded === null) throw new Error("a new membership's payment was not recorded");
-        const paymentId = recorded.id;
-        await setBillStatus(tx, input.gymId, opened.id, "paid", input.now);
-        // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
-        await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
-        await insertAudit(tx, {
-          actorUserId: input.actorUserId,
-          gymId: input.gymId,
-          action: "org.member_payment_recorded",
-          targetType: "gym_member_payment",
-          targetId: paymentId,
-          meta: {
-            entryId: input.entryId,
-            membershipId: created.id,
-            billId: opened.id,
-            period: String(due.periodIndex),
-            amountMinor: String(firstBill.amountMinor),
-            currency: type.currency,
-            method: input.method,
-            ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
-          },
-        });
-      }
-    } else if (pays) {
-      throw new Error("a membership given as paid had no bill to pay");
-    } else if (used !== null && used.payments === "first") {
-      // Its discount rides on the bill opened now; every later one is opened at the full price.
-      throw new Error("a membership given with a first-payment discount had no bill to carry it");
-    } else if (gift !== null) {
-      throw new Error("a membership given with a Refer a friend gift had no bill to carry it");
-    } else if (joiningFeeMinor > 0) {
-      throw new Error("a membership given with a joining fee had no bill to carry it");
+      if (recorded === null) throw new Error("a new membership's payment was not recorded");
+      const paymentId = recorded.id;
+      await setBillStatus(tx, input.gymId, opened.id, "paid", input.now);
+      // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
+      await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.member_payment_recorded",
+        targetType: "gym_member_payment",
+        targetId: paymentId,
+        meta: {
+          entryId: input.entryId,
+          membershipId: created.id,
+          billId: opened.id,
+          period: String(due.periodIndex),
+          amountMinor: String(firstBill.amountMinor),
+          currency: type.currency,
+          method: input.method,
+          ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
+        },
+      });
     }
-    return { kind: "ok" };
-  });
+  } else if (pays) {
+    throw new Error("a membership given as paid had no bill to pay");
+  } else if (used !== null && used.payments === "first") {
+    // Its discount rides on the bill opened now; every later one is opened at the full price.
+    throw new Error("a membership given with a first-payment discount had no bill to carry it");
+  } else if (gift !== null) {
+    throw new Error("a membership given with a Refer a friend gift had no bill to carry it");
+  } else if (joiningFeeMinor > 0) {
+    throw new Error("a membership given with a joining fee had no bill to carry it");
+  } else if (creditMinor > 0 && !paidByChange) {
+    throw new Error("a membership given in place of another had no bill to carry its credit");
+  }
+  return { kind: "given", id: created.id };
 }
 
 /** One membership of a record, held for a write, or null where it is not that record's.

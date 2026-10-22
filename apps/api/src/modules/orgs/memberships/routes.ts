@@ -33,6 +33,7 @@ import type { z } from "zod";
 import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   cancelHeldMembershipRequestSchema,
+  changeHeldMembershipRequestSchema,
   giveHeldMembershipRequestSchema,
   membershipLinkPreviewRequestSchema,
   membershipLinkRequestSchema,
@@ -93,12 +94,13 @@ function requireUserId(req: FastifyRequest): string {
 
 /** A change to one membership answered: the person's memberships, or the 409 a cancel
  *  answers while it would end bookings nobody has confirmed. */
-function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<ReturnType<typeof held.moveHeldMembership>>) {
+function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<ReturnType<typeof held.moveHeldMembership>>, change = false) {
   if (answer.kind === "ok") return reply.status(200).send(answer.body);
   return reply.status(409).send({
     error: MEMBERSHIP_HAS_BOOKINGS_ERROR,
-    message:
-      answer.ending.ptSessions === undefined
+    message: change
+      ? "They have bookings that the new membership doesn't cover. Those will end if you go ahead."
+      : answer.ending.ptSessions === undefined
         ? "They have classes booked on this membership. Those bookings will end if you go ahead."
         : answer.ending.booked === 0
           ? "They have personal training sessions booked on this membership. Those sessions will be cancelled if you go ahead."
@@ -264,6 +266,15 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       body.confirmPtSessions ?? null,
     );
     return sendHeld(reply, req, answer);
+  });
+
+  app.post(`${heldUrl}/:membershipId/change`, heldGuarded, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(changeHeldMembershipRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await held.changeHeldMembership(heldDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, body);
+    return sendHeld(reply, req, answer, true);
   });
 
   app.post(`${heldUrl}/:membershipId/paid`, heldGuarded, async (req, reply) => {
