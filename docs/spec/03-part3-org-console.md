@@ -4197,7 +4197,13 @@ for an app that asks, and GoCardless is closed to Kd (RULINGS 2026-10-20).
   membership that renews, the Terminal shows the card agreement first, and the card is kept
   from that payment (CreateCard with the payment's id, within 24 hours; tried 2026-10-21 in
   Square's US test area on the simulated Terminal `9fa747a2-…`: an EMV payment, VISA ending
-  1111 kept).
+  1111 kept). *As built, 18d-vi-a (a member's bill):* Record payment → Card on Terminal sends a
+  Terminal checkout with no tip and no Square receipt screen; nothing is recorded until Square
+  says it is COMPLETED and its one payment is exactly the amount, at the gym's location; it is
+  recorded once, as `terminal` with Square's payment id; while it waits nothing else pays, voids
+  or cancels that membership's bill; a Terminal payment is refunded in Square, never voided here;
+  money Square took that the bill can no longer take is kept as "not recorded" and told to Staff
+  activity. Square's test area approves up to $25.
 - **The Square Reader, in Square's own app** (18d-iii-b): Square's payment message, matched by
   the Square customer KWAZO made for the member, records it; a payment with no member on it
   waits for staff to match, never guessed. Staff type the bill's total, so the gym keeps
