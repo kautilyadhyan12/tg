@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, Plus } from 'lucide-react';
+import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import PlaceLink from '../../components/console/PlaceLink';
@@ -8,6 +8,9 @@ import ReceiptBox from '../../components/console/ReceiptBox';
 import MoreMenu from '../../components/console/MoreMenu';
 import { RECEIPT_BUTTON, receiptButtonLabel } from './receiptView';
 import MembershipChoice from './MembershipChoice';
+import TerminalPayBox from './TerminalPayBox';
+import { cardTerminalSerial } from './memberCardView';
+import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
 import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
@@ -147,6 +150,8 @@ export default function MemberMemberships({
   managesTypes = true,
   membershipsTo = null,
   addNow = false,
+  /** How often the Terminal's box asks the server; the box's own unless a test says. */
+  checkEveryMs,
 }) {
   /** The answer on screen, and the record it is about: never shown under another. */
   const [held, setHeld] = useState(null);
@@ -179,6 +184,10 @@ export default function MemberMemberships({
    *  requestKey, method, tried }, for the membership in `open`. */
   const [feeForm, setFeeForm] = useState(null);
   const addedNow = useRef(false);
+  /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
+   *  open box follows, { membershipId, payment, terminalId }, until it ends. */
+  const [terminals, setTerminals] = useState({ entryId: null, list: [] });
+  const [terminalPay, setTerminalPay] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -196,6 +205,29 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  const canBillHere = shown?.canBill === true;
+  useEffect(() => {
+    if (!canBillHere) return undefined;
+    let live = true;
+    orgService.getTerminalPayments(gymId, entryId).then(
+      (res) => {
+        if (!live) return;
+        setTerminals({ entryId, list: res.data.terminals });
+        // One waiting for this person, pressed here before or on another screen: its box is open.
+        const waiting = res.data.waiting[0];
+        if (waiting !== undefined) {
+          setTerminalPay((was) => was ?? { membershipId: waiting.membershipId, payment: waiting });
+          setOpen((was) => was ?? { what: 'terminalPay', id: waiting.membershipId });
+        }
+      },
+      // Without them the form offers only the ways recorded by hand.
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, entryId, canBillHere, attempt]);
+  const terminalList = terminals.entryId === entryId ? terminals.list : [];
   // Opened by "Add membership" on the Members list's own row (21c-iii): the form is open
   // already, once, when their memberships have loaded.
   const addsNow = addNow && !readOnly && shown !== null && !shown.past;
@@ -365,6 +397,7 @@ export default function MemberMemberships({
 
   const close = () => {
     setRefusal(null);
+    setTerminalPay(null);
     setOpen(null);
     setForm(null);
     setEnding(null);
@@ -409,7 +442,7 @@ export default function MemberMemberships({
         >
           <p className="c-s15 c-w6 c-t1 m-0">{`Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
           <label className="c-field">
-            <span className="c-label">How they paid</span>
+            <span className="c-label">Payment method</span>
             <select className="c-sel" value={feeForm.method} onChange={(e) => setFeeForm((f) => ({ ...f, method: e.target.value }))}>
               <option value="">Choose one</option>
               {PAYMENT_METHODS.map((method) => (
@@ -758,10 +791,104 @@ export default function MemberMemberships({
     );
   };
 
-  /** Record payment: the amount, starting at what is left, and how it was paid. */
+  /** Take payment on Terminal (18d-vi-a): the amount goes to the chosen Terminal, and the box
+   *  under it waits for the person. */
+  const startTerminal = async (m, terminalId, body) => {
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    try {
+      const res = await orgService.startTerminalPayment(gymId, entryId, m.id, { terminalId, requestKey: body.requestKey, periodIndex: body.periodIndex, amountMinor: body.amountMinor });
+      setTerminalPay({ membershipId: m.id, payment: res.data.payment, terminalId });
+      setOpen({ what: 'terminalPay', id: m.id });
+    } catch (err) {
+      setRefusal(errorText(err, "We couldn't reach the Terminal. Try again."));
+      if (STALE_CODES.includes(errorCode(err))) {
+        close();
+        setAttempt((n) => n + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Where the payment the box follows stands now; when it is paid, the bill is read again. A
+   *  payment only moves forward: an ask's answer sent before Cancel's never takes it back. */
+  const onTerminalAnswer = (payment) => {
+    setTerminalPay((was) => (was === null || was.payment.id !== payment.id || was.payment.step === 'done' ? was : { ...was, payment }));
+    if (payment.step !== 'done' || payment.outcome !== 'paid') return;
+    setTerminalPay(null);
+    setOpen(null);
+    setPayForm(null);
+    // What was left on the bill, as on screen while it waited: the bill is read again only after.
+    const owedOn = shown?.memberships.find((x) => x.id === payment.membershipId)?.billing?.pay;
+    setNotice(terminalPayOutcomeLine(payment, name, owedOn?.leftMinor ?? payment.amountMinor));
+    setAttempt((n) => n + 1);
+    onChanged?.();
+  };
+
+  /** A payment on the Terminal that ended without being paid: why, and what next. */
+  const renderTerminalEnded = (m) => {
+    const { payment } = terminalPay;
+    const paidMaybe = mayHavePaid(payment);
+    const again = terminalList.find((t) => t.id === (terminalPay.terminalId ?? payment.terminal?.id));
+    const owed = m.billing?.pay ?? null;
+    const canAgain = !paidMaybe && again !== undefined && owed !== null && owed.leftMinor >= payment.amountMinor;
+    return (
+      <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-ended">
+        <p className="c-s14 m-0" style={{ color: paidMaybe ? 'var(--t1)' : 'var(--bad)' }} role="alert">
+          {terminalPayOutcomeLine(payment, name, owed?.leftMinor ?? payment.amountMinor)}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {canAgain ? (
+            <button
+              type="button"
+              className={PAY}
+              disabled={busy}
+              onClick={() => void startTerminal(m, again.id, { requestKey: newRequestKey(), periodIndex: owed.periodIndex, amountMinor: payment.amountMinor })}
+            >
+              {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              Try again
+            </button>
+          ) : null}
+          {!paidMaybe && owed !== null ? (
+            <button
+              type="button"
+              className={SMALL}
+              disabled={busy}
+              onClick={() => {
+                setTerminalPay(null);
+                startPay(m);
+              }}
+            >
+              Record another way
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={SMALL}
+            disabled={busy}
+            onClick={() => {
+              close();
+              setAttempt((n) => n + 1);
+            }}
+          >
+            {paidMaybe ? 'Done' : 'Back'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /** Record payment: the amount, starting at what is left, and how it was paid. Where the gym has
+   *  a Square Terminal, Card on Terminal comes first, and takes the money there. */
   const renderPay = (m) => {
     const words = paymentWords(m, name, today);
+    const onTerminal = payForm.method === TERMINAL_METHOD;
     const { problem, body } = paymentBody(m, payForm);
+    const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === payForm.terminalId);
+    const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
+    const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...PAYMENT_METHODS] : PAYMENT_METHODS;
     return (
       <form
         noValidate
@@ -771,15 +898,19 @@ export default function MemberMemberships({
         onSubmit={(e) => {
           e.preventDefault();
           if (busy) return;
-          if (body === null) {
+          if (body === null || terminalProblem !== null) {
             setPayForm((f) => ({ ...f, tried: true }));
+            return;
+          }
+          if (onTerminal) {
+            void startTerminal(m, pickedTerminal.id, body);
             return;
           }
           void run('pay', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'payments', body), paidWords(m, body.amountMinor));
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{words.title}</p>
-        <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal ? words.takeTitle : words.title}</p>
+        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : words.detail}</p>
         <label className="c-field">
           <span className="c-label">{`Amount paid (${m.currency})`}</span>
           <input
@@ -791,25 +922,44 @@ export default function MemberMemberships({
           />
         </label>
         <label className="c-field">
-          <span className="c-label">How they paid</span>
+          <span className="c-label">Payment method</span>
           <select className="c-sel" value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value }))}>
             <option value="">Choose one</option>
-            {PAYMENT_METHODS.map((method) => (
+            {methods.map((method) => (
               <option key={method.value} value={method.value}>
                 {method.label}
               </option>
             ))}
           </select>
         </label>
-        {payForm.tried && problem !== null ? (
+        {onTerminal && terminalList.length > 1 ? (
+          <label className="c-field">
+            <span className="c-label">Terminal</span>
+            <select className="c-sel" value={payForm.terminalId ?? ''} onChange={(e) => setPayForm((f) => ({ ...f, terminalId: e.target.value }))}>
+              <option value="">Choose one</option>
+              {terminalList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {cardTerminalSerial(t) === null ? payTerminalName(t) : `${payTerminalName(t)} · ${cardTerminalSerial(t)}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {payForm.tried && (problem ?? terminalProblem) !== null ? (
           <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
-            {problem}
+            {problem ?? terminalProblem}
           </span>
         ) : null}
         <div className="flex flex-wrap gap-2">
           <button type="submit" className={MAIN} disabled={busy}>
-            {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : <Check aria-hidden="true" className="w-4 h-4" />}
-            Record payment
+            {busy ? (
+              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+            ) : onTerminal ? (
+              <CreditCard aria-hidden="true" className="w-4 h-4" />
+            ) : (
+              <Check aria-hidden="true" className="w-4 h-4" />
+            )}
+            {onTerminal ? 'Take payment on Terminal' : 'Record payment'}
           </button>
           <button type="button" className={PLAIN} disabled={busy} onClick={close}>
             Back
@@ -1170,7 +1320,25 @@ export default function MemberMemberships({
           </p>
         ) : null}
         {asking ? (
-          open.what === 'pay' && payForm !== null ? (
+          open.what === 'terminalPay' && terminalPay !== null ? (
+            terminalPay.payment.step === 'done' ? (
+              renderTerminalEnded(m)
+            ) : (
+              <TerminalPayBox
+                gymId={gymId}
+                entryId={entryId}
+                payment={terminalPay.payment}
+                name={name}
+                showName={terminalList.length > 1}
+                onAnswer={onTerminalAnswer}
+                checkEveryMs={checkEveryMs}
+                onEnded={(line) => {
+                  close();
+                  setRefusal(line);
+                }}
+              />
+            )
+          ) : open.what === 'pay' && payForm !== null ? (
             renderPay(m)
           ) : open.what === 'cancelBill' || open.what === 'refund' || open.what === 'voidRefund' || (open.what === 'undo' && m.billing?.undo?.kind === 'payment') ? null : (
             // Drawn inside the bill, payment or refund they are about (`renderBills`).

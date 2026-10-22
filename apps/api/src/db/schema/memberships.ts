@@ -53,7 +53,7 @@ export const gymMembershipTypes = pgTable(
     ptPeriod: text("pt_period"),
     /** The gym's tax rate its bills charge (0112); null for none. */
     taxRateId: uuid("tax_rate_id"),
-    /** Charged on the first bill of a membership given from it (0149; 18t); 0 for none. */
+    /** Charged on the first bill of a membership given from it (0150; 18t); 0 for none. */
     joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
@@ -290,7 +290,7 @@ export const gymMemberBills = pgTable(
     classBookingId: uuid("class_booking_id"),
     /** A personal training session's fee (0138; 18h-ii): the session while it stands. */
     ptAppointmentId: uuid("pt_appointment_id"),
-    /** The type's joining fee inside `amount_minor`, before any tax added on top (0149; 18t):
+    /** The type's joining fee inside `amount_minor`, before any tax added on top (0150; 18t):
      *  on the bill opened when the membership was given; 0 on every other. */
     joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
     createdAt: createdAt(),
@@ -390,10 +390,10 @@ export const gymMemberPayments = pgTable(
     unique("gym_member_payments_gym_id_uq").on(t.gymId, t.id),
     check("gym_member_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','link','company')`),
+    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','card_at_desk','bank_transfer','link','company','terminal')`),
     check(
       "gym_member_payments_provider_check",
-      sql`(${t.method} = 'company') = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
+      sql`(${t.method} IN ('company','terminal')) = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
     ),
     foreignKey({
       name: "gym_member_payments_bill_fk",

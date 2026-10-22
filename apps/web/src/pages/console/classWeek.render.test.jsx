@@ -20,6 +20,7 @@ const api = {
   getMemberList: vi.fn(),
   getMemberListEntry: vi.fn(),
   getHeldMemberships: vi.fn(),
+  getTerminalPayments: vi.fn(() => Promise.resolve({ data: { terminals: [], waiting: [] } })),
   changeClassDay: vi.fn(),
   cancelClassDay: vi.fn(),
   restoreClassDay: vi.fn(),

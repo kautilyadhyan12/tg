@@ -173,3 +173,55 @@ export type SquareTerminalAction = z.infer<typeof squareTerminalActionSchema>;
 
 /** CreateTerminalAction's, GetTerminalAction's and CancelTerminalAction's answer. */
 export const squareTerminalActionAnswerSchema = z.object({ action: squareTerminalActionSchema });
+
+// Take payment on Terminal (ROADMAP 18d-vi-a; developer.squareup.com, read 2026-10-22: "Terminal
+// API", CreateTerminalCheckout, GetTerminalCheckout, CancelTerminalCheckout, GetPayment, "Sandbox
+// testing"). A checkout shows the amount on the gym's Terminal; the person taps, inserts or swipes
+// their card, and Square answers the payment it took.
+
+/** A Terminal checkout's id at Square. */
+export const squareTerminalCheckoutIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{1,255}$/);
+
+/** A payment's id at Square. */
+export const squarePaymentIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,192}$/);
+
+const squareMoneySchema = z.object({ amount: z.number().int(), currency: z.string().regex(/^[A-Z]{3}$/) });
+
+/** `status` and `cancel_reason` as a Terminal action's. Measured in Square's test area
+ *  (2026-10-22): the amount, the device and `reference_id` come back as sent, and a COMPLETED
+ *  checkout names its one payment. */
+export const squareTerminalCheckoutSchema = z.object({
+  id: squareTerminalCheckoutIdSchema,
+  amount_money: squareMoneySchema,
+  reference_id: z.string().max(40).nullish(),
+  device_options: z.object({ device_id: squareDeviceIdSchema.nullish() }).nullish(),
+  status: z.string().max(40),
+  cancel_reason: z.string().max(40).nullish(),
+  payment_ids: z.array(squarePaymentIdSchema).max(20).nullish(),
+  updated_at: squareTimeSchema.nullish(),
+});
+export type SquareTerminalCheckout = z.infer<typeof squareTerminalCheckoutSchema>;
+
+/** CreateTerminalCheckout's, GetTerminalCheckout's and CancelTerminalCheckout's answer. */
+export const squareTerminalCheckoutAnswerSchema = z.object({ checkout: squareTerminalCheckoutSchema });
+
+/** A payment. `status` COMPLETED is money taken; APPROVED and PENDING are not yet; FAILED and
+ *  CANCELED never will be. */
+export const squarePaymentSchema = z.object({
+  id: squarePaymentIdSchema,
+  status: z.string().max(40),
+  amount_money: squareMoneySchema,
+  tip_money: squareMoneySchema.nullish(),
+  total_money: squareMoneySchema.nullish(),
+  location_id: squareObjectIdSchema.nullish(),
+  terminal_checkout_id: squareTerminalCheckoutIdSchema.nullish(),
+  card_details: z
+    .object({
+      card: z.object({ card_brand: z.string().max(40).nullish(), last_4: z.string().regex(/^[0-9]{4}$/).nullish() }).nullish(),
+    })
+    .nullish(),
+});
+export type SquarePayment = z.infer<typeof squarePaymentSchema>;
+
+/** GetPayment's answer. */
+export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema });

@@ -233,7 +233,7 @@ export function feePayDraft(fee, newKey) {
 /** Why a fee's payment cannot be sent as it stands, or null; and the body it sends. */
 export function feePayBody(draft, fee) {
   if (draft === null || fee === undefined || fee === null) return { problem: 'Open the form again.', body: null };
-  if (!MEMBER_PAYMENT_BY_HAND.includes(draft.method)) return { problem: 'Pick how they paid.', body: null };
+  if (!MEMBER_PAYMENT_BY_HAND.includes(draft.method)) return { problem: 'Choose a payment method.', body: null };
   return { problem: null, body: { requestKey: draft.requestKey, amountMinor: fee.amountMinor, method: draft.method } };
 }
 
@@ -348,7 +348,8 @@ export function refundWords(m, name, payment, live) {
     : '';
   return {
     title: `Note a refund for ${name}'s ${m.typeName}`,
-    detail: `This is for the ${paid}.${some} It only writes the refund in your records: give the money back yourself.${keeps}`,
+    // A card paid on the Terminal (18d-vi-a) is refunded in Square, where its money is.
+    detail: `This is for the ${paid}.${some} It only writes the refund in your records: ${payment.method === 'terminal' ? 'refund the card in your Square Dashboard' : 'give the money back yourself'}.${keeps}`,
   };
 }
 
@@ -413,15 +414,19 @@ export function payLabel(m, today) {
 }
 
 /** What the form says above its fields: what is left, for which days, and when it is
- *  due where that day is still to come. `today` is the gym's own day. */
+ *  due where that day is still to come. `today` is the gym's own day. `left` is that part
+ *  alone, for the box when the Terminal takes the money (18d-vi-a). */
 export function paymentWords(m, name, today) {
   const pay = m.billing.pay;
   const left = formatMinor(pay.leftMinor, m.currency);
   const what = pay.covers === null ? '' : ` for ${dayWords(pay.covers.from)} to ${dayWords(pay.covers.to)}`;
   const early = paysEarly(m, today) ? ` It is not due until ${dayWords(pay.dueOn)}.` : '';
+  const leftWords = `${left} is left to pay${what}.${early}`;
   return {
     title: `Record a payment for ${name}'s ${m.typeName}`,
-    detail: `${left} is left to pay${what}.${early} This only writes it in your records: no money is taken.`,
+    detail: `${leftWords} This only writes it in your records: no money is taken.`,
+    takeTitle: `Take a payment for ${name}'s ${m.typeName}`,
+    left: leftWords,
   };
 }
 
@@ -436,7 +441,7 @@ export function paymentBody(m, draft) {
   if (amountMinor > pay.leftMinor) {
     return { problem: `That is more than is left to pay. ${formatMinor(pay.leftMinor, m.currency)} is left.`, body: null };
   }
-  if (draft.method === '') return { problem: 'Pick how they paid.', body: null };
+  if (draft.method === '') return { problem: 'Choose a payment method.', body: null };
   return { problem: null, body: { requestKey: draft.requestKey, periodIndex: pay.periodIndex, amountMinor, method: draft.method } };
 }
 

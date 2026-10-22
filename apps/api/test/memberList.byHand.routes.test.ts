@@ -1192,6 +1192,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // the Terminal then saves is stopped at Square (`terminalCards.routes.test.ts`).
       "gym_terminal_card_saves.entry_id",
       "gym_terminal_card_saves.gym_id",
+      // A payment waiting on the gym's Square Terminal (0149; 18d-vi-a): not moved by the join. A
+      // record joined or deleted for good lets go of it (`entry_id` alone to null); what Square
+      // takes is recorded on whichever record holds the membership then (`terminalPayments.routes.test.ts`).
+      "gym_terminal_payments.entry_id",
+      "gym_terminal_payments.gym_id",
       // A waiver signed at the desk (0106): moved by the join where the kept record has none
       // of that wording, and kept with no record when one is deleted for good, as the gym's
       // proof (`waiver.desk.routes.test.ts`).

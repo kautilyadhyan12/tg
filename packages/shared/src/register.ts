@@ -367,6 +367,7 @@ export const saleTotalsSchema = z
     bank_transfer: z.number().int().min(0),
     link: z.number().int().min(0),
     company: z.number().int().min(0),
+    terminal: z.number().int().min(0),
     refundedMinor: z.number().int().min(0),
     /** What discounts took off the product sales that stand. */
     discountMinor: z.number().int().min(0),

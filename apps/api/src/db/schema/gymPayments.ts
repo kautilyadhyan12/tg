@@ -336,3 +336,67 @@ export const gymTerminalCardSaves = pgTable(
     index("gym_terminal_card_saves_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL`),
   ],
 );
+
+/** Take payment on Terminal (0149; ROADMAP 18d-vi-a): one press, while the amount waits on the
+ *  gym's Square Terminal (`waiting`), then `done` with why, kept a day; one whose money Square
+ *  took but could not be recorded (`not_recorded`) is kept. The checkout's key is kept, so asking
+ *  again gives back the same checkout. `held_membership_id` has no link: the payment is recorded
+ *  on whichever record holds the membership when Square answers. A record deleted for good lets
+ *  go of `entry_id` alone (`ON DELETE SET NULL ("entry_id")`, in the migration only). */
+export const gymTerminalPayments = pgTable(
+  "gym_terminal_payments",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id"),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    periodIndex: integer("period_index").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    locationId: text("location_id").notNull(),
+    deviceId: text("device_id").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    state: text("state").notNull(),
+    outcome: text("outcome"),
+    checkoutKey: uuid("checkout_key").notNull(),
+    checkoutId: text("checkout_id"),
+    pickedUp: boolean("picked_up").notNull().default(false),
+    squarePaymentId: text("square_payment_id"),
+    memberPaymentId: uuid("member_payment_id"),
+    startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    checkingUntil: timestamp("checking_until", { withTimezone: true }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    cancelWantedAt: timestamp("cancel_wanted_at", { withTimezone: true }),
+    cancelTooLate: boolean("cancel_too_late").notNull().default(false),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_terminal_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_terminal_payments_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$' AND (${t.checkoutId} IS NULL OR ${t.checkoutId} ~ '^[A-Za-z0-9:_-]{1,255}$') AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+    ),
+    check("gym_terminal_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND ${t.periodIndex} >= 0`),
+    check("gym_terminal_payments_state_check", sql`${t.state} IN ('waiting','done')`),
+    check(
+      "gym_terminal_payments_outcome_check",
+      sql`(${t.state} = 'waiting') = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('paid','cancelled_on_terminal','timed_out','no_answer','cancelled','refused','gone','not_recorded'))`,
+    ),
+    check(
+      "gym_terminal_payments_paid_check",
+      sql`((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.memberPaymentId} IS NOT NULL)) AND (${t.outcome} NOT IN ('paid','not_recorded') OR ${t.squarePaymentId} IS NOT NULL)`,
+    ),
+    uniqueIndex("gym_terminal_payments_request_uq").on(t.gymId, t.requestKey),
+    uniqueIndex("gym_terminal_payments_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.state} = 'waiting'`),
+    uniqueIndex("gym_terminal_payments_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'waiting'`),
+    uniqueIndex("gym_terminal_payments_square_payment_uq").on(t.environment, t.accountId, t.squarePaymentId).where(sql`${t.squarePaymentId} IS NOT NULL`),
+    index("gym_terminal_payments_entry_idx").on(t.gymId, t.entryId).where(sql`${t.state} = 'waiting'`),
+    index("gym_terminal_payments_open_idx").on(t.checkedAt).where(sql`${t.state} = 'waiting'`),
+    index("gym_terminal_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL`),
+  ],
+);

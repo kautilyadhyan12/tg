@@ -9,6 +9,7 @@
 // gym's time zone, never the caller's.
 import type { Sql } from "postgres";
 import {
+  TERMINAL_PAYMENT_WORDS,
   DISCOUNT_WORDS,
   FRIEND_GIFT_WORDS,
   MEMBER_GIFT_WORDS,
@@ -85,7 +86,9 @@ function billingOf(
   const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
   const cancel = memberCancelTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
   const cancelBill = cancel === null ? undefined : bills.find((b) => b.periodIndex === cancel.periodIndex);
-  const back = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
+  const newestBack = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
+  // A payment taken on the Terminal is refunded in Square, never voided here (18d-vi-a).
+  const back = newestBack !== null && payments.some((p) => p.id === newestBack.paymentId && p.method === "terminal") ? null : newestBack;
   // A mark with no payment behind it: taken back as it always was. A period a bill
   // settled (paid, cancelled or refunded) is not one.
   const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status !== "open");
@@ -94,7 +97,7 @@ function billingOf(
   const newest = bills.slice(0, BILLS_SHOWN);
   const owedBill = pay === null ? undefined : bills.find((b) => b.periodIndex === pay.periodIndex);
   const sent = owedBill === undefined || newest.includes(owedBill) ? newest : [...newest, owedBill];
-  const mark = !ctx.past && back === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
+  const mark = !ctx.past && newestBack === null && view.can.undoPaid !== null && !settledAt(view.can.undoPaid.paidPeriods) ? view.can.undoPaid : null;
   const refundOf = (r: RefundRow) => ({ id: r.id, amountMinor: r.amountMinor, method: r.method, refundedOn: r.refundedOn, reason: r.reason, by: r.by, receiptNumber: r.receiptNumber });
   const voidedRefundsOf = (paymentId: string) => voided.refunds.filter((r) => r.paymentId === paymentId).map((r) => ({ ...refundOf(r), voided: r.voided }));
   return {
@@ -371,6 +374,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
     case "member_gift_changed":
       throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
+    case "terminal_waiting":
+      throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
     case "early_payment":
       throw new OrgsError(
         409,
@@ -547,6 +552,10 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
         "held_membership_changed",
         "This membership has changed since you opened it. Nothing was saved: check it and try again.",
       );
+    case "terminal_waiting":
+      throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "terminal_payment":
+      throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled bill outcome: ${JSON.stringify(never)}`);

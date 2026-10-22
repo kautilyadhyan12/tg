@@ -16,6 +16,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getHeldMemberships: vi.fn(),
+      // No Square Terminal here (18d-vi-a): Record payment offers the ways recorded by hand.
+      getTerminalPayments: vi.fn(() => Promise.resolve({ data: { terminals: [], waiting: [] } })),
       giveHeldMembership: vi.fn(),
       changeHeldMembership: vi.fn(),
       getBillSettings: vi.fn(),
@@ -155,7 +157,7 @@ describe('each bill reads the word the server sent, under its own membership', (
     const form = within(within(packRow).getByTestId('held-pay'));
     // More than is left is caught here, and nothing is sent.
     fireEvent.change(form.getByLabelText('Amount paid (GBP)'), { target: { value: '90.01' } });
-    fireEvent.change(form.getByLabelText('How they paid'), { target: { value: 'cash' } });
+    fireEvent.change(form.getByLabelText('Payment method'), { target: { value: 'cash' } });
     fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
     expect(form.getByRole('alert').textContent).toBe('That is more than is left to pay. £90.00 is left.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
@@ -321,7 +323,7 @@ describe('one payment said back', () => {
     const [row] = await rowsSoon();
     fireEvent.click(within(row).getByRole('button', { name: 'Record payment' }));
     const form = within(within(row).getByTestId('held-pay'));
-    fireEvent.change(form.getByLabelText('How they paid'), { target: { value: 'cash' } });
+    fireEvent.change(form.getByLabelText('Payment method'), { target: { value: 'cash' } });
     fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
     expect(await screen.findByText('£49.99 recorded. That bill is paid.')).toBeTruthy();
     expect(screen.queryByText(/Gold Monthly is paid/)).toBeNull();
@@ -697,9 +699,9 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     fireEvent.click(within(item).getByRole('button', { name: 'Record payment · £5.00' }));
     const form = within(within(item).getByTestId('held-fee-pay'));
     fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
-    expect(form.getByRole('alert').textContent).toBe('Pick how they paid.');
+    expect(form.getByRole('alert').textContent).toBe('Choose a payment method.');
     expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
-    fireEvent.change(form.getByLabelText('How they paid'), { target: { value: 'card_at_desk' } });
+    fireEvent.change(form.getByLabelText('Payment method'), { target: { value: 'card_at_desk' } });
     fireEvent.click(form.getByRole('button', { name: 'Record payment' }));
     await waitFor(() =>
       expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, gold.id, `fees/${FEE_ID}/payments`, {

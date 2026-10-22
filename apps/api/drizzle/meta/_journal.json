@@ -1042,7 +1042,14 @@
       "idx": 148,
       "version": "7",
       "when": 1790726400149,
-      "tag": "0149_joining_fee",
+      "tag": "0149_terminal_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 149,
+      "version": "7",
+      "when": 1790726400150,
+      "tag": "0150_joining_fee",
       "breakpoints": true
     }
   ]

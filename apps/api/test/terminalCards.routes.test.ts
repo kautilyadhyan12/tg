@@ -262,6 +262,10 @@ function fakeSquare() {
       Object.assign(action, { status: "CANCELED", cancelReason: "SELLER_CANCELED" });
       return Promise.resolve({ kind: "ok", value: actionJson(action) });
     },
+    createTerminalCheckout: () => Promise.resolve(unavailable),
+    getTerminalCheckout: () => Promise.resolve(unavailable),
+    cancelTerminalCheckout: () => Promise.resolve(unavailable),
+    getPayment: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgp-${randomBytes(8).toString("hex")}`;

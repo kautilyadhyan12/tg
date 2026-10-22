@@ -31,7 +31,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { lockGym } from "../memberList/repo.js";
-import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, type NewBill } from "./billsSql.js";
+import { billOf, billsFor, cancelBill, insertBills, insertPayment, insertRefund, paymentsFor, setBillStatus, setOverdueDays, terminalWaiting, type NewBill } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
 
 export type BillWriteOutcome =
@@ -53,133 +53,145 @@ export type BillWriteOutcome =
   /** The membership or its bills are not as the screen was shown them. */
   | { kind: "not_allowed" }
   /** More than what is left to pay for the period. */
-  | { kind: "too_much"; leftMinor: number; currency: string };
+  | { kind: "too_much"; leftMinor: number; currency: string }
+  /** A payment for this membership is waiting on the gym's Square Terminal (18d-vi-a). */
+  | { kind: "terminal_waiting" }
+  /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
+  | { kind: "terminal_payment" };
 
-export async function recordPayment(
-  sql: Sql,
-  input: {
-    gymId: string;
-    entryId: string;
-    membershipId: string;
-    requestKey: string;
-    /** The period the screen was shown. */
-    periodIndex: number;
-    amountMinor: number;
-    method: MemberPaymentMethod;
-    /** A payment company's own id for this payment (18d): the same one twice is one row. */
-    provider?: { name: string; paymentId: string };
-    /** The gym's own day. */
-    today: string;
-    actorUserId: string | null;
-    now: Date;
-  },
-): Promise<BillWriteOutcome> {
+export interface RecordPaymentInput {
+  gymId: string;
+  entryId: string;
+  membershipId: string;
+  requestKey: string;
+  /** The period the screen was shown. */
+  periodIndex: number;
+  amountMinor: number;
+  method: MemberPaymentMethod;
+  /** A payment company's own id for this payment (18d): the same one twice is one row. */
+  provider?: { name: string; paymentId: string };
+  /** The gym's own day. */
+  today: string;
+  actorUserId: string | null;
+  now: Date;
+}
+
+export async function recordPayment(sql: Sql, input: RecordPaymentInput): Promise<BillWriteOutcome> {
   return await sql.begin(async (tx): Promise<BillWriteOutcome> => {
-    const entry = await lockedEntry(tx, input.gymId, input.entryId);
-    if (entry === null) return { kind: "entry_not_found" };
+    const done = await recordPaymentIn(tx, input);
+    return done.kind === "recorded" ? { kind: "ok" } : done;
+  });
+}
 
-    // The same request, or the same payment of a company's, again: the one recorded
-    // stands and nothing is added.
-    // The same key with anything else in it, or after its payment was taken back, is not
-    // the same request: it is refused, never answered as recorded.
-    // A fee's payment (18h-i) has no period, so its key is never this request's.
-    const [byKey] = await tx<{ held_membership_id: string; period_index: number | null; amount_minor: number; undone: boolean }[]>`
-      SELECT b.held_membership_id, b.period_index, p.amount_minor, p.undone_at IS NOT NULL AS undone
-      FROM gym_member_payments p
-      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
-      WHERE p.gym_id = ${input.gymId} AND p.request_key = ${input.requestKey}`;
-    if (byKey !== undefined) {
-      const same =
-        byKey.held_membership_id === input.membershipId && byKey.period_index === input.periodIndex && byKey.amount_minor === input.amountMinor && !byKey.undone;
-      return same ? { kind: "ok" } : { kind: "request_reused" };
-    }
-    if (input.provider !== undefined) {
-      const [byCompany] = await tx<{ id: string }[]>`
-        SELECT id FROM gym_member_payments
-        WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
-      if (byCompany !== undefined) return { kind: "ok" };
-    }
+/** `recordPayment` inside a transaction of the caller's: the Terminal's payment (18d-vi-a) is
+ *  recorded in the same one that marks it paid. Refuses before writing anything. */
+export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentInput): Promise<BillWriteOutcome | { kind: "recorded"; paymentId: string }> {
+  const entry = await lockedEntry(tx, input.gymId, input.entryId);
+  if (entry === null) return { kind: "entry_not_found" };
 
-    // What the clock has done is written first, then the membership is read. A past
-    // member's memberships are not in use and are left as they stand.
-    if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
-    const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
-    if (row === null) return { kind: "membership_not_found" };
+  // The same request, or the same payment of a company's, again: the one recorded
+  // stands and nothing is added.
+  // The same key with anything else in it, or after its payment was taken back, is not
+  // the same request: it is refused, never answered as recorded.
+  // A fee's payment (18h-i) has no period, so its key is never this request's.
+  const [byKey] = await tx<{ id: string; held_membership_id: string; period_index: number | null; amount_minor: number; undone: boolean }[]>`
+    SELECT p.id, b.held_membership_id, b.period_index, p.amount_minor, p.undone_at IS NOT NULL AS undone
+    FROM gym_member_payments p
+    JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+    WHERE p.gym_id = ${input.gymId} AND p.request_key = ${input.requestKey}`;
+  if (byKey !== undefined) {
+    const same =
+      byKey.held_membership_id === input.membershipId && byKey.period_index === input.periodIndex && byKey.amount_minor === input.amountMinor && !byKey.undone;
+    return same ? { kind: "recorded", paymentId: byKey.id } : { kind: "request_reused" };
+  }
+  if (input.provider !== undefined) {
+    const [byCompany] = await tx<{ id: string }[]>`
+      SELECT id FROM gym_member_payments
+      WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
+    if (byCompany !== undefined) return { kind: "recorded", paymentId: byCompany.id };
+  }
 
-    const bills = await billsFor(tx, input.gymId, [row.id]);
-    const target = memberPayTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
-    if (target === null || target.periodIndex !== input.periodIndex) return { kind: "not_allowed" };
-    if (input.amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
+  // What the clock has done is written first, then the membership is read. A past
+  // member's memberships are not in use and are left as they stand.
+  if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
+  const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
+  if (row === null) return { kind: "membership_not_found" };
+  // Recorded by hand while the Terminal waits: both would be taken.
+  if (input.method !== "terminal" && (await terminalWaiting(tx, input.gymId, row.id))) return { kind: "terminal_waiting" };
 
-    // Everything that can refuse is asked before anything is written: a refusal leaves no
-    // bill behind.
-    const found = bills.find((b) => b.periodIndex === target.periodIndex);
-    // A period with no bill yet is opened as the bill run would open it today, its tax in.
-    const opening = billOf(row.priceMinor, row.taxApplied);
-    const paid = payMemberBill(found ?? { status: "open", amountMinor: opening.amountMinor, paidMinor: 0 }, input.amountMinor);
-    if (!paid.ok) return { kind: "not_allowed" };
-    // The count of paid periods moves with the payment that settles the bill, or not at all.
-    let paidPeriods: number | null = null;
-    if (paid.status === "paid") {
-      const count = countAfterPayment(row.membership, target, input.today);
-      if (!count.ok) return { kind: "not_allowed" };
-      paidPeriods = count.paidPeriods;
-    }
+  const bills = await billsFor(tx, input.gymId, [row.id]);
+  const target = memberPayTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
+  if (target === null || target.periodIndex !== input.periodIndex) return { kind: "not_allowed" };
+  if (input.amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
 
-    let bill = found;
-    if (bill === undefined) {
-      const [opened] = await insertBills(
-        tx,
-        input.gymId,
-        [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
-        input.now,
-      );
-      if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
-      bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, joiningFeeMinor: 0, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
-    }
+  // Everything that can refuse is asked before anything is written: a refusal leaves no
+  // bill behind.
+  const found = bills.find((b) => b.periodIndex === target.periodIndex);
+  // A period with no bill yet is opened as the bill run would open it today, its tax in.
+  const opening = billOf(row.priceMinor, row.taxApplied);
+  const paid = payMemberBill(found ?? { status: "open", amountMinor: opening.amountMinor, paidMinor: 0 }, input.amountMinor);
+  if (!paid.ok) return { kind: "not_allowed" };
+  // The count of paid periods moves with the payment that settles the bill, or not at all.
+  let paidPeriods: number | null = null;
+  if (paid.status === "paid") {
+    const count = countAfterPayment(row.membership, target, input.today);
+    if (!count.ok) return { kind: "not_allowed" };
+    paidPeriods = count.paidPeriods;
+  }
 
-    const recorded = await insertPayment(
+  let bill = found;
+  if (bill === undefined) {
+    const [opened] = await insertBills(
       tx,
-      {
-        gymId: input.gymId,
-        billId: bill.id,
-        amountMinor: input.amountMinor,
-        currency: bill.currency,
-        method: input.method,
-        requestKey: input.requestKey,
-        paidOn: input.today,
-        recordedBy: input.actorUserId,
-        provider: input.provider ?? null,
-      },
+      input.gymId,
+      [{ membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, currency: row.currency, dueOn: target.dueOn, covers: target.covers }],
       input.now,
     );
-    if (recorded === null) throw new Error("a payment was not recorded under the gym's lock");
-    const paymentId = recorded.id;
-    if (paid.status === "paid") await setBillStatus(tx, input.gymId, bill.id, "paid", input.now);
-    if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
-    // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
-    await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
+    if (opened === undefined) throw new Error("a bill to pay was not opened under the gym's lock");
+    bill = { id: opened.id, membershipId: row.id, periodIndex: target.periodIndex, amountMinor: opening.amountMinor, tax: opening.tax, joiningFeeMinor: 0, currency: row.currency, dueOn: target.dueOn, covers: target.covers, status: "open", paidMinor: 0, refundedMinor: 0, cancelled: null };
+  }
 
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
+  const recorded = await insertPayment(
+    tx,
+    {
       gymId: input.gymId,
-      action: "org.member_payment_recorded",
-      targetType: "gym_member_payment",
-      targetId: paymentId,
-      meta: {
-        entryId: input.entryId,
-        membershipId: row.id,
-        billId: bill.id,
-        period: String(bill.periodIndex),
-        amountMinor: String(input.amountMinor),
-        currency: bill.currency,
-        method: input.method,
-        billSettled: String(paid.status === "paid"),
-        ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
-      },
-    });
-    return { kind: "ok" };
+      billId: bill.id,
+      amountMinor: input.amountMinor,
+      currency: bill.currency,
+      method: input.method,
+      requestKey: input.requestKey,
+      paidOn: input.today,
+      recordedBy: input.actorUserId,
+      provider: input.provider ?? null,
+    },
+    input.now,
+  );
+  if (recorded === null) throw new Error("a payment was not recorded under the gym's lock");
+  const paymentId = recorded.id;
+  if (paid.status === "paid") await setBillStatus(tx, input.gymId, bill.id, "paid", input.now);
+  if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
+  // A friend a member invited has paid: the member's Refer a friend gift (20e-ii-b-ii-a).
+  await giveMemberGift(tx, { gymId: input.gymId, friendEntryId: input.entryId, by: { paymentId }, today: input.today, now: input.now });
+
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.member_payment_recorded",
+    targetType: "gym_member_payment",
+    targetId: paymentId,
+    meta: {
+      entryId: input.entryId,
+      membershipId: row.id,
+      billId: bill.id,
+      period: String(bill.periodIndex),
+      amountMinor: String(input.amountMinor),
+      currency: bill.currency,
+      method: input.method,
+      billSettled: String(paid.status === "paid"),
+      ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
+    },
   });
+  return { kind: "recorded", paymentId };
 }
 
 /** Voids the newest payment on a membership (18o): recorded by mistake. Its row is kept,
@@ -196,14 +208,17 @@ export async function voidPayment(
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
 
-    const [payment] = await tx<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number }[]>`
-      SELECT p.undone_at IS NOT NULL AS undone, p.bill_id, p.amount_minor, p.currency, b.period_index
+    const [payment] = await tx<{ undone: boolean; bill_id: string; amount_minor: number; currency: string; period_index: number; method: string }[]>`
+      SELECT p.undone_at IS NOT NULL AS undone, p.bill_id, p.amount_minor, p.currency, b.period_index, p.method
       FROM gym_member_payments p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       WHERE p.gym_id = ${input.gymId} AND p.id = ${input.paymentId} AND b.held_membership_id = ${row.id} AND b.period_index IS NOT NULL`;
     if (payment === undefined) return { kind: "payment_not_found" };
     if (payment.undone) return { kind: "ok" };
     if (entry.past) return { kind: "past_member" };
+    // Square holds that money: voided here, the bill would be owed again with the card charged.
+    if (payment.method === "terminal") return { kind: "terminal_payment" };
+    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
     const payments = await paymentsFor(tx, input.gymId, [row.id]);
@@ -256,6 +271,7 @@ export async function undoMark(
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
     if (entry.past) return { kind: "past_member" };
+    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
 
     const before = row.membership.paidPeriods;
     // Only ever back, and only by the rule's one step.
@@ -300,6 +316,7 @@ export async function cancelMemberBill(
     if (bill === undefined) return { kind: "bill_not_found" };
     if (bill.status === "void" && bill.cancelled !== null) return { kind: "ok" };
     if (bill.status === "open" && bill.paidMinor > 0) return { kind: "bill_has_payment" };
+    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
     const target = memberCancelTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
     if (target === null || target.periodIndex !== bill.periodIndex) return { kind: "not_allowed" };
     const count = countAfterPayment(row.membership, target, input.today);
