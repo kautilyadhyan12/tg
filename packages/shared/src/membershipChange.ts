@@ -7,7 +7,7 @@
 // for the next payment date, as Podplay and MyTime do a cheaper move. No joining fee is
 // charged on a change. The credit is worked out from the money that stands on each paid
 // period's bill, never from the price list, so nobody is paid back what they never paid.
-import { addDays, daysBetween, fullFromOf, heldMembershipView, partMinor, partPeriod, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
+import { addDays, daysBetween, fullFromOf, heldMembershipView, partMinor, partPeriod, periodIndex, periodListedMinor, periodStart, type HeldMembership } from "./heldMemberships.js";
 import { bookingPeriod } from "./classBookings.js";
 import type { MembershipKind, MembershipTermUnit } from "./memberships.js";
 
@@ -83,7 +83,9 @@ export function changeFrom(m: HeldMembership, heldPriceMinor: number, bills: rea
   if (!m.free) {
     for (let index = current; index <= lastPaid; index += 1) {
       const bill = bills.find((b) => b.periodIndex === index);
-      const paid = bill === undefined ? heldPriceMinor : billDaysMinor(bill);
+      // A period with no bill was paid at its price: the part month's share for a part month (18y),
+      // as one an earlier change paid for whole (round one, High-1).
+      const paid = bill === undefined ? periodListedMinor(m, index, heldPriceMinor) : billDaysMinor(bill);
       const credit = index === current ? (periodDays <= 0 ? 0 : Math.floor((paid * daysLeft) / periodDays)) : paid;
       creditMinor += credit;
       if (bill !== undefined) byPeriod.push({ periodIndex: index, creditMinor: credit });

@@ -161,8 +161,8 @@ describe('the bill, the receipt and the setting', () => {
     expect(choices[28]).toEqual({ value: '28', label: 'The 28th of each month' });
     expect(billDayExample(null)).toBe('Each membership is billed on the day of the month it started.');
     expect(billDayExample(1)).toBe(
-      'Somebody who joins on 20 Mar pays for 20 Mar to 31 Mar first, then the full price on the 1st of each month. This is for new monthly and yearly memberships: members who already have one keep their own billing day.',
+      'Somebody who joins on 20 Mar pays for 20 Mar to 31 Mar first, then the full price on the 1st: each month for a monthly membership, each year for a yearly one. Members who already have a membership keep their own billing day.',
     );
-    expect(billDayExample(25)).toMatch(/^Somebody who joins on 5 Mar pays for 5 Mar to 24 Mar first, then the full price on the 25th of each month\./);
+    expect(billDayExample(25)).toMatch(/^Somebody who joins on 5 Mar pays for 5 Mar to 24 Mar first, then the full price on the 25th: each month/);
   });
 });

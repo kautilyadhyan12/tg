@@ -355,6 +355,8 @@ export default function MemberMemberships({
       if (what === 'give' && typeof code === 'string' && (code.startsWith('discount_') || code === 'membership_discount_changed' || code === 'membership_price_changed')) {
         setAttempt((n) => n + 1);
       }
+      // The gym's billing day changed (18y): read it again, and keep the box open with its new total.
+      if (code === 'membership_bill_day_changed') setAttempt((n) => n + 1);
       // Somebody else changed it first: show it as it is now.
       if (STALE_CODES.includes(errorCode(err))) {
         setOpen(null);

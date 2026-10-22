@@ -522,7 +522,7 @@ export function billDayExample(billDay) {
   const startsOn = billDay < 20 ? '2026-03-20' : '2026-03-05';
   const fullFrom = fullFromOf({ kind: 'recurring', termUnit: 'month' }, startsOn, billDay);
   const to = shortDay(addDays(fullFrom, -1), false);
-  return `Somebody who joins on ${shortDay(startsOn, false)} pays for ${shortDay(startsOn, false)} to ${to} first, then the full price on the ${dayOfMonthWords(billDay)} of each month. This is for new monthly and yearly memberships: members who already have one keep their own billing day.`;
+  return `Somebody who joins on ${shortDay(startsOn, false)} pays for ${shortDay(startsOn, false)} to ${to} first, then the full price on the ${dayOfMonthWords(billDay)}: each month for a monthly membership, each year for a yearly one. Members who already have a membership keep their own billing day.`;
 }
 
 /** The setting said with a real date: a bill stays Due on its due date and for the days

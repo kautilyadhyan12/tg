@@ -29,7 +29,7 @@ describe('the billing day on the Bills box', () => {
     expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
 
     fireEvent.change(select, { target: { value: '1' } });
-    expect(screen.getByText(/Somebody who joins on 20 Mar pays for 20 Mar to 31 Mar first, then the full price on the 1st of each month\./)).toBeTruthy();
+    expect(screen.getByText(/Somebody who joins on 20 Mar pays for 20 Mar to 31 Mar first, then the full price on the 1st: each month for a monthly membership, each year for a yearly one\./)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(orgService.saveBillSettings).toHaveBeenCalledWith(GYM, { overdueAfterDays: 3, billDay: 1 }));
     expect(await screen.findByText('Saved.')).toBeTruthy();

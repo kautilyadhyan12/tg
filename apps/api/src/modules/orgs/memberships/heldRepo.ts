@@ -424,6 +424,8 @@ export type HeldWriteOutcome =
   | { kind: "method_needed" }
   /** The type's price is no longer the one the screen showed. */
   | { kind: "price_changed" }
+  /** The gym's billing day (18y) is no longer the one the screen worked the first bill out on. */
+  | { kind: "bill_day_changed" }
   /** The discount named is not one of this gym's. */
   | { kind: "discount_not_found" }
   /** The gym's own discount, and it cannot be used on this membership today. */
@@ -731,7 +733,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   // start, as the screen said: a day changed since it was opened gives nothing.
   const given = giveHeldMembership(type, input.startsOn, false, input.today, await billDayOf(tx, input.gymId));
   if (!given.ok) return { kind: given.reason };
-  if (input.shownFullFrom !== undefined && input.shownFullFrom !== given.membership.fullFrom) return { kind: "price_changed" };
+  if (input.shownFullFrom !== undefined && input.shownFullFrom !== given.membership.fullFrom) return { kind: "bill_day_changed" };
   // The first bill: its price after any discount, for the part month where it is that period's
   // (the gift worked out on that), the joining fee, less any credit, and its tax. Nothing is
   // given at a total the screen did not show.

@@ -383,6 +383,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(400, "payment_method_needed", "Pick how they paid.");
     case "price_changed":
       throw new OrgsError(409, "membership_price_changed", "The price of this membership changed while this was open. Nothing was saved: check the total and press again.");
+    case "bill_day_changed":
+      throw new OrgsError(409, "membership_bill_day_changed", "Your gym's billing day changed while this was open. Nothing was saved: check the total and press again.");
     case "discount_not_found":
       throw new OrgsError(409, "discount_not_available", DISCOUNT_WORDS.membership_not_available);
     case "discount_refused":

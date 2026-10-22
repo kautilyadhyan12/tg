@@ -121,7 +121,7 @@ export async function changeHeld(
       // is never written on a day the screen did not say (round one, Low-1).
       if (to.creditMinor !== input.shownCreditMinor || to.startsOn !== input.shownStartsOn) return { kind: "credit_changed" };
       // The gym's billing day changed while the box was open (18y): nothing at a total it did not show.
-      if (to.fullFrom !== input.shownFullFrom) return { kind: "price_changed" };
+      if (to.fullFrom !== input.shownFullFrom) return { kind: "bill_day_changed" };
 
       // The membership changed: today it ends now; later it stops at the end of what is paid.
       const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end" };

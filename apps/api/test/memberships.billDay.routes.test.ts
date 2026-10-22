@@ -229,7 +229,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       const maya = await addPerson(gymId, owner.cookies, "Maya Rao");
 
       // A screen that showed the whole month, one that showed no billing day, and one that showed
-      // another day: each refused, with nothing written.
+      // another day: each refused, with nothing written, and told it is the billing day.
       for (const body of [
         giveBody(gold, 5000, 5000, null),
         giveBody(gold, 5000, 2741, null),
@@ -239,8 +239,12 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       ]) {
         const res = await give(gymId, maya, owner.cookies, body);
         expect(res.statusCode, res.body).toBe(409);
-        expect(errorOf(res)).toBe("membership_price_changed");
+        expect(errorOf(res)).toBe("membership_bill_day_changed");
       }
+      // The right day and a whole month's total: the total is what is refused.
+      const whole = await give(gymId, maya, owner.cookies, giveBody(gold, 5000, 5000, "2026-11-01"));
+      expect(whole.statusCode, whole.body).toBe(409);
+      expect(errorOf(whole)).toBe("membership_price_changed");
       expect([await count(gymId, "gym_held_memberships"), await count(gymId, "gym_member_bills"), await count(gymId, "gym_member_payments")]).toEqual([0, 0, 0]);
 
       // 15 to 31 October is 17 of October's 31 days: $50.00 × 17 / 31 = $27.41.
@@ -390,6 +394,63 @@ d("billing everyone on one day of the month (real Postgres)", () => {
   );
 
   it(
+    "a part month with no bill yet is offered and opened at the part month's price, and a first-month discount's receipt prints the price and the discount for those days",
+    async () => {
+      clock = at("2026-10-15");
+      const owner = await makeUser("open-owner");
+      const gymId = (await makeGym(owner, "Bday Open Gym")).org.id;
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
+      await setBillDay(gymId, owner.cookies, 1);
+
+      // Given unpaid, then its first bill gone (as no screen does): what is offered and what a payment
+      // opens are the part month's, $27.41, never the whole month.
+      const leo = await addPerson(gymId, owner.cookies, "Leo Part");
+      expect((await give(gymId, leo, owner.cookies, giveBody(gold, 5000, 2741, "2026-11-01", { paid: false }))).statusCode).toBe(201);
+      const [leoId = ""] = await idsOf(gymId, leo);
+      await sql`DELETE FROM gym_member_bills WHERE gym_id = ${gymId} AND held_membership_id = ${leoId}`;
+      const page = held(await get(heldUrl(gymId, leo), owner.cookies));
+      expect(page.memberships[0]?.billing?.pay).toMatchObject({ periodIndex: 0, leftMinor: 2741 });
+      await payOpen(gymId, leo, leoId, owner.cookies);
+      expect(await bills(gymId, leoId)).toEqual([["2026-10-15", "2026-10-31", 2741, "paid"]]);
+
+      // 20% off the first payment: $40.00 a month, for 17 of 31 days $21.93; the days at the full
+      // price are $27.41, so the receipt says $5.48 off.
+      const discountRes = await post(
+        `/v1/orgs/${gymId}/register/discounts`,
+        {
+          name: "First month",
+          code: null,
+          kind: "percent",
+          percentBp: 2000,
+          amountMinor: null,
+          startsOn: null,
+          endsOn: null,
+          maxUses: null,
+          forProducts: false,
+          allProducts: true,
+          productIds: [],
+          forMemberships: true,
+          allMembershipTypes: true,
+          membershipTypeIds: [],
+          membershipPayments: "first",
+        },
+        owner.cookies,
+      );
+      expect(discountRes.statusCode, discountRes.body).toBe(201);
+      const firstMonth = sellPageResponseSchema.parse(JSON.parse(discountRes.body)).discounts[0];
+      if (firstMonth === undefined) throw new Error("no discount");
+      const mia = await addPerson(gymId, owner.cookies, "Mia Discount");
+      const res = await give(gymId, mia, owner.cookies, giveBody(gold, 5000, 2193, "2026-11-01", { discountId: firstMonth.id, discountMinor: 1000 }));
+      expect(res.statusCode, res.body).toBe(201);
+      const [last] = await sql<{ n: number }[]>`SELECT receipt_number AS n FROM gym_member_payments WHERE gym_id = ${gymId} ORDER BY seq DESC LIMIT 1`;
+      const printed = receiptSchema.parse(JSON.parse((await get(`/v1/orgs/${gymId}/receipts/${String(last?.n)}`, owner.cookies)).body));
+      if (printed.kind !== "payment") throw new Error("not a payment receipt");
+      expect(printed.amounts).toMatchObject({ listedMinor: 2741, discount: { name: "First month", minor: 548 }, totalMinor: 2193 });
+    },
+    T,
+  );
+
+  it(
     "a change today at a gym that bills on the 1st: the new one's part month, less the unused days of the old one's part month",
     async () => {
       clock = at("2026-10-15");
@@ -422,6 +483,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       });
       const wrong = await post(`${heldUrl(gymId, maya)}/${basicId}/change`, changeBody(null), owner.cookies);
       expect(wrong.statusCode, wrong.body).toBe(409);
+      expect(errorOf(wrong)).toBe("membership_bill_day_changed");
       expect(await idsOf(gymId, maya)).toHaveLength(1);
       const res = await post(`${heldUrl(gymId, maya)}/${basicId}/change`, changeBody("2026-11-01"), owner.cookies);
       expect(res.statusCode, res.body).toBe(200);
@@ -442,6 +504,11 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       const stranger = await makeUser("tenant-stranger");
       const otherId = (await makeGym(stranger, "Bday Next Door")).org.id;
       await setBillDay(otherId, stranger.cookies, 15);
+      // A membership given here while the gym next door bills on the 15th: from its own start, whole.
+      const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
+      const ana = await addPerson(gymId, owner.cookies, "Ana Own Day");
+      expect((await give(gymId, ana, owner.cookies, giveBody(gold, 5000, 5000, null))).statusCode).toBe(201);
+      expect(await bills(gymId, (await idsOf(gymId, ana))[0] ?? "")).toEqual([["2026-10-15", "2026-11-14", 5000, "paid"]]);
       expect((await get(settingsUrl(gymId), stranger.cookies)).statusCode).toBe(404);
       expect((await put(settingsUrl(gymId), { overdueAfterDays: 0, billDay: 1 }, stranger.cookies)).statusCode).toBe(404);
       expect((await put(settingsUrl(gymId), { overdueAfterDays: 0, billDay: 1 }, {})).statusCode).toBe(401);

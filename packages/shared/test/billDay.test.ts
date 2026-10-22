@@ -13,6 +13,7 @@ import {
   addDays,
   addTerms,
   billsToOpen,
+  changeFrom,
   changeTo,
   dayOfMonthWords,
   fullFromOf,
@@ -197,6 +198,17 @@ describe("a change of membership where the gym bills on one day", () => {
   it("on the next payment date, not the gym's day: the part month up to it", () => {
     // 1 to 14 November, of the 31 days from 15 October to 15 November: 8000 × 14 / 31 = 3612.
     expect(changeTo(from, "basic", gold, "next_payment", "2026-10-15", 15)).toMatchObject({ ok: true, startsOn: "2026-11-01", fullFrom: "2026-11-15", firstListedMinor: 3612 });
+  });
+
+  it("a part month paid for by a change, changed again: the credit is what those days cost, never a whole month's (round one, High-1)", () => {
+    // Gold at $31.00 started 22 October, its part month to 1 November paid whole by the change before
+    // it, so it has no bill. On 23 October 9 of its 10 days are left: $31.00 × 10 / 31 = $10.00 for
+    // the part month, and 9 of its 10 days are $9.00 (the review's run offered $27.90).
+    const m: HeldMembership = { ...given(monthly, "2026-10-22", "2026-10-22", 1), paidPeriods: 1, paidFloor: 1 };
+    expect(m.fullFrom).toBe("2026-11-01");
+    expect(changeFrom(m, 3100, [], "2026-10-23")).toEqual({ ok: true, creditMinor: 900, daysLeft: 9, nextOn: "2026-11-01", byPeriod: [] });
+    // And once in a whole month, a whole month's price for its days.
+    expect(changeFrom({ ...m, paidPeriods: 2, paidFloor: 2 }, 3100, [], "2026-11-16")).toMatchObject({ ok: true, creditMinor: 1550, daysLeft: 15 });
   });
 
   it("with no day, as before", () => {
