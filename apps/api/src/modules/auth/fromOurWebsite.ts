@@ -17,7 +17,8 @@
 //     program's one-click unsubscribe and the phone app send neither, and hold no
 //     browser's cookie, so they pass.
 //   · An older browser sends `Origin` without `Sec-Fetch-Site`: it passes only when the
-//     page is on the api's own host.
+//     page is on the api's own host. The unsubscribe page is, and its referrer policy is
+//     same-origin so that its button's Origin names it rather than "null".
 // Run before anything else counts or reads the request, so a refused request spends
 // none of the signed-in person's allowance.
 import type { IncomingHttpHeaders } from "node:http";

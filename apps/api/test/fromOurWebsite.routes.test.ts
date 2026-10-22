@@ -16,7 +16,7 @@ const d = describe.skipIf(url === undefined || url === "");
 
 const PASSWORD = "a-Perfectly-fine-pw-1"; // dummy fixture, gitleaks:allow
 const WEB_ORIGIN = "http://localhost:5173";
-const API_HOST = "localhost:80";
+const API_HOST = "localhost:3005";
 const baseEnv = {
   NODE_ENV: "test",
   DATABASE_URL: url ?? "",
@@ -165,38 +165,51 @@ d("a change is taken only from our website (real Postgres)", () => {
 
   it("a payment company's or Resend's message reaches its own check, which refuses it for its own reason", { timeout: TIMEOUT_MS }, async () => {
     for (const path of ["/v1/webhooks/paddle", "/v1/webhooks/razorpay", "/v1/webhooks/square", "/v1/webhooks/resend"]) {
+      // A server sends neither Origin nor Sec-Fetch-Site.
       const res = await api().inject({
         method: "POST",
         url: path,
         remoteAddress: nextIp(),
-        headers: { "content-type": "application/json" },
+        headers: { host: API_HOST, "content-type": "application/json" },
         payload: JSON.stringify({ event_type: "nothing" }),
       });
       notRefusedAsCrossSite(res);
     }
   });
 
-  it("an unsubscribe still reaches its own page: a mail program's one click, and the page's button in a signed-in browser", { timeout: TIMEOUT_MS }, async () => {
+  // The Origin a browser puts on a form post from a page to its own address follows the
+  // page's own referrer policy (the Fetch standard, "serializing a request origin"):
+  // "null" under no-referrer, the page's own origin otherwise.
+  const originAFormPostSends = (policy: string | undefined) => (policy === "no-referrer" ? "null" : `http://${API_HOST}`);
+
+  it("an unsubscribe still reaches its own page: a mail program's one click, and the page's button in a signed-in browser, old or new", { timeout: TIMEOUT_MS }, async () => {
     const owner = await makeOwner();
-    for (const path of ["/v1/email/unsubscribe?t=not-a-token", "/v1/email/leads/unsubscribe?t=not-a-token"]) {
+    for (const path of ["/v1/email/unsubscribe?t=not-a-token", "/v1/email/leads/unsubscribe?t=not-a-token", "/v1/email/not-me?t=not-a-token"]) {
       const oneClick = await api().inject({
         method: "POST",
         url: path,
         remoteAddress: nextIp(),
-        headers: { "content-type": "application/x-www-form-urlencoded" },
+        headers: { host: API_HOST, "content-type": "application/x-www-form-urlencoded" },
         payload: "List-Unsubscribe=One-Click",
       });
       notRefusedAsCrossSite(oneClick);
-      const button = await api().inject({
-        method: "POST",
-        url: path,
-        remoteAddress: nextIp(),
-        cookies: owner.cookies,
-        headers: { origin: `http://${API_HOST}`, "sec-fetch-site": "same-origin", host: API_HOST, "content-type": "application/x-www-form-urlencoded" },
-        payload: "",
-      });
-      notRefusedAsCrossSite(button);
-      expect(button.headers["content-type"]).toMatch(/text\/html/);
+      const shown = await api().inject({ method: "GET", url: path, remoteAddress: nextIp(), headers: { host: API_HOST } });
+      expect(shown.headers["content-type"]).toMatch(/text\/html/);
+      const policy = shown.headers["referrer-policy"];
+      const origin = originAFormPostSends(typeof policy === "string" ? policy : undefined);
+      // A browser since 2023 adds Sec-Fetch-Site; Safari before 16.4 does not.
+      for (const site of [{ "sec-fetch-site": "same-origin" }, {}]) {
+        const button = await api().inject({
+          method: "POST",
+          url: path,
+          remoteAddress: nextIp(),
+          cookies: owner.cookies,
+          headers: { origin, host: API_HOST, "content-type": "application/x-www-form-urlencoded", ...site },
+          payload: "",
+        });
+        notRefusedAsCrossSite(button);
+        expect(button.headers["content-type"]).toMatch(/text\/html/);
+      }
     }
   });
 });
