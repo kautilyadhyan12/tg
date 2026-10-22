@@ -237,6 +237,15 @@ export function feePayBody(draft, fee) {
 
 const feeName = (fee) => (MEMBER_FEE_WORDS[fee.fee] ?? 'fee').toLowerCase();
 
+/** A fee's Record payment box when the Terminal takes the money (18d-vi-b-i): its title, and
+ *  what the fee is for. */
+export function feeTakeWords(fee, currency) {
+  return {
+    title: `Take ${formatMinor(fee.amountMinor, currency)} for the ${feeName(fee)}`,
+    about: `It is for ${fee.forName} on ${dayWords(fee.on)}.`,
+  };
+}
+
 /** Said once a fee's payment is recorded. */
 export function feePaidWords(fee, currency) {
   return `${formatMinor(fee.amountMinor, currency)} recorded for the ${feeName(fee)}. Its receipt is under the fee.`;

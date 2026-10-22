@@ -18,6 +18,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       changeHeldMembership: vi.fn(),
       getTerminalPayments: vi.fn(),
       startTerminalPayment: vi.fn(),
+      startTerminalFeePayment: vi.fn(),
       checkTerminalPayment: vi.fn(),
       cancelTerminalPayment: vi.fn(),
     },
@@ -91,6 +92,7 @@ const payment = (over = {}) =>
   terminalPaymentSchema.parse({
     id: PAY_ID,
     membershipId: held(1, false).id,
+    feeBillId: null,
     amountMinor: 4999,
     currency: 'USD',
     step: 'waiting',
@@ -250,5 +252,113 @@ describe('Take payment on Terminal: how it ends', () => {
     const ended = within(await screen.findByTestId('terminal-pay-ended'));
     expect(ended.getByRole('alert').textContent).toBe('Cancelled. Nothing was charged.');
     expect(orgService.cancelTerminalPayment).toHaveBeenCalledWith(GYM, TARA, PAY_ID);
+  });
+});
+
+// A late cancel or no-show fee taken on the Terminal (18d-vi-b-i). The worst thing here: the
+// press sending another fee, another membership or another amount than the one on screen, or the
+// fee reading paid before Square took it.
+describe('Take payment on Terminal for a fee', () => {
+  const FEE_ID = '66666666-6666-4666-8666-000000000001';
+  const fee = (over = {}) => ({
+    id: FEE_ID,
+    fee: 'no_show',
+    of: 'class',
+    forName: 'Spin',
+    on: '2026-10-14',
+    amountMinor: 1000,
+    tax: null,
+    dueOn: '2026-10-14',
+    state: 'overdue',
+    waived: null,
+    stillOwed: true,
+    payments: [],
+    voidedPayments: [],
+    can: { pay: true, waive: true, voidPaymentId: null },
+    ...over,
+  });
+  const owingFee = (f = fee()) => {
+    const m = held(1, true);
+    return { ...m, billing: { ...m.billing, fees: [f] } };
+  };
+  const feePayment = (over = {}) => payment({ feeBillId: FEE_ID, amountMinor: 1000, ...over });
+  /** Opens Record payment on the fee. */
+  const openFeePay = async () => {
+    const item = within(await screen.findByTestId('held-fee'));
+    fireEvent.click(item.getByRole('button', { name: 'Record payment · $10.00' }));
+    return { item, form: within(item.getByTestId('held-fee-pay')) };
+  };
+
+  it('the worst thing first: sends exactly the fee, membership, amount and Terminal on screen, records nothing by hand, and reads paid only on the server\'s "paid"', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(page([owingFee()]));
+    orgService.getTerminalPayments.mockReturnValue(terminals([DESK]));
+    orgService.startTerminalFeePayment.mockResolvedValue({ data: { payment: feePayment() } });
+    orgService.checkTerminalPayment
+      .mockResolvedValueOnce({ data: { payment: feePayment({ pickedUp: true }) } })
+      .mockResolvedValue({ data: { payment: feePayment({ pickedUp: true, step: 'done', outcome: 'paid', receiptNumber: 14 }) } });
+    draw();
+    const { item, form } = await openFeePay();
+    await waitFor(() => expect(optionsOf(howPaid(form))).toEqual(['Choose one', 'Card on Terminal', 'Cash', 'Card at the desk', 'Bank transfer']));
+    fireEvent.change(howPaid(form), { target: { value: 'terminal' } });
+    expect(form.getByText('Take $10.00 for the no-show fee')).toBeTruthy();
+    expect(form.getByText('It is for Spin on 14 October 2026. The Terminal shows the amount and Tara pays by card.')).toBeTruthy();
+    fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
+
+    await waitFor(() => expect(orgService.startTerminalFeePayment).toHaveBeenCalledTimes(1));
+    const [gymId, entryId, membershipId, billId, body] = orgService.startTerminalFeePayment.mock.calls[0];
+    expect([gymId, entryId, membershipId, billId]).toEqual([GYM, TARA, held(1, true).id, FEE_ID]);
+    expect(body).toEqual({ terminalId: DESK.id, requestKey: expect.any(String), amountMinor: 1000 });
+    expect(orgService.startTerminalPayment).not.toHaveBeenCalled();
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+
+    // The box waits under the fee that was pressed, with no word of paid until the server says it.
+    const wait = within(await item.findByTestId('terminal-pay-wait'));
+    expect(wait.getByText('Waiting for Tara to pay $10.00 on the Terminal')).toBeTruthy();
+    expect(screen.queryByText(/paid by card on the Terminal/)).toBeNull();
+    orgService.getHeldMemberships.mockResolvedValue(page([owingFee(fee({ state: 'paid', can: { pay: false, waive: false, voidPaymentId: null } }))]));
+    expect(await screen.findByText('$10.00 paid by card on the Terminal. That fee is paid.')).toBeTruthy();
+    expect(screen.queryByTestId('terminal-pay-wait')).toBeNull();
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+  });
+
+  it('not paid: under the fee, Try again sends the same fee with a new key, and Record another way opens its own box', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(page([owingFee()]));
+    orgService.getTerminalPayments.mockReturnValue(terminals([DESK]));
+    orgService.startTerminalFeePayment.mockResolvedValue({ data: { payment: feePayment() } });
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: feePayment({ pickedUp: true, step: 'done', outcome: 'timed_out' }) } });
+    draw();
+    const { item, form } = await openFeePay();
+    await waitFor(() => expect(optionsOf(howPaid(form))).toContain('Card on Terminal'));
+    fireEvent.change(howPaid(form), { target: { value: 'terminal' } });
+    fireEvent.click(form.getByRole('button', { name: 'Take payment on Terminal' }));
+    const ended = within(await item.findByTestId('terminal-pay-ended'));
+    expect(ended.getByRole('alert').textContent).toBe('Not paid. Time ran out on the Terminal. Nothing was charged.');
+    expect(ended.getAllByRole('button').map((b) => b.textContent)).toEqual(['Try again', 'Record another way', 'Back']);
+
+    fireEvent.click(ended.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(orgService.startTerminalFeePayment).toHaveBeenCalledTimes(2));
+    const [first, second] = orgService.startTerminalFeePayment.mock.calls;
+    expect(second.slice(0, 4)).toEqual(first.slice(0, 4));
+    expect(second[4]).toEqual({ ...first[4], requestKey: expect.any(String) });
+    expect(second[4].requestKey).not.toBe(first[4].requestKey);
+
+    const again = within(await item.findByTestId('terminal-pay-ended'));
+    fireEvent.click(again.getByRole('button', { name: 'Record another way' }));
+    const byHand = within(await item.findByTestId('held-fee-pay'));
+    expect(byHand.getByText('Record $10.00 for the no-show fee')).toBeTruthy();
+    expect(orgService.startTerminalPayment).not.toHaveBeenCalled();
+  });
+
+  it('money Square took for a fee taken off meanwhile: says so under the fee, with no Try again', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(page([owingFee()]));
+    orgService.getTerminalPayments.mockReturnValue(terminals([DESK], [feePayment({ pickedUp: true })]));
+    orgService.checkTerminalPayment.mockResolvedValue({ data: { payment: feePayment({ pickedUp: true, step: 'done', outcome: 'not_recorded' }) } });
+    draw();
+    const item = within(await screen.findByTestId('held-fee'));
+    const ended = within(await item.findByTestId('terminal-pay-ended'));
+    expect(ended.getByRole('alert').textContent).toBe(
+      "Square took $10.00 from Tara's card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then refund it there or record it by hand.",
+    );
+    expect(ended.getAllByRole('button').map((b) => b.textContent)).toEqual(['Done']);
   });
 });

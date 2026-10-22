@@ -1,4 +1,4 @@
-// TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a): the words of the box on a bill. Pure functions, so
+// TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a; a fee, 18d-vi-b-i): the words of the box on a bill. Pure functions, so
 // every line is tested without a page. The waiting box follows Save card on Terminal's
 // (`memberCardView.js`): what the person does at the Terminal, then how it ended.
 import { formatMinor } from '@app/shared';
@@ -45,8 +45,11 @@ export function terminalPayWaitWords(payment, name) {
 export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
   const who = personNames(name).first;
   const amount = formatMinor(payment.amountMinor, payment.currency);
+  // A late cancel or no-show fee (18d-vi-b-i) is paid all at once.
+  const fee = payment.feeBillId != null;
   switch (payment.outcome) {
     case 'paid': {
+      if (fee) return `${amount} paid by card on the Terminal. That fee is paid.`;
       const left = billLeftMinor - payment.amountMinor;
       return left > 0
         ? `${amount} paid by card on the Terminal. ${formatMinor(left, payment.currency)} is still left to pay.`
@@ -65,7 +68,9 @@ export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
     case 'gone':
       return `This payment can't be checked here any more. Look in your Square Dashboard before taking it again.`;
     case 'not_recorded':
-      return `Square took ${amount} from ${who}'s card, but this bill changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then record it by hand or refund it there.`;
+      return fee
+        ? `Square took ${amount} from ${who}'s card, but this fee was taken off or changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then refund it there or record it by hand.`
+        : `Square took ${amount} from ${who}'s card, but this bill changed meanwhile, so it isn't recorded here. Check it in your Square Dashboard, then record it by hand or refund it there.`;
     default:
       return 'Not paid. Try again.';
   }
