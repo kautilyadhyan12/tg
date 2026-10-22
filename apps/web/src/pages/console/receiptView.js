@@ -49,11 +49,14 @@ export function receiptLines(receipt) {
   const amounts = receipt.kind === 'sale' ? receipt.lines[0].amounts : receipt.amounts;
   // A joining fee (18t) is a line of its own, after the membership and its discount.
   const fee = receipt.kind === 'payment' && receipt.joiningFeeMinor > 0 ? receipt.joiningFeeMinor : 0;
+  // A change of membership (18x): its full price, then the unused days of the one before off it.
+  const credit = receipt.kind === 'payment' && receipt.changeCredit !== null && receipt.changeCredit !== undefined ? receipt.changeCredit : null;
   if (receipt.kind === 'sale') {
     lines.push(productLine(receipt.lines[0], money));
   } else {
-    lines.push({ label: membershipLabel(receipt.item), amount: money(amounts.listedMinor - fee) });
+    lines.push({ label: membershipLabel(receipt.item), amount: money(amounts.listedMinor - fee + (credit?.minor ?? 0)) });
   }
+  if (credit !== null) lines.push({ label: `Unused days of ${credit.fromName}`, amount: `−${money(credit.minor)}` });
   if (amounts.discount !== null) lines.push({ label: `Discount: ${amounts.discount.name}`, amount: `−${money(amounts.discount.minor)}` });
   if (fee > 0) lines.push({ label: 'Joining fee', amount: money(fee) });
   if (amounts.tax !== null && !amounts.tax.included) lines.push({ label: tax(amounts.tax), amount: money(amounts.tax.minor) });

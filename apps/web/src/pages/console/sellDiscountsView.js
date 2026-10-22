@@ -323,6 +323,30 @@ export function membershipSummary(type, discount, taxIncluded = false, memberGif
   };
 }
 
+/** What a change of membership comes to (18x): the new type's price, the unused days of the one
+ *  it replaces taken off before tax, and the tax on what is left, as the server works it out.
+ *  `fromName` is the membership being changed. */
+export function changeSummary(type, creditMinor, fromName, taxIncluded = false) {
+  if (type === null || type === undefined) return null;
+  const money = (minor) => formatMinor(minor, type.currency);
+  const tax = typeTax(type, taxIncluded);
+  const listed = type.priceMinor - creditMinor;
+  const first = listed <= 0 ? { ok: true, totalMinor: 0, taxMinor: 0 } : billAmounts(listed, tax);
+  const next = type.priceMinor === 0 ? { ok: true, totalMinor: 0 } : billAmounts(type.priceMinor, tax);
+  if (!first.ok || !next.ok) return null;
+  const onTop = tax !== null && !tax.included && first.taxMinor > 0;
+  const lines = [{ label: 'Price', value: type.priceMinor === 0 ? 'Free' : money(type.priceMinor) }];
+  if (creditMinor > 0) lines.push({ label: `Unused days of ${fromName}`, value: `-${money(creditMinor)}` });
+  if (onTop) lines.push({ label: taxLabel(tax), value: money(first.taxMinor) });
+  lines.push({ label: 'Total', value: money(first.totalMinor), strong: true });
+  if (tax !== null && tax.included && first.taxMinor > 0) lines.push({ label: `Includes ${taxLabel(tax)}`, value: money(first.taxMinor) });
+  const later =
+    type.kind === 'recurring' && type.priceMinor > 0 && (creditMinor > 0 || first.totalMinor !== next.totalMinor)
+      ? `This is the first payment. Every payment after it is ${money(next.totalMinor)}.`
+      : null;
+  return { totalMinor: first.totalMinor, lines, later, total: money(first.totalMinor) };
+}
+
 /** A held membership's tax, said on a person's page (18b-iii); null where it has none. */
 export function heldTaxLine(membership) {
   const t = membership.tax;
