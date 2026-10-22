@@ -1117,6 +1117,25 @@ describe('Take payment on Terminal at Sell', () => {
     expect(within(newSale()).queryByTestId('terminal-pay-lost')).toBeNull();
   });
 
+  it('a press whose answer was lost and that the customer paid meanwhile: Check again says Sale recorded and clears the form', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-towel');
+    await waitFor(() => expect(takeButton().textContent).toBe('Take payment on Terminal · $5.41'));
+    orgApi.startTerminalSale.mockRejectedValueOnce(new Error('Network Error'));
+    fireEvent.click(takeButton());
+    const lost = await within(newSale()).findByTestId('terminal-pay-lost');
+    // The customer tapped and the server recorded the sale while nobody asked.
+    svc.get.mockResolvedValue(withSale(sale({ itemName: 'Towel', quantity: 1, totalMinor: 541, method: 'terminal', receiptNumber: 41, canUndo: false })));
+    orgApi.startTerminalSale.mockReturnValueOnce(answered({ amountMinor: 541, step: 'done', outcome: 'paid', pickedUp: true, receiptNumber: 41 }));
+    fireEvent.click(within(lost).getByRole('button', { name: 'Check again' }));
+    const done = await within(newSale()).findByTestId('sale-done');
+    expect(done.textContent).toContain('Sold: 1 × Towel to a walk-in. $5.41, card on the Terminal.');
+    expect(screen.queryByLabelText('Add a product')).toBeNull();
+    expect(svc.sell).not.toHaveBeenCalled();
+  });
+
   it('with two Terminals, asks which, and sends to the one picked', async () => {
     orgApi.getTerminalSales.mockResolvedValue(till({ terminals: [DESK, BACK] }));
     open();

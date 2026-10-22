@@ -408,6 +408,9 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       const res = await orgService.startTerminalSale(gymId, { terminalId: pickedTerminal.id, requestKey: b.requestKey, entryId: b.entryId, totalMinor: b.totalMinor, lines: b.lines });
       setOnTill({ payment: res.data.payment });
       setState({ busy: false, error: null, done: null });
+      // The same press asked again after its answer was lost may already be paid (the worker records
+      // it): said as any paid one is, never left looking unpaid.
+      if (res.data.payment.step === 'done' && res.data.payment.outcome === 'paid') void paidOnTerminal(res.data.payment);
     } catch (err) {
       const status = errorStatus(err);
       // No answer, or a server fault: the press may have reached the Terminal. The same key asked
