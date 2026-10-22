@@ -224,4 +224,22 @@ d("a database error carries a person, and nothing we write carries it on", () =>
     expect(written).not.toContain(ADDRESS);
     expect(written).not.toContain("membershipType");
   });
+
+  it("a test run writes no request lines of Fastify's own, even at its loudest", async () => {
+    const capture = await buildCapturing();
+    let written = "";
+    try {
+      const res = await capture.app.inject({ method: "GET", url: "/health" });
+      expect(res.statusCode).toBe(200);
+      capture.app.log.info("logsafety-quiet-probe");
+      written = capture.written();
+    } finally {
+      capture.stop();
+      await capture.app.close();
+    }
+    // THE CONTROL: the capture records this logger at all.
+    expect(written).toContain("logsafety-quiet-probe");
+    expect(written).not.toContain("incoming request");
+    expect(written).not.toContain("request completed");
+  });
 });
