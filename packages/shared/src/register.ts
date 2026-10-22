@@ -479,7 +479,9 @@ const oneProductRequestSchema = z
  *  and the sale's, are what the screen showed: a sale that would now come to anything else
  *  is refused. `entryId` null is a walk-in. A product is one line, however many of it; the
  *  buyer's own gift goes on one line, with no discount beside it. */
-export const sellProductRequestSchema = z.union([basketRequestSchema, oneProductRequestSchema]).superRefine((v, ctx) => basketChecks(v, ctx));
+export const sellProductRequestSchema = z.union([basketRequestSchema, oneProductRequestSchema]).superRefine((v, ctx) => {
+  basketChecks(v, ctx);
+});
 
 function basketChecks(v: { entryId: string | null; totalMinor: number; lines: readonly { productId: string; discountId: string | null; memberGift: unknown; totalMinor: number }[] }, ctx: z.RefinementCtx): void {
   const products = new Set(v.lines.map((l) => l.productId));
@@ -505,7 +507,9 @@ export const terminalSaleRequestSchema = z
     lines: z.array(saleLineRequestSchema).min(1).max(SALE_LINES_MAX),
   })
   .strict()
-  .superRefine((v, ctx) => basketChecks(v, ctx));
+  .superRefine((v, ctx) => {
+    basketChecks(v, ctx);
+  });
 export type TerminalSaleRequest = z.infer<typeof terminalSaleRequestSchema>;
 export type TerminalSaleRequestBody = z.input<typeof terminalSaleRequestSchema>;
 
