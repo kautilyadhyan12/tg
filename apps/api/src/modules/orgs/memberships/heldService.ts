@@ -16,6 +16,8 @@ import {
   BILLS_SHOWN,
   BILL_OVERDUE_DAYS_MAX,
   HELD_EARLIER_PAGE,
+  MEMBERSHIP_CHANGE_WORDS,
+  changeFrom,
   MEMBER_LIST_BY_HAND_WORDS,
   billSettingsResponseSchema,
   countAfterGap,
@@ -28,10 +30,11 @@ import {
   memberCancelTarget,
   memberPayTarget,
   memberUndoTarget,
-  refundableMinor,
+  paymentRefundableMinor,
   type BillSettings,
   type BillSettingsResponse,
   type CancelMemberBillRequest,
+  type ChangeHeldMembershipRequest,
   type ClassBookingsEnding,
   type GiveHeldMembershipRequest,
   type HeldMembership,
@@ -53,6 +56,7 @@ import { endMembershipBookings, membershipBookingsAsk } from "../classes/booking
 import { endingPerson, type BookingsAnswer } from "../classes/service.js";
 import * as repo from "./heldRepo.js";
 import * as billsRepo from "./billsRepo.js";
+import * as changeRepo from "./changeRepo.js";
 import { membershipDiscounts } from "../register/discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
@@ -81,7 +85,7 @@ function billingOf(
   voided: { payments: readonly VoidedPaymentRow[]; refunds: readonly VoidedRefundRow[] },
   fees: { fees: readonly FeeRow[]; payments: readonly FeePaymentRow[] },
   ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }> },
-): MemberBilling {
+): Omit<MemberBilling, "change"> {
   const view = heldMembershipView(row.membership, ctx.today);
   const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
   const cancel = memberCancelTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
@@ -108,6 +112,8 @@ function billingOf(
       amountMinor: b.amountMinor,
       tax: b.tax,
       joiningFeeMinor: b.joiningFeeMinor,
+      changeCreditMinor: b.changeCreditMinor,
+      movedMinor: b.movedMinor,
       paidMinor: b.paidMinor,
       dueOn: b.dueOn,
       state: memberBillState(b, ctx.today, ctx.overdueAfterDays),
@@ -124,7 +130,7 @@ function billingOf(
           by: p.by,
           refunds: refunds.filter((r) => r.paymentId === p.id).map(refundOf),
           voidedRefunds: voidedRefundsOf(p.id),
-          refundableMinor: refundableMinor(b.status, p),
+          refundableMinor: paymentRefundableMinor(b, p),
           receiptNumber: p.receiptNumber,
         })),
       voidedPayments: voided.payments
@@ -250,10 +256,21 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     const count = countAfterGap(row.membership, today, have);
     return count === null ? row : { ...row, membership: { ...row.membership, paidPeriods: count, paidFloor: count } };
   };
+  // Change membership (18x): worked out by the rule the write uses, for each one in use.
+  const replaced = new Set(list.changes.filter((c) => c.newStatus !== "cancelled").map((c) => c.oldId));
+  const changeOf = (row: repo.HeldRow): MemberBilling["change"] => {
+    if (list.past || !list.inUse.some((r) => r.id === row.id)) return null;
+    if (replaced.has(row.id)) return { ok: false, reason: "changed_already" };
+    const from = changeFrom(row.membership, row.priceMinor, list.bills.filter((b) => b.membershipId === row.id).map(changeRepo.changeBillFacts), today);
+    return from.ok ? { ok: true, creditMinor: from.creditMinor, daysLeft: from.daysLeft, nextOn: from.nextOn } : { ok: false, reason: from.reason };
+  };
+  const changedTo = (id: string) => list.changes.find((c) => c.oldId === id && c.newStatus !== "cancelled");
+  const changedFrom = (id: string) => list.changes.find((c) => c.newId === id);
   const all = [...list.inUse.map(asOfToday), ...list.over]
     .map((row) => ({
       billing: canBill
-        ? billingOf(
+        ? {
+            ...billingOf(
             row,
             list.bills.filter((b) => b.membershipId === row.id),
             list.payments.filter((p) => p.membershipId === row.id),
@@ -264,7 +281,9 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
             },
             { fees: list.fees.filter((f) => f.membershipId === row.id), payments: list.feePayments },
             ctx,
-          )
+          ),
+            change: changeOf(row),
+          }
         : null,
       id: row.id,
       typeId: row.typeId,
@@ -286,6 +305,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       freeDays: freeDays.get(row.id) ?? [],
       tax: row.tax,
       view: viewOf(row, list.bills, list.fees, today, list.past),
+      changedFrom: ((c) => (c === undefined ? null : { typeName: c.oldName, stopped: c.stopped }))(changedFrom(row.id)),
+      changedTo: ((c) => (c === undefined ? null : { typeName: c.newName, startsOn: c.startsOn }))(changedTo(row.id)),
     }))
     .sort(
       (a, b) =>
@@ -484,6 +505,45 @@ export async function moveHeldMembership(
   }
   throwOnFailure(outcome);
   return { kind: "ok", body: await readOr404(deps, gymId, entryId, today, privileges.includes(BILLING)) };
+}
+
+/** CHANGE MEMBERSHIP (18x): moves money, so it needs `billing.members` as well as the person's
+ *  page. Classes booked on the old one that the new one does not cover end once confirmed. */
+export async function changeHeldMembership(
+  deps: HeldDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  req: ChangeHeldMembershipRequest,
+): Promise<BookingsAnswer<HeldMembershipsResponse>> {
+  const { today, now } = await requireBilling(deps, userId, gymId);
+  const outcome = await changeRepo.changeHeld(deps.sql, CANCEL_BOOKINGS, {
+    gymId,
+    entryId,
+    membershipId,
+    typeId: req.typeId,
+    when: req.when,
+    requestKey: req.requestKey,
+    shownPriceMinor: req.priceMinor,
+    shownCreditMinor: req.creditMinor,
+    shownTotalMinor: req.totalMinor,
+    shownStartsOn: req.startsOn,
+    paid: req.paid,
+    method: req.method ?? null,
+    confirmBookings: req.confirmBookings ?? null,
+    confirmPtSessions: req.confirmPtSessions ?? null,
+    today,
+    actorUserId: userId,
+    now,
+  });
+  if (outcome.kind === "has_bookings") {
+    return { kind: "bookings", ending: { ...outcome.ending, people: outcome.ending.people.map(endingPerson) } };
+  }
+  if (outcome.kind === "change_refused") throw new OrgsError(409, `membership_change_${outcome.reason}`, MEMBERSHIP_CHANGE_WORDS[outcome.reason]);
+  if (outcome.kind === "credit_changed") throw new OrgsError(409, "membership_change_credit_changed", MEMBERSHIP_CHANGE_WORDS.credit_changed);
+  throwOnFailure(outcome);
+  return { kind: "ok", body: await readOr404(deps, gymId, entryId, today, true) };
 }
 
 // ── Bills and payments (spec Part 3 §14.2; ROADMAP 18a-i) ────────────────────

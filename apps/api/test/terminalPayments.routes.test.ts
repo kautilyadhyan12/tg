@@ -295,6 +295,9 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
       expect([403, 404], res.body).toContain(res.statusCode);
     }
     expect(square.checkouts.size).toBe(0);
+    // A manager is not the owner: the forms tell them who can connect Square, never offer it (18x).
+    const asManager = await send("GET", `${entryUrl(gymA, tara.entryId)}/terminal-payments`, manager.cookies);
+    expect(terminalPaymentsResponseSchema.parse(JSON.parse(asManager.body))).toMatchObject({ square: "ready", isOwner: false });
 
     // The manager takes Tara's month on the Terminal: Square is asked for exactly that amount on that
     // Terminal, for this press; nothing is on the bill yet.
@@ -551,15 +554,17 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     clock = new Date();
     const gym = await makeGym("Pay List");
     const acct = account(`TPI${uniq().slice(-6)}`);
-    await connect(gym, acct);
     const person = await owing(gym, await typeOf(gym), "Ada King");
-    const desk = await terminal(gym, acct);
     const listed = async () => {
       const res = await send("GET", `${entryUrl(gym, person.entryId)}/terminal-payments`, gym.owner.cookies);
       expect(res.statusCode, res.body).toBe(200);
       return terminalPaymentsResponseSchema.parse(JSON.parse(res.body));
     };
-    expect(await listed()).toEqual({ terminals: [{ id: desk.id, serial: desk.deviceId, practice: null }], waiting: [] });
+    // Square not set up yet: the payment forms offer the owner Connect Square (18x).
+    expect(await listed()).toEqual({ terminals: [], waiting: [], square: "connect", isOwner: true });
+    await connect(gym, acct);
+    const desk = await terminal(gym, acct);
+    expect(await listed()).toEqual({ terminals: [{ id: desk.id, serial: desk.deviceId, practice: null }], waiting: [], square: "ready", isOwner: true });
     const started = await pay(gym, gym.owner, person, desk.id);
     expect((await listed()).waiting.map((w) => w.id)).toEqual([started.payment.id]);
     await cancel(gym, gym.owner, person.entryId, started.payment.id);

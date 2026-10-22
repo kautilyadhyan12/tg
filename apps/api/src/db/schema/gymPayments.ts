@@ -351,12 +351,12 @@ export const gymTerminalPayments = pgTable(
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
     entryId: uuid("entry_id"),
-    /** Null for a basket at Sell (0152; 18d-vi-b-ii). */
+    /** Null for a basket at Sell (0153; 18d-vi-b-ii). */
     heldMembershipId: uuid("held_membership_id"),
     periodIndex: integer("period_index"),
     /** A fee of the membership (18d-vi-b-i), in place of a period. */
     feeBillId: uuid("fee_bill_id"),
-    /** A basket at Sell (0152; 18d-vi-b-ii), as priced at the press, in place of a membership. */
+    /** A basket at Sell (0153; 18d-vi-b-ii), as priced at the press, in place of a membership. */
     sale: jsonb("sale"),
     /** The sale's receipt, once Square took the money and the sale is recorded. */
     saleReceiptNumber: integer("sale_receipt_number"),

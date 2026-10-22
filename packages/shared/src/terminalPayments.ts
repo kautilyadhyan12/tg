@@ -53,6 +53,10 @@ export const terminalPaymentsResponseSchema = z
   .object({
     terminals: z.array(cardTerminalSchema).max(SQUARE_TERMINALS_MAX),
     waiting: z.array(terminalPaymentSchema).max(50),
+    /** Whether the gym has set up Square, and whether this reader is its owner, who alone can
+     *  connect it: the payment forms offer Connect Square while it is not set up (18x). */
+    square: memberCardStateSchema.default("not_offered"),
+    isOwner: z.boolean().default(false),
   })
   .strict();
 export type TerminalPaymentsResponse = z.infer<typeof terminalPaymentsResponseSchema>;

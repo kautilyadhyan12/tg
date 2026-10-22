@@ -240,6 +240,10 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.held_membership_frozen": (s) => `Froze ${whose(s, membershipOf(s))}`,
   "org.held_membership_unfrozen": (s) => `Unfroze ${whose(s, membershipOf(s))}`,
   "org.held_membership_cancelled": (s) => `Cancelled ${whose(s, membershipOf(s))}`,
+  "org.held_membership_changed": (s) => {
+    const to = text(s, "toType");
+    return `Changed ${whose(s, membershipOf(s))}${to === null ? "" : ` to ${to}`}`;
+  },
   "org.member_payment_recorded": (s) => `Recorded ${pay(s)} from ${fromWhom(s)}${methodWords(s)}`,
   // Square took the money on the Terminal, and the bill had changed meanwhile (18d-vi-a).
   // Square's answer could not be read past its time, so the money may have been taken (18d-vi-a).

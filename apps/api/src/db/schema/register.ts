@@ -203,7 +203,7 @@ export const gymSales = pgTable(
     taxName: text("tax_name"),
     currency: text("currency").notNull(),
     method: text("method").notNull(),
-    /** Square's payment, for a sale paid on the Terminal (0152; 18d-vi-b-ii). */
+    /** Square's payment, for a sale paid on the Terminal (0153; 18d-vi-b-ii). */
     squarePaymentId: text("square_payment_id"),
     soldOn: date("sold_on").notNull(),
     recordedBy: uuid("recorded_by").references(() => users.id, { onDelete: "set null" }),

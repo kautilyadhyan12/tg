@@ -1,5 +1,6 @@
 -- Take payment on Terminal at Sell (ROADMAP Stage 2 item 18d-vi-b-ii; spec Part 3 §14.8).
 -- Forward-only. Hand-written, as `0016` onwards are; its journal entry is part of this commit.
+-- Renumbered from 0152 when 18x's `0152_membership_change` merged first.
 --
 -- A press pays a period of a membership, one of its fees, or a basket at Sell (`sale`): the
 -- basket as it was priced when the card was asked for, recorded as that sale when Square says

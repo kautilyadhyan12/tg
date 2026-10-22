@@ -193,6 +193,12 @@ export const memberBillSchema = z
     /** The joining fee in `amountMinor`, before any tax added on top (18t): on the bill the
      *  membership was given with; 0 on every other. */
     joiningFeeMinor: minorSchema.default(0),
+    /** A change's credit taken off it, before tax (18x): what the membership it replaced had
+     *  paid for the days not yet used. Not inside `amountMinor`; 0 on every other bill. */
+    changeCreditMinor: minorSchema.default(0),
+    /** The money on it whose days a change moved to the membership that replaced this one (18x):
+     *  never refunded from this bill. 0 on every other bill. */
+    movedMinor: minorSchema.default(0),
     paidMinor: minorSchema,
     dueOn: daySchema,
     state: memberBillStateSchema,
@@ -287,6 +293,16 @@ export const memberBillingSchema = z
       .nullable(),
     /** Its late cancel and no-show fees, newest first (18h-i). */
     fees: z.array(memberFeeSchema).default([]),
+    /** Change membership (18x, `changeFrom`): what a change today takes off its first bill and
+     *  the first day of a change on the next payment date, or why it cannot be changed. Null
+     *  for one that is over. */
+    change: z
+      .discriminatedUnion("ok", [
+        z.object({ ok: z.literal(true), creditMinor: minorSchema, daysLeft: z.number().int().min(0), nextOn: daySchema.nullable() }).strict(),
+        z.object({ ok: z.literal(false), reason: z.enum(["not_changeable", "frozen", "not_started", "unpaid", "changed_already"]) }).strict(),
+      ])
+      .nullable()
+      .default(null),
   })
   .strict();
 export type MemberBilling = z.infer<typeof memberBillingSchema>;

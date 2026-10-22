@@ -1063,7 +1063,14 @@
       "idx": 151,
       "version": "7",
       "when": 1790726400152,
-      "tag": "0152_terminal_sale_payments",
+      "tag": "0152_membership_change",
+      "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1790726400153,
+      "tag": "0153_terminal_sale_payments",
       "breakpoints": true
     }
   ]

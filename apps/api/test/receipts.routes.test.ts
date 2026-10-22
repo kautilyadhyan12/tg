@@ -303,6 +303,7 @@ d("receipts (real Postgres)", () => {
         item: { name: "Gold Monthly", covers: { from: "2026-10-15", to: "2026-11-14" } },
         amounts: { listedMinor: 5000, discount: null, tax: { name: "Sales tax", bp: 825, included: false, minor: 413 }, totalMinor: 5413 },
         joiningFeeMinor: 0,
+        changeCredit: null,
         paidMinor: 5413,
         method: "cash",
         balance: null,
