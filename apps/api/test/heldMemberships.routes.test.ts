@@ -482,7 +482,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       const stamp = types.types.find((t) => t.id === ten)?.updatedAt;
       const changed = await put(
         `/v1/orgs/${gymId}/membership-types/${ten}`,
-        { ...pack({ name: "20 classes", packClasses: 20, packDays: 30, priceMinor: 15000 }), taxRateId: null, updatedAt: stamp },
+        { ...pack({ name: "20 classes", packClasses: 20, packDays: 30, priceMinor: 15000 }), taxRateId: null, joiningFeeMinor: 0, updatedAt: stamp },
         owner.cookies,
       );
       expect(changed.statusCode, changed.body).toBe(200);
@@ -555,7 +555,7 @@ d("a person's memberships: the gym's own day, who may read and change them, and 
       expect(read.earlierNotShown).toBe(0);
       // The price list comes with it, for the Add form.
       expect(read.types).toEqual([
-        { id: gold, name: "Gold Monthly", kind: "recurring", priceMinor: 4999, currency: "GBP", termCount: 1, termUnit: "month", packClasses: null, packDays: null, tax: null },
+        { id: gold, name: "Gold Monthly", kind: "recurring", priceMinor: 4999, currency: "GBP", termCount: 1, termUnit: "month", packClasses: null, packDays: null, tax: null, joiningFeeMinor: 0 },
       ]);
 
       // Filled to the most one person can have running: the next is refused.
