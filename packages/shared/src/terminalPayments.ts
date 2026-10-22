@@ -44,6 +44,8 @@ export const terminalPaymentSchema = z
     startedAt: z.string().datetime(),
     /** The payment's receipt once it is on the bill, or the sale's once it is recorded. */
     receiptNumber: receiptNumberSchema.nullable(),
+    /** Who pressed it: sent for Sell's waiting sales, so another desk sees whose it is. */
+    startedByName: z.string().nullable().default(null),
   })
   .strict();
 export type TerminalPayment = z.infer<typeof terminalPaymentSchema>;
@@ -70,6 +72,8 @@ export const terminalSalesResponseSchema = z
     isOwner: z.boolean(),
     terminals: z.array(cardTerminalSchema).max(SQUARE_TERMINALS_MAX),
     pairTerminal: z.boolean(),
+    /** Square is connected and the gym must connect it again to use its Terminals. */
+    reconnect: z.boolean().default(false),
     waiting: z.array(terminalPaymentSchema).max(50),
   })
   .strict();

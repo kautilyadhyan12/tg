@@ -12,18 +12,13 @@ describe("Sell's line about Square, for whoever reads it (Kd, 2026-10-22)", () =
     ['Square takes no payments in this country', till({ square: 'not_offered', terminals: [] }), null],
     ['ready, with a Terminal', till(), null],
     ['ready, no Terminal, not the owner', till({ terminals: [], pairTerminal: false, isOwner: false }), null],
-    ['not connected, the owner', till({ square: 'connect', terminals: [] }), { line: 'To take card payments on a Square Terminal, connect Square.', button: 'Connect Square' }],
-    ['no location yet, the owner', till({ square: 'choose_location', terminals: [] }), { line: 'To take card payments on a Square Terminal, choose your Square location.', button: 'Choose location' }],
-    [
-      'not connected, staff',
-      till({ square: 'connect', isOwner: false, terminals: [] }),
-      { line: 'To take card payments on a Square Terminal, connect Square. Only the owner of Iron House can do this.', button: null },
-    ],
-    [
-      'no location yet, staff',
-      till({ square: 'choose_location', isOwner: false, terminals: [] }),
-      { line: 'To take card payments on a Square Terminal, connect Square. Only the owner of Iron House can do this.', button: null },
-    ],
+    // The same words the payment forms say (18x): one sentence for one thing on every screen.
+    ['not connected, the owner', till({ square: 'connect', terminals: [] }), { line: 'Take cards with Square.', button: 'Connect Square' }],
+    ['no location yet, the owner', till({ square: 'choose_location', terminals: [] }), { line: 'Choose your Square location to take cards.', button: 'Choose location' }],
+    ['not connected, staff', till({ square: 'connect', isOwner: false, terminals: [] }), { line: 'Only the owner of Iron House can connect Square.', button: null }],
+    ['no location yet, staff', till({ square: 'choose_location', isOwner: false, terminals: [] }), { line: 'Only the owner of Iron House can connect Square.', button: null }],
+    ['connected, its Terminal permission gone, the owner', till({ terminals: [], reconnect: true }), { line: 'Reconnect Square to use Square Terminals.', button: 'Reconnect Square' }],
+    ['connected, its Terminal permission gone, staff', till({ terminals: [], reconnect: true, isOwner: false }), { line: 'Only the owner of Iron House can connect Square.', button: null }],
     ['ready, no Terminal, the owner', till({ terminals: [], pairTerminal: true }), { line: 'To take card payments here, pair your Square Terminal.', button: 'Pair a Terminal' }],
   ])('%s', (_name, answer, said) => {
     expect(tillSetupView(answer, 'Iron House')).toEqual(said);

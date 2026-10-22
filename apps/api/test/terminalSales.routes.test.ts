@@ -445,13 +445,60 @@ d("Take payment on Terminal at Sell: one sale for the money taken, at this gym a
     expect(parsed(await press(gym, gym.owner, basket(desk.id, null, [[water, 1, 200]]))).payment.step).toBe("waiting");
   });
 
+  it("a sale waiting while its buyer's record is joined to another is recorded on the kept record; deleted for good, as a member's sale with no record", async () => {
+    clock = new Date();
+    const gym = await makeGym("Sale Moves");
+    const acct = account(`TSM${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const water = await product(gym, "Water", 200);
+    const desk = await terminal(gym, acct);
+    const tara = await person(gym, "Tara Singh");
+    const taraAgain = await person(gym, "Tara S. Rao");
+    const joined = parsed(await press(gym, gym.owner, basket(desk.id, tara, [[water, 1, 200]])));
+    const merge = await send("POST", `/v1/orgs/${gym.id}/member-list/entries/${tara}/merge`, gym.owner.cookies, { keepEntryId: taraAgain });
+    expect(merge.statusCode, merge.body).toBe(200);
+    square.at(desk.deviceId).taps();
+    expect((await check(gym, gym.owner, joined.payment.id)).payment.outcome).toBe("paid");
+    expect((await sql<{ entry_id: string | null; for_member: boolean }[]>`SELECT entry_id, for_member FROM gym_sales WHERE request_key = ${joined.payment.id}`)).toEqual([{ entry_id: taraAgain, for_member: true }]);
+
+    const sam = await person(gym, "Sam Lee");
+    const gone = parsed(await press(gym, gym.owner, basket(desk.id, sam, [[water, 1, 200]])));
+    await sql`DELETE FROM gym_member_list_entries WHERE gym_id = ${gym.id} AND id = ${sam}`;
+    square.at(desk.deviceId).taps();
+    expect((await check(gym, gym.owner, gone.payment.id)).payment.outcome).toBe("paid");
+    expect((await sql<{ entry_id: string | null; for_member: boolean }[]>`SELECT entry_id, for_member FROM gym_sales WHERE request_key = ${gone.payment.id}`)).toEqual([{ entry_id: null, for_member: true }]);
+  });
+
+  it("a sale by hand sent under a press's own key is never taken as the money the Terminal took", async () => {
+    clock = new Date();
+    const gym = await makeGym("Sale Key");
+    const acct = account(`TSK${uniq().slice(-6)}`);
+    await connect(gym, acct);
+    const water = await product(gym, "Water", 200);
+    const desk = await terminal(gym, acct);
+    const started = parsed(await press(gym, gym.owner, basket(desk.id, null, [[water, 1, 200]])));
+    const byHand = await send("POST", `/v1/orgs/${gym.id}/register/sales`, gym.owner.cookies, {
+      requestKey: started.payment.id,
+      entryId: null,
+      method: "cash",
+      totalMinor: 200,
+      lines: [{ productId: water, quantity: 1, discountId: null, totalMinor: 200 }],
+    });
+    expect(byHand.statusCode, byHand.body).toBe(201);
+    square.at(desk.deviceId).taps();
+    expect((await check(gym, gym.owner, started.payment.id)).payment).toMatchObject({ step: "done", outcome: "not_recorded", receiptNumber: null });
+    expect((await salesOf(gym.id)).map((s) => s.method)).toEqual(["cash"]);
+    const told = await sql<{ meta: Record<string, string> }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.terminal_payment_not_recorded'`;
+    expect(told.map((x) => x.meta.why)).toEqual(["key_taken"]);
+  });
+
   it("Sell's box says whether Square is connected, to the owner who can connect it, and lists the Terminals", async () => {
     clock = new Date();
     const gym = await makeGym("Sale Box");
     const manager = await signedIn("Box Manager");
     await staff(gym, manager, "manager");
     const read = async (who: Person) => terminalSalesResponseSchema.parse(JSON.parse((await send("GET", saleUrl(gym), who.cookies)).body));
-    expect(await read(gym.owner)).toEqual({ square: "connect", isOwner: true, terminals: [], pairTerminal: false, waiting: [] });
+    expect(await read(gym.owner)).toEqual({ square: "connect", isOwner: true, terminals: [], pairTerminal: false, reconnect: false, waiting: [] });
     expect(await read(manager)).toMatchObject({ square: "connect", isOwner: false });
     const acct = account(`TSB${uniq().slice(-6)}`);
     await connect(gym, acct);
@@ -459,6 +506,9 @@ d("Take payment on Terminal at Sell: one sale for the money taken, at this gym a
     expect(await read(manager)).toMatchObject({ square: "ready", pairTerminal: false });
     const desk = await terminal(gym, acct);
     expect((await read(manager)).terminals.map((t) => t.id)).toEqual([desk.id]);
+    // Connected, but Square's permission for Terminals taken away: said, and no Terminal offered.
+    await sql`UPDATE gym_payment_connections SET scopes = '{}' WHERE gym_id = ${gym.id}`;
+    expect(await read(gym.owner)).toMatchObject({ square: "ready", reconnect: true, terminals: [], pairTerminal: false });
     // A gym where Square does not take payments is told nothing about it.
     const india = await makeGym("Sale Box India", "IN");
     const there = terminalSalesResponseSchema.parse(JSON.parse((await send("GET", saleUrl(india), india.owner.cookies)).body));

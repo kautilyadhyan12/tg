@@ -25,7 +25,7 @@ import { addToBasket, applyBasketCode, basketBody, basketCodeNote, basketView, w
 import { FriendGiftNote, MemberGiftNote } from './FriendGift';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
-import { TERMINAL_METHOD, TERMINAL_SALE_HINT, mayHavePaid, payTerminalName, terminalPayOutcomeLine, tillSetupView } from './terminalPayView';
+import { TERMINAL_METHOD, TERMINAL_SALE_HINT, TERMINAL_SALE_LOST, mayHavePaid, payTerminalName, terminalPayOutcomeLine, tillSetupView } from './terminalPayView';
 import { SALE_LINES_MAX, formatMinor, saleBaskets } from '@app/shared';
 import {
   NO_SELLING_LINE,
@@ -300,6 +300,8 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   const [onTill, setOnTill] = useState(null);
   /** Sales left waiting on a Terminal when Sell was closed: shown again above the form. */
   const [resumed, setResumed] = useState([]);
+  /** A press whose answer never came, by its key: the basket waits until it is checked again. */
+  const [lostKey, setLostKey] = useState(null);
   const finished = useRef(null);
   const [code, setCode] = useState({ text: '', note: null, appliedId: null });
   /** Refer a friend's gift for the person picked, where they are a friend a member invited
@@ -407,8 +409,16 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
       setOnTill({ payment: res.data.payment });
       setState({ busy: false, error: null, done: null });
     } catch (err) {
-      setState({ busy: false, error: errorText(err, "We couldn't reach the Terminal. Nothing was charged: try again."), done: null });
-      if (errorStatus(err) === 409) {
+      const status = errorStatus(err);
+      // No answer, or a server fault: the press may have reached the Terminal. The same key asked
+      // again is answered with that press, so nothing else is offered until it is.
+      if (status === null || status >= 500) {
+        setLostKey(requestKey);
+        setState({ busy: false, error: null, done: null });
+        return;
+      }
+      setState({ busy: false, error: errorText(err, "We couldn't reach the Terminal. Try again."), done: null });
+      if (status === 409) {
         setKey(newKey());
         registerService.get(gymId).then(onPage, () => undefined);
       }
@@ -498,11 +508,11 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
   }
 
   const full = lines.length >= SALE_LINES_MAX;
-  const still = locked || state.busy || waiting;
+  const still = locked || state.busy || waiting || lostKey !== null;
   return (
     <div className="flex flex-col gap-4">
       {resumed.map((payment) => (
-        <ResumedSale key={payment.id} gymId={gymId} payment={payment} showName={terminals.length > 1} onPaid={() => registerService.get(gymId).then(onPage, () => undefined)} onClose={() => setResumed((was) => was.filter((w) => w.id !== payment.id))} />
+        <ResumedSale key={payment.id} gymId={gymId} payment={payment} showName onPaid={() => registerService.get(gymId).then(onPage, () => undefined)} onClose={() => setResumed((was) => was.filter((w) => w.id !== payment.id))} />
       ))}
       <div className="c-field">
         <label className="c-label" htmlFor={pickerId}>
@@ -686,6 +696,28 @@ function ProductSale({ gymId, org, page: gymPage, locked, firstPerson, addMember
         {view.problem !== null && lines.length > 0 && view.rows.every((r) => r.problem === null) ? <p className="c-s14 c-t2 m-0">{view.problem}</p> : null}
         <p className="c-s13 c-t3 m-0">{onTerminal ? TERMINAL_SALE_HINT : SALE_HINT}</p>
       </div>
+      {lostKey !== null ? (
+        <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid="terminal-pay-lost">
+          <p className="c-s14 c-t1 m-0" role="alert">
+            {TERMINAL_SALE_LOST}
+          </p>
+          <div>
+            <button
+              type="button"
+              className="c-btn c-btn-p"
+              disabled={state.busy}
+              onClick={() => {
+                const again = lostKey;
+                setLostKey(null);
+                void sendToTerminal(again);
+              }}
+            >
+              {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              Check again
+            </button>
+          </div>
+        </div>
+      ) : null}
       {onTill !== null && onTill.payment.step !== 'done' ? (
         <TerminalPayBox gymId={gymId} entryId={null} payment={onTill.payment} name={buyerName} showName={terminals.length > 1} onAnswer={onTillAnswer} onEnded={(why) => setState({ busy: false, error: why, done: null })} />
       ) : null}

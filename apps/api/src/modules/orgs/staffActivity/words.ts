@@ -254,7 +254,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
       : `Started ${pay(s)} from ${person(s)} on a Square Terminal that couldn't be checked. Check it in Square`,
   "org.terminal_payment_not_recorded": (s) =>
     text(s, "sale") === "true"
-      ? `Square took another amount than asked for a sale on a Square Terminal, so the sale isn't recorded. Refund it in Square`
+      ? text(s, "why") === "key_taken"
+        ? `Took a sale${amountOf(s)} on a Square Terminal that another sale was recorded under, so it isn't recorded. Check it in Square`
+        : `Square took another amount than asked for a sale on a Square Terminal, so the sale isn't recorded. Refund it in Square`
       : text(s, "why") === "amount_differs"
       ? `Square took another amount than asked from ${person(s)} on a Square Terminal, so it isn't recorded. Refund it in Square`
       : text(s, "feeBillId") === null

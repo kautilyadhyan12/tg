@@ -359,6 +359,7 @@ function viewOf(pay: pays.PayRow, paired: readonly (CardTerminal & { deviceId: s
     terminal: terminal === undefined ? null : { id: terminal.id, serial: terminal.serial, practice: terminal.practice },
     startedAt: pay.startedAt.toISOString(),
     receiptNumber: pay.receiptNumber,
+    startedByName: pay.startedByName ?? null,
   };
 }
 
@@ -514,6 +515,7 @@ export async function readTerminalSales(deps: PaymentsDeps, userId: string, gymI
   const state = stateOf(square, gym, row);
   const isOwner = gym.ownerUserId === userId;
   const usable = square !== null && row !== null && state === "ready" && terminalsOffered(row) && !missingScopes(row);
+  const reconnect = row !== null && state === "ready" && terminalsOffered(row) && missingScopes(row);
   const paired = usable ? await pairedTerminals(deps, gymId, square.environment, row.accountId) : [];
   const waitingRows = square === null ? [] : await pays.readWaitingSales(deps.sql, gymId, square.environment);
   const waiting = await Promise.all(waitingRows.map(async (p) => viewOf(p, await pairedTerminals(deps, gymId, p.environment, p.accountId))));
@@ -522,6 +524,7 @@ export async function readTerminalSales(deps: PaymentsDeps, userId: string, gymI
     isOwner,
     terminals: paired.map((t) => ({ id: t.id, serial: t.serial, practice: t.practice })),
     pairTerminal: usable && isOwner && paired.length === 0,
+    reconnect,
     waiting,
   });
 }

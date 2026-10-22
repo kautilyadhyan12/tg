@@ -1,8 +1,9 @@
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a; a fee, 18d-vi-b-i): the words of the box on a bill. Pure functions, so
 // every line is tested without a page. The waiting box follows Save card on Terminal's
 // (`memberCardView.js`): what the person does at the Terminal, then how it ended.
-import { formatMinor } from '@app/shared';
+import { GYM_PAYMENTS_WORDS, cardOwnerOnlyLine, formatMinor } from '@app/shared';
 import { personNames } from './memberCardView';
+import { squareSetUpLine } from './membershipChangeView';
 
 /** Square's simulated Terminals (its test area only) by what each does with a payment: they are
  *  named for saving a card elsewhere, and the one that saves a card is the one that pays. */
@@ -112,13 +113,17 @@ export const TERMINAL_SALE_HINT = 'The Terminal shows the total and the customer
  *  the server's answer, or null before it comes. */
 export function tillSetupView(till, gymName) {
   if (till === null) return null;
-  const missing = till.square === 'connect' || till.square === 'choose_location';
-  if (missing && !till.isOwner) return { line: `To take card payments on a Square Terminal, connect Square. Only the owner of ${gymName} can do this.`, button: null };
-  if (till.square === 'connect') return { line: 'To take card payments on a Square Terminal, connect Square.', button: 'Connect Square' };
-  if (till.square === 'choose_location') return { line: 'To take card payments on a Square Terminal, choose your Square location.', button: 'Choose location' };
+  // Square not set up: the same line the payment forms say (18x), one sentence on every screen.
+  const setUp = squareSetUpLine(till.square, till.isOwner, gymName);
+  if (setUp !== null) return setUp;
+  if (till.reconnect === true) return till.isOwner ? { line: GYM_PAYMENTS_WORDS.terminals_need_allow, button: 'Reconnect Square' } : { line: cardOwnerOnlyLine(gymName), button: null };
   if (till.pairTerminal) return { line: 'To take card payments here, pair your Square Terminal.', button: 'Pair a Terminal' };
   return null;
 }
+
+/** A press whose answer never came (no connection, a server fault): the amount may be on the
+ *  Terminal, so the basket stays as it is until the same press is checked again. */
+export const TERMINAL_SALE_LOST = "We couldn't hear back about this payment, and it may be on the Terminal. Press Check again before you take payment another way.";
 
 /** Whether the person may well have paid: the box then offers no Try again. */
 export const mayHavePaid = (payment) => payment.outcome === 'gone' || payment.outcome === 'not_recorded';

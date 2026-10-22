@@ -805,7 +805,8 @@ async function writeSale(
       UPDATE gym_products SET stock = GREATEST(stock - ${p.quantity}, 0), updated_at = ${input.now}
       WHERE gym_id = ${input.gymId} AND id = ${p.productId} AND stock IS NOT NULL
       RETURNING id`;
-    // A gift used meanwhile (only ever on a Terminal's sale) is not used again.
+    // A gift used meanwhile (only ever on a Terminal's sale) is not used again; the line still names
+    // the gift and what it took off, as the person paid that, and the gift points at the other sale.
     const gift = p.gift === null ? null : (await giftStillWaiting(tx, input.gymId, input.entryId, p.gift.id)) ? p.gift : null;
     const [created] = await tx<{ id: string }[]>`
       INSERT INTO gym_sales

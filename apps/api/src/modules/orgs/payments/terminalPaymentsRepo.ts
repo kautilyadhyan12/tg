@@ -58,6 +58,8 @@ export interface PayRow {
   cancelTooLate: boolean;
   /** The payment's receipt, once it is on the bill. */
   receiptNumber: number | null;
+  /** Who pressed it, as their name reads now: read only for Sell's waiting sales. */
+  startedByName?: string | null;
 }
 
 interface RawPay {
@@ -331,12 +333,12 @@ export async function readWaitingOf(sql: SqlOrTx, gymId: string, entryId: string
 
 /** The gym's sales waiting on a Terminal, for Sell (18d-vi-b-ii): one a Terminal at most. */
 export async function readWaitingSales(sql: SqlOrTx, gymId: string, environment: SquareEnvironment): Promise<PayRow[]> {
-  const rows = await sql<RawPay[]>`
-    SELECT ${COLUMNS(sql)} FROM gym_terminal_payments t
+  const rows = await sql<(RawPay & { started_by_name: string | null })[]>`
+    SELECT ${COLUMNS(sql)}, (SELECT u.display_name FROM users u WHERE u.id = t.started_by) AS started_by_name FROM gym_terminal_payments t
     WHERE t.gym_id = ${gymId} AND t.sale IS NOT NULL AND t.environment = ${environment} AND t.state = 'waiting'
     ORDER BY t.started_at
     LIMIT 50`;
-  return rows.map(toRow);
+  return rows.map((r) => ({ ...toRow(r), startedByName: r.started_by_name }));
 }
 
 /** This request asks Square about the payment, and nobody else does until `until` or `release`.
@@ -555,8 +557,10 @@ async function recordSalePaid(
     if (still === undefined) return null;
     if (p.refuse === undefined) {
       // The press itself is the sale's key: the same press recorded twice is one sale.
-      const [made] = await tx<{ receipt_number: number }[]>`
-        SELECT receipt_number FROM gym_sales WHERE gym_id = ${pay.gymId} AND request_key = ${pay.id} ORDER BY line_no LIMIT 1`;
+      const [made] = await tx<{ receipt_number: number; method: string; square_payment_id: string | null }[]>`
+        SELECT receipt_number, method, square_payment_id FROM gym_sales WHERE gym_id = ${pay.gymId} AND request_key = ${pay.id} ORDER BY line_no LIMIT 1`;
+      // A sale by hand sent with this press's id as its own key is not the money Square took.
+      if (made !== undefined && (made.method !== "terminal" || made.square_payment_id !== p.squarePaymentId)) return await saleNotRecorded(tx, p, still.entry_id, "key_taken");
       const sold = made !== undefined ? { receiptNumber: made.receipt_number } : await recordTakenSale(tx, {
         gymId: pay.gymId,
         requestKey: pay.id,
@@ -574,26 +578,32 @@ async function recordSalePaid(
         WHERE id = ${pay.id}`;
       return { outcome: "paid" as const };
     }
-    await tx`
-      UPDATE gym_terminal_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
-             finished_at = ${p.now}, checking_until = NULL
-      WHERE id = ${pay.id}`;
-    await insertAudit(tx, {
-      actorUserId: pay.startedBy,
-      gymId: pay.gymId,
-      action: "org.terminal_payment_not_recorded",
-      targetType: "gym_terminal_payment",
-      targetId: pay.id,
-      meta: {
-        ...(still.entry_id === null ? {} : { entryId: still.entry_id }),
-        sale: "true",
-        amountMinor: String(pay.amountMinor),
-        currency: pay.currency,
-        why: p.refuse,
-      },
-    });
-    return { outcome: "not_recorded" as const };
+    return await saleNotRecorded(tx, p, still.entry_id, p.refuse);
   });
+}
+
+/** Money Square took for a sale that is not recorded: kept, and told to the gym's Staff activity. */
+async function saleNotRecorded(tx: TransactionSql, p: { pay: PayRow; squarePaymentId: string; now: Date }, entryId: string | null, why: string): Promise<{ outcome: "not_recorded" }> {
+  const { pay } = p;
+  await tx`
+    UPDATE gym_terminal_payments SET state = 'done', outcome = 'not_recorded', square_payment_id = ${p.squarePaymentId},
+           finished_at = ${p.now}, checking_until = NULL
+    WHERE id = ${pay.id}`;
+  await insertAudit(tx, {
+    actorUserId: pay.startedBy,
+    gymId: pay.gymId,
+    action: "org.terminal_payment_not_recorded",
+    targetType: "gym_terminal_payment",
+    targetId: pay.id,
+    meta: {
+      ...(entryId === null ? {} : { entryId }),
+      sale: "true",
+      amountMinor: String(pay.amountMinor),
+      currency: pay.currency,
+      why,
+    },
+  });
+  return { outcome: "not_recorded" as const };
 }
 
 /** Done ones are kept a day, for the page that asks how one ended; one Square took money for but

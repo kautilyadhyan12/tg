@@ -1091,6 +1091,32 @@ describe('Take payment on Terminal at Sell', () => {
     expect(svc.sell.mock.calls[0][1]).toMatchObject({ method: 'cash', totalMinor: 541 });
   }, 15000);
 
+  it('a press whose answer never comes keeps the basket as it is, offers nothing else, and Check again sends the same press', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-towel');
+    await waitFor(() => expect(takeButton().textContent).toBe('Take payment on Terminal · $5.41'));
+    // The server wrote the press and the Terminal shows the amount, but the answer is lost.
+    orgApi.startTerminalSale.mockRejectedValueOnce(new Error('Network Error'));
+    fireEvent.click(takeButton());
+    const lost = await within(newSale()).findByTestId('terminal-pay-lost');
+    expect(within(lost).getByRole('alert').textContent).toBe("We couldn't hear back about this payment, and it may be on the Terminal. Press Check again before you take payment another way.");
+    expect(within(newSale()).queryByText(/Nothing was charged/)).toBeNull();
+    expect(screen.getByLabelText('Payment method').disabled).toBe(true);
+    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
+    expect(takeButton().disabled).toBe(true);
+    expect(svc.sell).not.toHaveBeenCalled();
+    // Check again: the same key, so the server answers with the press it already has.
+    orgApi.startTerminalSale.mockReturnValueOnce(answered({ amountMinor: 541 }));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ amountMinor: 541 }));
+    fireEvent.click(within(lost).getByRole('button', { name: 'Check again' }));
+    await within(newSale()).findByTestId('terminal-pay-wait');
+    const [first, second] = orgApi.startTerminalSale.mock.calls.map((c) => c[1]);
+    expect(second).toEqual(first);
+    expect(within(newSale()).queryByTestId('terminal-pay-lost')).toBeNull();
+  });
+
   it('with two Terminals, asks which, and sends to the one picked', async () => {
     orgApi.getTerminalSales.mockResolvedValue(till({ terminals: [DESK, BACK] }));
     open();
@@ -1113,7 +1139,7 @@ describe('Take payment on Terminal at Sell', () => {
     open();
     await screen.findByRole('region', { name: 'New sale' });
     const setup = await within(newSale()).findByTestId('sell-terminal-setup');
-    expect(setup.textContent).toBe('To take card payments on a Square Terminal, connect Square.Connect Square');
+    expect(setup.textContent).toBe('Take cards with Square.Connect Square');
     expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Cash', 'Card at the desk', 'Bank transfer']);
     fireEvent.click(within(setup).getByRole('link', { name: 'Connect Square' }));
     expect(await screen.findByText('The Settings page')).toBeTruthy();
@@ -1123,7 +1149,7 @@ describe('Take payment on Terminal at Sell', () => {
     open(SELLER);
     await screen.findByRole('region', { name: 'New sale' });
     const told = await within(newSale()).findByTestId('sell-terminal-setup');
-    expect(told.textContent).toBe('To take card payments on a Square Terminal, connect Square. Only the owner of Iron House can do this.');
+    expect(told.textContent).toBe('Only the owner of Iron House can connect Square.');
     expect(within(told).queryByRole('link')).toBeNull();
     cleanup();
 
@@ -1139,12 +1165,14 @@ describe('Take payment on Terminal at Sell', () => {
   });
 
   it('a sale left waiting on a Terminal when Sell was closed is shown again, and the new sale form stays free', async () => {
-    orgApi.getTerminalSales.mockResolvedValue(till({ waiting: [onTerminal({ pickedUp: true })] }));
-    orgApi.checkTerminalSale.mockReturnValue(answered({ pickedUp: true }));
+    orgApi.getTerminalSales.mockResolvedValue(till({ waiting: [onTerminal({ pickedUp: true, startedByName: 'Sam Desk' })] }));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ pickedUp: true, startedByName: 'Sam Desk' }));
     open();
     await screen.findByRole('region', { name: 'New sale' });
     const box = await within(newSale()).findByTestId('terminal-pay-wait');
     expect(box.textContent).toContain('Waiting for the customer to pay $4.31 on the Terminal');
+    // Another desk's sale says which Terminal and who started it, with one Terminal too.
+    expect(box.textContent).toContain('R5DESK001 · started by Sam Desk');
     expect(screen.getByLabelText('Add a product').disabled).toBe(false);
     orgApi.cancelTerminalSale.mockReturnValue(answered({ step: 'done', outcome: 'cancelled', pickedUp: true }));
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
