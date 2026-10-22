@@ -700,9 +700,9 @@ export function freezeFeeMonth(frozenOn: string, today: string): { from: string;
   const q = parts(today);
   if (p === null || q === null) throw new Error(`not a day: ${frozenOn} or ${today}`);
   if (today < frozenOn) return null;
-  let k = (q[0] - p[0]) * 12 + (q[1] - p[1]);
-  while (k > 0 && addMonths(frozenOn, k) > today) k -= 1;
-  while (addMonths(frozenOn, k + 1) <= today) k += 1;
+  // The months between them, or one fewer where today is before the freeze day in its month.
+  const months = (q[0] - p[0]) * 12 + (q[1] - p[1]);
+  const k = addMonths(frozenOn, months) > today ? months - 1 : months;
   return { from: addMonths(frozenOn, k), to: addDays(addMonths(frozenOn, k + 1), -1) };
 }
 
