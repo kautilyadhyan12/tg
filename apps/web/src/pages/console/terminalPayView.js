@@ -1,8 +1,9 @@
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a; a fee, 18d-vi-b-i): the words of the box on a bill. Pure functions, so
 // every line is tested without a page. The waiting box follows Save card on Terminal's
 // (`memberCardView.js`): what the person does at the Terminal, then how it ended.
-import { formatMinor } from '@app/shared';
+import { GYM_PAYMENTS_WORDS, cardOwnerOnlyLine, formatMinor } from '@app/shared';
 import { personNames } from './memberCardView';
+import { squareSetUpLine } from './membershipChangeView';
 
 /** Square's simulated Terminals (its test area only) by what each does with a payment: they are
  *  named for saving a card elsewhere, and the one that saves a card is the one that pays. */
@@ -29,15 +30,23 @@ export function terminalPayDetail(name, leftWords) {
   return `${leftWords} The Terminal shows the amount and ${personNames(name).first} pays by card.`;
 }
 
+/** Who pays, in a sentence: the person's first name, or at Sell with nobody picked (18d-vi-b-ii),
+ *  the customer. */
+function payer(payment, name) {
+  if (payment.forSale === true && (typeof name !== 'string' || name.trim() === '')) return { inside: 'the customer', first: 'The customer' };
+  const first = personNames(name).first;
+  return { inside: first, first };
+}
+
 /** While the Terminal waits: the title and its two steps. */
 export function terminalPayWaitWords(payment, name) {
-  const who = personNames(name).first;
+  const who = payer(payment, name);
   return {
-    title: `Waiting for ${who} to pay ${formatMinor(payment.amountMinor, payment.currency)} on the Terminal`,
+    title: `Waiting for ${who.inside} to pay ${formatMinor(payment.amountMinor, payment.currency)} on the Terminal`,
     shown: 'The Terminal shows the amount.',
-    card: `${who} taps, inserts or swipes their card.`,
+    card: `${who.first} taps, inserts or swipes their card.`,
     notShown: "The Terminal hasn't shown it yet. Check it's on and connected to the internet.",
-    tooLate: `Too late to cancel: ${who} is paying on the Terminal.`,
+    tooLate: `Too late to cancel: ${who.inside} is paying on the Terminal.`,
   };
 }
 
@@ -46,8 +55,9 @@ export const TERMINAL_FEE_NOT_OWED = 'This fee is no longer owed. Cancel it on t
 
 /** What a payment that ended is said as, in the place it was pressed. */
 export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
-  const who = personNames(name).first;
   const amount = formatMinor(payment.amountMinor, payment.currency);
+  if (payment.forSale === true) return terminalSaleOutcomeLine(payment, name, amount);
+  const who = personNames(name).first;
   // A late cancel or no-show fee (18d-vi-b-i) is paid all at once.
   const fee = payment.feeBillId != null;
   switch (payment.outcome) {
@@ -78,6 +88,42 @@ export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
       return 'Not paid. Try again.';
   }
 }
+
+/** A sale at Sell (18d-vi-b-ii): how it ended. */
+function terminalSaleOutcomeLine(payment, name, amount) {
+  const who = payer(payment, name);
+  switch (payment.outcome) {
+    case 'paid':
+      return `${amount} paid by card on the Terminal. Sale recorded.`;
+    case 'cancelled_on_terminal':
+      return `Not paid. ${who.first} cancelled on the Terminal. Nothing was charged.`;
+    case 'not_recorded':
+      return `Square took another amount than this sale's ${amount}, so the sale isn't recorded. Refund it in your Square Dashboard, then take payment again.`;
+    default:
+      return terminalPayOutcomeLine({ ...payment, forSale: false }, name, payment.amountMinor);
+  }
+}
+
+/** Under Take payment at Sell when the Terminal takes the money, in place of the line for a sale
+ *  taken by hand. */
+export const TERMINAL_SALE_HINT = 'The Terminal shows the total and the customer pays by card. The sale is recorded once they have paid.';
+
+/** At Sell, where the gym cannot take a card on a Terminal yet (Kd, 2026-10-22): what is missing,
+ *  and for the owner the button that opens the place to set it up; null when nothing is. `till` is
+ *  the server's answer, or null before it comes. */
+export function tillSetupView(till, gymName) {
+  if (till === null) return null;
+  // Square not set up: the same line the payment forms say (18x), one sentence on every screen.
+  const setUp = squareSetUpLine(till.square, till.isOwner, gymName);
+  if (setUp !== null) return setUp;
+  if (till.reconnect === true) return till.isOwner ? { line: GYM_PAYMENTS_WORDS.terminals_need_allow, button: 'Reconnect Square' } : { line: cardOwnerOnlyLine(gymName), button: null };
+  if (till.pairTerminal) return { line: 'To take card payments here, pair your Square Terminal.', button: 'Pair a Terminal' };
+  return null;
+}
+
+/** A press whose answer never came (no connection, a server fault): the amount may be on the
+ *  Terminal, so the basket stays as it is until the same press is checked again. */
+export const TERMINAL_SALE_LOST = "We couldn't hear back about this payment, and it may be on the Terminal. Press Check again before you take payment another way.";
 
 /** Whether the person may well have paid: the box then offers no Try again. */
 export const mayHavePaid = (payment) => payment.outcome === 'gone' || payment.outcome === 'not_recorded';

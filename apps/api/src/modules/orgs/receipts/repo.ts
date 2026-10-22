@@ -6,6 +6,7 @@ import {
   memberPaymentByHandSchema,
   membershipKindSchema,
   membershipTermUnitSchema,
+  salePaymentMethodSchema,
   memberPaymentMethodSchema,
   partMinor,
   partPeriod,
@@ -105,7 +106,7 @@ async function saleReceipt(sql: Sql, gymId: string, number: number): Promise<Rec
     })),
     totalMinor: rows.reduce((n, line) => n + line.total_minor, 0),
     // Text under a CHECK: parsed, so a method this build does not know fails here.
-    method: memberPaymentByHandSchema.parse(r.method),
+    method: salePaymentMethodSchema.parse(r.method),
     refunds: refunds.map((f) => ({ number: f.receipt_number, on: f.refunded_on, amountMinor: f.amount_minor, item: rows.length > 1 ? f.item_name : null })),
   };
 }

@@ -1070,7 +1070,14 @@
       "idx": 152,
       "version": "7",
       "when": 1790726400153,
-      "tag": "0153_bill_day",
+      "tag": "0153_terminal_sale_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1790726400154,
+      "tag": "0154_bill_day",
       "breakpoints": true
     }
   ]

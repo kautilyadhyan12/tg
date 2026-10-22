@@ -27,7 +27,16 @@ const svc = {
   receipt: vi.fn(),
   friendGift: vi.fn(),
 };
-const orgApi = { getMine: vi.fn(), getMemberList: vi.fn(), getMembershipTypes: vi.fn(), giveHeldMembership: vi.fn() };
+const orgApi = {
+  getMine: vi.fn(),
+  getMemberList: vi.fn(),
+  getMembershipTypes: vi.fn(),
+  giveHeldMembership: vi.fn(),
+  getTerminalSales: vi.fn(),
+  startTerminalSale: vi.fn(),
+  checkTerminalSale: vi.fn(),
+  cancelTerminalSale: vi.fn(),
+};
 vi.mock('../../api/registerApi', () => ({ registerService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -149,6 +158,8 @@ beforeEach(() => {
   svc.sell.mockResolvedValue({ saleId: 's1', receiptNumber: 41, register: withSale() });
   orgApi.getMemberList.mockResolvedValue({ data: { list: null } });
   orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [MONTH] } });
+  // A gym with no Square unless a test says: the sale goes by hand.
+  orgApi.getTerminalSales.mockResolvedValue({ data: { square: 'not_offered', isOwner: true, terminals: [], pairTerminal: false, waiting: [] } });
 });
 afterEach(() => {
   cleanup();
@@ -975,5 +986,218 @@ describe('a basket (18q)', () => {
     const row = (await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row'))[0];
     expect(within(row).getByTestId('sale-refund').textContent).toContain('Towel · Cash · 12 Oct 2026 · Faulty or damaged · by Priya Desk');
     expect(row.textContent).toContain('Part refunded');
+  });
+});
+
+// TAKE PAYMENT ON TERMINAL AT SELL (18d-vi-b-ii). The worst thing first: the basket sent to the
+// Terminal is exactly the one on screen, once, and "Sale recorded" is said only on the server's
+// "paid".
+const DESK = { id: 'term-1', serial: 'R5DESK001', practice: null };
+const BACK = { id: 'term-2', serial: 'R5BACK002', practice: null };
+const till = (over = {}) => ({ data: { square: 'ready', isOwner: true, terminals: [DESK], pairTerminal: false, waiting: [], ...over } });
+const onTerminal = (over = {}) => ({
+  id: '7f0c3a52-4a1e-4c6e-9d8b-1d2c3e4f5a6b',
+  membershipId: null,
+  forSale: true,
+  feeBillId: null,
+  amountMinor: 431,
+  currency: 'USD',
+  step: 'waiting',
+  outcome: null,
+  pickedUp: false,
+  stopping: false,
+  tooLate: false,
+  terminal: DESK,
+  startedAt: new Date().toISOString(),
+  receiptNumber: null,
+  ...over,
+});
+const answered = (over) => Promise.resolve({ data: { payment: onTerminal(over) } });
+
+describe('Take payment on Terminal at Sell', () => {
+  it('the worst thing first: sends exactly the basket on screen to the Terminal, once, records nothing by hand, and says Sale recorded only on "paid"', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-water');
+    fireEvent.change(screen.getByLabelText('How many'), { target: { value: '2' } });
+    // Card on Terminal comes first where the gym has a Terminal, and the button says where the money goes.
+    await waitFor(() => expect(screen.getByLabelText('Payment method').value).toBe('terminal'));
+    expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Card on Terminal', 'Cash', 'Card at the desk', 'Bank transfer']);
+    expect(takeButton().textContent).toBe('Take payment on Terminal · $4.31');
+    expect(within(newSale()).getByText('The Terminal shows the total and the customer pays by card. The sale is recorded once they have paid.')).toBeTruthy();
+
+    let reach;
+    orgApi.startTerminalSale.mockReturnValue(new Promise((resolve) => (reach = resolve)));
+    fireEvent.click(takeButton());
+    fireEvent.click(within(newSale()).getByRole('button', { name: 'Sending…' }));
+    expect(orgApi.startTerminalSale).toHaveBeenCalledTimes(1);
+    expect(svc.sell).not.toHaveBeenCalled();
+    const [gymId, body] = orgApi.startTerminalSale.mock.calls[0];
+    expect(gymId).toBe('g1');
+    expect(body).toEqual({
+      terminalId: 'term-1',
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      entryId: null,
+      totalMinor: 431,
+      lines: [{ productId: 'p-water', quantity: 2, discountId: null, totalMinor: 431 }],
+    });
+    // While the Terminal waits the basket cannot change, and nothing says it is sold.
+    orgApi.checkTerminalSale.mockReturnValue(answered({ pickedUp: true }));
+    reach({ data: { payment: onTerminal() } });
+    const box = await within(newSale()).findByTestId('terminal-pay-wait');
+    expect(box.textContent).toContain('Waiting for the customer to pay $4.31 on the Terminal');
+    expect(box.textContent).toContain('The customer taps, inserts or swipes their card.');
+    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
+    expect(screen.getByLabelText('How many').disabled).toBe(true);
+    expect(takeButton().disabled).toBe(true);
+    expect(within(newSale()).queryByTestId('sale-done')).toBeNull();
+
+    // Square took it: the sale is said as one by hand is, with its receipt and where to refund it.
+    svc.get.mockResolvedValue(withSale(sale({ method: 'terminal', receiptNumber: 41, canUndo: false })));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ step: 'done', outcome: 'paid', pickedUp: true, receiptNumber: 41 }));
+    const done = await within(newSale()).findByTestId('sale-done', {}, { timeout: 8000 });
+    expect(done.textContent).toBe(
+      "Sale recordedSold: 2 × Water to a walk-in. $4.31, card on the Terminal.It is in today's list below. To give the money back, refund it in your Square Dashboard, then press ⋯ on its row and Refund sale.New saleView receipt",
+    );
+    expect(svc.sell).not.toHaveBeenCalled();
+    expect(orgApi.startTerminalSale).toHaveBeenCalledTimes(1);
+  }, 15000);
+
+  it('not paid: says why and that nothing was charged, with Try again under a new key and Record another way', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-towel');
+    await waitFor(() => expect(takeButton().textContent).toBe('Take payment on Terminal · $5.41'));
+    orgApi.startTerminalSale.mockReturnValue(answered({ amountMinor: 541 }));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ amountMinor: 541, step: 'done', outcome: 'cancelled_on_terminal', pickedUp: true }));
+    fireEvent.click(takeButton());
+    const ended = await within(newSale()).findByTestId('terminal-pay-ended', {}, { timeout: 8000 });
+    expect(within(ended).getByRole('alert').textContent).toBe('Not paid. The customer cancelled on the Terminal. Nothing was charged.');
+    const first = orgApi.startTerminalSale.mock.calls[0][1];
+    fireEvent.click(within(ended).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(orgApi.startTerminalSale).toHaveBeenCalledTimes(2));
+    const second = orgApi.startTerminalSale.mock.calls[1][1];
+    expect(second).toEqual({ ...first, requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+    expect(second.requestKey).not.toBe(first.requestKey);
+    // Record another way: the form again, with Cash picked, and the sale goes by hand.
+    const again = await within(newSale()).findByTestId('terminal-pay-ended', {}, { timeout: 8000 });
+    fireEvent.click(within(again).getByRole('button', { name: 'Record another way' }));
+    expect(screen.getByLabelText('Payment method').value).toBe('cash');
+    expect(takeButton().textContent).toBe('Take payment · $5.41');
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(svc.sell).toHaveBeenCalledTimes(1));
+    expect(svc.sell.mock.calls[0][1]).toMatchObject({ method: 'cash', totalMinor: 541 });
+  }, 15000);
+
+  it('a press whose answer never comes keeps the basket as it is, offers nothing else, and Check again sends the same press', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-towel');
+    await waitFor(() => expect(takeButton().textContent).toBe('Take payment on Terminal · $5.41'));
+    // The server wrote the press and the Terminal shows the amount, but the answer is lost.
+    orgApi.startTerminalSale.mockRejectedValueOnce(new Error('Network Error'));
+    fireEvent.click(takeButton());
+    const lost = await within(newSale()).findByTestId('terminal-pay-lost');
+    expect(within(lost).getByRole('alert').textContent).toBe("We couldn't hear back about this payment, and it may be on the Terminal. Press Check again before you take payment another way.");
+    expect(within(newSale()).queryByText(/Nothing was charged/)).toBeNull();
+    expect(screen.getByLabelText('Payment method').disabled).toBe(true);
+    expect(screen.getByLabelText('Add a product').disabled).toBe(true);
+    expect(takeButton().disabled).toBe(true);
+    expect(svc.sell).not.toHaveBeenCalled();
+    // Check again: the same key, so the server answers with the press it already has.
+    orgApi.startTerminalSale.mockReturnValueOnce(answered({ amountMinor: 541 }));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ amountMinor: 541 }));
+    fireEvent.click(within(lost).getByRole('button', { name: 'Check again' }));
+    await within(newSale()).findByTestId('terminal-pay-wait');
+    const [first, second] = orgApi.startTerminalSale.mock.calls.map((c) => c[1]);
+    expect(second).toEqual(first);
+    expect(within(newSale()).queryByTestId('terminal-pay-lost')).toBeNull();
+  });
+
+  it('a press whose answer was lost and that the customer paid meanwhile: Check again says Sale recorded and clears the form', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till());
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-towel');
+    await waitFor(() => expect(takeButton().textContent).toBe('Take payment on Terminal · $5.41'));
+    orgApi.startTerminalSale.mockRejectedValueOnce(new Error('Network Error'));
+    fireEvent.click(takeButton());
+    const lost = await within(newSale()).findByTestId('terminal-pay-lost');
+    // The customer tapped and the server recorded the sale while nobody asked.
+    svc.get.mockResolvedValue(withSale(sale({ itemName: 'Towel', quantity: 1, totalMinor: 541, method: 'terminal', receiptNumber: 41, canUndo: false })));
+    orgApi.startTerminalSale.mockReturnValueOnce(answered({ amountMinor: 541, step: 'done', outcome: 'paid', pickedUp: true, receiptNumber: 41 }));
+    fireEvent.click(within(lost).getByRole('button', { name: 'Check again' }));
+    const done = await within(newSale()).findByTestId('sale-done');
+    expect(done.textContent).toContain('Sold: 1 × Towel to a walk-in. $5.41, card on the Terminal.');
+    expect(screen.queryByLabelText('Add a product')).toBeNull();
+    expect(svc.sell).not.toHaveBeenCalled();
+  });
+
+  it('with two Terminals, asks which, and sends to the one picked', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till({ terminals: [DESK, BACK] }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    pick('Add a product', 'p-towel');
+    await waitFor(() => expect(screen.getByLabelText('Terminal')).toBeTruthy());
+    orgApi.startTerminalSale.mockReturnValue(answered({ amountMinor: 541, terminal: BACK }));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ amountMinor: 541, terminal: BACK }));
+    fireEvent.click(takeButton());
+    expect(await within(newSale()).findByText('Choose a Terminal.')).toBeTruthy();
+    expect(orgApi.startTerminalSale).not.toHaveBeenCalled();
+    pick('Terminal', 'term-2');
+    fireEvent.click(takeButton());
+    await waitFor(() => expect(orgApi.startTerminalSale).toHaveBeenCalledTimes(1));
+    expect(orgApi.startTerminalSale.mock.calls[0][1].terminalId).toBe('term-2');
+  });
+
+  it('a gym without Square: the owner is shown Connect Square, which opens Settings; staff are told only the owner can; the sale goes by hand', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till({ square: 'connect', terminals: [] }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    const setup = await within(newSale()).findByTestId('sell-terminal-setup');
+    expect(setup.textContent).toBe('Take cards with Square.Connect Square');
+    expect(Array.from(screen.getByLabelText('Payment method').options).map((o) => o.textContent)).toEqual(['Cash', 'Card at the desk', 'Bank transfer']);
+    fireEvent.click(within(setup).getByRole('link', { name: 'Connect Square' }));
+    expect(await screen.findByText('The Settings page')).toBeTruthy();
+    cleanup();
+
+    orgApi.getTerminalSales.mockResolvedValue(till({ square: 'connect', isOwner: false, terminals: [] }));
+    open(SELLER);
+    await screen.findByRole('region', { name: 'New sale' });
+    const told = await within(newSale()).findByTestId('sell-terminal-setup');
+    expect(told.textContent).toBe('Only the owner of Iron House can connect Square.');
+    expect(within(told).queryByRole('link')).toBeNull();
+    cleanup();
+
+    // Square connected with a Terminal, or where Square takes no payments: nothing is said.
+    for (const answer of [till(), till({ square: 'not_offered', terminals: [] })]) {
+      orgApi.getTerminalSales.mockResolvedValue(answer);
+      open();
+      await screen.findByRole('region', { name: 'New sale' });
+      await waitFor(() => expect(orgApi.getTerminalSales).toHaveBeenCalled());
+      expect(within(newSale()).queryByTestId('sell-terminal-setup')).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('a sale left waiting on a Terminal when Sell was closed is shown again, and the new sale form stays free', async () => {
+    orgApi.getTerminalSales.mockResolvedValue(till({ waiting: [onTerminal({ pickedUp: true, startedByName: 'Sam Desk' })] }));
+    orgApi.checkTerminalSale.mockReturnValue(answered({ pickedUp: true, startedByName: 'Sam Desk' }));
+    open();
+    await screen.findByRole('region', { name: 'New sale' });
+    const box = await within(newSale()).findByTestId('terminal-pay-wait');
+    expect(box.textContent).toContain('Waiting for the customer to pay $4.31 on the Terminal');
+    // Another desk's sale says which Terminal and who started it, with one Terminal too.
+    expect(box.textContent).toContain('R5DESK001 · started by Sam Desk');
+    expect(screen.getByLabelText('Add a product').disabled).toBe(false);
+    orgApi.cancelTerminalSale.mockReturnValue(answered({ step: 'done', outcome: 'cancelled', pickedUp: true }));
+    fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
+    const ended = await within(newSale()).findByTestId('terminal-sale-resumed');
+    expect(ended.textContent).toBe('Cancelled. Nothing was charged.Close');
+    fireEvent.click(within(ended).getByRole('button', { name: 'Close' }));
+    expect(within(newSale()).queryByTestId('terminal-sale-resumed')).toBeNull();
   });
 });

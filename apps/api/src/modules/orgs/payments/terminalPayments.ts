@@ -1,7 +1,8 @@
 // TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a; spec Part 3 §14.8; rulings/2026-10-21-money-plan.md).
 //
 // Staff holding the payments tick press Take payment on Terminal in a bill's Record payment box,
-// or in a late cancel or no-show fee's (18d-vi-b-i).
+// or in a late cancel or no-show fee's (18d-vi-b-i), or at Sell for a whole basket (18d-vi-b-ii),
+// recorded as that sale once Square takes the money.
 // The amount goes to the gym's Square Terminal (Square's Terminal checkout, with no tip screen and
 // no receipt screen of Square's: the gym's receipt is ours); the person taps, inserts or swipes
 // their card there, and the payment Square took is recorded on the bill as Card on Terminal. The
@@ -27,6 +28,7 @@ import {
   formatMinor,
   terminalPaymentResponseSchema,
   terminalPaymentsResponseSchema,
+  terminalSalesResponseSchema,
   type CardTerminal,
   type SquarePayment,
   type SquareTerminalCheckout,
@@ -36,10 +38,13 @@ import {
   type TerminalPaymentRequest,
   type TerminalPaymentResponse,
   type TerminalPaymentsResponse,
+  type TerminalSaleRequest,
+  type TerminalSalesResponse,
 } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
-import { BILLING, connectionRefused, entryNotFound, notReady, orgNotFound, readyOrThrow, stateOf } from "./cards.js";
+import { saleRefused } from "../register/service.js";
+import { BILLING, connectionRefused, entryNotFound, notReady, orgNotFound, readyOrThrow, stateOf, type Ready } from "./cards.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
 import { accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
@@ -72,6 +77,7 @@ export const TERMINAL_PAYMENT = {
   perRun: 50,
   /** What the gym's Square Dashboard lists the payment as: no name of the person goes to Square. */
   note: "Membership payment",
+  saleNote: "Sale at the desk",
 } as const;
 
 /** Square's simulated Terminals take a checkout on other device ids than an action ("Sandbox
@@ -136,7 +142,7 @@ async function checkoutOf(a: Asking): Promise<SquareResult<SquareTerminalCheckou
     // Square's own field for the app's record of it: the press, never the person.
     referenceId: pay.id,
     // A fee is named as one ("No-show fee"), so staff refunding it in Square find it (18d-vi-b-i).
-    note: pay.feeKind === null ? TERMINAL_PAYMENT.note : MEMBER_FEE_WORDS[pay.feeKind],
+    note: pay.sale !== null ? TERMINAL_PAYMENT.saleNote : pay.feeKind === null ? TERMINAL_PAYMENT.note : MEMBER_FEE_WORDS[pay.feeKind],
     deadline: TERMINAL_PAYMENT.deadline,
   });
   if (made.kind !== "ok") return made;
@@ -341,6 +347,7 @@ function viewOf(pay: pays.PayRow, paired: readonly (CardTerminal & { deviceId: s
   return {
     id: pay.id,
     membershipId: pay.membershipId,
+    forSale: pay.sale !== null,
     feeBillId: pay.feeBillId,
     amountMinor: pay.amountMinor,
     currency: pay.currency,
@@ -352,13 +359,14 @@ function viewOf(pay: pays.PayRow, paired: readonly (CardTerminal & { deviceId: s
     terminal: terminal === undefined ? null : { id: terminal.id, serial: terminal.serial, practice: terminal.practice },
     startedAt: pay.startedAt.toISOString(),
     receiptNumber: pay.receiptNumber,
+    startedByName: pay.startedByName ?? null,
   };
 }
 
 /** The answer for the page: where the payment stands. */
-async function answer(deps: PaymentsDeps, userId: string, gymId: string, entryId: string, payId: string): Promise<TerminalPaymentResponse> {
+async function answer(deps: PaymentsDeps, userId: string, gymId: string, of: pays.Scope, payId: string): Promise<TerminalPaymentResponse> {
   await requirePrivilege(deps, gymId, userId, BILLING);
-  const pay = await pays.readPayment(deps.sql, gymId, entryId, payId);
+  const pay = await pays.readPayment(deps.sql, gymId, of, payId);
   if (pay === null) throw paymentGone();
   return terminalPaymentResponseSchema.parse({ payment: viewOf(pay, await pairedTerminals(deps, gymId, pay.environment, pay.accountId)) });
 }
@@ -421,6 +429,106 @@ export async function startTerminalFeePayment(
   return await start(deps, userId, gymId, entryId, membershipId, body, { kind: "fee", billId });
 }
 
+/** The gym's Square, ready to take a payment on the chosen Terminal, or why not. */
+async function terminalFor(deps: PaymentsDeps, gymId: string, terminalId: string) {
+  const gym = await repo.readGym(deps.sql, gymId);
+  if (gym === null) throw orgNotFound();
+  const ready = await readyOrThrow(deps, gymId, gym);
+  if (ready.row.locationId === null) throw notReady();
+  if (!terminalsOffered(ready.row)) throw new OrgsError(409, "terminals_not_offered", GYM_PAYMENTS_WORDS.terminals_not_offered);
+  if (missingScopes(ready.row)) throw new OrgsError(409, "terminals_need_allow", GYM_PAYMENTS_WORDS.terminals_need_allow);
+  const terminal = await terminalsRepo.readTerminal(deps.sql, gymId, ready.square.environment, terminalId);
+  if (terminal?.state !== "paired" || terminal.deviceId === null || terminal.accountId !== ready.row.accountId) throw terminalGone();
+  return { gym, ready, deviceId: terminal.deviceId, locationId: ready.row.locationId };
+}
+
+/** A press, and once more when the Terminal was busy with a payment that may be over (its page
+ *  closed before the worker's minute): Square is asked about that one once, with its own gym's
+ *  token. A card save keeping it busy is that save's to finish. */
+async function pressFreeing<T extends { kind: string }>(deps: PaymentsDeps, ready: Ready, deviceId: string, press: (now: Date) => Promise<T>): Promise<T> {
+  const now = deps.now();
+  const written = await press(now);
+  if (written.kind !== "terminal_busy") return written;
+  const blocking = await pays.claimBlocking(deps.sql, ready.square.environment, ready.row.accountId, deviceId, now, leaseFrom(now));
+  if (blocking === null) return written;
+  await advance(deps, ready.square, blocking, leaseFrom(now));
+  return await press(deps.now());
+}
+
+/** Take payment on Terminal at Sell (18d-vi-b-ii): the basket, priced as a sale by hand is, goes to
+ *  the chosen Terminal for its total, and is recorded as that sale once Square takes the money. The
+ *  same press sent twice is one payment. Whoever may sell may press it: Sell's own tick. */
+export async function startTerminalSale(deps: PaymentsDeps, userId: string, gymId: string, body: TerminalSaleRequest): Promise<TerminalPaymentResponse> {
+  await requireWritablePrivilege(deps, gymId, userId, BILLING);
+  const { gym, ready, deviceId, locationId } = await terminalFor(deps, gymId, body.terminalId);
+  const press = (now: Date): Promise<pays.StartSaleOutcome> =>
+    pays.startSalePayment(deps.sql, {
+      gymId,
+      entryId: body.entryId,
+      totalMinor: body.totalMinor,
+      lines: body.lines,
+      environment: ready.square.environment,
+      accountId: ready.row.accountId,
+      locationId,
+      accountCurrency: ready.row.currency,
+      deviceId,
+      requestKey: body.requestKey,
+      checkoutKey: randomUUID(),
+      startedBy: userId,
+      today: dayInTz(now, gym.timezone),
+      now,
+      checkingUntil: leaseFrom(now),
+    });
+  const written = await pressFreeing(deps, ready, deviceId, press);
+  switch (written.kind) {
+    case "new": {
+      const first = await advance(deps, ready.square, written.payment, leaseFrom(deps.now()));
+      if (first?.refusal !== undefined && first.done === "refused") throw startRefused(first.refusal);
+      return await answer(deps, userId, gymId, { sale: true }, written.payment.id);
+    }
+    case "same_press":
+      return await answer(deps, userId, gymId, { sale: true }, written.payment.id);
+    case "terminal_busy":
+      throw terminalBusy();
+    case "key_reused":
+      throw paymentGone();
+    case "currency":
+      throw new OrgsError(409, "terminal_payment_currency", TERMINAL_PAYMENT_WORDS.sale_currency);
+    case "refused":
+      throw saleRefused(written.refusal);
+    default: {
+      const never: never = written;
+      throw new Error(`unhandled Terminal sale start: ${JSON.stringify(never)}`);
+    }
+  }
+}
+
+/** Sell's Terminal box (18d-vi-b-ii): whether the gym's Square is ready (or the owner's button to
+ *  connect it, and anybody else's line saying who can), its paired Terminals, and the sales waiting
+ *  on one, so a page opened again shows them. A gym outside Square's countries is told nothing. */
+export async function readTerminalSales(deps: PaymentsDeps, userId: string, gymId: string): Promise<TerminalSalesResponse> {
+  await requirePrivilege(deps, gymId, userId, BILLING);
+  const gym = await repo.readGym(deps.sql, gymId);
+  if (gym === null) throw orgNotFound();
+  const square = deps.square;
+  const row = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
+  const state = stateOf(square, gym, row);
+  const isOwner = gym.ownerUserId === userId;
+  const usable = square !== null && row !== null && state === "ready" && terminalsOffered(row) && !missingScopes(row);
+  const reconnect = row !== null && state === "ready" && terminalsOffered(row) && missingScopes(row);
+  const paired = usable ? await pairedTerminals(deps, gymId, square.environment, row.accountId) : [];
+  const waitingRows = square === null ? [] : await pays.readWaitingSales(deps.sql, gymId, square.environment);
+  const waiting = await Promise.all(waitingRows.map(async (p) => viewOf(p, await pairedTerminals(deps, gymId, p.environment, p.accountId))));
+  return terminalSalesResponseSchema.parse({
+    square: state,
+    isOwner,
+    terminals: paired.map((t) => ({ id: t.id, serial: t.serial, practice: t.practice })),
+    pairTerminal: usable && isOwner && paired.length === 0,
+    reconnect,
+    waiting,
+  });
+}
+
 /** Take payment on Terminal: the amount goes to the chosen Terminal. The same press sent twice is
  *  one payment; one already waiting for the same bill is answered instead of a second. */
 async function start(
@@ -434,16 +542,7 @@ async function start(
 ): Promise<TerminalPaymentResponse> {
   const { privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.confirm");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
-  const gym = await repo.readGym(deps.sql, gymId);
-  if (gym === null) throw orgNotFound();
-  const ready = await readyOrThrow(deps, gymId, gym);
-  if (ready.row.locationId === null) throw notReady();
-  if (!terminalsOffered(ready.row)) throw new OrgsError(409, "terminals_not_offered", GYM_PAYMENTS_WORDS.terminals_not_offered);
-  if (missingScopes(ready.row)) throw new OrgsError(409, "terminals_need_allow", GYM_PAYMENTS_WORDS.terminals_need_allow);
-  const terminal = await terminalsRepo.readTerminal(deps.sql, gymId, ready.square.environment, body.terminalId);
-  if (terminal?.state !== "paired" || terminal.deviceId === null || terminal.accountId !== ready.row.accountId) throw terminalGone();
-  const deviceId = terminal.deviceId;
-  const locationId = ready.row.locationId;
+  const { gym, ready, deviceId, locationId } = await terminalFor(deps, gymId, body.terminalId);
 
   const press = (now: Date): Promise<pays.StartOutcome> =>
     pays.startPayment(deps.sql, {
@@ -464,27 +563,16 @@ async function start(
       now,
       checkingUntil: leaseFrom(now),
     });
-  const now = deps.now();
-  let written = await press(now);
-  if (written.kind === "terminal_busy") {
-    // Busy with a payment that may be over (its page closed before the worker's minute): Square is
-    // asked about it once, with its own gym's token; then pressed again. A card save keeping it
-    // busy is that save's to finish.
-    const blocking = await pays.claimBlocking(deps.sql, ready.square.environment, ready.row.accountId, deviceId, now, leaseFrom(now));
-    if (blocking !== null) {
-      await advance(deps, ready.square, blocking, leaseFrom(now));
-      written = await press(deps.now());
-    }
-  }
+  const written = await pressFreeing(deps, ready, deviceId, press);
   switch (written.kind) {
     case "new": {
-      const first = await advance(deps, ready.square, written.payment, leaseFrom(now));
+      const first = await advance(deps, ready.square, written.payment, leaseFrom(deps.now()));
       if (first?.refusal !== undefined && first.done === "refused") throw startRefused(first.refusal);
-      return await answer(deps, userId, gymId, entryId, written.payment.id);
+      return await answer(deps, userId, gymId, { entryId }, written.payment.id);
     }
     case "same_press":
     case "membership_waiting":
-      return await answer(deps, userId, gymId, entryId, written.payment.id);
+      return await answer(deps, userId, gymId, { entryId }, written.payment.id);
     case "terminal_busy":
       throw terminalBusy();
     case "key_reused":
@@ -514,29 +602,47 @@ async function start(
 
 /** Where the payment stands: Square is asked, unless another request is asking right now. */
 export async function checkTerminalPayment(deps: PaymentsDeps, userId: string, gymId: string, entryId: string, payId: string): Promise<TerminalPaymentResponse> {
+  return await check(deps, userId, gymId, { entryId }, payId);
+}
+
+/** Where a sale on the Terminal stands (18d-vi-b-ii). */
+export async function checkTerminalSale(deps: PaymentsDeps, userId: string, gymId: string, payId: string): Promise<TerminalPaymentResponse> {
+  return await check(deps, userId, gymId, { sale: true }, payId);
+}
+
+async function check(deps: PaymentsDeps, userId: string, gymId: string, of: pays.Scope, payId: string): Promise<TerminalPaymentResponse> {
   await requirePrivilege(deps, gymId, userId, BILLING);
   const square = deps.square;
   if (square === null) throw paymentGone();
   const now = deps.now();
-  const held = await pays.claimCheck(deps.sql, gymId, entryId, payId, now, leaseFrom(now));
+  const held = await pays.claimCheck(deps.sql, gymId, of, payId, now, leaseFrom(now));
   if (held !== null) await advance(deps, square, held, leaseFrom(now));
-  return await answer(deps, userId, gymId, entryId, payId);
+  return await answer(deps, userId, gymId, of, payId);
 }
 
 /** Cancel: kept on the payment, then Square is asked to stop the checkout, by this request or, while
  *  another is asking Square, by that one. Square stops it only until the person pays. */
 export async function cancelTerminalPayment(deps: PaymentsDeps, userId: string, gymId: string, entryId: string, payId: string): Promise<TerminalPaymentResponse> {
+  return await cancel(deps, userId, gymId, { entryId }, payId);
+}
+
+/** Cancel a sale on the Terminal (18d-vi-b-ii). */
+export async function cancelTerminalSale(deps: PaymentsDeps, userId: string, gymId: string, payId: string): Promise<TerminalPaymentResponse> {
+  return await cancel(deps, userId, gymId, { sale: true }, payId);
+}
+
+async function cancel(deps: PaymentsDeps, userId: string, gymId: string, of: pays.Scope, payId: string): Promise<TerminalPaymentResponse> {
   await requirePrivilege(deps, gymId, userId, BILLING);
   const square = deps.square;
   if (square === null) throw paymentGone();
-  if (!(await pays.wantCancel(deps.sql, gymId, entryId, payId, deps.now()))) {
-    if ((await pays.readPayment(deps.sql, gymId, entryId, payId)) === null) throw paymentGone();
-    return await answer(deps, userId, gymId, entryId, payId);
+  if (!(await pays.wantCancel(deps.sql, gymId, of, payId, deps.now()))) {
+    if ((await pays.readPayment(deps.sql, gymId, of, payId)) === null) throw paymentGone();
+    return await answer(deps, userId, gymId, of, payId);
   }
   const waitUntil = Date.now() + TERMINAL_PAYMENT.cancelWaitMs;
   for (;;) {
     const now = deps.now();
-    const held = await pays.claimCheck(deps.sql, gymId, entryId, payId, now, leaseFrom(now));
+    const held = await pays.claimCheck(deps.sql, gymId, of, payId, now, leaseFrom(now));
     if (held !== null) {
       await advance(deps, square, held, leaseFrom(now));
       break;
@@ -544,7 +650,7 @@ export async function cancelTerminalPayment(deps: PaymentsDeps, userId: string, 
     if (Date.now() >= waitUntil) break;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  return await answer(deps, userId, gymId, entryId, payId);
+  return await answer(deps, userId, gymId, of, payId);
 }
 
 /** The worker's minute: payments nobody has asked about since a page closed, and done ones to

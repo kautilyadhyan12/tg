@@ -26,7 +26,7 @@ const svc = {
   restoreDiscount: vi.fn(),
   purchases: vi.fn(),
 };
-const orgApi = { getMine: vi.fn(), getMemberList: vi.fn(), getMembershipTypes: vi.fn(), giveHeldMembership: vi.fn() };
+const orgApi = { getMine: vi.fn(), getMemberList: vi.fn(), getMembershipTypes: vi.fn(), giveHeldMembership: vi.fn(), getTerminalSales: vi.fn() };
 vi.mock('../../api/registerApi', () => ({ registerService: svc }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -125,6 +125,8 @@ beforeEach(() => {
   svc.findPeople.mockResolvedValue([]);
   orgApi.getMemberList.mockResolvedValue({ data: { list: null } });
   orgApi.getMembershipTypes.mockResolvedValue({ data: { types: [] } });
+  // A gym with no Square (18d-vi-b-ii): the sale goes by hand.
+  orgApi.getTerminalSales.mockResolvedValue({ data: { square: 'not_offered', isOwner: true, terminals: [], pairTerminal: false, reconnect: false, waiting: [] } });
 });
 afterEach(() => {
   cleanup();

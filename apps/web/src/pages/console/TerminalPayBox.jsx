@@ -4,8 +4,8 @@ import { orgService, errorText } from '../../api/orgsApi';
 import { TERMINAL_STOPPING, cardTerminalSerial } from './memberCardView';
 import { TERMINAL_FEE_NOT_OWED, payTerminalName, terminalPayWaitWords } from './terminalPayView';
 
-// TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a): the box on a bill while the amount waits on the
-// gym's Square Terminal. It asks the server every few seconds and hands each answer up; the
+// TAKE PAYMENT ON TERMINAL (ROADMAP 18d-vi-a): the box on a bill, or at Sell (18d-vi-b-ii), while
+// the amount waits on the gym's Square Terminal. It asks the server every few seconds and hands each answer up; the
 // memberships box reads the bill again when it ends. Built as Save card on Terminal's box is
 // (`MemberCard.jsx`): the steps at the Terminal, a line when it isn't shown, and Cancel.
 
@@ -61,7 +61,7 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
     const ask = async () => {
       const cancelsBefore = cancelAnswers.current;
       try {
-        const res = await orgService.checkTerminalPayment(gymId, entryId, payment.id);
+        const res = payment.forSale ? await orgService.checkTerminalSale(gymId, payment.id) : await orgService.checkTerminalPayment(gymId, entryId, payment.id);
         if (stopped) return;
         faults = 0;
         setProblem(null);
@@ -96,7 +96,7 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
     setCancelling(true);
     setProblem(null);
     try {
-      const res = await orgService.cancelTerminalPayment(gymId, entryId, payment.id);
+      const res = payment.forSale ? await orgService.cancelTerminalSale(gymId, payment.id) : await orgService.cancelTerminalPayment(gymId, entryId, payment.id);
       if (live.current) {
         cancelAnswers.current += 1;
         onAnswer(res.data.payment);
@@ -116,6 +116,7 @@ export default function TerminalPayBox({ gymId, entryId, payment, name, showName
           <p className="c-s13 c-t2 m-0">
             {payTerminalName(payment.terminal)}
             {cardTerminalSerial(payment.terminal) !== null ? <span className="c-num">{` · ${cardTerminalSerial(payment.terminal)}`}</span> : null}
+            {payment.startedByName ? ` · started by ${payment.startedByName}` : null}
           </p>
         ) : null}
       </div>

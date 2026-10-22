@@ -9,7 +9,7 @@
 // bill and payment are the notebook's, and no row of this file's is written for it.
 import { z } from "zod";
 import { gymDiscountSchema } from "./discounts.js";
-import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema } from "./memberBills.js";
+import { memberPaymentByHandSchema, memberPaymentMethodSchema, receiptNumberSchema, salePaymentMethodSchema } from "./memberBills.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX } from "./memberships.js";
 import { isRealDay } from "./discounts.js";
 import { saleRefundSchema } from "./saleRefunds.js";
@@ -250,7 +250,7 @@ export const gymSaleSchema = z
      *  invited, by the gym's list; null otherwise, or where that record is gone. */
     giftFor: z.string().nullable().default(null),
     currency: currencySchema,
-    method: memberPaymentByHandSchema,
+    method: salePaymentMethodSchema,
     /** The gym's own day, and the instant. */
     soldOn: daySchema,
     soldAt: z.string().datetime(),
@@ -480,17 +480,38 @@ const oneProductRequestSchema = z
  *  is refused. `entryId` null is a walk-in. A product is one line, however many of it; the
  *  buyer's own gift goes on one line, with no discount beside it. */
 export const sellProductRequestSchema = z.union([basketRequestSchema, oneProductRequestSchema]).superRefine((v, ctx) => {
+  basketChecks(v, ctx);
+});
+
+function basketChecks(v: { entryId: string | null; totalMinor: number; lines: readonly { productId: string; discountId: string | null; memberGift: unknown; totalMinor: number }[] }, ctx: z.RefinementCtx): void {
   const products = new Set(v.lines.map((l) => l.productId));
   if (products.size !== v.lines.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "product_twice" });
   const gifts = v.lines.filter((l) => l.memberGift !== null);
   if (gifts.length > 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "member_gift_once" });
   if (gifts.some((l) => l.discountId !== null) || (gifts.length > 0 && v.entryId === null)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "member_gift_alone" });
   if (v.lines.reduce((n, l) => n + l.totalMinor, 0) !== v.totalMinor) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "total_not_lines" });
-});
+}
 export type SellProductRequest = z.infer<typeof sellProductRequestSchema>;
 export type SaleLineRequest = SellProductRequest["lines"][number];
 /** The same, as a screen sends it: a line's `discountId` may be left out. */
 export type SellProductRequestBody = z.input<typeof sellProductRequestSchema>;
+
+/** Take payment on Terminal at Sell (18d-vi-b-ii): the basket as a sale by hand sends it, and the
+ *  gym's Terminal it goes to in place of a payment method. */
+export const terminalSaleRequestSchema = z
+  .object({
+    terminalId: z.string().uuid(),
+    requestKey: z.string().uuid(),
+    entryId: z.string().uuid().nullable(),
+    totalMinor: saleTotalSchema,
+    lines: z.array(saleLineRequestSchema).min(1).max(SALE_LINES_MAX),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    basketChecks(v, ctx);
+  });
+export type TerminalSaleRequest = z.infer<typeof terminalSaleRequestSchema>;
+export type TerminalSaleRequestBody = z.input<typeof terminalSaleRequestSchema>;
 
 /** `saleId` is the sale's first line; every line of it has `receiptNumber`. */
 export const sellProductResponseSchema = z.object({ saleId: z.string().uuid(), receiptNumber: receiptNumberSchema, register: sellPageResponseSchema }).strict();

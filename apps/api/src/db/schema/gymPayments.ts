@@ -351,10 +351,15 @@ export const gymTerminalPayments = pgTable(
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
     entryId: uuid("entry_id"),
-    heldMembershipId: uuid("held_membership_id").notNull(),
+    /** Null for a basket at Sell (0153; 18d-vi-b-ii). */
+    heldMembershipId: uuid("held_membership_id"),
     periodIndex: integer("period_index"),
     /** A fee of the membership (18d-vi-b-i), in place of a period. */
     feeBillId: uuid("fee_bill_id"),
+    /** A basket at Sell (0153; 18d-vi-b-ii), as priced at the press, in place of a membership. */
+    sale: jsonb("sale"),
+    /** The sale's receipt, once Square took the money and the sale is recorded. */
+    saleReceiptNumber: integer("sale_receipt_number"),
     amountMinor: integer("amount_minor").notNull(),
     currency: text("currency").notNull(),
     environment: text("environment").notNull(),
@@ -384,7 +389,7 @@ export const gymTerminalPayments = pgTable(
       sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.deviceId} ~ '^[A-Za-z0-9:_-]{1,100}$' AND (${t.checkoutId} IS NULL OR ${t.checkoutId} ~ '^[A-Za-z0-9:_-]{1,255}$') AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
     ),
     check("gym_terminal_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0)`),
-    check("gym_terminal_payments_bill_check", sql`(${t.feeBillId} IS NULL) = (${t.periodIndex} IS NOT NULL)`),
+    check("gym_terminal_payments_bill_check", sql`num_nonnulls(${t.periodIndex}, ${t.feeBillId}, ${t.sale}) = 1 AND (${t.heldMembershipId} IS NULL) = (${t.sale} IS NOT NULL)`),
     check("gym_terminal_payments_state_check", sql`${t.state} IN ('waiting','done')`),
     check(
       "gym_terminal_payments_outcome_check",
@@ -392,12 +397,13 @@ export const gymTerminalPayments = pgTable(
     ),
     check(
       "gym_terminal_payments_paid_check",
-      sql`((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.memberPaymentId} IS NOT NULL)) AND (${t.outcome} NOT IN ('paid','not_recorded') OR ${t.squarePaymentId} IS NOT NULL)`,
+      sql`((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.memberPaymentId} IS NOT NULL OR ${t.saleReceiptNumber} IS NOT NULL)) AND (${t.memberPaymentId} IS NULL OR ${t.saleReceiptNumber} IS NULL) AND (${t.outcome} NOT IN ('paid','not_recorded') OR ${t.squarePaymentId} IS NOT NULL)`,
     ),
     uniqueIndex("gym_terminal_payments_request_uq").on(t.gymId, t.requestKey),
     uniqueIndex("gym_terminal_payments_device_uq").on(t.environment, t.accountId, t.deviceId).where(sql`${t.state} = 'waiting'`),
     uniqueIndex("gym_terminal_payments_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'waiting'`),
     uniqueIndex("gym_terminal_payments_square_payment_uq").on(t.environment, t.accountId, t.squarePaymentId).where(sql`${t.squarePaymentId} IS NOT NULL`),
+    index("gym_terminal_payments_sale_idx").on(t.gymId).where(sql`${t.state} = 'waiting' AND ${t.sale} IS NOT NULL`),
     index("gym_terminal_payments_entry_idx").on(t.gymId, t.entryId).where(sql`${t.state} = 'waiting'`),
     index("gym_terminal_payments_open_idx").on(t.checkedAt).where(sql`${t.state} = 'waiting'`),
     index("gym_terminal_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL`),

@@ -29,6 +29,7 @@ import {
   type FriendGiftResponse,
   PURCHASES_SHOWN,
   REGISTER_WORDS,
+  TERMINAL_PAYMENT_WORDS,
   SALES_SHOWN,
   SALE_PEOPLE_FOUND,
   discountNothingOffWords,
@@ -121,7 +122,8 @@ const shownSales = (sales: readonly repo.SaleRow[], today: string, canSell: bool
   return sales.map((s) => ({
     ...s,
     soldAt: s.soldAt.toISOString(),
-    canUndo: canSell && !s.undone && s.soldOn === today && !refunded.has(s.receiptNumber),
+    // A sale paid on the Terminal is refunded in Square, never voided here (18d-vi-b-ii).
+    canUndo: canSell && !s.undone && s.soldOn === today && !refunded.has(s.receiptNumber) && s.method !== "terminal",
     canRefund: canSell && !s.undone && s.refundedMinor < s.totalMinor,
   }));
 };
@@ -196,7 +198,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
       bank_transfer: (sold?.bank_transfer ?? 0) + of("bank_transfer"),
       link: of("link"),
       company: of("company"),
-      terminal: of("terminal"),
+      terminal: (sold?.terminal ?? 0) + of("terminal"),
       refundedMinor: [...(paid?.refunds ?? []), ...row.refunds].filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
       discountMinor: sold?.discountMinor ?? 0,
       otherCurrency,
@@ -332,39 +334,43 @@ export async function sellProduct(deps: RegisterDeps, userId: string, gymId: str
     actorUserId: userId,
     now,
   });
+  if (outcome.kind === "ok") return sellProductResponseSchema.parse({ saleId: outcome.saleId, receiptNumber: outcome.receiptNumber, register: await read(deps, gymId, viewer) });
+  throw saleRefused(outcome);
+}
+
+/** Why a basket was not sold, as staff read it: by hand, or sent to the Terminal (18d-vi-b-ii). */
+export function saleRefused(outcome: Exclude<repo.SellOutcome, { kind: "ok" }>): OrgsError {
   switch (outcome.kind) {
-    case "ok":
-      return sellProductResponseSchema.parse({ saleId: outcome.saleId, receiptNumber: outcome.receiptNumber, register: await read(deps, gymId, viewer) });
     case "product_not_found":
-      throw new OrgsError(409, "product_not_for_sale", REGISTER_WORDS.product_not_found);
+      return new OrgsError(409, "product_not_for_sale", REGISTER_WORDS.product_not_found);
     case "person_not_found":
-      throw new OrgsError(404, "entry_not_found", REGISTER_WORDS.person_not_found);
+      return new OrgsError(404, "entry_not_found", REGISTER_WORDS.person_not_found);
     case "request_reused":
-      throw new OrgsError(409, "request_reused", REGISTER_WORDS.request_reused);
+      return new OrgsError(409, "request_reused", REGISTER_WORDS.request_reused);
     case "price_changed":
-      throw new OrgsError(409, "sale_price_changed", REGISTER_WORDS.price_changed);
+      return new OrgsError(409, "sale_price_changed", REGISTER_WORDS.price_changed);
     case "currency_changed":
-      throw new OrgsError(409, "product_currency_changed", productCurrencyWords(outcome.name, outcome.was, outcome.now));
+      return new OrgsError(409, "product_currency_changed", productCurrencyWords(outcome.name, outcome.was, outcome.now));
     case "out_of_stock":
-      throw new OrgsError(409, "out_of_stock", outOfStockWords(outcome.name, outcome.left));
+      return new OrgsError(409, "out_of_stock", outOfStockWords(outcome.name, outcome.left));
     case "discount_not_found":
-      throw new OrgsError(409, "discount_not_available", DISCOUNT_WORDS.not_available);
+      return new OrgsError(409, "discount_not_available", DISCOUNT_WORDS.not_available);
     case "discount_refused":
-      throw new OrgsError(409, `discount_${outcome.reason}`, discountRefusalWords(outcome.name, outcome.reason));
+      return new OrgsError(409, `discount_${outcome.reason}`, discountRefusalWords(outcome.name, outcome.reason));
     case "nothing_to_pay":
-      throw new OrgsError(409, "discount_nothing_to_pay", DISCOUNT_WORDS.nothing_to_pay);
+      return new OrgsError(409, "discount_nothing_to_pay", DISCOUNT_WORDS.nothing_to_pay);
     case "discount_nothing_off":
-      throw new OrgsError(409, "discount_takes_nothing_off", discountNothingOffWords(outcome.name));
+      return new OrgsError(409, "discount_takes_nothing_off", discountNothingOffWords(outcome.name));
     case "friend_gift_not_theirs":
-      throw new OrgsError(409, "friend_gift_not_theirs", FRIEND_GIFT_WORDS.not_theirs);
+      return new OrgsError(409, "friend_gift_not_theirs", FRIEND_GIFT_WORDS.not_theirs);
     case "member_gift_not_theirs":
-      throw new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
+      return new OrgsError(409, "member_gift_not_theirs", MEMBER_GIFT_WORDS.not_theirs);
     case "member_gift_changed":
-      throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
+      return new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
     case "member_gift_with_discount":
-      throw new OrgsError(409, "member_gift_with_discount", MEMBER_GIFT_WORDS.with_discount);
+      return new OrgsError(409, "member_gift_with_discount", MEMBER_GIFT_WORDS.with_discount);
     case "one_line_only":
-      throw new OrgsError(409, "discount_one_line", oneLineOnlyWords(outcome.name));
+      return new OrgsError(409, "discount_one_line", oneLineOnlyWords(outcome.name));
     default: {
       const never: never = outcome;
       throw new Error(`unhandled sale outcome: ${JSON.stringify(never)}`);
@@ -454,6 +460,7 @@ export async function voidSale(deps: RegisterDeps, userId: string, gymId: string
   if (outcome.kind === "sale_not_found") throw new OrgsError(404, "sale_not_found", REGISTER_WORDS.sale_not_found);
   if (outcome.kind === "not_today") throw new OrgsError(409, "sale_not_today", REGISTER_WORDS.sale_not_today);
   if (outcome.kind === "has_refund") throw new OrgsError(409, "sale_has_refund", SALE_REFUND_WORDS.has_refund);
+  if (outcome.kind === "terminal") throw new OrgsError(409, "terminal_sale_void", TERMINAL_PAYMENT_WORDS.void_terminal_sale);
   return await read(deps, gymId, viewer);
 }
 

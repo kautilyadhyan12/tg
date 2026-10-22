@@ -187,6 +187,9 @@ export const terminalPaymentParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), paymentId: z.string().uuid() })
   .strict();
 
+/** A sale on the Terminal at Sell (18d-vi-b-ii). */
+export const terminalSaleParamsSchema = z.object({ gymId: z.string().uuid(), paymentId: z.string().uuid() }).strict();
+
 export const memberNoteParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), noteId: z.string().uuid() })
   .strict();

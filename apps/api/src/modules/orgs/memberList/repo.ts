@@ -2336,6 +2336,8 @@ export async function moveMembershipLinks(tx: TransactionSql, gymId: string, fro
  *  one's, each sale as it is. */
 export async function moveSaleLinks(tx: TransactionSql, gymId: string, fromEntryId: string, toEntryId: string): Promise<void> {
   await tx`UPDATE gym_sales SET entry_id = ${toEntryId} WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId}`;
+  // A sale still on the Terminal (18d-vi-b-ii) is recorded on the kept one when Square takes it.
+  await tx`UPDATE gym_terminal_payments SET entry_id = ${toEntryId} WHERE gym_id = ${gymId} AND entry_id = ${fromEntryId} AND sale IS NOT NULL`;
 }
 
 /** Two records joined: the visits of the one not kept become the kept one's (16a). A

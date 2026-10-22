@@ -187,7 +187,7 @@ export const gymHeldMemberships = pgTable(
     /** The change set the one it replaced to stop at the end of what is paid (0152): cancelling
      *  this one before it starts sets that one renewing again. */
     replacedStopped: boolean("replaced_stopped").notNull().default(false),
-    /** Given while the gym billed everyone on one day (0153; 18y): the first of those days after
+    /** Given while the gym billed everyone on one day (0154; 18y): the first of those days after
      *  the start, from which its full periods count; its first period is the part month before. */
     fullFrom: date("full_from"),
     createdAt: createdAt(),
