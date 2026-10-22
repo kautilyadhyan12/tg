@@ -16,6 +16,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getHeldMemberships: vi.fn(),
+      // No Square Terminal here (18d-vi-a): Record payment offers the ways recorded by hand.
+      getTerminalPayments: vi.fn(() => Promise.resolve({ data: { terminals: [], waiting: [] } })),
       giveHeldMembership: vi.fn(),
       changeHeldMembership: vi.fn(),
       getBillSettings: vi.fn(),

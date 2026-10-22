@@ -12,6 +12,7 @@ import * as repo from "./repo.js";
 import { SQUARE_REFRESH_EVERY_MS, accessContext, refreshContext, sendOwedRevokes, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import { processTerminalSaves } from "./terminalCards.js";
+import { processTerminalPayments } from "./terminalPayments.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
 
@@ -47,6 +48,7 @@ export interface SquareWorkRun {
   startsForgotten: number;
   /** Saves on a Square Terminal nobody was asking about, and done ones forgotten (18d-ii-b-ii). */
   terminalSaves: { asked: number; forgotten: number };
+  terminalPayments: { asked: number; forgotten: number };
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -134,6 +136,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     renewalsWaiting: 0,
     startsForgotten: 0,
     terminalSaves: { asked: 0, forgotten: 0 },
+    terminalPayments: { asked: 0, forgotten: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -186,6 +189,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
   run.revokes = await sendOwedRevokes(deps, square, null, 50, gymIds);
   run.cardStops = await sendOwedCardDisables(deps, square, null, 50, gymIds);
   run.terminalSaves = await processTerminalSaves(deps, square, gymIds);
+  run.terminalPayments = await processTerminalPayments(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

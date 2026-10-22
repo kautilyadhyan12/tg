@@ -13,7 +13,9 @@
 // to a POS Application", read 2026-10-21), and saves a card with PAYMENTS_WRITE_IN_PERSON: its
 // test area left a save "in progress" for 512 seconds without it, and saved one in 2 with it
 // (measured 2026-10-21). Save card on Terminal (18d-ii-b-ii) sends two Terminal actions with
-// those: CONFIRMATION, the gym's agreement, then SAVE_CARD.
+// those: CONFIRMATION, the gym's agreement, then SAVE_CARD. Take payment on Terminal (18d-vi-a)
+// sends a Terminal checkout with PAYMENTS_WRITE_IN_PERSON and reads its payment with
+// PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22).
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
@@ -21,15 +23,19 @@ import {
   squareErrorSchema,
   squareLocationsSchema,
   squareMerchantSchema,
+  squarePaymentAnswerSchema,
   squareRevokeSchema,
   squareTerminalActionAnswerSchema,
+  squareTerminalCheckoutAnswerSchema,
   squareTokenSchema,
   squareTokenStatusSchema,
   type SquareCard,
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
+  type SquarePayment,
   type SquareTerminalAction,
+  type SquareTerminalCheckout,
   type SquareToken,
   type SquareTokenStatus,
 } from "@app/shared";
@@ -84,6 +90,25 @@ export interface SquareApi {
   /** Square stops an action still pending or in progress; a SAVE_CARD only until the person
    *  confirms their email on the Terminal. */
   cancelTerminalAction(accessToken: string, actionId: string): Promise<SquareResult<SquareTerminalAction>>;
+  /** The amount on a paired Terminal, for the person to pay by card. `idempotencyKey`: asked
+   *  again, Square gives back the same checkout. */
+  createTerminalCheckout(accessToken: string, checkout: NewTerminalCheckout): Promise<SquareResult<SquareTerminalCheckout>>;
+  getTerminalCheckout(accessToken: string, checkoutId: string): Promise<SquareResult<SquareTerminalCheckout>>;
+  /** Square stops a checkout still pending or in progress; one paid already is refused (400). */
+  cancelTerminalCheckout(accessToken: string, checkoutId: string): Promise<SquareResult<SquareTerminalCheckout>>;
+  getPayment(accessToken: string, paymentId: string): Promise<SquareResult<SquarePayment>>;
+}
+
+/** `referenceId`: our own press, never the person. `note`: what Square's Dashboard lists the
+ *  payment as. No tip screen and no Square receipt screen: the gym's receipt is ours. */
+export interface NewTerminalCheckout {
+  idempotencyKey: string;
+  deviceId: string;
+  amountMinor: number;
+  currency: string;
+  referenceId: string;
+  note: string;
+  deadline: string;
 }
 
 /** CONFIRMATION shows `title`, `body` and two buttons, and keeps the Terminal waiting
@@ -113,6 +138,16 @@ const cardPath = (cardId: string): string => {
 const actionPath = (actionId: string): string => {
   if (!/^[A-Za-z0-9:_-]{1,255}$/.test(actionId)) throw new Error("not a Square Terminal action id");
   return `/v2/terminals/actions/${actionId}`;
+};
+
+/** The same for a Terminal checkout's id and a payment's id. */
+const checkoutPath = (checkoutId: string): string => {
+  if (!/^[A-Za-z0-9:_-]{1,255}$/.test(checkoutId)) throw new Error("not a Square Terminal checkout id");
+  return `/v2/terminals/checkouts/${checkoutId}`;
+};
+const paymentPath = (paymentId: string): string => {
+  if (!/^[A-Za-z0-9_-]{1,192}$/.test(paymentId)) throw new Error("not a Square payment id");
+  return `/v2/payments/${paymentId}`;
 };
 
 export const SQUARE_SCOPES = [
@@ -295,6 +330,31 @@ export function createSquareApi(opts: {
     async cancelTerminalAction(accessToken, actionId) {
       const result = await call("POST", `${actionPath(actionId)}/cancel`, squareTerminalActionAnswerSchema, bearer(accessToken), {});
       return result.kind === "ok" ? { kind: "ok", value: result.value.action } : result;
+    },
+    async createTerminalCheckout(accessToken, c) {
+      const result = await call("POST", "/v2/terminals/checkouts", squareTerminalCheckoutAnswerSchema, bearer(accessToken), {
+        idempotency_key: c.idempotencyKey,
+        checkout: {
+          amount_money: { amount: c.amountMinor, currency: c.currency },
+          reference_id: c.referenceId,
+          note: c.note,
+          deadline_duration: c.deadline,
+          device_options: { device_id: c.deviceId, skip_receipt_screen: true, tip_settings: { allow_tipping: false } },
+        },
+      });
+      return result.kind === "ok" ? { kind: "ok", value: result.value.checkout } : result;
+    },
+    async getTerminalCheckout(accessToken, checkoutId) {
+      const result = await call("GET", checkoutPath(checkoutId), squareTerminalCheckoutAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.checkout } : result;
+    },
+    async cancelTerminalCheckout(accessToken, checkoutId) {
+      const result = await call("POST", `${checkoutPath(checkoutId)}/cancel`, squareTerminalCheckoutAnswerSchema, bearer(accessToken), {});
+      return result.kind === "ok" ? { kind: "ok", value: result.value.checkout } : result;
+    },
+    async getPayment(accessToken, paymentId) {
+      const result = await call("GET", paymentPath(paymentId), squarePaymentAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.payment } : result;
     },
     async revokeAccount(accountId) {
       const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {

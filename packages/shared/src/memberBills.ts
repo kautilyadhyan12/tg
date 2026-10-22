@@ -17,9 +17,10 @@ export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as cons
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
 export type MemberBillStatus = z.infer<typeof memberBillStatusSchema>;
 
-/** How a payment was made. `link` is the gym's own payment link (18c) and `company` a
- *  connected payment company (18d); staff record the first three by hand. */
-export const MEMBER_PAYMENT_METHODS = ["cash", "card_at_desk", "bank_transfer", "link", "company"] as const;
+/** How a payment was made. `link` is the gym's own payment link (18c), `company` a
+ *  connected payment company (18d) and `terminal` a card on the gym's Square Terminal
+ *  (18d-vi-a); staff record the first three by hand. */
+export const MEMBER_PAYMENT_METHODS = ["cash", "card_at_desk", "bank_transfer", "link", "company", "terminal"] as const;
 export const memberPaymentMethodSchema = z.enum(MEMBER_PAYMENT_METHODS);
 export type MemberPaymentMethod = z.infer<typeof memberPaymentMethodSchema>;
 
@@ -33,6 +34,7 @@ export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, s
   bank_transfer: "Bank transfer",
   link: "Payment link",
   company: "Card on file",
+  terminal: "Card on Terminal",
 };
 
 /** Why staff cancelled a bill: picked, never typed, so no sentence about a person is kept. */

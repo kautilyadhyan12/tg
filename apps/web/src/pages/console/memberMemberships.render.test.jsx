@@ -27,6 +27,7 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
     ...actual,
     orgService: {
       getHeldMemberships: vi.fn(),
+      getTerminalPayments: vi.fn(),
       giveHeldMembership: vi.fn(),
       changeHeldMembership: vi.fn(),
       getMemberListEntry: vi.fn(),
@@ -135,6 +136,8 @@ const boxSoon = async () => within(await screen.findByTestId('held-memberships')
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // No Square Terminal here (18d-vi-a): Record payment offers the ways recorded by hand.
+  orgService.getTerminalPayments.mockImplementation(() => Promise.resolve({ data: { terminals: [], waiting: [] } }));
 });
 
 afterEach(() => {

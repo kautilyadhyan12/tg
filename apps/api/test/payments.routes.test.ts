@@ -166,6 +166,10 @@ function fakeSquare() {
     createTerminalAction: () => Promise.resolve(unavailable),
     getTerminalAction: () => Promise.resolve(unavailable),
     cancelTerminalAction: () => Promise.resolve(unavailable),
+    createTerminalCheckout: () => Promise.resolve(unavailable),
+    getTerminalCheckout: () => Promise.resolve(unavailable),
+    cancelTerminalCheckout: () => Promise.resolve(unavailable),
+    getPayment: () => Promise.resolve(unavailable),
   };
   /** The gym signs in at Square as this account and presses Allow: Square hands back a code. */
   const allow = (account: Account): string => {
