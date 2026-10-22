@@ -89,14 +89,16 @@ export const REFUND_VOID_REASON_WORDS: Readonly<Record<RefundVoidReason, string>
 };
 
 /** A fee for a late cancel or a no-show (18h-i): a bill of the membership the booking
- *  used, of no period. It is the amount the gym set, its tax in, and it moves no date. */
-export const MEMBER_FEES = ["late_cancel", "no_show"] as const;
+ *  used, of no period. It is the amount the gym set, its tax in, and it moves no date. A
+ *  freeze fee (18z) is one for each month a renewing membership is frozen. */
+export const MEMBER_FEES = ["late_cancel", "no_show", "freeze"] as const;
 export const memberFeeKindSchema = z.enum(MEMBER_FEES);
 export type MemberFeeKind = z.infer<typeof memberFeeKindSchema>;
 
 export const MEMBER_FEE_WORDS: Readonly<Record<MemberFeeKind, string>> = {
   late_cancel: "Late cancel fee",
   no_show: "No-show fee",
+  freeze: "Freeze fee",
 };
 
 /** What a fee is called on a receipt, in a download and in the day's takings. */
@@ -233,11 +235,14 @@ export const memberFeeSchema = z
   .object({
     id: z.string().uuid(),
     fee: memberFeeKindSchema,
-    /** A class's fee, or a personal training session's (18h-ii). */
-    of: z.enum(["class", "pt"]).default("class"),
-    /** The class it was for, as it was named then, or "Personal training with Ravi", and its day. */
+    /** A class's fee, a personal training session's (18h-ii), or the membership's own freeze fee (18z). */
+    of: z.enum(["class", "pt", "membership"]).default("class"),
+    /** The class it was for, as it was named then, or "Personal training with Ravi", and its day;
+     *  a freeze fee's membership and the first day of the month it is for. */
     forName: z.string().min(1),
     on: daySchema,
+    /** A freeze fee's last day of that month; null for every other fee. */
+    to: daySchema.nullable().default(null),
     amountMinor: minorSchema,
     tax: z
       .object({ name: z.string(), bp: z.number().int().min(1).max(3000), included: z.boolean(), minor: minorSchema })
@@ -358,11 +363,21 @@ export type NoteMemberRefundRequest = z.infer<typeof noteMemberRefundRequestSche
  *  first bill the part month up to it (18y); null bills each from the day it starts. 28 at most,
  *  so every month has it (`BILL_DAY_MAX` in `heldMemberships.ts`). Left out, it is as it was. */
 const billDaySchema = z.number().int().min(1).max(28).nullable();
+/** `freezeFeeMinor`: charged for each month a renewing membership is frozen (18z); 0 for none.
+ *  Left out, it is as it was. */
+const freezeFeeSchema = z.number().int().min(0).max(99_999_999);
 export const billSettingsSchema = z
-  .object({ overdueAfterDays: z.number().int().min(0).max(BILL_OVERDUE_DAYS_MAX), billDay: billDaySchema.optional() })
+  .object({
+    overdueAfterDays: z.number().int().min(0).max(BILL_OVERDUE_DAYS_MAX),
+    billDay: billDaySchema.optional(),
+    freezeFeeMinor: freezeFeeSchema.optional(),
+  })
   .strict();
 export type BillSettings = z.infer<typeof billSettingsSchema>;
 
-/** The settings, and whether this reader may change them. */
-export const billSettingsResponseSchema = billSettingsSchema.extend({ billDay: billDaySchema, canChange: z.boolean() }).strict();
+/** The settings, and whether this reader may change them. `currency` is the gym's money, for
+ *  the freeze fee's box. */
+export const billSettingsResponseSchema = billSettingsSchema
+  .extend({ billDay: billDaySchema, freezeFeeMinor: freezeFeeSchema, currency: z.string().regex(/^[A-Z]{3}$/).nullable(), canChange: z.boolean() })
+  .strict();
 export type BillSettingsResponse = z.infer<typeof billSettingsResponseSchema>;

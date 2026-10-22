@@ -878,7 +878,9 @@ describe('changing a membership', () => {
 
     fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
     fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
-    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'freeze', undefined));
+    // A gym with no freeze fee: no fee line, and none sent (18z).
+    expect(screen.queryByTestId('held-freeze-fee')).toBeNull();
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'freeze', { feeMinor: 0 }));
     expect(await (await boxSoon()).findByText('Gold Monthly is frozen.')).toBeTruthy();
 
     fireEvent.click(box().getByRole('button', { name: 'Unfreeze' }));
@@ -896,6 +898,48 @@ describe('changing a membership', () => {
     const paymentId = gold.billing.bills[0].payments[0].id;
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, `payments/${paymentId}/void`, { reason: 'mistake' }));
     expect(await (await boxSoon()).findByText('Payment voided.')).toBeTruthy();
+  });
+
+  it("Freeze with the gym's freeze fee (18z): the box says what it charges and when, ticked; unticked sends none; staff who cannot record payments have no tick", async () => {
+    const gold = { ...held(1, GOLD, '2026-10-04', true), freezeFeeMinor: 1000 };
+    const frozen = { ...held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, TODAY]]), freezeFeeMinor: 1000 };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([frozen]));
+    render(draw(ADA, 'Ada Lovelace'));
+
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    const ask = within(screen.getByTestId('held-ask-freeze'));
+    expect(ask.getByText('Freeze fee: £10.00 today, then £10.00 on the 20th of each month until it is unfrozen.')).toBeTruthy();
+    const tick = ask.getByRole('checkbox', { name: 'Charge Ada Lovelace the freeze fee' });
+    expect(tick.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(ask.getByRole('button', { name: 'Freeze' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'freeze', { feeMinor: 1000 }));
+    expect(await (await boxSoon()).findByText("Gold Monthly is frozen. The £10.00 freeze fee is on Ada Lovelace's bills, due today.")).toBeTruthy();
+    // Frozen with it, the membership says so.
+    expect(box().getByTestId('held-freeze-fee-line').textContent).toBe('Freeze fee £10.00 each month while frozen.');
+    cleanup();
+
+    // Unticked: frozen with no fee.
+    orgService.changeHeldMembership.mockResolvedValue(answer([{ ...frozen, freezeFeeMinor: 0 }]));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('checkbox', { name: 'Charge Ada Lovelace the freeze fee' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'freeze', { feeMinor: 0 }));
+    expect(await (await boxSoon()).findByText('Gold Monthly is frozen.')).toBeTruthy();
+    expect(box().queryByTestId('held-freeze-fee-line')).toBeNull();
+    cleanup();
+
+    // Staff without the payments tick: the fee line, no tick, and the fee sent.
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold], false, { canBill: false }));
+    orgService.changeHeldMembership.mockResolvedValue(answer([frozen], false, { canBill: false }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    const theirs = within(screen.getByTestId('held-ask-freeze'));
+    expect(theirs.getByText(/^Freeze fee: £10\.00 today/)).toBeTruthy();
+    expect(theirs.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(theirs.getByRole('button', { name: 'Freeze' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenLastCalledWith(GYM, ADA, gold.id, 'freeze', { feeMinor: 1000 }));
   });
 
   it('a membership somebody else changed first is said so, and read again', async () => {

@@ -82,7 +82,7 @@ export function owedItems(held, today) {
         kind: 'fee',
         membership: m,
         fee,
-        title: `${MEMBER_FEE_WORDS[fee.fee] ?? 'Fee'} · ${fee.forName} · ${shortDay(fee.on, false)}`,
+        title: `${MEMBER_FEE_WORDS[fee.fee] ?? 'Fee'} · ${fee.forName} · ${fee.fee === 'freeze' && fee.to ? billDays({ from: fee.on, to: fee.to }) : shortDay(fee.on, false)}`,
         amount: formatMinor(fee.amountMinor, m.currency),
         tag: fee.state === 'overdue' ? 'Overdue' : 'Payment due',
         overdue: fee.state === 'overdue',

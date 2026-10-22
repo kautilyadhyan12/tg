@@ -42,6 +42,8 @@ import {
   paymentLine,
   statusTag,
   firstBillPart,
+  freezeFeeAsk,
+  freezeFeeLine,
 } from './heldMembershipsView';
 import {
   CANCEL_REASONS,
@@ -185,6 +187,8 @@ export default function MemberMemberships({
   const [refundForm, setRefundForm] = useState(null);
   /** The Void payment and Void refund boxes: { reason, tried }, for the membership in `open`. */
   const [voidForm, setVoidForm] = useState(null);
+  // The Freeze box's tick for its fee (18z): ticked each time the box opens.
+  const [freezeCharge, setFreezeCharge] = useState(true);
   /** The membership whose bills are all drawn, by its id. */
   const [allBills, setAllBills] = useState(null);
   /** A fee's own form (18h-i): { what: 'payFee' | 'waiveFee' | 'voidFeePayment', billId,
@@ -357,6 +361,8 @@ export default function MemberMemberships({
       }
       // The gym's billing day changed (18y): read it again, and keep the box open with its new total.
       if (code === 'membership_bill_day_changed') setAttempt((n) => n + 1);
+      // The gym's freeze fee changed (18z): read it again, and keep the box open with the new fee.
+      if (code === 'membership_freeze_fee_changed') setAttempt((n) => n + 1);
       // Somebody else changed it first: show it as it is now.
       if (STALE_CODES.includes(errorCode(err))) {
         setOpen(null);
@@ -380,6 +386,7 @@ export default function MemberMemberships({
     setRefusal(null);
     setEnding(null);
     setVoidForm({ reason: '', tried: false });
+    setFreezeCharge(true);
     setOpen({ what, id: m.id });
   };
 
@@ -1533,7 +1540,12 @@ export default function MemberMemberships({
     }
     const act = {
       undo: () => run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'paid', { paidPeriods: undo.paidPeriods }), words.done),
-      freeze: () => change('freeze', m, 'freeze'),
+      // The fee the box showed, or none where staff unticked it (18z).
+      freeze: () => {
+        const fee = freezeFeeAsk(m, name, today);
+        const charged = fee !== null && (freezeCharge || !shown.canBill);
+        return run('freeze', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'freeze', { feeMinor: charged ? m.freezeFeeMinor : 0 }), charged ? fee.done : null);
+      },
       unfreeze: () => change('unfreeze', m, 'unfreeze'),
       cancel: () => change('cancel', m, 'cancel', { when: 'today' }),
     }[open.what];
@@ -1542,6 +1554,27 @@ export default function MemberMemberships({
       <div className="rounded-[14px] p-3 flex flex-col gap-2" style={{ background: 'var(--raise)' }} data-testid={`held-ask-${open.what}`}>
         <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
         <p className="c-s14 c-t2 m-0">{words.detail}</p>
+        {open.what === 'freeze' && freezeFeeAsk(m, name, today) !== null ? (
+          <div className="flex flex-col gap-2" data-testid="held-freeze-fee">
+            <p className="c-s14 c-w5 c-t1 m-0">{freezeFeeAsk(m, name, today).line}</p>
+            {/* Freezing with no fee is a waiver: staff who record payments only. */}
+            {shown.canBill ? (
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={freezeCharge}
+                onClick={() => setFreezeCharge(!freezeCharge)}
+                disabled={busy}
+                className="self-start flex items-start gap-3 min-h-11 text-left"
+              >
+                <span className={freezeCharge ? 'c-check c-check-on mt-px' : 'c-check mt-px'}>
+                  {freezeCharge ? <Check aria-hidden="true" className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+                </span>
+                <span className="c-s15 c-w5 c-t1">{freezeFeeAsk(m, name, today).tick}</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           {cancelling && words.laterButton !== null ? (
             <button type="button" className={MAIN} disabled={busy} onClick={() => void change('cancelLater', m, 'cancel', { when: 'period_end' })}>
@@ -1597,6 +1630,11 @@ export default function MemberMemberships({
         <span className="c-s14 c-t2">{termLine(m)}</span>
         {heldDiscountLine(m) !== null ? <span className="c-s14 c-t2">{heldDiscountLine(m)}</span> : null}
         {heldTaxLine(m) !== null ? <span className="c-s14 c-t2">{heldTaxLine(m)}</span> : null}
+        {freezeFeeLine(m) !== null ? (
+          <span className="c-s14 c-t2" data-testid="held-freeze-fee-line">
+            {freezeFeeLine(m)}
+          </span>
+        ) : null}
         <span className="c-s14 c-t2">{[datesLine(m), classes].filter((part) => part !== null).join(' · ')}</span>
         {changeLine(m, today) !== null ? (
           <span className="c-s14 c-t2" data-testid="held-change-line">

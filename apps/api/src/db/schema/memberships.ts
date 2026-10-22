@@ -190,6 +190,9 @@ export const gymHeldMemberships = pgTable(
     /** Given while the gym billed everyone on one day (0154; 18y): the first of those days after
      *  the start, from which its full periods count; its first period is the part month before. */
     fullFrom: date("full_from"),
+    /** What its freeze charges a month (0155; 18z): the gym's freeze fee when it was frozen, or 0
+     *  where staff froze it with no fee. Read only while it is frozen. */
+    freezeFeeMinor: integer("freeze_fee_minor").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -199,6 +202,7 @@ export const gymHeldMemberships = pgTable(
       sql`(${t.entryId} IS NULL) = (${t.recordDeletedAt} IS NOT NULL) AND (${t.entryId} IS NOT NULL OR ${t.status} IN ('ended','cancelled'))`,
     ),
     check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
+    check("gym_held_memberships_freeze_fee_check", sql`${t.freezeFeeMinor} BETWEEN 0 AND 99999999`),
     check("gym_held_memberships_replaces_check", sql`${t.replacesId} IS NULL OR ${t.replacesId} <> ${t.id}`),
     check(
       "gym_held_memberships_full_from_check",
@@ -336,9 +340,13 @@ export const gymMemberBills = pgTable(
     ),
     check(
       "gym_member_bills_fee_check",
-      sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL)`,
+      sql`(${t.periodIndex} IS NULL) = (${t.fee} IS NOT NULL) AND (${t.fee} IS NULL OR (${t.fee} IN ('late_cancel','no_show','freeze') AND char_length(${t.feeFor}) BETWEEN 1 AND 80 AND ${t.coversFrom} IS NOT NULL)) AND (${t.fee} IS NOT NULL OR ${t.feeFor} IS NULL) AND (${t.classBookingId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.fee} <> 'freeze' OR (${t.classBookingId} IS NULL AND ${t.ptAppointmentId} IS NULL))`,
     ),
     // `0136` holds its foreign key, which sets the booking to null when it goes.
+    // One freeze fee a month of a membership (0155; 18z); a waived one counts.
+    uniqueIndex("gym_member_bills_freeze_fee_uq")
+      .on(t.heldMembershipId, t.coversFrom)
+      .where(sql`${t.fee} = 'freeze' AND (${t.status} <> 'void' OR ${t.voidReason} = 'waived')`),
     uniqueIndex("gym_member_bills_class_fee_uq").on(t.classBookingId).where(sql`${t.classBookingId} IS NOT NULL AND ${t.status} <> 'void'`),
     // `0138` holds the session's foreign key, which sets it to null when the session goes.
     check("gym_member_bills_pt_fee_check", sql`(${t.ptAppointmentId} IS NULL OR ${t.fee} IS NOT NULL) AND (${t.ptAppointmentId} IS NULL OR ${t.classBookingId} IS NULL)`),

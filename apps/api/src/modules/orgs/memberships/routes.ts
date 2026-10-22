@@ -33,6 +33,7 @@ import type { z } from "zod";
 import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   cancelHeldMembershipRequestSchema,
+  freezeHeldMembershipRequestSchema,
   changeHeldMembershipRequestSchema,
   giveHeldMembershipRequestSchema,
   membershipLinkPreviewRequestSchema,
@@ -225,6 +226,9 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
   app.post(`${heldUrl}/:membershipId/freeze`, heldGuarded, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
+    // No body is a freeze with no fee, as a screen from before 18z sends it.
+    const body = parseOr400(freezeHeldMembershipRequestSchema, req.body ?? {}, req, reply);
+    if (body === null) return;
     const answer = await held.moveHeldMembership(
       heldDeps,
       requireUserId(req),
@@ -232,6 +236,9 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
       params.entryId,
       params.membershipId,
       { type: "freeze" },
+      null,
+      null,
+      body.feeMinor,
     );
     return sendHeld(reply, req, answer);
   });

@@ -680,6 +680,32 @@ export function shownRenewal(view: Pick<HeldMembershipView, "renewsOn" | "paymen
 // ── Refer a friend's free days (§16.3; ROADMAP 20e-ii-b-ii-b) ────────────────
 
 
+// ── A fee while frozen (ROADMAP 18z) ─────────────────────────────────────────
+
+/** Whether a gym's freeze fee is charged on this membership: one that renews by itself and has a
+ *  price. One paid once, a pack, a trial and a free one freeze with no fee. */
+export function freezeFeeApplies(m: Pick<HeldMembership, "kind" | "renews" | "free">): boolean {
+  return m.kind === "recurring" && m.renews && !m.free;
+}
+
+/** THE MONTH OF A FREEZE THAT `today` FALLS IN, the gym's own day, which the freeze fee is
+ *  charged for: the first from the day it was frozen, then one each month on that day while it
+ *  stays frozen. Each is counted from the freeze day (31 Jan, 28 Feb, 31 Mar), never from the month
+ *  before, and each ends the day before the next begins, so no day is charged twice or missed.
+ *  Only this month is ever opened: one that began earlier with no fee was never asked for (the
+ *  person was a past member then) and is never charged afterwards, as a period's bill is not
+ *  (`countAfterGap`). Null before the freeze. */
+export function freezeFeeMonth(frozenOn: string, today: string): { from: string; to: string } | null {
+  const p = parts(frozenOn);
+  const q = parts(today);
+  if (p === null || q === null) throw new Error(`not a day: ${frozenOn} or ${today}`);
+  if (today < frozenOn) return null;
+  let k = (q[0] - p[0]) * 12 + (q[1] - p[1]);
+  while (k > 0 && addMonths(frozenOn, k) > today) k -= 1;
+  while (addMonths(frozenOn, k + 1) <= today) k += 1;
+  return { from: addMonths(frozenOn, k), to: addDays(addMonths(frozenOn, k + 1), -1) };
+}
+
 /** The day a membership's dates are read on: a frozen one's stand still at its freeze. */
 const asOfDay = (m: HeldMembership, today: string): string => (m.status === "frozen" && m.frozenOn !== null ? m.frozenOn : today);
 
@@ -781,6 +807,10 @@ export const heldMembershipSchema = z
     /** Billed from the gym's day (18y): the day its full periods start; its first bill is the part month before it. */
     fullFrom: daySchema.nullable().default(null),
     frozenOn: daySchema.nullable(),
+    /** The freeze fee a month (18z): while it is frozen, what this freeze charges (0 where it was
+     *  frozen with none); else what a freeze today would charge, 0 where the gym has no fee or it
+     *  does not apply (`freezeFeeApplies`). */
+    freezeFeeMinor: z.number().int().min(0).default(0),
     classesLeft: z.number().int().min(0).nullable(),
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
      *  list's day, so a screen does not print it as the day the person started. */
@@ -950,6 +980,11 @@ export const cancelHeldMembershipRequestSchema = z
   })
   .strict();
 export type CancelHeldMembershipRequest = z.infer<typeof cancelHeldMembershipRequestSchema>;
+
+/** Freeze (18z): `feeMinor` is the freeze fee a month the screen showed and staff left ticked, or 0
+ *  to freeze it with no fee. A fee that is no longer the gym's is refused, never charged. */
+export const freezeHeldMembershipRequestSchema = z.object({ feeMinor: z.number().int().min(0).max(99_999_999).default(0) }).strict();
+export type FreezeHeldMembershipRequest = z.infer<typeof freezeHeldMembershipRequestSchema>;
 
 export const paidHeldMembershipRequestSchema = z
   .object({ paidPeriods: z.number().int().min(0).max(100_000) })

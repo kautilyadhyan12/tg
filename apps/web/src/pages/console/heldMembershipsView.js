@@ -10,6 +10,7 @@ import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   addDays,
   classBookingsEndingSchema,
+  dayOfMonthWords,
   daysBetween,
   formatMinor,
   fullFromOf,
@@ -260,6 +261,25 @@ function endingThings(n, bookings, sessions) {
   const pt = sessions === 1 ? '1 session' : `${sessions.toLocaleString('en')} sessions`;
   if (sessions === 0) return bookings;
   return n === 0 ? pt : `${bookings} and ${pt}`;
+}
+
+/** The freeze fee a Freeze box offers (18z), or null where none is charged: its line, the tick's
+ *  words and what is said once it is frozen with it. `today` is the gym's own day. */
+export function freezeFeeAsk(m, name, today) {
+  if (m.view.status === 'frozen' || !(m.freezeFeeMinor > 0)) return null;
+  const amount = formatMinor(m.freezeFeeMinor, m.currency);
+  const day = Number(today.slice(8, 10));
+  return {
+    line: `Freeze fee: ${amount} today, then ${amount} on the ${dayOfMonthWords(day)} of each month until it is unfrozen.`,
+    tick: `Charge ${name} the freeze fee`,
+    done: `${m.typeName} is frozen. The ${amount} freeze fee is on ${name}'s bills, due today.`,
+  };
+}
+
+/** A frozen membership's freeze fee (18z), or null where it was frozen with none. */
+export function freezeFeeLine(m) {
+  if (m.view.status !== 'frozen' || !(m.freezeFeeMinor > 0)) return null;
+  return `Freeze fee ${formatMinor(m.freezeFeeMinor, m.currency)} each month while frozen.`;
 }
 
 /** What each press did, said back in one line. */
