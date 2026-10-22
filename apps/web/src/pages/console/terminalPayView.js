@@ -41,6 +41,9 @@ export function terminalPayWaitWords(payment, name) {
   };
 }
 
+/** A fee's payment still on the Terminal after the fee was taken off (marked Came, 18d-vi-b-i). */
+export const TERMINAL_FEE_NOT_OWED = 'This fee is no longer owed. Cancel it on the Terminal.';
+
 /** What a payment that ended is said as, in the place it was pressed. */
 export function terminalPayOutcomeLine(payment, name, billLeftMinor) {
   const who = personNames(name).first;

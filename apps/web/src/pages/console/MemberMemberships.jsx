@@ -895,6 +895,7 @@ export default function MemberMemberships({
         payment={terminalPay.payment}
         name={name}
         showName={terminalList.length > 1}
+        notOwed={terminalPay.feeBillId !== null && !(m.billing?.fees ?? []).some((f) => f.id === terminalPay.feeBillId)}
         onAnswer={onTerminalAnswer}
         checkEveryMs={checkEveryMs}
         onEnded={(line) => {

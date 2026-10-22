@@ -363,6 +363,7 @@ describe('Take payment on Terminal for a fee', () => {
     expect(row.queryByTestId('held-fee')).toBeNull();
     const wait = within(await row.findByTestId('terminal-pay-wait'));
     expect(wait.getByText('Waiting for Tara to pay $10.00 on the Terminal')).toBeTruthy();
+    expect(wait.getByText('This fee is no longer owed. Cancel it on the Terminal.')).toBeTruthy();
     fireEvent.click(wait.getByRole('button', { name: 'Cancel' }));
     expect((await row.findByTestId('terminal-pay-ended')).textContent).toContain('Cancelled. Nothing was charged.');
     expect(orgService.cancelTerminalPayment).toHaveBeenCalledWith(GYM, TARA, PAY_ID);
