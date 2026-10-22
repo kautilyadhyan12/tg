@@ -547,8 +547,13 @@ d("move to another membership (real Postgres)", () => {
       ]);
 
       // Low-2: Noah moves to Off Peak on 1 November; staff then cancel Off Peak before it starts, and
-      // Gold renews again as it did before.
+      // Gold renews again as it did before. A November bill already open on Gold goes with the change,
+      // and is owed again once it is undone (the re-check's Low).
+      await sql`
+        INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to)
+        VALUES (${gymId}, ${noahGold}, 1, 8000, 'USD', '2026-11-01', '2026-11-01', '2026-11-30')`;
       expect((await change(gymId, noah, noahGold, owner.cookies, changeBody(cheap, 3000, 0, 3000, { when: "next_payment", startsOn: "2026-11-01", paid: false }))).statusCode).toBe(200);
+      expect((await bills(gymId, noahGold)).map((b) => b[3])).toEqual(["paid", "void"]);
       const offPeak = (await rows(gymId, noah))[1]?.id ?? "";
       expect((await page(gymId, noah, owner.cookies)).memberships.find((m) => m.id === offPeak)?.changedFrom).toEqual({ typeName: "Gold Monthly", stopped: true });
       expect((await rows(gymId, noah)).map((r) => [r.type, r.renews])).toEqual([
@@ -562,6 +567,13 @@ d("move to another membership (real Postgres)", () => {
         ["Off Peak", "cancelled", true],
       ]);
       expect(changeOf(await page(gymId, noah, owner.cookies), noahGold)).toMatchObject({ ok: true, nextOn: "2026-11-01" });
+      expect(await bills(gymId, noahGold)).toEqual([
+        ["2026-10-01", 8000, 0, "paid"],
+        ["2026-11-01", 8000, 0, "open"],
+      ]);
+      // On 2 November the payment due has its bill to pay.
+      clock = new Date("2026-11-02T17:00:00Z");
+      expect((await page(gymId, noah, owner.cookies)).memberships.find((m) => m.id === noahGold)?.billing?.pay).toMatchObject({ periodIndex: 1, leftMinor: 8000 });
     },
     T,
   );

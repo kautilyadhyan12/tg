@@ -963,14 +963,22 @@ export async function moveHeld(
     // renews again, as it did before the change (18x, round one, Low-2).
     let renewsAgain = false;
     if (input.event.type === "cancel" && m.status === "cancelled" && before.membership.startsOn > input.today) {
-      const back = await tx`
+      const back = await tx<{ id: string; starts_on: string }[]>`
         UPDATE gym_held_memberships o SET renews = true, updated_at = ${input.now}
         FROM gym_held_memberships n
         WHERE n.gym_id = ${input.gymId} AND n.id = ${before.id} AND n.replaced_stopped
           AND o.gym_id = n.gym_id AND o.id = n.replaces_id AND o.entry_id = ${input.entryId}
           AND o.status = 'active' AND o.kind = 'recurring' AND NOT o.renews
-        RETURNING o.id`;
+        RETURNING o.id, n.starts_on::text AS starts_on`;
       renewsAgain = back.length > 0;
+      // The bills the change cancelled with it (unpaid, for days after its last day) are owed again,
+      // so a payment due always has its bill to pay (re-check, Low).
+      for (const old of back) {
+        await tx`
+          UPDATE gym_member_bills SET status = 'open', updated_at = ${input.now}
+          WHERE gym_id = ${input.gymId} AND held_membership_id = ${old.id} AND status = 'void'
+            AND void_reason IS NULL AND period_index IS NOT NULL AND due_on >= ${old.starts_on}::date`;
+      }
     }
     await voidBills(tx, input.gymId, voided, input.now);
     // A Refer a friend gift taken off a bill cancelled with it waits for the next bill.
