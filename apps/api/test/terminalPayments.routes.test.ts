@@ -220,7 +220,8 @@ function fakeSquare() {
       if (a === undefined) return Promise.resolve(unauthorized);
       const p = payments.get(id);
       if (p?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      const { accountId: _, ...payment } = p;
+      const payment: SquarePayment = { ...p };
+      delete (payment as { accountId?: string }).accountId;
       return Promise.resolve({ kind: "ok", value: payment });
     },
   };
@@ -240,7 +241,9 @@ function fakeSquare() {
     sees: () => Object.assign(open(deviceId), { status: "IN_PROGRESS" }),
     /** Their card is being read: Square no longer lets the checkout be cancelled. */
     paying: () => Object.assign(open(deviceId), { status: "IN_PROGRESS", paying: true }),
-    taps: (over: Partial<SquarePayment> = {}) => take(open(deviceId), over),
+    taps: (over: Partial<SquarePayment> = {}) => {
+      take(open(deviceId), over);
+    },
     cancels: () => Object.assign(open(deviceId), { status: "CANCELED", cancelReason: "BUYER_CANCELED" }),
   });
   return { api, allow, state, devices, checkouts, payments, at };
