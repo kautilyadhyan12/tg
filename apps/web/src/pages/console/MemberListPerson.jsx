@@ -1265,7 +1265,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           {gift !== null ? (
             <FriendGiftNote gift={gift} applied={!giftOff} onRemove={() => setGiftOff(true)} onPutBack={() => setGiftOff(false)} disabled={busy} />
           ) : null}
-          {total !== null && total.shows && ((gift !== null && !giftOff) || total.joiningFeeMinor > 0) ? <MembershipTotal summary={total} /> : null}
+          {total !== null && total.shows && ((gift !== null && !giftOff) || total.joiningFeeMinor > 0 || total.part) ? <MembershipTotal summary={total} /> : null}
           {HELD_ANSWERS.some((key) => (form[key] ?? '').trim() !== '') ? (
             <p className="c-hint m-0" data-testid="typed-not-saved">
               You can now pick a membership. The status and payment you typed won&apos;t be saved.

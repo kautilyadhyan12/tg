@@ -43,6 +43,9 @@ describe('the part month the desk is shown is the one the first bill charges', (
       { label: 'Total', value: '$27.41', strong: true },
     ]);
     expect(summary.later).toBe('This pays for 15 Oct – 31 Oct 2026. From 1 Nov 2026, each payment is $50.00.');
+    // Add member draws its total box for a part month as it does for a joining fee.
+    expect([summary.shows, summary.part]).toEqual([true, true]);
+    expect(membershipSummary({ ...GOLD, billDay: null }, null).part).toBe(false);
     const body = giveBody('k-1', GOLD, { typeId: GOLD.id, startsOn: '2026-10-15', paid: true, method: 'cash' }, null, summary, null, 0);
     expect(body).toMatchObject({ totalMinor: 2741, fullFrom: '2026-11-01', priceMinor: 5000 });
   });

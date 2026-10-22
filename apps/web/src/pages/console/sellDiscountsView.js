@@ -335,6 +335,8 @@ export function membershipSummary(type, discount, taxIncluded = false, memberGif
     lines,
     later,
     shows: costs.offMinor !== null || giftOffMinor > 0 || tax !== null || fee > 0 || part !== null,
+    // Its first bill is a part month (18y): a form that draws totals only for some things draws this one.
+    part: part !== null,
   };
 }
 
