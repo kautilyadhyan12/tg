@@ -243,7 +243,12 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   // Square took the money on the Terminal, and the bill had changed meanwhile (18d-vi-a).
   // Square's answer could not be read past its time, so the money may have been taken (18d-vi-a).
   "org.terminal_payment_unchecked": (s) => `Started ${pay(s)} from ${person(s)} on a Square Terminal that couldn't be checked. Check it in Square`,
-  "org.terminal_payment_not_recorded": (s) => `Took ${pay(s)} from ${person(s)} on a Square Terminal, but the bill had changed, so it isn't recorded. Check it in Square`,
+  "org.terminal_payment_not_recorded": (s) =>
+    text(s, "why") === "amount_differs"
+      ? `Square took another amount than asked from ${person(s)} on a Square Terminal, so it isn't recorded. Refund it in Square`
+      : text(s, "feeBillId") === null
+        ? `Took ${pay(s)} from ${person(s)} on a Square Terminal, but the bill had changed, so it isn't recorded. Check it in Square`
+        : `Took ${pay(s)} from ${person(s)} on a Square Terminal for a fee no longer owed, so it isn't recorded. Refund it in Square`,
   "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");

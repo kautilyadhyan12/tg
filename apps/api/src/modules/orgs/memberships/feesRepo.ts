@@ -15,6 +15,9 @@
 // a receipt, or waived by staff. It never moves a membership's dates or its count of paid
 // periods, and the period rules never read it (`billsFor` and the rest read periods alone).
 // With `billsSql.ts` and `billsRepo.ts`, the only files that write the bills.
+//
+// A fee is paid on the gym's Square Terminal too (18d-vi-b-i): while that payment waits, nothing
+// else pays or waives the fee, and a payment taken there is refunded in Square, never voided here.
 import type { Sql, TransactionSql } from "postgres";
 import {
   classFeeFor,
@@ -33,7 +36,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { insertAudit } from "../repo.js";
 import { lockedEntry } from "./heldRepo.js";
-import { billOf, insertPayment, type BillTax, type Voided } from "./billsSql.js";
+import { billOf, insertPayment, terminalWaiting, type BillTax, type Voided } from "./billsSql.js";
 
 const STATUS_FOR: Record<MemberFeeKind, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
 
@@ -437,7 +440,11 @@ export type FeeWriteOutcome =
   /** A past member's payment is voided only once they are back on the list, as a period's is. */
   | { kind: "past_member" }
   /** The fee is paid, waived or taken off, or is not the amount the screen showed. */
-  | { kind: "fee_changed" };
+  | { kind: "fee_changed" }
+  /** A payment for the membership waits on the Terminal (18d-vi-b-i). */
+  | { kind: "terminal_waiting" }
+  /** Paid on the Terminal: refunded in Square, never voided here. */
+  | { kind: "terminal_payment" };
 
 /** One fee of one membership of one record, held to the commit; null where it is not theirs. */
 async function lockedFee(
@@ -454,72 +461,88 @@ async function lockedFee(
   return row === undefined ? null : { ...row, status: memberBillStatusSchema.parse(row.status) };
 }
 
+export interface FeePaymentInput {
+  gymId: string;
+  entryId: string;
+  membershipId: string;
+  billId: string;
+  requestKey: string;
+  amountMinor: number;
+  method: MemberPaymentMethod;
+  /** The payment company's own id (the Terminal's, 18d-vi-b-i): the same one twice is one row. */
+  provider?: { name: string; paymentId: string };
+  today: string;
+  actorUserId: string | null;
+  now: Date;
+}
+
 /** Staff record that a fee was paid, all of it, with a receipt. The same request twice is
  *  one payment. */
-export async function recordFeePayment(
-  sql: Sql,
-  input: {
-    gymId: string;
-    entryId: string;
-    membershipId: string;
-    billId: string;
-    requestKey: string;
-    amountMinor: number;
-    method: MemberPaymentByHand;
-    today: string;
-    actorUserId: string;
-    now: Date;
-  },
-): Promise<FeeWriteOutcome> {
+export async function recordFeePayment(sql: Sql, input: FeePaymentInput & { method: MemberPaymentByHand; actorUserId: string }): Promise<FeeWriteOutcome> {
   return await sql.begin(async (tx): Promise<FeeWriteOutcome> => {
-    if ((await lockedEntry(tx, input.gymId, input.entryId)) === null) return { kind: "entry_not_found" };
-    const [byKey] = await tx<{ bill_id: string; amount_minor: number; method: string; undone: boolean }[]>`
-      SELECT bill_id, amount_minor, method, undone_at IS NOT NULL AS undone
-      FROM gym_member_payments WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
-    if (byKey !== undefined) {
-      const same = byKey.bill_id === input.billId && byKey.amount_minor === input.amountMinor && byKey.method === input.method && !byKey.undone;
-      return same ? { kind: "ok" } : { kind: "request_reused" };
-    }
-    const fee = await lockedFee(tx, input);
-    if (fee === null) return { kind: "fee_not_found" };
-    if (fee.status !== "open" || fee.amount_minor !== input.amountMinor) return { kind: "fee_changed" };
-    const recorded = await insertPayment(
-      tx,
-      {
-        gymId: input.gymId,
-        billId: fee.id,
-        amountMinor: fee.amount_minor,
-        currency: fee.currency,
-        method: input.method,
-        requestKey: input.requestKey,
-        paidOn: input.today,
-        recordedBy: input.actorUserId,
-        provider: null,
-      },
-      input.now,
-    );
-    if (recorded === null) throw new Error("a fee's payment was not recorded under the gym's lock");
-    const paymentId = recorded.id;
-    await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now} WHERE gym_id = ${input.gymId} AND id = ${fee.id}`;
-    await insertAudit(tx, {
-      actorUserId: input.actorUserId,
-      gymId: input.gymId,
-      action: "org.member_fee_paid",
-      targetType: "gym_member_payment",
-      targetId: paymentId,
-      meta: {
-        entryId: input.entryId,
-        membershipId: input.membershipId,
-        billId: fee.id,
-        fee: fee.fee,
-        amountMinor: String(fee.amount_minor),
-        currency: fee.currency,
-        method: input.method,
-        ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
-      },
-    });
-    return { kind: "ok" };
+    const done = await recordFeePaymentIn(tx, input);
+    return done.kind === "recorded" ? { kind: "ok" } : done;
   });
+}
+
+/** `recordFeePayment` inside a transaction of the caller's: the Terminal's payment (18d-vi-b-i) is
+ *  recorded in the same one that marks it paid. Refuses before writing anything. */
+export async function recordFeePaymentIn(tx: TransactionSql, input: FeePaymentInput): Promise<FeeWriteOutcome | { kind: "recorded"; paymentId: string }> {
+  if ((await lockedEntry(tx, input.gymId, input.entryId)) === null) return { kind: "entry_not_found" };
+  const [byKey] = await tx<{ id: string; bill_id: string; amount_minor: number; method: string; undone: boolean }[]>`
+    SELECT id, bill_id, amount_minor, method, undone_at IS NOT NULL AS undone
+    FROM gym_member_payments WHERE gym_id = ${input.gymId} AND request_key = ${input.requestKey}`;
+  if (byKey !== undefined) {
+    const same = byKey.bill_id === input.billId && byKey.amount_minor === input.amountMinor && byKey.method === input.method && !byKey.undone;
+    return same ? { kind: "recorded", paymentId: byKey.id } : { kind: "request_reused" };
+  }
+  if (input.provider !== undefined) {
+    const [byCompany] = await tx<{ id: string }[]>`
+      SELECT id FROM gym_member_payments
+      WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
+    if (byCompany !== undefined) return { kind: "recorded", paymentId: byCompany.id };
+  }
+  const fee = await lockedFee(tx, input);
+  if (fee === null) return { kind: "fee_not_found" };
+  // Recorded by hand while the Terminal waits: both would be taken.
+  if (input.method !== "terminal" && (await terminalWaiting(tx, input.gymId, input.membershipId))) return { kind: "terminal_waiting" };
+  if (fee.status !== "open" || fee.amount_minor !== input.amountMinor) return { kind: "fee_changed" };
+  const recorded = await insertPayment(
+    tx,
+    {
+      gymId: input.gymId,
+      billId: fee.id,
+      amountMinor: fee.amount_minor,
+      currency: fee.currency,
+      method: input.method,
+      requestKey: input.requestKey,
+      paidOn: input.today,
+      recordedBy: input.actorUserId,
+      provider: input.provider ?? null,
+    },
+    input.now,
+  );
+  if (recorded === null) throw new Error("a fee's payment was not recorded under the gym's lock");
+  const paymentId = recorded.id;
+  await tx`UPDATE gym_member_bills SET status = 'paid', updated_at = ${input.now} WHERE gym_id = ${input.gymId} AND id = ${fee.id}`;
+  await insertAudit(tx, {
+    actorUserId: input.actorUserId,
+    gymId: input.gymId,
+    action: "org.member_fee_paid",
+    targetType: "gym_member_payment",
+    targetId: paymentId,
+    meta: {
+      entryId: input.entryId,
+      membershipId: input.membershipId,
+      billId: fee.id,
+      fee: fee.fee,
+      amountMinor: String(fee.amount_minor),
+      currency: fee.currency,
+      method: input.method,
+      ...(recorded.paidByEntryId === null ? {} : { paidByEntryId: recorded.paidByEntryId }),
+    },
+  });
+  return { kind: "recorded", paymentId };
 }
 
 /** Staff waive an unpaid fee: the person no longer owes it. Kept, marked with who and when.
@@ -536,6 +559,8 @@ export async function waiveFee(
       SELECT void_reason = 'waived' AS waived FROM gym_member_bills WHERE gym_id = ${input.gymId} AND id = ${fee.id}`;
     if (waived?.waived === true) return { kind: "ok" };
     if (fee.status !== "open") return { kind: "fee_changed" };
+    // Waived while the person may be paying it on the Terminal.
+    if (await terminalWaiting(tx, input.gymId, input.membershipId)) return { kind: "terminal_waiting" };
     await tx`
       UPDATE gym_member_bills
       SET status = 'void', void_reason = 'waived', voided_on = ${input.today}::date, voided_by = ${input.actorUserId}, updated_at = ${input.now}
@@ -565,12 +590,14 @@ export async function voidFeePayment(
     if (entry === null) return { kind: "entry_not_found" };
     const fee = await lockedFee(tx, input);
     if (fee === null) return { kind: "fee_not_found" };
-    const [payment] = await tx<{ undone: boolean; amount_minor: number }[]>`
-      SELECT undone_at IS NOT NULL AS undone, amount_minor FROM gym_member_payments
+    const [payment] = await tx<{ undone: boolean; amount_minor: number; method: string }[]>`
+      SELECT undone_at IS NOT NULL AS undone, amount_minor, method FROM gym_member_payments
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND bill_id = ${fee.id}`;
     if (payment === undefined) return { kind: "payment_not_found" };
     if (payment.undone) return { kind: "ok" };
+    if (payment.method === "terminal") return { kind: "terminal_payment" };
     if (entry.past) return { kind: "past_member" };
+    if (await terminalWaiting(tx, input.gymId, input.membershipId)) return { kind: "terminal_waiting" };
     await tx`
       UPDATE gym_member_payments SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND undone_at IS NULL`;

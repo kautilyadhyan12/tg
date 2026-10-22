@@ -3680,8 +3680,8 @@ the day's takings name it "Late cancel fee · Spin" with the class's day, Report
 under its membership. A member reads the fees under a class's buttons and in the late
 cancel box; staff read each place's fee, and what No-show adds, on the class's list.
 **Not built**: personal training's fees (18h-ii), a notice for an unpaid fee, a fee's
-refund, and charging a saved card (18d: 24 hours after the fee, the bill's id as the
-company's idempotency key).
+refund. A fee is never charged to a saved card by itself: staff take it by hand or waive it
+(Kd, 2026-10-22, `rulings/2026-10-22-18d-vi-b-i.md`; it was to be charged 24 hours after).
 
 **As built, 18h-ii (2026-10-17; `rulings/2026-10-17-18h-ii.md`): the same fees for personal
 training.** Two amounts of their own in Booking rules, under Personal training (`gyms.pt_*`,
@@ -4203,7 +4203,10 @@ for an app that asks, and GoCardless is closed to Kd (RULINGS 2026-10-20).
   recorded once, as `terminal` with Square's payment id; while it waits nothing else pays, voids
   or cancels that membership's bill; a Terminal payment is refunded in Square, never voided here;
   money Square took that the bill can no longer take is kept as "not recorded" and told to Staff
-  activity. Square's test area approves up to $25.
+  activity. Square's test area approves up to $25. *As built, 18d-vi-b-i (a late cancel or no-show
+  fee):* the fee's own Record payment → Card on Terminal, all of it, the box under the fee; while
+  it waits nothing of that membership is paid by hand, and the fee is not waived; a fee taken off
+  meanwhile (marked Came) leaves Square's money "not recorded", told to Staff activity.
 - **The Square Reader, in Square's own app** (18d-iii-b): Square's payment message, matched by
   the Square customer KWAZO made for the member, records it; a payment with no member on it
   waits for staff to match, never guessed. Staff type the bill's total, so the gym keeps

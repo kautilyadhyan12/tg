@@ -125,6 +125,10 @@ describe("Staff activity's sentences", () => {
       ["attendance.visit_removed", { meta: { day: "2026-10-15" } }, "Removed the visit of a member no longer on your list on 15 Oct 2026"],
       ["org.member_list_entry_changed", {}, "Changed the details of a member no longer on your list"],
       ["org.referrals_changed", { meta: { on: "true", memberGift: "true", friendGift: "false" } }, "Changed Refer a friend"],
+      // Money Square took on the Terminal that is not on a bill: a bill changed, or a fee no longer owed (18d-vi-b-i).
+      ["org.terminal_payment_not_recorded", { about: "Amit Rao", currency: "USD", meta: { amountMinor: "4999", currency: "USD" } }, "Took a payment of $49.99 from Amit Rao on a Square Terminal, but the bill had changed, so it isn't recorded. Check it in Square"],
+      ["org.terminal_payment_not_recorded", { about: "Amit Rao", currency: "USD", meta: { amountMinor: "1000", currency: "USD", feeBillId: "6cc6acd4-0000-4000-8000-000000000001" } }, "Took a payment of $10.00 from Amit Rao on a Square Terminal for a fee no longer owed, so it isn't recorded. Refund it in Square"],
+      ["org.terminal_payment_not_recorded", { about: "Amit Rao", currency: "USD", meta: { amountMinor: "1000", currency: "USD", feeBillId: "6cc6acd4-0000-4000-8000-000000000001", why: "amount_differs" } }, "Square took another amount than asked from Amit Rao on a Square Terminal, so it isn't recorded. Refund it in Square"],
     ];
     for (const [action, over, line] of cases) expect(STAFF_LINES[action]?.(said(over)), action).toBe(line);
     // A studio's people are clients.

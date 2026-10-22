@@ -182,9 +182,9 @@ export const gymHeldMemberships = pgTable(
     taxIncluded: boolean("tax_included"),
     /** When its record was deleted for good (0116); set exactly when `entry_id` is null. */
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
-    /** The membership this one replaced when staff changed one for the other (0151; 18x). */
+    /** The membership this one replaced when staff changed one for the other (0152; 18x). */
     replacesId: uuid("replaces_id"),
-    /** The change set the one it replaced to stop at the end of what is paid (0151): cancelling
+    /** The change set the one it replaced to stop at the end of what is paid (0152): cancelling
      *  this one before it starts sets that one renewing again. */
     replacedStopped: boolean("replaced_stopped").notNull().default(false),
     createdAt: createdAt(),
@@ -197,7 +197,7 @@ export const gymHeldMemberships = pgTable(
     ),
     check("gym_held_memberships_tax_included_check", sql`${t.taxRateId} IS NULL OR ${t.taxIncluded} IS NOT NULL`),
     check("gym_held_memberships_replaces_check", sql`${t.replacesId} IS NULL OR ${t.replacesId} <> ${t.id}`),
-    // `0151` clears only `replaces_id` when that row goes; Drizzle cannot say which column.
+    // `0152` clears only `replaces_id` when that row goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_held_memberships_replaces_fk",
       columns: [t.gymId, t.replacesId],
@@ -309,9 +309,9 @@ export const gymMemberBills = pgTable(
      *  on the bill opened when the membership was given; 0 on every other. */
     joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
     /** What the membership it replaced had paid for the days not yet used, before tax, taken off
-     *  this first bill (0151; 18x): not inside `amount_minor`; 0 on every other. */
+     *  this first bill (0152; 18x): not inside `amount_minor`; 0 on every other. */
     changeCreditMinor: integer("change_credit_minor").notNull().default(0),
-    /** On a bill of a membership changed for another (0151; 18x): the money whose days moved to
+    /** On a bill of a membership changed for another (0152; 18x): the money whose days moved to
      *  the new one, never refunded from this bill. 0 on every other. */
     movedMinor: integer("moved_minor").notNull().default(0),
     createdAt: createdAt(),
