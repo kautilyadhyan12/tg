@@ -31,7 +31,8 @@ export function cancelledLine(receipt) {
 
 /** "Gold Monthly, 15 Oct – 14 Nov 2026": the membership type by its own name (which may
  *  already say "membership"), and the days paid for; a membership of one period has none. */
-const membershipLabel = (item) => (item.covers === null ? item.name : `${item.name}, ${billDays(item.covers)}`);
+const membershipLabel = (item) =>
+  item.covers === null ? item.name : `${item.name}, ${billDays(item.covers)}${item.part === true ? ' (part month)' : ''}`;
 
 const tax = (t) => `${t.name ?? 'Tax'} ${bpToTaxRateText(t.bp)}%`;
 

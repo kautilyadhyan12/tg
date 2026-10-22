@@ -12,9 +12,12 @@ import {
   classBookingsEndingSchema,
   daysBetween,
   formatMinor,
+  fullFromOf,
   giveHeldMembership,
   heldMembershipView,
   isDayPass,
+  partPeriod,
+  periodIndex,
   shownRenewal,
 } from '@app/shared';
 import { dayHeading } from './classesView';
@@ -288,7 +291,7 @@ export function startRange(today) {
  *  words of the "paid" tick. `problem` is why it cannot be added as it stands. */
 export function givePreview(type, startsOn, paid, today, paidMinor = null) {
   if (type === null || startsOn === '') return { line: null, paidLabel: null, problem: null };
-  const made = giveHeldMembership(type, startsOn, paid, today);
+  const made = giveHeldMembership(type, startsOn, paid, today, type.billDay ?? null);
   if (!made.ok) {
     return {
       line: null,
@@ -304,7 +307,7 @@ export function givePreview(type, startsOn, paid, today, paidMinor = null) {
   const line = [datesLine(held), classesLine(held)].filter((part) => part !== null).join(' · ');
   if (type.priceMinor === 0) return { line, paidLabel: null, problem: null };
   // What the tick would mean, said with its date for a repeating membership.
-  const ifPaid = giveHeldMembership(type, startsOn, true, today);
+  const ifPaid = giveHeldMembership(type, startsOn, true, today, type.billDay ?? null);
   const until = ifPaid.ok ? heldMembershipView(ifPaid.membership, today).payment : null;
   // With a discount the tick says what they pay, the Total under it (18b-ii-b).
   const price = formatMinor(paidMinor ?? type.priceMinor, type.currency);
@@ -313,6 +316,20 @@ export function givePreview(type, startsOn, paid, today, paidMinor = null) {
       ? `They have paid up to ${dayWords(until.until)}`
       : `They have paid the ${price}`;
   return { line, paidLabel, problem: null };
+}
+
+/** THE PART MONTH a new membership's first bill is for, where the gym bills everyone on one
+ *  day of the month (18y; `type.billDay`): its days, the days of a whole period ending on that
+ *  day, and the day full payments start. Null where its first bill is a whole period: no day,
+ *  not a monthly or yearly membership, starting on the day, or a start so far back that the
+ *  part month is over. The same rule the server gives it with. */
+export function firstBillPart(type, startsOn, today) {
+  if (type === null || type === undefined || startsOn === '') return null;
+  const made = giveHeldMembership(type, startsOn, false, today, type.billDay ?? null);
+  if (!made.ok || made.membership.fullFrom === null || periodIndex(made.membership, today) !== 0) return null;
+  const part = partPeriod(made.membership);
+  if (part === null) return null;
+  return { ...part, from: startsOn, to: addDays(made.membership.fullFrom, -1), fullFrom: made.membership.fullFrom };
 }
 
 /** What a choice of membership comes to: the type, the line under the date, the words of
@@ -342,6 +359,9 @@ export function giveBody(requestKey, type, value, discount = null, summary = nul
     // that said nothing of a fee the type has.
     ...(type.joiningFeeMinor > 0 ? { joiningFeeMinor } : {}),
     ...(summary === null ? {} : { totalMinor: summary.totalMinor }),
+    // The day its full payments start where the gym bills everyone on one day (18y): the
+    // server gives nothing where the gym's day now says otherwise.
+    fullFrom: value.startsOn === '' ? null : fullFromOf(type, value.startsOn, type.billDay ?? null),
   };
   // The person's own Refer a friend gift, and what it takes off (20e-ii-b-ii-a).
   const gifted = memberGift === null || summary === null || !(summary.giftOffMinor > 0) ? shown : { ...shown, memberGiftId: memberGift.id, memberGiftMinor: summary.giftOffMinor };
@@ -366,7 +386,8 @@ export function joiningFeeFor(type, choice, canBill, alreadyMember) {
 /** A price-list type with the tax its bills charge, as the Add form reads it (18b-iii). */
 export function typeWithTax(type, list) {
   const rate = (list?.taxRates ?? []).find((r) => r.id === type.taxRateId);
-  return { ...type, tax: rate === undefined ? null : { name: rate.name, bp: rate.bp } };
+  // With the gym's day of the month it bills everyone on (18y), for the first bill's part month.
+  return { ...type, tax: rate === undefined ? null : { name: rate.name, bp: rate.bp }, billDay: list?.billDay ?? null };
 }
 
 /** A key the server takes one membership for, however often the request arrives. */

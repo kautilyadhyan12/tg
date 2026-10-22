@@ -28,12 +28,12 @@ const threeMonths: HeldMembershipTerms = { ...monthly, kind: "one_time", termCou
 const freeMonthly: HeldMembershipTerms = { ...monthly, priceMinor: 0 };
 const tenPack: HeldMembershipTerms = { kind: "pack", termCount: null, termUnit: null, packClasses: 10, packDays: 60, priceMinor: 9000 };
 
-const gold = { id: "gold", kind: "recurring" as const, priceMinor: 8000 };
-const silver = { id: "silver", kind: "recurring" as const, priceMinor: 5000 };
-const silverOnce = { id: "silver-once", kind: "one_time" as const, priceMinor: 5000 };
-const basic = { id: "basic", kind: "recurring" as const, priceMinor: 3000 };
-const free = { id: "free", kind: "recurring" as const, priceMinor: 0 };
-const pack = { id: "pack", kind: "pack" as const, priceMinor: 9000 };
+const gold = { id: "gold", kind: "recurring" as const, priceMinor: 8000, termCount: 1, termUnit: "month" as const };
+const silver = { id: "silver", kind: "recurring" as const, priceMinor: 5000, termCount: 1, termUnit: "month" as const };
+const silverOnce = { id: "silver-once", kind: "one_time" as const, priceMinor: 5000, termCount: 3, termUnit: "month" as const };
+const basic = { id: "basic", kind: "recurring" as const, priceMinor: 3000, termCount: 1, termUnit: "month" as const };
+const free = { id: "free", kind: "recurring" as const, priceMinor: 0, termCount: 1, termUnit: "month" as const };
+const pack = { id: "pack", kind: "pack" as const, priceMinor: 9000, termCount: null, termUnit: null };
 
 function given(type: HeldMembershipTerms, startsOn: string, paid: boolean, today: string): HeldMembership {
   const made = giveHeldMembership(type, startsOn, paid, today);
@@ -61,6 +61,7 @@ describe("the worst thing: a member is never charged twice for the same days", (
     expect(changeTo(from, "basic-monthly", gold, "today", "2026-10-16")).toEqual({
       ok: true,
       startsOn: "2026-10-16",
+      fullFrom: null,
       creditMinor: 2580,
       firstListedMinor: 5420,
       paidByChange: false,
@@ -72,6 +73,7 @@ describe("the worst thing: a member is never charged twice for the same days", (
     expect(changeTo(from, "basic-monthly", gold, "next_payment", "2026-10-16")).toEqual({
       ok: true,
       startsOn: "2026-11-01",
+      fullFrom: null,
       creditMinor: 0,
       firstListedMinor: 8000,
       paidByChange: false,
@@ -246,7 +248,7 @@ describe("what it can change to", () => {
   });
 
   it("the same price, repeating: it starts paid by the change, with no bill", () => {
-    expect(changeTo(from, "basic-monthly", silver, "today", "2026-10-16")).toEqual({ ok: true, startsOn: "2026-10-16", creditMinor: 5000, firstListedMinor: 0, paidByChange: true });
+    expect(changeTo(from, "basic-monthly", silver, "today", "2026-10-16")).toEqual({ ok: true, startsOn: "2026-10-16", fullFrom: null, creditMinor: 5000, firstListedMinor: 0, paidByChange: true });
   });
 
   it("the same price, paid once: refused, as it would be paid with no bill behind it", () => {

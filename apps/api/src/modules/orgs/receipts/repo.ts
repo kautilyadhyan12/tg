@@ -4,8 +4,12 @@ import type { PendingQuery, Row, Sql, TransactionSql } from "postgres";
 import {
   billAmounts,
   memberPaymentByHandSchema,
+  membershipKindSchema,
+  membershipTermUnitSchema,
   salePaymentMethodSchema,
   memberPaymentMethodSchema,
+  partMinor,
+  partPeriod,
   receiptAmounts,
   receiptBalance,
   type PaymentReceipt,
@@ -156,7 +160,8 @@ async function saleRefundReceipt(sql: Sql, gymId: string, number: number): Promi
  *  "every" its kept price is already after it, so the full price is that and the discount;
  *  with "first" its kept price is the full one, and the bill that came to the price less the
  *  discount, at the bill's own tax, is the one it came off. A bill opened at the full price
- *  prints no discount. */
+ *  prints no discount. A part month's bill (18y) prints the price and the discount for its days,
+ *  as the Add box showed them (round one, Low-2). */
 function billReceiptAmounts(r: {
   bill_minor: number;
   joining_fee: number;
@@ -168,16 +173,27 @@ function billReceiptAmounts(r: {
   discount_name: string | null;
   discount_minor: number;
   discount_payments: string | null;
-}) {
+}, part: { days: number; fullDays: number } | null) {
   const tax = taxOf(r);
   const plain = receiptAmounts({ totalMinor: r.bill_minor, tax, discount: null });
   if (r.discount_name === null || r.discount_minor <= 0 || r.discount_payments === null) return plain;
+  const share = (minor: number): number => (part === null ? minor : partMinor(minor, part));
+  // The full price and the price after the discount, for the bill's days.
+  const full = share(r.discount_payments === "every" ? r.held_price + r.discount_minor : r.held_price);
+  const off = full - share(r.discount_payments === "every" ? r.held_price : r.held_price - r.discount_minor);
   // A joining fee (18t) is listed with the membership's price, and no discount comes off it.
-  const listed = (r.discount_payments === "every" ? r.held_price + r.discount_minor : r.held_price) + r.joining_fee;
+  const listed = full + r.joining_fee;
   const applied = tax === null ? null : { name: tax.name ?? "", bp: tax.bp, included: tax.included };
-  const came = billAmounts(listed - r.discount_minor, applied);
-  if (!came.ok || came.totalMinor !== r.bill_minor) return plain;
-  return receiptAmounts({ totalMinor: r.bill_minor, listedMinor: listed, tax, discount: { name: r.discount_name, minor: r.discount_minor } });
+  const came = billAmounts(listed - off, applied);
+  if (off <= 0 || !came.ok || came.totalMinor !== r.bill_minor) return plain;
+  return receiptAmounts({ totalMinor: r.bill_minor, listedMinor: listed, tax, discount: { name: r.discount_name, minor: off } });
+}
+
+/** The part month's days of the membership a part bill is for (18y), by the one rule. */
+function partOfRow(r: { kind: string; term_count: number | null; term_unit: string | null; starts_on: string; full_from: string | null }) {
+  const kind = membershipKindSchema.parse(r.kind);
+  const termUnit = r.term_unit === null ? null : membershipTermUnitSchema.parse(r.term_unit);
+  return partPeriod({ kind, termCount: r.term_count, termUnit, packDays: null, startsOn: r.starts_on, fullFrom: r.full_from });
 }
 
 async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<ReceiptRow | null> {
@@ -201,6 +217,12 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       change_from: string | null;
       covers_from: string | null;
       covers_to: string | null;
+      part: boolean;
+      kind: string;
+      term_count: number | null;
+      term_unit: string | null;
+      starts_on: string;
+      full_from: string | null;
       tax_minor: number;
       tax_bp: number;
       tax_name: string | null;
@@ -217,7 +239,8 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
            b.amount_minor AS bill_minor, b.joining_fee_minor AS joining_fee, b.change_credit_minor AS change_credit,
            (SELECT ot.name FROM gym_held_memberships o JOIN gym_membership_types ot ON ot.gym_id = o.gym_id AND ot.id = o.membership_type_id
             WHERE o.gym_id = h.gym_id AND o.id = h.replaces_id) AS change_from,
-           b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
+           b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, (b.period_index = 0 AND h.full_from IS NOT NULL) AS part,
+           h.kind, h.term_count, h.term_unit, h.starts_on::text AS starts_on, h.full_from::text AS full_from,
            b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
                      WHERE q.gym_id = p.gym_id AND q.bill_id = p.bill_id AND q.undone_at IS NULL AND q.seq < p.seq), 0)::int AS paid_before
@@ -245,8 +268,8 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
-    item: { name: r.type_name, covers: coversOf(r) },
-    amounts: billReceiptAmounts(r),
+    item: { name: r.type_name, covers: coversOf(r), part: r.part },
+    amounts: billReceiptAmounts(r, r.part ? partOfRow(r) : null),
     joiningFeeMinor: r.joining_fee,
     // A change of membership (18x): the days already paid for under the one before.
     changeCredit: r.change_credit > 0 ? { minor: r.change_credit, fromName: r.change_from ?? "their earlier membership" } : null,

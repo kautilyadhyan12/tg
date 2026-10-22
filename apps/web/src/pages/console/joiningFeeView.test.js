@@ -76,6 +76,7 @@ describe('the joining fee the desk is shown is the one the first bill charges', 
       priceMinor: 5000,
       joiningFeeMinor: 2500,
       totalMinor: 7500,
+      fullFrom: null,
     });
   });
 

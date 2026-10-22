@@ -301,7 +301,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18v. [ ] **Each place's rules**: renewal on or off per type (Quebec: none paid), a longest term, a cooling-off refund, a notice period, a cancellation fee, release on death, disability or a move, reminders before a renewal, a price change or a trial's end (Kd, 2026-10-22; spec §14.8). Needs the lawyer. Web folder 2.
    - 18w. [ ] **Raise the price for existing members** from their next payment, with each place's notice (Kd, 2026-10-22). Web folder 2.
    - 18x. [x] **Move to another membership** · merged 2026-10-22 · PR #338
-   - 18y. [ ] **Bill everyone on one day of the month**, the first payment for the part month, a gym's choice (Kd, 2026-10-22). Web folder 2.
+   - 18y. [x] **Bill everyone on one day of the month** · merged 2026-10-22 · PR #340
    - 18z. [ ] **A fee while frozen**, a gym's choice (Kd, 2026-10-22). Web folder 2.
 19. **The gym's shared page** (RULINGS 2026-09-22, Part 6 of the re-plan; spec Part 3 §15) — it takes in items 1b, 6, 10 and 11. Every card Opus xhigh.
    - 19a. **The leaderboard** (re-planned 2026-10-02, RULINGS that day; spec Part 3 §15.5), in four jobs. It takes item 1b's place.

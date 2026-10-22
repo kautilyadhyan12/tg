@@ -142,6 +142,7 @@ describe('the worst thing: the box sends what it shows', () => {
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, m.id, 'change', {
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      fullFrom: null,
       typeId: GOLD.id,
       when: 'today',
       startsOn: '2026-10-16',
@@ -171,6 +172,7 @@ describe('the worst thing: the box sends what it shows', () => {
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(1));
     expect(orgService.changeHeldMembership.mock.calls[0][4]).toEqual({
       requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      fullFrom: null,
       typeId: OFF_PEAK.id,
       when: 'next_payment',
       startsOn: '2026-11-01',

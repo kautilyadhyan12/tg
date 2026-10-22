@@ -636,8 +636,8 @@ describe('the Bills card on Memberships', () => {
   const card = () => within(screen.getByTestId('bill-settings'));
 
   it('shows the gym\'s days of grace with a real date, and saves the one picked', async () => {
-    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 0, canChange: true } });
-    orgService.saveBillSettings.mockResolvedValue({ data: { overdueAfterDays: 7, canChange: true } });
+    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 0, billDay: null, canChange: true } });
+    orgService.saveBillSettings.mockResolvedValue({ data: { overdueAfterDays: 7, billDay: null, canChange: true } });
     render(<BillSettingsCard gymId={GYM} readOnly={false} />);
     await screen.findByTestId('bill-settings');
     const pick = card().getByLabelText('Grace period before an unpaid bill reads Overdue');
@@ -649,13 +649,13 @@ describe('the Bills card on Memberships', () => {
     expect(card().getByText("A bill due on 1 March reads Overdue from 9 March if it isn't paid.")).toBeTruthy();
     expect(orgService.saveBillSettings).not.toHaveBeenCalled();
     fireEvent.click(card().getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(orgService.saveBillSettings).toHaveBeenCalledWith(GYM, { overdueAfterDays: 7 }));
+    await waitFor(() => expect(orgService.saveBillSettings).toHaveBeenCalledWith(GYM, { overdueAfterDays: 7, billDay: null }));
     expect(await card().findByText('Saved.')).toBeTruthy();
     expect(card().getByRole('button', { name: 'Save' }).disabled).toBe(true);
   });
 
   it('staff without the tick read it, cannot change it, and are told who can', async () => {
-    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, canChange: false } });
+    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, billDay: null, canChange: false } });
     render(<BillSettingsCard gymId={GYM} readOnly={false} />);
     await screen.findByTestId('bill-settings');
     expect(card().getByLabelText('Grace period before an unpaid bill reads Overdue').disabled).toBe(true);
@@ -664,7 +664,7 @@ describe('the Bills card on Memberships', () => {
   });
 
   it('a gym with no live plan reads it and cannot change it; a save that fails says so; one that cannot be read draws nothing', async () => {
-    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, canChange: true } });
+    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 3, billDay: null, canChange: true } });
     const lapsed = render(<BillSettingsCard gymId={GYM} readOnly readOnlyLine="Start a plan to change anything here." />);
     await screen.findByTestId('bill-settings');
     expect(card().getByLabelText('Grace period before an unpaid bill reads Overdue').disabled).toBe(true);
