@@ -200,6 +200,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
       change_from: string | null;
       covers_from: string | null;
       covers_to: string | null;
+      part: boolean;
       tax_minor: number;
       tax_bp: number;
       tax_name: string | null;
@@ -216,7 +217,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
            b.amount_minor AS bill_minor, b.joining_fee_minor AS joining_fee, b.change_credit_minor AS change_credit,
            (SELECT ot.name FROM gym_held_memberships o JOIN gym_membership_types ot ON ot.gym_id = o.gym_id AND ot.id = o.membership_type_id
             WHERE o.gym_id = h.gym_id AND o.id = h.replaces_id) AS change_from,
-           b.covers_from::text AS covers_from, b.covers_to::text AS covers_to,
+           b.covers_from::text AS covers_from, b.covers_to::text AS covers_to, (b.period_index = 0 AND h.full_from IS NOT NULL) AS part,
            b.tax_minor, b.tax_bp, b.tax_name, b.tax_included,
            COALESCE((SELECT sum(q.amount_minor) FROM gym_member_payments q
                      WHERE q.gym_id = p.gym_id AND q.bill_id = p.bill_id AND q.undone_at IS NULL AND q.seq < p.seq), 0)::int AS paid_before
@@ -244,7 +245,7 @@ async function paymentReceipt(sql: Sql, gymId: string, number: number): Promise<
     by: r.by,
     currency: r.currency,
     cancelled: r.cancelled,
-    item: { name: r.type_name, covers: coversOf(r) },
+    item: { name: r.type_name, covers: coversOf(r), part: r.part },
     amounts: billReceiptAmounts(r),
     joiningFeeMinor: r.joining_fee,
     // A change of membership (18x): the days already paid for under the one before.

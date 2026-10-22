@@ -26,6 +26,10 @@
 //                  a mark is never taken back below it;
 //   `renews`       false once staff cancelled a repeating membership at the end of
 //                  what is paid;
+//   `fullFrom`     where the gym bills everyone on one day of the month (18y), the first
+//                  of those days after the start: the first period runs from the start to
+//                  the day before it (the part month), and every later one is counted
+//                  from it. Null for a membership counted from its start;
 //   the end day, the renewal day and what is owed are worked out from those.
 import { z } from "zod";
 import {
@@ -86,6 +90,9 @@ function parts(day: string): [number, number, number] | null {
 
 const pad = (n: number, width: number) => String(n).padStart(width, "0");
 const dayOf = (y: number, m: number, d: number) => `${pad(y, 4)}-${pad(m, 2)}-${pad(d, 2)}`;
+
+/** The latest day of the month a gym can bill everyone on (18y): every month has it. */
+export const BILL_DAY_MAX = 28;
 
 /** The days in a month; `month` is 1 to 12. */
 function monthLength(year: number, month: number): number {
@@ -170,9 +177,11 @@ export interface HeldMembership {
   paidFloor: number;
   renews: boolean;
   classesLeft: number | null;
+  /** The first of the gym's billing days after the start (18y); null where it is counted from its start. */
+  fullFrom: string | null;
 }
 
-function term(m: HeldMembership): { count: number; unit: MembershipTermUnit } {
+function term(m: Pick<HeldMembership, "kind" | "termCount" | "termUnit" | "packDays">): { count: number; unit: MembershipTermUnit } {
   if (m.kind === "pack") {
     if (m.packDays === null) throw new Error("a pack without its days");
     return { count: m.packDays, unit: "day" };
@@ -184,7 +193,11 @@ function term(m: HeldMembership): { count: number; unit: MembershipTermUnit } {
 /** The first day of period `index` (0 is the first). */
 export function periodStart(m: HeldMembership, index: number): string {
   const t = term(m);
-  return addDays(addTerms(m.startsOn, t.count, t.unit, index), m.frozenDays + (index >= m.giftFrom ? m.giftDays : 0));
+  // Billed from the gym's day: the first period is the part month, and the rest count from that day.
+  // A screen's own copy of a membership may leave `fullFrom` out: read as none.
+  const full = m.fullFrom ?? null;
+  const base = full === null || index === 0 ? addTerms(m.startsOn, t.count, t.unit, index) : addTerms(full, t.count, t.unit, index - 1);
+  return addDays(base, m.frozenDays + (index >= m.giftFrom ? m.giftDays : 0));
 }
 
 /** Which period `day` falls in: 0 for the first, and 0 for a day before it starts. */
@@ -193,22 +206,72 @@ export function periodIndex(m: HeldMembership, day: string): number {
   // never too high: periods are counted from the start.
   const at = addDays(day, -m.frozenDays - m.giftDays);
   const t = term(m);
+  // Counted from the gym's billing day where a part month comes first, as period 0.
+  const anchor = m.fullFrom ?? m.startsOn;
+  const before = (m.fullFrom ?? null) === null ? 0 : 1;
   // A first guess that is never too high, then forward to the period holding the day. A day
   // before the start is in none yet, and reads as the first.
   let index = 0;
-  if (at > m.startsOn) {
-    const a = parts(m.startsOn);
+  if (at > anchor) {
+    const a = parts(anchor);
     const d = parts(at);
     if (a === null || d === null) throw new Error("not a day");
     if (t.unit === "day" || t.unit === "week") {
-      index = Math.floor(daysBetween(m.startsOn, at) / ((t.unit === "week" ? 7 : 1) * t.count));
+      index = before + Math.floor(daysBetween(anchor, at) / ((t.unit === "week" ? 7 : 1) * t.count));
     } else {
       const months = (d[0] - a[0]) * 12 + (d[1] - a[1]) - 1;
-      index = Math.max(0, Math.floor(months / ((t.unit === "year" ? 12 : 1) * t.count)));
+      index = before + Math.max(0, Math.floor(months / ((t.unit === "year" ? 12 : 1) * t.count)));
     }
   }
   while (periodStart(m, index + 1) <= day) index += 1;
   return index;
+}
+
+// ── Billing everyone on one day of the month (§14.8; ROADMAP 18y) ────────────
+
+/** THE DAY A NEW MEMBERSHIP'S FULL PERIODS START, where the gym bills everyone on `billDay` of
+ *  the month: the first such day after `startsOn`. Only a repeating membership counted in
+ *  months or years; null for any other, where the gym has no day, and where it starts on that
+ *  day already. */
+export function fullFromOf(type: { kind: MembershipKind; termUnit: MembershipTermUnit | null }, startsOn: string, billDay: number | null): string | null {
+  if (billDay === null || type.kind !== "recurring" || (type.termUnit !== "month" && type.termUnit !== "year")) return null;
+  if (!Number.isInteger(billDay) || billDay < 1 || billDay > BILL_DAY_MAX) throw new Error(`not a billing day: ${String(billDay)}`);
+  const p = parts(startsOn);
+  if (p === null) throw new Error(`not a day: ${startsOn}`);
+  if (p[2] === billDay) return null;
+  const inMonth = dayOf(p[0], p[1], billDay);
+  return p[2] < billDay ? inMonth : addMonths(inMonth, 1);
+}
+
+/** "1st", "2nd", "3rd", "11th", "22nd": a day of the month as it is said. */
+export function dayOfMonthWords(day: number): string {
+  const teen = day % 100 >= 11 && day % 100 <= 13;
+  const end = teen ? "th" : day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th";
+  return `${String(day)}${end}`;
+}
+
+/** The part month of a membership billed from the gym's day: the days from its start to that
+ *  day, and the days of a whole period ending on it. Null for one with no part month. */
+export function partPeriod(
+  m: Pick<HeldMembership, "kind" | "termCount" | "termUnit" | "packDays" | "startsOn" | "fullFrom">,
+): { days: number; fullDays: number } | null {
+  const full = m.fullFrom ?? null;
+  if (full === null) return null;
+  const t = term(m);
+  return { days: daysBetween(m.startsOn, full), fullDays: daysBetween(addTerms(full, t.count, t.unit, -1), full) };
+}
+
+/** THE PRICE OF THE PART MONTH: a whole period's price for the days used, rounded down to the
+ *  cent. A billing day is never past the 28th, so the days are always fewer than a period's. */
+export function partMinor(listedMinor: number, part: { days: number; fullDays: number }): number {
+  return Math.floor((listedMinor * part.days) / part.fullDays);
+}
+
+/** What period `index` costs before tax, from what a whole period costs: the part month's share
+ *  for the first period of one billed from the gym's day, else the whole. */
+export function periodListedMinor(m: HeldMembership, index: number, listedMinor: number): number {
+  const part = index === 0 ? partPeriod(m) : null;
+  return part === null ? listedMinor : partMinor(listedMinor, part);
 }
 
 /** The day a repeating membership is paid up to: the first day not paid for. */
@@ -450,8 +513,9 @@ export type GiveHeldMembership =
 
 /** A membership as it is when staff give it: the type's term, a start day, and whether
  *  it is paid. `paid` on a repeating membership that started earlier means paid up to
- *  the end of the period today falls in; unpaid, that period is the one owed. */
-export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, paid: boolean, today: string): GiveHeldMembership {
+ *  the end of the period today falls in; unpaid, that period is the one owed. `billDay` is
+ *  the day of the month the gym bills everyone on (18y), null for none. */
+export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, paid: boolean, today: string, billDay: number | null = null): GiveHeldMembership {
   if (!isCalendarDay(startsOn) || startsOn < HELD_START_MIN || startsOn > addDays(today, HELD_START_AHEAD_DAYS)) {
     return { ok: false, reason: "start_out_of_range" };
   }
@@ -473,6 +537,7 @@ export function giveHeldMembership(type: HeldMembershipTerms, startsOn: string, 
     paidFloor: 0,
     renews: type.kind === "recurring",
     classesLeft: type.kind === "pack" ? type.packClasses : null,
+    fullFrom: fullFromOf(type, startsOn, billDay),
   };
   const free = base.free;
   const current = type.kind === "recurring" ? periodIndex(base, today) : 0;
@@ -551,6 +616,8 @@ export function linkHeldMembership(
     paidFloor: 0,
     renews: type.kind === "recurring",
     classesLeft: type.kind === "pack" ? type.packClasses : null,
+    // The list's own day is kept: never billed from the gym's day.
+    fullFrom: null,
   };
   const t = term(base);
 
@@ -711,6 +778,8 @@ export const heldMembershipSchema = z
     packClasses: z.number().int().nullable(),
     packDays: z.number().int().nullable(),
     startsOn: daySchema,
+    /** Billed from the gym's day (18y): the day its full periods start; its first bill is the part month before it. */
+    fullFrom: daySchema.nullable().default(null),
     frozenOn: daySchema.nullable(),
     classesLeft: z.number().int().min(0).nullable(),
     /** Taken from the gym's own list (17a-iii): its start day was worked back from the
@@ -817,6 +886,8 @@ export const heldMembershipsResponseSchema = z
     memberGiftAtSell: memberGiftSchema.nullable().default(null),
     /** Whether the gym's prices already hold the tax, or it is added on top (18b-iii). */
     taxIncluded: z.boolean(),
+    /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */
+    billDay: z.number().int().min(1).max(BILL_DAY_MAX).nullable().default(null),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;
@@ -853,6 +924,9 @@ export const giveHeldMembershipRequestSchema = z
      *  somebody who records payments may choose. Sent with `priceMinor` wherever the type
      *  has a fee; left out, the screen showed none, and a type with one is not given. */
     joiningFeeMinor: z.number().int().min(0).max(99_999_999).optional(),
+    /** The day the screen said its full payments start, the part month before it (18y); null
+     *  where it said none. Nothing is given where the gym's billing day now says otherwise. */
+    fullFrom: daySchema.nullable().optional(),
   })
   .strict()
   .refine((v) => (v.discountId === undefined) === (v.discountMinor === undefined) && (v.discountId === undefined || v.priceMinor !== undefined), {
@@ -893,6 +967,8 @@ export const changeHeldMembershipRequestSchema = z
     when: z.enum(["today", "next_payment"]),
     /** The day the screen said the new one starts: a change on any other day is refused. */
     startsOn: daySchema,
+    /** The day the screen said the new one's full payments start (18y); null where it said none. */
+    fullFrom: daySchema.nullable().optional(),
     priceMinor: z.number().int().min(0).max(99_999_999),
     creditMinor: z.number().int().min(0).max(99_999_999),
     totalMinor: z.number().int().min(0).max(99_999_999),

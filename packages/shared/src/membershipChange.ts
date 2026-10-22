@@ -7,9 +7,9 @@
 // for the next payment date, as Podplay and MyTime do a cheaper move. No joining fee is
 // charged on a change. The credit is worked out from the money that stands on each paid
 // period's bill, never from the price list, so nobody is paid back what they never paid.
-import { addDays, daysBetween, heldMembershipView, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
+import { addDays, daysBetween, fullFromOf, heldMembershipView, partMinor, partPeriod, periodIndex, periodStart, type HeldMembership } from "./heldMemberships.js";
 import { bookingPeriod } from "./classBookings.js";
-import type { MembershipKind } from "./memberships.js";
+import type { MembershipKind, MembershipTermUnit } from "./memberships.js";
 
 /** What the rule reads of one bill of the membership being changed. */
 export interface ChangeBillFacts {
@@ -141,6 +141,8 @@ export interface ChangeTarget {
   id: string;
   kind: MembershipKind;
   priceMinor: number;
+  termCount: number | null;
+  termUnit: MembershipTermUnit | null;
 }
 
 /** `nothing_to_pay`: the credit is exactly the price of a membership paid once, which would
@@ -152,28 +154,43 @@ export type ChangeTo =
   | {
       ok: true;
       startsOn: string;
+      /** Where the gym bills everyone on one day (18y): the day the new one's full periods start,
+       *  its first bill the part month before it. Null for none. */
+      fullFrom: string | null;
       /** Off the new membership's first bill, before tax; 0 for a change on the next payment date. */
       creditMinor: number;
-      /** The new first bill before tax: its price less the credit. 0 opens no bill. */
+      /** The new first bill before tax: its price (the part month's, where it has one) less the
+       *  credit. 0 opens no bill. */
       firstListedMinor: number;
       /** The credit pays the whole of a repeating membership's first period: it starts paid. */
       paidByChange: boolean;
     };
 
 /** THE CHANGE: from `from`, held as type `fromTypeId`, to `target`, `today` or on the next
- *  payment date. A change today leaves nothing over: the credit is at most the new price. */
-export function changeTo(from: Extract<ChangeFrom, { ok: true }>, fromTypeId: string, target: ChangeTarget, when: "today" | "next_payment", today: string): ChangeTo {
+ *  payment date. A change today leaves nothing over: the credit is at most the new price.
+ *  `billDay` is the day of the month the gym bills everyone on (18y), null for none: the new
+ *  one is billed from it as any new membership is, its first bill the part month. */
+export function changeTo(
+  from: Extract<ChangeFrom, { ok: true }>,
+  fromTypeId: string,
+  target: ChangeTarget,
+  when: "today" | "next_payment",
+  today: string,
+  billDay: number | null = null,
+): ChangeTo {
   if (target.id === fromTypeId) return { ok: false, reason: "same_type" };
   if (target.kind !== "recurring" && target.kind !== "one_time") return { ok: false, reason: "kind_not_allowed" };
-  if (when === "next_payment") {
-    if (from.nextOn === null) return { ok: false, reason: "no_next_payment" };
-    return { ok: true, startsOn: from.nextOn, creditMinor: 0, firstListedMinor: target.priceMinor, paidByChange: false };
-  }
-  const first = target.priceMinor - from.creditMinor;
+  const startsOn = when === "next_payment" ? from.nextOn : today;
+  if (startsOn === null) return { ok: false, reason: "no_next_payment" };
+  const fullFrom = fullFromOf(target, startsOn, billDay);
+  const part = partPeriod({ ...target, packDays: null, startsOn, fullFrom });
+  const priceMinor = part === null ? target.priceMinor : partMinor(target.priceMinor, part);
+  if (when === "next_payment") return { ok: true, startsOn, fullFrom, creditMinor: 0, firstListedMinor: priceMinor, paidByChange: false };
+  const first = priceMinor - from.creditMinor;
   if (first < 0) return { ok: false, reason: "left_over" };
   const paidByChange = first === 0 && target.priceMinor > 0;
   if (paidByChange && target.kind !== "recurring") return { ok: false, reason: "nothing_to_pay" };
-  return { ok: true, startsOn: today, creditMinor: from.creditMinor, firstListedMinor: first, paidByChange };
+  return { ok: true, startsOn, fullFrom, creditMinor: from.creditMinor, firstListedMinor: first, paidByChange };
 }
 
 /** What staff read where a change cannot be made: the same words on the screen and from the server. */

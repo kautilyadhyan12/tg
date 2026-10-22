@@ -35,6 +35,9 @@ import {
   takeBackGiftDays,
   billsAtCancel,
   billsToOpen,
+  periodListedMinor,
+  partMinor,
+  partPeriod,
   countAfterGap,
   discountFits,
   giveHeldMembership,
@@ -73,6 +76,7 @@ import {
   insertBills,
   insertPayment,
   overdueDaysOf,
+  billDayOf,
   paymentsFor,
   refundsFor,
   setBillStatus,
@@ -102,7 +106,8 @@ export interface HeldRow {
   tax: HeldTax | null;
   /** That tax as a bill opened today charges it; null for none. */
   taxApplied: TaxApplied | null;
-  /** What a bill opened today for a period comes to, its tax in; 0 for a free one. */
+  /** What the bill of the first period not paid comes to when opened today, its tax in (the part
+   *  month's, 18y, where that is the first period); 0 for a free one. */
   nextBillMinor: number;
   membership: HeldMembership;
 }
@@ -130,6 +135,7 @@ const rawSchema = z.object({
   paid_floor: z.number().int(),
   renews: z.boolean(),
   classes_left: z.number().int().nullable(),
+  full_from: z.string().nullable(),
   from_list: z.boolean(),
   discount_name: z.string().nullable(),
   discount_minor: z.number().int(),
@@ -139,6 +145,12 @@ const rawSchema = z.object({
   tax_included: z.boolean().nullable(),
 });
 
+/** The part month's price of a membership billed from the gym's day (18y), before tax. */
+function partOf(r: z.infer<typeof rawSchema>): number {
+  const part = partPeriod({ kind: r.kind, termCount: r.term_count, termUnit: r.term_unit, packDays: r.pack_days, startsOn: r.starts_on, fullFrom: r.full_from });
+  return part === null ? r.price_minor : partMinor(r.price_minor, part);
+}
+
 function shape(row: unknown): HeldRow {
   const r = rawSchema.parse(row);
   const tax = r.tax_name === null || r.tax_bp === null ? null : { name: r.tax_name, bp: r.tax_bp };
@@ -147,7 +159,7 @@ function shape(row: unknown): HeldRow {
   return {
     tax,
     taxApplied,
-    nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.price_minor, taxApplied).amountMinor,
+    nextBillMinor: r.price_minor === 0 ? 0 : billOf(r.full_from !== null && r.paid_periods === 0 ? partOf(r) : r.price_minor, taxApplied).amountMinor,
     id: r.id,
     typeId: r.membership_type_id,
     typeName: r.type_name,
@@ -173,6 +185,7 @@ function shape(row: unknown): HeldRow {
       paidFloor: r.paid_floor,
       renews: r.renews,
       classesLeft: r.classes_left,
+      fullFrom: r.full_from,
     },
   };
 }
@@ -234,7 +247,7 @@ const COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.term_count, h.term_unit, h.pack_classes, h.pack_days,
   h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
-  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list,
+  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from,
   h.discount_name, h.discount_minor, h.discount_payments,
   (SELECT r.name FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_name,
   (SELECT r.rate_bp FROM gym_tax_rates r WHERE r.gym_id = h.gym_id AND r.id = h.tax_rate_id) AS tax_bp,
@@ -281,6 +294,8 @@ export interface HeldList {
   overdueAfterDays: number;
   /** Whether the gym's prices hold its tax (18b-iii), for the Add form's total. */
   taxIncluded: boolean;
+  /** The day of the month the gym bills everyone on (18y), for the Add form; null for none. */
+  billDay: number | null;
   /** Every membership of this record given in place of another (18x), with both type names. */
   changes: HeldChange[];
 }
@@ -372,6 +387,7 @@ export async function readHeld(sql: Sql, gymId: string, entryId: string): Promis
       ...(await feesOf(tx, gymId, ids)),
       overdueAfterDays: await overdueDaysOf(tx, gymId),
       taxIncluded: (await taxIncludedOf(tx, gymId)) ?? false,
+      billDay: await billDayOf(tx, gymId),
       changes: await tx<{ new_id: string; old_id: string; new_name: string; old_name: string; starts_on: string; new_status: string; stopped: boolean }[]>`
         SELECT n.id AS new_id, n.replaces_id AS old_id, tn.name AS new_name, tt.name AS old_name,
                n.starts_on::text AS starts_on, n.status AS new_status, n.replaced_stopped AS stopped
@@ -619,6 +635,9 @@ export interface GiveHeldInput {
   /** The type's joining fee the screen showed and charges (18t), 0 where it showed it waived;
    *  null where it showed none. */
   joiningFeeMinor: number | null;
+  /** The day the screen said its full payments start, its first bill the part month (18y); null
+   *  where it said none; undefined where the caller showed no screen of its own. */
+  shownFullFrom?: string | null;
   /** Whether this reader may give a type that has a joining fee without it. */
   mayWaiveJoiningFee: boolean;
   /** Given in place of another membership (18x, `changeRepo.ts`): the one it replaces and
@@ -689,15 +708,8 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   const priceMinor = used === null ? type.priceMinor : used.heldPriceMinor;
   const firstListed = used === null ? type.priceMinor : used.firstBillMinor;
   // The member's own Refer a friend gift comes off the first bill, after any discount: this
-  // record's, still waiting, read under its lock, and taking off what the screen showed.
-  let gift: { id: string; offMinor: number } | null = null;
-  if (input.memberGift !== null) {
-    const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "membership");
-    if (found === null || type.priceMinor === 0) return { kind: "member_gift_not_theirs" };
-    const off = memberGiftOff(found, firstListed, type.currency);
-    if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
-    gift = { id: found.id, offMinor: off };
-  }
+  // record's, still waiting, read under its lock, and taking off what the screen showed. It is
+  // worked out below, once the first bill's own price is known.
   // The joining fee (18t): the type's own as it is now, and only where the screen showed that
   // very amount. 0 is waived, which only a reader who takes payments may do. A screen that
   // said nothing of a fee the type has was opened before it was set: sent back to look again.
@@ -712,16 +724,30 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
   // A change's credit comes off the first bill before tax, as a gift does (18x).
   const creditMinor = change?.creditMinor ?? 0;
   const paidByChange = change?.paidByChange ?? false;
-  // The first bill: its price after any discount, gift and credit, the joining fee, and its
-  // tax. Nothing is given at a total the screen did not show.
-  const firstBill =
-    type.priceMinor === 0 || paidByChange ? { amountMinor: 0, tax: null } : billOf(firstListed - (gift?.offMinor ?? 0) + joiningFeeMinor - creditMinor, tax);
-  if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
 
   // Worked out unpaid: the bill of the period owed is opened first, and a payment
-  // recorded against it is what moves the count of paid periods on.
-  const given = giveHeldMembership(type, input.startsOn, false, input.today);
+  // recorded against it is what moves the count of paid periods on. Where the gym bills
+  // everyone on one day (18y), its full periods count from the first of those days after its
+  // start, as the screen said: a day changed since it was opened gives nothing.
+  const given = giveHeldMembership(type, input.startsOn, false, input.today, await billDayOf(tx, input.gymId));
   if (!given.ok) return { kind: given.reason };
+  if (input.shownFullFrom !== undefined && input.shownFullFrom !== given.membership.fullFrom) return { kind: "price_changed" };
+  // The first bill: its price after any discount, for the part month where it is that period's
+  // (the gift worked out on that), the joining fee, less any credit, and its tax. Nothing is
+  // given at a total the screen did not show.
+  const [firstDue] = billsToOpen(given.membership, input.today, new Set());
+  const firstPart = periodListedMinor(given.membership, firstDue?.periodIndex ?? 0, firstListed);
+  let gift: { id: string; offMinor: number } | null = null;
+  if (input.memberGift !== null) {
+    const found = await lockedWaitingGift(tx, input.gymId, input.entryId, input.memberGift.id, "membership");
+    if (found === null || type.priceMinor === 0) return { kind: "member_gift_not_theirs" };
+    const off = memberGiftOff(found, firstPart, type.currency);
+    if (off === 0 || off !== input.memberGift.shownOffMinor) return { kind: "member_gift_changed" };
+    gift = { id: found.id, offMinor: off };
+  }
+  const firstBill =
+    type.priceMinor === 0 || paidByChange ? { amountMinor: 0, tax: null } : billOf(firstPart - (gift?.offMinor ?? 0) + joiningFeeMinor - creditMinor, tax);
+  if (input.shownTotalMinor !== null && input.shownTotalMinor !== firstBill.amountMinor) return { kind: "price_changed" };
   // Paid by the change: its first period counts as paid as one before it was given does, so
   // no mark is ever taken back into it and no bill is asked for it.
   const owed = paidByChange ? { ...given.membership, paidPeriods: 1, paidFloor: 1 } : given.membership;
@@ -747,13 +773,13 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency,
        term_count, term_unit, pack_classes, pack_days, starts_on, status,
        paid_periods, paid_floor, renews, classes_left,
-       discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped)
+       discount_id, discount_name, discount_minor, discount_payments, tax_rate_id, tax_included, replaces_id, replaced_stopped, full_from)
     VALUES (${input.gymId}, ${input.entryId}, ${input.typeId}, ${input.requestKey}, ${m.kind},
             ${priceMinor}, ${type.currency}, ${m.termCount}, ${m.termUnit}, ${m.packClasses},
             ${m.packDays}, ${m.startsOn}::date, ${m.status},
             ${m.paidPeriods}, ${m.paidFloor}, ${m.renews}, ${m.classesLeft},
             ${used?.id ?? null}, ${used?.name ?? null}, ${used?.offMinor ?? 0}, ${used?.payments ?? null}, ${rate?.id ?? null}, ${tax?.included ?? null},
-            ${change?.fromId ?? null}, ${change?.stoppedOld ?? false})
+            ${change?.fromId ?? null}, ${change?.stoppedOld ?? false}, ${m.fullFrom}::date)
     RETURNING id`;
   if (created === undefined) throw new Error("held membership insert returned no row");
 
@@ -775,6 +801,7 @@ export async function giveHeldIn(tx: TransactionSql, input: GiveHeldInput): Prom
       ...(joiningFeeMinor > 0 ? { joiningFeeMinor: String(joiningFeeMinor) } : {}),
       ...(waivedFeeMinor > 0 ? { joiningFeeWaivedMinor: String(waivedFeeMinor) } : {}),
       ...(change === null ? {} : { replaces: change.fromId, changeCreditMinor: String(creditMinor) }),
+      ...(m.fullFrom === null ? {} : { fullFrom: m.fullFrom }),
     },
   });
 
@@ -1165,6 +1192,7 @@ export interface ListHeldColumns {
   renews: boolean;
   classes_left: number | null;
   from_list: boolean;
+  full_from: string | null;
 }
 
 /** A row of an outer join: every column may be missing. */
@@ -1174,7 +1202,7 @@ const LIST_COLUMNS = (sql: Sql | TransactionSql) => sql`
   h.id, t.name AS type_name, h.kind, h.term_count, h.term_unit, h.pack_classes, h.pack_days,
   (h.price_minor = 0) AS free, h.starts_on::text AS starts_on, h.frozen_days, h.gift_days, h.gift_from, h.status,
   h.frozen_on::text AS frozen_on, h.cancelled_on::text AS cancelled_on,
-  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list`;
+  h.paid_periods, h.paid_floor, h.renews, h.classes_left, h.from_list, h.full_from::text AS full_from`;
 
 /** A text column under a CHECK, as one of the values the rule knows: a value this build
  *  does not know fails here, as it does in `shape`. */
@@ -1207,6 +1235,7 @@ function listHeld(row: ListHeldColumns): ListHeld {
       paidFloor: row.paid_floor,
       renews: row.renews,
       classesLeft: row.classes_left,
+      fullFrom: row.full_from,
     },
   };
 }
@@ -1283,9 +1312,9 @@ export async function inUseForMoney(
  *  `memberships.overForList.test.ts` and `membershipWords.again.routes.test.ts` hold the
  *  two together. */
 export const LAST_DAY = (sql: Sql | TransactionSql) => sql`
-  ((h.starts_on + make_interval(
-      years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
-      months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
+  ((CASE WHEN h.full_from IS NOT NULL AND h.paid_periods >= 1 THEN h.full_from ELSE h.starts_on END + make_interval(
+      years  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'year'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods - (CASE WHEN h.full_from IS NOT NULL AND h.paid_periods >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
+      months => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'month' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods - (CASE WHEN h.full_from IS NOT NULL AND h.paid_periods >= 1 THEN 1 ELSE 0 END) ELSE 1 END) ELSE 0 END,
       weeks  => CASE WHEN h.kind <> 'pack' AND h.term_unit = 'week'  THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END,
       days   => CASE WHEN h.kind = 'pack' THEN h.pack_days
                      WHEN h.term_unit = 'day' THEN h.term_count * (CASE WHEN h.kind = 'recurring' THEN h.paid_periods ELSE 1 END) ELSE 0 END
@@ -1452,6 +1481,7 @@ function wholeRow(row: Nullable<ListHeldColumns>): ListHeld | null {
     frozen_on: row.frozen_on,
     cancelled_on: row.cancelled_on,
     classes_left: row.classes_left,
+    full_from: row.full_from,
   });
 }
 

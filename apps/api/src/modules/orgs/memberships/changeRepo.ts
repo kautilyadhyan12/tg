@@ -25,7 +25,7 @@ import { insertAudit } from "../repo.js";
 import { giftUseUndone } from "../referrals/memberGiftRepo.js";
 import type { HasBookings } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
-import { billsFor, terminalWaiting, voidBills, type BillRow } from "./billsSql.js";
+import { billDayOf, billsFor, terminalWaiting, voidBills, type BillRow } from "./billsSql.js";
 import { giveHeldIn, liveTypes, lockedEntry, lockedHeld, settle, typeChoice, type CancelBookings, type HeldWriteOutcome } from "./heldRepo.js";
 
 export type ChangeOutcome =
@@ -80,6 +80,8 @@ export async function changeHeld(
     shownCreditMinor: number;
     shownTotalMinor: number;
     shownStartsOn: string;
+    /** The day it said the new one's full payments start (18y); null for none. */
+    shownFullFrom: string | null;
     paid: boolean;
     method: MemberPaymentByHand | null;
     confirmBookings: string | null;
@@ -113,11 +115,13 @@ export async function changeHeld(
       const [rawType] = await liveTypes(tx, input.gymId, input.typeId);
       if (rawType === undefined) return { kind: "type_not_found" };
       const type = typeChoice(rawType);
-      const to = changeTo(from, before.typeId, type, input.when, input.today);
+      const to = changeTo(from, before.typeId, type, input.when, input.today, await billDayOf(tx, input.gymId));
       if (!to.ok) return { kind: "change_refused", reason: to.reason };
       // A payment ahead recorded while the box was open moves the next payment date: the change
       // is never written on a day the screen did not say (round one, Low-1).
       if (to.creditMinor !== input.shownCreditMinor || to.startsOn !== input.shownStartsOn) return { kind: "credit_changed" };
+      // The gym's billing day changed while the box was open (18y): nothing at a total it did not show.
+      if (to.fullFrom !== input.shownFullFrom) return { kind: "price_changed" };
 
       // The membership changed: today it ends now; later it stops at the end of what is paid.
       const event: HeldMembershipEvent = { type: "cancel", when: input.when === "today" ? "today" : "period_end" };
@@ -148,6 +152,7 @@ export async function changeHeld(
         memberGift: null,
         shownTotalMinor: input.shownTotalMinor,
         joiningFeeMinor: null,
+        shownFullFrom: to.fullFrom,
         mayWaiveJoiningFee: false,
         // Set to stop by this change: cancelling the new one before it starts undoes that (Low-2).
         change: { fromId: before.id, creditMinor: to.creditMinor, paidByChange: to.paidByChange, stoppedOld: before.membership.renews && !stops.renews && stops.status !== "cancelled" },

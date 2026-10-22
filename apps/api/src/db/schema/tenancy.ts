@@ -149,6 +149,9 @@ export const gyms = pgTable(
     /** Days after its due date an unpaid bill reads Overdue (0093; spec Part 3 §14.2),
      *  under `gyms_bills_overdue_days_check`. */
     billsOverdueDays: integer("bills_overdue_days").notNull().default(0),
+    /** The day of the month every new monthly or yearly membership is billed on (0153; 18y),
+     *  under `gyms_bills_day_check`, 1 to 28; null bills each from the day it starts. */
+    billsDay: integer("bills_day"),
     /** The At risk list's two numbers (0098; spec Part 3 §16.4), under `gyms_at_risk_check`;
      *  `AT_RISK_QUIET_DAYS` and `AT_RISK_WEEKS_CAME` in `@app/shared`. */
     atRiskQuietDays: integer("at_risk_quiet_days").notNull().default(14),

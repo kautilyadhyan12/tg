@@ -625,3 +625,14 @@ export async function terminalWaiting(tx: TransactionSql, gymId: string, members
 export async function setOverdueDays(tx: TransactionSql, gymId: string, days: number): Promise<void> {
   await tx`UPDATE gyms SET bills_overdue_days = ${days} WHERE id = ${gymId}`;
 }
+
+/** The day of the month this gym bills every new monthly or yearly membership on (18y); null bills
+ *  each from the day it starts. */
+export async function billDayOf(sql: Sql | TransactionSql, gymId: string): Promise<number | null> {
+  const [row] = await sql<{ bills_day: number | null }[]>`SELECT bills_day FROM gyms WHERE id = ${gymId}`;
+  return row?.bills_day ?? null;
+}
+
+export async function setBillDay(tx: TransactionSql, gymId: string, day: number | null): Promise<void> {
+  await tx`UPDATE gyms SET bills_day = ${day} WHERE id = ${gymId}`;
+}

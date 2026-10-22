@@ -88,8 +88,10 @@ export const paymentReceiptSchema = z
     ...receiptCommon,
     kind: z.literal("payment"),
     /** The membership, by its type's name, and the days the bill is for (null for a
-     *  membership of one period). */
-    item: z.object({ name: z.string(), covers: z.object({ from: daySchema, to: daySchema }).strict().nullable() }).strict(),
+     *  membership of one period); `part` where they are the part month before the gym's billing day (18y). */
+    item: z
+      .object({ name: z.string(), covers: z.object({ from: daySchema, to: daySchema }).strict().nullable(), part: z.boolean().default(false) })
+      .strict(),
     /** The bill this payment was for. */
     amounts: receiptAmountsSchema,
     /** The joining fee inside `amounts.listedMinor` (18t): printed as a line of its own. */

@@ -33,7 +33,7 @@ import MemberPayer from './MemberPayer';
 import MemberCard from './MemberCard';
 import MemberNotes from './MemberNotes';
 import MembershipChoice from './MembershipChoice';
-import { METHOD_NEEDED, giveBody, joiningFeeFor, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
+import { METHOD_NEEDED, firstBillPart, giveBody, joiningFeeFor, membershipChoice, newRequestKey, typeWithTax } from './heldMembershipsView';
 import { discountsForType, membershipSummary } from './sellDiscountsView';
 import { FriendGiftNote } from './FriendGift';
 import { JoiningFeeTick, MembershipTotal } from './MembershipDiscount';
@@ -778,7 +778,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
     const givenDiscount = givenGift === null ? null : givenGift.discount;
     // Somebody just added has no membership here yet: a joining fee starts ticked.
     const givenFee = joiningFeeFor(givenType, giving.joiningFee, canRecordPayments(viewerPrivileges(gym)), false);
-    const givenSummary = givenType === null ? null : membershipSummary(givenType, givenDiscount, givenType.taxIncluded, null, givenFee.feeMinor);
+    const givenPart = firstBillPart(givenType, giving.startsOn, gymToday(gym?.timezone));
+    const givenSummary = givenType === null ? null : membershipSummary(givenType, givenDiscount, givenType.taxIncluded, null, givenFee.feeMinor, givenPart);
     const choice = giveTypes === null ? null : membershipChoice(giveTypes, giving, gymToday(gym?.timezone), givenSummary === null || !givenSummary.shows ? null : givenSummary.totalMinor);
     if (choice !== null && choice.type !== null && choice.problem !== null) {
       setRefusal({ message: choice.problem, openId: null, ack: null });
@@ -1243,7 +1244,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       const picked = giveTypes.find((t) => t.id === giving.typeId) ?? null;
       const gift = giftOf(picked);
       const fee = joiningFeeFor(picked, giving.joiningFee, canRecordPayments(viewerPrivileges(gym)), false);
-      const total = picked === null ? null : membershipSummary(picked, gift === null || giftOff ? null : gift.discount, picked.taxIncluded, null, fee.feeMinor);
+      const part = firstBillPart(picked, giving.startsOn, gymToday(gym?.timezone));
+      const total = picked === null ? null : membershipSummary(picked, gift === null || giftOff ? null : gift.discount, picked.taxIncluded, null, fee.feeMinor, part);
       return (
         <div className="c-card p-3 flex flex-col gap-3" data-testid="add-membership">
           <span className="c-s15 c-w6 c-t1">Membership</span>

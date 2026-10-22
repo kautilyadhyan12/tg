@@ -177,6 +177,8 @@ export const memberBillSchema = z
     id: z.string().uuid(),
     periodIndex: z.number().int().min(0),
     covers: z.object({ from: daySchema, to: daySchema }).strict().nullable(),
+    /** The part month before the gym's billing day (18y): the first bill of one billed from it. */
+    part: z.boolean().default(false),
     /** What the person pays for it, its tax in. */
     amountMinor: minorSchema,
     /** The tax in `amountMinor` (18b-iii), as the bill was opened: the rate's name and
@@ -347,11 +349,15 @@ export const noteMemberRefundRequestSchema = z
   .strict();
 export type NoteMemberRefundRequest = z.infer<typeof noteMemberRefundRequestSchema>;
 
+/** `billDay`: the day of the month every new monthly or yearly membership is billed on, its
+ *  first bill the part month up to it (18y); null bills each from the day it starts. 28 at most,
+ *  so every month has it (`BILL_DAY_MAX` in `heldMemberships.ts`). Left out, it is as it was. */
+const billDaySchema = z.number().int().min(1).max(28).nullable();
 export const billSettingsSchema = z
-  .object({ overdueAfterDays: z.number().int().min(0).max(BILL_OVERDUE_DAYS_MAX) })
+  .object({ overdueAfterDays: z.number().int().min(0).max(BILL_OVERDUE_DAYS_MAX), billDay: billDaySchema.optional() })
   .strict();
 export type BillSettings = z.infer<typeof billSettingsSchema>;
 
 /** The settings, and whether this reader may change them. */
-export const billSettingsResponseSchema = billSettingsSchema.extend({ canChange: z.boolean() }).strict();
+export const billSettingsResponseSchema = billSettingsSchema.extend({ billDay: billDaySchema, canChange: z.boolean() }).strict();
 export type BillSettingsResponse = z.infer<typeof billSettingsResponseSchema>;
