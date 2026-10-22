@@ -708,6 +708,30 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     expect(await paymentsOf(gym.id)).toEqual([]);
   });
 
+  it("Square out of reach while the member pays: still waiting past Square's own time, and recorded once when Square answers", async () => {
+    clock = new Date();
+    const gym = await makeGym("Pay Outage");
+    const acct = account(`TPO2${uniq().slice(-5)}`);
+    await connect(gym, acct);
+    const person = await owing(gym, await typeOf(gym), "Zoe Lane");
+    const desk = await terminal(gym, acct);
+    // The checkout is made, its answer is lost, and Square stops answering; the member pays meanwhile.
+    square.state.loseAnswers = true;
+    const started = await pay(gym, gym.owner, person, desk.id);
+    square.state.loseAnswers = false;
+    square.state.down = true;
+    square.at(desk.deviceId).taps();
+    clock = new Date(clock.getTime() + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs + 60_000);
+    try {
+      expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment.step).toBe("waiting");
+    } finally {
+      square.state.down = false;
+    }
+    expect((await check(gym, gym.owner, person.entryId, started.payment.id)).payment.outcome).toBe("paid");
+    expect(await paymentsOf(gym.id)).toHaveLength(1);
+    expect(checkoutsOn(desk.deviceId)).toHaveLength(1);
+  });
+
   it("a checkout Square will not show: kept waiting until Square's own time is past, then left to check in Square, and told", async () => {
     clock = new Date();
     const gym = await makeGym("Pay Unread");

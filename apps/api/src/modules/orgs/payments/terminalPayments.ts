@@ -61,6 +61,9 @@ export const TERMINAL_PAYMENT = {
   cancelWaitMs: 2_000,
   /** Nobody has asked for this long: the worker asks. */
   idleMs: 20_000,
+  /** Square giving no answer at all (down, or out of reach) for a day: given up, and told. Until
+   *  then money taken at the Terminal meanwhile is recorded when Square answers again. */
+  giveUpMs: 24 * 60 * 60_000,
   /** A done one is kept this long, for the page that asks how it ended. */
   keepMs: 24 * 60 * 60_000,
   perRun: 50,
@@ -251,12 +254,16 @@ async function stopping(a: Asking, checkout: SquareTerminalCheckout): Promise<St
   return null;
 }
 
-/** No answer to go on yet: asked again until Square's own time and a minute more are past. By then
- *  Square has cancelled it or taken the money, so the payment ends as one to check in Square (told
- *  to Staff activity), and the bill and the Terminal are not held any longer (review round one, Low 1). */
-async function notYet(a: Asking): Promise<Step> {
-  if (a.now.getTime() <= a.pay.startedAt.getTime() + TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs) return null;
-  a.deps.log.error({ event: "square.terminal_payment_unchecked", gymId: a.pay.gymId }, "a Terminal payment could not be read from Square past its time");
+/** Nothing to go on yet, so asked again. Square refusing to show a checkout of ours (`refused`), or
+ *  showing another, is held only until Square's own time and a minute more are past: by then Square
+ *  has cancelled it or taken the money, so it ends as one to check in Square, told to Staff activity,
+ *  and the bill and the Terminal are not held longer (review round one, Low 1). No answer at all
+ *  (`unavailable`) is waited out for a day: Square may have taken the money meanwhile, and it is
+ *  recorded when Square answers again (re-check). */
+async function notYet(a: Asking, why: "refused" | "unavailable"): Promise<Step> {
+  const limit = why === "refused" ? TERMINAL_PAYMENT.deadlineMs + TERMINAL_PAYMENT.graceMs : TERMINAL_PAYMENT.giveUpMs;
+  if (a.now.getTime() <= a.pay.startedAt.getTime() + limit) return null;
+  a.deps.log.error({ event: "square.terminal_payment_unchecked", gymId: a.pay.gymId, why }, "a Terminal payment could not be read from Square past its time");
   return await ended(a, "gone");
 }
 
@@ -268,21 +275,21 @@ async function step(a: Asking): Promise<Step> {
   // answer been lost: asking with the press's own key gives it back (or makes it), and `stopping`
   // cancels it. "Cancelled" is said only on Square's own word (review round one, Critical 1).
   const got = await checkoutOf(a);
-  if (got.kind === "unavailable") return await notYet(a);
+  if (got.kind === "unavailable") return await notYet(a, "unavailable");
   if (got.kind === "refused") {
     if (got.code === "PAYMENT_MOVED_ON") return null;
     if (pay.cancelWantedAt !== null && got.status === 404) return await ended(a, "cancelled");
     deps.log.warn({ event: "square.terminal_checkout_refused", gymId: pay.gymId, status: got.status, code: got.code }, "Square refused a Terminal checkout");
     // Refused before it reached the Terminal: nothing was taken. One Square made and then
     // refuses to show is asked about again until it answers.
-    if (pay.checkoutId !== null) return await notYet(a);
+    if (pay.checkoutId !== null) return await notYet(a, "refused");
     return await ended(a, "refused", got);
   }
   const checkout = got.value;
   if (!isOurs(a, checkout)) {
     deps.log.error({ event: "square.terminal_checkout_unexpected", gymId: pay.gymId }, "Square answered about another Terminal checkout");
     // Never recorded, never ended on it: a checkout of ours may still take money.
-    return await notYet(a);
+    return await notYet(a, "refused");
   }
   // On the Terminal's screen: Square reads it in progress, or it was answered there.
   if (!pay.pickedUp && (checkout.status === "IN_PROGRESS" || checkout.status === "COMPLETED")) {
