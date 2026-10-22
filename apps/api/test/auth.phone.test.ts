@@ -294,7 +294,8 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
   it("a script in a browser is never handed a token: the phone's way is refused to a request with an Origin", { timeout: 30_000 }, async () => {
     const email = "phone12a-origin@example.com";
     const phone = await phoneSignIn(email);
-    for (const origin of ["http://localhost:5173", "https://evil.example", "null"]) {
+    // Our own website's Origin: another website's never gets this far (`fromOurWebsite.ts`).
+    for (const origin of ["http://localhost:5173"]) {
       const code = await codeFor(email);
       const signIn = await post("/v1/auth/code/verify", { email, code, client: "phone" }, { origin });
       expect(signIn.statusCode).toBe(400);
@@ -308,6 +309,18 @@ d("the phone app's sign-in: one phone at a time (real Postgres)", () => {
       const browser = await post("/v1/auth/code/verify", { email, code }, { origin });
       expect(browser.statusCode).toBe(200);
       expect(browser.body).not.toMatch(/token/i);
+    }
+    for (const origin of ["https://evil.example", "null"]) {
+      const code = await codeFor(email);
+      for (const res of [
+        await post("/v1/auth/code/verify", { email, code, client: "phone" }, { origin }),
+        await post("/v1/auth/refresh", { refreshToken: phone.refreshToken }, { origin }),
+        await post("/v1/auth/code/verify", { email, code }, { origin }),
+      ]) {
+        expect(res.statusCode).toBe(403);
+        expect(res.body).not.toMatch(/token/i);
+        expect(res.cookies).toEqual([]);
+      }
     }
     // The real phone was not signed out by any of it.
     tokensIn(await phoneRefresh(phone.refreshToken));

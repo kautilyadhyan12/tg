@@ -53,7 +53,10 @@ function page(reply: FastifyReply, status: number, title: string, body: string):
     .status(status)
     .header("content-type", "text/html; charset=utf-8")
     .header("cache-control", "no-store")
-    .header("referrer-policy", "no-referrer")
+    // same-origin, not no-referrer: the link's token goes to no other site either way, and
+    // under no-referrer the page's own button posts with Origin "null", which a browser
+    // without Sec-Fetch-Site (Safari before 16.4) cannot prove is ours (`fromOurWebsite.ts`).
+    .header("referrer-policy", "same-origin")
     .header("x-frame-options", "DENY")
     .header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
     .send(html);

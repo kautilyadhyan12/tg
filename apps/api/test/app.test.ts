@@ -148,6 +148,23 @@ describe("api skeleton", () => {
     expect((await hit(ip)).statusCode).toBe(404);
   });
 
+  it("another website's 601 changes in a signed-in person's name are refused before the floor, and spend none of their 600", async () => {
+    const ip = "10.9.9.13";
+    const person = { [ACCESS_COOKIE]: signAccessToken(randomUUID(), config, randomUUID()) };
+    for (let i = 0; i < 601; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/nope",
+        remoteAddress: ip,
+        cookies: person,
+        headers: { origin: "https://evil.example", "sec-fetch-site": "cross-site" },
+      });
+      expect(res.statusCode).toBe(403);
+    }
+    expect((await hit(ip, person)).statusCode).toBe(404);
+    expect((await hit(ip)).statusCode).toBe(404);
+  });
+
   it.skipIf(realDbUrl === undefined || realDbUrl === "")(
     "/health pings the database and returns ok",
     async () => {
