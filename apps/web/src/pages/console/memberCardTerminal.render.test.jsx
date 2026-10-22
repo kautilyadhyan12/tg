@@ -86,6 +86,8 @@ function show(props = {}) {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // Answers a test set up and never used are not left for the next test.
+  Object.values(orgService).forEach((fn) => fn.mockReset());
 });
 
 describe('Save card on Terminal: the worst thing', () => {
@@ -209,19 +211,31 @@ describe('Save card on Terminal: the box', () => {
   });
 
   it("Cancel while Square has not stopped it yet: says it is asking the Terminal to stop, and keeps asking until it has", async () => {
+    // Answers as the server gives them, by what it has been told, never by the order of the asks.
+    let cancelled = false;
+    let stopped = false;
+    let asksAfterCancel = 0;
     orgService.getMemberCard.mockReturnValue(cardAnswer());
     orgService.startTerminalSave.mockReturnValue(saveAnswer({}));
-    orgService.checkTerminalSave
-      .mockReturnValueOnce(saveAnswer({ pickedUp: true }))
-      .mockReturnValueOnce(saveAnswer({ pickedUp: true, stopping: true }))
-      .mockReturnValue(saveAnswer({ step: 'done', outcome: 'cancelled' }));
-    orgService.cancelTerminalSave.mockReturnValue(saveAnswer({ pickedUp: true, stopping: true }));
+    orgService.checkTerminalSave.mockImplementation(() => {
+      if (!cancelled) return saveAnswer({ pickedUp: true });
+      asksAfterCancel += 1;
+      return saveAnswer(stopped ? { step: 'done', outcome: 'cancelled' } : { pickedUp: true, stopping: true });
+    });
+    orgService.cancelTerminalSave.mockImplementation(() => {
+      cancelled = true;
+      return saveAnswer({ pickedUp: true, stopping: true });
+    });
     show({ checkEveryMs: 30 });
     fireEvent.click(await screen.findByRole('button', { name: 'Save card on Terminal' }));
     const box = await screen.findByTestId('terminal-wait');
     fireEvent.click(within(box).getByRole('button', { name: 'Cancel' }));
     expect(await screen.findByText('Asking the Terminal to stop…')).toBeTruthy();
     expect(within(screen.getByTestId('terminal-wait')).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    await waitFor(() => expect(asksAfterCancel).toBeGreaterThan(1));
+    expect(screen.getByText('Asking the Terminal to stop…')).toBeTruthy();
+    expect(within(screen.getByTestId('terminal-wait')).queryByRole('button', { name: 'Cancel' })).toBeNull();
+    stopped = true;
     expect(within(await screen.findByTestId('terminal-not-saved')).getByText('Cancelled. Nothing was saved.')).toBeTruthy();
   });
 
