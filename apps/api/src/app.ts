@@ -3,7 +3,7 @@
 // error mapping, /health.
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyError, type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
@@ -146,7 +146,7 @@ export async function buildApp(
       // global rather than route by route.
       serializers: { err: safeErrorSerializer, req: safeRequestSerializer },
     },
-    disableRequestLogging: config.NODE_ENV === "test",
+    logController: new LogController({ disableRequestLogging: config.NODE_ENV === "test" }),
   });
 
   await app.register(sensible);

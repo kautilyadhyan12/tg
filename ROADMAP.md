@@ -481,7 +481,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 
 15. [ ] **A gym accepts our terms when it is created** (RULINGS 2026-10-08; Folder A's last job, with the lawyer's words of item 3): on Create, a tick of its own for the terms and the data agreement, each opening its text; the version, the time and who agreed are kept, and a later version asks the owner again. Acceptance online is enough; no paper.
 
-16. [ ] **S1 · The server's ready-made parts updated** (Kd, 2026-10-21): Fastify 5.10.0's published holes, one an authentication bypass fixed in 5.12.2, and the rest that have fixes; GitHub's automatic warning for new ones. Web folder 2.
+16. [x] **S1 · The server's ready-made parts updated** · merged 2026-10-22 · PR #333
 
 17. [ ] **S2 · Changes only from KWAZO's own website** (Kd, 2026-10-21): session cookies are SameSite=None in production and nothing checks where a write came from; one check in one place. Risky. Web folder 2.
 
