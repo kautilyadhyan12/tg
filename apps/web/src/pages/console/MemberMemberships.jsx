@@ -1548,7 +1548,7 @@ export default function MemberMemberships({
         const fee = freezeFeeAsk(m, name, today);
         const charged = fee !== null && (freezeCharge || !shown.canBill);
         return run('freeze', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'freeze', { feeMinor: charged ? m.freezeFeeMinor : 0 }), (data) =>
-          freezeDoneWords(data, m, name, today),
+          freezeDoneWords(data, m, name, today, charged ? m.freezeFeeMinor : 0),
         );
       },
       unfreeze: () => change('unfreeze', m, 'unfreeze'),

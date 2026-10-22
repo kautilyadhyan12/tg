@@ -280,11 +280,14 @@ export function freezeFeeAsk(m, name, today) {
 }
 
 /** What a freeze said once done, read from the server's answer: a fee is said only where one was
- *  opened today, never from the tick alone. */
-export function freezeDoneWords(answer, m, name, today) {
+ *  opened today, never from the tick alone. Staff without the payments tick are sent no bills, so for
+ *  them it is the fee they sent where the box said the first one is today (re-check, Low). */
+export function freezeDoneWords(answer, m, name, today, sentMinor = 0) {
   const after = answer?.memberships?.find((x) => x.id === m.id) ?? null;
+  const said = (minor) => `${m.typeName} is frozen. The ${formatMinor(minor, m.currency)} freeze fee is on ${name}'s bills, due today.`;
+  if (after !== null && after.billing === null) return sentMinor > 0 && m.freezeFeeFirstOn === today ? said(sentMinor) : `${m.typeName} is frozen.`;
   const fee = (after?.billing?.fees ?? []).find((f) => f.fee === 'freeze' && f.on === today && (f.state === 'due' || f.state === 'overdue'));
-  if (fee !== undefined) return `${m.typeName} is frozen. The ${formatMinor(fee.amountMinor, m.currency)} freeze fee is on ${name}'s bills, due today.`;
+  if (fee !== undefined) return said(fee.amountMinor);
   return `${m.typeName} is frozen.`;
 }
 
