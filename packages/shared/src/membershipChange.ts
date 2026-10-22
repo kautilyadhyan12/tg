@@ -118,8 +118,8 @@ export function movedMoneyMinor(b: ChangeBillFacts, creditMinor: number): number
 /** The classes or sessions booked on the old membership that move to the new one (round one,
  *  Low-3): those it covers, earliest first, while the new type's limit for each of its weeks or
  *  months has room. The rest end, once the screen has named them. */
-export function withinLimit<T extends { id: string; day: string }>(
-  booked: readonly T[],
+export function withinLimit(
+  booked: readonly { id: string; day: string }[],
   limit: number | null,
   period: "week" | "month" | null,
 ): string[] {
