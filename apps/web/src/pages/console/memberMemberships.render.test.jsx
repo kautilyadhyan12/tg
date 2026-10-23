@@ -1083,6 +1083,34 @@ describe('Add member gives a membership in the same form', () => {
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
   });
 
+  it('where the business asks for its membership agreement, the new person opens with it under the membership just given, with Sign later (18u-i)', async () => {
+    const given = held(1, GOLD, TODAY, false);
+    orgService.giveHeldMembership.mockResolvedValue(answer([given], false, { agreementInUse: true }));
+    orgService.getHeldMemberships.mockResolvedValue(answer([given], false, { agreementInUse: true }));
+    orgService.getMembershipAgreement.mockResolvedValue({
+      data: {
+        gymName: 'Iron House',
+        personName: 'Bea Hart',
+        timezone: 'Europe/London',
+        minor: false,
+        agreement: { id: '66666666-6666-4666-8666-666666666666', version: 1, text: 'Cancel at the desk.' },
+        facts: [{ label: 'Membership', value: 'Gold Monthly' }],
+        factsKey: 'a'.repeat(64),
+        signed: null,
+        hasEmail: true,
+      },
+    });
+    openAdd();
+    const choice = within(await screen.findByTestId('add-membership'));
+    fireEvent.change(choice.getByLabelText('Membership type'), { target: { value: GOLD.id } });
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    expect(await screen.findByText('Hand this screen to Bea Hart. They read the agreement and sign it themselves.')).toBeTruthy();
+    expect(orgService.getMembershipAgreement).toHaveBeenCalledWith(GYM, BEA, given.id);
+    expect(screen.getByRole('button', { name: 'Sign later' })).toBeTruthy();
+  });
+
   describe("the person typed is in Leads (20e-ii-b-i)", () => {
     const gift = {
       kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z',

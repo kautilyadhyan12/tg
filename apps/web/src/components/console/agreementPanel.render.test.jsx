@@ -44,7 +44,8 @@ describe('a business with no agreement', () => {
     expect(await screen.findByText('Not set up')).toBeTruthy();
     const note = await screen.findByRole('note');
     expect(within(note).getByText('You can write your membership agreement here.')).toBeTruthy();
-    expect(within(screen.getByRole('group', { name: 'Filled in for each membership' })).getByText('The first payment, with any joining fee')).toBeTruthy();
+    expect(within(note).getByText(/Press Save agreement to start\./)).toBeTruthy();
+    expect(screen.getByText("Members see their membership's price and dates above your terms. You don't need to type them.")).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save agreement' }).disabled).toBe(true);
     fireEvent.change(await field(), { target: { value: WORDS } });
     orgService.saveGymAgreement.mockResolvedValue({ data: { agreement: agreement(), inUse: true, signed: 0 } });

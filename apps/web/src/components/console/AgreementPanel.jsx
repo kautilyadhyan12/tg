@@ -17,15 +17,6 @@ const softStyle = { color: 'rgba(255,255,255,0.55)' };
 const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
-/** What the app writes above the business's words for each membership. */
-const FILLED_IN = [
-  'Your business name, address and phone',
-  "The member's name",
-  'The membership and its price, with any discount and tax',
-  'The first payment, with any joining fee',
-  'The start date, and when it ends or that it renews until cancelled',
-];
-
 // `membersName`: what this person's menu calls the Members page (`membersPageName`).
 export default function AgreementPanel({ org, readOnly, startOpen = false, membersTo = '../members', membersName = 'Members' }) {
   const gymId = org.id;
@@ -127,9 +118,8 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
                 You can write your membership agreement here.
               </p>
               <p className="text-sm m-0" style={labelStyle}>
-                Type or paste your terms: how members cancel, notice periods, refunds, freezes, fees and your house rules. The words are yours: this app
-                does not write or check them. When you give someone a membership, they read it on your screen with that membership&apos;s details and sign it,
-                and they get a copy by email.
+                Write how members cancel, your refunds, freezes, fees and house rules. When you give someone a membership, they read it on your screen
+                and sign it, and get a copy by email. Press Save agreement to start.
               </p>
             </div>
           ) : null}
@@ -159,22 +149,14 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
               className="w-full rounded-xl px-4 py-3 text-sm leading-relaxed"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', resize: 'vertical' }}
             />
+            <p className="text-sm m-0" style={softStyle}>
+              Members see their membership&apos;s price and dates above your terms. You don&apos;t need to type them.
+            </p>
             {state.problem !== null ? (
               <p role="alert" className="text-sm m-0" style={{ color: '#f87171' }}>
                 {state.problem}
               </p>
             ) : null}
-          </div>
-
-          <div role="group" aria-label="Filled in for each membership" className="rounded-xl px-4 py-3 flex flex-col gap-1.5" style={boxStyle}>
-            <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-              Filled in for each membership, above your terms
-            </p>
-            <ul className="m-0 pl-5 flex flex-col gap-1 text-sm" style={labelStyle}>
-              {FILLED_IN.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
           </div>
 
           {data.inUse ? (

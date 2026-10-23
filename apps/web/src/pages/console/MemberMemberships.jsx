@@ -164,6 +164,8 @@ export default function MemberMemberships({
   managesTypes = true,
   membershipsTo = null,
   addNow = false,
+  /** A membership Add member has just given (18u-i): its agreement box opens, with Sign later. */
+  signNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
 }) {
@@ -180,7 +182,13 @@ export default function MemberMemberships({
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
-  const [agreementFor, setAgreementFor] = useState(null);
+  const [agreementFor, setAgreementFor] = useState(() => (signNow === null ? null : { id: signNow, justGiven: true }));
+  // A membership Add member gives after this box was drawn opens its agreement too.
+  const [signNowSeen, setSignNowSeen] = useState(signNow);
+  if (signNow !== signNowSeen) {
+    setSignNowSeen(signNow);
+    if (signNow !== null) setAgreementFor({ id: signNow, justGiven: true });
+  }
   /** The receipt open under its payment or refund, by its number. */
   const [receiptFor, setReceiptFor] = useState(null);
   const toggleReceipt = (number) => setReceiptFor((was) => (was === number ? null : number));
