@@ -313,6 +313,20 @@ describe('Settings → Booking rules: the class fees (18h-i)', () => {
       'A fee goes on the bills of the membership a member booked with, so fees start once you sell memberships here.The owner or a manager can add one on Memberships.',
     );
   });
+
+  // 18s: a gym with no country it sells in has no money for a fee, so no boxes, and Save sends none.
+  it('a gym with no money its members pay in shows no fee boxes, says why, and saves the rules without fees', async () => {
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: { ...START, waitlistMax: 8 }, pt: PT, fees: { ...FEES, currency: null } } });
+    await open({ ...FEES, currency: null });
+    expect(screen.queryByLabelText('Late cancel fee')).toBeNull();
+    expect(screen.queryByLabelText('No-show fee')).toBeNull();
+    expect(screen.getByTestId('fees-need-country').textContent).toBe(
+      "Late cancel and no-show fees are in your country's own money, so they start once your country is set.The owner can set it in Gym details.",
+    );
+    fireEvent.change(screen.getByLabelText('How many people a waitlist holds'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, waitlistMax: 8, pt: PT }));
+  });
 });
 
 describe("Settings → Booking rules: personal training's own fees (18h-ii)", () => {

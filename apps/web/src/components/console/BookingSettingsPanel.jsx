@@ -206,9 +206,9 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
           setPt(res.data.pt);
           setDraft(bookingSettingsDraft(res.data.settings, res.data.pt));
           setFees(res.data.fees ?? null);
-          setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
+          setFeeDraft(res.data.fees?.currency ? classFeesDraft(res.data.fees) : null);
           setPtFees(res.data.ptFees ?? null);
-          setPtFeeDraft(res.data.fees && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
+          setPtFeeDraft(res.data.fees?.currency && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
           setOverdue(res.data.overdue ?? null);
           setOverdueDraft(res.data.overdue?.rule ?? null);
         })
@@ -265,7 +265,8 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     setSaveError(null);
   };
   const feesOff = off || !fees?.canChange;
-  const sign = fees === null ? '' : currencySign(fees.currency);
+  const sign = fees === null || fees.currency === null ? '' : currencySign(fees.currency);
+  const countryTo = placeFor(orgSlug, privileges, 'country');
   const membershipsTo = placeFor(orgSlug, privileges, 'memberships');
   const billsTo = placeFor(orgSlug, privileges, 'membershipBills');
   const pickOverdue = (rule) => {
@@ -297,9 +298,9 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
       setPt(res.data.pt);
       setDraft(bookingSettingsDraft(res.data.settings, res.data.pt));
       setFees(res.data.fees ?? null);
-      setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
+      setFeeDraft(res.data.fees?.currency ? classFeesDraft(res.data.fees) : null);
       setPtFees(res.data.ptFees ?? null);
-      setPtFeeDraft(res.data.fees && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
+      setPtFeeDraft(res.data.fees?.currency && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
       setOverdue(res.data.overdue ?? null);
       setOverdueDraft(res.data.overdue?.rule ?? null);
       setSaved(bookingSettingsSavedLine(res.data.movedIn));
@@ -354,6 +355,19 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
               <NumberBox label="How many people a waitlist holds" value={draft.waitlistMax} onChange={(waitlistMax) => edit({ waitlistMax })} disabled={off} />
               <span>people for each class</span>
             </Row>
+
+            {ready && fees !== null && fees.currency === null ? (
+              <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="fees-need-country">
+                <span>Late cancel and no-show fees are in your country's own money, so they start once your country is set.</span>
+                {countryTo === null ? (
+                  <span style={hintStyle}>The owner can set it in Gym details.</span>
+                ) : (
+                  <PlaceLink to={countryTo} className="c-lk c-w6">
+                    Set your country
+                  </PlaceLink>
+                )}
+              </p>
+            ) : null}
 
             {hasFees ? (
               <>

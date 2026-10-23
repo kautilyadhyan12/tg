@@ -36,23 +36,23 @@ const show = (gym) =>
 describe('a gym in a country that left the list', () => {
   it('says so by name, and asks for the country it is in', () => {
     show(org('FI'));
-    expect(screen.getByText("We don't take businesses in Finland. Choose the country your gym is in.")).toBeTruthy();
+    expect(screen.getByText("We no longer take businesses in Finland. If your gym is in another country, choose it here.")).toBeTruthy();
     expect(screen.queryByText(/We don't have your country on record/)).toBeNull();
   });
 
   it("uses the business's own word", () => {
     show(org('DE', 'studio'));
-    expect(screen.getByText("We don't take businesses in Germany. Choose the country your studio is in.")).toBeTruthy();
+    expect(screen.getByText("We no longer take businesses in Germany. If your studio is in another country, choose it here.")).toBeTruthy();
   });
 
   it('says nothing of the kind for a country on the list, or for none', () => {
     for (const country of ['JP', 'AU', 'FR', 'IN']) {
       show(org(country));
-      expect(screen.queryByText(/We don't take businesses in/), country).toBeNull();
+      expect(screen.queryByText(/We no longer take businesses in/), country).toBeNull();
       cleanup();
     }
     show(org(null));
-    expect(screen.queryByText(/We don't take businesses in/)).toBeNull();
+    expect(screen.queryByText(/We no longer take businesses in/)).toBeNull();
     expect(screen.getByText(/We don't have your country on record/)).toBeTruthy();
   });
 });

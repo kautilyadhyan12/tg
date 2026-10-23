@@ -17,6 +17,7 @@ import {
   CLASS_BOOKING_HOLDS_PLACE,
   BOOKING_OVERDUE_NAMES,
   CLASS_BOOKING_WORDS,
+  CLASS_FEES_NO_CURRENCY,
   CLASS_LATE_CANCEL_ERROR,
   CLASS_MARK_WORDS,
   CLASS_REMOVE_WORDS,
@@ -774,7 +775,7 @@ async function rulesView(deps: Pick<BookingsDeps, "sql" | "now">, org: OrgRow, s
   return classBookingSettingsResponseSchema.parse({
     settings: rules.settings,
     pt: rules.pt,
-    fees: { ...rules.fees, currency: memberCurrencyForCountry(org.country) ?? org.currencyDisplay, canChange, onBills },
+    fees: { ...rules.fees, currency: memberCurrencyForCountry(org.country), canChange, onBills },
     ptFees: rules.ptFees,
     overdue: { rule: rules.overdue, afterDays: overdue.afterDays, stopped },
   });
@@ -829,6 +830,9 @@ export async function setBookingSettings(
     const overdueChanged = overdue !== before.overdue;
     if ((feesChanged.length > 0 || ptFeesChanged.length > 0) && !mayFees) return new OrgsError(403, "forbidden", NO_FEES);
     if (overdueChanged && !mayFees) return new OrgsError(403, "forbidden", NO_OVERDUE);
+    if ((feesChanged.length > 0 || ptFeesChanged.length > 0) && memberCurrencyForCountry(org.country) === null) {
+      return new OrgsError(409, "no_member_currency", CLASS_FEES_NO_CURRENCY);
+    }
     if (changed.length === 0 && ptChanged.length === 0 && feesChanged.length === 0 && ptFeesChanged.length === 0 && !overdueChanged) return before;
     await repo.writeSettings(tx, gymId, { settings, pt, fees, ptFees, overdue });
     await insertAudit(tx, {

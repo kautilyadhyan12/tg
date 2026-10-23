@@ -9,6 +9,7 @@ import {
   coversWords,
   dayWords,
   mayDownloadPayments,
+  memberCurrencyForCountry,
   paymentLine,
   paymentsDownloadSummarySchema,
   paymentsFileName,
@@ -40,7 +41,8 @@ export interface Days {
 export async function requireReader(deps: PaymentsDownloadDeps, userId: string, gymId: string, query: PaymentsDownloadQuery): Promise<Days> {
   const { org, privileges } = await requireStaff(deps, gymId, userId);
   if (!mayDownloadPayments(privileges)) throw new OrgsError(403, "forbidden", PAYMENTS_DOWNLOAD_WORDS.no_payments);
-  const currency = org.currencyDisplay;
+  // What its members pay in, as Reports counts it; never the money the gym pays us in (18s).
+  const currency = memberCurrencyForCountry(org.country) ?? org.currencyDisplay;
   if (query.from !== undefined && query.to !== undefined) return { from: query.from, to: query.to, everyDay: false, currency };
   const today = dayInTz(deps.now(), org.timezone);
   const first = await repo.firstDay(deps.sql, gymId);
@@ -70,7 +72,7 @@ export function reportsSentence(gymCurrency: string, totals: readonly PaymentsTo
 
 /** The Totals sheet: each currency's column, in Reports' and the Download box's own words. */
 function totalsSheet(days: Days, lines: number, totals: readonly PaymentsTotals[]): Sheet {
-  const money = (pick: (t: PaymentsTotals) => number, bold = false): Cell[] => totals.map((t) => ({ kind: "money", minor: pick(t), bold }));
+  const money = (pick: (t: PaymentsTotals) => number, bold = false): Cell[] => totals.map((t) => ({ kind: "money", minor: pick(t), currency: t.currency, bold }));
   const reports = reportsSentence(days.currency, totals);
   const rows: Cell[][] = [
     [{ kind: "text", value: "Days" }, { kind: "text", value: days.from === days.to ? dayWords(days.from) : coversWords(days.from, days.to) }],
@@ -132,9 +134,9 @@ export async function file(deps: PaymentsDownloadDeps, userId: string, gymId: st
           line.forReceipt === null ? null : { kind: "int", value: line.forReceipt },
           { kind: "text", value: line.refundReason },
           { kind: "text", value: line.method },
-          { kind: "money", minor: line.amountMinor },
-          { kind: "money", minor: line.taxMinor },
-          { kind: "money", minor: line.countedMinor },
+          { kind: "money", minor: line.amountMinor, currency: row.currency },
+          { kind: "money", minor: line.taxMinor, currency: row.currency },
+          { kind: "money", minor: line.countedMinor, currency: row.currency },
           { kind: "text", value: line.status },
           { kind: "text", value: line.by },
           ...currency,

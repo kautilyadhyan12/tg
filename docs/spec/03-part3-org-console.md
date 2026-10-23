@@ -4233,9 +4233,9 @@ for an app that asks, and GoCardless is closed to Kd (RULINGS 2026-10-20).
 Square's eight countries (the US, Canada, the UK, Ireland, France, Spain, Australia, Japan),
 `supportedCountrySchema`. Outside India the business pays us in US dollars; its members pay
 in the country's own money (Australian dollars, yen: whole yen, no smaller unit). A gym stored
-in a country that has left the list keeps its row; Gym details says "We don't take
-businesses in {country}. Choose the country your gym is in." and until then it is a gym with
-no country. People who use the app for themselves may be anywhere.
+in a country that has left the list keeps its row; Gym details says "We no longer take
+businesses in {country}. If your gym is in another country, choose it here." and until then it
+is a gym with no country. People who use the app for themselves may be anywhere.
 
 **At the desk, three ways, each recorded on the bill or the sale:**
 - **The Square Terminal** (18d-vi): KWAZO sends the amount, on a bill or at Sell. For a

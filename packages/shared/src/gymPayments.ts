@@ -18,6 +18,8 @@ export function gymPaymentsAvailability(country: string | null): GymPaymentsAvai
   // A country that has left the business list (18s) is asked again, as no country is.
   if (country === null || !isServedCountry(country)) return "no_country";
   if (SQUARE_COUNTRIES.includes(country)) return "square";
+  // Every served country is Square's or India (18s): "not_available" stays for a country the
+  // business list keeps after Square leaves it, so the box never claims Square there.
   return country === "IN" ? "india_soon" : "not_available";
 }
 

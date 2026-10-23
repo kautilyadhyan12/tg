@@ -32,7 +32,7 @@ function regionNamer() {
  *  under the picker, which shows no country for it. null for any other gym. */
 export function closedCountryLine(country, orgType) {
   if (typeof country !== 'string' || country.trim() === '' || isServedCountry(country)) return null;
-  return `We don't take businesses in ${regionNamer()(country.trim().toUpperCase())}. Choose the country your ${orgWords(orgType).it} is in.`;
+  return `We no longer take businesses in ${regionNamer()(country.trim().toUpperCase())}. If your ${orgWords(orgType).it} is in another country, choose it here.`;
 }
 
 /** The country picker's options — built from the SERVER'S OWN supported list.
