@@ -167,10 +167,10 @@ describe('whose membership is on screen', () => {
     const rows = await screen.findAllByTestId('held-membership');
     expect(rows.map((r) => within(r).getByText(/Monthly|classes$/).textContent)).toEqual(['Gold Monthly', '10 classes']);
 
-    // The pack owes its one payment; Gold is paid up to 4 Nov.
+    // The pack owes its one payment, ten days late with no days of grace: Overdue (17i-ii). Gold is paid up to 4 Nov.
     const packRow = rows.find((r) => within(r).queryByText('10 classes') !== null);
     const goldRow = rows.find((r) => within(r).queryByText('Gold Monthly') !== null);
-    expect(within(packRow).getByTestId('held-payment').textContent).toBe('Payment due since 10 October 2026');
+    expect(within(packRow).getByTestId('held-payment').textContent).toBe('Overdue since 10 October 2026');
     expect(within(goldRow).getByTestId('held-payment').textContent).toBe('Paid · next payment due 4 November 2026');
 
     fireEvent.click(within(packRow).getByRole('button', { name: 'Record payment' }));
