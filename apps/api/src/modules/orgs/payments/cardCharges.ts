@@ -21,12 +21,18 @@
 // No answer from Square (no connection, a 5xx) is asked again with the same key: Square gives back
 // the same payment, paid or failed. A charge is ended only on Square's own answer, the gym leaving
 // that Square account, or a day without an answer.
+//
+// A DECLINE (18d-iii-ii-a, `cardRetries.ts` in @app/shared): the app tries the card again by itself
+// only after a decline a later try may cure, on the days the rule names, at most 3 charges of a bill
+// to a card in all; staff charge it again a whole day after a decline, never after the bank declined
+// it for good. The bill's first decline queues the email telling the cardholder (`cardNotices.ts`).
 import { randomUUID } from "node:crypto";
 import {
   CARD_CHARGE_WORDS,
   cardChargeResponseSchema,
   cardDeclineReasonOf,
   cardExpired,
+  cardName,
   formatMinor,
   MEMBER_FEE_WORDS,
   memberFeeKindSchema,
@@ -54,7 +60,8 @@ export const CARD_CHARGE = {
   /** Square giving no answer at all for a day: given up, and told to Staff activity. Until then
    *  money taken meanwhile is recorded when Square answers again. */
   giveUpMs: 24 * 60 * 60_000,
-  /** Charges asked again, and bills charged, in one minute of the worker. */
+  /** Charges asked again, and bills charged (first tries and tries again each), in one minute of the
+   *  worker. */
   perRun: 50,
   /** Bills looked at in one minute, charged or not. */
   lookPerRun: 500,
@@ -212,6 +219,7 @@ export async function cardOnFileFor(
     brand: card.brand,
     last4: card.last4,
     expired: cardExpired({ expMonth: card.exp_month, expYear: card.exp_year }, dayInTz(deps.now(), timezone)),
+    stopped: await charges.cardStopped(deps.sql, gymId, card.card_id),
     payerName: card.payerName,
     ref: charges.cardRefOf(card),
   };
@@ -315,11 +323,26 @@ async function chargeByStaff(
       throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
     case "fee_changed":
       throw new OrgsError(409, "member_fee_changed", "This fee has changed since you opened it. Nothing was charged: check it and try again.");
+    case "card_wait":
+      throw new OrgsError(409, "card_charge_wait", cardWaitWords(written, gym.timezone, gym.country));
+    case "card_stopped":
+      throw new OrgsError(409, "card_charge_stopped", CARD_CHARGE_WORDS.stopped);
+    case "card_tried_out":
+      throw new OrgsError(409, "card_charge_tried_out", CARD_CHARGE_WORDS.tried_out);
     default: {
       const never: never = written;
       throw new Error(`unhandled card charge start: ${JSON.stringify(never)}`);
     }
   }
+}
+
+/** "Visa ending 1111 was declined less than a day ago…", with the gym's own time it may be charged
+ *  again from. Square: "Wait at least 24 hours before retrying." */
+function cardWaitWords(w: { from: Date; brand: string; last4: string }, timezone: string, country: string | null): string {
+  const locale = `en-${country ?? "US"}`;
+  const time = new Intl.DateTimeFormat(locale, { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(w.from);
+  const day = new Intl.DateTimeFormat(locale, { timeZone: timezone, day: "numeric", month: "short" }).format(w.from);
+  return `${cardName(w)} was declined less than a day ago, and Square advises waiting a day before charging it again. It can be charged from ${time} on ${day}. Nothing was charged.`;
 }
 
 async function answer(deps: PaymentsDeps, gymId: string, entryId: string, chargeId: string): Promise<CardChargeResponse> {
@@ -350,20 +373,23 @@ export async function processCardCharges(deps: PaymentsDeps, square: SquareSetti
     run.asked += 1;
   }
 
-  let after: { gymId: string; billId: string } | null = null;
+  // Tries again first: they are fewer, and each has waited days already.
   let looked = 0;
-  while (run.charged < CARD_CHARGE.perRun && looked < CARD_CHARGE.lookPerRun) {
-    const due = await charges.dueBills(deps.sql, { environment: square.environment, now: deps.now(), limit: 50, after, gymIds });
-    if (due.length === 0) break;
-    for (const bill of due) {
-      looked += 1;
-      after = { gymId: bill.gymId, billId: bill.billId };
-      if (run.charged >= CARD_CHARGE.perRun) break;
-      const step = await chargeDueBill(deps, square, bill);
-      if (step === undefined) continue;
-      run.charged += 1;
-      if (step?.done === "paid") run.paid += 1;
-      if (step?.done === "declined") run.declined += 1;
+  for (const find of [charges.retryBills, charges.dueBills]) {
+    let after: { gymId: string; billId: string } | null = null;
+    while (run.charged < CARD_CHARGE.perRun && looked < CARD_CHARGE.lookPerRun) {
+      const due = await find(deps.sql, { environment: square.environment, now: deps.now(), limit: 50, after, gymIds });
+      if (due.length === 0) break;
+      for (const bill of due) {
+        looked += 1;
+        after = { gymId: bill.gymId, billId: bill.billId };
+        if (run.charged >= CARD_CHARGE.perRun) break;
+        const step = await chargeDueBill(deps, square, bill);
+        if (step === undefined) continue;
+        run.charged += 1;
+        if (step?.done === "paid") run.paid += 1;
+        if (step?.done === "declined") run.declined += 1;
+      }
     }
   }
   return run;

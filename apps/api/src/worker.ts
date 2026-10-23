@@ -56,6 +56,7 @@ import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js"
 import { sendPlanEndReminders } from "./modules/billing/service.js";
 import { squareSettings } from "./modules/orgs/payments/settings.js";
 import { processSquareWork } from "./modules/orgs/payments/work.js";
+import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createMemoryRedis } from "./redis.js";
 import { sentryOptions } from "./sentry.js";
@@ -544,6 +545,21 @@ if (invites === null || inviteSender === null) {
       });
       if (staff.sent + staff.skipped + staff.failed + staff.retried + staff.held > 0 || staff.capped || staff.stoppedByProvider) {
         log.info({ ...staff, durationMs: Date.now() - staffStartedAt, event: "job.finished", job: "invites.staff_invitations" }, "job finished");
+      }
+      // A card payment that did not go through, told to the cardholder (18d-iii-ii-a): the same
+      // sender and kill switch, never the daily cap.
+      const noticesStartedAt = Date.now();
+      const notices = await sendDueCardNotices({
+        sql,
+        log,
+        settings: invites,
+        sender: inviteSender,
+        transport: inviteTransport,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      });
+      if (notices.sent + notices.skipped + notices.failed + notices.retried > 0) {
+        log.info({ ...notices, durationMs: Date.now() - noticesStartedAt, event: "job.finished", job: "invites.card_notices" }, "job finished");
       }
     },
     { connection },

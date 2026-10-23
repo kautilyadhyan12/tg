@@ -241,3 +241,32 @@ export function accountDeletionEmail(
     `<p>— ${APP_NAME}</p>`;
   return { to, subject: `Your ${APP_NAME} account will be deleted in ${String(days)} days`, text, html };
 }
+
+/** A card payment that did not go through (18d-iii-ii-a; spec Part 3 §14.8): to whoever's card it
+ *  is, from the gym, with at least 7 days to pay another way (Visa). Every line arrives worded and
+ *  cleaned by the sender (`cardNotices.ts`); the gym's name, a person's name and the gym's contact
+ *  details are the only text that is not ours, and none carries a link. */
+export function cardDeclinedEmail(words: {
+  to: string;
+  gymName: string;
+  greeting: string;
+  /** "Your card payment of $25.00 to Iron Gym for your membership didn't go through." */
+  what: string;
+  /** "Visa ending 1111 was declined on October 23. There wasn't enough money on the card." */
+  why: string;
+  /** "We'll try the card again on October 26."; null where the email cannot say. */
+  next: string | null;
+  /** "Please pay by October 30: at the front desk, or with another card." */
+  payBy: string;
+  /** "Questions? Call 555 0100 or email desk@irongym.com." or null. */
+  contact: string | null;
+}): EmailMessage {
+  const body = [words.greeting, words.what, words.why, words.next, words.payBy, words.contact].filter((line): line is string => line !== null);
+  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about a payment you agreed to.`;
+  const text = `${body.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
+  const html =
+    body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.gymName)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `Your payment to ${words.gymName} didn't go through`, text, html };
+}

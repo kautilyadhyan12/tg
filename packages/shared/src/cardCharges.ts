@@ -50,12 +50,35 @@ const receiptNumberSchema = z.number().int().min(1).max(2_147_483_647);
 /** The card a charge was made to, as a screen shows it. */
 export const cardSeenSchema = z.object({ brand: z.string().regex(/^[A-Z_]{1,40}$/), last4: z.string().regex(/^[0-9]{4}$/) }).strict();
 
+const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/** What becomes of a declined bill next (18d-iii-ii-a, `cardRetries.ts`): `bank`, staff charge it
+ *  again once the cardholder has spoken to their bank; `new_card`, the bank declined the card for
+ *  good; `tried_out`, it was charged as often as one bill allows. */
+export const cardRetryStopSchema = z.enum(["bank", "new_card", "tried_out"]);
+export type CardRetryStop = z.infer<typeof cardRetryStopSchema>;
+
+/** The email telling the cardholder (18d-iii-ii-a): `emailed` on its day; `sending` until it goes;
+ *  `no_email`, nobody has an address on file; `not_sent`, it could not be sent. */
+export const cardNoticeSchema = z
+  .object({
+    state: z.enum(["emailed", "sending", "no_email", "not_sent"]),
+    on: daySchema.nullable(),
+  })
+  .strict();
+export type CardNotice = z.infer<typeof cardNoticeSchema>;
+
 /** A bill's newest charge to a card on file, where it was declined and the bill is still owed. */
 export const cardDeclinedSchema = cardSeenSchema
   .extend({
     /** The gym's own day it was declined on. */
-    on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    on: daySchema,
     reason: cardDeclineReasonSchema,
+    /** The gym day the app charges the card again by itself; null where it will not. */
+    next: daySchema.nullable().default(null),
+    /** Why it will not, where it will not. */
+    stop: cardRetryStopSchema.nullable().default(null),
+    notice: cardNoticeSchema.nullable().default(null),
   })
   .strict();
 export type CardDeclined = z.infer<typeof cardDeclinedSchema>;
@@ -75,6 +98,8 @@ export const cardOnFileSchema = cardSeenSchema
   .extend({
     /** Past its expiry month, on the gym's day: Square may still have a newer date. */
     expired: z.boolean(),
+    /** Declined for good by its bank (18d-iii-ii-a): never charged again; another card is saved. */
+    stopped: z.boolean().default(false),
     /** The record that pays for them, by name; null for their own card. */
     payerName: z.string().nullable(),
     /** Sent back with Charge card on file: a card replaced, or a payer changed, since is refused. */
@@ -138,4 +163,13 @@ export const CARD_CHARGE_WORDS = {
   charge_gone: "This charge is no longer here.",
   disconnect_charging: "A card on file is being charged. Wait a minute for Square's answer, then disconnect.",
   void_card: "This was charged to the card on file. To give the money back, refund it in your Square Dashboard, then note the refund here.",
+  stopped: "The bank declined this card for good, so it can't be charged again. Save another card, or take payment another way.",
+  tried_out: "This card has been tried 3 times for this payment, so it can't be charged for it again. Ask for another card, or take payment another way.",
 } as const;
+
+/** Said after the decline on a bill (18d-iii-ii-a). */
+export const CARD_RETRY_WORDS: Readonly<Record<CardRetryStop, string>> = {
+  bank: "It won't be tried again by itself. Ask the cardholder to call their bank, then charge it again, or take payment another way.",
+  new_card: "The bank declined this card for good. Ask for another card, or take payment another way.",
+  tried_out: "It was tried 3 times. Ask for another card, or take payment another way.",
+};

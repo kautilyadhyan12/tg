@@ -361,7 +361,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(await chargesOf(bea)).toEqual([]);
   });
 
-  it("a declined card leaves the bill owed and says so, and is not charged again by itself", async () => {
+  it("a declined card leaves the bill owed and says so, and is not charged again the same day", async () => {
     const gym = await makeGym(`Decline Gym ${uniq()}`, `MDC${uniq()}`);
     const typeId = await typeOf(gym);
     const dana = await holding(gym, typeId, await person(gym, "Dana Declined"));
@@ -376,7 +376,11 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(second?.status).toBe("open");
     expect((await chargesOf(dana)).map((c) => c.outcome)).toEqual(["declined"]);
     const shown = (await held(gym, gym.owner, dana.entryId)).memberships[0]?.billing?.bills.find((b) => b.periodIndex === 1);
-    expect(shown?.cardDeclined).toEqual({ brand: "VISA", last4: "1111", on: await todayOf(gym, dana.entryId), reason: "insufficient_funds" });
+    // Not enough money: tried again by itself in 3 days (18d-iii-ii-a); the email to Dana waits for
+    // the sender.
+    const on = await todayOf(gym, dana.entryId);
+    const next = new Date(new Date(`${on}T12:00:00Z`).getTime() + 3 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    expect(shown?.cardDeclined).toEqual({ brand: "VISA", last4: "1111", on, reason: "insufficient_funds", next, stop: null, notice: { state: "sending", on: null } });
   });
 
   it("before 6 in the morning, and for a bill three days old, nothing is charged", async () => {
