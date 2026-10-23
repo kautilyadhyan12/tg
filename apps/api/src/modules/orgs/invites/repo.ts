@@ -631,6 +631,9 @@ export async function emailsUsedToday(sql: SqlOrTx, now: Date): Promise<number> 
          + (SELECT count(*) FROM gym_lead_sends
             WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now}))
          + (SELECT count(*) FROM gym_staff_invite_sends
+            WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now}))
+         -- Payment notices (18d-iii-ii-a) are owed and never capped, but they use the same sender.
+         + (SELECT count(*) FROM gym_card_decline_notices
             WHERE (state = 'sent' AND finished_at > ${dayAgo}) OR (state = 'sending' AND lease_until >= ${now})))::int AS n`;
   return rows[0]?.n ?? 0;
 }

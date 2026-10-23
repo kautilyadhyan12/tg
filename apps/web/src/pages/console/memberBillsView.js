@@ -11,6 +11,7 @@ import {
   BILL_CANCEL_REASON_WORDS,
   BILL_OVERDUE_DAYS_MAX,
   CARD_DECLINE_WORDS,
+  CARD_RETRY_WORDS,
   cardName,
   MEMBER_FEE_WORDS,
   MEMBER_PAYMENT_BY_HAND,
@@ -60,9 +61,31 @@ export const BILLS_FOLDED = 2;
 
 const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? 'Paid';
 
-/** A bill or fee whose newest charge to the card on file was declined (18d-iii-i). */
+/** A bill or fee whose newest charge to the card on file was declined (18d-iii-i): why, what the
+ *  app does next or why it won't, and whether the cardholder was emailed (18d-iii-ii-a). */
 export function cardDeclinedLine(declined) {
-  return `${cardName(declined)} was declined on ${shortDay(declined.on, false)}. ${CARD_DECLINE_WORDS[declined.reason] ?? CARD_DECLINE_WORDS.declined}`;
+  const next =
+    declined.next !== null && declined.next !== undefined
+      ? ` The payment will be retried automatically on ${shortDay(declined.next, false)}.`
+      : declined.stop !== null && declined.stop !== undefined
+        ? ` ${CARD_RETRY_WORDS[declined.stop]}`
+        : '';
+  return `${cardName(declined)} was declined on ${shortDay(declined.on, false)}. ${CARD_DECLINE_WORDS[declined.reason] ?? CARD_DECLINE_WORDS.declined}${next}${cardNoticeLine(declined.notice)}`;
+}
+
+/** The email telling the cardholder, after the decline. */
+function cardNoticeLine(notice) {
+  if (notice === null || notice === undefined) return '';
+  switch (notice.state) {
+    case 'emailed':
+      return ` The cardholder was emailed on ${shortDay(notice.on, false)}.`;
+    case 'sending':
+      return ' An email to the cardholder is being sent.';
+    case 'no_email':
+      return ' The cardholder was not emailed because there is no email address on file. Please contact them directly.';
+    default:
+      return ' The email to the cardholder could not be sent. Please contact them directly.';
+  }
 }
 
 /** A bill or fee whose charge to the card on file Square never answered: the money may be taken. */

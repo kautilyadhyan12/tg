@@ -242,6 +242,43 @@ export function accountDeletionEmail(
   return { to, subject: `Your ${APP_NAME} account will be deleted in ${String(days)} days`, text, html };
 }
 
+/** A card payment that did not go through (18d-iii-ii-a; spec Part 3 §14.8): to whoever's card it
+ *  is, from the gym, with at least 7 days to pay another way (Visa). Every line arrives worded and
+ *  cleaned by the sender (`cardNotices.ts`); the gym's name, a person's name and the gym's contact
+ *  details are the only text that is not ours, and none carries a link. */
+export function cardDeclinedEmail(words: {
+  to: string;
+  gymName: string;
+  greeting: string;
+  /** "Your $25.00 membership payment to Iron Gym could not be processed." */
+  what: string;
+  /** "Your Visa ending in 1111 was declined on October 23. The card did not have enough funds." */
+  why: string;
+  /** "We will retry this payment automatically on October 26."; null where the email cannot say. */
+  next: string | null;
+  /** "Please make your payment by October 30 using one of the following options:" */
+  payBy: string;
+  /** The ways to pay, one bullet each. */
+  options: readonly string[];
+  /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
+  contact: string | null;
+}): EmailMessage {
+  const before = [words.greeting, words.what, words.why, words.next].filter((line): line is string => line !== null);
+  const after = [...(words.contact === null ? [] : [words.contact]), "Thank you."];
+  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about a payment you agreed to.`;
+  const text =
+    `${before.join("\n\n")}\n\n${words.payBy}\n\n${words.options.map((o) => `• ${o}`).join("\n")}\n\n` +
+    `${after.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
+  const html =
+    before.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.payBy)}</p>` +
+    `<ul>${words.options.map((o) => `<li>${escapeHtml(o)}</li>`).join("")}</ul>` +
+    after.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.gymName)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `Your payment to ${words.gymName} could not be processed`, text, html };
+}
+
 /** The copy of a membership agreement a person signed at the desk (ROADMAP 18u-i): the
  *  details the app filled in, the business's own words and the signature, as signed. Plain
  *  text in both: the business's words are never made into links here. The gym name arrives

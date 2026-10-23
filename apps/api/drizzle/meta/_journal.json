@@ -1114,6 +1114,13 @@
       "when": 1790726400159,
       "tag": "0159_membership_agreement",
       "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1790726400160,
+      "tag": "0160_card_retries",
+      "breakpoints": true
     }
   ]
 }

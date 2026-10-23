@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { createdAt } from "./common.js";
+import { boolean, check, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gymMemberListEntries } from "./memberList.js";
 import { gyms } from "./tenancy.js";
@@ -455,6 +455,8 @@ export const gymCardCharges = pgTable(
     checkingUntil: timestamp("checking_until", { withTimezone: true }),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** On a decline the app tries again by itself (0160; 18d-iii-ii-a), the gym day it does. */
+    nextTryOn: date("next_try_on"),
   },
   (t) => [
     check("gym_card_charges_environment_check", sql`${t.environment} IN ('sandbox','production')`),
@@ -480,11 +482,63 @@ export const gymCardCharges = pgTable(
     ),
     uniqueIndex("gym_card_charges_request_uq").on(t.gymId, t.requestKey),
     uniqueIndex("gym_card_charges_payment_key_uq").on(t.environment, t.accountId, t.paymentKey),
-    uniqueIndex("gym_card_charges_schedule_uq").on(t.gymId, t.billId).where(sql`${t.bySchedule}`),
+    check("gym_card_charges_next_try_check", sql`${t.nextTryOn} IS NULL OR ${t.outcome} = 'declined'`),
+    uniqueIndex("gym_card_charges_schedule_uq").on(t.gymId, t.paymentKey).where(sql`${t.bySchedule}`),
     uniqueIndex("gym_card_charges_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'charging'`),
     uniqueIndex("gym_card_charges_square_payment_uq").on(t.environment, t.accountId, t.squarePaymentId).where(sql`${t.squarePaymentId} IS NOT NULL`),
     index("gym_card_charges_bill_idx").on(t.gymId, t.billId, t.startedAt),
     index("gym_card_charges_period_idx").on(t.gymId, t.heldMembershipId, t.periodIndex).where(sql`${t.billId} IS NULL`),
     index("gym_card_charges_open_idx").on(t.checkedAt).where(sql`${t.state} = 'charging'`),
+    index("gym_card_charges_card_idx").on(t.gymId, t.cardId).where(sql`${t.outcome} = 'declined'`),
+    index("gym_card_charges_retry_idx").on(t.nextTryOn).where(sql`${t.nextTryOn} IS NOT NULL`),
+  ],
+);
+
+/** The email telling a cardholder their payment did not go through (0160; 18d-iii-ii-a): one a
+ *  period of a membership (`bill_id` null; a press paying ahead has no bill yet) or one a fee (by its
+ *  bill), written with its first decline. The address is kept only while it waits to go. The record
+ *  link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the migration only. */
+export const gymCardDeclineNotices = pgTable(
+  "gym_card_decline_notices",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    /** The period it is about; null for a fee. */
+    periodIndex: integer("period_index"),
+    /** The fee it is about; null for a period. */
+    billId: uuid("bill_id"),
+    chargeId: uuid("charge_id")
+      .notNull()
+      .references(() => gymCardCharges.id, { onDelete: "cascade" }),
+    /** The cardholder's record: the person's own, or whoever pays for them. */
+    entryId: uuid("entry_id"),
+    email: citext("email"),
+    state: text("state").notNull(),
+    reason: text("reason"),
+    attempts: integer("attempts").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    maybeSentAt: timestamp("maybe_sent_at", { withTimezone: true }),
+    providerId: text("provider_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_card_decline_notices_target_check", sql`(${t.periodIndex} IS NULL) = (${t.billId} IS NOT NULL) AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0)`),
+    check("gym_card_decline_notices_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
+    check("gym_card_decline_notices_email_check", sql`(${t.state} IN ('queued','sending') OR ${t.email} IS NULL) AND (${t.email} IS NULL OR length(${t.email}) <= 254)`),
+    check("gym_card_decline_notices_waiting_check", sql`${t.state} NOT IN ('queued','sending') OR ${t.email} IS NOT NULL`),
+    check("gym_card_decline_notices_lease_check", sql`(${t.state} = 'sending') = (${t.leaseUntil} IS NOT NULL)`),
+    check("gym_card_decline_notices_finished_check", sql`(${t.state} IN ('sent','skipped','failed')) = (${t.finishedAt} IS NOT NULL)`),
+    check("gym_card_decline_notices_reason_check", sql`((${t.state} IN ('skipped','failed')) = (${t.reason} IS NOT NULL)) AND (${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$')`),
+    check("gym_card_decline_notices_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
+    check("gym_card_decline_notices_attempts_check", sql`${t.attempts} >= 0`),
+    uniqueIndex("gym_card_decline_notices_period_uq").on(t.gymId, t.heldMembershipId, t.periodIndex).where(sql`${t.periodIndex} IS NOT NULL`),
+    uniqueIndex("gym_card_decline_notices_fee_uq").on(t.gymId, t.billId).where(sql`${t.billId} IS NOT NULL`),
+    index("gym_card_decline_notices_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
+    index("gym_card_decline_notices_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
   ],
 );

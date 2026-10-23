@@ -36,7 +36,8 @@ export interface FakeCheckout {
 }
 
 /** How a card on file answers a charge. */
-export type CardBehaviour = "pays" | "declines" | "insufficient" | "expired";
+/** How a card on file answers a charge; `{ declines }` with any code Square sends (18d-iii-ii-a). */
+export type CardBehaviour = "pays" | "declines" | "insufficient" | "expired" | { declines: string };
 
 export function fakeSquare() {
   const cards = new Map<string, { accountId: string; customerId: string; behaviour: CardBehaviour }>();
@@ -231,7 +232,14 @@ export function fakeSquare() {
         ...(state.answerWith ?? {}),
       };
       charged.push({ ...payment, accountId: a.merchantId, cardId: p.cardId, key: p.idempotencyKey });
-      const code = card.behaviour === "insufficient" ? "INSUFFICIENT_FUNDS" : card.behaviour === "expired" ? "CARD_EXPIRED" : "GENERIC_DECLINE";
+      const code =
+        typeof card.behaviour === "object"
+          ? card.behaviour.declines
+          : card.behaviour === "insufficient"
+            ? "INSUFFICIENT_FUNDS"
+            : card.behaviour === "expired"
+              ? "CARD_EXPIRED"
+              : "GENERIC_DECLINE";
       const result: CardPaymentResult = card.behaviour === "pays" ? { kind: "ok", value: payment } : { kind: "declined", status: 400, code, payment };
       cardPayments.set(keyed, { body: { ...p }, result });
       if (state.loseAnswers) return Promise.resolve(unavailable);

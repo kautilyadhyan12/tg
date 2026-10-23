@@ -5,7 +5,22 @@
 // (`checking_until`), and every change names the state it was read in, so two requests never both
 // act on one answer. Every read for a screen names the gym; the worker's reads across gyms name the
 // environment and hand each row back with its gym.
-import { cardDeclineReasonOf, cardChargeOutcomeSchema, heldMembershipView, memberPayTarget, type CardChargeOutcome, type CardDeclined, type CardUnchecked } from "@app/shared";
+import {
+  CARD_RETRY,
+  appCardRetry,
+  appRetryDue,
+  cardChargeOutcomeSchema,
+  cardDeclineClassOf,
+  cardDeclineReasonOf,
+  heldMembershipView,
+  memberPayTarget,
+  staffCardRetry,
+  type CardChargeOutcome,
+  type CardChargeTry,
+  type CardDeclined,
+  type CardNotice,
+  type CardUnchecked,
+} from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
@@ -157,7 +172,40 @@ export type StartChargeOutcome =
   | { kind: "key_reused" | "entry_not_found" | "membership_not_found" | "not_allowed" | "no_card" | "card_changed" | "currency" }
   | { kind: "terminal_waiting" | "card_charging" }
   | { kind: "fee_not_found" | "fee_changed" }
-  | { kind: "too_much"; leftMinor: number; currency: string };
+  | { kind: "too_much"; leftMinor: number; currency: string }
+  /** Staff: the card was declined for this bill less than a day ago; for good; or 3 times. */
+  | { kind: "card_wait"; from: Date; brand: string; last4: string }
+  | { kind: "card_stopped" | "card_tried_out" };
+
+/** The bill's charges, oldest first, as the retry rule reads them: by the bill, and a press for its
+ *  period made before it was open (which keeps no bill). `billId` null: a period with no bill yet. */
+export async function triesOf(
+  sql: SqlOrTx,
+  gymId: string,
+  membershipId: string,
+  billId: string | null,
+  periodIndex: number | null,
+): Promise<CardChargeTry[]> {
+  const rows = await sql<{ card_id: string; outcome: string | null; decline_code: string | null; by_schedule: boolean; started_at: Date; day: string }[]>`
+    SELECT c.card_id, c.outcome, c.decline_code, c.by_schedule, c.started_at, (c.started_at AT TIME ZONE g.timezone)::date::text AS day
+    FROM gym_card_charges c
+    JOIN gyms g ON g.id = c.gym_id
+    WHERE c.gym_id = ${gymId}
+      AND ((${billId}::uuid IS NOT NULL AND c.bill_id = ${billId})
+           OR (${periodIndex}::int IS NOT NULL AND c.bill_id IS NULL AND c.held_membership_id = ${membershipId} AND c.period_index = ${periodIndex}))
+    ORDER BY c.started_at, c.id`;
+  return rows.map((r) => {
+    const outcome = cardChargeOutcomeSchema.safeParse(r.outcome);
+    return { cardId: r.card_id, outcome: outcome.success ? outcome.data : null, code: r.decline_code, bySchedule: r.by_schedule, startedAt: r.started_at, day: r.day };
+  });
+}
+
+/** Whether the bank declined this card for good, for any bill of the gym: never charged again. */
+export async function cardStopped(sql: SqlOrTx, gymId: string, cardId: string): Promise<boolean> {
+  const rows = await sql<{ decline_code: string }[]>`
+    SELECT DISTINCT decline_code FROM gym_card_charges WHERE gym_id = ${gymId} AND card_id = ${cardId} AND outcome = 'declined' AND decline_code IS NOT NULL`;
+  return rows.some((r) => cardDeclineClassOf(r.decline_code) === "new_card");
+}
 
 /** The card a charge for this record is made to: the payer's where somebody pays for them (18i),
  *  otherwise their own, in the Square account named. Locked for the transaction. */
@@ -239,22 +287,34 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
       currency = fee.currency;
     }
     if (currency !== s.accountCurrency) return { kind: "currency" };
-    // The app charges by itself only a bill no card was ever charged for, by itself or by staff: one
-    // try, never again after a decline, and never after an answer Square did not give (the money may
-    // be taken). A second run at the same instant waits for this lock, then finds the first's row.
-    if (s.bySchedule && billId !== null) {
-      const [before] = await tx<{ id: string }[]>`
-        SELECT id FROM gym_card_charges
-        WHERE gym_id = ${s.gymId} AND (bill_id = ${billId} OR (bill_id IS NULL AND held_membership_id = ${row.id} AND period_index = ${periodIndex}))`;
-      if (before !== undefined) return { kind: "not_allowed" };
-    }
 
     const card = await lockedCardFor(tx, s.gymId, s.entryId, s.environment, s.accountId);
     if (card === null) return { kind: "no_card" };
     if (s.cardRef !== null && s.cardRef !== cardRefOf(card)) return { kind: "card_changed" };
-    // The app's own charge is asked with the bill's id: whatever happens to this row, Square takes
-    // that bill once. A press is asked with its own.
-    const paymentKey = s.bySchedule && billId !== null ? billId : s.id;
+    // The bill's charges so far, read under the record's lock: a second run at the same instant waits
+    // for it, then finds the first's row. The app charges a bill by itself first on its date, then
+    // again only on the days the retry rule names after a decline a later try may cure; never after
+    // a refusal, or an answer Square did not give (the money may be taken). Staff charge a card again
+    // a whole day after its decline, never after the bank declined it for good, at most 3 times.
+    const tries = await triesOf(tx, s.gymId, row.id, billId, periodIndex);
+    const stopped = await cardStopped(tx, s.gymId, card.card_id);
+    if (s.bySchedule) {
+      const retry = appCardRetry(tries, card.card_id, stopped);
+      if (retry.kind === "no" || (retry.kind === "on" && !appRetryDue(retry, s.today, s.now))) return { kind: "not_allowed" };
+    } else {
+      const retry = staffCardRetry(tries, card.card_id, stopped, s.now);
+      if (retry.kind === "wait") return { kind: "card_wait", from: retry.from, brand: card.brand, last4: card.last4 };
+      if (retry.kind === "no") return { kind: retry.why === "new_card" ? "card_stopped" : "card_tried_out" };
+    }
+    // The app's own tries are asked with the bill's id, then "<bill>:2" and "<bill>:3": whatever
+    // happens to this row, Square takes each try once. A press is asked with its own id.
+    const appTry = tries.filter((t) => t.bySchedule).length + 1;
+    const paymentKey = s.bySchedule && billId !== null ? (appTry === 1 ? billId : `${billId}:${String(appTry)}`) : s.id;
+    // A new charge of the bill ends any try the app had set for it.
+    await tx`
+      UPDATE gym_card_charges SET next_try_on = NULL
+      WHERE gym_id = ${s.gymId} AND next_try_on IS NOT NULL
+        AND (bill_id = ${billId} OR (bill_id IS NULL AND held_membership_id = ${row.id} AND period_index = ${periodIndex}))`;
     const [made] = await tx<{ id: string }[]>`
       INSERT INTO gym_card_charges (id, gym_id, entry_id, held_membership_id, bill_id, period_index, payer_entry_id, environment,
                                     account_id, location_id, customer_id, card_id, brand, last4, amount_minor, currency,
@@ -309,12 +369,13 @@ export async function finish(
   at: Date,
 ): Promise<boolean> {
   return await sql.begin(async (tx) => {
-    const [row] = await tx<{ gym_id: string; entry_id: string | null; held_membership_id: string; bill_id: string | null; amount_minor: number; currency: string; brand: string; last4: string; started_by: string | null; by_schedule: boolean }[]>`
+    const [row] = await tx<{ gym_id: string; entry_id: string | null; held_membership_id: string; bill_id: string | null; period_index: number | null; payer_entry_id: string | null; card_id: string; amount_minor: number; currency: string; brand: string; last4: string; started_by: string | null; by_schedule: boolean }[]>`
       UPDATE gym_card_charges SET state = 'done', outcome = ${end.outcome}, decline_code = ${end.code}, square_payment_id = ${end.squarePaymentId},
              finished_at = ${at}, checking_until = NULL
       WHERE id = ${id} AND state = 'charging'
-      RETURNING gym_id, entry_id, held_membership_id, bill_id, amount_minor, currency, brand, last4, started_by, by_schedule`;
+      RETURNING gym_id, entry_id, held_membership_id, bill_id, period_index, payer_entry_id, card_id, amount_minor, currency, brand, last4, started_by, by_schedule`;
     if (row === undefined) return false;
+    if (end.outcome === "declined") await afterDecline(tx, { ...row, id }, at);
     await insertAudit(tx, {
       actorUserId: row.started_by,
       gymId: row.gym_id,
@@ -335,6 +396,42 @@ export async function finish(
     });
     return true;
   });
+}
+
+/** A decline (18d-iii-ii-a): the day the app tries the card again, where the retry rule names one
+ *  and the bill is one the app charges by itself (a renewal, or a freeze fee); and, with the bill's
+ *  first decline, the email telling the cardholder, or a note that nobody has an address. */
+async function afterDecline(
+  tx: TransactionSql,
+  c: { id: string; gym_id: string; entry_id: string | null; held_membership_id: string; bill_id: string | null; period_index: number | null; payer_entry_id: string | null; card_id: string },
+  at: Date,
+): Promise<void> {
+  // The bill it was for: by its id, or the period's bill for a press made before it was open.
+  const [bill] = await tx<{ id: string; fee: string | null; renewal: boolean }[]>`
+    SELECT b.id, b.fee,
+           EXISTS (SELECT 1 FROM gym_member_bills o
+                   WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.period_index < b.period_index) AS renewal
+    FROM gym_member_bills b
+    WHERE b.gym_id = ${c.gym_id} AND b.held_membership_id = ${c.held_membership_id}
+      AND (b.id = ${c.bill_id} OR (${c.bill_id}::uuid IS NULL AND b.fee IS NULL AND b.period_index = ${c.period_index}))
+    LIMIT 1`;
+  if (bill !== undefined && c.bill_id !== null && (bill.fee === "freeze" || (bill.fee === null && bill.renewal))) {
+    const retry = appCardRetry(await triesOf(tx, c.gym_id, c.held_membership_id, c.bill_id, c.period_index), c.card_id, await cardStopped(tx, c.gym_id, c.card_id));
+    if (retry.kind === "on") await tx`UPDATE gym_card_charges SET next_try_on = ${retry.day} WHERE id = ${c.id}`;
+  }
+  // Whoever's card it is: the person's own, or the record that pays for them.
+  const holder = c.payer_entry_id ?? c.entry_id;
+  const [person] = holder === null ? [] : await tx<{ email: string | null }[]>`SELECT email::text AS email FROM gym_member_list_entries WHERE gym_id = ${c.gym_id} AND id = ${holder}`;
+  const email = person?.email ?? null;
+  // One a period of the membership, or one a fee. A press paying ahead has no bill yet: its notice
+  // is the period's, and the bill reads it once open (review round one).
+  const billId = c.period_index === null ? (bill?.id ?? c.bill_id) : null;
+  if (c.period_index === null && billId === null) return;
+  await tx`
+    INSERT INTO gym_card_decline_notices (gym_id, held_membership_id, period_index, bill_id, charge_id, entry_id, email, state, reason, not_before, created_at, finished_at)
+    VALUES (${c.gym_id}, ${c.held_membership_id}, ${c.period_index}, ${billId}, ${c.id}, ${holder}, ${email}, ${email === null ? "skipped" : "queued"},
+            ${email === null ? "no_email" : null}, ${at}, ${at}, ${email === null ? at : null})
+    ON CONFLICT DO NOTHING`;
 }
 
 /** Square took the money: it is recorded on the bill, on whichever record holds the membership now,
@@ -422,31 +519,13 @@ export interface DueBill {
   timezone: string;
 }
 
-/** Bills the app charges by itself now, across gyms, after `after` in (gym, bill) order: a renewing
- *  membership's bill with a bill before it while it is in use, or its freeze fee while it is frozen,
- *  of a current member, in the Square account's money, open, due today or in the two days before on
- *  its gym's clock and from 6 in the morning there, never charged before by the app or by staff,
- *  whose payer has a card in the Square account the gym is connected to, and with nothing else on its
- *  way through Square for that membership. The write checks it all again under the record's lock. */
-export async function dueBills(
-  sql: Sql,
-  q: { environment: SquareEnvironment; now: Date; limit: number; after: { gymId: string; billId: string } | null; gymIds: readonly string[] | null },
-): Promise<DueBill[]> {
-  const rows = await sql<{ gym_id: string; entry_id: string; held_membership_id: string; bill_id: string; period_index: number | null; timezone: string }[]>`
-    WITH gym_day AS (
-      SELECT g.id AS gym_id, g.timezone, c.account_id, c.currency,
-             (${q.now}::timestamptz AT TIME ZONE g.timezone)::date AS today,
-             extract(hour FROM ${q.now}::timestamptz AT TIME ZONE g.timezone) AS hour
-      FROM gym_payment_connections c
-      JOIN gyms g ON g.id = c.gym_id
-      WHERE c.environment = ${q.environment} AND c.state = 'connected' AND c.location_id IS NOT NULL
-        AND (${q.gymIds === null}::boolean OR c.gym_id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))
-    )
-    SELECT b.gym_id, h.entry_id, b.held_membership_id, b.id AS bill_id, b.period_index, d.timezone
-    FROM gym_day d
-    JOIN gym_member_bills b ON b.gym_id = d.gym_id AND b.status = 'open' AND b.due_on BETWEEN d.today - 2 AND d.today
-    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-    WHERE d.hour >= 6
+/** What makes a bill (alias `b`, its membership `h`, its gym's day and connection `d`) one the app
+ *  charges by itself, whatever try it is: a renewing membership's bill with a bill before it while
+ *  it is in use, or its freeze fee while it is frozen, of a current member, open, in the Square
+ *  account's money. The worker's looks, the bill's "retried automatically on" and the email's all
+ *  read it (review round one: the bill must never promise what the worker will not do). */
+const appCharges = (sql: SqlOrTx) => sql`
+      b.status = 'open'
       AND h.kind = 'recurring' AND h.renews AND b.currency = d.currency AND h.entry_id IS NOT NULL
       -- A current member: looked up by the record's key, row by row, so the plan does not lean on the
       -- list's statistics (a join here took 17 s with 6,000 due just after they were added).
@@ -462,32 +541,132 @@ export async function dueBills(
           WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.period_index < b.period_index)
         AND NOT EXISTS (
           SELECT 1 FROM gym_member_bills o
-          WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.status = 'open' AND o.period_index < b.period_index)))
+          WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.status = 'open' AND o.period_index < b.period_index)))`;
+
+/** From 6 in the morning on the gym's clock, with nothing else on its way through Square for that
+ *  membership: when the worker charges, now. */
+const chargesNow = (sql: SqlOrTx) => sql`
+      d.hour >= 6
+      AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
+      AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')`;
+
+/** The card the app would charge for the bill's membership: its payer's, in the connected account. */
+const payerCard = (sql: SqlOrTx) => sql`
+      SELECT k.card_id FROM gym_member_cards k
+      WHERE k.gym_id = b.gym_id AND k.environment = d.environment AND k.account_id = d.account_id
+        AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id)`;
+
+/** Each gym's own day and its connected Square account; `environment` null: whichever it is connected
+ *  in (a person's page). */
+const gymDay = (sql: SqlOrTx, q: { environment: SquareEnvironment | null; now: Date; gymIds: readonly string[] | null }) => sql`
+    gym_day AS (
+      SELECT g.id AS gym_id, g.timezone, c.environment, c.account_id, c.currency,
+             (${q.now}::timestamptz AT TIME ZONE g.timezone)::date AS today,
+             extract(hour FROM ${q.now}::timestamptz AT TIME ZONE g.timezone) AS hour
+      FROM gym_payment_connections c
+      JOIN gyms g ON g.id = c.gym_id
+      WHERE (${q.environment === null}::boolean OR c.environment = ${q.environment}) AND c.state = 'connected' AND c.location_id IS NOT NULL
+        AND (${q.gymIds === null}::boolean OR c.gym_id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))
+    )`;
+
+interface DueRow {
+  gym_id: string;
+  entry_id: string;
+  held_membership_id: string;
+  bill_id: string;
+  period_index: number | null;
+  timezone: string;
+}
+const toDue = (r: DueRow): DueBill => ({ gymId: r.gym_id, entryId: r.entry_id, membershipId: r.held_membership_id, billId: r.bill_id, periodIndex: r.period_index, timezone: r.timezone });
+
+export interface DueQuery {
+  environment: SquareEnvironment;
+  now: Date;
+  limit: number;
+  after: { gymId: string; billId: string } | null;
+  gymIds: readonly string[] | null;
+}
+
+/** Bills the app charges by itself for the first time now, across gyms, after `after` in (gym, bill)
+ *  order: those of `appCharges`, due today or in the two days before on the gym's clock, whose payer
+ *  has a card in the Square account the gym is connected to, never charged before by the app or by
+ *  staff. The write checks it all again under the record's lock. */
+export async function dueBills(sql: Sql, q: DueQuery): Promise<DueBill[]> {
+  const rows = await sql<DueRow[]>`
+    WITH ${gymDay(sql, q)}
+    SELECT b.gym_id, h.entry_id, b.held_membership_id, b.id AS bill_id, b.period_index, d.timezone
+    FROM gym_day d
+    JOIN gym_member_bills b ON b.gym_id = d.gym_id AND b.status = 'open' AND b.due_on BETWEEN d.today - 2 AND d.today
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    WHERE ${appCharges(sql)} AND ${chargesNow(sql)}
       AND (${q.after === null}::boolean OR (b.gym_id, b.id) > (${q.after?.gymId ?? null}::uuid, ${q.after?.billId ?? null}::uuid))
-      AND EXISTS (
-        SELECT 1 FROM gym_member_cards k
-        WHERE k.gym_id = b.gym_id AND k.environment = ${q.environment} AND k.account_id = d.account_id
-          AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id))
-      -- No card was charged for it before, by the app or by staff: one try, and never again after a
-      -- decline or an answer Square did not give.
+      AND EXISTS (${payerCard(sql)})
+      -- No card was charged for it before, by the app or by staff: a later try is found by retryBills.
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id)
       AND (b.fee IS NOT NULL OR NOT EXISTS (
         SELECT 1 FROM gym_card_charges x
         WHERE x.gym_id = b.gym_id AND x.bill_id IS NULL AND x.held_membership_id = b.held_membership_id AND x.period_index = b.period_index))
-      AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
-      AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
     ORDER BY b.gym_id, b.id
     LIMIT ${q.limit}`;
-  return rows.map((r) => ({ gymId: r.gym_id, entryId: r.entry_id, membershipId: r.held_membership_id, billId: r.bill_id, periodIndex: r.period_index, timezone: r.timezone }));
+  return rows.map(toDue);
 }
 
-/** For a person's page: each bill's newest charge (declined; never answered by Square; or charging
- *  now), and the card each payment was charged to. */
+/** A decline the app will try again (alias `x`): its day set, not more than 3 days gone (a try the
+ *  worker could not make by then is staff's), on a bill of `appCharges`, and the same card the payer
+ *  has on file now in the connected account. */
+const retryPending = (sql: SqlOrTx) => sql`
+      x.next_try_on IS NOT NULL AND x.next_try_on >= d.today - 3 AND x.environment = d.environment
+      AND ${appCharges(sql)}
+      AND x.card_id = (${payerCard(sql)})`;
+
+/** Bills whose card the app tries again now (18d-iii-ii-a), after `after` in (gym, bill) order: those
+ *  of `retryPending` whose day is reached and a whole day after the decline. Found from the declines
+ *  (`gym_card_charges_retry_idx`), as they are few. The write checks it all again. */
+export async function retryBills(sql: Sql, q: DueQuery): Promise<DueBill[]> {
+  const rows = await sql<DueRow[]>`
+    WITH ${gymDay(sql, q)}
+    SELECT b.gym_id, h.entry_id, b.held_membership_id, b.id AS bill_id, b.period_index, d.timezone
+    FROM gym_card_charges x
+    JOIN gym_day d ON d.gym_id = x.gym_id AND d.account_id = x.account_id
+    JOIN gym_member_bills b ON b.gym_id = x.gym_id AND b.id = x.bill_id
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    WHERE ${retryPending(sql)} AND ${chargesNow(sql)}
+      AND x.next_try_on <= d.today AND x.started_at <= ${new Date(q.now.getTime() - CARD_RETRY.gapMs)}
+      AND (${q.after === null}::boolean OR (b.gym_id, b.id) > (${q.after?.gymId ?? null}::uuid, ${q.after?.billId ?? null}::uuid))
+    ORDER BY b.gym_id, b.id
+    LIMIT ${q.limit}`;
+  return rows.map(toDue);
+}
+
+/** A try again the worker's write refused: the bill's decline no longer sets a day. */
+export async function clearRetry(sql: Sql, gymId: string, billId: string): Promise<void> {
+  await sql`UPDATE gym_card_charges SET next_try_on = NULL WHERE gym_id = ${gymId} AND bill_id = ${billId} AND next_try_on IS NOT NULL`;
+}
+
+/** The day the app will try each of these bills again, by the worker's own rule (`retryPending`): the
+ *  bill's line and the email say it only where the worker will do it. */
+export async function pendingRetries(sql: SqlOrTx, gymId: string, billIds: readonly string[], now: Date): Promise<Map<string, string>> {
+  if (billIds.length === 0) return new Map();
+  const rows = await sql<{ bill_id: string; next_try_on: string }[]>`
+    WITH ${gymDay(sql, { environment: null, now, gymIds: [gymId] })}
+    SELECT b.id AS bill_id, x.next_try_on::text AS next_try_on
+    FROM gym_card_charges x
+    JOIN gym_day d ON d.gym_id = x.gym_id AND d.account_id = x.account_id
+    JOIN gym_member_bills b ON b.gym_id = x.gym_id AND b.id = x.bill_id
+    JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    WHERE x.gym_id = ${gymId} AND b.id = ANY(${[...billIds]}::uuid[]) AND ${retryPending(sql)}`;
+  return new Map(rows.map((r) => [r.bill_id, r.next_try_on]));
+}
+
+/** For a person's page: each bill's newest charge (declined, with what the app does next and the
+ *  email to the cardholder; never answered by Square; or charging now), and the card each payment
+ *  was charged to. */
 export async function chargesOfBills(
   sql: SqlOrTx,
   gymId: string,
   billIds: readonly string[],
   paymentIds: readonly string[],
+  now: Date,
 ): Promise<{
   declined: Map<string, CardDeclined>;
   unchecked: Map<string, CardUnchecked>;
@@ -499,40 +678,120 @@ export async function chargesOfBills(
   const charging = new Set<string>();
   const cardOfPayment = new Map<string, { brand: string; last4: string }>();
   if (billIds.length === 0 && paymentIds.length === 0) return { declined, unchecked, charging, cardOfPayment };
-  const rows = await sql<{ bill_id: string | null; state: string; outcome: string | null; decline_code: string | null; brand: string; last4: string; on: string; member_payment_id: string | null; newest: boolean }[]>`
+  const rows = await sql<
+    {
+      bill_id: string | null;
+      id: string;
+      state: string;
+      outcome: string | null;
+      decline_code: string | null;
+      card_id: string;
+      by_schedule: boolean;
+      started_at: Date;
+      brand: string;
+      last4: string;
+      on: string;
+      member_payment_id: string | null;
+      next_try_on: string | null;
+    }[]
+  >`
     WITH asked AS (
       -- Each bill's charges: by the bill, and a press for its period made before it was open, which
       -- keeps no bill (re-check: such a charge Square never answered must still be said on the bill).
-      SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
+      SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.card_id, c.by_schedule, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id, c.next_try_on
       FROM gym_member_bills b
       JOIN gym_card_charges c ON c.gym_id = b.gym_id AND c.bill_id = b.id
       WHERE b.gym_id = ${gymId} AND b.id = ANY(${[...billIds]}::uuid[])
       UNION
-      SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
+      SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.card_id, c.by_schedule, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id, c.next_try_on
       FROM gym_member_bills b
       JOIN gym_card_charges c
         ON c.gym_id = b.gym_id AND c.bill_id IS NULL AND c.held_membership_id = b.held_membership_id AND c.period_index = b.period_index
       WHERE b.gym_id = ${gymId} AND b.id = ANY(${[...billIds]}::uuid[]) AND b.fee IS NULL
       UNION
-      SELECT c.bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
+      SELECT c.bill_id, c.id, c.state, c.outcome, c.decline_code, c.card_id, c.by_schedule, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id, c.next_try_on
       FROM gym_card_charges c
       WHERE c.gym_id = ${gymId} AND c.member_payment_id = ANY(${[...paymentIds]}::uuid[])
     )
-    SELECT a.bill_id, a.state, a.outcome, a.decline_code, a.brand, a.last4, a.member_payment_id,
-           (a.started_at AT TIME ZONE g.timezone)::date::text AS on,
-           row_number() OVER (PARTITION BY a.bill_id ORDER BY a.started_at DESC, a.id DESC) = 1 AS newest
+    SELECT a.bill_id, a.id, a.state, a.outcome, a.decline_code, a.card_id, a.by_schedule, a.started_at, a.brand, a.last4, a.member_payment_id,
+           a.next_try_on::text AS next_try_on, (a.started_at AT TIME ZONE g.timezone)::date::text AS on
     FROM asked a
-    JOIN gyms g ON g.id = a.gym_id`;
+    JOIN gyms g ON g.id = a.gym_id
+    ORDER BY a.started_at, a.id`;
+  // Per bill: the card its payer has on file in the connected account, and its email (by the bill,
+  // or by the period for a press made before the bill was open).
+  const declinedBills = [...new Set(rows.filter((r) => r.bill_id !== null && r.outcome === "declined").map((r) => r.bill_id ?? ""))];
+  const facts =
+    declinedBills.length === 0
+      ? []
+      : await sql<{ bill_id: string; card_id: string | null; notice_state: string | null; notice_reason: string | null; notice_on: string | null }[]>`
+          SELECT b.id AS bill_id,
+                 (SELECT k.card_id FROM gym_member_cards k
+                  JOIN gym_payment_connections pc ON pc.gym_id = k.gym_id AND pc.environment = k.environment AND pc.account_id = k.account_id AND pc.state = 'connected'
+                  WHERE k.gym_id = b.gym_id
+                    AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id)
+                  LIMIT 1) AS card_id,
+                 n.state AS notice_state, n.reason AS notice_reason, (n.finished_at AT TIME ZONE g.timezone)::date::text AS notice_on
+          FROM gym_member_bills b
+          JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+          JOIN gyms g ON g.id = b.gym_id
+          LEFT JOIN gym_card_decline_notices n
+            ON n.gym_id = b.gym_id
+           AND ((n.period_index IS NULL AND n.bill_id = b.id)
+                OR (b.fee IS NULL AND n.held_membership_id = b.held_membership_id AND n.period_index = b.period_index))
+          WHERE b.gym_id = ${gymId} AND b.id = ANY(${declinedBills}::uuid[])`;
+  const pending = await pendingRetries(sql, gymId, declinedBills, now);
+  const stoppedCards = new Set<string>();
+  for (const cardId of new Set(facts.map((f) => f.card_id).filter((c): c is string => c !== null))) {
+    if (await cardStopped(sql, gymId, cardId)) stoppedCards.add(cardId);
+  }
+  const byBill = new Map<string, (typeof rows)[number][]>();
   for (const r of rows) {
     if (r.member_payment_id !== null) cardOfPayment.set(r.member_payment_id, { brand: r.brand, last4: r.last4 });
-    if (!r.newest || r.bill_id === null) continue;
-    if (r.state === "charging") charging.add(r.bill_id);
-    if (r.outcome === "declined" && r.decline_code !== null) {
-      declined.set(r.bill_id, { brand: r.brand, last4: r.last4, on: r.on, reason: cardDeclineReasonOf(r.decline_code) });
-    }
-    if (r.outcome === "gone") unchecked.set(r.bill_id, { brand: r.brand, last4: r.last4, on: r.on });
+    if (r.bill_id === null) continue;
+    byBill.set(r.bill_id, [...(byBill.get(r.bill_id) ?? []), r]);
+  }
+  for (const [billId, charges] of byBill) {
+    const r = charges[charges.length - 1];
+    if (r === undefined) continue;
+    if (r.state === "charging") charging.add(billId);
+    if (r.outcome === "gone") unchecked.set(billId, { brand: r.brand, last4: r.last4, on: r.on });
+    if (r.outcome !== "declined" || r.decline_code === null) continue;
+    const fact = facts.find((f) => f.bill_id === billId);
+    const tries: CardChargeTry[] = charges.map((c) => {
+      const outcome = cardChargeOutcomeSchema.safeParse(c.outcome);
+      return { cardId: c.card_id, outcome: outcome.success ? outcome.data : null, code: c.decline_code, bySchedule: c.by_schedule, startedAt: c.started_at, day: c.on };
+    });
+    const stopped = stoppedCards.has(r.card_id);
+    const retry = appCardRetry(tries, r.card_id, stopped);
+    // Whether staff may charge it again at all; a decline under a day old waits, which the line does
+    // not say, so the wait is read as past.
+    const staff = staffCardRetry(tries, r.card_id, stopped, new Date(8_640_000_000_000_000));
+    // The day the worker will try it, by the worker's own rule; else why not (every decline says what
+    // comes next: Kd, 2026-10-23).
+    const next = pending.get(billId) ?? null;
+    const sameCard = (fact?.card_id ?? null) === r.card_id;
+    const stop =
+      next !== null
+        ? null
+        : !sameCard
+          ? ("manual" as const)
+          : staff.kind === "no"
+            ? staff.why
+            : retry.kind === "no" && retry.why === "bank"
+              ? ("bank" as const)
+              : ("manual" as const);
+    declined.set(billId, { brand: r.brand, last4: r.last4, on: r.on, reason: cardDeclineReasonOf(r.decline_code), next, stop, notice: noticeOf(fact) });
   }
   return { declined, unchecked, charging, cardOfPayment };
+}
+
+function noticeOf(fact: { notice_state: string | null; notice_reason: string | null; notice_on: string | null } | undefined): CardNotice | null {
+  if (fact?.notice_state == null) return null;
+  if (fact.notice_state === "sent") return { state: "emailed", on: fact.notice_on };
+  if (fact.notice_state === "queued" || fact.notice_state === "sending") return { state: "sending", on: null };
+  if (fact.notice_reason === "no_email") return { state: "no_email", on: null };
+  return { state: "not_sent", on: null };
 }
 
 /** The card Charge card on file would charge for this record now, as `startCharge` picks it, with
@@ -543,16 +802,16 @@ export async function readChargeCard(
   entryId: string,
   environment: SquareEnvironment,
   accountId: string,
-): Promise<{ entry_id: string; brand: string; last4: string; exp_month: number; exp_year: number; saved_at: Date; payerName: string | null } | null> {
-  const [row] = await sql<{ entry_id: string; brand: string; last4: string; exp_month: number; exp_year: number; saved_at: Date; payer_name: string | null; paid_for: boolean }[]>`
+): Promise<{ entry_id: string; card_id: string; brand: string; last4: string; exp_month: number; exp_year: number; saved_at: Date; payerName: string | null } | null> {
+  const [row] = await sql<{ entry_id: string; card_id: string; brand: string; last4: string; exp_month: number; exp_year: number; saved_at: Date; payer_name: string | null; paid_for: boolean }[]>`
     WITH holder AS (
       SELECT COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.entry_id = ${entryId}), ${entryId}::uuid) AS entry_id
     )
-    SELECT k.entry_id, k.brand, k.last4, k.exp_month, k.exp_year, k.saved_at, e.full_name AS payer_name, k.entry_id <> ${entryId}::uuid AS paid_for
+    SELECT k.entry_id, k.card_id, k.brand, k.last4, k.exp_month, k.exp_year, k.saved_at, e.full_name AS payer_name, k.entry_id <> ${entryId}::uuid AS paid_for
     FROM holder h
     JOIN gym_member_cards k ON k.gym_id = ${gymId} AND k.entry_id = h.entry_id AND k.environment = ${environment} AND k.account_id = ${accountId}
     JOIN gym_member_list_entries e ON e.gym_id = k.gym_id AND e.id = k.entry_id`;
   return row === undefined
     ? null
-    : { entry_id: row.entry_id, brand: row.brand, last4: row.last4, exp_month: row.exp_month, exp_year: row.exp_year, saved_at: row.saved_at, payerName: row.paid_for ? row.payer_name : null };
+    : { entry_id: row.entry_id, card_id: row.card_id, brand: row.brand, last4: row.last4, exp_month: row.exp_month, exp_year: row.exp_year, saved_at: row.saved_at, payerName: row.paid_for ? row.payer_name : null };
 }
