@@ -97,9 +97,9 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
       cookies,
       ...(payload === undefined ? {} : { headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) }),
     });
-  const ok = <R>(res: { statusCode: number; body: string }): R => {
+  const ok = (res: { statusCode: number; body: string }): unknown => {
     expect(res.statusCode, res.body).toBe(200);
-    return JSON.parse(res.body) as R;
+    return JSON.parse(res.body);
   };
   const said = (res: { statusCode: number; body: string }): [number, string, string] => {
     const body = JSON.parse(res.body) as { error: string; message: string };
@@ -194,14 +194,14 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
   const book = (gym: Gym, who: Person, sessionId: string, joinWaitlist = false) =>
     inject("POST", bookingUrl(gym, sessionId), who.cookies, { requestKey: randomUUID(), joinWaitlist });
   const seen = async (gym: Gym, who: Person, sessionId: string): Promise<ClassBookingView> =>
-    ok<{ booking: ClassBookingView }>(await inject("GET", bookingUrl(gym, sessionId), who.cookies)).booking;
+    (ok(await inject("GET", bookingUrl(gym, sessionId), who.cookies)) as { booking: ClassBookingView }).booking;
   const statusOf = async (sessionId: string, who: Person): Promise<string | null> => {
     const [row] = await sql<{ status: string }[]>`
       SELECT status FROM gym_class_bookings WHERE session_id = ${sessionId} AND user_id = ${who.userId} ORDER BY seq DESC LIMIT 1`;
     return row?.status ?? null;
   };
   const settingsOf = async (gym: Gym, who: Person): Promise<ClassBookingSettingsResponse> =>
-    ok<ClassBookingSettingsResponse>(await inject("GET", `/v1/orgs/${gym.id}/booking-settings`, who.cookies));
+    ok(await inject("GET", `/v1/orgs/${gym.id}/booking-settings`, who.cookies)) as ClassBookingSettingsResponse;
   const setOverdue = async (gym: Gym, who: Person, overdue: "let_book" | "stop") => {
     const now = await settingsOf(gym, gym.owner);
     return await inject("PUT", `/v1/orgs/${gym.id}/booking-settings`, who.cookies, { ...now.settings, pt: now.pt, overdue });
@@ -275,7 +275,7 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
     expect(view.can).toMatchObject({ book: false, joinWaitlist: false, claim: false, why: "payment_overdue" });
     expect((await seen(gym, ana, first)).mine?.status).toBe("booked");
     expect((await book(gym, ana, second)).statusCode).toBe(403);
-    const list = ok<MemberClassesResponse>(await inject("GET", `/v1/orgs/${gym.id}/member-classes?week=0`, ana.cookies));
+    const list = ok(await inject("GET", `/v1/orgs/${gym.id}/member-classes?week=0`, ana.cookies)) as MemberClassesResponse;
     expect(list.classes.find((c) => c.sessionId === second)?.can.why).toBe("payment_overdue");
     expect(list.classes.find((c) => c.sessionId === first)?.mine?.status).toBe("booked");
     expect((await inject("POST", `${bookingUrl(gym, first)}/cancel`, ana.cookies, { lateOk: false })).statusCode).toBe(200);
@@ -332,7 +332,7 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
     await hold(gym, dev.entryId, gym.ptPack, true);
     expect((await setOverdue(gym, gym.owner, "stop")).statusCode).toBe(200);
 
-    const mine = ok<MemberPtResponse>(await inject("GET", `/v1/orgs/${gym.id}/member-pt?week=0`, ana.cookies));
+    const mine = ok(await inject("GET", `/v1/orgs/${gym.id}/member-pt?week=0`, ana.cookies)) as MemberPtResponse;
     expect(mine.days.every((day) => day.why === "payment_overdue" && day.pays === null)).toBe(true);
     expect(PT_MEMBER_WORDS.payment_overdue).toBe(OVERDUE_BOOKING_WORDS);
     const session = { trainerId: sam.userId, localDate: FRIDAY, startMinute: 600, minutes: 60 };
@@ -341,7 +341,7 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
       "payment_overdue",
       OVERDUE_BOOKING_WORDS,
     ]);
-    const theirs = ok<MemberPtResponse>(await inject("GET", `/v1/orgs/${gym.id}/member-pt?week=0`, dev.cookies));
+    const theirs = ok(await inject("GET", `/v1/orgs/${gym.id}/member-pt?week=0`, dev.cookies)) as MemberPtResponse;
     expect(theirs.days.some((day) => day.why === "payment_overdue")).toBe(false);
     expect((await inject("POST", `/v1/orgs/${gym.id}/member-pt/sessions`, dev.cookies, { requestKey: randomUUID(), ...session })).statusCode).toBe(200);
     // The owner books Ana a session at 11:00 at the desk.
@@ -375,14 +375,14 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
     expect((await setOverdue(gym, planner, "let_book")).statusCode).toBe(200);
 
     const saved = await setOverdue(gym, gym.owner, "stop");
-    expect(ok<ClassBookingSettingsResponse>(saved).overdue.rule).toBe("stop");
+    expect((ok(saved) as ClassBookingSettingsResponse).overdue.rule).toBe("stop");
     const audit = await sql<{ meta: Record<string, string> }[]>`
       SELECT meta FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.booking_settings_changed' ORDER BY at DESC, id DESC LIMIT 1`;
     expect(audit[0]?.meta).toEqual({ overdue: "let_book -> stop" });
 
     // The person's page says it beside Ana's bill, and not beside Dev's or the coach's.
     const page = async (entryId: string) =>
-      ok<HeldMembershipsResponse>(await inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${entryId}/memberships`, gym.owner.cookies)).bookingsStopped;
+      (ok(await inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${entryId}/memberships`, gym.owner.cookies)) as HeldMembershipsResponse).bookingsStopped;
     expect(await page(ana.entryId)).toBe(true);
     expect(await page(dev.entryId)).toBe(false);
     expect(await page(kim.entryId)).toBe(false);

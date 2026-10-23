@@ -257,7 +257,7 @@ export function currencySign(currency) {
 export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null, overdue = null) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
   // No new bookings while a payment is overdue (17i), said last where the gym has it on.
-  if (overdue === 'stop') return `${bookingSettingsSummary(settings, pt, fees, ptFees).replace(/.$/, '')}. No new bookings while a payment is overdue.`;
+  if (overdue === 'stop') return `${bookingSettingsSummary(settings, pt, fees, ptFees).replace(/\.$/, '')}. No new bookings while a payment is overdue.`;
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
   const said = (f) => {
     const line = f === null || f === undefined ? null : classFeesLine(f);

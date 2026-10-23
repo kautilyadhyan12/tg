@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useInRouterContext } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { useSectionLink } from '../../pages/console/useSectionLink';
@@ -28,6 +29,7 @@ function ToBills({ ready }) {
 
 // `readOnlyLine`: why nothing here can be changed, for a gym with no live plan.
 export default function BillSettingsCard({ gymId, readOnly, readOnlyLine = null }) {
+  const routed = useInRouterContext();
   /** What the server holds: { overdueAfterDays, billDay, freezeFeeMinor, currency, canChange }. */
   const [saved, setSaved] = useState(null);
   const [days, setDays] = useState(0);
@@ -87,7 +89,7 @@ export default function BillSettingsCard({ gymId, readOnly, readOnlyLine = null 
 
   return (
     <section id="bills" className="c-card p-5 md:p-6 flex flex-col gap-3" data-testid="bill-settings">
-      <ToBills ready={saved !== null} />
+      {routed ? <ToBills ready={saved !== null} /> : null}
       <h2 className="c-h2">Bills</h2>
       <p className="c-s14 c-t2 m-0">
         A membership with a price gets a bill for each period, by itself. You record what a person paid on their page, under Memberships.

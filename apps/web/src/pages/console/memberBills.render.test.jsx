@@ -810,3 +810,18 @@ describe('a late cancel or no-show fee, under its membership (18h-i)', () => {
     expect(within(item).queryAllByRole('button')).toEqual([]);
   });
 });
+
+describe('no new bookings while a payment is overdue (17i)', () => {
+  it("says beside the bill that the person can't book in the app, only while the server says the gym stops them", async () => {
+    const pack = held(2, PACK, '2026-10-10', false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([pack], { bookingsStopped: true }));
+    render(draw());
+    await rowsSoon();
+    expect(screen.getByTestId('bookings-stopped').textContent).toBe("Ada Lovelace can't book classes or personal training in the app until the overdue payment is paid.");
+    cleanup();
+    orgService.getHeldMemberships.mockResolvedValue(answer([pack]));
+    render(draw());
+    await rowsSoon();
+    expect(screen.queryByTestId('bookings-stopped')).toBeNull();
+  });
+});

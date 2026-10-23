@@ -360,3 +360,63 @@ describe("Settings → Booking rules: personal training's own fees (18h-ii)", ()
     await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, waitlistMax: 8, pt: PT }));
   });
 });
+
+describe('Settings → Booking rules: no new bookings while a payment is overdue (17i)', () => {
+  const ORG = { id: 'g1', orgType: 'gym' };
+  const START = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 1440, waitlistMax: 20 };
+  const PT = { opensDays: 3, freeCancelMinutes: 1440 };
+  const FEES = { lateCancelMinor: 0, noShowMinor: 0, currency: 'GBP', canChange: true, onBills: true };
+  const NAMES = ['Ana Lopez', 'Ben Okafor', 'Chloe Martin', 'Dev Patel', 'Ella Rossi'];
+  const STOPPED = { count: 5, people: NAMES.map((name, n) => ({ entryId: bid(100 + n), name })) };
+  const open = async (data) => {
+    api.getBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT, fees: FEES, ptFees: { lateCancelMinor: 0, noShowMinor: 0 }, ...data } });
+    render(<BookingSettingsPanel org={ORG} readOnly={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Booking rules/ }));
+    await screen.findByLabelText('Days before a class that booking opens');
+  };
+
+  it('names who owes today, says what the choice does to them, and Save sends it', async () => {
+    const saved = { rule: 'stop', afterDays: 3, stopped: STOPPED };
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: START, pt: PT, fees: FEES, ptFees: { lateCancelMinor: 0, noShowMinor: 0 }, overdue: saved } });
+    await open({ overdue: { rule: 'let_book', afterDays: 3, stopped: STOPPED } });
+    expect(screen.getByText('Overdue payments')).toBeTruthy();
+    expect(screen.getByText(/A payment is overdue once it is more than 3 days late\./)).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Let them book' }).checked).toBe(true);
+    expect(screen.getByText(/Places already booked stay booked/)).toBeTruthy();
+    const box = screen.getByRole('group', { name: 'Who has an overdue payment today' });
+    expect(within(box).getByText('Today 5 people on your list have an overdue payment:')).toBeTruthy();
+    expect(within(box).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Ana Lopez', 'Ben Okafor', 'Chloe Martin']);
+    expect(within(box).getByText('and 2 more')).toBeTruthy();
+    expect(within(box).getByText('They can still book in the app.')).toBeTruthy();
+    fireEvent.click(within(box).getByRole('button', { name: 'See all' }));
+    expect(within(box).getAllByRole('listitem')).toHaveLength(5);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Stop new bookings until they pay' }));
+    expect(within(box).getByText("Once you save, they can't book classes or personal training in the app until they pay.")).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, pt: PT, fees: { lateCancelMinor: 0, noShowMinor: 0 }, ptFees: { lateCancelMinor: 0, noShowMinor: 0 }, overdue: 'stop' }),
+    );
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(within(box).getByText("They can't book classes or personal training in the app until they pay.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: /No new bookings while a payment is overdue\./ })).toBeTruthy();
+  });
+
+  it('nobody owes today: it says so', async () => {
+    await open({ overdue: { rule: 'stop', afterDays: 0, stopped: { count: 0, people: [] } } });
+    expect(screen.getByText(/A payment is overdue from the day after it was due\./)).toBeTruthy();
+    expect(screen.getByText('Nobody on your list has an overdue payment today.')).toBeTruthy();
+  });
+
+  it('staff who do not record payments read the choice, cannot change it, see no names, and their save leaves it be', async () => {
+    api.updateBookingSettings.mockResolvedValue({ data: { settings: { ...START, waitlistMax: 8 }, pt: PT, fees: { ...FEES, canChange: false }, overdue: { rule: 'stop', afterDays: 3, stopped: null } } });
+    await open({ fees: { ...FEES, canChange: false }, overdue: { rule: 'stop', afterDays: 3, stopped: null } });
+    expect(screen.getByRole('radio', { name: 'Stop new bookings until they pay' }).checked).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Let them book' }).disabled).toBe(true);
+    expect(screen.getByTestId('overdue-who').textContent).toBe("Only staff who record members' payments can change this. Ask the owner.");
+    expect(screen.queryByRole('group', { name: 'Who has an overdue payment today' })).toBeNull();
+    fireEvent.change(screen.getByLabelText('How many people a waitlist holds'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(api.updateBookingSettings).toHaveBeenCalledWith('g1', { ...START, waitlistMax: 8, pt: PT }));
+  });
+});
