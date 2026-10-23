@@ -945,11 +945,42 @@ d("the register: products, sales and tax (real Postgres)", () => {
         CROSS JOIN generate_series(1, ${SALES_SHOWN}::int) AS n
         WHERE p.gym_id = ${gymId} AND b.fee IS NULL AND p.undone_at IS NULL`;
       const busy = await read(gymId, owner.cookies);
-      expect(busy.payments?.filter((p) => p.kind === "membership")).toHaveLength(SALES_SHOWN);
+      const listedMonths = busy.payments?.filter((p) => p.kind === "membership") ?? [];
+      expect(listedMonths).toHaveLength(SALES_SHOWN);
+      // The newest are listed: the last one added is there, and the first month paid is the one left out.
+      expect(listedMonths[0]?.receiptNumber).toBe(100000 + SALES_SHOWN);
+      expect(listedMonths.map((p) => p.id)).not.toContain(monthPayment.id);
       expect(busy.payments?.filter((p) => p.kind === "fee").map((p) => p.amountMinor)).toEqual([1500]);
       expect(busy.kinds.memberships).toMatchObject({ count: SALES_SHOWN + 1, notShown: 1 });
       expect(busy.kinds.fees).toMatchObject({ count: 1, notShown: 0 });
       expect(busy.paymentsNotShown).toBe(1);
+
+      // And the other way: a day of fees is cut at the same number and pushes no membership off.
+      await sql`
+        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by, receipt_number)
+        SELECT p.gym_id, p.bill_id, p.amount_minor, p.currency, p.method, gen_random_uuid(), p.paid_on, p.recorded_by, 200000 + n
+        FROM gym_member_payments p
+        JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+        CROSS JOIN generate_series(1, ${SALES_SHOWN}::int) AS n
+        WHERE p.gym_id = ${gymId} AND b.fee IS NOT NULL AND p.undone_at IS NULL`;
+      const fees = await read(gymId, owner.cookies);
+      const listedFees = fees.payments?.filter((p) => p.kind === "fee") ?? [];
+      expect(listedFees).toHaveLength(SALES_SHOWN);
+      expect(listedFees[0]?.receiptNumber).toBe(200000 + SALES_SHOWN);
+      expect(fees.payments?.filter((p) => p.kind === "membership")).toHaveLength(SALES_SHOWN);
+      expect(fees.kinds.fees).toMatchObject({ count: SALES_SHOWN + 1, notShown: 1 });
+      expect(fees.paymentsNotShown).toBe(2);
+
+      // The gym moves to the UK: what was taken in dollars is in no kind's sum, and each kind counts its own.
+      const moved = await send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country: "GB" });
+      expect(moved.statusCode, moved.body).toBe(200);
+      const after = await read(gymId, owner.cookies);
+      expect([after.kinds.products, after.kinds.memberships, after.kinds.fees].map((k) => [k.count, k.totalMinor, k.otherCurrency])).toEqual([
+        [0, 0, 1],
+        [0, 0, SALES_SHOWN + 1],
+        [0, 0, SALES_SHOWN + 1],
+      ]);
+      expect(after.kinds.products.otherCurrency + after.kinds.memberships.otherCurrency + after.kinds.fees.otherCurrency).toBe(after.totals.otherCurrency);
     },
     T,
   );

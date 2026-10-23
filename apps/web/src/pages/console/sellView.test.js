@@ -109,6 +109,18 @@ describe("the day's takings by kind (18q-ii)", () => {
     expect(takingsWords(empty, 'fees')).toBe('No fees taken yet today.');
     expect(takingsWords({ ...empty, day: '2026-10-09', today: '2026-10-12' }, 'fees')).toBe('No fees taken on 9 Oct 2026.');
   });
+  it('a kind whose only rows are in another money never says it had nothing: it says none of the gym’s own money, and the note says why they are listed', () => {
+    const moved = page({
+      currency: 'GBP',
+      totals: totals({ otherCurrency: 2 }),
+      kinds: { products: kind(), memberships: kind({ otherCurrency: 1 }), fees: kind({ otherCurrency: 1 }) },
+      payments: [{ id: 'm1', kind: 'membership', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'cash', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: null, receiptNumber: 50 }],
+    });
+    expect(takingsWords(moved, 'memberships')).toBe('Memberships today: £0.00.');
+    expect(takingsNotes(moved, 'memberships')).toEqual(['1 sale or payment today was taken in another currency. It is listed below and not added to the total above.']);
+    expect(takingsWords(moved)).toBe('Taken today: £0.00.');
+    expect(takingsWords(moved, 'products')).toBe('No product sales yet today.');
+  });
   it('each tab notes only its own tax, refunds and left-out rows', () => {
     expect(takingsNotes(day(), 'products')).toEqual(['$0.16 of the product sales is tax.']);
     expect(takingsNotes(day(), 'memberships')).toEqual(['Refunds noted today: $10.00. They are not taken off the total above.']);

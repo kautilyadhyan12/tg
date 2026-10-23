@@ -407,7 +407,7 @@ describe('today', () => {
     svc.get.mockResolvedValue(page({ currency: 'GBP', sales: [sale()], products: [product({ currency: 'USD' })], totals: totals({ otherCurrency: 1 }) }));
     open();
     await within(await screen.findByRole('region', { name: "Today's takings" })).findAllByTestId('takings-row');
-    expect(within(today()).getByTestId('takings-line').textContent).toBe('Nothing taken yet today.');
+    expect(within(today()).getByTestId('takings-line').textContent).toBe('Taken today: £0.00.');
     expect(within(today()).getByText('1 sale or payment today was taken in another currency. It is listed below and not added to the total above.')).toBeTruthy();
     // The product still priced in the old money cannot be sold, and its row says what to do.
     pick('Add a product', 'p-water');
@@ -545,18 +545,19 @@ describe("today's takings by kind (18q-ii)", () => {
     );
     open();
     const box = await screen.findByRole('region', { name: "Today's takings" });
-    const tabs = within(box).getByRole('tablist', { name: 'Kind of sale' });
-    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['All$69.30', 'Products$4.31', 'Memberships$49.99', 'Fees$15.00']);
-    expect(within(tabs).getByRole('tab', { name: /^All/ }).getAttribute('aria-selected')).toBe('true');
+    const tabs = within(box).getByRole('group', { name: 'Kind of sale' });
+    expect(within(tabs).getAllByRole('button').map((t) => t.textContent)).toEqual(['All$69.30', 'Products$4.31', 'Memberships$49.99', 'Fees$15.00']);
+    expect(within(tabs).getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('true');
     expect(within(box).getAllByTestId('takings-row')).toHaveLength(3);
 
-    fireEvent.click(within(tabs).getByRole('tab', { name: /^Fees/ }));
-    expect(within(tabs).getByRole('tab', { name: /^Fees/ }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(tabs).getByRole('button', { name: /^Fees/ }));
+    expect(within(tabs).getByRole('button', { name: /^Fees/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(tabs).getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('false');
     expect(within(box).getByTestId('takings-line').textContent).toBe('Fees today: $15.00 from 1 fee. Cash $15.00.');
     expect(within(box).getAllByTestId('takings-row').map((r) => r.textContent.includes('Late cancel fee · Spin · $15.00'))).toEqual([true]);
     expect(within(box).getByText("To void a fee, open the member's page.")).toBeTruthy();
 
-    fireEvent.click(within(tabs).getByRole('tab', { name: /^Products/ }));
+    fireEvent.click(within(tabs).getByRole('button', { name: /^Products/ }));
     expect(within(box).getByTestId('takings-line').textContent).toBe('Products today: $4.31 from 1 sale. Cash $4.31.');
     expect(within(box).getAllByTestId('takings-row').map((r) => r.textContent.includes('Water'))).toEqual([true]);
     expect(within(box).queryByText(/open the member's page/)).toBeNull();
@@ -565,7 +566,7 @@ describe("today's takings by kind (18q-ii)", () => {
     svc.get.mockResolvedValue(page({ sales: [sale()], totals: totals({ count: 1, totalMinor: 431, cash: 431 }), kinds: { products: kind({ count: 1, totalMinor: 431, cash: 431 }), memberships: kind(), fees: kind() } }));
     open();
     const box = await screen.findByRole('region', { name: "Today's takings" });
-    fireEvent.click(within(box).getByRole('tab', { name: /^Fees/ }));
+    fireEvent.click(within(within(box).getByRole('group', { name: 'Kind of sale' })).getByRole('button', { name: /^Fees/ }));
     expect(within(box).getByTestId('takings-line').textContent).toBe('No fees taken yet today.');
     expect(within(box).queryAllByTestId('takings-row')).toHaveLength(0);
   });

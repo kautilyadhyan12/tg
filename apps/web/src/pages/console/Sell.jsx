@@ -930,13 +930,12 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
           )
         ) : (
           <>
-            <div className="flex flex-wrap gap-2 py-1" role="tablist" aria-label="Kind of sale">
+            <div className="flex flex-wrap gap-2 py-1" role="group" aria-label="Kind of sale">
               {TAKINGS_TABS.map(({ key, label }) => (
                 <button
                   key={key}
                   type="button"
-                  role="tab"
-                  aria-selected={tab === key}
+                  aria-pressed={tab === key}
                   className={tab === key ? 'c-chip c-chip-on' : 'c-chip'}
                   onClick={() => {
                     setTab(key);

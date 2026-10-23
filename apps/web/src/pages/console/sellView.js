@@ -252,10 +252,15 @@ export function takingsWords(page, key = 'all') {
   if (key !== 'all') {
     const t = kindTotals(page, key);
     const words = KIND_WORDS[key];
-    if (t.count === 0) return past ? `${words.none} on ${shortDay(page.day)}.` : `${words.none} yet today.`;
+    if (t.count === 0 && t.otherCurrency === 0) return past ? `${words.none} on ${shortDay(page.day)}.` : `${words.none} yet today.`;
+    // Only rows in another money: nothing in the gym's own, and the note under it says why they are listed.
+    if (t.count === 0) return `${words.title} ${past ? `on ${shortDay(page.day)}` : 'today'}: ${money(0)}.`;
     return `${words.title} ${past ? `on ${shortDay(page.day)}` : 'today'}: ${money(t.totalMinor)} from ${count(t.count, words.one, words.many)}. ${howWords(t, money)}.`;
   }
-  if (totals.count === 0 && totals.payments === 0) return past ? `Nothing was taken on ${shortDay(page.day)}.` : 'Nothing taken yet today.';
+  if (totals.count === 0 && totals.payments === 0) {
+    if (totals.otherCurrency > 0) return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(0)}.`;
+    return past ? `Nothing was taken on ${shortDay(page.day)}.` : 'Nothing taken yet today.';
+  }
   const what = [];
   if (totals.count > 0) what.push(count(totals.count, 'sale', 'sales'));
   const fees = kindTotals(page, 'fees').count;
