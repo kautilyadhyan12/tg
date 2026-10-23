@@ -265,15 +265,24 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
       const benBox = await box(gymId, ben, benSilver, owner.cookies);
       expect(value(benBox.facts ?? [], "Price")).toBe("$30.00 every month");
 
-      // Ben's details on Maya's membership; Maya's membership under Ben's record; a key one
-      // letter off: nothing is signed.
+      // Maya holds a second membership: each key signs only its own membership.
+      const mayaSilver = await give(gymId, maya, owner.cookies, silver, { priceMinor: 3000, totalMinor: 3000 });
+      const silverBox = await box(gymId, maya, mayaSilver, owner.cookies);
+      expect(value(silverBox.facts ?? [], "Price")).toBe("$30.00 every month");
+
+      // Ben's details on Maya's membership; her other membership's details on each; Maya's
+      // membership under Ben's record; a key one letter off: nothing is signed.
       const base = { agreementId: v1, signer: "person", name: "Maya Patel" };
       const refused = [
         await sign(gymId, maya, mayaGold, owner.cookies, { ...base, factsKey: benBox.factsKey }),
+        await sign(gymId, maya, mayaGold, owner.cookies, { ...base, factsKey: silverBox.factsKey }),
+        await sign(gymId, maya, mayaSilver, owner.cookies, { ...base, factsKey: mayaBox.factsKey }),
         await sign(gymId, ben, mayaGold, owner.cookies, { ...base, factsKey: mayaBox.factsKey }),
         await sign(gymId, maya, mayaGold, owner.cookies, { ...base, factsKey: offByOne(mayaBox.factsKey ?? "") }),
       ];
       expect(refused.map((r) => [r.statusCode, errorOf(r).error])).toEqual([
+        [409, "facts_changed"],
+        [409, "facts_changed"],
         [409, "facts_changed"],
         [404, "membership_not_found"],
         [409, "facts_changed"],
