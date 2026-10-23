@@ -215,6 +215,9 @@ export const squarePaymentSchema = z.object({
   total_money: squareMoneySchema.nullish(),
   location_id: squareObjectIdSchema.nullish(),
   terminal_checkout_id: squareTerminalCheckoutIdSchema.nullish(),
+  /** Ours, on a card on file's charge (18d-iii-i): the charge's id. */
+  reference_id: z.string().max(40).nullish(),
+  customer_id: squareObjectIdSchema.nullish(),
   card_details: z
     .object({
       card: z.object({ card_brand: z.string().max(40).nullish(), last_4: z.string().regex(/^[0-9]{4}$/).nullish() }).nullish(),
@@ -225,3 +228,10 @@ export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 
 /** GetPayment's answer. */
 export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema });
+
+/** CreatePayment's refusal (18d-iii-i): a decline comes back as a 400 with Square's error and the
+ *  FAILED payment it kept (measured in Square's test area, 2026-10-23). */
+export const squarePaymentRefusalSchema = z.object({
+  errors: z.array(z.object({ code: z.string().max(100), category: z.string().max(100).optional() })).max(20).optional(),
+  payment: squarePaymentSchema.optional(),
+});

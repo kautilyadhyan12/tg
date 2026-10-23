@@ -32,12 +32,18 @@
 //   GET    …/member-list/entries/:entryId/terminal-payments/:paymentId              where it stands (every few seconds)
 //   POST   …/member-list/entries/:entryId/terminal-payments/:paymentId/cancel       Cancel
 //
+// Charge card on file (ROADMAP 18d-iii-i), `billing.members`:
+//   POST   …/member-list/entries/:entryId/memberships/:membershipId/card-charge              a period's
+//   POST   …/member-list/entries/:entryId/memberships/:membershipId/fees/:billId/card-charge a fee's
+//
 // Take payment on Terminal at Sell (ROADMAP 18d-vi-b-ii), `billing.members`:
 //   GET    /v1/orgs/:gymId/terminal-sales                     Square ready or not, the Terminals, and the sales waiting
 //   POST   /v1/orgs/:gymId/terminal-sales                     the basket goes to the Terminal
 //   GET    /v1/orgs/:gymId/terminal-sales/:paymentId          where it stands (every few seconds)
 //   POST   /v1/orgs/:gymId/terminal-sales/:paymentId/cancel   Cancel
 import {
+  cardChargeRequestSchema,
+  cardFeeChargeRequestSchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -65,6 +71,7 @@ import {
   terminalSaveParamsSchema,
 } from "../schemas.js";
 import { staffOnly } from "../staffLimit.js";
+import * as cardCharges from "./cardCharges.js";
 import * as cards from "./cards.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
@@ -251,6 +258,27 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const body = parseOr400(terminalFeePaymentRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await terminalPayments.startTerminalFeePayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, params.billId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Charge card on file: a press is one trip to Square, answered in it; a busy desk takes many.
+  const chargeLimit = createDualRateLimit({ name: "card_charge", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+
+  app.post(`${entryUrl}/memberships/:membershipId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)] }, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cardChargeRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await cardCharges.chargeCardOnFile(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, body);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)] }, async (req, reply) => {
+    const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(cardFeeChargeRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const answer = await cardCharges.chargeFeeToCardOnFile(paymentsDeps, callerId(req), params.gymId, params.entryId, params.membershipId, params.billId, body);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 

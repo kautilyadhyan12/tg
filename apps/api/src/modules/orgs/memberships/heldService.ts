@@ -9,6 +9,8 @@
 // gym's time zone, never the caller's.
 import type { Sql } from "postgres";
 import {
+  CARD_CHARGE_WORDS,
+  paidThroughSquare,
   TERMINAL_PAYMENT_WORDS,
   DISCOUNT_WORDS,
   FRIEND_GIFT_WORDS,
@@ -68,6 +70,7 @@ import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGif
 import { billDayOf, overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 import * as feesRepo from "./feesRepo.js";
 import { freezeFeeOf } from "./freezeFees.js";
+import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 
 export interface HeldDeps {
@@ -76,6 +79,9 @@ export interface HeldDeps {
 }
 
 const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
+
+type Charges = Awaited<ReturnType<typeof chargesOfBills>>;
+const NO_CHARGES: Charges = { declined: new Map(), charging: new Set(), cardOfPayment: new Map() };
 
 /** In use first, then the ones that are over; newest start first within each. */
 const ORDER: Record<HeldMembershipShown, number> = { active: 0, frozen: 0, upcoming: 1, ended: 2, cancelled: 2 };
@@ -90,15 +96,16 @@ function billingOf(
   refunds: readonly RefundRow[],
   voided: { payments: readonly VoidedPaymentRow[]; refunds: readonly VoidedRefundRow[] },
   fees: { fees: readonly FeeRow[]; payments: readonly FeePaymentRow[] },
-  ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }> },
+  ctx: { today: string; past: boolean; overdueAfterDays: number; gifts: ReadonlyMap<string, { offMinor: number; currency: string; friendName: string | null }>; charges: Charges },
 ): Omit<MemberBilling, "change"> {
   const view = heldMembershipView(row.membership, ctx.today);
   const pay = memberPayTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
   const cancel = memberCancelTarget(row.membership, row.nextBillMinor, ctx.today, bills, ctx.past);
   const cancelBill = cancel === null ? undefined : bills.find((b) => b.periodIndex === cancel.periodIndex);
   const newestBack = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
-  // A payment taken on the Terminal is refunded in Square, never voided here (18d-vi-a).
-  const back = newestBack !== null && payments.some((p) => p.id === newestBack.paymentId && p.method === "terminal") ? null : newestBack;
+  // A payment taken on the Terminal or charged to the card on file is refunded in Square, never
+  // voided here (18d-vi-a, 18d-iii-i).
+  const back = newestBack !== null && payments.some((p) => p.id === newestBack.paymentId && paidThroughSquare(p.method)) ? null : newestBack;
   // A mark with no payment behind it: taken back as it always was. A period a bill
   // settled (paid, cancelled or refunded) is not one.
   const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status !== "open");
@@ -139,6 +146,7 @@ function billingOf(
           voidedRefunds: voidedRefundsOf(p.id),
           refundableMinor: paymentRefundableMinor(b, p),
           receiptNumber: p.receiptNumber,
+          card: ctx.charges.cardOfPayment.get(p.id) ?? null,
         })),
       voidedPayments: voided.payments
         .filter((p) => p.billId === b.id)
@@ -150,8 +158,12 @@ function billingOf(
           by: p.by,
           voidedRefunds: voidedRefundsOf(p.id),
           receiptNumber: p.receiptNumber,
+          card: ctx.charges.cardOfPayment.get(p.id) ?? null,
           voided: p.voided,
         })),
+      // A decline is said while the bill is still owed (18d-iii-i).
+      cardDeclined: b.status === "open" ? (ctx.charges.declined.get(b.id) ?? null) : null,
+      charging: ctx.charges.charging.has(b.id),
     })),
     billsNotShown: bills.length - sent.length,
     pay:
@@ -183,11 +195,11 @@ function freezeFeeFirstOn(row: { id: string; membership: HeldMembership }, gymFe
 
 /** One fee as a person's page draws it (18h-i): paid all at once or waived while it is owed,
  *  and its payment voided while it stands. */
-function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: string; overdueAfterDays: number }): MemberFee {
+function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: string; overdueAfterDays: number; charges: Charges }): MemberFee {
   const mine = payments.filter((p) => p.billId === f.id);
   const standing = mine.filter((p) => p.voided === null);
   const owed = f.status === "open";
-  const paymentOf = (p: FeePaymentRow) => ({ id: p.id, amountMinor: p.amountMinor, method: p.method, paidOn: p.paidOn, by: p.by, receiptNumber: p.receiptNumber });
+  const paymentOf = (p: FeePaymentRow) => ({ id: p.id, amountMinor: p.amountMinor, method: p.method, paidOn: p.paidOn, by: p.by, receiptNumber: p.receiptNumber, card: ctx.charges.cardOfPayment.get(p.id) ?? null });
   return {
     id: f.id,
     fee: f.fee,
@@ -212,8 +224,11 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
     stillOwed: f.stillOwed,
     payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0 })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
-    // A payment taken on the Terminal is refunded in Square, never voided here (18d-vi-b-i).
-    can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" && standing[0] !== undefined && standing[0].method !== "terminal" ? standing[0].id : null },
+    cardDeclined: owed ? (ctx.charges.declined.get(f.id) ?? null) : null,
+    charging: ctx.charges.charging.has(f.id),
+    // A payment taken on the Terminal or charged to the card on file is refunded in Square, never
+    // voided here (18d-vi-b-i, 18d-iii-i).
+    can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" && standing[0] !== undefined && !paidThroughSquare(standing[0].method) ? standing[0].id : null },
   };
 }
 
@@ -266,7 +281,11 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     // Refer a friend's free days on each (20e-ii-b-ii-b): why its dates moved.
     giftDaysOn(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)),
   ]);
-  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts };
+  // What the card on file did on each bill and fee (18d-iii-i), for staff who take payments.
+  const charges: Charges = canBill
+    ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)])
+    : NO_CHARGES;
+  const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges };
   // The page reads a membership as the next write will find it: with its count moved
   // over the periods nobody was asked for (`countAfterGap`), which `settle` then writes.
   const asOfToday = (row: repo.HeldRow): repo.HeldRow => {
@@ -431,6 +450,8 @@ function throwOnFailure(outcome: repo.HeldWriteOutcome): void {
       throw new OrgsError(409, "member_gift_changed", MEMBER_GIFT_WORDS.changed);
     case "terminal_waiting":
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "card_charging":
+      throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
     case "early_payment":
       throw new OrgsError(
         409,
@@ -657,8 +678,12 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       );
     case "terminal_waiting":
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "card_charging":
+      throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
     case "terminal_payment":
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
+    case "card_payment":
+      throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled bill outcome: ${JSON.stringify(never)}`);
@@ -785,8 +810,12 @@ function throwOnFeeFailure(outcome: feesRepo.FeeWriteOutcome): void {
       throw new OrgsError(409, "member_fee_changed", "This fee has changed since you opened it. Nothing was saved: check it and try again.");
     case "terminal_waiting":
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "card_charging":
+      throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
     case "terminal_payment":
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
+    case "card_payment":
+      throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled fee outcome: ${JSON.stringify(never)}`);

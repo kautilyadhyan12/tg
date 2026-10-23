@@ -1120,6 +1120,13 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // day when one is deleted for good, as the gym's proof (`memberCards.routes.test.ts`).
       "gym_card_agreements.entry_id",
       "gym_card_agreements.gym_id",
+      // A charge to a card on file (0157; 18d-iii-i): not moved by the join. A record joined or
+      // deleted for good lets go of it (`entry_id` and `payer_entry_id` alone to null): a bill
+      // reads its charges by the bill, and money Square takes is recorded on whichever record
+      // holds the membership then (`cardCharges.routes.test.ts`).
+      "gym_card_charges.entry_id",
+      "gym_card_charges.gym_id",
+      "gym_card_charges.payer_entry_id",
       // A class booking (0075): it is the app account's, so the join moves it to the kept
       // record (driven in `classBookings.routes.test.ts`) and a deleted record lets it go
       // (`db.migration.test.ts`).

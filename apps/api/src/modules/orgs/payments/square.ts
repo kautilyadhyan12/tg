@@ -24,6 +24,7 @@ import {
   squareLocationsSchema,
   squareMerchantSchema,
   squarePaymentAnswerSchema,
+  squarePaymentRefusalSchema,
   squareRevokeSchema,
   squareTerminalActionAnswerSchema,
   squareTerminalCheckoutAnswerSchema,
@@ -97,7 +98,31 @@ export interface SquareApi {
   /** Square stops a checkout still pending or in progress; one paid already is refused (400). */
   cancelTerminalCheckout(accessToken: string, checkoutId: string): Promise<SquareResult<SquareTerminalCheckout>>;
   getPayment(accessToken: string, paymentId: string): Promise<SquareResult<SquarePayment>>;
+  /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
+   *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
+  createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
 }
+
+/** `referenceId`: our charge, never the person. `note`: what the gym's Square Dashboard lists the
+ *  payment as. Completed at once: no hold to capture later. */
+export interface NewCardPayment {
+  idempotencyKey: string;
+  cardId: string;
+  customerId: string;
+  amountMinor: number;
+  currency: string;
+  locationId: string;
+  referenceId: string;
+  note: string;
+}
+
+/** CreatePayment's answer: `declined` is the card's bank saying no, with Square's code and the
+ *  FAILED payment Square kept; `refused` is Square refusing the request itself. */
+export type CardPaymentResult =
+  | { kind: "ok"; value: SquarePayment }
+  | { kind: "declined"; status: number; code: string; payment: SquarePayment | null }
+  | { kind: "refused"; status: number; code: string }
+  | { kind: "unavailable"; status: number | null };
 
 /** `referenceId`: our own press, never the person. `note`: what Square's Dashboard lists the
  *  payment as. No tip screen and no Square receipt screen: the gym's receipt is ours. */
@@ -175,13 +200,8 @@ export function createSquareApi(opts: {
   const doFetch = opts.fetchImpl ?? fetch;
   const base = squareBaseUrl(opts.environment);
 
-  async function call<T extends z.ZodTypeAny>(
-    method: "GET" | "POST",
-    path: string,
-    schema: T,
-    authorization: string | null,
-    body?: unknown,
-  ): Promise<SquareResult<z.infer<T>>> {
+  /** Square's status and body, or null for no answer at all. */
+  async function send(method: "GET" | "POST", path: string, authorization: string | null, body?: unknown): Promise<{ status: number; ok: boolean; json: unknown } | null> {
     let response: Response;
     try {
       response = await doFetch(`${base}${path}`, {
@@ -195,7 +215,7 @@ export function createSquareApi(opts: {
         signal: AbortSignal.timeout(SQUARE_TIMEOUT_MS),
       });
     } catch {
-      return { kind: "unavailable", status: null };
+      return null;
     }
     let json: unknown = null;
     try {
@@ -203,15 +223,27 @@ export function createSquareApi(opts: {
     } catch {
       json = null;
     }
-    if (response.status === 429 || response.status >= 500) return { kind: "unavailable", status: response.status };
-    if (!response.ok) {
-      const error = squareErrorSchema.safeParse(json);
+    return { status: response.status, ok: response.ok, json };
+  }
+
+  async function call<T extends z.ZodTypeAny>(
+    method: "GET" | "POST",
+    path: string,
+    schema: T,
+    authorization: string | null,
+    body?: unknown,
+  ): Promise<SquareResult<z.infer<T>>> {
+    const sent = await send(method, path, authorization, body);
+    if (sent === null) return { kind: "unavailable", status: null };
+    if (sent.status === 429 || sent.status >= 500) return { kind: "unavailable", status: sent.status };
+    if (!sent.ok) {
+      const error = squareErrorSchema.safeParse(sent.json);
       const code = error.success ? (error.data.errors?.[0]?.code ?? error.data.type ?? "unknown") : "unknown";
-      return { kind: "refused", status: response.status, code };
+      return { kind: "refused", status: sent.status, code };
     }
-    const parsed = schema.safeParse(json);
+    const parsed = schema.safeParse(sent.json);
     // A 2xx we cannot read is treated as no answer, never as a success.
-    if (!parsed.success) return { kind: "unavailable", status: response.status };
+    if (!parsed.success) return { kind: "unavailable", status: sent.status };
     return { kind: "ok", value: parsed.data as z.infer<T> };
   }
 
@@ -355,6 +387,32 @@ export function createSquareApi(opts: {
     async getPayment(accessToken, paymentId) {
       const result = await call("GET", paymentPath(paymentId), squarePaymentAnswerSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.payment } : result;
+    },
+    async createCardPayment(accessToken, p) {
+      const sent = await send("POST", "/v2/payments", bearer(accessToken), {
+        idempotency_key: p.idempotencyKey,
+        source_id: p.cardId,
+        customer_id: p.customerId,
+        amount_money: { amount: p.amountMinor, currency: p.currency },
+        autocomplete: true,
+        location_id: p.locationId,
+        reference_id: p.referenceId,
+        note: p.note,
+      });
+      if (sent === null) return { kind: "unavailable", status: null };
+      if (sent.status === 429 || sent.status >= 500) return { kind: "unavailable", status: sent.status };
+      if (sent.ok) {
+        const parsed = squarePaymentAnswerSchema.safeParse(sent.json);
+        // A 2xx we cannot read is no answer, never a success.
+        return parsed.success ? { kind: "ok", value: parsed.data.payment } : { kind: "unavailable", status: sent.status };
+      }
+      const refusal = squarePaymentRefusalSchema.safeParse(sent.json);
+      const first = refusal.success ? refusal.data.errors?.[0] : undefined;
+      const code = first?.code ?? "unknown";
+      const payment = refusal.success ? (refusal.data.payment ?? null) : null;
+      // The card's bank said no: Square names it a payment method error and keeps the FAILED payment.
+      if (first?.category === "PAYMENT_METHOD_ERROR" || payment?.status === "FAILED") return { kind: "declined", status: sent.status, code, payment };
+      return { kind: "refused", status: sent.status, code };
     },
     async revokeAccount(accountId) {
       const result = await call("POST", "/oauth2/revoke", squareRevokeSchema, `Client ${opts.applicationSecret}`, {

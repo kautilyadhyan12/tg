@@ -12,6 +12,7 @@
 // counted paid with no bill is one the gym's own list said was paid, or one marked
 // before bills were kept.
 import { z } from "zod";
+import { cardDeclinedSchema, cardSeenSchema } from "./cardCharges.js";
 
 export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as const;
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
@@ -56,6 +57,12 @@ export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, s
   company: "Card on file",
   terminal: "Card on Terminal",
 };
+
+/** Taken through Square, on the Terminal or from the card on file (18d-iii-i): Square holds the
+ *  money, so it is refunded there and never voided here. */
+export function paidThroughSquare(method: MemberPaymentMethod): boolean {
+  return method === "terminal" || method === "company";
+}
 
 /** Why staff cancelled a bill: picked, never typed, so no sentence about a person is kept. */
 export const BILL_CANCEL_REASONS = ["mistake", "not_charging", "other"] as const;
@@ -182,6 +189,8 @@ export const memberPaymentSchema = z
     refundableMinor: minorSchema,
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
+    /** The card on file it was charged to (18d-iii-i); null for every other way. */
+    card: cardSeenSchema.nullable().default(null),
   })
   .strict();
 export type MemberPayment = z.infer<typeof memberPaymentSchema>;
@@ -235,6 +244,10 @@ export const memberBillSchema = z
     payments: z.array(memberPaymentSchema),
     /** The payments on it that staff voided, in the order they were recorded. */
     voidedPayments: z.array(voidedMemberPaymentSchema),
+    /** Its newest charge to a card on file was declined, and it is still owed (18d-iii-i). */
+    cardDeclined: cardDeclinedSchema.nullable().default(null),
+    /** A card on file is being charged for it: Square has not answered yet. */
+    charging: z.boolean().default(false),
   })
   .strict();
 export type MemberBill = z.infer<typeof memberBillSchema>;
@@ -273,6 +286,9 @@ export const memberFeeSchema = z
     stillOwed: z.boolean().default(true),
     payments: z.array(memberPaymentSchema),
     voidedPayments: z.array(voidedMemberPaymentSchema),
+    /** As a bill's (18d-iii-i). */
+    cardDeclined: cardDeclinedSchema.nullable().default(null),
+    charging: z.boolean().default(false),
     can: z
       .object({
         pay: z.boolean(),

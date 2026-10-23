@@ -24,6 +24,7 @@ import {
   memberBillStatusSchema,
   memberFeeKindSchema,
   memberPaymentMethodSchema,
+  paidThroughSquare,
   paymentVoidReasonSchema,
   type ClassFees,
   type MemberBillStatus,
@@ -36,7 +37,7 @@ import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { insertAudit } from "../repo.js";
 import { lockedEntry } from "./heldRepo.js";
-import { billOf, insertPayment, terminalWaiting, type BillTax, type Voided } from "./billsSql.js";
+import { billOf, insertPayment, squareMoneyOut, type BillTax, type Voided } from "./billsSql.js";
 
 const STATUS_FOR: Record<Exclude<MemberFeeKind, "freeze">, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
 /** A booking's or a session's own fee: a freeze fee is the membership's (`freezeFees.ts`). */
@@ -452,8 +453,12 @@ export type FeeWriteOutcome =
   | { kind: "fee_changed" }
   /** A payment for the membership waits on the Terminal (18d-vi-b-i). */
   | { kind: "terminal_waiting" }
+  /** The card on file is being charged for the membership (18d-iii-i). */
+  | { kind: "card_charging" }
   /** Paid on the Terminal: refunded in Square, never voided here. */
-  | { kind: "terminal_payment" };
+  | { kind: "terminal_payment" }
+  /** Charged to the card on file (18d-iii-i): refunded in Square, never voided here. */
+  | { kind: "card_payment" };
 
 /** One fee of one membership of one record, held to the commit; null where it is not theirs. */
 async function lockedFee(
@@ -514,7 +519,10 @@ export async function recordFeePaymentIn(tx: TransactionSql, input: FeePaymentIn
   const fee = await lockedFee(tx, input);
   if (fee === null) return { kind: "fee_not_found" };
   // Recorded by hand while the Terminal waits: both would be taken.
-  if (input.method !== "terminal" && (await terminalWaiting(tx, input.gymId, input.membershipId))) return { kind: "terminal_waiting" };
+  if (!paidThroughSquare(input.method)) {
+    const out = await squareMoneyOut(tx, input.gymId, input.membershipId);
+    if (out !== null) return out;
+  }
   if (fee.status !== "open" || fee.amount_minor !== input.amountMinor) return { kind: "fee_changed" };
   const recorded = await insertPayment(
     tx,
@@ -569,7 +577,8 @@ export async function waiveFee(
     if (waived?.waived === true) return { kind: "ok" };
     if (fee.status !== "open") return { kind: "fee_changed" };
     // Waived while the person may be paying it on the Terminal.
-    if (await terminalWaiting(tx, input.gymId, input.membershipId)) return { kind: "terminal_waiting" };
+    const out = await squareMoneyOut(tx, input.gymId, input.membershipId);
+    if (out !== null) return out;
     await tx`
       UPDATE gym_member_bills
       SET status = 'void', void_reason = 'waived', voided_on = ${input.today}::date, voided_by = ${input.actorUserId}, updated_at = ${input.now}
@@ -605,8 +614,10 @@ export async function voidFeePayment(
     if (payment === undefined) return { kind: "payment_not_found" };
     if (payment.undone) return { kind: "ok" };
     if (payment.method === "terminal") return { kind: "terminal_payment" };
+    if (payment.method === "company") return { kind: "card_payment" };
     if (entry.past) return { kind: "past_member" };
-    if (await terminalWaiting(tx, input.gymId, input.membershipId)) return { kind: "terminal_waiting" };
+    const out = await squareMoneyOut(tx, input.gymId, input.membershipId);
+    if (out !== null) return out;
     await tx`
       UPDATE gym_member_payments SET undone_at = ${input.now}, undone_by = ${input.actorUserId}, void_reason = ${input.reason}
       WHERE gym_id = ${input.gymId} AND id = ${input.paymentId} AND undone_at IS NULL`;

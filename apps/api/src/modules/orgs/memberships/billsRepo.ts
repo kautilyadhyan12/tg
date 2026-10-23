@@ -18,6 +18,7 @@ import {
   memberPayTarget,
   memberUndoTarget,
   moveHeldMembership,
+  paidThroughSquare,
   payMemberBill,
   refundMemberPayment,
   type BillCancelReason,
@@ -46,7 +47,7 @@ import {
   setBillDay,
   setBillStatus,
   setOverdueDays,
-  terminalWaiting,
+  squareMoneyOut,
   type NewBill,
 } from "./billsSql.js";
 import { listHeldMembership, lockedEntry, lockedHeld, settle, writeCountsAfterGap, writePaidPeriods, type CountMove, type ListHeldColumns } from "./heldRepo.js";
@@ -73,8 +74,12 @@ export type BillWriteOutcome =
   | { kind: "too_much"; leftMinor: number; currency: string }
   /** A payment for this membership is waiting on the gym's Square Terminal (18d-vi-a). */
   | { kind: "terminal_waiting" }
+  /** The card on file is being charged for this membership (18d-iii-i). */
+  | { kind: "card_charging" }
   /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
-  | { kind: "terminal_payment" };
+  | { kind: "terminal_payment" }
+  /** The same, charged to the card on file (18d-iii-i). */
+  | { kind: "card_payment" };
 
 export interface RecordPaymentInput {
   gymId: string;
@@ -133,8 +138,12 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
   if (!entry.past) await settle(tx, input.gymId, input.entryId, input.today, input.now);
   const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
   if (row === null) return { kind: "membership_not_found" };
-  // Recorded by hand while the Terminal waits: both would be taken.
-  if (input.method !== "terminal" && (await terminalWaiting(tx, input.gymId, row.id))) return { kind: "terminal_waiting" };
+  // Recorded by hand while the Terminal waits or the card on file is charged: both would be taken.
+  // Square's own answer is recorded while its row still waits.
+  if (!paidThroughSquare(input.method)) {
+    const out = await squareMoneyOut(tx, input.gymId, row.id);
+    if (out !== null) return out;
+  }
 
   const bills = await billsFor(tx, input.gymId, [row.id]);
   const target = memberPayTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
@@ -235,7 +244,9 @@ export async function voidPayment(
     if (entry.past) return { kind: "past_member" };
     // Square holds that money: voided here, the bill would be owed again with the card charged.
     if (payment.method === "terminal") return { kind: "terminal_payment" };
-    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
+    if (payment.method === "company") return { kind: "card_payment" };
+    const out = await squareMoneyOut(tx, input.gymId, row.id);
+    if (out !== null) return out;
 
     const bills = await billsFor(tx, input.gymId, [row.id]);
     const payments = await paymentsFor(tx, input.gymId, [row.id]);
@@ -288,7 +299,8 @@ export async function undoMark(
     const row = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (row === null) return { kind: "membership_not_found" };
     if (entry.past) return { kind: "past_member" };
-    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
+    const out = await squareMoneyOut(tx, input.gymId, row.id);
+    if (out !== null) return out;
 
     const before = row.membership.paidPeriods;
     // Only ever back, and only by the rule's one step.
@@ -333,7 +345,8 @@ export async function cancelMemberBill(
     if (bill === undefined) return { kind: "bill_not_found" };
     if (bill.status === "void" && bill.cancelled !== null) return { kind: "ok" };
     if (bill.status === "open" && bill.paidMinor > 0) return { kind: "bill_has_payment" };
-    if (await terminalWaiting(tx, input.gymId, row.id)) return { kind: "terminal_waiting" };
+    const out = await squareMoneyOut(tx, input.gymId, row.id);
+    if (out !== null) return out;
     const target = memberCancelTarget(row.membership, row.nextBillMinor, input.today, bills, entry.past);
     if (target === null || target.periodIndex !== bill.periodIndex) return { kind: "not_allowed" };
     const count = countAfterPayment(row.membership, target, input.today);
