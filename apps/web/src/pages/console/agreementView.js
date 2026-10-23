@@ -1,4 +1,4 @@
-import { AGREEMENT_AGREE_LABEL, WAIVER_MAX_CHARS, cleanWaiverText } from '@app/shared';
+import { AGREEMENT_AGREE_LABEL, AGREEMENT_NAME_MAX, MAIN_AGREEMENT_NAME, WAIVER_MAX_CHARS, cleanWaiverText } from '@app/shared';
 
 // The words of the membership agreement (ROADMAP 18u-i): Settings' box, worked out from what the
 // server sent (`gymAgreementResponseSchema`) and what is typed, and the box under a membership on
@@ -11,9 +11,11 @@ const memberships = (n) => (n === 1 ? '1 membership' : `${String(n)} memberships
 /** The box's line when it is folded shut. */
 export function agreementSummary(data) {
   if (data === null) return '';
-  if (data.agreement === null) return 'Not set up';
-  if (!data.inUse) return 'Not in use';
-  return `In use · signed for ${memberships(data.signed)}`;
+  const others = data.others?.length ?? 0;
+  const more = others === 0 ? '' : ` · ${others === 1 ? '1 more agreement' : `${String(others)} more agreements`}`;
+  if (data.agreement === null) return others === 0 ? 'Not set up' : `Main agreement not set up${more}`;
+  if (!data.inUse) return `Not in use${more}`;
+  return `In use · signed for ${memberships(data.signed)}${more}`;
 }
 
 /** What Save would do with the words typed: nothing to save, too long, or go. */
@@ -126,4 +128,112 @@ export function agreementResentLine(emailed) {
   if (emailed === 'no_email') return 'There is no email address on their record. Add one to their details, then try again.';
   if (emailed === 'blocked') return "Their email address can't receive our emails. Check it in their details.";
   return "The copy didn't send. Try again later.";
+}
+
+// ── Settings: the business's other agreements (18u-ii-a) ──
+
+/** The answer with its two lists, empty where an older answer has none. */
+export const withLists = (data) => ({ ...data, others: data.others ?? [], prices: data.prices ?? [] });
+
+/** What Settings and the price list call an agreement: its own name, or the main one's. */
+export const agreementTitle = (name) => (name === null || name === undefined ? MAIN_AGREEMENT_NAME : name);
+
+/** A few names, then "and N more". */
+function someNames(names, few = 3) {
+  if (names.length <= few) return names.join(', ');
+  return `${names.slice(0, few).join(', ')} and ${String(names.length - few)} more`;
+}
+
+/** The lines of the price list another agreement is used for. */
+export const usedForNames = (data, agreementId) => data.prices.filter((p) => p.agreementId === agreementId).map((p) => p.name);
+
+/** The line under another agreement in Settings' list. */
+export function otherAgreementLine(data, other) {
+  if (!other.inUse) return 'Not in use. Nobody is asked to sign it.';
+  const names = usedForNames(data, other.id);
+  const used = names.length === 0 ? 'Not used for any membership yet' : `Used for ${someNames(names)}`;
+  return `${used} · Signed for ${memberships(other.signed)}`;
+}
+
+/** The line under the main agreement once there are others. */
+export const MAIN_AGREEMENT_NOTE = 'Used for every membership not ticked on another agreement.';
+
+/** A new form, or one for another agreement as saved. */
+export function otherDraftFrom(data, other) {
+  if (other === null) return { name: '', text: '', usedFor: [] };
+  return { name: other.name, text: other.agreement.text, usedFor: data.prices.filter((p) => p.agreementId === other.id).map((p) => p.id) };
+}
+
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+/** What Save would do with another agreement's form: a problem to fix, nothing to save, or go. */
+export function otherDraftState(data, other, draft) {
+  const name = draft.name.trim();
+  const text = cleanWaiverText(draft.text);
+  if (name === '' || text === '') return { canSave: false, problem: null };
+  if (name.length > AGREEMENT_NAME_MAX) return { canSave: false, problem: `The name can be at most ${String(AGREEMENT_NAME_MAX)} characters.` };
+  const clash = name.toLowerCase() === MAIN_AGREEMENT_NAME.toLowerCase() ? MAIN_AGREEMENT_NAME : data.others.find((o) => o.id !== other?.id && o.name.toLowerCase() === name.toLowerCase())?.name;
+  if (clash !== undefined) return { canSave: false, problem: `You already have an agreement called ${clash}. Give this one another name.` };
+  if (text.length > WAIVER_MAX_CHARS) {
+    return { canSave: false, problem: `This agreement is ${String(text.length - WAIVER_MAX_CHARS)} characters too long. The most we can keep is ${WAIVER_MAX_CHARS.toLocaleString('en-GB')}.` };
+  }
+  if (other === null) return { canSave: true, problem: null };
+  const saved = otherDraftFrom(data, other);
+  const same = saved.name === name && cleanWaiverText(saved.text) === text && sameSet(saved.usedFor, draft.usedFor);
+  // The same words can still be saved while it is not in use: that starts it again.
+  return { canSave: !same || !other.inUse, problem: null };
+}
+
+/** Who Save changes, said before it: each line ticked that another agreement had, each line
+ *  unticked that goes back to the main one, and that signed memberships keep their words. */
+export function otherSaveChanges(data, other, draft) {
+  const out = [];
+  const id = other?.id ?? null;
+  const moving = data.prices.filter((p) => draft.usedFor.includes(p.id) && p.agreementId !== null && p.agreementId !== id);
+  for (const p of moving) {
+    const from = data.others.find((o) => o.id === p.agreementId);
+    if (from !== undefined) out.push(`${p.name} will stop using ${from.name}.`);
+  }
+  const leaving = id === null ? [] : data.prices.filter((p) => p.agreementId === id && !draft.usedFor.includes(p.id)).map((p) => p.name);
+  if (leaving.length > 0) out.push(`${someNames(leaving)} will use the ${MAIN_AGREEMENT_NAME.toLowerCase()}.`);
+  if (other !== null && other.signed > 0 && (cleanWaiverText(draft.text) !== cleanWaiverText(other.agreement.text) || leaving.length > 0)) {
+    out.push('The memberships already signed keep the agreement they were signed with.');
+  }
+  return out;
+}
+
+/** The Save button's words for another agreement. */
+export function otherSaveLabel(other) {
+  if (other === null) return 'Save agreement';
+  return other.inUse ? 'Save changes' : 'Use this agreement';
+}
+
+/** What saving another agreement did, said where its form was. */
+export function otherSavedLine(name, data, after) {
+  const saved = after.others.find((o) => o.name.toLowerCase() === name.trim().toLowerCase());
+  if (saved === undefined) return 'Saved.';
+  const names = usedForNames(after, saved.id);
+  return names.length === 0
+    ? `Saved ${saved.name}. Tick the memberships it is for, so people who take them sign it.`
+    : `Saved ${saved.name}. People who take ${someNames(names)} sign it from now on.`;
+}
+
+/** The box that asks before another agreement is stopped. */
+export function otherStopWords(data, other) {
+  const names = usedForNames(data, other.id);
+  return {
+    question: `Stop using ${other.name}?`,
+    changes: names.length === 0 ? 'Nobody will be asked to sign it.' : `People who take ${someNames(names)} won't be asked to sign an agreement.`,
+    kept:
+      other.signed === 0
+        ? 'Its words are kept here, so you can start using it again.'
+        : `Its words and the ${other.signed === 1 ? '1 signed membership' : `${String(other.signed)} signed memberships`} are kept, so you can start using it again.`,
+  };
+}
+
+/** On the price list: which agreement a line uses; null where the business has only its main one. */
+export function priceAgreementLine(list, type) {
+  if (!Array.isArray(list.agreements) || list.agreements.length === 0) return null;
+  const other = type.agreementId === null ? undefined : list.agreements.find((a) => a.id === type.agreementId);
+  return `Agreement: ${agreementTitle(other?.name ?? null)}`;
 }

@@ -1,7 +1,18 @@
 // The membership agreement's words (ROADMAP 18u-i).
 import { describe, expect, it } from 'vitest';
 import { WAIVER_MAX_CHARS } from '@app/shared';
-import { agreementAsksLine, agreementDraftState, agreementLineParts, agreementSaveLabel, agreementSavedLine, agreementSignedBy, agreementSummary } from './agreementView';
+import {
+  agreementAsksLine,
+  agreementDraftState,
+  agreementLineParts,
+  agreementSaveLabel,
+  agreementSavedLine,
+  agreementSignedBy,
+  agreementSummary,
+  otherDraftState,
+  otherSaveChanges,
+  priceAgreementLine,
+} from './agreementView';
 
 const agreement = (text = 'Cancel at the desk.', version = 1) => ({ id: 'a', version, text, savedAt: '2026-10-23T09:00:00.000Z' });
 const NONE = { agreement: null, inUse: false, signed: 0 };
@@ -55,5 +66,47 @@ describe('under a membership', () => {
   it('who signed, a parent or guardian named as one', () => {
     expect(agreementSignedBy({ name: 'Maya Patel', signer: 'person', at: 'x' }, when)).toBe('Signed by Maya Patel on 23 October 2026.');
     expect(agreementSignedBy({ name: 'Rosa Reyes', signer: 'guardian', at: 'x' }, when)).toBe('Signed by Rosa Reyes, parent or guardian, on 23 October 2026.');
+  });
+});
+
+describe('another agreement for some memberships (18u-ii-a)', () => {
+  const PACK = { id: 'p', name: '10-class pack', agreementId: 'a' };
+  const TRIAL = { id: 't', name: 'Free week', agreementId: 'b' };
+  const GOLD = { id: 'g', name: 'Gold Monthly', agreementId: null };
+  const packTerms = { id: 'a', name: 'Class pack terms', agreement: agreement('Pack words'), inUse: true, signed: 2 };
+  const trialTerms = { id: 'b', name: 'Trial terms', agreement: agreement('Trial words'), inUse: true, signed: 0 };
+  const data = { ...IN_USE, others: [packTerms, trialTerms], prices: [PACK, TRIAL, GOLD] };
+
+  it.each([
+    ['nothing typed', null, { name: '', text: '', usedFor: [] }, { canSave: false, problem: null }],
+    ['a new one, named and written', null, { name: 'Day pass terms', text: 'Words', usedFor: [] }, { canSave: true, problem: null }],
+    ['the main one\'s name, whatever its capitals', null, { name: 'MAIN AGREEMENT', text: 'Words', usedFor: [] }, { canSave: false, problem: 'You already have an agreement called Main agreement. Give this one another name.' }],
+    ['another one\'s name', null, { name: ' trial terms ', text: 'Words', usedFor: [] }, { canSave: false, problem: 'You already have an agreement called Trial terms. Give this one another name.' }],
+    ['its own name kept', packTerms, { name: 'Class pack terms', text: 'Pack words', usedFor: ['p'] }, { canSave: false, problem: null }],
+    ['a tick changed', packTerms, { name: 'Class pack terms', text: 'Pack words', usedFor: ['p', 'g'] }, { canSave: true, problem: null }],
+    ['stopped, saved as it was', { ...packTerms, inUse: false }, { name: 'Class pack terms', text: 'Pack words', usedFor: ['p'] }, { canSave: true, problem: null }],
+  ])('%s', (_, other, draft, want) => {
+    expect(otherDraftState(data, other, draft)).toEqual(want);
+  });
+
+  it('says before Save which memberships move, which go back to the main agreement, and that signed ones keep theirs', () => {
+    expect(otherSaveChanges(data, packTerms, { name: 'Class pack terms', text: 'Pack words', usedFor: ['t'] })).toEqual([
+      'Free week will stop using Trial terms.',
+      '10-class pack will use the main agreement.',
+      'The memberships already signed keep the agreement they were signed with.',
+    ]);
+    expect(otherSaveChanges(data, trialTerms, { name: 'Trial terms', text: 'New words', usedFor: ['t'] })).toEqual([]);
+    expect(otherSaveChanges(data, null, { name: 'New', text: 'Words', usedFor: ['g'] })).toEqual([]);
+  });
+
+  it('the price list names a line\'s agreement only once the business has another', () => {
+    expect(priceAgreementLine({ agreements: [] }, GOLD)).toBeNull();
+    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, PACK)).toBe('Agreement: Class pack terms');
+    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, GOLD)).toBe('Agreement: Main agreement');
+  });
+
+  it('the folded line counts the other agreements', () => {
+    expect(agreementSummary(data)).toBe('In use · signed for 2 memberships · 2 more agreements');
+    expect(agreementSummary({ ...NONE, others: [packTerms] })).toBe('Main agreement not set up · 1 more agreement');
   });
 });

@@ -206,6 +206,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
             <>
               <p className="c-s15 c-w6 c-t1 m-0">{agreementSignedBy(signed, when)}</p>
               <Facts facts={signed.facts} />
+              {signed.agreementName != null ? <span className="c-label">{signed.agreementName}</span> : null}
               <Terms gymName={box.gymName} text={signed.text} />
               <p className="c-s14 c-t2 m-0">{copyLine ?? agreementCopyLine(signed, box.hasEmail, when)}</p>
               <div className="flex flex-wrap items-center gap-2">
@@ -274,7 +275,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
                   <p className="c-s15 c-w6 c-t1 m-0">{words.handOver}</p>
                   <span className="c-label">The membership</span>
                   <Facts facts={box.facts} />
-                  <span className="c-label">{box.gymName}&apos;s terms</span>
+                  <span className="c-label">{box.agreement.name ?? `${box.gymName}'s terms`}</span>
                   <Terms gymName={box.gymName} text={box.agreement.text} />
                   <label htmlFor={nameId} className="flex flex-col gap-1.5">
                     <span className="c-label">{words.nameLabel}</span>

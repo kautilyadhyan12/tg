@@ -21,6 +21,7 @@ import {
   CHIP_KINDS,
   EMPTY_FILTERS,
   WAIVER_NOT_SIGNED_WORDS,
+  AGREEMENT_NOT_SIGNED_WORDS,
   activeFilters,
   appView,
   chipText,
@@ -148,6 +149,15 @@ function FilterBox({ list, gymTags, filters, words, total, onChange, onClear, on
                 'Waiver',
                 <Chip pressed={filters.waiverNotSigned} onClick={() => onChange({ ...filters, waiverNotSigned: !filters.waiverNotSigned })}>
                   {WAIVER_NOT_SIGNED_WORDS} <span className="c-n">{count(list.waiverNotSigned)}</span>
+                </Chip>,
+              )
+            : null}
+          {/* The business's membership agreements (18u-ii-a): only while it asks for one. */}
+          {list !== null && !past && typeof list.agreementNotSigned === 'number'
+            ? group(
+                'Agreement',
+                <Chip pressed={filters.agreementNotSigned} onClick={() => onChange({ ...filters, agreementNotSigned: !filters.agreementNotSigned })}>
+                  {AGREEMENT_NOT_SIGNED_WORDS} <span className="c-n">{count(list.agreementNotSigned)}</span>
                 </Chip>,
               )
             : null}

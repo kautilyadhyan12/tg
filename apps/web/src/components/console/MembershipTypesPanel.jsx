@@ -44,6 +44,7 @@ import MembershipDiscounts from '../../pages/console/MembershipDiscounts';
 import { NewRateInline } from '../../pages/console/TaxRates';
 import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
+import { priceAgreementLine } from '../../pages/console/agreementView';
 import { useListMemberships } from './useListMemberships';
 
 // THE MEMBERSHIPS PAGE (spec Part 3 §13.1; ROADMAP 17a-i, a page of its own since 23c-i),
@@ -475,7 +476,9 @@ function RowNote({ error, done }) {
 
 /** `form`: this type's own form while it is being changed, or null. `box`: the box of
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
-function TypeRow({ type, orgType, taxLine = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
+// `agreementLine`: which of the business's agreements it is signed with, once it has more than
+// one (18u-ii-a); `agreementTo`: Settings, for whoever may change it.
+function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
     <li className="px-5 py-4 md:px-6 flex flex-col gap-3" style={LINE}>
@@ -490,6 +493,14 @@ function TypeRow({ type, orgType, taxLine = null, readOnly, busy, formOpen, ties
           {joiningFeeLine(type) !== null ? <p className="c-s14 c-t2 m-0">{joiningFeeLine(type)}</p> : null}
           {taxLine !== null ? <p className="c-s14 c-t2 m-0">{taxLine}</p> : null}
           <p className="c-s14 c-t2 m-0">{includesLine(type, orgType)}</p>
+          {agreementLine !== null ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="c-s14 c-t2">{agreementLine}</span>
+              <PlaceLink to={agreementTo} state={{ agreementId: type.agreementId }} aria-label={`Change the agreement for ${type.name}`} className="c-btn c-btn-s c-btn-sm">
+                Change agreement
+              </PlaceLink>
+            </div>
+          ) : null}
         </div>
         {asking ? null : (
           <div className="flex flex-wrap gap-2 flex-shrink-0">
@@ -753,6 +764,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
   // The country is a box in Settings' details section ("Gym details", "Studio details"),
   // for whoever may change them: its button opens Settings there, at that box.
   const countryTo = placeFor(org.slug, viewerPrivileges(org), 'country');
+  const agreementTo = placeFor(org.slug, viewerPrivileges(org), 'agreement');
   const canSetCountry = countryTo !== null;
   const details = `${orgWords(org.orgType).itCap} details`;
 
@@ -824,6 +836,8 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
                     type={type}
                     orgType={org.orgType}
                     taxLine={typeTaxLine(type, list)}
+                    agreementLine={priceAgreementLine(list, type)}
+                    agreementTo={agreementTo}
                     readOnly={readOnly}
                     busy={anyBusy}
                     formOpen={locked}

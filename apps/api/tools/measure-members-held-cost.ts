@@ -198,5 +198,25 @@ const held = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_held_
 console.log(`everybody holds one, a quarter a pack as well, and three that are over (${String(held[0]?.n ?? 0)} memberships):`);
 await page("Payment due", true);
 
+// The business asks for its main agreement, and another for the packs (18u-ii-a), and nobody has
+// signed: what "Agreement not signed" adds to the header and what its own page costs.
+const mainDoc = randomUUID();
+const packDoc = randomUUID();
+await sql`INSERT INTO gym_agreement_documents (id, gym_id, name) VALUES (${mainDoc}, ${gymId}, NULL), (${packDoc}, ${gymId}, 'Class pack terms')`;
+await sql`
+  INSERT INTO gym_agreements (gym_id, document_id, version, body, saved_by)
+  VALUES (${gymId}, ${mainDoc}, 1, 'Main terms', ${owner}), (${gymId}, ${packDoc}, 1, 'Pack terms', ${owner})`;
+await sql`UPDATE gym_membership_types SET agreement_document_id = ${packDoc} WHERE id = ${pack}`;
+await analyse();
+console.log("the business asks for an agreement on each line, and nobody has signed:");
+await measure("the header and the Filter's counts", async () => {
+  const list = await readList(deps, owner, gymId, yes);
+  if (list?.agreementNotSigned !== PEOPLE) throw new Error(`not everybody to sign: ${String(list?.agreementNotSigned)}`);
+});
+await measure('a page under "Agreement not signed"', async () => {
+  const got = await readEntries(deps, owner, gymId, { agreement: "not_signed" }, yes);
+  if (got?.total !== PEOPLE) throw new Error(`not everybody: ${String(got?.total)}`);
+});
+
 await cleanup();
 await sql.end();

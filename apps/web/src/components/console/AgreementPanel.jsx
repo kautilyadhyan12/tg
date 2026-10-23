@@ -1,16 +1,31 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { WAIVER_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
-import { agreementAsksLine, agreementDraftState, agreementSaveLabel, agreementSavedLine, agreementStopWords, agreementSummary } from '../../pages/console/agreementView';
+import {
+  MAIN_AGREEMENT_NOTE,
+  agreementAsksLine,
+  agreementDraftState,
+  agreementSaveLabel,
+  agreementSavedLine,
+  agreementStopWords,
+  agreementSummary,
+  otherAgreementLine,
+  withLists,
+} from '../../pages/console/agreementView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
+import OtherAgreementForm from './OtherAgreementForm';
 
 // MEMBERSHIP AGREEMENT (ROADMAP 18u-i), on `org.manage` as the server gates it. The business
 // writes its own agreement; each membership it gives is signed on staff's screen, with that
 // membership's details filled in above these words, and the person gets a copy by email.
 // Changing the words keeps what was already signed, and the box says so before Save.
+//
+// Each line of the price list may have its own (18u-ii-a): Add agreement opens a form under it,
+// and each other agreement's Edit opens its form under its row. The main one is used for every
+// line not ticked on another; a business with only the main one sees only it.
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const softStyle = { color: 'rgba(255,255,255,0.55)' };
@@ -18,7 +33,8 @@ const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
 // `membersName`: what this person's menu calls the Members page (`membersPageName`).
-export default function AgreementPanel({ org, readOnly, startOpen = false, membersTo = '../members', membersName = 'Members' }) {
+// `openAgreementId`: another agreement whose form opens at once (the price list's Change).
+export default function AgreementPanel({ org, readOnly, startOpen = false, openAgreementId = null, membersTo = '../members', membersName = 'Members' }) {
   const gymId = org.id;
   const fieldId = useId();
   const [data, setData] = useState(null);
@@ -29,6 +45,14 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
   // What the last save or stop said, until the words are typed in again.
   const [doneLine, setDoneLine] = useState(null);
   const [asking, setAsking] = useState(false);
+  // Which other agreement's form is open ('new' for Add agreement), and what its last save said.
+  const [editing, setEditing] = useState(openAgreementId);
+  const [otherLine, setOtherLine] = useState(null);
+  const otherDone = (next, line, id) => {
+    setData(withLists(next));
+    setEditing(null);
+    setOtherLine({ at: id, text: line });
+  };
 
   const fetchAgreement = useCallback(
     (isLive = () => true) =>
@@ -36,7 +60,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
         .getGymAgreement(gymId)
         .then((res) => {
           if (!isLive()) return;
-          setData(res.data);
+          setData(withLists(res.data));
           setDraft(res.data.agreement?.text ?? '');
         })
         .catch((err) => {
@@ -71,7 +95,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
     try {
       const res = await orgService.saveGymAgreement(gymId, draft);
       setDoneLine(agreementSavedLine(data, res.data));
-      setData(res.data);
+      setData(withLists(res.data));
       setDraft(res.data.agreement?.text ?? '');
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save your membership agreement."));
@@ -85,7 +109,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
     setSaveError(null);
     try {
       const res = await orgService.stopGymAgreement(gymId);
-      setData(res.data);
+      setData(withLists(res.data));
       setDraft(res.data.agreement?.text ?? '');
       setAsking(false);
       setDoneLine('You have stopped using this agreement. Nobody is asked to sign it.');
@@ -99,7 +123,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
   const stopWords = data === null ? null : agreementStopWords(data);
 
   return (
-    <ConsoleSection title="Membership agreement" summary={agreementSummary(data)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+    <ConsoleSection title="Membership agreements" summary={agreementSummary(data)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
@@ -110,6 +134,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
       ) : data === null ? (
         <ConsoleLoading label="Loading…" />
       ) : (
+        <div className="flex flex-col gap-6">
         <form onSubmit={save} className="flex flex-col gap-4">
           {data.agreement === null ? (
             // Only until the business has written its agreement: after that the box holds its own words.
@@ -132,8 +157,13 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
 
           <div className="flex flex-col gap-2">
             <label htmlFor={fieldId} className="text-base font-bold" style={{ color: '#fff' }}>
-              Your terms
+              {data.others.length > 0 ? 'Main agreement' : 'Your terms'}
             </label>
+            {data.others.length > 0 ? (
+              <p className="text-sm m-0" style={softStyle}>
+                {MAIN_AGREEMENT_NOTE}
+              </p>
+            ) : null}
             <textarea
               id={fieldId}
               value={draft}
@@ -254,6 +284,76 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
             </div>
           ) : null}
         </form>
+
+        <div role="group" aria-label="Other agreements" className="flex flex-col gap-3">
+          {data.others.length > 0 ? (
+            <p className="text-base font-bold m-0" style={{ color: '#fff' }}>
+              Other agreements
+            </p>
+          ) : null}
+          {data.others.map((other) => (
+            <div key={other.id} className="flex flex-col gap-2">
+              <div className="rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3" style={boxStyle}>
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-semibold break-words" style={{ color: '#fff' }}>
+                    {other.name}
+                  </span>
+                  <span className="text-sm" style={softStyle}>
+                    {otherAgreementLine(data, other)}
+                  </span>
+                </div>
+                {editing !== other.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(other.id);
+                      setOtherLine(null);
+                    }}
+                    disabled={busy !== null}
+                    aria-label={`Edit ${other.name}`}
+                    className="rounded-xl px-4 text-sm font-semibold min-h-11"
+                    style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
+                  >
+                    Edit
+                  </button>
+                ) : null}
+              </div>
+              {editing === other.id ? (
+                <OtherAgreementForm key={other.id} gymId={gymId} data={data} other={other} readOnly={readOnly} onDone={otherDone} onCancel={() => setEditing(null)} />
+              ) : null}
+              {otherLine !== null && otherLine.at === other.id ? (
+                <p role="status" className="text-sm m-0" style={softStyle}>
+                  {otherLine.text}
+                </p>
+              ) : null}
+            </div>
+          ))}
+          {editing === 'new' ? (
+            <OtherAgreementForm key="new" gymId={gymId} data={data} other={null} readOnly={readOnly} onDone={otherDone} onCancel={() => setEditing(null)} />
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing('new');
+                  setOtherLine(null);
+                }}
+                disabled={readOnly || busy !== null}
+                className="self-start rounded-xl px-4 text-sm font-semibold inline-flex items-center gap-2 min-h-11 disabled:opacity-40"
+                style={{ border: '1px solid rgba(255,255,255,0.2)', color: '#fff' }}
+              >
+                <Plus aria-hidden="true" className="w-4 h-4" />
+                Add agreement
+              </button>
+              {data.others.length === 0 ? (
+                <p className="text-sm m-0" style={softStyle}>
+                  Use different terms for some memberships, such as class packs or a free trial.
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+        </div>
       )}
     </ConsoleSection>
   );

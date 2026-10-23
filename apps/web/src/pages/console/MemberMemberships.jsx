@@ -367,10 +367,10 @@ export default function MemberMemberships({
     try {
       const res = await work();
       setHeld({ entryId: asked, ...res.data });
-      // A membership just given is signed there and then, where the business asks for its
-      // agreement (18u-i): its box opens under it, with Sign later.
-      if (what === 'give' && res.data.agreementInUse) {
-        const given = res.data.memberships.find((x) => !before.has(x.id) && x.agreement === null);
+      // A membership just given is signed there and then, where the business asks for the
+      // agreement its line of the price list uses (18u-i, 18u-ii-a): its box opens under it, with Sign later.
+      if (what === 'give') {
+        const given = res.data.memberships.find((x) => !before.has(x.id) && x.agreement === null && x.agreementAsked === true);
         setAgreementFor(given === undefined ? null : { id: given.id, justGiven: true });
       }
       setOpen(null);
@@ -1782,7 +1782,7 @@ export default function MemberMemberships({
           gymId={gymId}
           entryId={entryId}
           membership={m}
-          inUse={shown.agreementInUse === true}
+          inUse={m.agreementAsked === true}
           signable={!shown.past && (m.view.status === 'active' || m.view.status === 'upcoming')}
           readOnly={readOnly}
           open={agreementFor?.id === m.id}

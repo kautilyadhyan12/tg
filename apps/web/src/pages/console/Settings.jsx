@@ -302,6 +302,7 @@ export default function Settings() {
             org={org}
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.agreement)}
+            openAgreementId={arrived !== null && typeof arrived === 'object' && typeof arrived.agreementId === 'string' ? arrived.agreementId : null}
             membersTo={placeTo(orgSlug, 'members') ?? '../members'}
             membersName={membersPageName(privileges, org.orgType)}
           />
