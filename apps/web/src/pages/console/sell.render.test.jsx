@@ -530,6 +530,47 @@ describe('receipts (18g-i)', () => {
   });
 });
 
+describe("today's takings by kind (18q-ii)", () => {
+  const kind = (over = {}) => ({ count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0, ...over });
+  it('the tabs show each kind with its total, and a tab shows only its own rows and line', async () => {
+    const fee = { id: 'f1', kind: 'fee', typeName: 'Late cancel fee · Spin', amountMinor: 1500, currency: 'USD', method: 'cash', paidAt: '2026-10-12T16:00:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 41 };
+    const month = { id: 'm1', kind: 'membership', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: 'Sam Desk', person: { entryId: 'e-maya', name: 'Maya Patel' }, receiptNumber: 40 };
+    svc.get.mockResolvedValue(
+      page({
+        sales: [sale()],
+        payments: [fee, month],
+        totals: totals({ count: 1, payments: 2, totalMinor: 431 + 4999 + 1500, cash: 431 + 1500, card_at_desk: 4999 }),
+        kinds: { products: kind({ count: 1, totalMinor: 431, cash: 431 }), memberships: kind({ count: 1, totalMinor: 4999, card_at_desk: 4999 }), fees: kind({ count: 1, totalMinor: 1500, cash: 1500 }) },
+      }),
+    );
+    open();
+    const box = await screen.findByRole('region', { name: "Today's takings" });
+    const tabs = within(box).getByRole('tablist', { name: 'Kind of sale' });
+    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['All$69.30', 'Products$4.31', 'Memberships$49.99', 'Fees$15.00']);
+    expect(within(tabs).getByRole('tab', { name: /^All/ }).getAttribute('aria-selected')).toBe('true');
+    expect(within(box).getAllByTestId('takings-row')).toHaveLength(3);
+
+    fireEvent.click(within(tabs).getByRole('tab', { name: /^Fees/ }));
+    expect(within(tabs).getByRole('tab', { name: /^Fees/ }).getAttribute('aria-selected')).toBe('true');
+    expect(within(box).getByTestId('takings-line').textContent).toBe('Fees today: $15.00 from 1 fee. Cash $15.00.');
+    expect(within(box).getAllByTestId('takings-row').map((r) => r.textContent.includes('Late cancel fee · Spin · $15.00'))).toEqual([true]);
+    expect(within(box).getByText("To void a fee, open the member's page.")).toBeTruthy();
+
+    fireEvent.click(within(tabs).getByRole('tab', { name: /^Products/ }));
+    expect(within(box).getByTestId('takings-line').textContent).toBe('Products today: $4.31 from 1 sale. Cash $4.31.');
+    expect(within(box).getAllByTestId('takings-row').map((r) => r.textContent.includes('Water'))).toEqual([true]);
+    expect(within(box).queryByText(/open the member's page/)).toBeNull();
+  });
+  it('a tab with nothing in it says so and lists nothing', async () => {
+    svc.get.mockResolvedValue(page({ sales: [sale()], totals: totals({ count: 1, totalMinor: 431, cash: 431 }), kinds: { products: kind({ count: 1, totalMinor: 431, cash: 431 }), memberships: kind(), fees: kind() } }));
+    open();
+    const box = await screen.findByRole('region', { name: "Today's takings" });
+    fireEvent.click(within(box).getByRole('tab', { name: /^Fees/ }));
+    expect(within(box).getByTestId('takings-line').textContent).toBe('No fees taken yet today.');
+    expect(within(box).queryAllByTestId('takings-row')).toHaveLength(0);
+  });
+});
+
 describe('a membership', () => {
   // Kd, 2026-10-14: Sell is for products; a membership is sold on the member's own page.
   it('is not sold here: the member is found, and their page opens with Add membership already open', async () => {

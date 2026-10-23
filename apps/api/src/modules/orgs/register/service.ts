@@ -158,6 +158,28 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
   const otherCurrency =
     row.totals.filter((t) => t.currency !== currency).reduce((n, t) => n + t.count, 0) +
     (paid?.sums ?? []).filter((s) => s.currency !== currency).reduce((n, s) => n + s.count, 0);
+  const salesNotShown = row.salesTotal - new Set(row.sales.map((s) => s.receiptNumber)).size;
+  // Each kind added up the same way as the whole day, so the three come to the day's total.
+  const paymentsOfKind = (fee: boolean) => {
+    const sums = (paid?.sums ?? []).filter((s) => s.fee === fee);
+    const own = sums.filter((s) => s.currency === currency);
+    const by = (method: MemberPaymentMethod): number => own.filter((s) => s.method === method).reduce((n, s) => n + s.totalMinor, 0);
+    const listed = paid === null ? 0 : paid.payments.filter((p) => p.fee === fee).length;
+    return {
+      count: own.reduce((n, s) => n + s.count, 0),
+      totalMinor: own.reduce((n, s) => n + s.totalMinor, 0),
+      cash: by("cash"),
+      upi: by("upi"),
+      card_at_desk: by("card_at_desk"),
+      bank_transfer: by("bank_transfer"),
+      link: by("link"),
+      company: by("company"),
+      terminal: by("terminal"),
+      refundedMinor: (paid?.refunds ?? []).filter((r) => r.fee === fee && r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
+      otherCurrency: sums.filter((s) => s.currency !== currency).reduce((n, s) => n + s.count, 0),
+      notShown: sums.reduce((n, s) => n + s.count, 0) - listed,
+    };
+  };
   // Parsed, not cast: a method or an amount the contract does not know fails here.
   return sellPageResponseSchema.parse({
     currency,
@@ -174,7 +196,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
     canSell: viewer.canSell,
     canManage: viewer.canManage,
     sales: shownSales(row.sales, today, viewer.canSell),
-    salesNotShown: row.salesTotal - new Set(row.sales.map((s) => s.receiptNumber)).size,
+    salesNotShown,
     payments:
       paid === null
         ? null
@@ -188,6 +210,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
             by: p.by,
             person: p.entryId === null ? null : { entryId: p.entryId, name: p.personName === null || p.personName.trim() === "" ? repo.NO_NAME : p.personName },
             receiptNumber: p.receiptNumber,
+            kind: p.fee ? "fee" : "membership",
           })),
     paymentsNotShown: paid === null ? 0 : paid.count - paid.payments.length,
     totals: {
@@ -205,6 +228,24 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
       refundedMinor: [...(paid?.refunds ?? []), ...row.refunds].filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
       discountMinor: sold?.discountMinor ?? 0,
       otherCurrency,
+    },
+    kinds: {
+      products: {
+        count: sold?.count ?? 0,
+        totalMinor: sold?.totalMinor ?? 0,
+        cash: sold?.cash ?? 0,
+        upi: sold?.upi ?? 0,
+        card_at_desk: sold?.card_at_desk ?? 0,
+        bank_transfer: sold?.bank_transfer ?? 0,
+        link: 0,
+        company: 0,
+        terminal: sold?.terminal ?? 0,
+        refundedMinor: row.refunds.filter((r) => r.currency === currency).reduce((n, r) => n + r.totalMinor, 0),
+        otherCurrency: row.totals.filter((t) => t.currency !== currency).reduce((n, t) => n + t.count, 0),
+        notShown: salesNotShown,
+      },
+      memberships: paymentsOfKind(false),
+      fees: paymentsOfKind(true),
     },
   });
 }
