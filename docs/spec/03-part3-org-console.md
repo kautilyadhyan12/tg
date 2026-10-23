@@ -3045,6 +3045,17 @@ booking. The choice is changed by staff who record members' payments, and only t
 part's list of who owes today; the person's page says beside the bill that they can't book, with
 a button to the part (`/settings#overdue-bookings`). Paid, they book again at once.
 
+**The Members list says Overdue, as built (17i-ii; Kd, 2026-10-23).** A row's Payment reads
+**Overdue** in red where it reads Payment due and the person's oldest bill still open reads Overdue
+on their page, by the gym's days of grace (`rowSaysOverdue` in `@app/shared`, over
+`paymentOverdue`); Payment due in yellow before that. By the bills alone: a membership from the
+gym's own file with no bill here stays Payment due. A past member's tag under the name says it the
+same way, the line over the bill on the person's page reads "Overdue since …" in red, and the
+download writes "Overdue". It is told to staff who record members' payments (`overdue` on each
+entry, false for everybody else), since staff with the list's tick alone are sent no bills and
+read Payment due on the person's page. The Filter keeps one choice, Payment due, which finds the
+overdue too, so Overview's and Reports' counts are unchanged.
+
 ### 13.5 Personal training
 
 `gym_trainer_hours` (a member of staff, weekday, local from and to) and the session
