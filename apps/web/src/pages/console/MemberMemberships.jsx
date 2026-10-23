@@ -138,6 +138,8 @@ const STOP = 'c-btn c-btn-danger c-btn-sm';
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 /** Refusals that mean the page is out of date: it is read again. */
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
+/** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
+const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -979,6 +981,11 @@ export default function MemberMemberships({
       setAttempt((n) => n + 1);
       onChanged?.();
     } catch (err) {
+      // The card may not be charged again yet, or at all (18d-iii-ii-a): said under the button pressed.
+      if (CARD_RETRY_REFUSALS.includes(errorCode(err))) {
+        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: errorText(err, '') });
+        return;
+      }
       setRefusal(errorText(err, "We couldn't get an answer. Press Charge again to see whether the card was charged: it is never charged twice."));
       if (STALE_CODES.includes(errorCode(err)) || errorCode(err) === 'card_charge_card_changed') {
         close();

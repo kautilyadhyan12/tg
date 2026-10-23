@@ -210,4 +210,29 @@ describe('Charge card on file: the form', () => {
     await waitFor(() => expect(orgService.chargeCardOnFile).toHaveBeenCalledTimes(2));
     expect(orgService.chargeCardOnFile.mock.calls[1][3].requestKey).not.toBe(orgService.chargeCardOnFile.mock.calls[0][3].requestKey);
   });
+
+  it('a card declined less than a day ago: the refusal is said under the button pressed (18d-iii-ii-a)', async () => {
+    orgService.getTerminalPayments.mockReturnValue(box(VISA));
+    const words = 'Visa ending 1111 was declined less than a day ago, and Square advises waiting a day before charging it again. It can be charged from 12:00 PM on Oct 24. Nothing was charged.';
+    orgService.chargeCardOnFile.mockRejectedValue({ response: { status: 409, data: { error: 'card_charge_wait', message: words } } });
+    draw();
+    const form = await openPay();
+    await waitFor(() => expect(optionsOf(howPaid(form))).toContain('Card on file · Visa ending 1111'));
+    fireEvent.change(howPaid(form), { target: { value: 'card_on_file' } });
+    fireEvent.click(form.getByRole('button', { name: 'Charge $49.99' }));
+    const said = await form.findByTestId('card-charge-said');
+    expect(said.textContent).toBe(words);
+    expect(screen.getAllByText(words)).toHaveLength(1);
+  });
+
+  it('a card its bank declined for good is named so, cannot be picked, and the form says what to do (18d-iii-ii-a)', async () => {
+    orgService.getTerminalPayments.mockReturnValue(box({ ...VISA, stopped: true }));
+    draw();
+    const form = await openPay();
+    const label = "Card on file · Visa ending 1111 · can't be charged";
+    await waitFor(() => expect(optionsOf(howPaid(form))).toContain(label));
+    const option = [...howPaid(form).querySelectorAll('option')].find((o) => o.value === 'card_on_file');
+    expect(option?.disabled).toBe(true);
+    expect(form.getByText("The bank declined this card for good, so it can't be charged again. Save another card, or take payment another way.")).toBeTruthy();
+  });
 });

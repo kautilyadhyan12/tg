@@ -341,7 +341,8 @@ async function chargeByStaff(
 function cardWaitWords(w: { from: Date; brand: string; last4: string }, timezone: string, country: string | null): string {
   const locale = `en-${country ?? "US"}`;
   const time = new Intl.DateTimeFormat(locale, { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(w.from);
-  const day = new Intl.DateTimeFormat(locale, { timeZone: timezone, day: "numeric", month: "short" }).format(w.from);
+  // "24 Oct", as every console page writes a day.
+  const day = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, day: "numeric", month: "short" }).format(w.from);
   return `${cardName(w)} was declined less than a day ago, and Square advises waiting a day before charging it again. It can be charged from ${time} on ${day}. Nothing was charged.`;
 }
 
