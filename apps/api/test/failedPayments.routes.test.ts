@@ -297,6 +297,8 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     if (ginaRow === undefined) throw new Error("no Gina row");
     expect(ginaRow.retry).toMatchObject({ kind: "charge", card: { brand: "VISA", last4: "1000" }, payerName: null, amountMinor: 2500 });
     expect(ginaRow.declined).toMatchObject({ last4: "1000", reason: "declined", stop: "bank" });
+    // Each row's Try again names that row's own card, never another row's.
+    expect(page.payments.find((p) => p.membershipId === nina.h.membershipId)?.retry).toMatchObject({ kind: "charge", card: { last4: "1001" } });
 
     // Gina's bank lets it through now. Two of staff press Try again on her row at the same instant.
     cardNowAnswers(gina.card, "pays");
@@ -333,6 +335,8 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     const page = await list(gym);
     for (const { h } of people) {
       const row = page.payments.find((p) => p.membershipId === h.membershipId);
+      // Try again would charge the very card that was declined: this person's own.
+      if (row?.retry.kind === "charge") expect(row.retry.card.last4).toBe(row.declined.last4);
       const bill = (await held(gym, h.entryId)).memberships[0]?.billing?.bills.find((b) => b.periodIndex === 1);
       expect(row?.declined).toEqual(bill?.cardDeclined);
       expect(row?.leftMinor).toBe(2500);
@@ -342,6 +346,7 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     expect(eli?.retry).toEqual({ kind: "no", why: "new_card" });
     const ivy = page.payments.find((p) => p.name === "Ivy Short");
     expect(ivy?.declined.next).not.toBeNull();
+    expect(page.payments.filter((p) => p.retry.kind === "charge").map((p) => p.name).sort()).toEqual(["Gus Generic", "Ivy Short"]);
   });
 
   it("declined less than a day ago: Try again waits, and the press is refused the same", async () => {
