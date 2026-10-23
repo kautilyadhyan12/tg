@@ -8,12 +8,14 @@
 //   - a person's page read with its bills and their charges.
 // With `--declines` (18d-iii-ii-a) every card declines for want of money, so every bill is tried
 // again by itself: also measured are the look for tries due on the third day, a minute of those
-// tries, a minute of the emails telling each cardholder, and a person's page with its decline.
+// tries, a minute of the emails telling each cardholder, and a person's page with its decline; and
+// (18d-iii-ii-b) the Failed payments list of the gym of 2,000, its first page and its last, and
+// Overview's count of it, a day after every card declined.
 // Two numbers each: total, and how long the one thread is busy and answers nobody. The look, the
 // charges and the emails are the worker's thread; the page read is the api's.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm --filter api exec tsx tools/measure-card-charges-cost.ts [--declines]
+//   corepack pnpm --filter api exec tsx tools/measure-card-charges-cost.ts [--declines [--list-only]]
 //
 // LOCAL DATABASES ONLY: it writes gyms, their lists, memberships, bills and cards, and removes them.
 import { createHash, randomUUID } from "node:crypto";
@@ -23,6 +25,7 @@ import postgres from "postgres";
 import { getHeldMemberships } from "../src/modules/orgs/memberships/heldService.js";
 import { CARD_CHARGE, processCardCharges } from "../src/modules/orgs/payments/cardCharges.js";
 import { dueBills, retryBills } from "../src/modules/orgs/payments/cardChargesRepo.js";
+import { readFailedPayments, readFailedSummary } from "../src/modules/orgs/payments/failedPayments.js";
 import { sendDueCardNotices } from "../src/modules/orgs/payments/cardNotices.js";
 import { accessContext, refreshContext } from "../src/modules/orgs/payments/service.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
@@ -41,6 +44,8 @@ const RUNS = 9;
 const PLAN = "zz_charges_cost";
 const PREFIX = "charges-cost-";
 const DECLINES = process.argv.includes("--declines");
+/** With `--declines`: stop once Failed payments is measured. */
+const LIST_ONLY = process.argv.includes("--list-only");
 const square = fakeSquare();
 const settings = squareSettings(
   {
@@ -227,6 +232,30 @@ for (let i = 0; i < RUNS; i++) lookEmpty.push(await time(look));
 many("the look for bills due, none left (every other minute)", lookEmpty);
 
 if (DECLINES) {
+  // A day on, staff open Failed payments: every bill of the gym of 2,000 is on it.
+  const dayOn = new Date(clock.getTime() + 25 * 60 * 60_000);
+  await sql`VACUUM ANALYZE gym_card_charges`;
+  const failedDeps = { ...deps, now: () => dayOn };
+  const first = await readFailedPayments(failedDeps, big.owner, big.id, 0);
+  const lists: { wall: number; js: number }[] = [];
+  for (let i = 0; i < RUNS; i++) lists.push(await time(() => readFailedPayments(failedDeps, big.owner, big.id, 0)));
+  many(`Failed payments, first page of ${String(first.count)} (${String(first.payments.length)} rows)`, lists);
+  const lastFrom = Math.floor((first.count - 1) / 25) * 25;
+  const lasts: { wall: number; js: number }[] = [];
+  for (let i = 0; i < RUNS; i++) lasts.push(await time(() => readFailedPayments(failedDeps, big.owner, big.id, lastFrom)));
+  many(`Failed payments, its last page (from ${String(lastFrom)})`, lasts);
+  const counts: { wall: number; js: number }[] = [];
+  for (let i = 0; i < RUNS; i++) counts.push(await time(() => readFailedSummary(failedDeps, big.owner, big.id)));
+  many("Overview's count of Failed payments", counts);
+  const charges = first.payments.filter((p) => p.retry.kind === "charge").length;
+  console.log(`${"rows with Try again on the first page".padEnd(56)} ${String(charges)} of ${String(first.payments.length)}`);
+
+  if (LIST_ONLY) {
+    await cleanup();
+    await sql.end({ timeout: 5 });
+    process.exit(0);
+  }
+
   // Every cardholder emailed: the sender's minute takes its run's worth, 120.
   const sent: { wall: number; js: number }[] = [];
   let emails = 0;

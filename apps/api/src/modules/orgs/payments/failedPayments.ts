@@ -27,7 +27,7 @@ import { billsFor } from "../memberships/billsSql.js";
 import { heldRowsOf } from "../memberships/heldRepo.js";
 import { BILLING, orgNotFound, stateOf } from "./cards.js";
 import * as charges from "./cardChargesRepo.js";
-import { failedBills, type FailedBill } from "./failedPaymentsRepo.js";
+import { failedBills, failedTotals, type FailedBill } from "./failedPaymentsRepo.js";
 import * as repo from "./repo.js";
 import type { PaymentsDeps } from "./service.js";
 
@@ -46,20 +46,10 @@ async function allowed(deps: PaymentsDeps, gymId: string, userId: string) {
 
 const leftOf = (b: FailedBill): number => Math.max(0, b.amountMinor - b.paidMinor);
 
-function summaryOf(bills: readonly FailedBill[], square: boolean): FailedPaymentsSummary {
-  const totals = new Map<string, number>();
-  for (const b of bills) totals.set(b.currency, (totals.get(b.currency) ?? 0) + leftOf(b));
-  return {
-    count: bills.length,
-    totals: [...totals].map(([currency, minor]) => ({ currency, minor })).sort((a, b) => (a.currency < b.currency ? -1 : 1)),
-    square,
-  };
-}
-
 /** How many, and what they come to: Overview's line. */
 export async function readFailedSummary(deps: PaymentsDeps, userId: string, gymId: string): Promise<FailedPaymentsSummary> {
   const { ready } = await allowed(deps, gymId, userId);
-  return failedPaymentsSummarySchema.parse(summaryOf(await failedBills(deps.sql, gymId), ready !== null));
+  return failedPaymentsSummarySchema.parse({ ...(await failedTotals(deps.sql, gymId)), square: ready !== null });
 }
 
 /** A page of the list, from the `from`th row. */
@@ -67,15 +57,19 @@ export async function readFailedPayments(deps: PaymentsDeps, userId: string, gym
   const { gym, ready } = await allowed(deps, gymId, userId);
   const now = deps.now();
   const today = dayInTz(now, gym.timezone);
-  const all = await failedBills(deps.sql, gymId);
-  const page = all.slice(from, from + FAILED_PAYMENTS_PAGE);
+  const [totals, page] = await Promise.all([failedTotals(deps.sql, gymId), failedBills(deps.sql, gymId, from, FAILED_PAYMENTS_PAGE)]);
   const { declined } = await charges.chargesOfBills(deps.sql, gymId, page.map((b) => b.billId), [], now);
   const ids = [...new Set(page.filter((b) => b.periodIndex !== null).map((b) => b.membershipId))];
   const [held, bills] = await Promise.all([heldRowsOf(deps.sql, gymId, ids), billsFor(deps.sql, gymId, ids)]);
-  const cards = new Map<string, Awaited<ReturnType<typeof charges.readChargeCard>>>();
+  // The page's cards, their charges and the cards declined for good, each read once for the page.
+  const [cards, tries] = await Promise.all([
+    ready === null ? new Map<string, never>() : charges.readChargeCards(deps.sql, gymId, [...new Set(page.map((b) => b.entryId))], ready.environment, ready.connection.accountId),
+    charges.triesOfBills(deps.sql, gymId, page),
+  ]);
+  const stopped = await charges.stoppedCardsOf(deps.sql, gymId, [...new Set([...cards.values()].map((c) => c.card_id))]);
 
   /** What Try again would do now, by the rules the press itself is decided by. */
-  const retryOf = async (b: FailedBill): Promise<FailedPaymentRetry> => {
+  const retryOf = (b: FailedBill): FailedPaymentRetry => {
     if (ready === null) return { kind: "no", why: "square" };
     if (b.currency !== ready.connection.currency) return { kind: "no", why: "currency" };
     let amountMinor = leftOf(b);
@@ -91,12 +85,9 @@ export async function readFailedPayments(deps: PaymentsDeps, userId: string, gym
       amountMinor = target.leftMinor;
     }
     if (amountMinor <= 0) return { kind: "no", why: "elsewhere" };
-    if (!cards.has(b.entryId)) cards.set(b.entryId, await charges.readChargeCard(deps.sql, gymId, b.entryId, ready.environment, ready.connection.accountId));
-    const card = cards.get(b.entryId) ?? null;
-    if (card === null) return { kind: "no", why: "no_card" };
-    const tries = await charges.triesOf(deps.sql, gymId, b.membershipId, b.billId, b.periodIndex);
-    const stopped = await charges.cardStopped(deps.sql, gymId, card.card_id);
-    const retry = staffCardRetry(tries, card.card_id, stopped, now);
+    const card = cards.get(b.entryId);
+    if (card === undefined) return { kind: "no", why: "no_card" };
+    const retry = staffCardRetry(tries.get(b.billId) ?? [], card.card_id, stopped.has(card.card_id), now);
     if (retry.kind === "wait") return { kind: "wait", from: retry.from.toISOString() };
     if (retry.kind === "no") return { kind: "no", why: retry.why };
     return {
@@ -127,9 +118,9 @@ export async function readFailedPayments(deps: PaymentsDeps, userId: string, gym
       leftMinor: leftOf(b),
       currency: b.currency,
       declined: decline,
-      retry: await retryOf(b),
+      retry: retryOf(b),
     });
   }
-  const next = from + FAILED_PAYMENTS_PAGE < all.length ? from + FAILED_PAYMENTS_PAGE : null;
-  return failedPaymentsResponseSchema.parse({ ...summaryOf(all, ready !== null), payments, next });
+  const next = from + FAILED_PAYMENTS_PAGE < totals.count ? from + FAILED_PAYMENTS_PAGE : null;
+  return failedPaymentsResponseSchema.parse({ ...totals, square: ready !== null, payments, next });
 }

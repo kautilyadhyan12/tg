@@ -741,10 +741,7 @@ export async function chargesOfBills(
                 OR (b.fee IS NULL AND n.held_membership_id = b.held_membership_id AND n.period_index = b.period_index))
           WHERE b.gym_id = ${gymId} AND b.id = ANY(${declinedBills}::uuid[])`;
   const pending = await pendingRetries(sql, gymId, declinedBills, now);
-  const stoppedCards = new Set<string>();
-  for (const cardId of new Set(facts.map((f) => f.card_id).filter((c): c is string => c !== null))) {
-    if (await cardStopped(sql, gymId, cardId)) stoppedCards.add(cardId);
-  }
+  const stoppedCards = await stoppedCardsOf(sql, gymId, [...new Set(facts.map((f) => f.card_id).filter((c): c is string => c !== null))]);
   const byBill = new Map<string, (typeof rows)[number][]>();
   for (const r of rows) {
     if (r.member_payment_id !== null) cardOfPayment.set(r.member_payment_id, { brand: r.brand, last4: r.last4 });
@@ -814,4 +811,66 @@ export async function readChargeCard(
   return row === undefined
     ? null
     : { entry_id: row.entry_id, card_id: row.card_id, brand: row.brand, last4: row.last4, exp_month: row.exp_month, exp_year: row.exp_year, saved_at: row.saved_at, payerName: row.paid_for ? row.payer_name : null };
+}
+
+/** `readChargeCard` for many records at once (the Failed payments list, 18d-iii-ii-b): the same
+ *  statement, keyed by each record. */
+export async function readChargeCards(
+  sql: SqlOrTx,
+  gymId: string,
+  entryIds: readonly string[],
+  environment: SquareEnvironment,
+  accountId: string,
+): Promise<Map<string, NonNullable<Awaited<ReturnType<typeof readChargeCard>>>>> {
+  if (entryIds.length === 0) return new Map();
+  const rows = await sql<{ for_id: string; entry_id: string; card_id: string; brand: string; last4: string; exp_month: number; exp_year: number; saved_at: Date; payer_name: string | null; paid_for: boolean }[]>`
+    WITH holder AS (
+      SELECT x.id AS for_id, COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.entry_id = x.id), x.id) AS entry_id
+      FROM unnest(${[...entryIds]}::uuid[]) AS x(id)
+    )
+    SELECT h.for_id, k.entry_id, k.card_id, k.brand, k.last4, k.exp_month, k.exp_year, k.saved_at, e.full_name AS payer_name, k.entry_id <> h.for_id AS paid_for
+    FROM holder h
+    JOIN gym_member_cards k ON k.gym_id = ${gymId} AND k.entry_id = h.entry_id AND k.environment = ${environment} AND k.account_id = ${accountId}
+    JOIN gym_member_list_entries e ON e.gym_id = k.gym_id AND e.id = k.entry_id`;
+  return new Map(
+    rows.map((row) => [
+      row.for_id,
+      { entry_id: row.entry_id, card_id: row.card_id, brand: row.brand, last4: row.last4, exp_month: row.exp_month, exp_year: row.exp_year, saved_at: row.saved_at, payerName: row.paid_for ? row.payer_name : null },
+    ]),
+  );
+}
+
+/** `triesOf` for many bills at once, by bill id; each bill's charges oldest first. */
+export async function triesOfBills(
+  sql: SqlOrTx,
+  gymId: string,
+  bills: readonly { membershipId: string; billId: string; periodIndex: number | null }[],
+): Promise<Map<string, CardChargeTry[]>> {
+  const out = new Map<string, CardChargeTry[]>(bills.map((b) => [b.billId, []]));
+  if (bills.length === 0) return out;
+  const rows = await sql<{ for_bill: string; card_id: string; outcome: string | null; decline_code: string | null; by_schedule: boolean; started_at: Date; day: string }[]>`
+    WITH asked AS (
+      SELECT * FROM unnest(${bills.map((b) => b.billId)}::uuid[], ${bills.map((b) => b.membershipId)}::uuid[], ${bills.map((b) => b.periodIndex)}::int[]) AS a(bill_id, membership_id, period_index)
+    )
+    SELECT a.bill_id AS for_bill, c.card_id, c.outcome, c.decline_code, c.by_schedule, c.started_at, (c.started_at AT TIME ZONE g.timezone)::date::text AS day
+    FROM asked a
+    JOIN gym_card_charges c
+      ON c.gym_id = ${gymId}
+     AND (c.bill_id = a.bill_id OR (a.period_index IS NOT NULL AND c.bill_id IS NULL AND c.held_membership_id = a.membership_id AND c.period_index = a.period_index))
+    JOIN gyms g ON g.id = c.gym_id
+    ORDER BY c.started_at, c.id`;
+  for (const r of rows) {
+    const outcome = cardChargeOutcomeSchema.safeParse(r.outcome);
+    out.get(r.for_bill)?.push({ cardId: r.card_id, outcome: outcome.success ? outcome.data : null, code: r.decline_code, bySchedule: r.by_schedule, startedAt: r.started_at, day: r.day });
+  }
+  return out;
+}
+
+/** `cardStopped` for many cards at once: the ones the bank declined for good. */
+export async function stoppedCardsOf(sql: SqlOrTx, gymId: string, cardIds: readonly string[]): Promise<Set<string>> {
+  if (cardIds.length === 0) return new Set();
+  const rows = await sql<{ card_id: string; decline_code: string }[]>`
+    SELECT DISTINCT card_id, decline_code FROM gym_card_charges
+    WHERE gym_id = ${gymId} AND card_id = ANY(${[...cardIds]}::text[]) AND outcome = 'declined' AND decline_code IS NOT NULL`;
+  return new Set(rows.filter((r) => cardDeclineClassOf(r.decline_code) === "new_card").map((r) => r.card_id));
 }
