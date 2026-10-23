@@ -28,8 +28,8 @@ describe("THE WORST THING: nobody who has paid, or is still inside the days of g
     ["due today", { shown: due(TODAY), former: false, owedSince: TODAY, today: TODAY, overdueAfterDays: GRACE }],
     ["due 2 days ago", { shown: due("2026-10-05"), former: false, owedSince: "2026-10-05", today: TODAY, overdueAfterDays: GRACE }],
     ["the last day of grace", { shown: due("2026-10-04"), former: false, owedSince: "2026-10-04", today: TODAY, overdueAfterDays: GRACE }],
-    // A membership from the gym's own file whose renewal has passed: no bill here to be Overdue.
-    ["Payment due with no bill of ours", { shown: due("2026-09-01"), former: false, owedSince: null, today: TODAY, overdueAfterDays: GRACE }],
+    // Its month has come but the hourly run has not opened its bill yet: no bill reads Overdue.
+    ["an app membership whose month has no bill opened yet", { shown: due("2026-09-01"), former: false, owedSince: null, today: TODAY, overdueAfterDays: GRACE }],
     // Their own list's word names a membership they never held: the gym's words show, not ours.
     ["the gym's own words", { shown: null, former: false, owedSince: "2026-09-01", today: TODAY, overdueAfterDays: GRACE }],
     ["a past member who owes nothing", { shown: null, former: true, owedSince: null, today: TODAY, overdueAfterDays: GRACE }],

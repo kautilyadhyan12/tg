@@ -3050,8 +3050,9 @@ a button to the part (`/settings#overdue-bookings`). Paid, they book again at on
 on their page, by the gym's days of grace (`rowSaysOverdue` in `@app/shared`, over
 `paymentOverdue`); Payment due in yellow before that. By the bills alone: a membership from the
 gym's own file with no bill here stays Payment due. A past member's tag under the name says it the
-same way, the line over the bill on the person's page reads "Overdue since …" in red, and the
-download writes "Overdue". It is told to staff who record members' payments (`overdue` on each
+same way, the line over the bill on the person's page reads "Overdue since …" in red once that
+bill itself reads Overdue (never for a month whose bill is not opened yet), and the download
+writes "Overdue", for a past member with a bill left open too ("Payment due" before). It is told to staff who record members' payments (`overdue` on each
 entry, false for everybody else), since staff with the list's tick alone are sent no bills and
 read Payment due on the person's page. The Filter keeps one choice, Payment due, which finds the
 overdue too, so Overview's and Reports' counts are unchanged.

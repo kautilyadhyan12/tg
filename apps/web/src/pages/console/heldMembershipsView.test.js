@@ -117,9 +117,13 @@ describe('what a membership reads as', () => {
   it('says Overdue since the day the bill was due once that bill reads Overdue', () => {
     const paid = held(monthly, '2026-10-04', true);
     const owing = { ...paid, view: { ...paid.view, payment: { state: 'due', since: '2026-09-04' } } };
-    const bill = (state) => ({ pay: { periodIndex: 1, dueOn: '2026-09-04', state }, fees: [] });
+    const bill = (state) => ({ pay: { periodIndex: 1, dueOn: '2026-09-04', state }, bills: [{ periodIndex: 1, dueOn: '2026-09-04', state }], fees: [] });
     expect(paymentLine({ ...owing, billing: bill('overdue') }, TODAY)).toEqual({ text: 'Overdue since 4 September 2026', due: true, overdue: true });
     expect(paymentLine({ ...owing, billing: bill('due') }, TODAY)).toEqual({ text: 'Payment due since 4 September 2026', due: true });
+    // A month whose bill is not opened yet: no bill reads Overdue, so neither does the line, as the list.
+    expect(paymentLine({ ...owing, billing: { ...bill('overdue'), bills: [] } }, TODAY)).toEqual({ text: 'Payment due since 4 September 2026', due: true });
+    // Another period's bill reading Overdue is not this one's.
+    expect(paymentLine({ ...owing, billing: { ...bill('overdue'), bills: [{ periodIndex: 0, dueOn: '2026-08-04', state: 'paid' }] } }, TODAY).text).toBe('Payment due since 4 September 2026');
     // Staff who read no bills: the plain words, as their Members list says.
     expect(paymentLine({ ...owing, billing: null }, TODAY)).toEqual({ text: 'Payment due since 4 September 2026', due: true });
     // A fee alone stays a fee.

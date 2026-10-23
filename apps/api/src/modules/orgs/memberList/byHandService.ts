@@ -66,7 +66,7 @@ import * as repo from "./repo.js";
 import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
-import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
+import { heldWithOwedOf } from "../memberships/onList.js";
 import { listBillFacts, overdueDaysOf } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
@@ -114,13 +114,14 @@ async function detailOf(
   const signatures = waiver === null ? new Map<string, SignatureRow>() : await signaturesOf(sql, gymId, waiver.id, shownIds);
   // And the record's own, made at the desk (3e-ii).
   const desk = waiver === null ? undefined : (await deskSignaturesOf(sql, gymId, waiver.id, [entry.id])).get(entry.id);
-  const [visits, held, bills, overdueAfterDays, app] = await Promise.all([
+  const [visits, { held, owedSince }, overdueAfterDays, app] = await Promise.all([
     repo.memberVisits(sql, gymId, shownIds),
-    // What their memberships here say, as their row on the list says it (23a-i).
-    entry.formerAt === null ? heldOnListOf(sql, gymId, today, [entry.id]) : Promise.resolve(new Map<string, HeldShown>()),
-    // A past member's memberships are not in use; what they still owe is (18a-ii). And
-    // since when a current one owes, for staff who are told it is Overdue.
-    entry.formerAt === null && !seesBills ? Promise.resolve(null) : listBillFacts(sql, gymId, today, [entry.id]).then((facts) => facts.owedSince.get(entry.id) ?? null),
+    // What their memberships here say, as their row on the list says it (23a-i), and since
+    // when they owe, in one snapshot. A past member's memberships are not in use; what they
+    // still owe is (18a-ii).
+    entry.formerAt === null
+      ? heldWithOwedOf(sql, gymId, today, [entry.id])
+      : listBillFacts(sql, gymId, today, [entry.id]).then((facts) => ({ held: new Map<string, never>(), owedSince: facts.owedSince })),
     seesBills ? overdueDaysOf(sql, gymId) : Promise.resolve(null),
     appViewsOf(
       sql,
@@ -132,6 +133,7 @@ async function detailOf(
     ),
   ]);
   const shown = held.get(entry.id)?.shown ?? null;
+  const bills = owedSince.get(entry.id) ?? null;
   return {
     entryId: entry.id,
     fullName: values.fullName,

@@ -142,8 +142,10 @@ export function paymentLine(m, today) {
   // fees, so the line does not sit over a paid bill saying a payment is due.
   const feeOnly = m.billing !== null && m.billing !== undefined && m.billing.pay === null && (m.billing.fees ?? []).some((f) => f.state === 'due' || f.state === 'overdue');
   // The bill a payment is taken for reads Overdue (17i-ii): the line says it in the same red,
-  // as the Members list does. Only staff who read the bills are sent them.
-  if (!feeOnly && m.billing?.pay?.state === 'overdue') return { text: `Overdue since ${dayWords(m.billing.pay.dueOn)}`, due: true, overdue: true };
+  // as the Members list does, by that bill and never by a month whose bill is not opened yet.
+  // Only staff who read the bills are sent them.
+  const late = feeOnly ? undefined : m.billing?.bills?.find((bill) => bill.periodIndex === m.billing.pay?.periodIndex && bill.state === 'overdue');
+  if (late !== undefined) return { text: `Overdue since ${dayWords(late.dueOn)}`, due: true, overdue: true };
   const owed = feeOnly ? 'Fee due' : 'Payment due';
   if (p.since === null) return { text: owed, due: true };
   if (p.since > today) return { text: `${owed} on ${dayWords(p.since)}`, due: false };

@@ -231,6 +231,30 @@ d("the Members list says Overdue (real Postgres)", { timeout: T }, () => {
     expect((await listOf(gym, gym.owner))["Tom Reid"]).toEqual(["due", true]);
   });
 
+  it("reads the OLDEST bill still open: one late bill beside a newer one is Overdue", async () => {
+    const gym = await makeGym("Two Bills Gym");
+    const ana = await record(gym, "Ana Lopez");
+    await owes(gym, await hold(gym, ana), "2026-10-06");
+    await owes(gym, await hold(gym, ana), "2026-10-01");
+    const dev = await record(gym, "Dev Patel");
+    await owes(gym, await hold(gym, dev), "2026-10-06");
+    await owes(gym, await hold(gym, dev), "2026-10-05");
+    expect(await listOf(gym, gym.owner)).toEqual({ "Ana Lopez": ["due", true], "Dev Patel": ["due", false] });
+  });
+
+  it("a month whose bill is not opened yet is not Overdue, on the list or on the person's page", async () => {
+    const gym = await makeGym("Unbilled Gym");
+    const ana = await record(gym, "Ana Lopez");
+    const gold = await hold(gym, ana);
+    await sql`UPDATE gym_held_memberships SET paid_periods = 0 WHERE id = ${gold}`;
+    expect((await listOf(gym, gym.owner))["Ana Lopez"]).toEqual(["due", false]);
+    // Her page has no bill that reads Overdue for its line to say so (heldMembershipsView's paymentLine).
+    const held = ok(await inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${ana}/memberships`, gym.owner.cookies)) as {
+      memberships: { billing: { bills: { state: string }[] } | null }[];
+    };
+    expect(held.memberships.flatMap((m) => m.billing?.bills ?? []).filter((b) => b.state === "overdue")).toEqual([]);
+  });
+
   it("a past member who left a bill unpaid is Overdue by the same rule", async () => {
     const gym = await makeGym("Past Gym");
     const ben = await record(gym, "Ben Okafor");
@@ -240,6 +264,15 @@ d("the Members list says Overdue (real Postgres)", { timeout: T }, () => {
     await sql`UPDATE gym_held_memberships SET status = 'cancelled', cancelled_on = '2026-10-05' WHERE entry_id IN (${ben}, ${kai})`;
     await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE id IN (${ben}, ${kai})`;
     expect(await listOf(gym, gym.owner, "former")).toEqual({ "Ben Okafor": ["due", true], "Kai Tong": ["due", false] });
+    // Their own pages say the same.
+    const page = (entryId: string) =>
+      inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${entryId}`, gym.owner.cookies).then((res) => (ok(res) as { entry: MemberListEntryDetail }).entry);
+    expect(await page(ben)).toMatchObject({ owedSince: "2026-10-01", overdue: true });
+    expect(await page(kai)).toMatchObject({ owedSince: "2026-10-06", overdue: false });
+    // And the download writes what their tags say.
+    const csv = await exportOf(gym, gym.owner, [ben, kai]);
+    expect(csvPayment(csv, "Ben Okafor")).toBe("Overdue");
+    expect(csvPayment(csv, "Kai Tong")).toBe("Payment due");
   });
 
   it("is said to staff who record members' payments, never to staff who only see the list", async () => {
@@ -254,10 +287,10 @@ d("the Members list says Overdue (real Postgres)", { timeout: T }, () => {
 
     // The person's own page gives the same answer.
     const page = (who: Person) =>
-      inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${ana}`, who.cookies).then((res) => (ok(res) as { entry: MemberListEntryDetail }).entry.overdue);
-    expect(await page(gym.owner)).toBe(true);
-    expect(await page(till)).toBe(true);
-    expect(await page(desk)).toBe(false);
+      inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${ana}`, who.cookies).then((res) => (ok(res) as { entry: MemberListEntryDetail }).entry);
+    expect(await page(gym.owner)).toMatchObject({ overdue: true, owedSince: null });
+    expect(await page(till)).toMatchObject({ overdue: true, owedSince: null });
+    expect(await page(desk)).toMatchObject({ overdue: false, owedSince: null });
 
     // And so does the download.
     expect(csvPayment(await exportOf(gym, gym.owner, [ana]), "Ana Lopez")).toBe("Overdue");
