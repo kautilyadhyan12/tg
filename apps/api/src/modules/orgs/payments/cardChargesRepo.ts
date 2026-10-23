@@ -446,9 +446,11 @@ export async function dueBills(
     FROM gym_day d
     JOIN gym_member_bills b ON b.gym_id = d.gym_id AND b.status = 'open' AND b.due_on BETWEEN d.today - 2 AND d.today
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
-    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
     WHERE d.hour >= 6
-      AND h.kind = 'recurring' AND h.renews AND b.currency = d.currency
+      AND h.kind = 'recurring' AND h.renews AND b.currency = d.currency AND h.entry_id IS NOT NULL
+      -- A current member: looked up by the record's key, row by row, so the plan does not lean on the
+      -- list's statistics (a join here took 17 s with 6,000 due just after they were added).
+      AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries e WHERE e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NOT NULL)
       -- A period's bill while the membership is in use, a freeze fee while it is frozen: never once it
       -- is cancelled. The write checks the membership as the clock has it.
       AND ((b.fee IS NULL AND h.status = 'active') OR (b.fee = 'freeze' AND NOT b.freeze_stopped AND h.status = 'frozen'))
