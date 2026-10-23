@@ -1,7 +1,7 @@
 // Charge card on file's words (ROADMAP 18d-iii-i), and the card's lines on a bill and a fee.
 import { describe, expect, it } from 'vitest';
 import { CARD_DECLINE_REASONS, cardDeclineReasonOf } from '@app/shared';
-import { cardChargeOutcome, cardOnFileDetail, cardOnFileLabel } from './cardChargeView';
+import { cardChargeOutcome, cardOnFileDetail, cardOnFileLabel, cardOnFileStoppedLine } from './cardChargeView';
 import { CARD_CHARGING_LINE, billRow, cardDeclinedLine, cardUncheckedLine } from './memberBillsView';
 
 const card = { brand: 'VISA', last4: '1111', expired: false, payerName: null, ref: 'x' };
@@ -11,6 +11,11 @@ describe('Record payment: Card on file', () => {
   it('names the card, and whose it is where somebody else pays', () => {
     expect(cardOnFileLabel(card)).toBe('Card on file · Visa ending 1111');
     expect(cardOnFileLabel({ ...card, brand: 'MASTERCARD', last4: '4444', payerName: 'Priya Sharma' })).toBe("Card on file · Mastercard ending 4444 (Priya Sharma's)");
+    // Declined for good by its bank (18d-iii-ii-a): named so, with the line under Payment method.
+    expect(cardOnFileLabel({ ...card, stopped: true })).toBe("Card on file · Visa ending 1111 · can't be charged");
+    expect(cardOnFileStoppedLine({ ...card, stopped: true })).toBe("The bank declined this card for good, so it can't be charged again. Save another card, or take payment another way.");
+    expect(cardOnFileStoppedLine(card)).toBeNull();
+    expect(cardOnFileStoppedLine(null)).toBeNull();
   });
 
   it('says what pressing it does before it is pressed', () => {
@@ -86,6 +91,17 @@ describe("a bill's card lines", () => {
     expect(cardDeclinedLine(declined)).toBe("Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.");
     expect(billRow({ ...bill, cardDeclined: declined }, 'USD', '2026-10-20').declined).toBe("Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.");
     expect(billRow(bill, 'USD', '2026-10-20').declined).toBeNull();
+  });
+
+  it.each([
+    [{ next: '2026-10-23', stop: null, notice: { state: 'emailed', on: '2026-10-20' } }, ' It will be tried again on 23 Oct. We emailed the cardholder on 20 Oct.'],
+    [{ next: null, stop: 'bank', notice: { state: 'sending', on: null } }, " It won't be tried again by itself. Ask the cardholder to call their bank, then charge it again, or take payment another way. An email to the cardholder is on its way."],
+    [{ next: null, stop: 'new_card', notice: { state: 'no_email', on: null } }, " The bank declined this card for good. Ask for another card, or take payment another way. Nobody was emailed, as there's no email address on file: tell the cardholder yourself."],
+    [{ next: null, stop: 'tried_out', notice: { state: 'not_sent', on: null } }, " It was tried 3 times. Ask for another card, or take payment another way. The email to the cardholder couldn't be sent: tell them yourself."],
+    [{ next: null, stop: null, notice: null }, ''],
+  ])('what happens next, and the email (18d-iii-ii-a): %o', (after, words) => {
+    const declined = { brand: 'VISA', last4: '1111', on: '2026-10-20', reason: 'insufficient_funds', ...after };
+    expect(cardDeclinedLine(declined)).toBe(`Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.${words}`);
   });
 
   it('a charge Square never answered: check Square before taking payment another way', () => {

@@ -1,15 +1,21 @@
 // CHARGE CARD ON FILE, its words (ROADMAP 18d-iii-i). Pure, so the tests read every state without
 // a browser. The server charges the card, records what Square took and says how it ended; this file
 // only puts that into words for Record payment, a bill and a fee.
-import { CARD_DECLINE_WORDS, cardName, formatMinor } from '@app/shared';
+import { CARD_CHARGE_WORDS, CARD_DECLINE_WORDS, cardName, formatMinor } from '@app/shared';
 
 /** Record payment's Payment method for the card on file. */
 export const CARD_ON_FILE_METHOD = 'card_on_file';
 
-/** "Card on file · Visa ending 1111", and whose it is where somebody else pays. */
+/** "Card on file · Visa ending 1111", and whose it is where somebody else pays; a card its bank
+ *  declined for good says so, and is not offered (18d-iii-ii-a). */
 export function cardOnFileLabel(card) {
   const whose = card.payerName === null ? '' : ` (${card.payerName}'s)`;
-  return `Card on file · ${cardName(card)}${whose}`;
+  return `Card on file · ${cardName(card)}${whose}${card.stopped === true ? " · can't be charged" : ''}`;
+}
+
+/** Under Payment method, where the card on file can't be charged again; null where it can. */
+export function cardOnFileStoppedLine(card) {
+  return card !== null && card.stopped === true ? CARD_CHARGE_WORDS.stopped : null;
 }
 
 /** What pressing it does, said before it is pressed. */

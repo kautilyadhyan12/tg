@@ -6,7 +6,8 @@
 //
 // It is owed to the cardholder, so neither the app's daily cap nor an unsubscribe from the gym's
 // other emails holds it; an address that bounced or was refused anywhere is never sent to, and a
-// bill paid meanwhile sends nothing. The bill tells staff when nobody was emailed.
+// bill paid meanwhile, or a record deleted for good meanwhile, sends nothing. The bill tells staff
+// when nobody was emailed.
 import { CARD_RETRY, addDays, authEmailSchema, cardDeclineClassOf, cardDeclineReasonOf, cardName, formatMinor, leadFirstName, leadGreeting, type CardDeclineReason } from "@app/shared";
 import type { Sql } from "postgres";
 import type { InviteEmail, InviteTransport } from "../../../email/resend.js";
@@ -82,6 +83,7 @@ async function sendOne(deps: CardNoticeDeps, claim: repo.ClaimedNotice): Promise
   const email = claim.email;
   if (email === null || !authEmailSchema.safeParse(email).success) return await stop(deps, claim, "address_invalid");
   const facts = await repo.noticeFacts(deps.sql, claim);
+  if (facts.recordGone) return await stop(deps, claim, "record_gone");
   if (facts.gym === null || !facts.gym.active || facts.charge === null) return await stop(deps, claim, "gym_gone");
   if (facts.bill === null) return await stop(deps, claim, "paid");
   const gymName = gymNameForEmail(facts.gym.name);
@@ -89,9 +91,9 @@ async function sendOne(deps: CardNoticeDeps, claim: repo.ClaimedNotice): Promise
   const hmac = emailHmac(deps.settings.hmacKey, email);
   const message = noticeMessage(deps, claim, email, gymName, facts.gym, facts.bill, facts.charge);
   if (!(await repo.markMaybeSent(deps.sql, claim, hmac, now))) {
-    // Paid meanwhile, the address blocked, or the claim no longer this run's.
+    // Paid meanwhile, the record gone, the address blocked, or the claim no longer this run's.
     const again = await repo.noticeFacts(deps.sql, claim);
-    return await stop(deps, claim, again.bill === null ? "paid" : "address_blocked");
+    return await stop(deps, claim, again.bill === null ? "paid" : again.recordGone ? "record_gone" : "address_blocked");
   }
   const result = await deps.transport.send(message);
   switch (result.kind) {

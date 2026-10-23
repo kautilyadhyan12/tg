@@ -42,6 +42,8 @@ export async function claimNextNotice(sql: Sql, q: { now: Date; leaseMs: number;
 
 /** What the email says and whether it still goes, read now. */
 export interface NoticeFacts {
+  /** The cardholder's record was joined away or deleted for good since: nothing is sent. */
+  recordGone: boolean;
   gym: { name: string; active: boolean; timezone: string; country: string | null; contactEmail: string | null; contactPhone: string | null } | null;
   /** Null once the bill is paid, cancelled or gone: nothing is owed, so nothing is sent. */
   bill: { fee: string | null } | null;
@@ -63,6 +65,7 @@ export interface NoticeFacts {
 }
 
 export async function noticeFacts(sql: SqlOrTx, n: ClaimedNotice): Promise<NoticeFacts> {
+  const [row] = await sql<{ gone: boolean }[]>`SELECT entry_id IS NULL AS gone FROM gym_card_decline_notices WHERE gym_id = ${n.gymId} AND id = ${n.id}`;
   const [gym] = await sql<{ name: string; status: string; timezone: string; country: string | null; contact_email: string | null; contact_phone: string | null }[]>`
     SELECT name, status, timezone, country, contact_email, contact_phone FROM gyms WHERE id = ${n.gymId}`;
   const [bill] = await sql<{ fee: string | null }[]>`SELECT fee FROM gym_member_bills WHERE gym_id = ${n.gymId} AND id = ${n.billId} AND status = 'open'`;
@@ -78,6 +81,7 @@ export async function noticeFacts(sql: SqlOrTx, n: ClaimedNotice): Promise<Notic
     JOIN gyms g ON g.id = c.gym_id
     WHERE c.gym_id = ${n.gymId} AND c.id = ${n.chargeId}`;
   return {
+    recordGone: row?.gone ?? true,
     gym:
       gym === undefined
         ? null
@@ -102,12 +106,13 @@ export async function noticeFacts(sql: SqlOrTx, n: ClaimedNotice): Promise<Notic
 }
 
 /** Record, before the email is handed to Resend, that from now on it may have gone. False when the
- *  claim is no longer this run's, the bill is no longer owed, or the address bounced or was refused
- *  anywhere: then nothing may be sent. One statement, so a payment committed before it is seen. */
+ *  claim is no longer this run's, the bill is no longer owed, the cardholder's record is gone, or the
+ *  address bounced or was refused anywhere: then nothing may be sent. One statement, so a payment
+ *  committed before it is seen. */
 export async function markMaybeSent(sql: SqlOrTx, n: ClaimedNotice, hmac: string, at: Date): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     UPDATE gym_card_decline_notices s SET maybe_sent_at = coalesce(s.maybe_sent_at, ${at})
-    WHERE s.id = ${n.id} AND s.gym_id = ${n.gymId} AND s.state = 'sending' AND s.attempts = ${n.attempts}
+    WHERE s.id = ${n.id} AND s.gym_id = ${n.gymId} AND s.state = 'sending' AND s.attempts = ${n.attempts} AND s.entry_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM gym_member_bills b WHERE b.gym_id = s.gym_id AND b.id = s.bill_id AND b.status = 'open')
       AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email_hmac = ${hmac} AND x.gym_id IS NULL)
     RETURNING s.id`;

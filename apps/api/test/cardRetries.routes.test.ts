@@ -432,12 +432,17 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     expect((await send("PUT", `${entryUrl(gym, kai.entryId)}/payer`, gym.owner.cookies, { payerEntryId: meiId })).statusCode).toBe(200);
     const phoneOnly = await renewingToday(gym, typeId, await person(gym, "Phil Phone", null));
     const paidFirst = await renewingToday(gym, typeId, await person(gym, "Paige Paid", "crty-paige@example.com"));
+    const gone = await renewingToday(gym, typeId, await person(gym, "Gwen Gone", "crty-gwen@example.com"));
     await cardFor(gym, nadia.entryId, "insufficient");
     await cardFor(gym, meiId, "expired");
     await cardFor(gym, phoneOnly.entryId, "declines");
     await cardFor(gym, paidFirst.entryId, "insufficient");
+    await cardFor(gym, gone.entryId, "insufficient");
 
     await work();
+    // Gwen's record deleted for good before her email goes: the link lets go of it, as deleting
+    // does (0159), and nothing is sent to an address the gym was asked to forget.
+    await sql`UPDATE gym_card_decline_notices SET entry_id = NULL WHERE gym_id = ${gym.id} AND entry_id = ${gone.entryId}`;
     // Paige pays at the desk before the email goes: nothing is sent to her.
     const pay = (await held(gym, paidFirst.entryId)).memberships[0]?.billing?.pay;
     expect(
@@ -478,7 +483,7 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     expect((await shown(gym, kai))?.cardDeclined).toMatchObject({ stop: "new_card", notice: { state: "emailed" } });
     expect((await shown(gym, phoneOnly))?.cardDeclined).toMatchObject({ stop: "bank", notice: { state: "no_email", on: null } });
     const rows = await sql<{ state: string; reason: string | null; email: string | null }[]>`SELECT state, reason, email::text AS email FROM gym_card_decline_notices WHERE gym_id = ${gym.id} ORDER BY created_at`;
-    expect(rows.map((r) => r.email)).toEqual([null, null, null, null]);
-    expect(rows.map((r) => `${r.state}:${r.reason ?? ""}`).sort()).toEqual(["sent:", "sent:", "skipped:no_email", "skipped:paid"]);
+    expect(rows.map((r) => r.email)).toEqual([null, null, null, null, null]);
+    expect(rows.map((r) => `${r.state}:${r.reason ?? ""}`).sort()).toEqual(["sent:", "sent:", "skipped:no_email", "skipped:paid", "skipped:record_gone"]);
   });
 });
