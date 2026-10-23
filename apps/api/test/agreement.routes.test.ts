@@ -579,22 +579,25 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
       const gymId = (await makeGym(owner, "Agree Blocked Gym")).org.id;
       const v1 = (await saveWords(gymId, owner.cookies, WORDS)).agreement?.id ?? "";
       const gold = await addType(gymId, owner.cookies, monthly());
-      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      // An address of its own, so the bounce, kept for every business at once, reaches nobody else's test.
+      const bounced = `agree-bounced-${String(Date.now())}@example.com`;
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", { email: bounced });
       const mayaGold = await give(gymId, maya, owner.cookies, gold, { priceMinor: 5000, totalMinor: 5000 });
-      const [address] = await sql<{ email: string }[]>`SELECT email::text AS email FROM gym_member_list_entries WHERE id = ${maya}`;
-      const hmac = emailHmac(settings.hmacKey, address?.email ?? "");
-      // A bounce is kept for every business at once.
+      const hmac = emailHmac(settings.hmacKey, bounced);
       await sql`INSERT INTO email_suppressions (gym_id, email_hmac, reason) VALUES (NULL, ${hmac}, 'bounced')`;
-      const before = sent.length;
-      const shown = await box(gymId, maya, mayaGold, owner.cookies);
-      const signed = signMembershipAgreementResponseSchema.parse(
-        JSON.parse((await sign(gymId, maya, mayaGold, owner.cookies, { agreementId: v1, factsKey: shown.factsKey, signer: "person", name: "Maya Patel" })).body),
-      );
-      expect([signed.emailed, signed.signed.emailedAt]).toEqual(["blocked", null]);
-      const again = emailAgreementCopyResponseSchema.parse(JSON.parse((await post(`${boxUrl(gymId, maya, mayaGold)}/email`, {}, owner.cookies)).body));
-      expect(again.emailed).toBe("blocked");
-      expect(sent.length).toBe(before);
-      await sql`DELETE FROM email_suppressions WHERE email_hmac = ${hmac}`;
+      try {
+        const before = sent.length;
+        const shown = await box(gymId, maya, mayaGold, owner.cookies);
+        const signed = signMembershipAgreementResponseSchema.parse(
+          JSON.parse((await sign(gymId, maya, mayaGold, owner.cookies, { agreementId: v1, factsKey: shown.factsKey, signer: "person", name: "Maya Patel" })).body),
+        );
+        expect([signed.emailed, signed.signed.emailedAt]).toEqual(["blocked", null]);
+        const again = emailAgreementCopyResponseSchema.parse(JSON.parse((await post(`${boxUrl(gymId, maya, mayaGold)}/email`, {}, owner.cookies)).body));
+        expect(again.emailed).toBe("blocked");
+        expect(sent.length).toBe(before);
+      } finally {
+        await sql`DELETE FROM email_suppressions WHERE email_hmac = ${hmac}`;
+      }
       // New words: the membership signed with the old ones still counts.
       const changed = await saveWords(gymId, owner.cookies, CHANGED);
       expect([changed.agreement?.version, changed.signed]).toEqual([2, 1]);
