@@ -299,38 +299,38 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
     "WORST THING: Paddle's window is filled in with THIS gym's owner's email and THIS gym's country, whoever of its billing staff opens it — never the opener's, another gym's, or anybody's for staff who may not pay",
     async () => {
       const emailOf = async (userId: string) => (await sql<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`)[0]?.email;
-      const vienna = await owner("AT");
+      const tokyo = await owner("JP");
       const austin = await owner("US");
-      // The clerk pays for Vienna and owns a gym of their own in Ireland.
+      // The clerk pays for Tokyo and owns a gym of their own in Ireland.
       const clerk = await owner("IE");
-      await addStaff(vienna.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
+      await addStaff(tokyo.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
       const desk = await makeUser();
-      await addStaff(vienna.gymId, desk.userId, "manager", ["members.read", "org.manage"]);
-      const [viennaEmail, austinEmail, clerkEmail] = [await emailOf(vienna.userId), await emailOf(austin.userId), await emailOf(clerk.userId)];
+      await addStaff(tokyo.gymId, desk.userId, "manager", ["members.read", "org.manage"]);
+      const [tokyoEmail, austinEmail, clerkEmail] = [await emailOf(tokyo.userId), await emailOf(austin.userId), await emailOf(clerk.userId)];
 
       const key = randomBytes(8).toString("hex");
-      const byClerk = await checkout(vienna.gymId, clerk.cookies, BIG, key);
-      expect(opened(byClerk)).toMatchObject({ email: viennaEmail, country: "AT" });
+      const byClerk = await checkout(tokyo.gymId, clerk.cookies, BIG, key);
+      expect(opened(byClerk)).toMatchObject({ email: tokyoEmail, country: "JP" });
       expect(byClerk.body).not.toContain(clerkEmail);
       // The same press again reopens the same window, filled in the same way.
-      expect(opened(await checkout(vienna.gymId, clerk.cookies, BIG, key))).toMatchObject({ email: viennaEmail, country: "AT" });
+      expect(opened(await checkout(tokyo.gymId, clerk.cookies, BIG, key))).toMatchObject({ email: tokyoEmail, country: "JP" });
       // The clerk's own gym gets the clerk's own details.
       expect(opened(await checkout(clerk.gymId, clerk.cookies, BIG))).toMatchObject({ email: clerkEmail, country: "IE" });
       // Paddle takes a US address only with a ZIP code: the email alone, and the payer types the rest.
       const byAustin = await checkout(austin.gymId, austin.cookies, BIG);
       expect(opened(byAustin)).toMatchObject({ email: austinEmail, country: null });
-      expect(byAustin.body).not.toContain(viennaEmail);
+      expect(byAustin.body).not.toContain(tokyoEmail);
 
       // Staff who may not pay, and strangers, open nothing and are told nobody's email.
       for (const who of [desk, austin]) {
-        const refused = await checkout(vienna.gymId, who.cookies, BIG);
+        const refused = await checkout(tokyo.gymId, who.cookies, BIG);
         expect([403, 404]).toContain(refused.statusCode);
-        expect(refused.body).not.toContain(viennaEmail);
+        expect(refused.body).not.toContain(tokyoEmail);
       }
 
       // A gym saved without a country: the email only.
-      await sql`UPDATE gyms SET country = NULL WHERE id = ${vienna.gymId}`;
-      expect(opened(await checkout(vienna.gymId, vienna.cookies, BIG))).toMatchObject({ email: viennaEmail, country: null });
+      await sql`UPDATE gyms SET country = NULL WHERE id = ${tokyo.gymId}`;
+      expect(opened(await checkout(tokyo.gymId, tokyo.cookies, BIG))).toMatchObject({ email: tokyoEmail, country: null });
     },
     TEST_TIMEOUT_MS,
   );
@@ -338,7 +338,7 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   it(
     "an owner's stored email Paddle's window can't be filled in with opens no window: a plan paid as anybody else is refunded",
     async () => {
-      const odd = await owner("AT");
+      const odd = await owner("JP");
       // A dot before the @, as a migrated or Google account may hold.
       const oddEmail = `billing-t-odd-${String(seq++)}.@example.com`;
       await sql`UPDATE users SET email = ${oddEmail} WHERE id = ${odd.userId}`;
@@ -861,20 +861,20 @@ d("a gym pays through Paddle (real Postgres, fake Paddle)", () => {
   it(
     "an owner's two gyms paid through windows filled in with the owner's email share one Paddle account: a clerk of one gym is told to ask the owner, by name, and the owner opens it",
     async () => {
-      const boss = await owner("AT");
+      const boss = await owner("JP");
       const dublin = await makeGym(boss.cookies, "IE");
       await sql`UPDATE users SET display_name = 'Aoife Byrne' WHERE id = ${boss.userId}`;
       const clerk = await makeUser();
       await addStaff(boss.gymId, clerk.userId, "manager", ["members.read", "billing.manage"]);
 
-      // The clerk pays for Vienna and the owner for Dublin; both windows carry the owner's email.
-      const vienna = opened(await checkout(boss.gymId, clerk.cookies, BIG)) as ReturnType<typeof opened> & { email: string | null };
+      // The clerk pays for Tokyo and the owner for Dublin; both windows carry the owner's email.
+      const tokyo = opened(await checkout(boss.gymId, clerk.cookies, BIG)) as ReturnType<typeof opened> & { email: string | null };
       const second = opened(await checkout(dublin, boss.cookies, BIG)) as ReturnType<typeof opened> & { email: string | null };
-      expect(vienna.email).not.toBeNull();
-      expect(second.email).toBe(vienna.email);
-      paddle.pay(vienna.transactionId, "api", true, vienna.email);
+      expect(tokyo.email).not.toBeNull();
+      expect(second.email).toBe(tokyo.email);
+      paddle.pay(tokyo.transactionId, "api", true, tokyo.email);
       paddle.pay(second.transactionId, "api", true, second.email);
-      expect((await post(`/v1/orgs/${boss.gymId}/billing/checkouts/${vienna.checkoutId}/sync`, {}, clerk.cookies)).statusCode).toBe(200);
+      expect((await post(`/v1/orgs/${boss.gymId}/billing/checkouts/${tokyo.checkoutId}/sync`, {}, clerk.cookies)).statusCode).toBe(200);
       expect((await post(`/v1/orgs/${dublin}/billing/checkouts/${second.checkoutId}/sync`, {}, boss.cookies)).statusCode).toBe(200);
 
       const refused = await openPortal(boss.gymId, clerk.cookies);

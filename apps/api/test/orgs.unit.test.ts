@@ -107,13 +107,12 @@ describe("currencyForCountry (Kd ruling 2026-08-18 — currency follows location
     expect(currencyForCountry("US")).toBe("USD");
     expect(currencyForCountry("CA")).toBe("USD");
     expect(currencyForCountry("GB")).toBe("USD");
-    expect(currencyForCountry("DE")).toBe("USD");
-    // …and a spread of the euro area rather than the one country somebody
-    // happened to type: twenty of these share a line in the map, so a single
-    // example proves only that the line exists.
+    // …and every other country a business may be in outside India (18s).
     expect(currencyForCountry("FR")).toBe("USD");
     expect(currencyForCountry("IE")).toBe("USD");
     expect(currencyForCountry("ES")).toBe("USD");
+    expect(currencyForCountry("AU")).toBe("USD");
+    expect(currencyForCountry("JP")).toBe("USD");
   });
 
   it("keeps India on rupees — the dollar book is a RULING, not a default", () => {
@@ -126,7 +125,7 @@ describe("currencyForCountry (Kd ruling 2026-08-18 — currency follows location
   it("returns null for a country we are not open in — never a fallback", () => {
     // A fallback is how a gym in Sydney gets quoted in rupees. Each of these
     // is a real country with a real currency we have no prices for.
-    for (const country of ["AU", "PL", "CH", "SE", "NO", "BR", "ZZ", ""]) {
+    for (const country of ["DE", "PL", "CH", "SE", "NO", "BR", "NZ", "ZZ", ""]) {
       expect(currencyForCountry(country)).toBeNull();
     }
   });

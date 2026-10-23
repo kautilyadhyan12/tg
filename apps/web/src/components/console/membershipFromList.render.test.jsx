@@ -237,7 +237,7 @@ describe('Set up, in a gym that has set no price yet', () => {
   it('with no country set there is nothing to set it up as: Set up waits, and the page says why', async () => {
     await open([], [name()], { currency: null });
     expect((await screen.findByRole('button', { name: 'Set up Gold' })).disabled).toBe(true);
-    expect(screen.getByText(/Your country isn't set yet, so a membership type can't be added/)).toBeTruthy();
+    expect(screen.getByText(/A membership type can't be added until your country is set/)).toBeTruthy();
   });
 });
 

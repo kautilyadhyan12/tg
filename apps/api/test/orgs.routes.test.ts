@@ -619,7 +619,9 @@ d("orgs routes (real Postgres)", () => {
       ["IN", "INR"],
       ["CA", "USD"],
       ["GB", "USD"],
-      ["DE", "USD"],
+      ["FR", "USD"],
+      ["AU", "USD"],
+      ["JP", "USD"],
       ["ie", "USD"], // lower case is accepted; the poster/keyboard does not care
     ] as const) {
       // An owner per country: one account creates five gyms an hour at most (2g).
@@ -642,16 +644,21 @@ d("orgs routes (real Postgres)", () => {
       expect(row[0]?.country).toBe(country.toUpperCase());
     }
 
-    // Australia, Poland and Switzerland are all real gyms in real countries we
-    // have no prices for. An honest refusal beats quoting them in euros.
-    for (const country of ["AU", "PL", "CH", "ZZ"]) {
+    // A business only from India and Square's countries (18s): Germany, Italy and the
+    // Netherlands use the euro and Square does not serve them; Poland and Switzerland never
+    // were on the list.
+    for (const country of ["DE", "IT", "NL", "PL", "CH", "ZZ"]) {
       const res = await post(
         "/v1/orgs",
         { trainsHere: true, name: "Orgs Test Money No", country, timezone: "UTC" },
         { cookies },
       );
       expect(res.statusCode).toBe(400);
-      expect((JSON.parse(res.body) as { error: string }).error).toBe("country_unsupported");
+      expect(JSON.parse(res.body) as { error: string; message: string }).toMatchObject({
+        error: "country_unsupported",
+        message:
+          "We don't take businesses in that country. A business can be in India, the United States, Canada, the United Kingdom, Ireland, France, Spain, Australia or Japan.",
+      });
     }
   });
 
@@ -5365,22 +5372,42 @@ d("orgs routes (real Postgres)", () => {
     // mapped to a currency and thrown away (migration `0014`).
     expect(org.org.country).toBe("IN");
 
-    // GERMANY IS BILLED IN US DOLLARS SINCE 2026-08-28 (:22215 §3.5), so the
-    // currency this move lands on is USD and not EUR. The subject is unchanged
-    // and is still worth its own test: the currency FOLLOWS the country and is
-    // never sent by the client (R3.1). India → Germany still crosses two
-    // currencies, which is what keeps that observable.
-    const res = await patch(`/v1/orgs/${org.org.id}`, { country: "de" }, { cookies: owner.cookies });
+    // JAPAN IS BILLED IN US DOLLARS (18s, as Canada and the UK are since 2026-08-28), so
+    // the currency this move lands on is USD. The currency FOLLOWS the country and is
+    // never sent by the client (R3.1). India → Japan crosses two currencies, which is
+    // what keeps that observable.
+    const res = await patch(`/v1/orgs/${org.org.id}`, { country: "jp" }, { cookies: owner.cookies });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { org: CreatedOrg["org"] };
-    expect(body.org.country).toBe("DE");
+    expect(body.org.country).toBe("JP");
     expect(body.org.currencyDisplay).toBe("USD");
 
     const row = await readGymRow(org.org.id);
     // Upper-cased on the way in, or the column's own CHECK would refuse the
-    // write as a 500 and `country === 'DE'` would be a question with two answers.
-    expect(row.country).toBe("DE");
+    // write as a 500 and `country === 'JP'` would be a question with two answers.
+    expect(row.country).toBe("JP");
     expect(row.currency_display).toBe("USD");
+  });
+
+  // A gym stored in a country that left the list (18s) keeps working: its other details save
+  // and its row keeps the country, but that country cannot be chosen again.
+  it("a gym stored in Finland saves its name, and cannot choose Finland or Germany again", { timeout: 30_000 }, async () => {
+    const owner = await makeUser("closed-country");
+    const org = await makeOrg(owner.cookies, "Orgs Test Closed Country", { country: "IE" });
+    await sql`UPDATE gyms SET country = 'FI' WHERE id = ${org.org.id}`;
+
+    const renamed = await patch(`/v1/orgs/${org.org.id}`, { name: "Orgs Test Closed Country Two" }, { cookies: owner.cookies });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect((JSON.parse(renamed.body) as { org: CreatedOrg["org"] }).org).toMatchObject({ country: "FI", currencyDisplay: "USD" });
+
+    for (const country of ["FI", "DE"]) {
+      const refused = await patch(`/v1/orgs/${org.org.id}`, { country }, { cookies: owner.cookies });
+      expect(refused.statusCode, country).toBe(400);
+      expect((JSON.parse(refused.body) as { error: string }).error).toBe("country_unsupported");
+    }
+    const chosen = await patch(`/v1/orgs/${org.org.id}`, { country: "IE" }, { cookies: owner.cookies });
+    expect(chosen.statusCode, chosen.body).toBe(200);
+    expect(await readGymRow(org.org.id)).toMatchObject({ country: "IE", currency_display: "USD" });
   });
 
   /** KD RULING 2026-08-26 — THE COUNTRY FREEZES THE DAY THE GYM STARTS PAYING.
@@ -5477,19 +5504,19 @@ d("orgs routes (real Postgres)", () => {
     //
     // **THIS LEG GOT STRONGER ON 2026-08-28 RATHER THAN WEAKER.** It used to
     // drive France → Germany, two countries that shared the euro; it now drives
-    // CANADA → GERMANY, which share a currency only BECAUSE of Kd's ruling. So
+    // CANADA → JAPAN, which share a currency only BECAUSE of Kd's ruling. So
     // the carve-out and the ruling are now pinned by the same three lines, and
     // a revert of the currency map turns this leg red instead of leaving it
     // quietly passing on a euro pair nobody bills in.
     await sql`UPDATE gyms SET country = 'CA', currency_display = 'USD' WHERE id = ${org.org.id}`;
     const sameCurrency = await patch(
       `/v1/orgs/${org.org.id}`,
-      { country: "DE" },
+      { country: "JP" },
       { cookies: owner.cookies },
     );
-    expect(sameCurrency.statusCode, "Canada to Germany keeps USD").toBe(200);
+    expect(sameCurrency.statusCode, "Canada to Japan keeps USD").toBe(200);
     const moved = await readGymRow(org.org.id);
-    expect(moved.country).toBe("DE");
+    expect(moved.country).toBe("JP");
     expect(moved.currency_display).toBe("USD");
   });
 
@@ -5554,9 +5581,9 @@ d("orgs routes (real Postgres)", () => {
     expect((await readGymRow(org.org.id)).currency_display).toBe("INR");
 
     // THE ONE THAT MUST BE REFUSED, and it is the half the reviewer's simpler
-    // rule would have let through: recording Germany moves this gym from rupees
-    // to euros — a paying gym's billing currency, which is the whole ruling.
-    const flip = await patch(`/v1/orgs/${org.org.id}`, { country: "DE" }, { cookies: owner.cookies });
+    // rule would have let through: recording France moves this gym from rupees
+    // to dollars — a paying gym's billing currency, which is the whole ruling.
+    const flip = await patch(`/v1/orgs/${org.org.id}`, { country: "FR" }, { cookies: owner.cookies });
     expect(flip.statusCode, "recording a country that changes the money").toBe(409);
     const refusal = JSON.parse(flip.body) as { error: string; message: string };
     expect(refusal.error).toBe("currency_locked");
@@ -5640,7 +5667,7 @@ d("orgs routes (real Postgres)", () => {
 
     const res = await patch(
       `/v1/orgs/${org.org.id}`,
-      { name: "Orgs Test Should Not Land", country: "AU" },
+      { name: "Orgs Test Should Not Land", country: "DE" },
       { cookies: owner.cookies },
     );
     expect(res.statusCode).toBe(400);
@@ -5650,9 +5677,9 @@ d("orgs routes (real Postgres)", () => {
     expect(row.name).toBe("Orgs Test Edit Country Bad");
     expect(row.country).toBe("IN");
     expect(row.currency_display).toBe("INR");
-    // Never a fallback currency — that is how a gym in Sydney gets quoted in
+    // Never a fallback currency — that is how a gym in Berlin gets quoted in
     // rupees, which is the exact failure the ruling removes.
-    expect(row.currency_display).not.toBe("AUD");
+    expect(row.currency_display).not.toBe("EUR");
   });
 
   /** `gyms.timezone` is the ONLY thing the rollup worker asks when it decides

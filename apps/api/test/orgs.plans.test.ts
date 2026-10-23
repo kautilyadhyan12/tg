@@ -317,11 +317,11 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
   /** WORST THING: a gym is quoted or given the wrong price or member limit — the
    *  old $35 for 300 members, rupees outside India — or an Indian gym is told we
    *  are not open in its country when it starts its trial. Driven through the
-   *  real routes for the US, India and one euro-area country. */
+   *  real routes for the US, India and Japan. */
   it.each([
     { country: "US", currency: "USD" as const },
     { country: "IN", currency: "INR" as const },
-    { country: "DE", currency: "USD" as const },
+    { country: "JP", currency: "USD" as const },
   ])(
     "a gym in $country trials for 10 days on 100 members and is quoted the ruled $currency list",
     async ({ country, currency }) => {
@@ -628,7 +628,7 @@ d("gym price list + trial-arm selector (real Postgres)", () => {
 
       // THE CONTROL: the walk above is only worth anything if this list is the
       // real one and the lookup can actually fail. Both halves checked.
-      expect(SUPPORTED_COUNTRIES.length).toBeGreaterThan(20);
+      expect(SUPPORTED_COUNTRIES.length).toBe(9);
       expect(currencyForCountry("ZZ")).toBeNull();
 
       // AND THE SCOPING'S OWN OBSERVER, which is the half the finding was about.

@@ -86,27 +86,12 @@ export function normaliseJoinCode(raw: string): string {
  *  whole change, but a new currency also needs prices that exist, so it belongs
  *  with the pricing ratification (:9944) and not with a chat's guess.
  *
- *  The euro-area members are listed individually rather than as "Europe"
- *  because Europe is not one currency: the UK is on the pound, and several EU
- *  states run their own money (Poland, Sweden, Denmark, Switzerland, Norway,
- *  Czechia, Hungary, Romania) — each of those is an unsupported country today,
- *  deliberately, because guessing euros for them would be the exact falsehood
- *  this ruling removes.
- *
- *  **THAT PARAGRAPH STILL GOVERNS THIS LIST EVEN THOUGH IT NO LONGER GOVERNS
- *  THE CURRENCY** (:22215 §3.5 bills CA/GB/the euro area in USD — see the map
- *  below). It reads as if the euro-area enumeration existed to get the CURRENCY
- *  right, and half of it did; the other half is which countries we are open in
- *  at all, which is :10010's *"usa india candan and europe"* and is untouched.
- *  **So Poland and Sweden stay OUT** — not because we would have to guess their
- *  money, but because Kd has never said we sell there. Widening this enum is a
- *  ruling, not a consequence of the currency change. */
-export const supportedCountrySchema = z.enum([
-  "US", "IN", "CA", "GB",
-  // Euro area.
-  "AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE",
-  "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES",
-]);
+ *  **A business only from India and the countries Square takes card payments in**
+ *  (Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`; ROADMAP 18s): `SQUARE_COUNTRIES` and
+ *  India. The 17 euro-area countries Square does not serve left the list; a gym already
+ *  stored in one keeps its row and is asked to choose again (`isServedCountry`). People
+ *  who use the app for themselves may come from anywhere: this list is businesses only. */
+export const supportedCountrySchema = z.enum(["US", "IN", "CA", "GB", "IE", "FR", "ES", "AU", "JP"]);
 export type SupportedCountry = z.infer<typeof supportedCountrySchema>;
 
 /** The picker's own source of truth — a console that builds its country list
@@ -114,6 +99,10 @@ export type SupportedCountry = z.infer<typeof supportedCountrySchema>;
  *  straight off the schema rather than through `Object.keys`, which returns
  *  `string[]` and would need a cast (R2.2). */
 export const SUPPORTED_COUNTRIES = supportedCountrySchema.options;
+
+/** What a business is told when its country is not on the list. */
+export const COUNTRY_UNSUPPORTED_WORDS =
+  "We don't take businesses in that country. A business can be in India, the United States, Canada, the United Kingdom, Ireland, France, Spain, Australia or Japan.";
 
 /** Typed as a total Record, so TypeScript refuses to compile a country added
  *  to the schema above without a currency here.
@@ -175,10 +164,18 @@ export const COUNTRY_CURRENCY: Readonly<Record<SupportedCountry, string>> = {
   IN: "INR",
   CA: "USD",
   GB: "USD",
-  AT: "USD", BE: "USD", HR: "USD", CY: "USD", EE: "USD", FI: "USD", FR: "USD",
-  DE: "USD", GR: "USD", IE: "USD", IT: "USD", LV: "USD", LT: "USD", LU: "USD",
-  MT: "USD", NL: "USD", PT: "USD", SK: "USD", SI: "USD", ES: "USD",
+  IE: "USD",
+  FR: "USD",
+  ES: "USD",
+  AU: "USD",
+  JP: "USD",
 };
+
+/** Whether a gym's stored country is one a business may be in today: false for none, and
+ *  for a country that has left the list (18s). */
+export function isServedCountry(country: string | null): boolean {
+  return country !== null && supportedCountrySchema.safeParse(country.trim().toUpperCase()).success;
+}
 
 /** null = we are not open in that country yet. Never a fallback currency:
  *  a fallback here is how a Canadian gym ends up quoted in rupees.

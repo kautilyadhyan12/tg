@@ -22,6 +22,7 @@ import type { Sql, TransactionSql } from "postgres";
 import {
   classFeeFor,
   memberBillStatusSchema,
+  memberCurrencyForCountry,
   memberFeeKindSchema,
   memberPaymentMethodSchema,
   paidThroughSquare,
@@ -58,6 +59,13 @@ const stillOwedSql = (sql: Sql | TransactionSql) => sql`
               WHERE a.gym_id = b.gym_id AND a.id = b.pt_appointment_id
                 AND a.status = CASE b.fee WHEN 'late_cancel' THEN 'late_cancelled' ELSE 'no_show' END))`;
 
+/** A fee is set in the gym's members' money, so it goes only on a membership sold in that
+ *  money: none where the gym has no country it sells in (18s), nor on a membership from
+ *  before it moved to another money. */
+function feeMoneyMatches(row: { currency: string; country: string | null }): boolean {
+  return row.currency === memberCurrencyForCountry(row.country);
+}
+
 /** The class fees of a gym, as the database holds them. */
 export async function classFeesOf(sql: Sql | TransactionSql, gymId: string): Promise<ClassFees> {
   const [row] = await sql<{ late: number; no_show: number }[]>`
@@ -89,12 +97,13 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
       class_name: string;
       class_day: string;
       timezone: string;
+      country: string | null;
       late: number;
       no_show: number;
     }[]
   >`
     SELECT b.id, b.held_membership_id, b.pack_charged, h.currency, r.name AS tax_name, r.rate_bp AS tax_bp,
-           left(t.name, 80) AS class_name, s.local_date::text AS class_day, g.timezone,
+           left(t.name, 80) AS class_name, s.local_date::text AS class_day, g.timezone, g.country,
            g.class_late_cancel_fee_minor AS late, g.class_no_show_fee_minor AS no_show
     FROM gym_class_bookings b
     JOIN gyms g ON g.id = b.gym_id
@@ -107,7 +116,7 @@ export async function openClassFees(tx: TransactionSql, gymId: string, bookingId
                       WHERE x.gym_id = b.gym_id AND x.class_booking_id = b.id AND (x.status <> 'void' OR x.void_reason = 'waived'))`;
   const opening = rows.flatMap((row) => {
     const minor = classFeeFor({ fee, heldMembershipId: row.held_membership_id, packCharged: row.pack_charged, fees: { lateCancelMinor: row.late, noShowMinor: row.no_show } });
-    if (minor === 0 || row.held_membership_id === null) return [];
+    if (minor === 0 || row.held_membership_id === null || !feeMoneyMatches(row)) return [];
     // The amount the gym set is what the person pays: the membership's rate is inside it.
     const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
     const bill = billOf(minor, tax);
@@ -206,12 +215,13 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
       trainer_email: string | null;
       day: string;
       timezone: string;
+      country: string | null;
       late: number;
       no_show: number;
     }[]
   >`
     SELECT a.id, a.held_membership_id, a.pack_charged, h.currency, r.name AS tax_name, r.rate_bp AS tax_bp,
-           u.display_name AS trainer_name, u.email::text AS trainer_email, a.local_date::text AS day, g.timezone,
+           u.display_name AS trainer_name, u.email::text AS trainer_email, a.local_date::text AS day, g.timezone, g.country,
            g.pt_late_cancel_fee_minor AS late, g.pt_no_show_fee_minor AS no_show
     FROM gym_pt_appointments a
     JOIN gyms g ON g.id = a.gym_id
@@ -223,7 +233,7 @@ export async function openPtFees(tx: TransactionSql, gymId: string, appointmentI
                       WHERE x.gym_id = a.gym_id AND x.pt_appointment_id = a.id AND (x.status <> 'void' OR x.void_reason = 'waived'))`;
   const opening = rows.flatMap((row) => {
     const minor = classFeeFor({ fee, heldMembershipId: row.held_membership_id, packCharged: row.pack_charged, fees: { lateCancelMinor: row.late, noShowMinor: row.no_show } });
-    if (minor === 0 || row.held_membership_id === null) return [];
+    if (minor === 0 || row.held_membership_id === null || !feeMoneyMatches(row)) return [];
     // The amount the gym set is what the person pays: the membership's rate is inside it.
     const tax = row.tax_name === null || row.tax_bp === null ? null : { name: row.tax_name, bp: row.tax_bp, included: true };
     const bill = billOf(minor, tax);

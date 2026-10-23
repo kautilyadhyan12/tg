@@ -336,11 +336,19 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       expect(await rowsOf(gymId)).toMatchObject([{ name: "Gold Monthly", price_minor: 4999, currency: "GBP" }]);
 
       // Each country's own money, stamped when the type is made.
-      for (const [country, currency] of [["IN", "INR"], ["US", "USD"], ["CA", "CAD"], ["DE", "EUR"]] as const) {
+      // Japan's yen has no cents: ¥5,000 is 5000, never ¥50 (18s).
+      for (const [country, currency, priceMinor] of [
+        ["IN", "INR", 150000],
+        ["US", "USD", 150000],
+        ["CA", "CAD", 150000],
+        ["FR", "EUR", 150000],
+        ["AU", "AUD", 150000],
+        ["JP", "JPY", 5000],
+      ] as const) {
         await sql`UPDATE gyms SET country = ${country} WHERE id = ${gymId}`;
-        const answer = await addType(gymId, owner.cookies, monthly({ name: `Plan ${country}`, priceMinor: 150000 }));
+        const answer = await addType(gymId, owner.cookies, monthly({ name: `Plan ${country}`, priceMinor }));
         expect(answer.currency).toBe(currency);
-        expect(answer.types.find((t) => t.name === `Plan ${country}`)).toMatchObject({ priceMinor: 150000, currency });
+        expect(answer.types.find((t) => t.name === `Plan ${country}`)).toMatchObject({ priceMinor, currency });
       }
 
       // A type keeps the money it was made in when it is changed later.
@@ -348,8 +356,9 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       expect(changed.statusCode).toBe(200);
       expect(list(changed).types.find((t) => t.id === goldId)).toMatchObject({ priceMinor: 5500, currency: "GBP" });
 
-      // A country we do not serve has no money to price in: no fallback.
-      for (const country of ["JP", null]) {
+      // A country we do not serve has no money to price in: no fallback. Germany left the
+      // list a business is in (18s); a gym stored there is asked for its country again.
+      for (const country of ["DE", "PL", null]) {
         await sql`UPDATE gyms SET country = ${country} WHERE id = ${gymId}`;
         const res = await post(typesUrl(gymId), monthly({ name: "Nowhere" }), owner.cookies);
         expect(res.statusCode).toBe(409);
@@ -358,9 +367,11 @@ d("a gym's membership types: who may read and change them, and what is kept (rea
       }
       expect((await rowsOf(gymId)).map((r) => `${r.name} ${r.currency} ${String(r.price_minor)}`)).toEqual([
         "Gold Monthly GBP 5500",
+        "Plan AU AUD 150000",
         "Plan CA CAD 150000",
-        "Plan DE EUR 150000",
+        "Plan FR EUR 150000",
         "Plan IN INR 150000",
+        "Plan JP JPY 5000",
         "Plan US USD 150000",
       ]);
     },

@@ -89,8 +89,8 @@ describe('a gym Square does not serve', () => {
 
   it('no country yet: a link to the exact place to add it', async () => {
     open(payments({ availability: 'no_country', country: null }));
-    expect(await screen.findByText('Add your country first. The card payments you can take depend on where you are.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Add your country' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
+    expect(await screen.findByText('Choose your country first. The card payments you can take depend on where you are.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Choose your country' }).getAttribute('href')).toBe('/console/iron-house/settings#country');
   });
 });
 
@@ -194,7 +194,7 @@ describe('a connection is shown before anything about the country', () => {
     expect(await screen.findByText('Connected to Square')).toBeTruthy();
     expect(screen.getAllByRole('definition').map((d) => d.textContent)).toEqual(['Iron House Ltd', 'Leeds', '19 Oct 2026']);
     expect(screen.getByRole('button', { name: 'Disconnect Square' })).toBeTruthy();
-    expect(screen.queryByText(/aren't available|coming soon|Add your country first/)).toBeNull();
+    expect(screen.queryByText(/aren't available|coming soon|Choose your country first/)).toBeNull();
   });
 });
 

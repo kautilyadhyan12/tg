@@ -2601,7 +2601,7 @@ archived, never deleted once anybody holds it. `memberships.manage` (owner and m
 by default; the owner can tick it for anyone on staff, RULINGS 2026-10-04).
 
 *(17a-i's notes, 2026-10-04.)* The gym's own currency is the COUNTRY's own —
-`MEMBER_CURRENCY` in `@app/shared`: pounds in the UK, euros in the euro area, Canadian
+`MEMBER_CURRENCY` in `@app/shared`: pounds in the UK, euros in Ireland, France and Spain, yen in Japan, Canadian
 dollars in Canada — not `COUNTRY_CURRENCY`, which is what the gym pays US in. The server
 stamps it on a type when it is made and never changes it, nor the type's kind. Reading
 the list needs `members.read`, or the tick itself. A change sends back the type's
@@ -4228,6 +4228,14 @@ and which web folder builds each are in ROADMAP, Stage 2's header and item 18.)*
 **First launch: India, the US and Canada.** Square in the US and Canada; Razorpay in India
 (18f), before launch. No bank debit: Square offers it in the US only, switched on by Square
 for an app that asks, and GoCardless is closed to Kd (RULINGS 2026-10-20).
+
+**Where a business can be (18s; Kd, 2026-10-23, `rulings/2026-10-23-18u-i.md`):** India and
+Square's eight countries (the US, Canada, the UK, Ireland, France, Spain, Australia, Japan),
+`supportedCountrySchema`. Outside India the business pays us in US dollars; its members pay
+in the country's own money (Australian dollars, yen: whole yen, no smaller unit). A gym stored
+in a country that has left the list keeps its row; Gym details says "We no longer take
+businesses in {country}. If your gym is in another country, choose it here." and until then it
+is a gym with no country. People who use the app for themselves may be anywhere.
 
 **At the desk, three ways, each recorded on the bill or the sale:**
 - **The Square Terminal** (18d-vi): KWAZO sends the amount, on a bill or at Sell. For a

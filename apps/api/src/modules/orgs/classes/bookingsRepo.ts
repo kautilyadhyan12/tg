@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   CLASS_BOOKING_COUNTED,
   CLASS_BOOKING_HOLDS_PLACE,
+  CLASS_FEES_OFF,
   memberCurrencyForCountry,
   bookingOverdueSchema,
   bookingPeriod,
@@ -25,6 +26,12 @@ import {
 import { heldForBooking, heldForClasses } from "../memberships/heldRepo.js";
 
 type SqlOrTx = Sql | TransactionSql;
+
+/** A gym's class fees as a booking reads them: none where it has no money to charge in, a
+ *  country unset or one that left the list (18s). */
+function feesInMoney(lateCancelMinor: number, noShowMinor: number, currency: string | null): ClassFees & { currency: string | null } {
+  return currency === null ? { ...CLASS_FEES_OFF, currency } : { lateCancelMinor, noShowMinor, currency };
+}
 
 export interface BookingSession {
   id: string;
@@ -225,7 +232,7 @@ async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: Retu
         onlineLink: r.online_link,
       },
       settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
-      fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee, currency: memberCurrencyForCountry(r.country) },
+      fees: feesInMoney(r.late_fee, r.no_show_fee, memberCurrencyForCountry(r.country)),
       counts: { booked: r.booked, waitlisted: r.waitlisted },
       gymHasTypes: r.has_types,
       overdue: { rule: r.overdue_rule, afterDays: r.overdue_days, timezone: r.timezone },

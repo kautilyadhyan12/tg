@@ -371,6 +371,42 @@ d("a fee for a late cancel or a no-show, for classes (real Postgres)", { timeout
     expect(fees[0]).toMatchObject({ fee: "late_cancel", amount_minor: LATE, status: "open", held_membership_id: cara.heldId });
   });
 
+  // 18s: a gym stored in a country that left the list has no money its members pay in. Its
+  // fees, set in pounds before, are shown in no other money, cannot be changed, and cost nothing.
+  it("a gym in a country that left the list shows no fee, sets none, and charges none", async () => {
+    clock = T0;
+    const gym = await makeGym("Moved Fees");
+    await makeDesk(gym);
+    const cara = await member(gym, "Cara Diaz");
+    const dev = await member(gym, "Dev Iyer");
+    const spin = await classAt(gym, T0 + 60 * MIN);
+    await book(gym, dev, spin);
+    await sql`UPDATE gyms SET country = 'DE' WHERE id = ${gym.id}`;
+
+    const settings = await settingsOf(gym, gym.owner);
+    expect(settings.fees).toMatchObject({ lateCancelMinor: LATE, noShowMinor: NO_SHOW, currency: null });
+    const refused = await setFeesRaw(gym, gym.owner, { lateCancelMinor: 100, noShowMinor: 200 });
+    expect(refused.statusCode, refused.body).toBe(409);
+    expect(JSON.parse(refused.body)).toMatchObject({
+      error: "no_member_currency",
+      message: "Set your country in Settings before setting a fee. Fees are in your country's own money.",
+    });
+    expect((await settingsOf(gym, gym.owner)).fees).toMatchObject({ lateCancelMinor: LATE, noShowMinor: NO_SHOW });
+
+    const seen = await book(gym, cara, spin);
+    expect(seen.fees).toBeNull();
+    const done = await cancel(gym, cara, spin, { lateOk: true });
+    expect(done.statusCode, done.body).toBe(200);
+    expect(await statusOf(spin, cara)).toBe("late_cancelled");
+    expect(await feesOf(cara)).toEqual([]);
+
+    // Somebody checks in for the class, so the gym checks people in and Dev, who did not, is a no-show.
+    await visitAt(gym, await member(gym, "Eli Moss"), T0 + 50 * MIN);
+    expect(await run(T0 + 60 * MIN + LENGTH + 15 * MIN, [gym])).toMatchObject({ noShows: 1 });
+    expect(await statusOf(spin, dev)).toBe("no_show");
+    expect(await feesOf(dev)).toEqual([]);
+  });
+
   it("every case: what costs a fee and what does not", async () => {
     clock = T0;
     const gym = await makeGym("Case Fees");
