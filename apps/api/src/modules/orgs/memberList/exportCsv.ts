@@ -12,14 +12,15 @@
 // save). The phone column holds only E.164 numbers the server made and is written as it
 // is, so "+44 …" keeps its plus; an email address may start with + or - (round one, L5),
 // so it is guarded like free text.
-import { MEMBER_APP_FILTER_WORDS, heldListWords, orgWords, type HeldOnList, type MemberListExportRequest, type MemberListFilter } from "@app/shared";
+import { MEMBER_APP_FILTER_WORDS, MEMBER_LIST_OVERDUE_WORD, heldListWords, rowSaysOverdue, orgWords, type HeldOnList, type MemberListExportRequest, type MemberListFilter } from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { insertAudit } from "../repo.js";
 import { requirePrivilege } from "../service.js";
 import * as repo from "./repo.js";
 import { selectedIds } from "./selection.js";
 import type { MemberListDeps } from "./service.js";
-import { heldOnListOf } from "../memberships/onList.js";
+import { overdueDaysOf } from "../memberships/billsSql.js";
+import { heldWithOwedOf } from "../memberships/onList.js";
 
 /** How many records one read of the file takes. */
 export const EXPORT_PAGE = 500;
@@ -101,8 +102,9 @@ function heldDay(shown: HeldOnList): { on: string; kind: "ends" | "renews" } | n
 }
 
 /** A person's line as their row on the list reads: the app's own words for the membership
- *  they hold here, in the columns the list's own words would fill. */
-export function shownRow(row: Row, shown: HeldOnList | undefined): Row {
+ *  they hold here, in the columns the list's own words would fill. `overdue`: their row
+ *  says Overdue (17i-ii). */
+export function shownRow(row: Row, shown: HeldOnList | undefined, overdue = false): Row {
   if (shown === undefined) return row;
   const words = heldListWords(shown);
   const day = heldDay(shown);
@@ -112,7 +114,7 @@ export function shownRow(row: Row, shown: HeldOnList | undefined): Row {
     membershipType: words.memberships.join("; "),
     endsOn: day?.on ?? null,
     endsOnKind: day?.kind ?? null,
-    paymentStatus: words.payment,
+    paymentStatus: overdue ? MEMBER_LIST_OVERDUE_WORD : words.payment,
   };
 }
 
@@ -181,13 +183,19 @@ export async function exportSelected(
   request: MemberListExportRequest,
   limit: () => Promise<boolean>,
 ): Promise<ExportFile | null> {
-  const { org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
+  const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const { selection } = request;
   const ids = await selectedIds(deps, gymId, selection);
   const today = dayInTz(deps.now(), org.timezone);
   // What the memberships these people hold say, so the file reads as the list does.
-  const held = await heldOnListOf(deps.sql, gymId, today, ids);
+  const [{ held, owedSince }, overdueAfterDays] = await Promise.all([
+    heldWithOwedOf(deps.sql, gymId, today, ids),
+    // Overdue is written for the staff who read members' bills, as their row says it.
+    privileges.includes("billing.members") ? overdueDaysOf(deps.sql, gymId) : null,
+  ]);
+  const overdue = (entryId: string): boolean =>
+    rowSaysOverdue({ shown: held.get(entryId)?.shown ?? null, former: false, owedSince: owedSince.get(entryId) ?? null, today, overdueAfterDays });
   const [counts, fields] = await Promise.all([repo.exportShapeOf(deps.sql, gymId, ids, [...held.keys()]), repo.listFields(deps.sql, gymId)]);
   const dated = { ends: counts.ends, renews: counts.renews };
   for (const { shown } of held.values()) {
@@ -211,7 +219,7 @@ export async function exportSelected(
     yield BOM + csvHeader(shape);
     for (let from = 0; from < ids.length; from += EXPORT_PAGE) {
       const rows = await repo.exportRows(deps.sql, gymId, ids.slice(from, from + EXPORT_PAGE));
-      yield rows.map((row) => csvLine(shownRow(row, held.get(row.entryId)?.shown), shape)).join("");
+      yield rows.map((row) => csvLine(shownRow(row, held.get(row.entryId)?.shown, overdue(row.entryId)), shape)).join("");
     }
   }
 

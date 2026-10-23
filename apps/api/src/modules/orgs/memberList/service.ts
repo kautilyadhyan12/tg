@@ -45,6 +45,7 @@ import {
   MEMBER_LIST_UPLOAD_TTL_MINUTES,
   memberFileRefusalWords,
   memberListStagedShellSchema,
+  rowSaysOverdue,
   type MemberFileRefusal,
   type MemberListConfirmed,
   type MemberListCounts,
@@ -108,10 +109,10 @@ import { bustAfterRemoval } from "./byHandService.js";
 import { sessionsAuditMeta } from "../pt/changes.js";
 import { importLeaversPlanOn, importNeedsLargeTick, requireForPlan, type RemovalPlan } from "./removeSelected.js";
 import { dayInTz } from "../../gamification/streak.js";
-import { heldChips, heldOnListOf, heldPassing, mergeChips, type WordCount } from "../memberships/onList.js";
+import { heldChips, heldOnListOf, heldPassing, heldWithOwedOf, mergeChips, type WordCount } from "../memberships/onList.js";
 import { keepLeftDays } from "../memberships/over.js";
 import { heldAndTidyOf, overOwingIdsOf, tidyIdsOf } from "./tidy.js";
-import { listBillFacts, pastOwing } from "../memberships/billsSql.js";
+import { listBillFacts, overdueDaysOf, pastOwing } from "../memberships/billsSql.js";
 
 export interface MemberListDeps {
   sql: Sql;
@@ -1681,6 +1682,8 @@ export async function readEntries(
   const { privileges, org } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
   const seesStaff = privileges.includes("staff.manage");
+  // Overdue is said to the staff who read the person's bills, as the bill on their page says it.
+  const seesBills = privileges.includes("billing.members");
 
   // Parsed, not trusted, and not quietly ignored either: a cursor that does not
   // decode is a 400, never "start again from the top", which would silently restart
@@ -1696,9 +1699,9 @@ export async function readEntries(
   const shown = page.entries.slice(0, MEMBER_LIST_ENTRIES_PAGE);
   const last = page.entries.length > MEMBER_LIST_ENTRIES_PAGE ? shown[shown.length - 1] : undefined;
   const today = dayInTz(deps.now(), org.timezone);
-  const [held, pastBills, invitations, app] = await Promise.all([
+  const [held, pastBills, invitations, app, overdueAfterDays] = await Promise.all([
     // What the memberships these people hold say, for the row's four columns (23a-i).
-    heldOnListOf(
+    heldWithOwedOf(
       deps.sql,
       gymId,
       today,
@@ -1731,7 +1734,16 @@ export async function readEntries(
       members,
       deps.now(),
     ),
+    seesBills ? overdueDaysOf(deps.sql, gymId) : null,
   ]);
+  const overdue = (entry: { entryId: string; formerAt: Date | null }): boolean =>
+    rowSaysOverdue({
+      shown: held.held.get(entry.entryId)?.shown ?? null,
+      former: entry.formerAt !== null,
+      owedSince: (entry.formerAt === null ? held.owedSince : pastBills.owedSince).get(entry.entryId) ?? null,
+      today,
+      overdueAfterDays,
+    });
   // Whose each record is, among the people in the app who also run the gym: the list's
   // Staff tag (Kd's 4a-ii click-through).
   const staffByRecord = new Map<string, { role: "owner" | "manager" | "trainer"; roleName: string | null }>();
@@ -1756,8 +1768,9 @@ export async function readEntries(
       endsOnKind: entry.endsOnKind,
       paymentStatus: entry.paymentStatus,
       dateOfBirth: entry.dateOfBirth,
-      held: held.get(entry.entryId)?.shown ?? null,
+      held: held.held.get(entry.entryId)?.shown ?? null,
       owedSince: entry.formerAt === null ? null : (pastBills.owedSince.get(entry.entryId) ?? null),
+      overdue: overdue(entry),
       formerAt: entry.formerAt?.toISOString() ?? null,
       source: entry.source,
       inApp: entry.inApp,

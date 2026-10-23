@@ -651,6 +651,38 @@ describe('the Invite button', () => {
 describe('a row says what the person holds in the app (23a-i)', () => {
   const rowOf = async (name) => (await screen.findAllByTestId('list-row')).find((r) => r.textContent.includes(name));
 
+  // 17i-ii: the same unpaid bill read Payment due on the list and Overdue on the person's page.
+  it('says Overdue in red where the server says the bill reads Overdue, Payment due in yellow before that', async () => {
+    const owing = { status: 'active', memberships: ['Gold Monthly'], day: { what: 'renews', on: '2099-11-06' }, payment: { state: 'due', since: '2026-10-01' } };
+    const ben = entry('Ben Okafor', { held: owing, overdue: true });
+    const dev = entry('Dev Patel', { held: owing, overdue: false });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ben, dev]));
+    draw();
+    const late = within(await rowOf('Ben Okafor')).getByTestId('row-pay');
+    expect(late.textContent).toBe('Overdue');
+    expect(late.style.color).toBe('var(--bad)');
+    const due = within(await rowOf('Dev Patel')).getByTestId('row-pay');
+    expect(due.textContent).toBe('Payment due');
+    expect(due.style.color).toBe('var(--warn)');
+  });
+
+  it("a past member's tag says Overdue in red by the same answer", async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ counts: { entries: 312, inApp: 40, canBeInvited: 250, noEmail: 22, former: 4, formerOwing: 2 } }) } });
+    const ivy = entry('Ivy Left Owing', { formerAt: '2026-09-03T10:00:00.000Z', owedSince: '2026-08-01', paymentStatus: 'Paid', overdue: true });
+    const kai = entry('Kai Left Lately', { formerAt: '2026-09-03T10:00:00.000Z', owedSince: '2026-10-06', paymentStatus: 'Paid' });
+    orgService.getMemberListEntries.mockResolvedValue(pageOf([ivy, kai]));
+    draw();
+    await openFilter();
+    fireEvent.click(within(filterBox().getByRole('radiogroup', { name: 'Show' })).getByRole('radio', { name: 'Past members 4' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'records=former'));
+    const ivyTag = within(await rowOf('Ivy Left Owing')).getByTestId('owes-tag');
+    expect(ivyTag.textContent).toBe('Overdue');
+    expect(ivyTag.className).toContain('c-tag-bad');
+    const kaiTag = within(await rowOf('Kai Left Lately')).getByTestId('owes-tag');
+    expect(kaiTag.textContent).toBe('Payment due');
+    expect(kaiTag.className).toContain('c-tag-warn');
+  });
+
   it("shows the membership, its day and what is owed, and never the record's own word beside it", async () => {
     // Maya's record still says "Paid" from the gym's old file; she owes on a pack she holds.
     const maya = entry('Maya Lopez', {
