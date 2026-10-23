@@ -56,6 +56,8 @@ const PLACES = {
   memberships: { path: '/memberships', may: canManageMemberships },
   // The Discounts box on Memberships, where a promo code for a membership is made.
   membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },
+  // The Bills box on Memberships, where the grace period before a bill reads Overdue is set.
+  membershipBills: { path: '/memberships#bills', may: canManageMemberships },
   sell: { path: '/sell', may: canOpenSell },
   members: { path: '/members', may: onStaff },
   importMembers: { path: '/members?open=import', may: onStaff },

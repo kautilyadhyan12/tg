@@ -11,7 +11,7 @@
 // bills opened here, and never a word from the gym's own file, which can be days old
 // (RULINGS 2026-10-02). Pure: the gym's own day is passed in.
 import { z } from "zod";
-import { addDays } from "./heldMemberships.js";
+import { paymentOverdue } from "./memberBillRules.js";
 import type { HeldOnList } from "./heldOnList.js";
 
 export const checkinWhoSchema = z.enum(["everyone", "current_membership"]);
@@ -81,7 +81,7 @@ export function checkinStop(input: CheckinStopInput): CheckinStopReason | null {
     if (status === "upcoming") return "not_started";
     if (status !== "active") return status;
   }
-  if (input.rules.overdue === "see_staff" && input.owedSince !== null && input.today > addDays(input.owedSince, input.overdueAfterDays)) {
+  if (input.rules.overdue === "see_staff" && paymentOverdue(input.owedSince, input.today, input.overdueAfterDays)) {
     return "overdue";
   }
   if (input.rules.waiver === "see_staff" && input.waiverSigned === false) return "no_waiver";

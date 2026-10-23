@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
+import { useSectionLink } from '../../pages/console/useSectionLink';
 import { formatMinor } from '@app/shared';
 import {
   NO_PAYMENTS_LINE,
@@ -17,6 +18,13 @@ import {
 // for them, how many days of grace an unpaid bill has before it reads Overdue, and the day of
 // the month it bills every new membership on (18y), and the fee for each month a membership is frozen (18z). They wait for Save. Staff without the payments tick read it and are told who can
 // change it; a gym with no live plan reads it too.
+
+/** "/memberships#bills" (Booking rules' Change the grace period) brings this box into view
+ *  once it has loaded. */
+function ToBills({ ready }) {
+  useSectionLink(ready);
+  return null;
+}
 
 // `readOnlyLine`: why nothing here can be changed, for a gym with no live plan.
 export default function BillSettingsCard({ gymId, readOnly, readOnlyLine = null }) {
@@ -78,7 +86,8 @@ export default function BillSettingsCard({ gymId, readOnly, readOnlyLine = null 
   };
 
   return (
-    <section className="c-card p-5 md:p-6 flex flex-col gap-3" data-testid="bill-settings">
+    <section id="bills" className="c-card p-5 md:p-6 flex flex-col gap-3" data-testid="bill-settings">
+      <ToBills ready={saved !== null} />
       <h2 className="c-h2">Bills</h2>
       <p className="c-s14 c-t2 m-0">
         A membership with a price gets a bill for each period, by itself. You record what a person paid on their page, under Memberships.

@@ -4,7 +4,12 @@ import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import { placeFor } from '../../pages/console/consolePlaces';
 import PlaceLink from './PlaceLink';
+import { overdueHint } from '../../pages/console/checkinRulesView';
 import {
+  OVERDUE_BOOKING_CHOICES,
+  OVERDUE_BOOKING_HINT,
+  overdueNames,
+  overduePeopleWords,
   BOOKING_TIME_UNITS,
   classFeesDraft,
   classFeesFromDraft,
@@ -23,7 +28,8 @@ import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 // a session, and until when a cancel is free), each a starting value it can change
 // (RULINGS 2026-09-21, 2026-10-08). All six wait for one Save, as the gym's details do
 // above, and so do the late cancel and no-show fees, the classes' (18h-i) and personal
-// training's own (18h-ii), which only staff who record members' payments can change.
+// training's own (18h-ii), which only staff who record members' payments can change; so
+// does whether a member books while a payment is overdue (17i), which names who it stops today.
 
 const inputStyle = {
   background: '#0A0908',
@@ -32,6 +38,8 @@ const inputStyle = {
 };
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const hintStyle = { color: 'rgba(255,255,255,0.45)' };
+const softStyle = { color: 'rgba(255,255,255,0.55)' };
+const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
 function NumberBox({ id, value, onChange, disabled, label }) {
   return (
@@ -118,6 +126,45 @@ function Row({ title, hint, children }) {
   );
 }
 
+/** Who has an overdue payment today, and what the choice picked does to them. */
+function OverduePeople({ stopped, rule, changed }) {
+  const [all, setAll] = useState(false);
+  const words = overduePeopleWords(stopped, rule, changed);
+  if (words === null) return null;
+  const names = overdueNames(stopped, all);
+  return (
+    <div role="group" aria-label="Who has an overdue payment today" className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
+      <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+        {words.title}
+      </p>
+      {names.shown.length > 0 ? (
+        <ul className={`m-0 p-0 list-none flex flex-col gap-1 ${all ? 'max-h-64 overflow-y-auto' : ''}`}>
+          {names.shown.map((person) => (
+            <li key={person.entryId} className="text-sm" style={labelStyle}>
+              {person.name}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {names.more > 0 ? (
+        <p className="text-sm m-0 flex flex-wrap items-center gap-2" style={softStyle}>
+          <span>{all ? `and ${String(names.notSent)} more, not listed here` : `and ${String(names.more)} more`}</span>
+          {names.canSeeAll ? (
+            <button type="button" onClick={() => setAll(true)} className="text-sm font-semibold underline min-h-11 sm:min-h-0" style={{ color: '#FFB347' }}>
+              See all
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+      {words.rest !== null ? (
+        <p className="text-sm m-0" style={softStyle}>
+          {words.rest}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 // `startOpen`: the page was opened by a link to this box (the Classes and Personal training pages).
 export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnly, startOpen = false }) {
   const gymId = org.id;
@@ -130,6 +177,9 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   // Personal training's own two, as saved and as typed (18h-ii), in the same money.
   const [ptFees, setPtFees] = useState(null);
   const [ptFeeDraft, setPtFeeDraft] = useState(null);
+  // No new bookings while a payment is overdue (17i): as saved, and as picked.
+  const [overdue, setOverdue] = useState(null);
+  const [overdueDraft, setOverdueDraft] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -149,6 +199,8 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
           setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
           setPtFees(res.data.ptFees ?? null);
           setPtFeeDraft(res.data.fees && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
+          setOverdue(res.data.overdue ?? null);
+          setOverdueDraft(res.data.overdue?.rule ?? null);
         })
         .catch((err) => {
           if (isLive()) setLoadError(errorText(err, "We couldn't load your booking settings."));
@@ -179,7 +231,9 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   const typedPtFees = hasPtFees ? classFeesFromDraft(ptFeeDraft, fees.currency) : null;
   const ptFeesChanged =
     hasPtFees && fees.canChange && (typedPtFees === null || typedPtFees.lateCancelMinor !== ptFees.lateCancelMinor || typedPtFees.noShowMinor !== ptFees.noShowMinor);
-  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged || ptFeesChanged);
+  const hasOverdue = ready && fees !== null && overdue !== null && overdueDraft !== null;
+  const overdueChanged = hasOverdue && fees.canChange && overdueDraft !== overdue.rule;
+  const changed = ready && (bookingSettingsChanged(draft, settings, pt) || feesChanged || ptFeesChanged || overdueChanged);
   const feeTypo = (hasFees && typedFees === null) || (hasPtFees && typedPtFees === null);
   const problem = !ready || !changed ? null : (bookingSettingsProblem(draft) ?? (feeTypo ? 'Type each fee as an amount, or 0 for no fee.' : null));
   const canSave = changed && problem === null && !saving && !readOnly;
@@ -203,6 +257,12 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   const feesOff = off || !fees?.canChange;
   const sign = fees === null ? '' : currencySign(fees.currency);
   const membershipsTo = placeFor(orgSlug, privileges, 'memberships');
+  const billsTo = placeFor(orgSlug, privileges, 'membershipBills');
+  const pickOverdue = (rule) => {
+    setOverdueDraft(rule);
+    setSaved(null);
+    setSaveError(null);
+  };
 
   const save = async (event) => {
     event.preventDefault();
@@ -212,7 +272,13 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
     const sendsPtFees = hasPtFees && fees.canChange;
     if (rules === null || (sendsFees && typedFees === null) || (sendsPtFees && typedPtFees === null)) return;
     // The fees go only from staff who may change them; anybody else's save leaves them be.
-    const body = { ...rules, ...(sendsFees ? { fees: typedFees } : {}), ...(sendsPtFees ? { ptFees: typedPtFees } : {}) };
+    const sendsOverdue = hasOverdue && fees.canChange;
+    const body = {
+      ...rules,
+      ...(sendsFees ? { fees: typedFees } : {}),
+      ...(sendsPtFees ? { ptFees: typedPtFees } : {}),
+      ...(sendsOverdue ? { overdue: overdueDraft } : {}),
+    };
     setSaving(true);
     setSaveError(null);
     try {
@@ -224,6 +290,8 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
       setFeeDraft(res.data.fees ? classFeesDraft(res.data.fees) : null);
       setPtFees(res.data.ptFees ?? null);
       setPtFeeDraft(res.data.fees && res.data.ptFees ? classFeesDraft({ ...res.data.ptFees, currency: res.data.fees.currency }) : null);
+      setOverdue(res.data.overdue ?? null);
+      setOverdueDraft(res.data.overdue?.rule ?? null);
       setSaved(bookingSettingsSavedLine(res.data.movedIn));
     } catch (err) {
       setSaveError(errorText(err, "We couldn't save your booking settings."));
@@ -233,7 +301,7 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
   };
 
   return (
-    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees, fees !== null && ptFees !== null ? { ...ptFees, currency: fees.currency } : null)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+    <ConsoleSection title="Booking rules" summary={bookingSettingsSummary(settings, pt, fees, fees !== null && ptFees !== null ? { ...ptFees, currency: fees.currency } : null, overdue?.rule ?? null)} forceOpen={loadError !== null} defaultOpen={startOpen}>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
@@ -361,6 +429,51 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
               </>
             ) : null}
           </Part>
+
+          {hasOverdue ? (
+            <Part title="Overdue payments" intro={`What happens when a member with an overdue payment tries to book in the app. ${overdueHint(overdue.afterDays)}`}>
+              <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
+                <legend className="text-sm font-semibold p-0 mb-1" style={labelStyle}>
+                  New bookings
+                </legend>
+                {OVERDUE_BOOKING_CHOICES.map((choice) => (
+                  <label key={choice.value} className="flex items-center gap-3 py-2 min-h-11 cursor-pointer text-sm" style={labelStyle}>
+                    <input
+                      type="radio"
+                      name="overdue-bookings"
+                      value={choice.value}
+                      checked={overdueDraft === choice.value}
+                      onChange={() => pickOverdue(choice.value)}
+                      disabled={feesOff}
+                      className="w-4 h-4 flex-shrink-0"
+                      style={{ accentColor: '#FF8A1F' }}
+                    />
+                    <span>{choice.label}</span>
+                  </label>
+                ))}
+                <span className="text-xs" style={hintStyle}>
+                  {OVERDUE_BOOKING_HINT}
+                </span>
+              </fieldset>
+              <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="overdue-grace">
+                <span>The grace period is set in the Bills box on Memberships.</span>
+                {billsTo === null ? (
+                  <span style={hintStyle}>Staff who can change the price list change it there.</span>
+                ) : (
+                  <PlaceLink to={billsTo} className="c-lk c-w6">
+                    Change the grace period
+                  </PlaceLink>
+                )}
+              </p>
+              {fees.canChange ? (
+                <OverduePeople stopped={overdue.stopped} rule={overdueDraft} changed={overdueChanged} />
+              ) : (
+                <p className="text-xs m-0" style={hintStyle} data-testid="overdue-who">
+                  Only staff who record members' payments can change this. Ask the owner.
+                </p>
+              )}
+            </Part>
+          ) : null}
 
           {problem === null ? null : (
             <p className="text-sm" style={{ color: '#ef4444' }}>

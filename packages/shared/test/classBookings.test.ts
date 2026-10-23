@@ -72,7 +72,7 @@ describe("the last place, and the pack", () => {
     let waitlisted = 0;
     const answers: string[] = [];
     for (let n = 0; n < 50; n++) {
-      const d = decideBook({ time: at("open"), cancelled: false, places: 1, booked, waitlisted, waitlistMax: S.waitlistMax, mine: null, joinWaitlist: true, cover: cover([], false, false) });
+      const d = decideBook({ time: at("open"), cancelled: false, places: 1, booked, waitlisted, waitlistMax: S.waitlistMax, mine: null, joinWaitlist: true, cover: cover([], false, false), overdue: false });
       if (d.kind === "book") booked += 1;
       if (d.kind === "waitlist") waitlisted += 1;
       answers.push(d.kind === "refuse" ? d.reason : d.kind);
@@ -84,17 +84,17 @@ describe("the last place, and the pack", () => {
 
   it("a pack is charged by the booking, and the same request again charges nothing", () => {
     const pack = held("p", given(tenPack, "2026-10-01"));
-    const first = decideBook({ time: at("open"), cancelled: false, places: 10, booked: 3, waitlisted: 0, waitlistMax: 20, mine: null, joinWaitlist: false, cover: cover([pack]) });
+    const first = decideBook({ time: at("open"), cancelled: false, places: 10, booked: 3, waitlisted: 0, waitlistMax: 20, mine: null, joinWaitlist: false, cover: cover([pack]), overdue: false });
     expect(first).toEqual({ kind: "book", membershipId: "p", chargePack: true, fromWaitlist: false });
-    const again = decideBook({ time: at("open"), cancelled: false, places: 10, booked: 4, waitlisted: 0, waitlistMax: 20, mine: "booked", joinWaitlist: false, cover: cover([pack]) });
+    const again = decideBook({ time: at("open"), cancelled: false, places: 10, booked: 4, waitlisted: 0, waitlistMax: 20, mine: "booked", joinWaitlist: false, cover: cover([pack]), overdue: false });
     expect(again).toEqual({ kind: "already", status: "booked" });
   });
 
   it("waiting charges nothing: the pack is charged when the place is theirs", () => {
     const pack = held("p", given(tenPack, "2026-10-01"));
-    const wait = decideBook({ time: at("open"), cancelled: false, places: 1, booked: 1, waitlisted: 0, waitlistMax: 20, mine: null, joinWaitlist: true, cover: cover([pack]) });
+    const wait = decideBook({ time: at("open"), cancelled: false, places: 1, booked: 1, waitlisted: 0, waitlistMax: 20, mine: null, joinWaitlist: true, cover: cover([pack]), overdue: false });
     expect(wait).toEqual({ kind: "waitlist" });
-    const movedIn = decideBook({ time: at("open"), cancelled: false, places: 1, booked: 0, waitlisted: 1, waitlistMax: 20, mine: "waitlisted", joinWaitlist: false, cover: cover([pack]) });
+    const movedIn = decideBook({ time: at("open"), cancelled: false, places: 1, booked: 0, waitlisted: 1, waitlistMax: 20, mine: "waitlisted", joinWaitlist: false, cover: cover([pack]), overdue: false });
     expect(movedIn).toEqual({ kind: "book", membershipId: "p", chargePack: true, fromWaitlist: true });
   });
 
@@ -263,7 +263,7 @@ describe("every kind of membership × places × time × the request twice", () =
   it.each(cases)("%s · %s · %s · waitlist asked: %s", (name, places, time, joinWaitlist) => {
     const m = MEMBERSHIPS[name];
     if (m === undefined) throw new Error("no such membership");
-    const input = { time: at(time), cancelled: false, ...PLACES[places], waitlisted: 3, waitlistMax: 20, mine: null, joinWaitlist, cover: m.cover };
+    const input = { time: at(time), cancelled: false, ...PLACES[places], waitlisted: 3, waitlistMax: 20, mine: null, joinWaitlist, cover: m.cover, overdue: false };
     const first = decideBook(input);
     expect(said(first)).toBe(expected(m, places, time, joinWaitlist));
 
@@ -286,7 +286,7 @@ describe("every kind of membership × places × time × the request twice", () =
 
 describe("the waitlist", () => {
   const any = cover([], false, false);
-  const full = { time: at("open"), cancelled: false, places: 2, booked: 2, waitlistMax: 20, cover: any };
+  const full = { time: at("open"), cancelled: false, places: 2, booked: 2, waitlistMax: 20, cover: any, overdue: false };
 
   it("holds the gym's number and no more", () => {
     expect(decideBook({ ...full, waitlisted: 19, mine: null, joinWaitlist: true })).toEqual({ kind: "waitlist" });
@@ -301,7 +301,7 @@ describe("the waitlist", () => {
   });
 
   it("somebody waiting whose membership no longer covers the class is not moved in", () => {
-    expect(decideBook({ ...full, booked: 1, waitlisted: 1, mine: "waitlisted", joinWaitlist: false, cover: cover([]) })).toEqual({ kind: "refuse", reason: "no_membership" });
+    expect(decideBook({ ...full, booked: 1, waitlisted: 1, mine: "waitlisted", joinWaitlist: false, cover: cover([]), overdue: false })).toEqual({ kind: "refuse", reason: "no_membership" });
   });
 
   it("leaving the waitlist is free at any time and frees no place", () => {
@@ -342,7 +342,10 @@ describe("the booking settings a save sends", () => {
     const ptFees = { lateCancelMinor: 1200, noShowMinor: 1500 };
     expect(bookingSettingsBodySchema.parse({ ...classes, pt, fees, ptFees })).toEqual({ ...classes, pt, fees, ptFees });
     expect(bookingSettingsBodySchema.parse({ ...classes, pt, ptFees })).toEqual({ ...classes, pt, ptFees });
-    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees })).toEqual({ settings: classes, pt, fees: answered, ptFees });
+    // No new bookings while a payment is overdue (17i): always answered.
+    const overdue = { rule: "let_book", afterDays: 0, stopped: null };
+    expect(classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees, overdue })).toEqual({ settings: classes, pt, fees: answered, ptFees, overdue });
+    expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered, ptFees })).toThrow();
     expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt })).toThrow();
     expect(() => classBookingSettingsResponseSchema.parse({ settings: classes, pt, fees: answered })).toThrow();
   });
