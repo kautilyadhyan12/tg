@@ -448,6 +448,9 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
   const [leadRead, setLeadRead] = useState(null);
   const [sameAs, setSameAs] = useState(null);
   const [giftOffFor, setGiftOffFor] = useState(null);
+  /** The membership Add member just gave, whose agreement opens on the new person's page
+   *  (18u-i): { entryId, membershipId }, or null. */
+  const [signNow, setSignNow] = useState(null);
   /** Where a refusal or the warning shows: at the top, above a form whose buttons are at its foot. */
   const alertRef = useRef(null);
 
@@ -803,7 +806,10 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           notGiven = `${who} ${why}, so the ${choice.type.name} membership was not added. Add it under Memberships below.`;
         } else {
           try {
-            await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, givenDiscount, givenSummary, null, givenFee.feeMinor));
+            const given = await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, givenDiscount, givenSummary, null, givenFee.feeMinor));
+            // Where the business asks for its membership agreement, it is signed there and then.
+            const toSign = given.data.agreementInUse ? given.data.memberships.find((m) => m.agreement === null) : undefined;
+            setSignNow(toSign === undefined ? null : { entryId: res.data.entry.entryId, membershipId: toSign.id });
             // Once it is given, and only then, the type's name becomes their Membership word,
             // so the list's Membership column and filter show it as they show a file's word.
             if (input.membershipType === undefined && choice.type.name.length <= MEMBER_LIST_MAX_STATUS_CHARS) {
@@ -1481,6 +1487,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
           addNow={addMembership}
+          signNow={signNow !== null && signNow.entryId === p.entryId ? signNow.membershipId : null}
         />
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
         {/* The card on file is for staff holding the payments tick alone (18d-ii). */}

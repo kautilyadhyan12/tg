@@ -407,6 +407,14 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.waiver_saved": () => "Saved the waiver",
   "org.waiver_stopped": () => "Stopped asking for the waiver",
   "org.waiver_in_use_again": () => "Started asking for the waiver again",
+  // The membership agreement (18u-i): signed at the desk for one membership.
+  "org.agreement_signed": (s) =>
+    text(s, "signer") === "guardian"
+      ? `Had ${whose(s, "parent or guardian")} sign the membership agreement at the desk`
+      : `Had ${person(s)} sign the membership agreement at the desk`,
+  "org.agreement_saved": () => "Saved the membership agreement",
+  "org.agreement_stopped": () => "Stopped asking for the membership agreement",
+  "org.agreement_in_use_again": () => "Started asking for the membership agreement again",
 
   // Leads
   "org.lead_added": (s) => `Added ${lead(s)}`,

@@ -4302,7 +4302,7 @@ later among them, stops the card for every bill of the gym until another card is
 closed or unknown account, a card not allowed this payment (Visa's Category 1). One bill is charged
 to one card at most 3 times in all, the app's and staff's together. Each of the app's tries is asked
 of Square under its own key (the bill's id, then `<bill>:2`, `<bill>:3`). A bill's first decline
-queues one email (`gym_card_decline_notices`, migration `0159`) to whoever's card it is, the payer
+queues one email (`gym_card_decline_notices`, migration `0160`) to whoever's card it is, the payer
 where somebody pays, from the gym (named "<gym> via" the app, replies to the gym's contact email): the amount,
 what for, the card, the reason, whether it will be retried automatically and on which day, and "Please
 make your payment by <7 days on> using one of the following options: • Pay at the front desk • Pay
@@ -4323,7 +4323,23 @@ desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Vi
 13.2 is a charge after a cancel); an offer to stay appears only beside the cancel button
 (California). The gym's switch to turn the button off is gone.
 
-**Each place's rules** (18u, 18v; the lawyer's words): renewal on or off per type (Quebec: no
+**The membership agreement** (18u-i, as built; `rulings/2026-10-23-18u-i.md`): the business writes
+its own terms in Settings → Membership agreement; every wording saved is kept and numbered, as the
+waiver's. When a membership is given (Add membership, Add member), its box opens under it: the screen
+is handed over and the person, or for somebody under 18 a parent or guardian, reads the membership's
+details the app fills in (the business's name, address and phone, the member, the membership, its
+price with any discount and tax, the first payment with any joining fee, the start, and its end or
+"renews until you cancel"), then the business's terms, types their name and ticks; Sign later
+leaves "Agreement not signed" with Sign agreement on that membership. The details are worked out by
+the server from the membership; the screen sends back their key and the wording's id, and nothing
+is signed where either changed (`facts_changed`, `agreement_changed`). The signature keeps the
+details and the wording, with who opened the screen; a copy is emailed to the record's address
+(View, then Email a copy, sends it again). A wording changed later reaches memberships given after
+it. A record deleted for good lets go of its signatures with the day; the purge removes them six
+years later, as a desk waiver's. 18u-ii adds an agreement for each line of the price list, an
+emailed link to sign, and a Members filter; the phone app signs in the app (Stage 5 item 20).
+
+**Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years
 without a 30-day exit; California, New York and Texas 3 years; Illinois a first term of 1
 year); days to cancel after signing (California 5 business days; New York, Texas and Illinois

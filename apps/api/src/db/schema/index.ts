@@ -27,6 +27,7 @@ export * from "./tax.js";
 export * from "./goals.js";
 export * from "./dietPlans.js";
 export * from "./waiver.js";
+export * from "./agreement.js";
 export * from "./foodWeek.js";
 export * from "./goneForGood.js";
 export * from "./referrals.js";

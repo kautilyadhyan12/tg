@@ -455,7 +455,7 @@ export const gymCardCharges = pgTable(
     checkingUntil: timestamp("checking_until", { withTimezone: true }),
     checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
-    /** On a decline the app tries again by itself (0159; 18d-iii-ii-a), the gym day it does. */
+    /** On a decline the app tries again by itself (0160; 18d-iii-ii-a), the gym day it does. */
     nextTryOn: date("next_try_on"),
   },
   (t) => [
@@ -494,7 +494,7 @@ export const gymCardCharges = pgTable(
   ],
 );
 
-/** The email telling a cardholder their payment did not go through (0159; 18d-iii-ii-a): one a
+/** The email telling a cardholder their payment did not go through (0160; 18d-iii-ii-a): one a
  *  bill, written with its first decline. The address is kept only while it waits to go. The record
  *  link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the migration only. */
 export const gymCardDeclineNotices = pgTable(

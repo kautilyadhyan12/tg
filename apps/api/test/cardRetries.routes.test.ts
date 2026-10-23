@@ -441,7 +441,7 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
 
     await work();
     // Gwen's record deleted for good before her email goes: the link lets go of it, as deleting
-    // does (0159), and nothing is sent to an address the gym was asked to forget.
+    // does (0160), and nothing is sent to an address the gym was asked to forget.
     await sql`UPDATE gym_card_decline_notices SET entry_id = NULL WHERE gym_id = ${gym.id} AND entry_id = ${gone.entryId}`;
     // Paige pays at the desk before the email goes: nothing is sent to her.
     const pay = (await held(gym, paidFirst.entryId)).memberships[0]?.billing?.pay;

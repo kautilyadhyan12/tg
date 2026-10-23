@@ -147,6 +147,10 @@ export async function purgeUser(
   return "purged";
 }
 
+/** What the consent log and the signed waivers and agreements are kept until, read at `now`:
+ *  anything whose day to count from is on or before it goes. */
+export const consentProofCutoff = (now: Date): Date => new Date(now.getTime() - CONSENT_PROOF_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+
 /** Scan for accounts past the §5.2 window and purge each one.
  *
  *  Failures are isolated per user: one bad row is logged and counted, and the
@@ -280,7 +284,7 @@ export async function purgeDueUsers(
   // The consent log's later expiry, one statement for the whole run. Its own
   // try: a failure here must not hide the per-user outcomes above, and the
   // next run simply tries again (idempotent — the rows are either gone or due).
-  const consentCutoff = new Date(now.getTime() - CONSENT_PROOF_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const consentCutoff = consentProofCutoff(now);
   try {
     result.consentProofExpired = await repo.deleteExpiredConsentProof(deps.sql, consentCutoff);
     result.waiverSignaturesExpired = await repo.deleteExpiredWaiverSignatures(deps.sql, consentCutoff);

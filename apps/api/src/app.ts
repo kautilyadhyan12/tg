@@ -26,6 +26,7 @@ import {
 } from "./modules/users/email.js";
 import { OnboardingIncompleteError, UsersError } from "./modules/users/service.js";
 import { createDevCoOwnerEmailSender, createResendCoOwnerEmailSender, type CoOwnerEmailSender } from "./modules/orgs/coOwners/email.js";
+import { createDevAgreementEmailSender, createResendAgreementEmailSender, type AgreementEmailSender } from "./modules/orgs/agreement/email.js";
 import { registerUserRoutes } from "./modules/users/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerExerciseRoutes } from "./modules/exercises/routes.js";
@@ -66,6 +67,8 @@ export interface BuildAppOverrides {
   usersEmailSender?: UsersEmailSender;
   /** The co-owner request's email (ROADMAP 4b-i). */
   coOwnerEmailSender?: CoOwnerEmailSender;
+  /** The copy of a signed membership agreement (ROADMAP 18u-i). */
+  agreementEmailSender?: AgreementEmailSender;
   /** Tests inject the in-memory adapter (with its `down` switch) to drive
    *  fail-open/fail-closed paths deterministically (P2.4). */
   redis?: RedisLike;
@@ -357,6 +360,9 @@ export async function buildApp(
       coOwnerEmail:
         overrides.coOwnerEmailSender ??
         (transport !== null ? createResendCoOwnerEmailSender(transport, app.log) : createDevCoOwnerEmailSender(app.log, config)),
+      agreementEmail:
+        overrides.agreementEmailSender ??
+        (transport !== null ? createResendAgreementEmailSender(transport, app.log) : createDevAgreementEmailSender(app.log, config)),
       webOrigin: config.WEB_ORIGIN,
       joinCodes: config.JOIN_CODES,
       memberTap: config.MEMBER_TAP,

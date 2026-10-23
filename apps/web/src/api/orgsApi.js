@@ -94,6 +94,10 @@ import {
   signWaiverResponseSchema,
   deskWaiverResponseSchema,
   signAtDeskResponseSchema,
+  gymAgreementResponseSchema,
+  membershipAgreementResponseSchema,
+  signMembershipAgreementResponseSchema,
+  emailAgreementCopyResponseSchema,
   notMeInvitationResponseSchema,
   billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
@@ -721,6 +725,33 @@ export const orgService = {
       signAtDeskResponseSchema,
       'the waiver',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/waiver/sign`, body),
+    ),
+
+  // THE MEMBERSHIP AGREEMENT (ROADMAP 18u-i). The first three are Settings', on `org.manage`;
+  // the last three are the desk's, under one membership on a person's page (`members.confirm`).
+  getGymAgreement: (gymId) =>
+    readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`)),
+  saveGymAgreement: (gymId, text) =>
+    readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`, { text })),
+  stopGymAgreement: (gymId) =>
+    readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`)),
+  getMembershipAgreement: (gymId, entryId, membershipId) =>
+    readThrough(
+      membershipAgreementResponseSchema,
+      'the agreement',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/agreement`),
+    ),
+  signMembershipAgreement: (gymId, entryId, membershipId, body) =>
+    readThrough(
+      signMembershipAgreementResponseSchema,
+      'the agreement',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/agreement/sign`, body),
+    ),
+  emailAgreementCopy: (gymId, entryId, membershipId) =>
+    readThrough(
+      emailAgreementCopyResponseSchema,
+      'the agreement',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/agreement/email`, {}),
     ),
 
   /** POST /v1/orgs/invitations/:invitationId/decline — No thanks. */

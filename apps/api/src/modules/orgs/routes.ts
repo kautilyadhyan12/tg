@@ -58,6 +58,8 @@ import type { PhotoStore } from "./gymPage/photoStore.js";
 import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import { registerWaiverRoutes } from "./waiver/routes.js";
+import { registerAgreementRoutes } from "./agreement/routes.js";
+import type { AgreementEmailSender } from "./agreement/email.js";
 import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
 import { registerMemberListRoutes } from "./memberList/routes.js";
@@ -141,6 +143,8 @@ export function registerOrgRoutes(
     supportEmail: string | null;
     /** The co-owner request's email, and the console's origin for its link (4b-i). */
     coOwnerEmail: CoOwnerEmailSender;
+    /** The copy of a signed membership agreement (18u-i). */
+    agreementEmail: AgreementEmailSender;
     /** Paddle and Razorpay, for the payment windows a hand-over closes (4b-ii); absent or null
      *  where neither is set up. */
     billing?: BillingDeps | null;
@@ -221,6 +225,9 @@ export function registerOrgRoutes(
 
   // A gym's waiver: written in Settings, signed by its members (ROADMAP 3e-i).
   registerWaiverRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+
+  // A business's membership agreement, signed at the desk for each membership (18u-i).
+  registerAgreementRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()), email: deps.agreementEmail, addressKey: deps.invites?.hmacKey ?? null });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
   registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, coOwnerEmail: deps.coOwnerEmail, webOrigin: deps.webOrigin });

@@ -1127,7 +1127,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_card_charges.entry_id",
       "gym_card_charges.gym_id",
       "gym_card_charges.payer_entry_id",
-      // The email telling a cardholder a payment did not go through (0159; 18d-iii-ii-a): not
+      // The email telling a cardholder a payment did not go through (0160; 18d-iii-ii-a): not
       // moved by the join. A record joined or deleted for good lets go of it (`entry_id` alone to
       // null), and an email still waiting for a record that is gone is never sent
       // (`cardRetries.routes.test.ts`).
