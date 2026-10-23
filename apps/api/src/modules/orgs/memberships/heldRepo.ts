@@ -82,7 +82,7 @@ import {
   paymentsFor,
   refundsFor,
   setBillStatus,
-  terminalWaiting,
+  squareMoneyOut,
   voidBills,
   voidedPaymentsFor,
   voidedRefundsFor,
@@ -456,7 +456,9 @@ export type HeldWriteOutcome =
   /** A cancel, and a payment stands on a bill for days after the membership's last day. */
   | { kind: "early_payment" }
   /** A payment for this membership waits on the gym's Square Terminal (18d-vi-a). */
-  | { kind: "terminal_waiting" };
+  | { kind: "terminal_waiting" }
+  /** The card on file is being charged for this membership (18d-iii-i). */
+  | { kind: "card_charging" };
 
 /** The record under the gym's lock and its own: null where it is not this gym's. */
 export async function lockedEntry(tx: TransactionSql, gymId: string, entryId: string): Promise<{ past: boolean } | null> {
@@ -964,7 +966,8 @@ export async function moveHeld(
     const before = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
     if (before === null) return { kind: "membership_not_found" };
     // Frozen, cancelled or marked paid while the Terminal waits, the member would pay for it anyway.
-    if (await terminalWaiting(tx, input.gymId, before.id)) return { kind: "terminal_waiting" };
+    const out = await squareMoneyOut(tx, input.gymId, before.id);
+    if (out !== null) return out;
 
     const move = moveHeldMembership(before.membership, input.event, input.today);
     if (!move.ok) return { kind: "not_allowed" };

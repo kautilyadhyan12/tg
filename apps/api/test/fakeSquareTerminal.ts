@@ -2,10 +2,13 @@
 // Terminal checkouts and payments as Square does: a token reaches only its own account and its own
 // Terminals, a checkout asked for again with its key is the same checkout, and a COMPLETED checkout
 // names the payment it took. Square's own test area answered the same way on 2026-10-22
-// (`apps/api/.cost/18d-vi-a/probe-checkout.mts`).
+// (`apps/api/.cost/18d-vi-a/probe-checkout.mts`). Cards on file are charged as Square's test area
+// charged them on 2026-10-23 (18d-iii-i, `apps/api/.cost/18d-iii-i/probe-charge.mts`): the same key
+// gives back the same payment, paid or failed; the same key with another body is refused; a decline
+// is a 400 with the FAILED payment.
 import { randomBytes } from "node:crypto";
 import type { SquareLocation, SquarePayment, SquareTerminalCheckout } from "@app/shared";
-import type { NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
+import type { CardPaymentResult, NewCardPayment, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
   merchantId: string;
@@ -32,7 +35,14 @@ export interface FakeCheckout {
   paying: boolean;
 }
 
+/** How a card on file answers a charge. */
+export type CardBehaviour = "pays" | "declines" | "insufficient" | "expired";
+
 export function fakeSquare() {
+  const cards = new Map<string, { accountId: string; customerId: string; behaviour: CardBehaviour }>();
+  const cardPayments = new Map<string, { body: NewCardPayment; result: CardPaymentResult }>();
+  /** Every payment a card on file was charged, as Square took it: COMPLETED ones are money taken. */
+  const charged: (SquarePayment & { accountId: string; cardId: string; key: string })[] = [];
   const codes = new Map<string, Account>();
   const tokens = new Map<string, Account>();
   const devices = new Map<string, { accountId: string; behaviour: Behaviour }>();
@@ -42,7 +52,26 @@ export function fakeSquare() {
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
-  const state: { down: boolean; refuseNew: boolean; loseAnswers: boolean; refuseRead: boolean } = { down: false, refuseNew: false, loseAnswers: false, refuseRead: false };
+  // `chargeOther`: a card on file's charge comes back COMPLETED for another amount than asked;
+  // `answerWith`: with these fields of Square's payment changed; `unauthorized`: Square refuses the
+  // gym's token (401), as for a token that expired or was taken away.
+  const state: {
+    down: boolean;
+    refuseNew: boolean;
+    loseAnswers: boolean;
+    refuseRead: boolean;
+    chargeOther: boolean;
+    answerWith: Partial<SquarePayment> | null;
+    unauthorized: boolean;
+  } = {
+    down: false,
+    refuseNew: false,
+    loseAnswers: false,
+    refuseRead: false,
+    chargeOther: false,
+    answerWith: null,
+    unauthorized: false,
+  };
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
   const unauthorized = { kind: "refused", status: 401, code: "UNAUTHORIZED" } as const;
@@ -173,6 +202,41 @@ export function fakeSquare() {
       Object.assign(c, { status: "CANCELED", cancelReason: c.cancelReason ?? "SELLER_CANCELED" });
       return Promise.resolve({ kind: "ok", value: json(c) });
     },
+    createCardPayment(token, p) {
+      if (state.down) return Promise.resolve(unavailable);
+      if (state.unauthorized) return Promise.resolve(unauthorized);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const keyed = `${a.merchantId}:${p.idempotencyKey}`;
+      const known = cardPayments.get(keyed);
+      if (known !== undefined) {
+        const same = JSON.stringify(known.body) === JSON.stringify(p);
+        return Promise.resolve(same ? known.result : { kind: "refused", status: 400, code: "IDEMPOTENCY_KEY_REUSED" });
+      }
+      const card = cards.get(p.cardId);
+      if (card?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      if (card.customerId !== p.customerId) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      n += 1;
+      const id = `CPAY${String(n)}${randomBytes(6).toString("hex")}`;
+      const amount = state.chargeOther ? p.amountMinor + 100 : p.amountMinor;
+      const payment: SquarePayment = {
+        id,
+        status: card.behaviour === "pays" ? "COMPLETED" : "FAILED",
+        amount_money: { amount, currency: p.currency },
+        total_money: { amount, currency: p.currency },
+        location_id: p.locationId,
+        reference_id: p.referenceId,
+        customer_id: p.customerId,
+        card_details: { card: { card_brand: "VISA", last_4: "1111" } },
+        ...(state.answerWith ?? {}),
+      };
+      charged.push({ ...payment, accountId: a.merchantId, cardId: p.cardId, key: p.idempotencyKey });
+      const code = card.behaviour === "insufficient" ? "INSUFFICIENT_FUNDS" : card.behaviour === "expired" ? "CARD_EXPIRED" : "GENERIC_DECLINE";
+      const result: CardPaymentResult = card.behaviour === "pays" ? { kind: "ok", value: payment } : { kind: "declined", status: 400, code, payment };
+      cardPayments.set(keyed, { body: { ...p }, result });
+      if (state.loseAnswers) return Promise.resolve(unavailable);
+      return Promise.resolve(result);
+    },
     getPayment(token, id) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
@@ -205,7 +269,13 @@ export function fakeSquare() {
     },
     cancels: () => Object.assign(open(deviceId), { status: "CANCELED", cancelReason: "BUYER_CANCELED" }),
   });
-  return { api, allow, state, devices, checkouts, payments, at };
+  /** A card on file in Square: on this customer of this account, answering charges as it says. */
+  const card = (cardId: string, accountId: string, customerId: string, behaviour: CardBehaviour = "pays") => {
+    cards.set(cardId, { accountId, customerId, behaviour });
+  };
+  /** Money Square took from cards on file. */
+  const taken = () => charged.filter((p) => p.status === "COMPLETED");
+  return { api, allow, state, devices, checkouts, payments, at, card, cards, charged, taken };
 }
 
 export const account = (merchantId: string, country = "US"): Account => ({

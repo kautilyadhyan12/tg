@@ -22,6 +22,7 @@
 // only on Square's own answer, the gym leaving that Square account, or a day without an answer.
 import { randomUUID } from "node:crypto";
 import {
+  CARD_CHARGE_WORDS,
   GYM_PAYMENTS_WORDS,
   MEMBER_FEE_WORDS,
   TERMINAL_PAYMENT_WORDS,
@@ -51,6 +52,7 @@ import { accessContext, missingScopes, terminalsOffered, type PaymentsDeps } fro
 import type { SquareSettings } from "./settings.js";
 import type { SquareResult } from "./square.js";
 import { SQUARE_PRACTICE_DEVICES } from "./terminals.js";
+import { cardOnFileFor } from "./cardCharges.js";
 import * as pays from "./terminalPaymentsRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 
@@ -394,6 +396,8 @@ export async function readTerminalPayments(deps: PaymentsDeps, userId: string, g
     waiting,
     square: stateOf(square, gym, row),
     isOwner,
+    // Record payment's Card on file (18d-iii-i): the card it would charge, while Square is ready.
+    cardOnFile: stateOf(square, gym, row) === "ready" ? await cardOnFileFor(deps, gymId, entryId, row, gym.timezone) : null,
   });
 }
 
@@ -589,6 +593,8 @@ async function start(
       throw new OrgsError(409, "terminal_payment_currency", TERMINAL_PAYMENT_WORDS.currency);
     case "other_waiting":
       throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.waiting);
+    case "card_charging":
+      throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
     case "fee_not_found":
       throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
     case "fee_changed":

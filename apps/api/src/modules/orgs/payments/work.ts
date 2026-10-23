@@ -4,7 +4,8 @@
 // a messenger: CLAUDE.md §4); tokens owed a revoke and cards owed a stop; renewals that are
 // due; presses of Connect Square that ran out; cards being saved on a Square Terminal whose page
 // was closed (18d-ii-b-ii). Safe to run twice: events, revokes, stops, renewals and Terminal
-// saves are each leased, and every write names the connection or card it was read for.
+// saves are each leased, and every write names the connection or card it was read for. Bills that
+// have fallen due are charged to the card on file (18d-iii-i, `cardCharges.ts`).
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
 import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
@@ -13,6 +14,7 @@ import { SQUARE_REFRESH_EVERY_MS, accessContext, refreshContext, sendOwedRevokes
 import type { SquareSettings } from "./settings.js";
 import { processTerminalSaves } from "./terminalCards.js";
 import { processTerminalPayments } from "./terminalPayments.js";
+import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
 
@@ -49,6 +51,8 @@ export interface SquareWorkRun {
   /** Saves on a Square Terminal nobody was asking about, and done ones forgotten (18d-ii-b-ii). */
   terminalSaves: { asked: number; forgotten: number };
   terminalPayments: { asked: number; forgotten: number };
+  /** Bills charged to the card on file, and charges Square had not answered (18d-iii-i). */
+  cardCharges: CardChargeRun;
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -137,6 +141,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     startsForgotten: 0,
     terminalSaves: { asked: 0, forgotten: 0 },
     terminalPayments: { asked: 0, forgotten: 0 },
+    cardCharges: { asked: 0, charged: 0, paid: 0, declined: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -190,6 +195,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
   run.cardStops = await sendOwedCardDisables(deps, square, null, 50, gymIds);
   run.terminalSaves = await processTerminalSaves(deps, square, gymIds);
   run.terminalPayments = await processTerminalPayments(deps, square, gymIds);
+  run.cardCharges = await processCardCharges(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

@@ -13,6 +13,7 @@ import { Tick } from './MemberListUpload';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
 import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
+import { CARD_ON_FILE_METHOD, cardChargeOutcome, cardOnFileDetail, cardOnFileLabel } from './cardChargeView';
 import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
@@ -203,12 +204,18 @@ export default function MemberMemberships({
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
    *  open box follows, { membershipId, feeBillId, payment, terminalId }, until it ends. `feeBillId`:
    *  a late cancel or no-show fee's (18d-vi-b-i), whose box is drawn under that fee. */
-  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false });
+  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null });
   const routed = useInRouterContext();
   const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   // Booking rules, where a gym stops new bookings while a payment is overdue (17i).
   const bookingRulesTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'overdueBookings') : null;
   const [terminalPay, setTerminalPay] = useState(null);
+  /** Charge card on file (18d-iii-i): a press that did not take the money, said in its own box:
+   *  { membershipId, feeBillId, line }. */
+  const [chargeSaid, setChargeSaid] = useState(null);
+  /** Counts each opening of a Record payment box: the Terminals and the card on file are read again
+   *  then, so a card saved in Card on file a moment before is offered (18d-iii-i). */
+  const [payOpened, setPayOpened] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -233,7 +240,7 @@ export default function MemberMemberships({
     orgService.getTerminalPayments(gymId, entryId).then(
       (res) => {
         if (!live) return;
-        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner });
+        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null });
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
@@ -247,8 +254,16 @@ export default function MemberMemberships({
     return () => {
       live = false;
     };
-  }, [gymId, entryId, canBillHere, attempt]);
+  }, [gymId, entryId, canBillHere, attempt, payOpened]);
   const terminalList = terminals.entryId === entryId ? terminals.list : [];
+  // The card Record payment can charge, theirs or their payer's (18d-iii-i).
+  const cardOnFile = terminals.entryId === entryId ? terminals.cardOnFile : null;
+  /** Record payment's ways: the gym's Terminal, then the card on file, then the ways recorded by hand. */
+  const payMethodsWithSquare = [
+    ...(terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }] : []),
+    ...(cardOnFile !== null ? [{ value: CARD_ON_FILE_METHOD, label: cardOnFileLabel(cardOnFile) }] : []),
+    ...payMethods,
+  ];
   // Square not set up yet (18x, Kd 2026-10-22): the payment forms say so, with Connect Square for the owner.
   const squareLine = terminals.entryId === entryId ? squareSetUpLine(terminals.square, terminals.isOwner, gym?.name ?? 'this gym') : null;
   const renderSquareLine = () =>
@@ -404,6 +419,7 @@ export default function MemberMemberships({
 
 
   const startPay = (m) => {
+    setPayOpened((n) => n + 1);
     setNotice(null);
     setRefusal(null);
     setEnding(null);
@@ -447,6 +463,7 @@ export default function MemberMemberships({
 
   const close = () => {
     setRefusal(null);
+    setChargeSaid(null);
     setTerminalPay(null);
     setOpen(null);
     setForm(null);
@@ -461,6 +478,7 @@ export default function MemberMemberships({
 
   /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */
   const startFee = (m, what, fee) => {
+    if (what === 'payFee') setPayOpened((n) => n + 1);
     setNotice(null);
     setRefusal(null);
     setEnding(null);
@@ -475,10 +493,12 @@ export default function MemberMemberships({
     const path = `fees/${encodeURIComponent(fee.id)}`;
     if (feeForm.what === 'payFee') {
       const onTerminal = feeForm.method === TERMINAL_METHOD;
-      const { problem, body } = onTerminal ? { problem: null, body: { requestKey: feeForm.requestKey, amountMinor: fee.amountMinor } } : feePayBody(feeForm, fee);
+      const onCard = feeForm.method === CARD_ON_FILE_METHOD && cardOnFile !== null;
+      const { problem, body } = onTerminal || onCard ? { problem: null, body: { requestKey: feeForm.requestKey, amountMinor: fee.amountMinor } } : feePayBody(feeForm, fee);
       const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === feeForm.terminalId);
       const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
-      const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...payMethods] : payMethods;
+      const methods = payMethodsWithSquare;
+      const said = chargeSaid !== null && chargeSaid.feeBillId === fee.id ? chargeSaid.line : null;
       const take = feeTakeWords(fee, m.currency);
       return (
         <form
@@ -497,11 +517,16 @@ export default function MemberMemberships({
               void startTerminalFee(m, fee, pickedTerminal.id, body.requestKey);
               return;
             }
+            if (onCard) {
+              void chargeCard(m, fee, { requestKey: body.requestKey, amountMinor: fee.amountMinor, cardRef: cardOnFile.ref });
+              return;
+            }
             void run('payFee', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/payments`, body), feePaidWords(fee, m.currency));
           }}
         >
-          <p className="c-s15 c-w6 c-t1 m-0">{onTerminal ? take.title : `Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
+          <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? take.title : `Record ${formatMinor(fee.amountMinor, m.currency)} for the ${MEMBER_FEE_WORDS[fee.fee].toLowerCase()}`}</p>
           {onTerminal ? <p className="c-s14 c-t2 m-0">{terminalPayDetail(name, take.about)}</p> : null}
+          {onCard ? <p className="c-s14 c-t2 m-0">{cardOnFileDetail(cardOnFile, fee.amountMinor, m.currency, name)}</p> : null}
           <label className="c-field">
             <span className="c-label">Payment method</span>
             <select className="c-sel" value={feeForm.method} onChange={(e) => setFeeForm((f) => ({ ...f, method: e.target.value }))}>
@@ -531,14 +556,19 @@ export default function MemberMemberships({
               {problem ?? terminalProblem}
             </span>
           ) : null}
+          {said !== null ? (
+            <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert" data-testid="card-charge-said">
+              {said}
+            </span>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={MAIN} disabled={busy}>
               {busy ? (
                 <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
-              ) : onTerminal ? (
+              ) : onTerminal || onCard ? (
                 <CreditCard aria-hidden="true" className="w-4 h-4" />
               ) : null}
-              {onTerminal ? 'Take payment on Terminal' : 'Record payment'}
+              {onTerminal ? 'Take payment on Terminal' : onCard ? `Charge ${formatMinor(fee.amountMinor, m.currency)}` : 'Record payment'}
             </button>
             <button type="button" className={PLAIN} disabled={busy} onClick={close}>
               Cancel
@@ -616,6 +646,12 @@ export default function MemberMemberships({
                       {line}
                     </span>
                   ))}
+                  {row.declined !== null ? (
+                    <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-fee-declined">
+                      {row.declined}
+                    </span>
+                  ) : null}
+                  {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                 </div>
                 {row.payments.map((p) => (
                   <div key={p.id} className="flex flex-col gap-2 px-3 py-2" style={SPLIT} data-testid={p.voided === null ? 'held-fee-payment' : 'held-fee-voided-payment'}>
@@ -917,6 +953,41 @@ export default function MemberMemberships({
     }
   };
 
+  /** Charge card on file (18d-iii-i): Square answers in the same press. Paid: the box closes and the
+   *  bill is read again. Not paid: the box stays open saying why, ready for another way, with a new key
+   *  so the next press is a press of its own. */
+  const chargeCard = async (m, fee, body) => {
+    setBusy(true);
+    setNotice(null);
+    setRefusal(null);
+    setChargeSaid(null);
+    try {
+      const res =
+        fee === null
+          ? await orgService.chargeCardOnFile(gymId, entryId, m.id, body)
+          : await orgService.chargeFeeToCardOnFile(gymId, entryId, m.id, fee.id, body);
+      const said = cardChargeOutcome(res.data.charge, name);
+      if (said.good) {
+        close();
+        setNotice(said.line);
+      } else {
+        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: said.line });
+        if (fee === null) setPayForm((f) => (f === null ? f : { ...f, requestKey: newRequestKey(), method: '', tried: false }));
+        else setFeeForm((f) => (f === null ? f : { ...f, requestKey: newRequestKey(), method: '', tried: false }));
+      }
+      setAttempt((n) => n + 1);
+      onChanged?.();
+    } catch (err) {
+      setRefusal(errorText(err, "We couldn't get an answer. Press Charge again to see whether the card was charged: it is never charged twice."));
+      if (STALE_CODES.includes(errorCode(err)) || errorCode(err) === 'card_charge_card_changed') {
+        close();
+        setAttempt((n) => n + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Where the payment the box follows stands now; when it is paid, the bill is read again. A
    *  payment only moves forward: an ask's answer sent before Cancel's never takes it back. */
   const onTerminalAnswer = (payment) => {
@@ -1020,10 +1091,12 @@ export default function MemberMemberships({
   const renderPay = (m) => {
     const words = paymentWords(m, name, today);
     const onTerminal = payForm.method === TERMINAL_METHOD;
+    const onCard = payForm.method === CARD_ON_FILE_METHOD && cardOnFile !== null;
     const { problem, body } = paymentBody(m, payForm);
     const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === payForm.terminalId);
     const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
-    const methods = terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }, ...payMethods] : payMethods;
+    const methods = payMethodsWithSquare;
+    const said = chargeSaid !== null && chargeSaid.membershipId === m.id && chargeSaid.feeBillId === null ? chargeSaid.line : null;
     return (
       <form
         noValidate
@@ -1041,11 +1114,15 @@ export default function MemberMemberships({
             void startTerminal(m, pickedTerminal.id, body);
             return;
           }
+          if (onCard) {
+            void chargeCard(m, null, { requestKey: body.requestKey, periodIndex: body.periodIndex, amountMinor: body.amountMinor, cardRef: cardOnFile.ref });
+            return;
+          }
           void run('pay', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'payments', body), paidWords(m, body.amountMinor));
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal ? words.takeTitle : words.title}</p>
-        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : words.detail}</p>
+        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? words.takeTitle : words.title}</p>
+        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : onCard ? words.left : words.detail}</p>
         <label className="c-field">
           <span className="c-label">{`Amount paid (${m.currency})`}</span>
           <input
@@ -1081,21 +1158,27 @@ export default function MemberMemberships({
             </select>
           </label>
         ) : null}
+        {onCard ? <p className="c-s14 c-t2 m-0">{cardOnFileDetail(cardOnFile, body?.amountMinor ?? null, m.currency, name)}</p> : null}
         {payForm.tried && (problem ?? terminalProblem) !== null ? (
           <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert">
             {problem ?? terminalProblem}
+          </span>
+        ) : null}
+        {said !== null ? (
+          <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert" data-testid="card-charge-said">
+            {said}
           </span>
         ) : null}
         <div className="flex flex-wrap gap-2">
           <button type="submit" className={MAIN} disabled={busy}>
             {busy ? (
               <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
-            ) : onTerminal ? (
+            ) : onTerminal || onCard ? (
               <CreditCard aria-hidden="true" className="w-4 h-4" />
             ) : (
               <Check aria-hidden="true" className="w-4 h-4" />
             )}
-            {onTerminal ? 'Take payment on Terminal' : 'Record payment'}
+            {onTerminal ? 'Take payment on Terminal' : onCard ? (body === null ? 'Charge card' : `Charge ${formatMinor(body.amountMinor, m.currency)}`) : 'Record payment'}
           </button>
           <button type="button" className={PLAIN} disabled={busy} onClick={close}>
             Back
@@ -1157,13 +1240,19 @@ export default function MemberMemberships({
                     <span className={`c-tag ${TAG_TONES[row.tone]} whitespace-nowrap`}>{row.tag}</span>
                   </span>
                 </div>
-                {notes.length > 0 || row.left !== null ? (
+                {notes.length > 0 || row.left !== null || row.declined !== null || row.charging !== null ? (
                   <div className="flex flex-col px-3 pb-2.5">
                     {notes.map((line) => (
                       <span key={line} className="c-s13 c-t2" style={row.tone === 'red' ? { color: 'var(--bad)' } : undefined}>
                         {line}
                       </span>
                     ))}
+                    {row.declined !== null ? (
+                      <span className="c-s13 c-w5" style={{ color: 'var(--bad)' }} data-testid="held-bill-declined">
+                        {row.declined}
+                      </span>
+                    ) : null}
+                    {row.charging !== null ? <span className="c-s13 c-t2">{row.charging}</span> : null}
                     {row.left !== null ? (
                       <span className="c-s13 c-w5" style={{ color: 'var(--warn)' }}>
                         {row.left}

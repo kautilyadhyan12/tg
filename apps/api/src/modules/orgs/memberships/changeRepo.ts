@@ -25,7 +25,7 @@ import { insertAudit } from "../repo.js";
 import { giftUseUndone } from "../referrals/memberGiftRepo.js";
 import type { HasBookings } from "../classes/bookingChanges.js";
 import type { MembershipScope } from "../classes/bookingsRepo.js";
-import { billDayOf, billsFor, terminalWaiting, voidBills, type BillRow } from "./billsSql.js";
+import { billDayOf, billsFor, squareMoneyOut, voidBills, type BillRow } from "./billsSql.js";
 import { giveHeldIn, liveTypes, lockedEntry, lockedHeld, settle, typeChoice, type CancelBookings, type HeldWriteOutcome } from "./heldRepo.js";
 
 export type ChangeOutcome =
@@ -106,7 +106,8 @@ export async function changeHeld(
       await settle(tx, input.gymId, input.entryId, input.today, input.now);
       const before = await lockedHeld(tx, input.gymId, input.entryId, input.membershipId);
       if (before === null) return { kind: "membership_not_found" };
-      if (await terminalWaiting(tx, input.gymId, before.id)) return { kind: "terminal_waiting" };
+      const out = await squareMoneyOut(tx, input.gymId, before.id);
+      if (out !== null) return out;
       if ((await changedAlready(tx, input.gymId, input.entryId)).has(before.id)) return { kind: "change_refused", reason: "changed_already" };
 
       const bills = await billsFor(tx, input.gymId, [before.id]);

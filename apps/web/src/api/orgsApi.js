@@ -113,6 +113,7 @@ import {
   memberCardResponseSchema,
   terminalSaveResponseSchema,
   terminalPaymentResponseSchema,
+  cardChargeResponseSchema,
   terminalPaymentsResponseSchema,
   terminalSalesResponseSchema,
   memberNotesAndTagsSchema,
@@ -1816,6 +1817,25 @@ export const orgService = {
       "this person's payments",
       authApi.post(
         `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/terminal-payment`,
+        body,
+      ),
+    ),
+  /** Charge card on file (ROADMAP 18d-iii-i): Square answers in the same press. */
+  chargeCardOnFile: (gymId, entryId, membershipId, body) =>
+    readThrough(
+      cardChargeResponseSchema,
+      "this person's payments",
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/card-charge`,
+        body,
+      ),
+    ),
+  chargeFeeToCardOnFile: (gymId, entryId, membershipId, billId, body) =>
+    readThrough(
+      cardChargeResponseSchema,
+      "this person's payments",
+      authApi.post(
+        `/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/fees/${encodeURIComponent(billId)}/card-charge`,
         body,
       ),
     ),

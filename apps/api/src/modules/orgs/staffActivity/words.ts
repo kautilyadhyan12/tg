@@ -267,6 +267,16 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
       : text(s, "feeBillId") === null
         ? `Took ${pay(s)} from ${person(s)} on a Square Terminal, but the bill had changed, so it isn't recorded. Check it in Square`
         : `Took ${pay(s)} from ${person(s)} on a Square Terminal for a fee no longer owed, so it isn't recorded. Refund it in Square`,
+  // A card on file charged from Record payment (18d-iii-i): what Square said, when it was not paid.
+  "org.card_charge_declined": (s) => `${cardOf(s, "brand", "last4") ?? "The card on file"} was declined for ${pay(s)} from ${person(s)}`,
+  "org.card_charge_refused": (s) => `Square wouldn't charge ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${pay(s)} from ${person(s)}. Check the card on file`,
+  "org.card_charge_unchecked": (s) => `Charged ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${pay(s)} from ${person(s)}, but Square never answered. Check it in Square`,
+  "org.card_charge_not_recorded": (s) =>
+    text(s, "why") === "amount_differs"
+      ? `Square took another amount than asked from ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${person(s)}, so it isn't recorded. Refund it in Square`
+      : text(s, "why") === "not_ours"
+        ? `Square answered a charge to ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${person(s)} with a payment that doesn't match it, so it isn't recorded. Check it in Square`
+        : `Charged ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${pay(s)} from ${person(s)}, but the bill had changed, so it isn't recorded. Check it in Square`,
   "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");

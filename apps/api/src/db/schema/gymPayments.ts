@@ -409,3 +409,82 @@ export const gymTerminalPayments = pgTable(
     index("gym_terminal_payments_done_idx").on(t.finishedAt).where(sql`${t.finishedAt} IS NOT NULL`),
   ],
 );
+
+/** The saved card charged (0158; ROADMAP 18d-iii-i): the app's own charge of a renewing
+ *  membership's bill or a freeze fee on its date (`by_schedule`), or staff pressing Charge card on
+ *  file. `payment_key` is Square's idempotency key (the bill's id for the app's, the row's own for a
+ *  press), so asking again gives back the same payment. While `charging`, nothing else pays, voids
+ *  or cancels that membership's bills. Kept: a bill reads "declined" from its newest one. The
+ *  record links (`entry_id`, `payer_entry_id`, each `ON DELETE SET NULL` of that column alone) are
+ *  in the migration only, as `gym_terminal_payments`' is. */
+export const gymCardCharges = pgTable(
+  "gym_card_charges",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    entryId: uuid("entry_id"),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    /** Null only for a press paying a period whose bill is not open yet. */
+    billId: uuid("bill_id"),
+    /** Null for a fee. */
+    periodIndex: integer("period_index"),
+    /** Whose card: the person's own, or the record that pays for them (18i). */
+    payerEntryId: uuid("payer_entry_id"),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    locationId: text("location_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    cardId: text("card_id").notNull(),
+    brand: text("brand").notNull(),
+    last4: text("last4").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    currency: text("currency").notNull(),
+    bySchedule: boolean("by_schedule").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    paymentKey: text("payment_key").notNull(),
+    state: text("state").notNull(),
+    outcome: text("outcome"),
+    /** Square's code for a decline or a refusal. */
+    declineCode: text("decline_code"),
+    squarePaymentId: text("square_payment_id"),
+    memberPaymentId: uuid("member_payment_id"),
+    startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    checkingUntil: timestamp("checking_until", { withTimezone: true }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_card_charges_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_card_charges_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.cardId} ~ '^[A-Za-z0-9:_-]{1,192}$' AND (${t.squarePaymentId} IS NULL OR ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$') AND char_length(${t.paymentKey}) BETWEEN 1 AND 45`,
+    ),
+    check("gym_card_charges_card_check", sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$'`),
+    check("gym_card_charges_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0)`),
+    check("gym_card_charges_by_check", sql`NOT ${t.bySchedule} OR (${t.startedBy} IS NULL AND ${t.billId} IS NOT NULL)`),
+    check("gym_card_charges_bill_check", sql`${t.billId} IS NOT NULL OR ${t.periodIndex} IS NOT NULL`),
+    check(
+      "gym_card_charges_state_check",
+      sql`${t.state} IN ('charging','done') AND (${t.state} = 'charging') = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('paid','declined','refused','not_recorded','gone'))`,
+    ),
+    check(
+      "gym_card_charges_paid_check",
+      sql`((${t.outcome} IS NOT DISTINCT FROM 'paid') = (${t.memberPaymentId} IS NOT NULL)) AND (${t.outcome} NOT IN ('paid','not_recorded') OR ${t.squarePaymentId} IS NOT NULL)`,
+    ),
+    check(
+      "gym_card_charges_decline_check",
+      sql`(${t.declineCode} IS NULL OR (${t.outcome} IN ('declined','refused') AND ${t.declineCode} ~ '^[A-Z0-9_]{1,60}$')) AND (${t.outcome} IS DISTINCT FROM 'declined' OR ${t.declineCode} IS NOT NULL)`,
+    ),
+    uniqueIndex("gym_card_charges_request_uq").on(t.gymId, t.requestKey),
+    uniqueIndex("gym_card_charges_payment_key_uq").on(t.environment, t.accountId, t.paymentKey),
+    uniqueIndex("gym_card_charges_schedule_uq").on(t.gymId, t.billId).where(sql`${t.bySchedule}`),
+    uniqueIndex("gym_card_charges_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'charging'`),
+    uniqueIndex("gym_card_charges_square_payment_uq").on(t.environment, t.accountId, t.squarePaymentId).where(sql`${t.squarePaymentId} IS NOT NULL`),
+    index("gym_card_charges_bill_idx").on(t.gymId, t.billId, t.startedAt),
+    index("gym_card_charges_period_idx").on(t.gymId, t.heldMembershipId, t.periodIndex).where(sql`${t.billId} IS NULL`),
+    index("gym_card_charges_open_idx").on(t.checkedAt).where(sql`${t.state} = 'charging'`),
+  ],
+);

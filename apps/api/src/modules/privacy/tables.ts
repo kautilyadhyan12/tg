@@ -545,6 +545,12 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // It holds Square's ids and the amount, no card number, and is forgotten a day after it ends
   // unless Square took money it could not record.
   "gym_terminal_payments",
+  // gym_card_charges.started_by — which member of staff pressed Charge card on file (`0158`;
+  // 18d-iii-i); null for the app's own charge on a bill's date. On gym_member_payments' footing: the
+  // gym's record of money asked for; `ON DELETE set null`. It holds Square's ids, the card's brand
+  // and last four, and the amount, no card number; a record deleted for good lets go of
+  // `entry_id` and `payer_entry_id`.
+  "gym_card_charges",
   // gym_waivers.saved_by — which member of staff saved a wording of the gym's waiver
   // (`0103`), on gym_leads' footing: the gym's record; `ON DELETE set null`.
   "gym_waivers",
