@@ -113,6 +113,19 @@ describe('what a membership reads as', () => {
     expect(paymentLine({ ...feeOnly, billing: null }, TODAY).text).toBe('Payment due today');
   });
 
+  // 17i-ii: the line over a bill that reads Overdue says so, as the Members list does.
+  it('says Overdue since the day the bill was due once that bill reads Overdue', () => {
+    const paid = held(monthly, '2026-10-04', true);
+    const owing = { ...paid, view: { ...paid.view, payment: { state: 'due', since: '2026-09-04' } } };
+    const bill = (state) => ({ pay: { periodIndex: 1, dueOn: '2026-09-04', state }, fees: [] });
+    expect(paymentLine({ ...owing, billing: bill('overdue') }, TODAY)).toEqual({ text: 'Overdue since 4 September 2026', due: true, overdue: true });
+    expect(paymentLine({ ...owing, billing: bill('due') }, TODAY)).toEqual({ text: 'Payment due since 4 September 2026', due: true });
+    // Staff who read no bills: the plain words, as their Members list says.
+    expect(paymentLine({ ...owing, billing: null }, TODAY)).toEqual({ text: 'Payment due since 4 September 2026', due: true });
+    // A fee alone stays a fee.
+    expect(paymentLine({ ...owing, billing: { pay: null, fees: [{ state: 'overdue' }] } }, TODAY).text).toBe('Fee due since 4 September 2026');
+  });
+
   it('counts a pack\'s classes, and says nothing for a day pass or another kind', () => {
     expect(classesLine(held(tenPack, TODAY, true))).toBe('10 of 10 classes left');
     expect(classesLine({ ...held(tenPack, TODAY, true), classesLeft: 1 })).toBe('1 of 10 classes left');

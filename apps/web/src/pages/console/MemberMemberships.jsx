@@ -1657,7 +1657,7 @@ export default function MemberMemberships({
           </span>
         ))}
         {pay !== null ? (
-          <span className="c-s14 c-w5" style={{ color: pay.due ? 'var(--warn)' : 'var(--t1)' }} data-testid="held-payment">
+          <span className="c-s14 c-w5" style={{ color: pay.overdue === true ? 'var(--bad)' : pay.due ? 'var(--warn)' : 'var(--t1)' }} data-testid="held-payment">
             {pay.text}
           </span>
         ) : null}
