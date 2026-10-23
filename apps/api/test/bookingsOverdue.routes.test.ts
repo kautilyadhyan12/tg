@@ -313,11 +313,20 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
     expect(said(await book(gym, ben, full, true))).toEqual([403, "payment_overdue", OVERDUE_BOOKING_WORDS]);
     // Ana is still waiting, first in line; pressing again changes nothing.
     expect((await seen(gym, ana, full)).mine).toMatchObject({ status: "waitlisted", waitlistPlace: 1 });
+    expect((await book(gym, ana, full, true)).statusCode).toBe(200);
+    expect((await seen(gym, ana, full)).mine).toMatchObject({ status: "waitlisted", waitlistPlace: 1 });
     // Priya cancels: the freed place goes past Ana to Dev, and Ana keeps her place.
     expect((await inject("POST", `${bookingUrl(gym, full)}/cancel`, priya.cookies, { lateOk: false })).statusCode).toBe(200);
     expect(await statusOf(full, dev)).toBe("booked");
     expect(await statusOf(full, ana)).toBe("waitlisted");
     expect(await statusOf(full, ben)).toBeNull();
+    // A second place appears with nobody moved in yet: the week Priya reads offers it to her, as
+    // Ana, first in line, is passed over; Ana's own week says why she has none.
+    await sql`UPDATE gym_class_sessions SET places = 2 WHERE id = ${full}`;
+    const week = async (who: Person) =>
+      (ok(await inject("GET", `/v1/orgs/${gym.id}/member-classes?week=0`, who.cookies)) as MemberClassesResponse).classes.find((c) => c.sessionId === full);
+    expect((await week(priya))?.can).toMatchObject({ book: true });
+    expect((await week(ana))?.can).toMatchObject({ book: false, claim: false, why: "payment_overdue" });
   });
 
   it("personal training: a member's own booking is refused and every day says why; staff still book for them", async () => {
@@ -343,7 +352,16 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
     ]);
     const theirs = ok(await inject("GET", `/v1/orgs/${gym.id}/member-pt?week=0`, dev.cookies)) as MemberPtResponse;
     expect(theirs.days.some((day) => day.why === "payment_overdue")).toBe(false);
-    expect((await inject("POST", `/v1/orgs/${gym.id}/member-pt/sessions`, dev.cookies, { requestKey: randomUUID(), ...session })).statusCode).toBe(200);
+    const devKey = randomUUID();
+    const devs = await inject("POST", `/v1/orgs/${gym.id}/member-pt/sessions`, dev.cookies, { requestKey: devKey, ...session });
+    expect(devs.statusCode).toBe(200);
+    // Dev's payment turns Overdue, and the phone sends the same booking again after a lost
+    // connection: it answers the session it made, never that the booking failed.
+    await owes(gym, dev.gold, "2026-10-01");
+    const again = await inject("POST", `/v1/orgs/${gym.id}/member-pt/sessions`, dev.cookies, { requestKey: devKey, ...session });
+    expect(again.statusCode, again.body).toBe(200);
+    const idOf = (res: { body: string }) => (JSON.parse(res.body) as { session: { id: string } }).session.id;
+    expect(idOf(again)).toBe(idOf(devs));
     // The owner books Ana a session at 11:00 at the desk.
     const desk = await inject("POST", `/v1/orgs/${gym.id}/pt/appointments`, gym.owner.cookies, { requestKey: randomUUID(), ...session, startMinute: 660, entryId: ana.entryId });
     expect(desk.statusCode, desk.body).toBe(200);
@@ -386,6 +404,17 @@ d("no new bookings while a payment is overdue (real Postgres)", { timeout: T }, 
     expect(await page(ana.entryId)).toBe(true);
     expect(await page(dev.entryId)).toBe(false);
     expect(await page(kim.entryId)).toBe(false);
+    // Staff who do not take payments are not told on the page.
+    const pageOf = async (who: Person, entryId: string) =>
+      (ok(await inject("GET", `/v1/orgs/${gym.id}/member-list/entries/${entryId}/memberships`, who.cookies)) as HeldMembershipsResponse).bookingsStopped;
+    expect(await pageOf(await staffWith(gym, "Mo Desk", ["members.read", "members.confirm"]), ana.entryId)).toBe(false);
+    // A second account on the coach's own record (a partner): the record is a member of staff's, so
+    // the box, the page and a booking all agree that it is not stopped.
+    const partner = await signedIn("Kim Partner");
+    await sql`INSERT INTO gym_members (gym_id, user_id, joined_at, entry_id) VALUES (${gym.id}, ${partner.userId}, '2026-01-01T00:00:00Z', ${kim.entryId})`;
+    const spin = await classAt(gym, 48, 10);
+    expect((await book(gym, partner, spin)).statusCode).toBe(200);
+    expect((await book(gym, ana, spin)).statusCode).toBe(403);
 
     // Another gym's owner reads and changes nothing here.
     const other = await makeGym("Other Gym");

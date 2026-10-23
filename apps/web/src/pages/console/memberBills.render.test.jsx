@@ -817,7 +817,7 @@ describe('no new bookings while a payment is overdue (17i)', () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([pack], { bookingsStopped: true }));
     render(draw());
     await rowsSoon();
-    expect(screen.getByTestId('bookings-stopped').textContent).toBe("Ada Lovelace can't book classes or personal training in the app until the overdue payment is paid.");
+    expect(screen.getByTestId('bookings-stopped').textContent).toBe("Ada Lovelace can't book classes or personal training in the app until the overdue payment is paid.Staff who manage the timetable can change this in Booking rules.");
     cleanup();
     orgService.getHeldMemberships.mockResolvedValue(answer([pack]));
     render(draw());

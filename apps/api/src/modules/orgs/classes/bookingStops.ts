@@ -19,7 +19,9 @@ export interface Booker {
   entryId: string | null;
 }
 
-/** The accounts among these that the gym's choice stops making a new booking now. */
+/** The accounts among these that the gym's choice stops making a new booking now. A record a
+ *  member of staff is on is never stopped, whichever of its accounts books, as Booking rules and
+ *  the person's page read it. */
 export async function stoppedBookers(sql: Sql | TransactionSql, gymId: string, rule: OverdueRule, bookers: readonly Booker[], now: Date): Promise<Set<string>> {
   const stopped = new Set<string>();
   if (rule.rule === "let_book") return stopped;
@@ -29,10 +31,11 @@ export async function stoppedBookers(sql: Sql | TransactionSql, gymId: string, r
   const bills = await listBillFacts(sql, gymId, today, owing.map((b) => b.entryId));
   const late = owing.filter((b) => bills.owedSince.has(b.entryId));
   if (late.length === 0) return stopped;
-  const staff = await staffAmong(sql, gymId, { userIds: late.map((b) => b.userId), entryIds: [] });
+  const staff = await staffAmong(sql, gymId, { userIds: late.map((b) => b.userId), entryIds: late.map((b) => b.entryId) });
   for (const b of late) {
     const owedSince = bills.owedSince.get(b.entryId) ?? null;
-    if (bookingStopped({ rule: rule.rule, staff: staff.userIds.has(b.userId), owedSince, today, overdueAfterDays: rule.afterDays })) stopped.add(b.userId);
+    const isStaff = staff.userIds.has(b.userId) || staff.entryIds.has(b.entryId);
+    if (bookingStopped({ rule: rule.rule, staff: isStaff, owedSince, today, overdueAfterDays: rule.afterDays })) stopped.add(b.userId);
   }
   return stopped;
 }

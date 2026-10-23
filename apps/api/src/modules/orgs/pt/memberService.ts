@@ -242,7 +242,8 @@ export async function memberBook(
       if (me.shared) return new OrgsError(409, PT_RECORD_SHARED_ERROR, PT_RECORD_SHARED_WORDS);
       if (me.entryId === null) return new OrgsError(409, PT_NOT_ON_LIST_ERROR, ptNotOnListWords(org.orgType));
       if (req.trainerId === userId) return new OrgsError(409, "not_a_time", PT_MEMBER_WORDS.not_a_time);
-      const rule = await overdueRule(tx, gymId);
+      // A booking sent again is answered by `bookUnderLock` with the session it made, overdue or not.
+      const rule = (await repo.byKey(tx, gymId, req.requestKey)) === null ? await overdueRule(tx, gymId) : null;
       if (rule !== null && (await stoppedBookers(tx, gymId, rule, [{ userId, entryId: me.entryId }], deps.now())).has(userId)) {
         return new OrgsError(403, "payment_overdue", PT_MEMBER_WORDS.payment_overdue);
       }

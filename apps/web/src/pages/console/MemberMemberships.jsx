@@ -1843,7 +1843,9 @@ export default function MemberMemberships({
       {shown.bookingsStopped === true && open === null ? (
         <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="bookings-stopped">
           <span>{bookingsStoppedLine(`${name.charAt(0).toUpperCase()}${name.slice(1)}`)}</span>
-          {bookingRulesTo === null ? null : (
+          {bookingRulesTo === null ? (
+            <span className="c-t3">Staff who manage the timetable can change this in Booking rules.</span>
+          ) : (
             <PlaceLink to={bookingRulesTo} className="c-lk c-w6">
               Booking rules
             </PlaceLink>
