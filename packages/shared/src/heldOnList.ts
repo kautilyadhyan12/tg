@@ -18,6 +18,7 @@ import {
   type HeldMembershipFacts,
   type HeldMembershipShown,
 } from "./heldMemberships.js";
+import { paymentOverdue } from "./memberBillRules.js";
 
 /** The word for each state of a held membership, on the list and on a person's page. */
 export const HELD_STATUS_WORDS: Readonly<Record<HeldMembershipShown, string>> = {
@@ -32,6 +33,29 @@ export const HELD_STATUS_WORDS: Readonly<Record<HeldMembershipShown, string>> = 
  *  money owed today; a payment whose day has not come is "Not due yet", so nobody who
  *  owes nothing is found under the word staff chase people by. */
 export const HELD_PAYMENT_WORDS = { due: "Payment due", later: "Not due yet", paid: "Paid", free: "Free" } as const;
+
+/** What a row's Payment says in place of "Payment due" once the oldest bill still open
+ *  reads Overdue on the person's page (17i-ii). Not a Filter choice of its own: an overdue
+ *  payment is a payment due, and is found under that word. */
+export const MEMBER_LIST_OVERDUE_WORD = "Overdue";
+
+/** Whether a row of the Members list says "Overdue" (17i-ii): it reads "Payment due" (a
+ *  current person by `shown`, a past member by a bill left open) and the oldest bill of
+ *  theirs still open reads Overdue on their page, by the gym's days of grace. By the bills
+ *  alone: a membership from the gym's own file with no bill here stays "Payment due".
+ *  `overdueAfterDays` is null for staff who are not shown members' bills: never Overdue. */
+export function rowSaysOverdue(input: {
+  shown: HeldOnList | null;
+  former: boolean;
+  /** The day the oldest bill of theirs still open fell due, or null. */
+  owedSince: string | null;
+  today: string;
+  overdueAfterDays: number | null;
+}): boolean {
+  if (input.overdueAfterDays === null) return false;
+  const owes = input.former ? input.owedSince !== null : input.shown?.payment?.state === "due";
+  return owes && paymentOverdue(input.owedSince, input.today, input.overdueAfterDays);
+}
 
 const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 

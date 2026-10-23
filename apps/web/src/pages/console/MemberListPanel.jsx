@@ -1294,7 +1294,7 @@ export default function MemberListPanel({
                       {/* A past member who left a bill unpaid (18a-ii): said here at every width,
                           since a past member's row has no Payment column. */}
                       {past && cells.owes ? (
-                        <span className="c-tag c-tag-warn self-start mt-1" data-testid="owes-tag">
+                        <span className={`c-tag ${cells.overdue ? 'c-tag-bad' : 'c-tag-warn'} self-start mt-1`} data-testid="owes-tag">
                           {cells.payment}
                         </span>
                       ) : null}
@@ -1320,7 +1320,7 @@ export default function MemberListPanel({
                     {past ? null : (
                       <span
                         className="hidden md:block c-s14 c-t1 c-ell"
-                        style={cells.owes ? { gridArea: 'pay', color: 'var(--warn)' } : { gridArea: 'pay' }}
+                        style={cells.owes ? { gridArea: 'pay', color: cells.overdue ? 'var(--bad)' : 'var(--warn)' } : { gridArea: 'pay' }}
                         data-testid="row-pay"
                       >
                         {cells.payment ?? <span className="c-t3">—</span>}

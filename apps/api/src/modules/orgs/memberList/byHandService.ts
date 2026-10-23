@@ -38,6 +38,7 @@ import {
   type MemberListUnlistedGroup,
   type MemberListUnlistedPage,
   type MemberListUnlistedQuery,
+  rowSaysOverdue,
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
 import { z } from "zod";
@@ -65,8 +66,8 @@ import * as repo from "./repo.js";
 import { reviewAfterChecked, reviewAfterEdit, reviewAfterMerge, sameReview } from "./review.js";
 import { decodeEntryCursor, encodeEntryCursor } from "./cursor.js";
 import { appOrThrow, type MemberListDeps } from "./service.js";
-import { heldOnListOf, type HeldShown } from "../memberships/onList.js";
-import { listBillFacts } from "../memberships/billsSql.js";
+import { heldWithOwedOf } from "../memberships/onList.js";
+import { listBillFacts, overdueDaysOf } from "../memberships/billsSql.js";
 import { unlistedDigest, unlistedGroup, unlistedPage } from "./unlisted.js";
 import { moveGiftLinks } from "../referrals/memberGiftRepo.js";
 import { movePayerLinks } from "../payers/repo.js";
@@ -86,6 +87,8 @@ async function detailOf(
   /** The caller holds `staff.manage`: who runs the gym, by role, is the owner's to read
    *  (4a-ii round one, L4). */
   seesStaff = false,
+  /** The caller holds `billing.members`: the row says Overdue where the bill does (17i-ii). */
+  seesBills = false,
 ): Promise<MemberListEntryDetail> {
   const [fields, reached, invitation] = await Promise.all([
     repo.listFields(sql, gymId),
@@ -111,12 +114,15 @@ async function detailOf(
   const signatures = waiver === null ? new Map<string, SignatureRow>() : await signaturesOf(sql, gymId, waiver.id, shownIds);
   // And the record's own, made at the desk (3e-ii).
   const desk = waiver === null ? undefined : (await deskSignaturesOf(sql, gymId, waiver.id, [entry.id])).get(entry.id);
-  const [visits, held, owedSince, app] = await Promise.all([
+  const [visits, { held, owedSince }, overdueAfterDays, app] = await Promise.all([
     repo.memberVisits(sql, gymId, shownIds),
-    // What their memberships here say, as their row on the list says it (23a-i).
-    entry.formerAt === null ? heldOnListOf(sql, gymId, today, [entry.id]) : Promise.resolve(new Map<string, HeldShown>()),
-    // A past member's memberships are not in use; what they still owe is (18a-ii).
-    entry.formerAt === null ? Promise.resolve(null) : listBillFacts(sql, gymId, today, [entry.id]).then((bills) => bills.owedSince.get(entry.id) ?? null),
+    // What their memberships here say, as their row on the list says it (23a-i), and since
+    // when they owe, in one snapshot. A past member's memberships are not in use; what they
+    // still owe is (18a-ii).
+    entry.formerAt === null
+      ? heldWithOwedOf(sql, gymId, today, [entry.id])
+      : listBillFacts(sql, gymId, today, [entry.id]).then((facts) => ({ held: new Map<string, never>(), owedSince: facts.owedSince })),
+    seesBills ? overdueDaysOf(sql, gymId) : Promise.resolve(null),
     appViewsOf(
       sql,
       settings,
@@ -126,6 +132,8 @@ async function detailOf(
       now,
     ),
   ]);
+  const shown = held.get(entry.id)?.shown ?? null;
+  const bills = owedSince.get(entry.id) ?? null;
   return {
     entryId: entry.id,
     fullName: values.fullName,
@@ -139,8 +147,9 @@ async function detailOf(
     endsOnKind: values.endsOnKind,
     paymentStatus: values.paymentStatus,
     dateOfBirth: values.dateOfBirth,
-    held: held.get(entry.id)?.shown ?? null,
-    owedSince,
+    held: shown,
+    owedSince: entry.formerAt === null ? null : bills,
+    overdue: rowSaysOverdue({ shown, former: entry.formerAt !== null, owedSince: bills, today, overdueAfterDays }),
     formerAt: entry.formerAt?.toISOString() ?? null,
     source: entry.source,
     inApp: mine.length > 0 || shared.size > 0,
@@ -185,10 +194,10 @@ function reviewLines(keys: readonly string[], fields: readonly { key: string; la
   return lines;
 }
 
-async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string, seesStaff = false): Promise<MemberListEntryDetail> {
+async function detailAfter(deps: MemberListDeps, gymId: string, entryId: string, seesStaff = false, seesBills = false): Promise<MemberListEntryDetail> {
   const entry = await repo.entryFor(deps.sql, gymId, entryId);
   if (entry === null) throw notFound();
-  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null, deps.now(), seesStaff);
+  return await detailOf(deps.sql, gymId, entry, deps.invites ?? null, deps.now(), seesStaff, seesBills);
 }
 
 async function typedContext(tx: TransactionSql, gymId: string, country: string | null): Promise<TypedContext> {
@@ -245,7 +254,7 @@ export async function readEntry(
 ): Promise<MemberListEntryDetail | null> {
   const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!(await limit())) return null;
-  return await detailAfter(deps, gymId, entryId, privileges.includes("staff.manage"));
+  return await detailAfter(deps, gymId, entryId, privileges.includes("staff.manage"), privileges.includes("billing.members"));
 }
 
 /** The member number Add member fills in (5e-i). */

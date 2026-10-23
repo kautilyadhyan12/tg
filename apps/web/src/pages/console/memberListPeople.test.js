@@ -383,7 +383,7 @@ describe('a row for somebody who holds a membership in the app (23a-i)', () => {
 
   it("reads what the membership says, never the record's own words", () => {
     const e = entry({ status: 'Expired', membershipType: 'Gold', paymentStatus: 'Paid', held: held({ payment: { state: 'due', since: '2026-09-20' } }) });
-    expect(rowCells(e, TODAY)).toEqual({ status: 'Active', membership: 'Gold Monthly', ends: 'Renews 6 Nov', payment: 'Payment due', owes: true });
+    expect(rowCells(e, TODAY)).toEqual({ status: 'Active', membership: 'Gold Monthly', ends: 'Renews 6 Nov', payment: 'Payment due', owes: true, overdue: false });
     expect(rowWords(e, TODAY)).toEqual(['Active', 'Gold Monthly', 'Renews 6 Nov', 'Payment due']);
   });
 
@@ -405,13 +405,29 @@ describe('a row for somebody who holds a membership in the app (23a-i)', () => {
       [held({ status: 'ended', day: { what: 'ended', on: null }, payment: null }), ['Ended', 'Gold Monthly', null, null], false],
     ];
     for (const [says, [status, membership, ends, payment], owes] of cases) {
-      expect(rowCells(entry({ held: says }), TODAY), JSON.stringify(says)).toEqual({ status, membership, ends, payment, owes });
+      expect(rowCells(entry({ held: says }), TODAY), JSON.stringify(says)).toEqual({ status, membership, ends, payment, owes, overdue: false });
     }
   });
 
   it("reads the gym's own words for somebody who holds nothing here, an empty one as none", () => {
-    expect(rowCells(entry({ paymentStatus: 'Paid' }), TODAY)).toEqual({ status: 'Active', membership: 'Gold', ends: 'Renews 3 Oct', payment: 'Paid', owes: false });
-    expect(rowCells(entry({ status: null, membershipType: '', endsOn: null, endsOnKind: null }), TODAY)).toEqual({ status: null, membership: null, ends: null, payment: null, owes: false });
+    expect(rowCells(entry({ paymentStatus: 'Paid' }), TODAY)).toEqual({ status: 'Active', membership: 'Gold', ends: 'Renews 3 Oct', payment: 'Paid', owes: false, overdue: false });
+    expect(rowCells(entry({ status: null, membershipType: '', endsOn: null, endsOnKind: null }), TODAY)).toEqual({ status: null, membership: null, ends: null, payment: null, owes: false, overdue: false });
+  });
+
+  // 17i-ii. The server says whose oldest bill reads Overdue on their page; the row only says it.
+  it('says Overdue where the server says so, and only where the row would say Payment due', () => {
+    const owing = held({ payment: { state: 'due', since: '2026-09-01' } });
+    expect(rowCells(entry({ held: owing, overdue: true }), TODAY)).toEqual({ status: 'Active', membership: 'Gold Monthly', ends: 'Renews 6 Nov', payment: 'Overdue', owes: true, overdue: true });
+    expect(rowWords(entry({ held: owing, overdue: true }), TODAY)).toEqual(['Active', 'Gold Monthly', 'Renews 6 Nov', 'Overdue']);
+    expect(rowCells(entry({ held: owing, overdue: false }), TODAY)).toMatchObject({ payment: 'Payment due', overdue: false });
+    expect(rowCells(entry({ held: owing }), TODAY)).toMatchObject({ payment: 'Payment due', overdue: false });
+    // Never over a row that does not owe, whatever is sent.
+    expect(rowCells(entry({ held: held(), overdue: true }), TODAY)).toMatchObject({ payment: 'Paid', overdue: false });
+    expect(rowCells(entry({ paymentStatus: 'Paid', overdue: true }), TODAY)).toMatchObject({ payment: 'Paid', overdue: false });
+    // A past member who left a bill unpaid.
+    const past = { formerAt: '2026-09-03T10:00:00.000Z', owedSince: '2026-08-01', paymentStatus: 'Paid' };
+    expect(rowCells(entry({ ...past, overdue: true }), TODAY)).toMatchObject({ payment: 'Overdue', owes: true, overdue: true });
+    expect(rowCells(entry({ ...past, overdue: false }), TODAY)).toMatchObject({ payment: 'Payment due', owes: true, overdue: false });
   });
 });
 

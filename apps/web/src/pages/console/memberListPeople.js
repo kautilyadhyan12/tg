@@ -7,6 +7,7 @@ import {
   MEMBER_INVITE_WORDS,
   MEMBER_LIST_MERGE_FILLS,
   MEMBER_LIST_MERGE_KEEPS_OWN,
+  MEMBER_LIST_OVERDUE_WORD,
   MEMBER_LIST_TICKED_MAX,
   GYM_GROUP_MESSAGE_WORDS,
   GYM_MESSAGE_BODY_MAX,
@@ -328,9 +329,12 @@ function heldDayWords(day, today) {
 /** A row's Status, Membership, Renews-or-ends and Payment (23a-i). Somebody who holds a
  *  membership in the app reads what it says (`entry.held`, worked out by the server);
  *  everybody else reads the gym's own words. `owes`: the server says a payment is due,
- *  which is money owed today; one whose day has not come is "Not due yet" and not owed. */
+ *  which is money owed today; one whose day has not come is "Not due yet" and not owed.
+ *  `overdue`: the server says their oldest bill reads Overdue on their page (17i-ii), so the
+ *  row says "Overdue" in red where it would say "Payment due". */
 export function rowCells(entry, today = null) {
   const held = entry.held ?? null;
+  const overdue = entry.overdue === true;
   if (held === null) {
     const word = (w) => (w === null || w === undefined || w === '' ? null : w);
     // A past member who left a bill unpaid (18a-ii): the server says since when.
@@ -339,8 +343,9 @@ export function rowCells(entry, today = null) {
       status: word(entry.status),
       membership: word(entry.membershipType),
       ends: endsWords(entry, today),
-      payment: owes ? HELD_PAYMENT_WORDS.due : word(entry.paymentStatus),
+      payment: owes ? (overdue ? MEMBER_LIST_OVERDUE_WORD : HELD_PAYMENT_WORDS.due) : word(entry.paymentStatus),
       owes,
+      overdue: owes && overdue,
     };
   }
   const pay = held.payment;
@@ -348,8 +353,9 @@ export function rowCells(entry, today = null) {
     status: HELD_STATUS_WORDS[held.status] ?? null,
     membership: heldNamesLine(held.memberships),
     ends: heldDayWords(held.day, today),
-    payment: pay === null ? null : HELD_PAYMENT_WORDS[pay.state],
+    payment: pay === null ? null : pay.state === 'due' && overdue ? MEMBER_LIST_OVERDUE_WORD : HELD_PAYMENT_WORDS[pay.state],
     owes: pay !== null && pay.state === 'due',
+    overdue: pay !== null && pay.state === 'due' && overdue,
   };
 }
 

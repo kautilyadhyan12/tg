@@ -1794,6 +1794,10 @@ export const memberListEntrySchema = z.object({
    *  fell due. Their row's Payment reads "Payment due". Null for everybody else; somebody
    *  on the list says it through `held`. */
   owedSince: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
+  /** Their Payment reads "Payment due" and their oldest bill still open reads Overdue on
+   *  their page, by the gym's days of grace (17i-ii): the row says "Overdue". Sent only to
+   *  staff who read members' bills; false for everybody else. */
+  overdue: z.boolean().default(false),
   /** When this person was taken off the list, or null while they are on it (§11.1).
    *  A former record admits nobody, is invited by nothing, and is left out of a page
    *  unless it is asked for. */

@@ -40,13 +40,16 @@ export async function heldOnListOf(
  *  one has: what the front desk's own rule reads (`checkinStop`; 16d). One snapshot, the
  *  same reads and the same rule as the list's own rows. */
 export async function heldWithOwedOf(
-  sql: Sql,
+  sql: Sql | TransactionSql,
   gymId: string,
   today: string,
   entryIds: readonly string[] | null,
 ): Promise<{ held: Map<string, HeldShown>; owedSince: Map<string, string> }> {
   const owedSince = new Map<string, string>();
-  const held = await sql.begin("isolation level repeatable read read only", (tx) => bothReads(tx, gymId, today, entryIds, null, owedSince));
+  const held =
+    "savepoint" in sql
+      ? await bothReads(sql, gymId, today, entryIds, null, owedSince)
+      : await sql.begin("isolation level repeatable read read only", (tx) => bothReads(tx, gymId, today, entryIds, null, owedSince));
   return { held, owedSince };
 }
 
