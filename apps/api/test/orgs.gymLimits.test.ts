@@ -198,7 +198,7 @@ d("creating gyms: how fast and how many (real Postgres)", () => {
         });
       for (let i = 0; i < 25; i++) {
         // A blank name, a mistyped mobile, a country we are not open in: each refused, none counted.
-        const bad = [{ name: "", country: "IN" }, { name: "Gym Limits Typo", country: "IN", billingMobile: "12345" }, { name: "Gym Limits Typo", country: "AU" }][i % 3];
+        const bad = [{ name: "", country: "IN" }, { name: "Gym Limits Typo", country: "IN", billingMobile: "12345" }, { name: "Gym Limits Typo", country: "DE" }][i % 3];
         expect((await press(bad ?? {})).statusCode).toBe(400);
       }
       for (let i = 0; i < 5; i++) expect((await create(owner, ip)).statusCode).toBe(201);
