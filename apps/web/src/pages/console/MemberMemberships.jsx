@@ -13,7 +13,7 @@ import { Tick } from './MemberListUpload';
 import TerminalPayBox from './TerminalPayBox';
 import { cardTerminalSerial } from './memberCardView';
 import { TERMINAL_METHOD, mayHavePaid, payTerminalName, terminalPayDetail, terminalPayOutcomeLine } from './terminalPayView';
-import { CARD_ON_FILE_METHOD, cardChargeOutcome, cardOnFileDetail, cardOnFileLabel } from './cardChargeView';
+import { CARD_ON_FILE_METHOD, cardChargeOutcome, cardOnFileDetail, cardOnFileLabel, cardOnFileStoppedLine } from './cardChargeView';
 import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './MembershipDiscount';
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
@@ -140,6 +140,8 @@ const STOP = 'c-btn c-btn-danger c-btn-sm';
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 /** Refusals that mean the page is out of date: it is read again. */
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
+/** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
+const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -273,7 +275,7 @@ export default function MemberMemberships({
   /** Record payment's ways: the gym's Terminal, then the card on file, then the ways recorded by hand. */
   const payMethodsWithSquare = [
     ...(terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }] : []),
-    ...(cardOnFile !== null ? [{ value: CARD_ON_FILE_METHOD, label: cardOnFileLabel(cardOnFile) }] : []),
+    ...(cardOnFile !== null ? [{ value: CARD_ON_FILE_METHOD, label: cardOnFileLabel(cardOnFile), disabled: cardOnFile.stopped === true }] : []),
     ...payMethods,
   ];
   // Square not set up yet (18x, Kd 2026-10-22): the payment forms say so, with Connect Square for the owner.
@@ -551,12 +553,13 @@ export default function MemberMemberships({
             <select className="c-sel" value={feeForm.method} onChange={(e) => setFeeForm((f) => ({ ...f, method: e.target.value }))}>
               <option value="">Choose one</option>
               {methods.map((method) => (
-                <option key={method.value} value={method.value}>
+                <option key={method.value} value={method.value} disabled={method.disabled === true}>
                   {method.label}
                 </option>
               ))}
             </select>
           </label>
+          {cardOnFileStoppedLine(cardOnFile) !== null ? <p className="c-s14 c-t2 m-0">{cardOnFileStoppedLine(cardOnFile)}</p> : null}
           {onTerminal && terminalList.length > 1 ? (
             <label className="c-field">
               <span className="c-label">Terminal</span>
@@ -997,6 +1000,11 @@ export default function MemberMemberships({
       setAttempt((n) => n + 1);
       onChanged?.();
     } catch (err) {
+      // The card may not be charged again yet, or at all (18d-iii-ii-a): said under the button pressed.
+      if (CARD_RETRY_REFUSALS.includes(errorCode(err))) {
+        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: errorText(err, '') });
+        return;
+      }
       setRefusal(errorText(err, "We couldn't get an answer. Press Charge again to see whether the card was charged: it is never charged twice."));
       if (STALE_CODES.includes(errorCode(err)) || errorCode(err) === 'card_charge_card_changed') {
         close();
@@ -1157,13 +1165,14 @@ export default function MemberMemberships({
           <select className="c-sel" value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value }))}>
             <option value="">Choose one</option>
             {methods.map((method) => (
-              <option key={method.value} value={method.value}>
+              <option key={method.value} value={method.value} disabled={method.disabled === true}>
                 {method.label}
               </option>
             ))}
           </select>
         </label>
         {renderSquareLine()}
+        {cardOnFileStoppedLine(cardOnFile) !== null ? <p className="c-s14 c-t2 m-0">{cardOnFileStoppedLine(cardOnFile)}</p> : null}
         {onTerminal && terminalList.length > 1 ? (
           <label className="c-field">
             <span className="c-label">Terminal</span>

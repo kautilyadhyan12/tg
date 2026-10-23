@@ -6,11 +6,14 @@
 //   - the worker's look for bills due, when all are due and when none is left (every other minute);
 //   - one minute of the worker: 50 charges, each started under its record's lock and recorded;
 //   - a person's page read with its bills and their charges.
-// Two numbers each: total, and how long the one thread is busy and answers nobody. The look and the
-// charges are the worker's thread; the page read is the api's.
+// With `--declines` (18d-iii-ii-a) every card declines for want of money, so every bill is tried
+// again by itself: also measured are the look for tries due on the third day, a minute of those
+// tries, a minute of the emails telling each cardholder, and a person's page with its decline.
+// Two numbers each: total, and how long the one thread is busy and answers nobody. The look, the
+// charges and the emails are the worker's thread; the page read is the api's.
 //
 //   $env:DATABASE_URL='postgres://aihg:aihg@localhost:5433/aihg_web1'
-//   corepack pnpm --filter api exec tsx tools/measure-card-charges-cost.ts
+//   corepack pnpm --filter api exec tsx tools/measure-card-charges-cost.ts [--declines]
 //
 // LOCAL DATABASES ONLY: it writes gyms, their lists, memberships, bills and cards, and removes them.
 import { createHash, randomUUID } from "node:crypto";
@@ -19,7 +22,8 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { getHeldMemberships } from "../src/modules/orgs/memberships/heldService.js";
 import { CARD_CHARGE, processCardCharges } from "../src/modules/orgs/payments/cardCharges.js";
-import { dueBills } from "../src/modules/orgs/payments/cardChargesRepo.js";
+import { dueBills, retryBills } from "../src/modules/orgs/payments/cardChargesRepo.js";
+import { sendDueCardNotices } from "../src/modules/orgs/payments/cardNotices.js";
 import { accessContext, refreshContext } from "../src/modules/orgs/payments/service.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { account, fakeSquare } from "../test/fakeSquareTerminal.js";
@@ -36,6 +40,7 @@ const BIG = 2000;
 const RUNS = 9;
 const PLAN = "zz_charges_cost";
 const PREFIX = "charges-cost-";
+const DECLINES = process.argv.includes("--declines");
 const square = fakeSquare();
 const settings = squareSettings(
   {
@@ -52,6 +57,7 @@ if (settings === null) throw new Error("no Square settings");
 
 async function cleanup(): Promise<void> {
   const gyms = sql`SELECT id FROM gyms WHERE slug LIKE ${PREFIX + "%"}`;
+  await sql`DELETE FROM gym_card_decline_notices WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_card_charges WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${gyms})`;
   await sql`DELETE FROM gym_card_agreements WHERE gym_id IN (${gyms})`;
@@ -131,7 +137,7 @@ async function seedGym(people: number, n: number): Promise<Gym> {
     FROM gym_held_memberships h WHERE h.gym_id = ${id}`;
   // Each person's card on file, in that account and in the fake.
   const cards = records.map((r) => ({ entry: r.id, customer: `CUST${randomUUID().slice(0, 8)}`, card: `ccof:${randomUUID()}` }));
-  for (const c of cards) square.card(c.card, acct.merchantId, c.customer);
+  for (const c of cards) square.card(c.card, acct.merchantId, c.customer, DECLINES ? "insufficient" : "pays");
   const agreements = records.map((r) => ({
     id: randomUUID(),
     gym_id: id,
@@ -190,7 +196,7 @@ const [noon] = await sql<{ at: Date }[]>`SELECT ((now() AT TIME ZONE 'America/Ch
 const clock = noon?.at ?? new Date();
 const quiet = { info: () => undefined, warn: () => undefined, error: (obj: object) => { console.error("error", obj); } };
 const deps = { sql, square: settings, log: quiet, now: () => clock };
-console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, every person a bill due today and a card on file; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
+console.log(`${String(GYMS)} gyms of ${String(PEOPLE)} and one of ${String(BIG)}, every person a bill due today and a card on file${DECLINES ? " that declines" : ""}; cpu ${String(cpus()[0]?.speed ?? 0)} MHz`);
 
 const delay = monitorEventLoopDelay({ resolution: 1 });
 delay.enable();
@@ -220,11 +226,61 @@ const lookEmpty: { wall: number; js: number }[] = [];
 for (let i = 0; i < RUNS; i++) lookEmpty.push(await time(look));
 many("the look for bills due, none left (every other minute)", lookEmpty);
 
+if (DECLINES) {
+  // Every cardholder emailed: the sender's minute takes its run's worth, 120.
+  const sent: { wall: number; js: number }[] = [];
+  let emails = 0;
+  for (;;) {
+    let run = { sent: 0, skipped: 0 };
+    const t = await time(async () => {
+      run = await sendDueCardNotices({
+        sql,
+        log: quiet,
+        settings: { hmacKey: Buffer.alloc(32, 3), webOrigin: "http://localhost:5173", perDay: 100_000, paused: false, sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" } },
+        sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" },
+        transport: { send: () => Promise.resolve({ kind: "sent", id: `re_${randomUUID()}` }) },
+        now: () => clock,
+        sleep: () => Promise.resolve(),
+        gymIds: all,
+      });
+    });
+    if (run.sent + run.skipped === 0) break;
+    emails += run.sent;
+    sent.push(t);
+  }
+  many("one minute of the emails to cardholders (120)", sent);
+  console.log(`${"all emailed in".padEnd(56)} ${String(sent.length)} minutes of the worker · ${String(emails)} emails`);
+
+  // The third day at noon: every bill's second try is due.
+  const day3 = new Date(clock.getTime() + 3 * 24 * 60 * 60_000);
+  await sql`VACUUM ANALYZE gym_card_charges`;
+  const retryLook = () => retryBills(sql, { environment: "production", now: day3, limit: 50, after: null, gymIds: all });
+  const retryFull: { wall: number; js: number }[] = [];
+  for (let i = 0; i < RUNS; i++) retryFull.push(await time(retryLook));
+  many(`the look for tries due, ${String(GYMS * PEOPLE + BIG)} due`, retryFull);
+  const retryMinutes: { wall: number; js: number }[] = [];
+  let retried = 0;
+  for (;;) {
+    let run = { charged: 0 };
+    const t = await time(async () => {
+      run = await processCardCharges({ ...deps, now: () => day3 }, settings, all);
+    });
+    if (run.charged === 0) break;
+    retried += run.charged;
+    retryMinutes.push(t);
+  }
+  many(`one minute of the worker's tries again, ${String(CARD_CHARGE.perRun)}`, retryMinutes);
+  console.log(`${"all tried again in".padEnd(56)} ${String(retryMinutes.length)} minutes of the worker · ${String(retried)} tries`);
+  const retryEmpty: { wall: number; js: number }[] = [];
+  for (let i = 0; i < RUNS; i++) retryEmpty.push(await time(retryLook));
+  many("the look for tries due, none left (every other minute)", retryEmpty);
+}
+
 const page = () => getHeldMemberships({ sql, now: () => clock }, big.owner, big.id, big.first);
 await page();
 const pages: { wall: number; js: number }[] = [];
 for (let i = 0; i < RUNS; i++) pages.push(await time(page));
-many("read a person's page, with its bill and its charge", pages);
+many(`read a person's page, with its bill and its charge${DECLINES ? "s declined" : ""}`, pages);
 
 delay.disable();
 console.log(`longest single stall of the thread during all of it: ${fmt(delay.max / 1e6)}`);

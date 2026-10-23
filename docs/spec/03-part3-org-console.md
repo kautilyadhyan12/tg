@@ -4279,8 +4279,8 @@ in Square, never voided here. A decline leaves the bill owed and says "Visa endi
 declined on 23 Oct", with the reason Square's code gives. While a charge waits for Square's answer
 nothing else pays, voids, cancels, freezes or changes that membership, and no answer is asked
 again with the same key for a day. Staff with the payments tick charge it themselves from Record
-payment: Card on file · Visa ending 1111, the card named before the press. One try only here; the
-retries, the member's notice and the Failed payments list are 18d-iii-ii.
+payment: Card on file · Visa ending 1111, the card named before the press. The retries and the
+member's notice are 18d-iii-ii-a (below); the Failed payments list is 18d-iii-ii-b.
 
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card
@@ -4289,6 +4289,38 @@ payment; Mastercard's advice codes 03 and 21); the member told in writing at onc
 7 days to pay another way (Visa, Table 5-22); a Failed payments list for staff with Try again;
 at the desk the gym's own choice (16d) and, where the gym switches it on, no new bookings
 while a payment is overdue (17i).
+
+*As built, 18d-iii-ii-a (tried again, and the cardholder told):* one rule (`cardRetries.ts` in
+@app/shared), built the safe way round. The app tries a card again by itself only after a decline
+Square names as one a later try may cure (`INSUFFICIENT_FUNDS`, `TRANSACTION_LIMIT`; Square:
+"Retrying after a few days might be effective"): 3 and 7 days after the card was first declined for
+that bill, from 6 a.m. gym time and never within 24 hours of its last decline, and only a bill the app
+charges by itself, on the same card the payer still has on file. Staff may charge it again from
+Record payment after a decline the cardholder can clear with their bank (`GENERIC_DECLINE`, "call
+your bank", verification, CVV, postal code), a whole day after it. Every other code, one Square adds
+later among them, stops the card for every bill of the gym until another card is saved: expired,
+closed or unknown account, a card not allowed this payment (Visa's Category 1). One bill is charged
+to one card at most 3 times in all, the app's and staff's together. Each of the app's tries is asked
+of Square under its own key (the bill's id, then `<bill>:2`, `<bill>:3`); a try the worker could not
+make within 3 days of its day is left to staff. The bill's "retried automatically on" and the email's
+are read from the worker's own rule, so neither promises a try the worker will not make; where the app
+will not, the bill says why ("…Retry the payment, or collect payment using another method." for a bill
+the app does not charge by itself). A period's first decline, or a fee's, queues one email (a press
+paying ahead, before the bill is open, too) (`gym_card_decline_notices`, migration `0160`) to whoever's card it is, the payer
+where somebody pays, from the gym (named "<gym> via" the app, replies to the gym's contact email): the amount,
+what for, the card, the reason, whether it will be retried automatically and on which day, and "Please
+make your payment by <7 days on> using one of the following options: • Pay at the front desk • Pay
+with another card", with the gym's phone and email (Kd's own words, 2026-10-24). It is owed,
+so neither the daily cap nor an unsubscribe holds it; a bounced or refused address, a bill paid
+meanwhile, or a record deleted for good meanwhile sends nothing. The bill's decline line says what
+comes next ("The payment will be retried automatically on 26 Oct." · "The payment will not be retried
+automatically. Ask the cardholder to contact their bank for more information, then retry the payment,
+or collect payment using another method." · "The bank declined this card permanently…" · "The payment
+was tried 3 times and will not be retried…") and the email ("The cardholder was emailed on 23 Oct." ·
+"The cardholder was not emailed because there is no email address on file. Please contact them
+directly."), in the words Kd gave on 2026-10-24. A card declined for good reads "· cannot be charged" in
+Payment method and cannot be picked. Resend's reports about these emails are kept but
+not yet read back onto the bill.
 
 **Cancelling** (18l): every member can cancel in the app, including those who joined at the
 desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Visa's dispute

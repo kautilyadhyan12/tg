@@ -1127,6 +1127,12 @@ d("member list: keeping it by hand (real Postgres)", () => {
       "gym_card_charges.entry_id",
       "gym_card_charges.gym_id",
       "gym_card_charges.payer_entry_id",
+      // The email telling a cardholder a payment did not go through (0160; 18d-iii-ii-a): not
+      // moved by the join. A record joined or deleted for good lets go of it (`entry_id` alone to
+      // null), and an email still waiting for a record that is gone is never sent
+      // (`cardRetries.routes.test.ts`).
+      "gym_card_decline_notices.entry_id",
+      "gym_card_decline_notices.gym_id",
       // A class booking (0075): it is the app account's, so the join moves it to the kept
       // record (driven in `classBookings.routes.test.ts`) and a deleted record lets it go
       // (`db.migration.test.ts`).
