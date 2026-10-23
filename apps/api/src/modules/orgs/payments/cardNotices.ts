@@ -124,7 +124,7 @@ function dayWords(day: string, country: string | null): string {
 export function noticeLines(
   gymName: string,
   gym: { country: string | null; contactEmail: string | null; contactPhone: string | null },
-  bill: { fee: string | null },
+  bill: { fee: string | null; ahead: boolean },
   charge: NonNullable<repo.NoticeFacts["charge"]>,
 ): Omit<Parameters<typeof cardDeclinedEmail>[0], "to"> {
   const amount = formatMinor(charge.amountMinor, charge.currency);
@@ -153,7 +153,10 @@ export function noticeLines(
         : `Your ${amount} payment to ${gymName} for ${forName}'s ${kind} could not be processed.`,
     why: `Your ${cardWords} was declined on ${dayWords(charge.on, gym.country)}. ${REASON_WORDS[cardDeclineReasonOf(code)]}`,
     next,
-    payBy: `Please make your payment by ${dayWords(addDays(charge.on, CARD_RETRY.noticeDays), gym.country)} using one of the following options:`,
+    // Paid ahead, before the period is due: no "by" day earlier than its bill (review round one, Low-A).
+    payBy: bill.ahead
+      ? "Please make your payment using one of the following options:"
+      : `Please make your payment by ${dayWords(addDays(charge.on, CARD_RETRY.noticeDays), gym.country)} using one of the following options:`,
     options: ["Pay at the front desk", "Pay with another card"],
     contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
   };

@@ -377,7 +377,11 @@ export async function processCardCharges(deps: PaymentsDeps, square: SquareSetti
 
   // Tries again first: they are fewer, and each has waited days already.
   let looked = 0;
-  for (const find of [charges.retryBills, charges.dueBills]) {
+  const looks: { find: typeof charges.dueBills; again: boolean }[] = [
+    { find: charges.retryBills, again: true },
+    { find: charges.dueBills, again: false },
+  ];
+  for (const { find, again } of looks) {
     let after: { gymId: string; billId: string } | null = null;
     while (run.charged < CARD_CHARGE.perRun && looked < CARD_CHARGE.lookPerRun) {
       const due = await find(deps.sql, { environment: square.environment, now: deps.now(), limit: 50, after, gymIds });
@@ -386,7 +390,7 @@ export async function processCardCharges(deps: PaymentsDeps, square: SquareSetti
         looked += 1;
         after = { gymId: bill.gymId, billId: bill.billId };
         if (run.charged >= CARD_CHARGE.perRun) break;
-        const step = await chargeDueBill(deps, square, bill);
+        const step = await chargeDueBill(deps, square, bill, again);
         if (step === undefined) continue;
         run.charged += 1;
         if (step?.done === "paid") run.paid += 1;
@@ -399,7 +403,7 @@ export async function processCardCharges(deps: PaymentsDeps, square: SquareSetti
 
 /** One bill the app charges by itself, or undefined where the write's own check found it should not
  *  be charged after all (it is looked at again next minute only if it still qualifies then). */
-async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: charges.DueBill): Promise<Step | undefined> {
+async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: charges.DueBill, again: boolean): Promise<Step | undefined> {
   const row = await repo.readConnection(deps.sql, bill.gymId, square.environment);
   if (row?.state !== "connected" || row.locationId === null) return undefined;
   const now = deps.now();
@@ -425,6 +429,8 @@ async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: c
   });
   if (written.kind !== "new") {
     if (written.kind !== "not_allowed" && written.kind !== "no_card") deps.log.warn({ event: "square.card_charge_skipped", gymId: bill.gymId, why: written.kind }, "a bill due was not charged");
+    // A try again the write's own checks refuse is staff's from now: the bill stops showing its day.
+    if (again && (written.kind === "not_allowed" || written.kind === "no_card" || written.kind === "currency")) await charges.clearRetry(deps.sql, bill.gymId, bill.billId);
     return undefined;
   }
   return await advance(deps, square, written.charge, leaseFrom(now));

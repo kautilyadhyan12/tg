@@ -638,6 +638,11 @@ export async function retryBills(sql: Sql, q: DueQuery): Promise<DueBill[]> {
   return rows.map(toDue);
 }
 
+/** A try again the worker's write refused: the bill's decline no longer sets a day. */
+export async function clearRetry(sql: Sql, gymId: string, billId: string): Promise<void> {
+  await sql`UPDATE gym_card_charges SET next_try_on = NULL WHERE gym_id = ${gymId} AND bill_id = ${billId} AND next_try_on IS NOT NULL`;
+}
+
 /** The day the app will try each of these bills again, by the worker's own rule (`retryPending`): the
  *  bill's line and the email say it only where the worker will do it. */
 export async function pendingRetries(sql: SqlOrTx, gymId: string, billIds: readonly string[], now: Date): Promise<Map<string, string>> {

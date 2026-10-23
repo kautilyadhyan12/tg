@@ -63,7 +63,7 @@ export async function claimNextNotice(sql: Sql, q: { now: Date; leaseMs: number;
 const stillOwed = (sql: SqlOrTx) => sql`
       ((s.bill_id IS NOT NULL AND EXISTS (SELECT 1 FROM gym_member_bills b WHERE b.gym_id = s.gym_id AND b.id = s.bill_id AND b.status = 'open'))
        OR (s.period_index IS NOT NULL
-           AND EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = s.gym_id AND h.id = s.held_membership_id)
+           AND EXISTS (SELECT 1 FROM gym_held_memberships h WHERE h.gym_id = s.gym_id AND h.id = s.held_membership_id AND h.status IN ('active','frozen'))
            AND NOT EXISTS (SELECT 1 FROM gym_member_bills b
                            WHERE b.gym_id = s.gym_id AND b.held_membership_id = s.held_membership_id AND b.fee IS NULL
                              AND b.period_index = s.period_index AND b.status <> 'open')))`;
@@ -83,8 +83,9 @@ export interface NoticeFacts {
   /** The cardholder's record was joined away or deleted for good since: nothing is sent. */
   recordGone: boolean;
   gym: { name: string; active: boolean; timezone: string; country: string | null; contactEmail: string | null; contactPhone: string | null } | null;
-  /** Null once the bill is paid, cancelled or gone: nothing is owed, so nothing is sent. */
-  bill: { fee: string | null } | null;
+  /** Null once the bill is paid, cancelled or gone: nothing is owed, so nothing is sent. `ahead`: a
+   *  period paid ahead whose bill is not written yet, so not yet due. */
+  bill: { fee: string | null; ahead: boolean } | null;
   charge: {
     amountMinor: number;
     currency: string;
@@ -129,7 +130,7 @@ export async function noticeFacts(sql: SqlOrTx, n: ClaimedNotice, now: Date): Pr
         ? null
         : { name: gym.name, active: gym.status === "active", timezone: gym.timezone, country: gym.country, contactEmail: gym.contact_email, contactPhone: gym.contact_phone },
     // Owed with no bill yet (a press paying ahead): a membership payment.
-    bill: owed?.owed === true ? { fee: bill?.fee ?? null } : null,
+    bill: owed?.owed === true ? { fee: bill?.fee ?? null, ahead: bill === null } : null,
     charge:
       charge === undefined
         ? null

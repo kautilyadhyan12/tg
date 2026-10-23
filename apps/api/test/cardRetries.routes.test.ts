@@ -469,6 +469,8 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     const abeMail = mail.find((x) => x.to === "crty-abe@example.com");
     expect(abeMail?.text).toMatch(/Your \$25\.00 membership payment to Ahead Gym \d+ could not be processed\./);
     expect(abeMail?.text).toContain("We will not automatically retry this payment.");
+    // Paid ahead, so not yet due: no "by" day before its bill (review round one, Low-A).
+    expect(abeMail?.text).toContain("Please make your payment using one of the following options:");
     // A week on, the bill opens and says what happened.
     await sql`UPDATE gym_held_memberships SET starts_on = starts_on - 7 WHERE gym_id = ${gym.id} AND id = ${m.id}`;
     await sql`UPDATE gym_member_bills SET due_on = due_on - 7, covers_from = covers_from - 7, covers_to = covers_to - 7 WHERE gym_id = ${gym.id} AND held_membership_id = ${m.id}`;
@@ -477,6 +479,18 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     // One email for that week, however often the sender runs.
     await notify();
     expect(mail.filter((x) => x.to === "crty-abe@example.com")).toHaveLength(1);
+
+    // Cara paid ahead too, was declined, and cancelled before her email went: nothing is sent.
+    const cara = await person(gym, "Cara Cancelled", "crty-cara@example.com");
+    const caraGiven = await send("POST", `${entryUrl(gym, cara)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId, startsOn: today, paid: true });
+    const caraM = heldMembershipsResponseSchema.parse(JSON.parse(caraGiven.body)).memberships[0];
+    if (caraM === undefined) throw new Error("no membership");
+    await cardFor(gym, cara, "insufficient");
+    expect(cardChargeResponseSchema.parse(JSON.parse((await press(gym, { entryId: cara, membershipId: caraM.id })).body)).charge.outcome).toBe("declined");
+    const caraCancel = await send("POST", `${entryUrl(gym, cara)}/memberships/${caraM.id}/cancel`, gym.owner.cookies, { when: "today" });
+    expect(caraCancel.statusCode, caraCancel.body).toBe(200);
+    await notify();
+    expect(mail.filter((x) => x.to === "crty-cara@example.com")).toHaveLength(0);
   });
 
   it("the cardholder is emailed once a bill, at their own address or their payer's, and the bill says so", async () => {
