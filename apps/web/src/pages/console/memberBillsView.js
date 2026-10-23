@@ -10,6 +10,8 @@ import {
   BILL_CANCEL_REASONS,
   BILL_CANCEL_REASON_WORDS,
   BILL_OVERDUE_DAYS_MAX,
+  CARD_DECLINE_WORDS,
+  cardName,
   MEMBER_FEE_WORDS,
   MEMBER_PAYMENT_BY_HAND,
   MEMBER_PAYMENT_METHOD_WORDS,
@@ -26,6 +28,7 @@ import {
   fullFromOf,
   memberGiftBillLine,
   minorToPriceText,
+  paidThroughSquare,
   priceToMinor,
 } from '@app/shared';
 import { dayWords } from './memberListView';
@@ -56,6 +59,20 @@ const STATE_TAGS = {
 export const BILLS_FOLDED = 2;
 
 const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? 'Paid';
+
+/** A bill or fee whose newest charge to the card on file was declined (18d-iii-i). */
+export function cardDeclinedLine(declined) {
+  return `${cardName(declined)} was declined on ${shortDay(declined.on, false)}. ${CARD_DECLINE_WORDS[declined.reason] ?? CARD_DECLINE_WORDS.declined}`;
+}
+
+/** A bill or fee whose charge to the card on file Square has not answered yet. */
+export const CARD_CHARGING_LINE = "Charging the card on file: waiting for Square's answer.";
+
+/** Its decline, and its charge on its way, for a bill's or a fee's box. */
+const cardLines = (b) => ({
+  declined: b.cardDeclined === null || b.cardDeclined === undefined ? null : cardDeclinedLine(b.cardDeclined),
+  charging: b.charging === true ? CARD_CHARGING_LINE : null,
+});
 const byWords = (by) => (by === null ? null : `by ${by}`);
 const joined = (parts) => parts.filter((part) => part !== null).join(' · ');
 
@@ -165,6 +182,7 @@ export function billRow(bill, currency, today) {
     // Part paid: what is still owed, said in money.
     left: open && bill.paidMinor > 0 ? `${formatMinor(bill.paidMinor, currency)} paid · ${formatMinor(left, currency)} left` : null,
     cancelled,
+    ...cardLines(bill),
     payments: [
       ...bill.payments.map((p) => ({ ...paymentLine(p, currency), refundable: p.refundableMinor > 0, voided: null })),
       ...(bill.voidedPayments ?? []).map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
@@ -175,7 +193,8 @@ export function billRow(bill, currency, today) {
 const paymentLine = (p, currency) => ({
   id: p.id,
   amount: formatMinor(p.amountMinor, currency),
-  detail: joined([methodWords(p.method), shortDay(p.paidOn), byWords(p.by)]),
+  // Charged to the card on file (18d-iii-i): which card.
+  detail: joined([p.card === null || p.card === undefined ? methodWords(p.method) : `${methodWords(p.method)}, ${cardName(p.card)}`, shortDay(p.paidOn), byWords(p.by)]),
   receiptNumber: p.receiptNumber,
   refunds: refundLines(p, currency),
 });
@@ -226,8 +245,9 @@ export function feeRow(fee, currency, today) {
         : fee.state === 'removed'
           ? noLongerOwed(fee)
           : fee.state === 'paid' && fee.stillOwed === false
-            ? // Paid on the Terminal: Square holds the money, and Void payment is not offered (18d-vi-b-i).
-              fee.payments.some((p) => p.method === 'terminal')
+            ? // Paid on the Terminal or from the card on file: Square holds the money, and Void payment is
+              // not offered (18d-vi-b-i, 18d-iii-i).
+              fee.payments.some((p) => paidThroughSquare(p.method))
               ? `${noLongerOwed(fee)} To give the money back, refund it in your Square Dashboard.`
               : `${noLongerOwed(fee)} If you gave the money back, void the payment.`
             : null,
@@ -235,6 +255,7 @@ export function feeRow(fee, currency, today) {
       ...fee.payments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: null })),
       ...fee.voidedPayments.map((p) => ({ ...paymentLine(p, currency), refundable: false, voided: voidedLine(p.voided, PAYMENT_VOID_REASON_WORDS) })),
     ].sort((a, b) => a.receiptNumber - b.receiptNumber),
+    ...cardLines(fee),
     canPay: fee.can.pay,
     canWaive: fee.can.waive,
     voidPaymentId: fee.can.voidPaymentId,
@@ -382,7 +403,7 @@ export function refundWords(m, name, payment, live) {
   return {
     title: `Note a refund for ${name}'s ${m.typeName}`,
     // A card paid on the Terminal (18d-vi-a) is refunded in Square, where its money is.
-    detail: `This is for the ${paid}.${some} It only writes the refund in your records: ${payment.method === 'terminal' ? 'refund the card in your Square Dashboard' : 'give the money back yourself'}.${keeps}`,
+    detail: `This is for the ${paid}.${some} It only writes the refund in your records: ${paidThroughSquare(payment.method) ? 'refund the card in your Square Dashboard' : 'give the money back yourself'}.${keeps}`,
   };
 }
 
