@@ -124,9 +124,11 @@ interface Current {
 }
 
 /** A membership of this record, with its details worked out now from what is stored. */
-async function current(deps: AgreementDeps, org: OrgRow, entryId: string, membershipId: string, today: string): Promise<Current> {
-  const record = await repo.membershipRecord(deps.sql, org.id, entryId, membershipId);
+async function current(deps: AgreementDeps, org: OrgRow, entryId: string, membershipId: string, today: string, opts: { former: boolean } = { former: false }): Promise<Current> {
+  const record = await repo.membershipRecord(deps.sql, org.id, entryId, membershipId, opts);
   if (record === null) throw membershipNotFound();
+  // A past member: their signed copy is read, and nothing is signed for them.
+  if (record.former) return { record, facts: null };
   const [held, contact] = await Promise.all([readOwnHeld({ sql: deps.sql, now: deps.now }, org.id, entryId, today), repo.gymContact(deps.sql, org.id)]);
   const membership = held.memberships.find((m) => m.id === membershipId);
   if (membership === undefined) throw membershipNotFound();
@@ -157,7 +159,8 @@ export async function getMembershipAgreement(
   const { org } = await requirePrivilege(deps, gymId, userId, DESK_TICK);
   if (!(await limit())) return null;
   const today = dayInTz(deps.now(), org.timezone);
-  const now = await current(deps, org, entryId, membershipId, today);
+  // A past member's page shows what they signed, and sends its copy again.
+  const now = await current(deps, org, entryId, membershipId, today, { former: true });
   const [agreement, signed] = await Promise.all([repo.agreementInUse(deps.sql, gymId), repo.signatureOf(deps.sql, gymId, membershipId)]);
   return membershipAgreementResponseSchema.parse({
     gymName: org.name,

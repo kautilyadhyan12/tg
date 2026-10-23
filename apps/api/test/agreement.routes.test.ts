@@ -556,8 +556,10 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
       const resent = await Promise.all([post(copyUrl, {}, owner.cookies), post(copyUrl, {}, owner.cookies)]);
       expect(resent.map((r) => emailAgreementCopyResponseSchema.parse(JSON.parse(r.body)).emailed)).toEqual(["sent", "sent"]);
       expect(sent.length - before).toBe(2);
-      // Taken off the list: the signed copy can still be sent to them.
+      // Taken off the list: View still reads what they signed, with nothing to sign, and the copy can still be sent.
       expect((await send("DELETE", `/v1/orgs/${gymId}/member-list/entries/${maya}`, owner.cookies)).statusCode).toBe(200);
+      const past = await box(gymId, maya, mayaGold, owner.cookies);
+      expect([past.signed?.name, past.facts, past.factsKey]).toEqual(["Maya Patel", null, null]);
       await sql`UPDATE gym_agreement_signatures SET emailed_at = emailed_at - interval '2 minutes' WHERE held_membership_id = ${mayaGold}`;
       const former = await post(copyUrl, {}, owner.cookies);
       expect([former.statusCode, emailAgreementCopyResponseSchema.parse(JSON.parse(former.body)).emailed]).toEqual([200, "sent"]);

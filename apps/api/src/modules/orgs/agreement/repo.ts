@@ -120,14 +120,14 @@ export async function membershipRecord(
   membershipId: string,
   /** A past member's too: their signed copy can still be sent to them. */
   opts: { former: boolean } = { former: false },
-): Promise<{ fullName: string; dateOfBirth: string | null; email: string | null } | null> {
-  const rows = await sql<{ full_name: string; date_of_birth: string | null; email: string | null }[]>`
-    SELECT e.full_name, e.date_of_birth::text AS date_of_birth, e.email::text AS email
+): Promise<{ fullName: string; dateOfBirth: string | null; email: string | null; former: boolean } | null> {
+  const rows = await sql<{ full_name: string; date_of_birth: string | null; email: string | null; former: boolean }[]>`
+    SELECT e.full_name, e.date_of_birth::text AS date_of_birth, e.email::text AS email, e.former_at IS NOT NULL AS former
     FROM gym_member_list_entries e
     JOIN gym_held_memberships h ON h.gym_id = e.gym_id AND h.entry_id = e.id AND h.id = ${membershipId}
     WHERE e.gym_id = ${gymId} AND e.id = ${entryId} AND (${opts.former} OR e.former_at IS NULL)`;
   const row = rows[0];
-  return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth, email: row.email };
+  return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth, email: row.email, former: row.former };
 }
 
 /** The business's details the agreement names. */
