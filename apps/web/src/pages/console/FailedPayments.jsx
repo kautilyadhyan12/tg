@@ -53,9 +53,9 @@ function Row({ row, org, readOnly, onOpenPerson, onCharged }) {
           : await orgService.chargeFeeToCardOnFile(org.id, row.entryId, row.membershipId, row.billId, body);
       const charged = res.data.charge;
       const said = cardChargeOutcome(charged, row.name);
-      // Paid, or still with Square: never pressed again from here. A decline can be, once a day has passed.
-      const done = charged.step === 'charging' || charged.outcome !== 'declined';
-      setState({ busy: false, error: null, said, done });
+      // Answered either way: never pressed again from here. Paid or with Square, it is not owed by
+      // card; declined, Square asks for a day first, which the list says once it is opened again.
+      setState({ busy: false, error: null, said, done: true });
       setOpen(false);
       setKey(newKey());
       onCharged();

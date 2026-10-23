@@ -200,6 +200,8 @@ describe('Failed payments', () => {
     orgApi.chargeCardOnFile.mockResolvedValue({ data: { charge: { ...paid(GINA).data.charge, outcome: 'declined', reason: 'insufficient_funds', receiptNumber: null } } });
     fireEvent.click(within(gina).getByRole('button', { name: 'Charge $25.00' }));
     await within(gina).findByText(/Visa ending 1000 was declined\. The card did not have enough funds\./);
+    // Square asks for a day before the next try: no Try again on that row now.
+    expect(within(gina).queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(row('Nina Short').textContent).not.toContain('was declined. The card did not have enough funds. Nothing');
   });
 
