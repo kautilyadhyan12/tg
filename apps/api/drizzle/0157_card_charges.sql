@@ -72,5 +72,7 @@ CREATE UNIQUE INDEX "gym_card_charges_membership_uq" ON "gym_card_charges" USING
 CREATE UNIQUE INDEX "gym_card_charges_square_payment_uq" ON "gym_card_charges" USING btree ("environment","account_id","square_payment_id") WHERE "square_payment_id" IS NOT NULL;--> statement-breakpoint
 -- A bill's newest charge, for its page.
 CREATE INDEX "gym_card_charges_bill_idx" ON "gym_card_charges" USING btree ("gym_id","bill_id","started_at");--> statement-breakpoint
+-- A press paying a period before its bill was open, found for that bill by its membership and period.
+CREATE INDEX "gym_card_charges_period_idx" ON "gym_card_charges" USING btree ("gym_id","held_membership_id","period_index") WHERE "bill_id" IS NULL;--> statement-breakpoint
 -- The worker's search for charges Square has not answered.
 CREATE INDEX "gym_card_charges_open_idx" ON "gym_card_charges" USING btree ("checked_at") WHERE "state" = 'charging';

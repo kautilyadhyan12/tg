@@ -484,6 +484,7 @@ export const gymCardCharges = pgTable(
     uniqueIndex("gym_card_charges_membership_uq").on(t.gymId, t.heldMembershipId).where(sql`${t.state} = 'charging'`),
     uniqueIndex("gym_card_charges_square_payment_uq").on(t.environment, t.accountId, t.squarePaymentId).where(sql`${t.squarePaymentId} IS NOT NULL`),
     index("gym_card_charges_bill_idx").on(t.gymId, t.billId, t.startedAt),
+    index("gym_card_charges_period_idx").on(t.gymId, t.heldMembershipId, t.periodIndex).where(sql`${t.billId} IS NULL`),
     index("gym_card_charges_open_idx").on(t.checkedAt).where(sql`${t.state} = 'charging'`),
   ],
 );

@@ -245,7 +245,7 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
     if (s.bySchedule && billId !== null) {
       const [before] = await tx<{ id: string }[]>`
         SELECT id FROM gym_card_charges
-        WHERE gym_id = ${s.gymId} AND (bill_id = ${billId} OR (held_membership_id = ${row.id} AND period_index = ${periodIndex}))`;
+        WHERE gym_id = ${s.gymId} AND (bill_id = ${billId} OR (bill_id IS NULL AND held_membership_id = ${row.id} AND period_index = ${periodIndex}))`;
       if (before !== undefined) return { kind: "not_allowed" };
     }
 
@@ -468,9 +468,10 @@ export async function dueBills(
           AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id))
       -- No card was charged for it before, by the app or by staff: one try, and never again after a
       -- decline or an answer Square did not give.
-      AND NOT EXISTS (
+      AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id)
+      AND (b.fee IS NOT NULL OR NOT EXISTS (
         SELECT 1 FROM gym_card_charges x
-        WHERE x.gym_id = b.gym_id AND (x.bill_id = b.id OR (b.fee IS NULL AND x.held_membership_id = b.held_membership_id AND x.period_index = b.period_index)))
+        WHERE x.gym_id = b.gym_id AND x.bill_id IS NULL AND x.held_membership_id = b.held_membership_id AND x.period_index = b.period_index))
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
       AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
     ORDER BY b.gym_id, b.id
@@ -502,10 +503,14 @@ export async function chargesOfBills(
       -- keeps no bill (re-check: such a charge Square never answered must still be said on the bill).
       SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
       FROM gym_member_bills b
-      JOIN gym_card_charges c
-        ON c.gym_id = b.gym_id
-       AND (c.bill_id = b.id OR (c.bill_id IS NULL AND b.fee IS NULL AND c.held_membership_id = b.held_membership_id AND c.period_index = b.period_index))
+      JOIN gym_card_charges c ON c.gym_id = b.gym_id AND c.bill_id = b.id
       WHERE b.gym_id = ${gymId} AND b.id = ANY(${[...billIds]}::uuid[])
+      UNION
+      SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
+      FROM gym_member_bills b
+      JOIN gym_card_charges c
+        ON c.gym_id = b.gym_id AND c.bill_id IS NULL AND c.held_membership_id = b.held_membership_id AND c.period_index = b.period_index
+      WHERE b.gym_id = ${gymId} AND b.id = ANY(${[...billIds]}::uuid[]) AND b.fee IS NULL
       UNION
       SELECT c.bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
       FROM gym_card_charges c
