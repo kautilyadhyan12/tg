@@ -118,6 +118,12 @@ async function seedGym(people: number, n: number): Promise<Gym> {
       (gym_id, entry_id, membership_type_id, request_key, kind, price_minor, currency, term_count, term_unit, starts_on, status, paid_periods, renews)
     SELECT ${id}, e.id, ${typeId}, gen_random_uuid(), 'recurring', 2500, 'USD', 1, 'week', (SELECT d FROM today) - 7, 'active', 1, true
     FROM gym_member_list_entries e WHERE e.gym_id = ${id}`;
+  // The first week's bill, paid at the desk (the app charges only a bill with one before it).
+  await sql`
+    WITH today AS (SELECT (now() AT TIME ZONE 'America/Chicago')::date AS d)
+    INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to, status)
+    SELECT ${id}, h.id, 0, 2500, 'USD', (SELECT d FROM today) - 7, (SELECT d FROM today) - 7, (SELECT d FROM today) - 1, 'paid'
+    FROM gym_held_memberships h WHERE h.gym_id = ${id}`;
   await sql`
     WITH today AS (SELECT (now() AT TIME ZONE 'America/Chicago')::date AS d)
     INSERT INTO gym_member_bills (gym_id, held_membership_id, period_index, amount_minor, currency, due_on, covers_from, covers_to)
