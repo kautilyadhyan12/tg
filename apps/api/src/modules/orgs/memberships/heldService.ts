@@ -81,7 +81,7 @@ export interface HeldDeps {
 const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
 
 type Charges = Awaited<ReturnType<typeof chargesOfBills>>;
-const NO_CHARGES: Charges = { declined: new Map(), charging: new Set(), cardOfPayment: new Map() };
+const NO_CHARGES: Charges = { declined: new Map(), unchecked: new Map(), charging: new Set(), cardOfPayment: new Map() };
 
 /** In use first, then the ones that are over; newest start first within each. */
 const ORDER: Record<HeldMembershipShown, number> = { active: 0, frozen: 0, upcoming: 1, ended: 2, cancelled: 2 };
@@ -163,6 +163,7 @@ function billingOf(
         })),
       // A decline is said while the bill is still owed (18d-iii-i).
       cardDeclined: b.status === "open" ? (ctx.charges.declined.get(b.id) ?? null) : null,
+      cardUnchecked: b.status === "open" ? (ctx.charges.unchecked.get(b.id) ?? null) : null,
       charging: ctx.charges.charging.has(b.id),
     })),
     billsNotShown: bills.length - sent.length,
@@ -225,6 +226,7 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
     payments: standing.map((p) => ({ ...paymentOf(p), refunds: [], voidedRefunds: [], refundableMinor: 0 })),
     voidedPayments: mine.flatMap((p) => (p.voided === null ? [] : [{ ...paymentOf(p), voidedRefunds: [], voided: p.voided }])),
     cardDeclined: owed ? (ctx.charges.declined.get(f.id) ?? null) : null,
+    cardUnchecked: owed ? (ctx.charges.unchecked.get(f.id) ?? null) : null,
     charging: ctx.charges.charging.has(f.id),
     // A payment taken on the Terminal or charged to the card on file is refunded in Square, never
     // voided here (18d-vi-b-i, 18d-iii-i).

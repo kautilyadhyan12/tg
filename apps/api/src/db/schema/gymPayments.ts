@@ -426,7 +426,8 @@ export const gymCardCharges = pgTable(
       .references(() => gyms.id, { onDelete: "cascade" }),
     entryId: uuid("entry_id"),
     heldMembershipId: uuid("held_membership_id").notNull(),
-    billId: uuid("bill_id").notNull(),
+    /** Null only for a press paying a period whose bill is not open yet. */
+    billId: uuid("bill_id"),
     /** Null for a fee. */
     periodIndex: integer("period_index"),
     /** Whose card: the person's own, or the record that pays for them (18i). */
@@ -463,7 +464,8 @@ export const gymCardCharges = pgTable(
     ),
     check("gym_card_charges_card_check", sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$'`),
     check("gym_card_charges_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999 AND ${t.currency} ~ '^[A-Z]{3}$' AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0)`),
-    check("gym_card_charges_by_check", sql`NOT ${t.bySchedule} OR ${t.startedBy} IS NULL`),
+    check("gym_card_charges_by_check", sql`NOT ${t.bySchedule} OR (${t.startedBy} IS NULL AND ${t.billId} IS NOT NULL)`),
+    check("gym_card_charges_bill_check", sql`${t.billId} IS NOT NULL OR ${t.periodIndex} IS NOT NULL`),
     check(
       "gym_card_charges_state_check",
       sql`${t.state} IN ('charging','done') AND (${t.state} = 'charging') = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('paid','declined','refused','not_recorded','gone'))`,

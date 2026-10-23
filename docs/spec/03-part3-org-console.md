@@ -4231,8 +4231,10 @@ charges a renewing membership's bill after its first, and a freeze fee, that fel
 the two days before on the gym's clock, from 6 a.m. there, to the card on file of whoever pays for
 the person (18i), in the Square account the gym is connected to now. The first bill is taken at
 the desk when the membership is given; late cancel and no-show fees are taken by hand; a membership
-set to stop, cancelled, or a past member's is never charged by itself, nor a bill with an earlier
-period still owed. Square is asked with the bill's own id as its idempotency key (Square gives back
+set to stop, cancelled, frozen (but for its freeze fee), or a past member's is never charged by
+itself, nor a bill with an earlier period still owed, nor a bill a card was charged for before, by the
+app or by staff (one try: never again after a decline, or after a charge Square did not answer, which
+the bill says to check in Square). Square is asked with the bill's own id as its idempotency key (Square gives back
 the same payment, paid or failed, and refuses the same key with another body: measured 2026-10-23);
 the app charges a bill by itself once. A payment Square took is recorded as Card on file
 (`company`) with Square's payment id and the card's brand and last four on the bill; it is refunded

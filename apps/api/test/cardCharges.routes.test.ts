@@ -276,23 +276,27 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     const aarav = await holding(gym, typeId, await person(gym, "Aarav Sharma"));
     const payer = await send("PUT", `${entryUrl(gym, aarav.entryId)}/payer`, gym.owner.cookies, { payerEntryId: priyaId });
     expect(payer.statusCode, payer.body).toBe(200);
-    // Not the app's to charge: a first week never paid, a membership cancelled, one set to stop.
+    // Not the app's to charge: a first week never paid, and, once the second week's bill is open, a
+    // membership cancelled, one set to stop, one frozen.
     const unpaidFirst = await holding(gym, typeId, await person(gym, "Una First"), false);
     const cancelled = await holding(gym, typeId, await person(gym, "Cal Cancelled"));
     const stopping = await holding(gym, typeId, await person(gym, "Stella Stopping"));
+    const frozen = await holding(gym, typeId, await person(gym, "Fred Frozen"));
     // Another gym's member, with a card of their own in another account.
     const stranger = await holding(other, otherType, await person(other, "Sam Stranger"));
 
-    // Cancelled now, and set to stop at the end of its first week: neither renews by itself.
-    for (const [h, when] of [
-      [cancelled, "today"],
-      [stopping, "period_end"],
-    ] as const) {
-      const res = await send("POST", `${entryUrl(gym, h.entryId)}/memberships/${h.membershipId}/cancel`, gym.owner.cookies, { when });
-      expect(res.statusCode, res.body).toBe(200);
-    }
-    for (const h of [tara, ravi, aarav, cancelled, stopping]) await weekOn(gym, h);
+    for (const h of [tara, ravi, aarav, cancelled, stopping, frozen]) await weekOn(gym, h);
     await weekOn(other, stranger);
+    // With the second week's bill open: cancelled today, set to stop, frozen. None renews by itself
+    // now, and each bill stays for the desk.
+    const cancel = await send("POST", `${entryUrl(gym, cancelled.entryId)}/memberships/${cancelled.membershipId}/cancel`, gym.owner.cookies, { when: "today" });
+    expect(cancel.statusCode, cancel.body).toBe(200);
+    // Set to stop: the app refuses it while the week is unpaid, so a bill never opens on one set to
+    // stop; the flag is set here to prove the charge's own check stands behind that.
+    await sql`UPDATE gym_held_memberships SET renews = false WHERE id = ${stopping.membershipId}`;
+    const froze = await send("POST", `${entryUrl(gym, frozen.entryId)}/memberships/${frozen.membershipId}/freeze`, gym.owner.cookies, { feeMinor: 0 });
+    expect(froze.statusCode, froze.body).toBe(200);
+    for (const h of [cancelled, stopping, frozen]) expect((await billsOf(h)).find((b) => b.period_index === 1)?.status, "a bill still open").toBe("open");
     const taraCard = await cardFor(gym, tara.entryId);
     const raviCard = await cardFor(gym, ravi.entryId);
     const priyaCard = await cardFor(gym, priyaId);
@@ -300,6 +304,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     const unpaidCard = await cardFor(gym, unpaidFirst.entryId);
     const cancelledCard = await cardFor(gym, cancelled.entryId);
     const stoppingCard = await cardFor(gym, stopping.entryId);
+    const frozenCard = await cardFor(gym, frozen.entryId);
     const strangerCard = await cardFor(other, stranger.entryId);
 
     // The worker's minute, twice at the same instant, then once more.
@@ -327,9 +332,9 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     // The other gym is its own: charged in its own account, and nothing of this gym's touched it.
     expect(takenFrom(strangerCard)).toHaveLength(1);
     expect(square.taken().every((p) => (p.cardId === strangerCard ? p.accountId === other.acct.merchantId : p.accountId === gym.acct.merchantId))).toBe(true);
-    // Never charged: the first week (taken at the desk), a cancelled membership, one set to stop.
-    for (const card of [unpaidCard, cancelledCard, stoppingCard]) expect(square.charged.filter((p) => p.cardId === card)).toEqual([]);
-    for (const h of [unpaidFirst, cancelled, stopping]) expect(await chargesOf(h)).toEqual([]);
+    // Never charged: the first week (taken at the desk), a cancelled membership, one set to stop, one frozen.
+    for (const card of [unpaidCard, cancelledCard, stoppingCard, frozenCard]) expect(square.charged.filter((p) => p.cardId === card)).toEqual([]);
+    for (const h of [unpaidFirst, cancelled, stopping, frozen]) expect(await chargesOf(h)).toEqual([]);
 
     // The page: paid by Card on file, Visa ending 1111.
     const page = (await held(gym, gym.owner, tara.entryId)).memberships[0];
@@ -523,7 +528,17 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     const charge = cardChargeResponseSchema.parse(JSON.parse(first.body)).charge;
     expect(charge).toMatchObject({ step: "done", outcome: "paid", card: { brand: "VISA", last4: "1111" }, amountMinor: pay.leftMinor });
     expect(cardChargeResponseSchema.parse(JSON.parse(again.body)).charge.id).toBe(charge.id);
-    expect(takenFrom(card).map((p) => p.amount_money.amount)).toEqual([pay.leftMinor]);
+
+    // The next week, paid ahead: it has no bill yet, and the press opens it as a payment by hand does.
+    const ahead = (await held(gym, gym.owner, tess.entryId)).memberships[0]?.billing?.pay;
+    if (ahead === undefined || ahead === null) throw new Error("nothing to pay ahead");
+    expect(ahead.periodIndex).toBe(pay.periodIndex + 1);
+    expect((await billsOf(tess)).some((b) => b.period_index === ahead.periodIndex)).toBe(false);
+    const early = await send("POST", chargeUrl, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: ahead.periodIndex, amountMinor: ahead.leftMinor, cardRef: ref });
+    expect(early.statusCode, early.body).toBe(200);
+    expect(cardChargeResponseSchema.parse(JSON.parse(early.body)).charge).toMatchObject({ step: "done", outcome: "paid", amountMinor: ahead.leftMinor });
+    expect((await billsOf(tess)).find((b) => b.period_index === ahead.periodIndex)?.status).toBe("paid");
+    expect(takenFrom(card).map((p) => p.amount_money.amount)).toEqual([pay.leftMinor, ahead.leftMinor]);
     expect(charge.receiptNumber).not.toBeNull();
 
     // Paid through Square: given back there, never voided here.
@@ -532,7 +547,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(page?.billing?.undo).toBeNull();
     const voided = await send("POST", `${entryUrl(gym, tess.entryId)}/memberships/${tess.membershipId}/payments/${paid?.id ?? ""}/void`, gym.owner.cookies, { reason: "mistake" });
     expect(voided.statusCode, voided.body).toBe(409);
-    expect((await paymentsOf(tess)).map((p) => p.method)).toEqual(["company"]);
+    expect((await paymentsOf(tess)).map((p) => p.method)).toEqual(["company", "company"]);
   });
 
   it("a declined press says why, and charges nothing", async () => {
@@ -553,5 +568,86 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(await paymentsOf(ned)).toEqual([]);
     const [told] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.card_charge_declined'`;
     expect(told?.n).toBe(1);
+  });
+
+  it("Square's answer lost, then a refusal on asking again: never called nothing taken, said on the bill, and not charged again by itself", async () => {
+    const gym = await makeGym(`Refused Gym ${uniq()}`, `MRF${uniq()}`);
+    const typeId = await typeOf(gym);
+    const rosa = await holding(gym, typeId, await person(gym, "Rosa Refused"));
+    const today = await todayOf(gym, rosa.entryId);
+    clock = new Date(`${today}T18:00:00Z`);
+    await weekOn(gym, rosa);
+    const card = await cardFor(gym, rosa.entryId);
+    square.state.loseAnswers = true;
+    await work();
+    square.state.loseAnswers = false;
+    expect(takenFrom(card)).toHaveLength(1);
+    // A minute later Square refuses the gym's token: what the first ask did cannot be read.
+    clock = new Date(clock.getTime() + CARD_CHARGE.idleMs + 1000);
+    square.state.unauthorized = true;
+    try {
+      await work();
+    } finally {
+      square.state.unauthorized = false;
+    }
+    expect((await chargesOf(rosa)).map((c) => c.outcome)).toEqual(["gone"]);
+    const [told] = await sql<{ action: string }[]>`SELECT action FROM audit_log WHERE gym_id = ${gym.id} AND action LIKE 'org.card_charge_%'`;
+    expect(told?.action).toBe("org.card_charge_unchecked");
+    const shown = (await held(gym, gym.owner, rosa.entryId)).memberships[0]?.billing?.bills.find((b) => b.periodIndex === 1);
+    expect(shown?.cardUnchecked).toEqual({ brand: "VISA", last4: "1111", on: today });
+    expect(shown?.cardDeclined).toBeNull();
+    // Never asked again by itself: Square may have the money already.
+    clock = new Date(clock.getTime() + 60 * 60_000);
+    await work();
+    expect(square.charged.filter((p) => p.cardId === card)).toHaveLength(1);
+    expect(await chargesOf(rosa)).toHaveLength(1);
+  });
+
+  it("a card declined on a staff press is not tried again by itself", async () => {
+    const gym = await makeGym(`Press Gym ${uniq()}`, `MPR${uniq()}`);
+    const typeId = await typeOf(gym);
+    const pia = await holding(gym, typeId, await person(gym, "Pia Pressed"));
+    const today = await todayOf(gym, pia.entryId);
+    // Before 6 in the morning, the renewal opens; staff press Charge card on file; the bank says no.
+    clock = new Date(`${today}T10:00:00Z`);
+    await weekOn(gym, pia);
+    const card = await cardFor(gym, pia.entryId, "insufficient");
+    const box = terminalPaymentsResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, pia.entryId)}/terminal-payments`, gym.owner.cookies)).body));
+    const pay = (await held(gym, gym.owner, pia.entryId)).memberships[0]?.billing?.pay;
+    const pressed = await send("POST", `${entryUrl(gym, pia.entryId)}/memberships/${pia.membershipId}/card-charge`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      periodIndex: pay?.periodIndex,
+      amountMinor: pay?.leftMinor,
+      cardRef: box.cardOnFile?.ref,
+    });
+    expect(cardChargeResponseSchema.parse(JSON.parse(pressed.body)).charge.outcome).toBe("declined");
+    // At noon the worker looks: the bill is due, the card is on file, and it was declined today.
+    clock = new Date(`${today}T18:00:00Z`);
+    await work();
+    expect(square.charged.filter((p) => p.cardId === card)).toHaveLength(1);
+    expect((await chargesOf(pia)).map((c) => [c.outcome, c.by_schedule])).toEqual([["declined", false]]);
+  });
+
+  it.each([
+    ["another location", { location_id: "LELSEWHERE" }],
+    ["another customer", { customer_id: "CUSTSOMEONEELSE" }],
+    ["another charge", { reference_id: "00000000-0000-4000-8000-000000000000" }],
+  ])("Square answering with a payment at %s is kept, never recorded", async (_what, answer) => {
+    const gym = await makeGym(`Other Gym ${uniq()}`, `MOA${uniq()}`);
+    const typeId = await typeOf(gym);
+    const olga = await holding(gym, typeId, await person(gym, "Olga Other"));
+    clock = new Date(`${await todayOf(gym, olga.entryId)}T18:00:00Z`);
+    await weekOn(gym, olga);
+    await cardFor(gym, olga.entryId);
+    square.state.answerWith = answer;
+    try {
+      await work();
+    } finally {
+      square.state.answerWith = null;
+    }
+    expect((await chargesOf(olga)).map((c) => c.outcome)).toEqual(["not_recorded"]);
+    expect((await billsOf(olga)).find((b) => b.period_index === 1)?.status).toBe("open");
+    const [told] = await sql<{ why: string }[]>`SELECT meta->>'why' AS why FROM audit_log WHERE gym_id = ${gym.id} AND action = 'org.card_charge_not_recorded'`;
+    expect(told?.why).toBe("not_ours");
   });
 });

@@ -8,6 +8,8 @@
 -- else pays, voids or cancels that membership's bills. Rows are kept: a bill reads "declined" from
 -- its newest one, and a payment its card.
 --
+-- `bill_id` is null only for a press paying a period whose bill is not open yet: the payment opens
+-- it, as a payment by hand does.
 -- `held_membership_id` and `bill_id` have no link: the money is recorded on whichever record holds
 -- the membership when Square answers, and a bill gone by then leaves the row to say so. A record
 -- deleted for good lets go of `entry_id` and `payer_entry_id` alone (as `0149`).
@@ -16,7 +18,7 @@ CREATE TABLE "gym_card_charges" (
 	"gym_id" uuid NOT NULL,
 	"entry_id" uuid,
 	"held_membership_id" uuid NOT NULL,
-	"bill_id" uuid NOT NULL,
+	"bill_id" uuid,
 	"period_index" integer,
 	"payer_entry_id" uuid,
 	"environment" text NOT NULL,
@@ -46,7 +48,8 @@ CREATE TABLE "gym_card_charges" (
 	CONSTRAINT "gym_card_charges_card_check" CHECK ("brand" ~ '^[A-Z_]{1,40}$' AND "last4" ~ '^[0-9]{4}$'),
 	CONSTRAINT "gym_card_charges_amount_check" CHECK ("amount_minor" BETWEEN 1 AND 99999999 AND "currency" ~ '^[A-Z]{3}$' AND ("period_index" IS NULL OR "period_index" >= 0)),
 	-- The app's own charge has nobody behind it; a press has whoever pressed, while they are in the app.
-	CONSTRAINT "gym_card_charges_by_check" CHECK (NOT "by_schedule" OR "started_by" IS NULL),
+	CONSTRAINT "gym_card_charges_by_check" CHECK (NOT "by_schedule" OR ("started_by" IS NULL AND "bill_id" IS NOT NULL)),
+	CONSTRAINT "gym_card_charges_bill_check" CHECK ("bill_id" IS NOT NULL OR "period_index" IS NOT NULL),
 	CONSTRAINT "gym_card_charges_state_check" CHECK ("state" IN ('charging','done') AND ("state" = 'charging') = ("outcome" IS NULL AND "finished_at" IS NULL) AND ("outcome" IS NULL OR "outcome" IN ('paid','declined','refused','not_recorded','gone'))),
 	-- Paid is a payment Square took and the one row it is on the bill as; not recorded is a payment
 	-- Square took and nothing on the bill. Declined and refused keep Square's code.

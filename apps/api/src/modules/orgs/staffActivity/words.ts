@@ -274,7 +274,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
   "org.card_charge_not_recorded": (s) =>
     text(s, "why") === "amount_differs"
       ? `Square took another amount than asked from ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${person(s)}, so it isn't recorded. Refund it in Square`
-      : `Charged ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${pay(s)} from ${person(s)}, but the bill had changed, so it isn't recorded. Check it in Square`,
+      : text(s, "why") === "not_ours"
+        ? `Square answered a charge to ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${person(s)} with a payment that doesn't match it, so it isn't recorded. Check it in Square`
+        : `Charged ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${pay(s)} from ${person(s)}, but the bill had changed, so it isn't recorded. Check it in Square`,
   "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");

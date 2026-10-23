@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { CARD_DECLINE_REASONS, cardDeclineReasonOf } from '@app/shared';
 import { cardChargeOutcome, cardOnFileDetail, cardOnFileLabel } from './cardChargeView';
-import { CARD_CHARGING_LINE, billRow, cardDeclinedLine } from './memberBillsView';
+import { CARD_CHARGING_LINE, billRow, cardDeclinedLine, cardUncheckedLine } from './memberBillsView';
 
 const card = { brand: 'VISA', last4: '1111', expired: false, payerName: null, ref: 'x' };
 const charge = (over) => ({ id: 'c', membershipId: 'm', feeBillId: null, amountMinor: 2500, currency: 'USD', card: { brand: 'VISA', last4: '1111' }, step: 'done', outcome: 'paid', reason: null, receiptNumber: 7, ...over });
@@ -86,6 +86,12 @@ describe("a bill's card lines", () => {
     expect(cardDeclinedLine(declined)).toBe("Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.");
     expect(billRow({ ...bill, cardDeclined: declined }, 'USD', '2026-10-20').declined).toBe("Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.");
     expect(billRow(bill, 'USD', '2026-10-20').declined).toBeNull();
+  });
+
+  it('a charge Square never answered: check Square before taking payment another way', () => {
+    const unchecked = { brand: 'VISA', last4: '1111', on: '2026-10-20' };
+    expect(cardUncheckedLine(unchecked)).toBe("Square didn't say whether it charged Visa ending 1111 on 20 Oct. Check your Square Dashboard before taking payment another way.");
+    expect(billRow({ ...bill, cardUnchecked: unchecked }, 'USD', '2026-10-20').declined).toBe(cardUncheckedLine(unchecked));
   });
 
   it('a charge on its way', () => {

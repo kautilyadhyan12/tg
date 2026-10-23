@@ -5,7 +5,7 @@
 // (`checking_until`), and every change names the state it was read in, so two requests never both
 // act on one answer. Every read for a screen names the gym; the worker's reads across gyms name the
 // environment and hand each row back with its gym.
-import { cardDeclineReasonOf, cardChargeOutcomeSchema, memberPayTarget, type CardChargeOutcome, type CardDeclined } from "@app/shared";
+import { cardDeclineReasonOf, cardChargeOutcomeSchema, heldMembershipView, memberPayTarget, type CardChargeOutcome, type CardDeclined, type CardUnchecked } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { insertAudit } from "../repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
@@ -45,6 +45,9 @@ export interface ChargeRow {
   squarePaymentId: string | null;
   startedBy: string | null;
   startedAt: Date;
+  /** When Square was last asked about it: past `startedAt`, Square was asked before, and may have
+   *  taken the money then. */
+  checkedAt: Date;
   /** The payment's receipt, once it is on the bill. */
   receiptNumber: number | null;
   /** The fee it charges, while its bill is kept: a freeze fee, a late cancel or a no-show. */
@@ -76,6 +79,7 @@ interface RawCharge {
   square_payment_id: string | null;
   started_by: string | null;
   started_at: Date;
+  checked_at: Date;
   receipt_number: number | null;
   fee_kind: string | null;
 }
@@ -107,6 +111,7 @@ const toRow = (r: RawCharge): ChargeRow => {
     squarePaymentId: r.square_payment_id,
     startedBy: r.started_by,
     startedAt: r.started_at,
+    checkedAt: r.checked_at,
     receiptNumber: r.receipt_number,
     feeKind: r.fee_kind,
   };
@@ -115,7 +120,7 @@ const toRow = (r: RawCharge): ChargeRow => {
 const COLUMNS = (sql: SqlOrTx) =>
   sql`c.id, c.gym_id, c.entry_id, c.held_membership_id, c.bill_id, c.period_index, c.payer_entry_id, c.environment, c.account_id,
       c.location_id, c.customer_id, c.card_id, c.brand, c.last4, c.amount_minor, c.currency, c.by_schedule, c.payment_key,
-      c.state, c.outcome, c.decline_code, c.square_payment_id, c.started_by, c.started_at,
+      c.state, c.outcome, c.decline_code, c.square_payment_id, c.started_by, c.started_at, c.checked_at,
       (SELECT p.receipt_number FROM gym_member_payments p WHERE p.gym_id = c.gym_id AND p.id = c.member_payment_id) AS receipt_number,
       (SELECT b.fee FROM gym_member_bills b WHERE b.gym_id = c.gym_id AND b.id = c.bill_id) AS fee_kind`;
 
@@ -198,6 +203,10 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
     const out = await squareMoneyOut(tx, s.gymId, row.id);
     if (out !== null) return out;
     if (s.bySchedule && (row.membership.kind !== "recurring" || !row.membership.renews)) return { kind: "not_allowed" };
+    // The app's own charge stops the moment a membership is cancelled (Visa's dispute 13.2): a
+    // period's bill only while it is in use, a freeze fee only while it is frozen (review round one).
+    const status = heldMembershipView(row.membership, s.today).status;
+    if (s.bySchedule && status !== (s.target.kind === "period" ? "active" : "frozen")) return { kind: "not_allowed" };
 
     let billId: string | null;
     let amountMinor: number;
@@ -230,10 +239,13 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
       currency = fee.currency;
     }
     if (currency !== s.accountCurrency) return { kind: "currency" };
-    // The app charges a bill by itself once: a second run at the same instant waits for this lock,
-    // then finds the first's row.
+    // The app charges by itself only a bill no card was ever charged for, by itself or by staff: one
+    // try, never again after a decline, and never after an answer Square did not give (the money may
+    // be taken). A second run at the same instant waits for this lock, then finds the first's row.
     if (s.bySchedule && billId !== null) {
-      const [before] = await tx<{ id: string }[]>`SELECT id FROM gym_card_charges WHERE gym_id = ${s.gymId} AND bill_id = ${billId} AND by_schedule`;
+      const [before] = await tx<{ id: string }[]>`
+        SELECT id FROM gym_card_charges
+        WHERE gym_id = ${s.gymId} AND (bill_id = ${billId} OR (held_membership_id = ${row.id} AND period_index = ${periodIndex}))`;
       if (before !== undefined) return { kind: "not_allowed" };
     }
 
@@ -411,17 +423,18 @@ export interface DueBill {
 }
 
 /** Bills the app charges by itself now, across gyms, after `after` in (gym, bill) order: a renewing
- *  membership's bill with a bill before it, or its freeze fee, open, due today or in the two days before
- *  on its gym's clock and from 6 in the morning there, never charged by the app before, whose payer
- *  has a card in the Square account the gym is connected to, and with nothing else on its way
- *  through Square for that membership. The write checks it all again under the record's lock. */
+ *  membership's bill with a bill before it while it is in use, or its freeze fee while it is frozen,
+ *  of a current member, in the Square account's money, open, due today or in the two days before on
+ *  its gym's clock and from 6 in the morning there, never charged before by the app or by staff,
+ *  whose payer has a card in the Square account the gym is connected to, and with nothing else on its
+ *  way through Square for that membership. The write checks it all again under the record's lock. */
 export async function dueBills(
   sql: Sql,
   q: { environment: SquareEnvironment; now: Date; limit: number; after: { gymId: string; billId: string } | null; gymIds: readonly string[] | null },
 ): Promise<DueBill[]> {
   const rows = await sql<{ gym_id: string; entry_id: string; held_membership_id: string; bill_id: string; period_index: number | null; timezone: string }[]>`
     WITH gym_day AS (
-      SELECT g.id AS gym_id, g.timezone, c.account_id,
+      SELECT g.id AS gym_id, g.timezone, c.account_id, c.currency,
              (${q.now}::timestamptz AT TIME ZONE g.timezone)::date AS today,
              extract(hour FROM ${q.now}::timestamptz AT TIME ZONE g.timezone) AS hour
       FROM gym_payment_connections c
@@ -433,9 +446,12 @@ export async function dueBills(
     FROM gym_day d
     JOIN gym_member_bills b ON b.gym_id = d.gym_id AND b.status = 'open' AND b.due_on BETWEEN d.today - 2 AND d.today
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
     WHERE d.hour >= 6
-      AND h.kind = 'recurring' AND h.renews AND h.entry_id IS NOT NULL
-      AND (b.fee IS NULL OR (b.fee = 'freeze' AND NOT b.freeze_stopped))
+      AND h.kind = 'recurring' AND h.renews AND b.currency = d.currency
+      -- A period's bill while the membership is in use, a freeze fee while it is frozen: never once it
+      -- is cancelled. The write checks the membership as the clock has it.
+      AND ((b.fee IS NULL AND h.status = 'active') OR (b.fee = 'freeze' AND NOT b.freeze_stopped AND h.status = 'frozen'))
       -- A renewal: the membership had a bill before this one (its first is taken at the desk), and
       -- none of those is still owed (periods are paid in order).
       AND (b.fee IS NOT NULL OR (
@@ -450,7 +466,11 @@ export async function dueBills(
         SELECT 1 FROM gym_member_cards k
         WHERE k.gym_id = b.gym_id AND k.environment = ${q.environment} AND k.account_id = d.account_id
           AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id))
-      AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.bill_id = b.id AND x.by_schedule)
+      -- No card was charged for it before, by the app or by staff: one try, and never again after a
+      -- decline or an answer Square did not give.
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_card_charges x
+        WHERE x.gym_id = b.gym_id AND (x.bill_id = b.id OR (b.fee IS NULL AND x.held_membership_id = b.held_membership_id AND x.period_index = b.period_index)))
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
       AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
     ORDER BY b.gym_id, b.id
@@ -458,18 +478,24 @@ export async function dueBills(
   return rows.map((r) => ({ gymId: r.gym_id, entryId: r.entry_id, membershipId: r.held_membership_id, billId: r.bill_id, periodIndex: r.period_index, timezone: r.timezone }));
 }
 
-/** For a person's page: each bill's newest charge (declined; or charging now), and the card each
- *  payment was charged to. */
+/** For a person's page: each bill's newest charge (declined; never answered by Square; or charging
+ *  now), and the card each payment was charged to. */
 export async function chargesOfBills(
   sql: SqlOrTx,
   gymId: string,
   billIds: readonly string[],
   paymentIds: readonly string[],
-): Promise<{ declined: Map<string, CardDeclined>; charging: Set<string>; cardOfPayment: Map<string, { brand: string; last4: string }> }> {
+): Promise<{
+  declined: Map<string, CardDeclined>;
+  unchecked: Map<string, CardUnchecked>;
+  charging: Set<string>;
+  cardOfPayment: Map<string, { brand: string; last4: string }>;
+}> {
   const declined = new Map<string, CardDeclined>();
+  const unchecked = new Map<string, CardUnchecked>();
   const charging = new Set<string>();
   const cardOfPayment = new Map<string, { brand: string; last4: string }>();
-  if (billIds.length === 0 && paymentIds.length === 0) return { declined, charging, cardOfPayment };
+  if (billIds.length === 0 && paymentIds.length === 0) return { declined, unchecked, charging, cardOfPayment };
   const rows = await sql<{ bill_id: string | null; state: string; outcome: string | null; decline_code: string | null; brand: string; last4: string; on: string; member_payment_id: string | null; newest: boolean }[]>`
     SELECT c.bill_id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id,
            (c.started_at AT TIME ZONE g.timezone)::date::text AS on,
@@ -484,8 +510,9 @@ export async function chargesOfBills(
     if (r.outcome === "declined" && r.decline_code !== null) {
       declined.set(r.bill_id, { brand: r.brand, last4: r.last4, on: r.on, reason: cardDeclineReasonOf(r.decline_code) });
     }
+    if (r.outcome === "gone") unchecked.set(r.bill_id, { brand: r.brand, last4: r.last4, on: r.on });
   }
-  return { declined, charging, cardOfPayment };
+  return { declined, unchecked, charging, cardOfPayment };
 }
 
 /** The card Charge card on file would charge for this record now, as `startCharge` picks it, with

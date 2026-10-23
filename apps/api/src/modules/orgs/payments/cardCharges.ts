@@ -76,12 +76,18 @@ const codeOf = (code: string): string => (/^[A-Z0-9_]{1,60}$/.test(code) ? code 
 /** The payment Square answered with is this charge's: our amount, our location, our customer and
  *  our charge named in it (Square's test area names all of them, measured 2026-10-23). */
 function isOurs(charge: charges.ChargeRow, payment: SquarePayment): boolean {
-  if (payment.amount_money.amount !== charge.amountMinor || payment.amount_money.currency !== charge.currency) return false;
-  if (payment.total_money != null && payment.total_money.amount !== charge.amountMinor) return false;
-  if (payment.tip_money != null && payment.tip_money.amount !== 0) return false;
-  if (payment.location_id != null && payment.location_id !== charge.locationId) return false;
-  if (payment.customer_id != null && payment.customer_id !== charge.customerId) return false;
-  return payment.reference_id == null || payment.reference_id === charge.id;
+  return mismatch(charge, payment) === null;
+}
+
+/** How Square's payment differs from this charge: `amount_differs` for another amount, `not_ours`
+ *  for another location, customer or charge; null where it is this charge's. */
+function mismatch(charge: charges.ChargeRow, payment: SquarePayment): "amount_differs" | "not_ours" | null {
+  if (payment.amount_money.amount !== charge.amountMinor || payment.amount_money.currency !== charge.currency) return "amount_differs";
+  if (payment.total_money != null && payment.total_money.amount !== charge.amountMinor) return "amount_differs";
+  if (payment.tip_money != null && payment.tip_money.amount !== 0) return "amount_differs";
+  if (payment.location_id != null && payment.location_id !== charge.locationId) return "not_ours";
+  if (payment.customer_id != null && payment.customer_id !== charge.customerId) return "not_ours";
+  return payment.reference_id == null || payment.reference_id === charge.id ? null : "not_ours";
 }
 
 /** Square's answer to the charge, and what follows from it. */
@@ -100,19 +106,24 @@ async function answered(deps: PaymentsDeps, charge: charges.ChargeRow, result: C
     return await end("declined", codeOf(result.code), failed);
   }
   if (result.kind === "refused") {
-    // Square refusing the request itself: the card gone from Square, the connection refused, or a
-    // fault of ours (the same key with another body). Nothing was taken.
     deps.log.warn({ event: "square.card_charge_refused", gymId: charge.gymId, status: result.status, code: result.code }, "Square refused a card charge");
+    // Asked before with no answer: Square may have taken the money then, and a refusal now (a token
+    // taken away, an account closed) says nothing of it. Checked in Square, never "nothing taken"
+    // (review round one).
+    if (charge.checkedAt.getTime() > charge.startedAt.getTime()) return await end("gone", null, null);
+    // Square refusing the request itself on the first ask: the card gone from Square, the connection
+    // refused, or a fault of ours. Nothing was taken.
     return await end("refused", codeOf(result.code), null);
   }
   const payment = result.value;
   const gym = await repo.readGym(deps.sql, charge.gymId);
   const today = dayInTz(now, gym?.timezone ?? "UTC");
-  if (!isOurs(charge, payment)) {
-    deps.log.error({ event: "square.card_charge_unexpected", gymId: charge.gymId, status: payment.status }, "Square answered a card charge with another payment");
+  const differs = mismatch(charge, payment);
+  if (differs !== null) {
+    deps.log.error({ event: "square.card_charge_unexpected", gymId: charge.gymId, status: payment.status, why: differs }, "Square answered a card charge with another payment");
     if (payment.status !== "COMPLETED") return null;
     // Money Square took that is not what was asked: kept, never recorded.
-    const kept = await charges.recordCharged(deps.sql, { charge, squarePaymentId: payment.id, today, now, refuse: "amount_differs" });
+    const kept = await charges.recordCharged(deps.sql, { charge, squarePaymentId: payment.id, today, now, refuse: differs });
     return kept === null ? null : { done: kept.outcome };
   }
   if (payment.status === "COMPLETED") {

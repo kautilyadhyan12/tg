@@ -60,6 +60,16 @@ export const cardDeclinedSchema = cardSeenSchema
   .strict();
 export type CardDeclined = z.infer<typeof cardDeclinedSchema>;
 
+/** A bill's newest charge to a card on file that Square never answered, where it is still owed:
+ *  the money may have been taken, so it is checked in Square before taking payment another way. */
+export const cardUncheckedSchema = cardSeenSchema
+  .extend({
+    /** The gym's own day it was charged on. */
+    on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })
+  .strict();
+export type CardUnchecked = z.infer<typeof cardUncheckedSchema>;
+
 /** The card on file Record payment can charge for this person: theirs, or the payer's (18i). */
 export const cardOnFileSchema = cardSeenSchema
   .extend({

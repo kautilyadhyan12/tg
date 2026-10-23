@@ -65,12 +65,22 @@ export function cardDeclinedLine(declined) {
   return `${cardName(declined)} was declined on ${shortDay(declined.on, false)}. ${CARD_DECLINE_WORDS[declined.reason] ?? CARD_DECLINE_WORDS.declined}`;
 }
 
+/** A bill or fee whose charge to the card on file Square never answered: the money may be taken. */
+export function cardUncheckedLine(unchecked) {
+  return `Square didn't say whether it charged ${cardName(unchecked)} on ${shortDay(unchecked.on, false)}. Check your Square Dashboard before taking payment another way.`;
+}
+
 /** A bill or fee whose charge to the card on file Square has not answered yet. */
 export const CARD_CHARGING_LINE = "Charging the card on file: waiting for Square's answer.";
 
 /** Its decline, and its charge on its way, for a bill's or a fee's box. */
 const cardLines = (b) => ({
-  declined: b.cardDeclined === null || b.cardDeclined === undefined ? null : cardDeclinedLine(b.cardDeclined),
+  declined:
+    b.cardDeclined !== null && b.cardDeclined !== undefined
+      ? cardDeclinedLine(b.cardDeclined)
+      : b.cardUnchecked !== null && b.cardUnchecked !== undefined
+        ? cardUncheckedLine(b.cardUnchecked)
+        : null,
   charging: b.charging === true ? CARD_CHARGING_LINE : null,
 });
 const byWords = (by) => (by === null ? null : `by ${by}`);

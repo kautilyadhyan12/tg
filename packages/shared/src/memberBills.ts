@@ -12,7 +12,7 @@
 // counted paid with no bill is one the gym's own list said was paid, or one marked
 // before bills were kept.
 import { z } from "zod";
-import { cardDeclinedSchema, cardSeenSchema } from "./cardCharges.js";
+import { cardDeclinedSchema, cardSeenSchema, cardUncheckedSchema } from "./cardCharges.js";
 
 export const MEMBER_BILL_STATUSES = ["open", "paid", "void", "refunded"] as const;
 export const memberBillStatusSchema = z.enum(MEMBER_BILL_STATUSES);
@@ -246,6 +246,8 @@ export const memberBillSchema = z
     voidedPayments: z.array(voidedMemberPaymentSchema),
     /** Its newest charge to a card on file was declined, and it is still owed (18d-iii-i). */
     cardDeclined: cardDeclinedSchema.nullable().default(null),
+    /** Its newest charge to a card on file Square never answered, and it is still owed. */
+    cardUnchecked: cardUncheckedSchema.nullable().default(null),
     /** A card on file is being charged for it: Square has not answered yet. */
     charging: z.boolean().default(false),
   })
@@ -288,6 +290,7 @@ export const memberFeeSchema = z
     voidedPayments: z.array(voidedMemberPaymentSchema),
     /** As a bill's (18d-iii-i). */
     cardDeclined: cardDeclinedSchema.nullable().default(null),
+    cardUnchecked: cardUncheckedSchema.nullable().default(null),
     charging: z.boolean().default(false),
     can: z
       .object({

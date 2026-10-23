@@ -976,7 +976,7 @@ export default function MemberMemberships({
       setAttempt((n) => n + 1);
       onChanged?.();
     } catch (err) {
-      setRefusal(errorText(err, "We couldn't reach Square. Nothing was charged: try again."));
+      setRefusal(errorText(err, "We couldn't get an answer. Press Charge again to see whether the card was charged: it is never charged twice."));
       if (STALE_CODES.includes(errorCode(err)) || errorCode(err) === 'card_charge_card_changed') {
         close();
         setAttempt((n) => n + 1);

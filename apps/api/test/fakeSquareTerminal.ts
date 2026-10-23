@@ -52,13 +52,25 @@ export function fakeSquare() {
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
-  // `chargeOther`: a card on file's charge comes back COMPLETED for another amount than asked.
-  const state: { down: boolean; refuseNew: boolean; loseAnswers: boolean; refuseRead: boolean; chargeOther: boolean } = {
+  // `chargeOther`: a card on file's charge comes back COMPLETED for another amount than asked;
+  // `answerWith`: with these fields of Square's payment changed; `unauthorized`: Square refuses the
+  // gym's token (401), as for a token that expired or was taken away.
+  const state: {
+    down: boolean;
+    refuseNew: boolean;
+    loseAnswers: boolean;
+    refuseRead: boolean;
+    chargeOther: boolean;
+    answerWith: Partial<SquarePayment> | null;
+    unauthorized: boolean;
+  } = {
     down: false,
     refuseNew: false,
     loseAnswers: false,
     refuseRead: false,
     chargeOther: false,
+    answerWith: null,
+    unauthorized: false,
   };
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
@@ -192,6 +204,7 @@ export function fakeSquare() {
     },
     createCardPayment(token, p) {
       if (state.down) return Promise.resolve(unavailable);
+      if (state.unauthorized) return Promise.resolve(unauthorized);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
       const keyed = `${a.merchantId}:${p.idempotencyKey}`;
@@ -215,6 +228,7 @@ export function fakeSquare() {
         reference_id: p.referenceId,
         customer_id: p.customerId,
         card_details: { card: { card_brand: "VISA", last_4: "1111" } },
+        ...(state.answerWith ?? {}),
       };
       charged.push({ ...payment, accountId: a.merchantId, cardId: p.cardId, key: p.idempotencyKey });
       const code = card.behaviour === "insufficient" ? "INSUFFICIENT_FUNDS" : card.behaviour === "expired" ? "CARD_EXPIRED" : "GENERIC_DECLINE";
