@@ -22,6 +22,8 @@ export const SETTINGS_SECTION = {
   memberContact: 'member-contact',
   messages: 'automatic-messages',
   bookingRules: 'booking-rules',
+  // The Overdue payments part of Booking rules (17i): the box opens, with the part in view.
+  overdueBookings: 'overdue-bookings',
   frontDesk: 'check-in-devices',
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
@@ -48,6 +50,7 @@ const PLACES = {
   memberContact: { path: `/settings#${SETTINGS_SECTION.memberContact}`, may: canManageOrg },
   messages: { path: `/settings#${SETTINGS_SECTION.messages}`, may: canManageOrg },
   bookingRules: { path: `/settings#${SETTINGS_SECTION.bookingRules}`, may: canManageSchedule },
+  overdueBookings: { path: `/settings#${SETTINGS_SECTION.overdueBookings}`, may: canManageSchedule },
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   waiver: { path: `/settings#${SETTINGS_SECTION.waiver}`, may: canManageOrg },
@@ -56,6 +59,8 @@ const PLACES = {
   memberships: { path: '/memberships', may: canManageMemberships },
   // The Discounts box on Memberships, where a promo code for a membership is made.
   membershipDiscounts: { path: '/memberships#discounts', may: canManageMemberships },
+  // The Bills box on Memberships, where the grace period before a bill reads Overdue is set.
+  membershipBills: { path: '/memberships#bills', may: canManageMemberships },
   sell: { path: '/sell', may: canOpenSell },
   members: { path: '/members', may: onStaff },
   importMembers: { path: '/members?open=import', may: onStaff },

@@ -254,8 +254,10 @@ export function currencySign(currency) {
 
 /** The closed section's one line: the settings as they stand, classes then personal training,
  *  each with its fees where any is set (18h-i, 18h-ii). */
-export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null) {
+export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null, overdue = null) {
   if (settings === null || settings === undefined) return 'When members can book and cancel, and how the waitlist works';
+  // No new bookings while a payment is overdue (17i), said last where the gym has it on.
+  if (overdue === 'stop') return `${bookingSettingsSummary(settings, pt, fees, ptFees).replace(/\.$/, '')}. No new bookings while a payment is overdue.`;
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
   const said = (f) => {
     const line = f === null || f === undefined ? null : classFeesLine(f);
@@ -288,4 +290,53 @@ export function bookingRulesOwnLine(freeCancelMinutes) {
 export function bookingSettingsSavedLine(movedIn) {
   if (!Number.isInteger(movedIn) || movedIn <= 0) return 'Saved.';
   return movedIn === 1 ? 'Saved. 1 person moved in from a waitlist.' : `Saved. ${movedIn.toLocaleString('en')} people moved in from waitlists.`;
+}
+
+// ── NO NEW BOOKINGS WHILE A PAYMENT IS OVERDUE (17i) ──
+
+/** The two choices, in the box's own words. Every gym starts on the first. */
+export const OVERDUE_BOOKING_CHOICES = [
+  { value: 'let_book', label: 'Let them book' },
+  { value: 'stop', label: 'Stop new bookings until they pay' },
+];
+
+/** What the choice does and does not touch, said under it. */
+export const OVERDUE_BOOKING_HINT =
+  'This stops booking classes, waitlists and personal training in the app. Places already booked stay booked, and your staff can still book a personal training session for them.';
+
+/** How many names the box shows before See all. */
+export const OVERDUE_NAMES_SHOWN = 3;
+
+/** The box's sentences about who has an overdue payment today, under the choice picked
+ *  (`rule`); `changed`: it is not saved yet. Null where the reader is sent no names. */
+export function overduePeopleWords(stopped, rule, changed) {
+  if (stopped === null || stopped === undefined || typeof stopped.count !== 'number') return null;
+  const { count } = stopped;
+  if (count === 0) return { title: 'Nobody on your list has an overdue payment today.', rest: null };
+  const title = `Today ${people(count)} on your list ${count === 1 ? 'has' : 'have'} an overdue payment:`;
+  if (rule === 'stop') {
+    return { title, rest: `${changed ? 'Once you save, they' : 'They'} can't book classes or personal training in the app until they pay.` };
+  }
+  return { title, rest: changed ? 'Once you save, they can book in the app again.' : 'They can still book in the app.' };
+}
+
+/** The names to draw: the first few, or every one sent once See all is pressed. */
+export function overdueNames(stopped, all) {
+  const list = Array.isArray(stopped?.people) ? stopped.people : [];
+  const shown = all ? list : list.slice(0, OVERDUE_NAMES_SHOWN);
+  const count = typeof stopped?.count === 'number' ? stopped.count : list.length;
+  return {
+    shown: shown.map((person) => ({ entryId: person.entryId, name: person.name === '' ? 'No name' : person.name })),
+    more: count - shown.length,
+    canSeeAll: !all && list.length > shown.length,
+    /** How many were not sent by name (a very long list). */
+    notSent: count - list.length,
+  };
+}
+
+/** The line on a person's page, beside their overdue bill, while the gym stops their new
+ *  bookings for it. */
+export function bookingsStoppedLine(name) {
+  const who = typeof name === 'string' && name.trim() !== '' ? name.trim() : 'This person';
+  return `${who} can't book classes or personal training in the app until the overdue payment is paid.`;
 }

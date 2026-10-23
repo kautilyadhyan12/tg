@@ -8,7 +8,7 @@
 // time too: it comes off their free times, and a session cannot be booked over it.
 import { z } from "zod";
 import { CLASS_FILL_HORIZON_DAYS, classDaySchema } from "./classes.js";
-import { bookingPeriod, classFeesSchema } from "./classBookings.js";
+import { OVERDUE_BOOKING_WORDS, bookingPeriod, classFeesSchema } from "./classBookings.js";
 import { hasNoNul } from "./visibleText.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import { membershipLimitPeriodSchema, type MembershipLimitPeriod } from "./memberships.js";
@@ -755,8 +755,10 @@ export type AddPtTimeOffRequest = z.infer<typeof addPtTimeOffRequestSchema>;
 // ── A MEMBER BOOKS AND CANCELS THEIR OWN (17e-ii) ──
 
 /** What a member reads when the server says no to their own booking. Why a trainer's time
- *  has gone (a class, time off, somebody else's session) is the gym's to know, not theirs. */
-export function ptMemberWords(orgType: unknown): Record<PtBookRefusal, string> {
+ *  has gone (a class, time off, somebody else's session) is the gym's to know, not theirs.
+ *  `payment_overdue`: the gym stops a member's own new bookings while a payment is overdue
+ *  (17i), which never stops staff booking for them. */
+export function ptMemberWords(orgType: unknown): Record<PtBookRefusal | "payment_overdue", string> {
   return {
     trainer_not_offering: `This ${orgWords(orgType).coach} isn't taking personal training sessions right now.`,
     not_a_time: "That time is no longer available. Pick another time.",
@@ -772,6 +774,7 @@ export function ptMemberWords(orgType: unknown): Record<PtBookRefusal, string> {
     pack_used: "Your pack has no sessions left. Ask at the front desk for another.",
     limit_week: "You've used all the personal training sessions your membership includes for that week.",
     limit_month: "You've used all the personal training sessions your membership includes for that month.",
+    payment_overdue: OVERDUE_BOOKING_WORDS,
   };
 }
 
@@ -872,8 +875,9 @@ export const memberPtResponseSchema = z
           /** What a booking on this day would be made on, by the booking's own rule
            *  (`membership` null where the gym sells none); null where nothing pays. */
           pays: z.object({ membership: z.string().nullable(), sessionsLeft: z.number().int().nullable() }).strict().nullable(),
-          /** Why nothing pays; null where something does, or the reader has no record of their own. */
-          why: z.enum(["no_membership", "not_covered", "pack_used", "limit_week", "limit_month"]).nullable(),
+          /** Why nothing pays; null where something does, or the reader has no record of their own.
+           *  `payment_overdue`: the gym stops their new bookings while a payment is overdue (17i). */
+          why: z.enum(["no_membership", "not_covered", "pack_used", "limit_week", "limit_month", "payment_overdue"]).nullable(),
           /** The paying membership's limit on sessions, or the one that is used where
            *  `why` is a limit or a pack pays because of it; null otherwise. */
           limit: ptAllowanceSchema.nullable(),

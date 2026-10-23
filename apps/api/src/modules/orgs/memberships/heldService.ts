@@ -69,6 +69,7 @@ import { friendGiftOffer } from "../referrals/friendGift.js";
 import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { billDayOf, overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 import * as feesRepo from "./feesRepo.js";
+import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
@@ -276,12 +277,14 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // waiting, filled in on Add.
   // One off a membership is the one Add membership fills in; one off products waits for Sell,
   // and the page says both (round one, L3).
-  const [gifts, memberGift, memberGiftAtSell, freeDays] = await Promise.all([
+  const [gifts, memberGift, memberGiftAtSell, freeDays, bookingsStopped] = await Promise.all([
     canBill ? giftsOnBills(deps.sql, gymId, list.bills.map((b) => b.id)) : new Map<string, { offMinor: number; currency: string; friendName: string | null }>(),
     offers && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "membership") : null,
     offers && !list.past ? waitingGiftFor(deps.sql, gymId, entryId, "products") : null,
     // Refer a friend's free days on each (20e-ii-b-ii-b): why its dates moved.
     giftDaysOn(deps.sql, gymId, [...list.inUse, ...list.over].map((row) => row.id)),
+    // No new bookings while a payment is overdue (17i): said beside the bill, to who takes payments.
+    canBill && !list.past ? recordStopped(deps.sql, gymId, entryId, deps.now()) : false,
   ]);
   // What the card on file did on each bill and fee (18d-iii-i), for staff who take payments.
   const charges: Charges = canBill
@@ -379,6 +382,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     canBill,
     taxIncluded: list.taxIncluded,
     billDay: list.billDay,
+    bookingsStopped,
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
     friendGift: list.past ? null : friendGift,
     memberGift,

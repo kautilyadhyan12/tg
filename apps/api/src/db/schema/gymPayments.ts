@@ -410,7 +410,7 @@ export const gymTerminalPayments = pgTable(
   ],
 );
 
-/** The saved card charged (0157; ROADMAP 18d-iii-i): the app's own charge of a renewing
+/** The saved card charged (0158; ROADMAP 18d-iii-i): the app's own charge of a renewing
  *  membership's bill or a freeze fee on its date (`by_schedule`), or staff pressing Charge card on
  *  file. `payment_key` is Square's idempotency key (the bill's id for the app's, the row's own for a
  *  press), so asking again gives back the same payment. While `charging`, nothing else pays, voids

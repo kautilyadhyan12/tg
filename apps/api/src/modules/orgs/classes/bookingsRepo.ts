@@ -12,8 +12,10 @@ import {
   CLASS_BOOKING_COUNTED,
   CLASS_BOOKING_HOLDS_PLACE,
   memberCurrencyForCountry,
+  bookingOverdueSchema,
   bookingPeriod,
   classBookingStatusSchema,
+  type BookingOverdue,
   type ClassBookingSettings,
   type ClassFees,
   type PtBookingSettings,
@@ -131,6 +133,9 @@ export interface BookingContext {
   counts: { booked: number; waitlisted: number };
   /** Whether the gym has any membership type on its price list. */
   gymHasTypes: boolean;
+  /** The gym's choice for somebody whose payment is overdue (17i), and its days of grace
+   *  before a bill reads Overdue. */
+  overdue: OverdueRule;
   /** The person as a booker: a live app member of the gym with an active account, and
    *  their record on its list where the list says which is theirs and it is not a past
    *  member's. Null: not a member now. */
@@ -165,6 +170,8 @@ const rawContext = z.object({
   booked: z.number().int(),
   waitlisted: z.number().int(),
   has_types: z.boolean(),
+  overdue_rule: bookingOverdueSchema,
+  overdue_days: z.number().int(),
   member: z.boolean(),
   entry_id: z.string().nullable(),
   mine_id: z.string().nullable(),
@@ -183,6 +190,7 @@ async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: Retu
            (SELECT count(*)::int FROM gym_class_bookings b
             WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'waitlisted') AS waitlisted,
            EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = s.gym_id AND mt.archived_at IS NULL) AS has_types,
+           g.bookings_overdue AS overdue_rule, g.bills_overdue_days AS overdue_days,
            (m.user_id IS NOT NULL AND u.id IS NOT NULL) AS member, e.id AS entry_id,
            mine.id AS mine_id, mine.seq, mine.session_id, mine.user_id, mine.status, mine.held_membership_id, mine.pack_charged
     FROM gym_class_sessions s
@@ -220,6 +228,7 @@ async function contexts(sql: SqlOrTx, gymId: string, userId: string, which: Retu
       fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee, currency: memberCurrencyForCountry(r.country) },
       counts: { booked: r.booked, waitlisted: r.waitlisted },
       gymHasTypes: r.has_types,
+      overdue: { rule: r.overdue_rule, afterDays: r.overdue_days, timezone: r.timezone },
       booker: r.member ? { entryId: r.entry_id } : null,
       latest: r.mine_id === null ? null : toBooking({ ...row, id: r.mine_id }),
     };
@@ -551,7 +560,7 @@ export async function countStatus(sql: SqlOrTx, gymId: string, sessionId: string
 // ── WHEN A CLASS OR A PERSON GOES (17c-ii-a) ──
 
 /** One class as a hand-over reads it: no one person in it. */
-export type ClassContext = Pick<BookingContext, "session" | "settings" | "counts" | "gymHasTypes">;
+export type ClassContext = Pick<BookingContext, "session" | "settings" | "counts" | "gymHasTypes" | "overdue">;
 
 const rawClassContext = rawContext.omit({ member: true, entry_id: true, mine_id: true, late_fee: true, no_show_fee: true, country: true });
 
@@ -567,7 +576,8 @@ export async function classContext(tx: TransactionSql, gymId: string, sessionId:
             WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = ANY(${[...CLASS_BOOKING_HOLDS_PLACE]}::text[])) AS booked,
            (SELECT count(*)::int FROM gym_class_bookings b
             WHERE b.gym_id = s.gym_id AND b.session_id = s.id AND b.status = 'waitlisted') AS waitlisted,
-           EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = s.gym_id AND mt.archived_at IS NULL) AS has_types
+           EXISTS (SELECT 1 FROM gym_membership_types mt WHERE mt.gym_id = s.gym_id AND mt.archived_at IS NULL) AS has_types,
+           g.bookings_overdue AS overdue_rule, g.bills_overdue_days AS overdue_days
     FROM gym_class_sessions s
     JOIN gym_class_types t ON t.id = s.class_type_id AND t.gym_id = s.gym_id
     JOIN gyms g ON g.id = s.gym_id
@@ -595,6 +605,7 @@ export async function classContext(tx: TransactionSql, gymId: string, sessionId:
     settings: { opensDays: r.opens, freeCancelMinutes: r.free, handoverMinutes: r.handover, waitlistMax: r.waitlist, timezone: r.timezone },
     counts: { booked: r.booked, waitlisted: r.waitlisted },
     gymHasTypes: r.has_types,
+    overdue: { rule: r.overdue_rule, afterDays: r.overdue_days, timezone: r.timezone },
   };
 }
 
@@ -813,6 +824,23 @@ export async function endingPeople(sql: SqlOrTx, gymId: string, where: EndingWhe
   }));
 }
 
+/** The gym's choice for somebody whose payment is overdue (17i), with what deciding it needs. */
+export interface OverdueRule {
+  rule: BookingOverdue;
+  /** Days after its due date an unpaid bill reads Overdue. */
+  afterDays: number;
+  timezone: string;
+}
+
+/** The gym's choice for an overdue payment, as a booking of a personal training session
+ *  reads it; null where there is no such gym. */
+export async function overdueRule(sql: SqlOrTx, gymId: string): Promise<OverdueRule | null> {
+  const rows = await sql<{ rule: string; days: number; timezone: string }[]>`
+    SELECT bookings_overdue AS rule, bills_overdue_days AS days, timezone FROM gyms WHERE id = ${gymId}`;
+  const r = rows[0];
+  return r === undefined ? null : { rule: bookingOverdueSchema.parse(r.rule), afterDays: r.days, timezone: r.timezone };
+}
+
 export interface BookingRules {
   settings: ClassBookingSettings;
   pt: PtBookingSettings;
@@ -820,19 +848,22 @@ export interface BookingRules {
   fees: ClassFees;
   /** Personal training's own two fees (18h-ii). */
   ptFees: ClassFees;
+  /** No new bookings while a payment is overdue (17i). */
+  overdue: BookingOverdue;
 }
 
 /** The gym's four booking settings and personal training's two; null where there is no
  *  such gym. */
 export async function readSettings(sql: SqlOrTx, gymId: string): Promise<BookingRules | null> {
   const rows = await sql<
-    { opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number; late_fee: number; no_show_fee: number; pt_late_fee: number; pt_no_show_fee: number }[]
+    { opens: number; free: number; handover: number; waitlist: number; pt_opens: number; pt_free: number; late_fee: number; no_show_fee: number; pt_late_fee: number; pt_no_show_fee: number; overdue: string }[]
   >`
     SELECT booking_opens_days AS opens, booking_free_cancel_minutes AS free,
            waitlist_handover_minutes AS handover, waitlist_max AS waitlist,
            pt_opens_days AS pt_opens, pt_free_cancel_minutes AS pt_free,
            class_late_cancel_fee_minor AS late_fee, class_no_show_fee_minor AS no_show_fee,
-           pt_late_cancel_fee_minor AS pt_late_fee, pt_no_show_fee_minor AS pt_no_show_fee
+           pt_late_cancel_fee_minor AS pt_late_fee, pt_no_show_fee_minor AS pt_no_show_fee,
+           bookings_overdue AS overdue
     FROM gyms WHERE id = ${gymId}`;
   const r = rows[0];
   if (r === undefined) return null;
@@ -841,17 +872,19 @@ export async function readSettings(sql: SqlOrTx, gymId: string): Promise<Booking
     pt: { opensDays: r.pt_opens, freeCancelMinutes: r.pt_free },
     fees: { lateCancelMinor: r.late_fee, noShowMinor: r.no_show_fee },
     ptFees: { lateCancelMinor: r.pt_late_fee, noShowMinor: r.pt_no_show_fee },
+    overdue: bookingOverdueSchema.parse(r.overdue),
   };
 }
 
-export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt, fees, ptFees }: BookingRules): Promise<void> {
+export async function writeSettings(tx: TransactionSql, gymId: string, { settings: s, pt, fees, ptFees, overdue }: BookingRules): Promise<void> {
   await tx`
     UPDATE gyms
     SET booking_opens_days = ${s.opensDays}, booking_free_cancel_minutes = ${s.freeCancelMinutes},
         waitlist_handover_minutes = ${s.handoverMinutes}, waitlist_max = ${s.waitlistMax},
         pt_opens_days = ${pt.opensDays}, pt_free_cancel_minutes = ${pt.freeCancelMinutes},
         class_late_cancel_fee_minor = ${fees.lateCancelMinor}, class_no_show_fee_minor = ${fees.noShowMinor},
-        pt_late_cancel_fee_minor = ${ptFees.lateCancelMinor}, pt_no_show_fee_minor = ${ptFees.noShowMinor}
+        pt_late_cancel_fee_minor = ${ptFees.lateCancelMinor}, pt_no_show_fee_minor = ${ptFees.noShowMinor},
+        bookings_overdue = ${overdue}
     WHERE id = ${gymId}`;
 }
 
