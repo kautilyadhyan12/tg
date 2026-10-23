@@ -250,7 +250,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 17f. [x] **Check-in meets bookings** — merged 2026-10-09 (PR #206).
    - 17g. [x] **Online classes, and staff take one person off a class** — merged 2026-10-09 (PR #208).
    - 17h. [x] **The two extra passes' fixes** over what a gym sells — merged 2026-10-10 (PR #212).
-   - 17i. [ ] **Stop new bookings while a payment is overdue**, a gym's choice (Kd, 2026-10-22; GymMaster, TeamUp and Glofox do it). Web folder 2.
+   - 17i. [x] **Stop new bookings while a payment is overdue** — merged 2026-10-23 (PR #343).
    - 17i-ii. [ ] **The Members list says Overdue**: its Payment column reads Overdue (red) once a bill reads Overdue on the person's page, Payment due before that (Kd, 2026-10-23, `rulings/2026-10-23-17i.md`). Screen only. Web folder 2, straight after 17i.
 18. **Money between a member and their gym** (RULINGS 2026-09-22, Part 5 of the re-plan; spec Part 3 §14) — it takes in Stage 3 item 3 and what is left of item 9. The app never holds the money and takes no part of it. Every card Opus xhigh.
    - 18a. **The notebook** (§14.2), split 2026-10-10 in two (too big for one terminal; the line as first written is in `archive/records/ROADMAP-stories.md`):
