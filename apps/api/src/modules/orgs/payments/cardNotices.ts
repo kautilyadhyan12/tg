@@ -46,11 +46,11 @@ const RETRY_AFTER_MS = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 6
 
 /** The decline's reason as the cardholder reads it. */
 const REASON_WORDS: Readonly<Record<CardDeclineReason, string>> = {
-  insufficient_funds: "There wasn't enough money on the card.",
+  insufficient_funds: "The card did not have enough funds.",
   expired: "The card has expired.",
-  call_bank: "Your bank asks you to contact them.",
+  call_bank: "Your bank has asked you to contact them.",
   closed: "The card's account is closed.",
-  declined: "Your bank didn't give a reason.",
+  declined: "Your bank did not provide a reason for the decline, so we recommend contacting your bank for more information.",
 };
 
 type Tally = "sent" | "skipped" | "failed" | "retried";
@@ -129,8 +129,7 @@ export function noticeLines(
 ): Omit<Parameters<typeof cardDeclinedEmail>[0], "to"> {
   const amount = formatMinor(charge.amountMinor, charge.currency);
   const forName = charge.forName === null ? "" : cleanGymText(charge.forName, GYM_TEXT_IN_EMAIL_CHARS);
-  const whose = forName === "" ? "your" : `${forName}'s`;
-  const purpose = bill.fee === "freeze" ? `${whose} freeze fee` : `${whose} membership`;
+  const kind = bill.fee === "freeze" ? "freeze fee" : "membership";
   const card = cardName(charge);
   const code = charge.code ?? "UNKNOWN";
   const next =
@@ -138,19 +137,25 @@ export function noticeLines(
     charge.newer
       ? null
       : charge.nextTryOn !== null
-        ? `We'll try the card again on ${dayWords(charge.nextTryOn, gym.country)}.`
+        ? `We will retry this payment automatically on ${dayWords(charge.nextTryOn, gym.country)}.`
         : cardDeclineClassOf(code) === "new_card"
-          ? "This card can't be charged again, so please pay another way."
-          : "We won't try the card again by ourselves. Your bank can tell you more.";
+          ? "This card cannot be charged again."
+          : "We will not automatically retry this payment.";
   const contact = [gym.contactPhone === null ? null : `call ${gym.contactPhone}`, gym.contactEmail === null ? null : `email ${gym.contactEmail}`].filter((x): x is string => x !== null);
+  // "Visa ending in 0002", as a card is named to its holder.
+  const cardWords = card.replace(" ending ", " ending in ");
   return {
     gymName,
     greeting: leadGreeting(cleanGymText(leadFirstName(charge.holderName ?? ""), GYM_TEXT_IN_EMAIL_CHARS)),
-    what: `Your card payment of ${amount} to ${gymName} for ${purpose} didn't go through.`,
-    why: `${card} was declined on ${dayWords(charge.on, gym.country)}. ${REASON_WORDS[cardDeclineReasonOf(code)]}`,
+    what:
+      forName === ""
+        ? `Your ${amount} ${kind} payment to ${gymName} could not be processed.`
+        : `Your ${amount} payment to ${gymName} for ${forName}'s ${kind} could not be processed.`,
+    why: `Your ${cardWords} was declined on ${dayWords(charge.on, gym.country)}. ${REASON_WORDS[cardDeclineReasonOf(code)]}`,
     next,
-    payBy: `Please pay by ${dayWords(addDays(charge.on, CARD_RETRY.noticeDays), gym.country)}: at the front desk, or with another card.`,
-    contact: contact.length === 0 ? null : `Questions? You can ${contact.join(" or ")}.`,
+    payBy: `Please make your payment by ${dayWords(addDays(charge.on, CARD_RETRY.noticeDays), gym.country)} using one of the following options:`,
+    options: ["Pay at the front desk", "Pay with another card"],
+    contact: contact.length === 0 ? null : `If you have any questions, you can ${contact.join(" or ")}.`,
   };
 }
 

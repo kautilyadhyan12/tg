@@ -4304,15 +4304,18 @@ to one card at most 3 times in all, the app's and staff's together. Each of the 
 of Square under its own key (the bill's id, then `<bill>:2`, `<bill>:3`). A bill's first decline
 queues one email (`gym_card_decline_notices`, migration `0159`) to whoever's card it is, the payer
 where somebody pays, from the gym (named "<gym> via" the app, replies to the gym's contact email): the amount,
-what for, the card, the reason, whether it will be tried again and on which day, and "Please pay by
-<7 days on>: at the front desk, or with another card", with the gym's phone and email. It is owed,
+what for, the card, the reason, whether it will be retried automatically and on which day, and "Please
+make your payment by <7 days on> using one of the following options: • Pay at the front desk • Pay
+with another card", with the gym's phone and email (Kd's own words, 2026-10-24). It is owed,
 so neither the daily cap nor an unsubscribe holds it; a bounced or refused address, a bill paid
 meanwhile, or a record deleted for good meanwhile sends nothing. The bill's decline line says what
-comes next ("It will be tried again on 26 Oct." · "It won't be tried again by itself. Ask the
-cardholder to call their bank…" · "The bank declined this card for good…" · "It was tried 3
-times…") and the email ("We emailed the cardholder on 23 Oct." · "Nobody was emailed, as there's no
-email address on file: tell the cardholder yourself."). A card declined for good reads "· can't be
-charged" in Payment method and cannot be picked. Resend's reports about these emails are kept but
+comes next ("The payment will be retried automatically on 26 Oct." · "The payment will not be retried
+automatically. Ask the cardholder to contact their bank for more information, then retry the payment,
+or collect payment using another method." · "The bank declined this card permanently…" · "The payment
+was tried 3 times and will not be retried…") and the email ("The cardholder was emailed on 23 Oct." ·
+"The cardholder was not emailed because there is no email address on file. Please contact them
+directly."), in the words Kd gave on 2026-10-24. A card declined for good reads "· cannot be charged" in
+Payment method and cannot be picked. Resend's reports about these emails are kept but
 not yet read back onto the bill.
 
 **Cancelling** (18l): every member can cancel in the app, including those who joined at the

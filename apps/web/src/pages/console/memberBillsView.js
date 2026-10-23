@@ -66,7 +66,7 @@ const methodWords = (method) => MEMBER_PAYMENT_METHOD_WORDS[method] ?? 'Paid';
 export function cardDeclinedLine(declined) {
   const next =
     declined.next !== null && declined.next !== undefined
-      ? ` It will be tried again on ${shortDay(declined.next, false)}.`
+      ? ` The payment will be retried automatically on ${shortDay(declined.next, false)}.`
       : declined.stop !== null && declined.stop !== undefined
         ? ` ${CARD_RETRY_WORDS[declined.stop]}`
         : '';
@@ -78,13 +78,13 @@ function cardNoticeLine(notice) {
   if (notice === null || notice === undefined) return '';
   switch (notice.state) {
     case 'emailed':
-      return ` We emailed the cardholder on ${shortDay(notice.on, false)}.`;
+      return ` The cardholder was emailed on ${shortDay(notice.on, false)}.`;
     case 'sending':
-      return ' An email to the cardholder is on its way.';
+      return ' An email to the cardholder is being sent.';
     case 'no_email':
-      return " Nobody was emailed, as there's no email address on file: tell the cardholder yourself.";
+      return ' The cardholder was not emailed because there is no email address on file. Please contact them directly.';
     default:
-      return " The email to the cardholder couldn't be sent: tell them yourself.";
+      return ' The email to the cardholder could not be sent. Please contact them directly.';
   }
 }
 

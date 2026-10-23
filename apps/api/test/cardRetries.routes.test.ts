@@ -388,7 +388,7 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     const early = await press(gym, will);
     expect(early.statusCode, early.body).toBe(409);
     expect(errorOf(early)).toMatchObject({ error: "card_charge_wait" });
-    expect(errorOf(early).message).toContain("Visa ending 1111 was declined less than a day ago");
+    expect(errorOf(early).message).toMatch(/^Visa ending 1111 was declined less than a day ago\. Square recommends waiting 24 hours before retrying\. It can be charged from .+ on \d{1,2} [A-Z][a-z]{2}\. Nothing was charged\.$/);
     expect(askedOf(card)).toHaveLength(1);
     clock = new Date(noon.getTime() + 24 * 60 * 60_000);
     const later = await press(gym, will);
@@ -464,18 +464,19 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     expect(to).toEqual(["crty-mei@example.com", "crty-nadia@example.com"]);
     const nadiaMail = mail.find((m) => m.to === "crty-nadia@example.com");
     const fmt = (offset: number) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric" }).format(new Date(`${today}T12:00:00Z`).getTime() + offset * DAY);
-    expect(nadiaMail?.subject).toMatch(/^Your payment to Notice Gym \d+ didn't go through$/);
+    expect(nadiaMail?.subject).toMatch(/^Your payment to Notice Gym \d+ could not be processed$/);
     expect(nadiaMail?.text).toContain("Hi Nadia,");
-    expect(nadiaMail?.text).toContain("Your card payment of $25.00 to Notice Gym");
-    expect(nadiaMail?.text).toContain(`Visa ending 1111 was declined on ${fmt(0)}. There wasn't enough money on the card.`);
-    expect(nadiaMail?.text).toContain(`We'll try the card again on ${fmt(3)}.`);
-    expect(nadiaMail?.text).toContain(`Please pay by ${fmt(7)}: at the front desk, or with another card.`);
-    expect(nadiaMail?.text).toContain("Questions? You can call +1 312 555 0199 or email desk@noticegym.test.");
+    expect(nadiaMail?.text).toMatch(/Your \$25\.00 membership payment to Notice Gym \d+ could not be processed\./);
+    expect(nadiaMail?.text).toContain(`Your Visa ending in 1111 was declined on ${fmt(0)}. The card did not have enough funds.`);
+    expect(nadiaMail?.text).toContain(`We will retry this payment automatically on ${fmt(3)}.`);
+    expect(nadiaMail?.text).toContain(`Please make your payment by ${fmt(7)} using one of the following options:\n\n• Pay at the front desk\n• Pay with another card`);
+    expect(nadiaMail?.text).toContain("If you have any questions, you can call +1 312 555 0199 or email desk@noticegym.test.\n\nThank you.");
+    expect(nadiaMail?.html).toContain("<ul><li>Pay at the front desk</li><li>Pay with another card</li></ul>");
     expect(nadiaMail?.replyTo).toBe("desk@noticegym.test");
     const meiMail = mail.find((m) => m.to === "crty-mei@example.com");
     expect(meiMail?.text).toContain("Hi Mei,");
-    expect(meiMail?.text).toContain("for Kai Child's membership");
-    expect(meiMail?.text).toContain("This card can't be charged again, so please pay another way.");
+    expect(meiMail?.text).toMatch(/Your \$25\.00 payment to Notice Gym \d+ for Kai Child's membership could not be processed\./);
+    expect(meiMail?.text).toContain("The card has expired.\n\nThis card cannot be charged again.");
     expect(meiMail?.text).not.toContain("crty-kai@example.com");
 
     // The bills say what happened; no address is kept once the emails are done.

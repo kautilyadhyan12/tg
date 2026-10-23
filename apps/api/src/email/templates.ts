@@ -250,23 +250,31 @@ export function cardDeclinedEmail(words: {
   to: string;
   gymName: string;
   greeting: string;
-  /** "Your card payment of $25.00 to Iron Gym for your membership didn't go through." */
+  /** "Your $25.00 membership payment to Iron Gym could not be processed." */
   what: string;
-  /** "Visa ending 1111 was declined on October 23. There wasn't enough money on the card." */
+  /** "Your Visa ending in 1111 was declined on October 23. The card did not have enough funds." */
   why: string;
-  /** "We'll try the card again on October 26."; null where the email cannot say. */
+  /** "We will retry this payment automatically on October 26."; null where the email cannot say. */
   next: string | null;
-  /** "Please pay by October 30: at the front desk, or with another card." */
+  /** "Please make your payment by October 30 using one of the following options:" */
   payBy: string;
-  /** "Questions? Call 555 0100 or email desk@irongym.com." or null. */
+  /** The ways to pay, one bullet each. */
+  options: readonly string[];
+  /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
   contact: string | null;
 }): EmailMessage {
-  const body = [words.greeting, words.what, words.why, words.next, words.payBy, words.contact].filter((line): line is string => line !== null);
+  const before = [words.greeting, words.what, words.why, words.next].filter((line): line is string => line !== null);
+  const after = [...(words.contact === null ? [] : [words.contact]), "Thank you."];
   const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about a payment you agreed to.`;
-  const text = `${body.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
+  const text =
+    `${before.join("\n\n")}\n\n${words.payBy}\n\n${words.options.map((o) => `• ${o}`).join("\n")}\n\n` +
+    `${after.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
   const html =
-    body.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    before.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.payBy)}</p>` +
+    `<ul>${words.options.map((o) => `<li>${escapeHtml(o)}</li>`).join("")}</ul>` +
+    after.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
     `<p>${escapeHtml(words.gymName)}</p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
-  return { to: words.to, subject: `Your payment to ${words.gymName} didn't go through`, text, html };
+  return { to: words.to, subject: `Your payment to ${words.gymName} could not be processed`, text, html };
 }

@@ -12,8 +12,8 @@ describe('Record payment: Card on file', () => {
     expect(cardOnFileLabel(card)).toBe('Card on file · Visa ending 1111');
     expect(cardOnFileLabel({ ...card, brand: 'MASTERCARD', last4: '4444', payerName: 'Priya Sharma' })).toBe("Card on file · Mastercard ending 4444 (Priya Sharma's)");
     // Declined for good by its bank (18d-iii-ii-a): named so, with the line under Payment method.
-    expect(cardOnFileLabel({ ...card, stopped: true })).toBe("Card on file · Visa ending 1111 · can't be charged");
-    expect(cardOnFileStoppedLine({ ...card, stopped: true })).toBe("The bank declined this card for good, so it can't be charged again. Save another card, or take payment another way.");
+    expect(cardOnFileLabel({ ...card, stopped: true })).toBe('Card on file · Visa ending 1111 · cannot be charged');
+    expect(cardOnFileStoppedLine({ ...card, stopped: true })).toBe('The bank declined this card permanently, so it cannot be charged again. Save another card, or collect payment using another method.');
     expect(cardOnFileStoppedLine(card)).toBeNull();
     expect(cardOnFileStoppedLine(null)).toBeNull();
   });
@@ -88,20 +88,20 @@ describe("a bill's card lines", () => {
 
   it('a decline, on the day, with its reason', () => {
     const declined = { brand: 'VISA', last4: '1111', on: '2026-10-20', reason: 'insufficient_funds' };
-    expect(cardDeclinedLine(declined)).toBe("Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.");
-    expect(billRow({ ...bill, cardDeclined: declined }, 'USD', '2026-10-20').declined).toBe("Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.");
+    expect(cardDeclinedLine(declined)).toBe("Visa ending 1111 was declined on 20 Oct. The card did not have enough funds.");
+    expect(billRow({ ...bill, cardDeclined: declined }, 'USD', '2026-10-20').declined).toBe("Visa ending 1111 was declined on 20 Oct. The card did not have enough funds.");
     expect(billRow(bill, 'USD', '2026-10-20').declined).toBeNull();
   });
 
   it.each([
-    [{ next: '2026-10-23', stop: null, notice: { state: 'emailed', on: '2026-10-20' } }, ' It will be tried again on 23 Oct. We emailed the cardholder on 20 Oct.'],
-    [{ next: null, stop: 'bank', notice: { state: 'sending', on: null } }, " It won't be tried again by itself. Ask the cardholder to call their bank, then charge it again, or take payment another way. An email to the cardholder is on its way."],
-    [{ next: null, stop: 'new_card', notice: { state: 'no_email', on: null } }, " The bank declined this card for good. Ask for another card, or take payment another way. Nobody was emailed, as there's no email address on file: tell the cardholder yourself."],
-    [{ next: null, stop: 'tried_out', notice: { state: 'not_sent', on: null } }, " It was tried 3 times. Ask for another card, or take payment another way. The email to the cardholder couldn't be sent: tell them yourself."],
+    [{ next: '2026-10-23', stop: null, notice: { state: 'emailed', on: '2026-10-20' } }, ' The payment will be retried automatically on 23 Oct. The cardholder was emailed on 20 Oct.'],
+    [{ next: null, stop: 'bank', notice: { state: 'sending', on: null } }, ' The payment will not be retried automatically. Ask the cardholder to contact their bank for more information, then retry the payment, or collect payment using another method. An email to the cardholder is being sent.'],
+    [{ next: null, stop: 'new_card', notice: { state: 'no_email', on: null } }, ' The bank declined this card permanently. Ask the cardholder for another card, or collect payment using another method. The cardholder was not emailed because there is no email address on file. Please contact them directly.'],
+    [{ next: null, stop: 'tried_out', notice: { state: 'not_sent', on: null } }, ' The payment was tried 3 times and will not be retried. Ask the cardholder for another card, or collect payment using another method. The email to the cardholder could not be sent. Please contact them directly.'],
     [{ next: null, stop: null, notice: null }, ''],
   ])('what happens next, and the email (18d-iii-ii-a): %o', (after, words) => {
     const declined = { brand: 'VISA', last4: '1111', on: '2026-10-20', reason: 'insufficient_funds', ...after };
-    expect(cardDeclinedLine(declined)).toBe(`Visa ending 1111 was declined on 20 Oct. There wasn't enough money on the card.${words}`);
+    expect(cardDeclinedLine(declined)).toBe(`Visa ending 1111 was declined on 20 Oct. The card did not have enough funds.${words}`);
   });
 
   it('a charge Square never answered: check Square before taking payment another way', () => {

@@ -200,7 +200,7 @@ describe('Charge card on file: the form', () => {
     fireEvent.click(form.getByRole('button', { name: 'Charge $49.99' }));
     const said = await form.findByTestId('card-charge-said');
     expect(said.textContent).toBe(
-      "Visa ending 1111 was declined. There wasn't enough money on the card. Nothing was charged: ask Tara Singh for another card or another way to pay.",
+      "Visa ending 1111 was declined. The card did not have enough funds. Nothing was charged: ask Tara Singh for another card or another way to pay.",
     );
     expect(screen.queryByText(/^Charged/)).toBeNull();
     // Ready for another way; a second charge is a new press, not the first one again.
@@ -213,7 +213,7 @@ describe('Charge card on file: the form', () => {
 
   it('a card declined less than a day ago: the refusal is said under the button pressed (18d-iii-ii-a)', async () => {
     orgService.getTerminalPayments.mockReturnValue(box(VISA));
-    const words = 'Visa ending 1111 was declined less than a day ago, and Square advises waiting a day before charging it again. It can be charged from 12:00 PM on Oct 24. Nothing was charged.';
+    const words = 'Visa ending 1111 was declined less than a day ago. Square recommends waiting 24 hours before retrying. It can be charged from 12:00 PM on 24 Oct. Nothing was charged.';
     orgService.chargeCardOnFile.mockRejectedValue({ response: { status: 409, data: { error: 'card_charge_wait', message: words } } });
     draw();
     const form = await openPay();
@@ -229,10 +229,10 @@ describe('Charge card on file: the form', () => {
     orgService.getTerminalPayments.mockReturnValue(box({ ...VISA, stopped: true }));
     draw();
     const form = await openPay();
-    const label = "Card on file · Visa ending 1111 · can't be charged";
+    const label = 'Card on file · Visa ending 1111 · cannot be charged';
     await waitFor(() => expect(optionsOf(howPaid(form))).toContain(label));
     const option = [...howPaid(form).querySelectorAll('option')].find((o) => o.value === 'card_on_file');
     expect(option?.disabled).toBe(true);
-    expect(form.getByText("The bank declined this card for good, so it can't be charged again. Save another card, or take payment another way.")).toBeTruthy();
+    expect(form.getByText('The bank declined this card permanently, so it cannot be charged again. Save another card, or collect payment using another method.')).toBeTruthy();
   });
 });

@@ -37,11 +37,11 @@ export function cardDeclineReasonOf(code: string): CardDeclineReason {
 
 /** The sentence after "Visa ending 1111 was declined on 23 Oct." */
 export const CARD_DECLINE_WORDS: Readonly<Record<CardDeclineReason, string>> = {
-  insufficient_funds: "There wasn't enough money on the card.",
+  insufficient_funds: "The card did not have enough funds.",
   expired: "The card has expired.",
-  call_bank: "The bank asks the cardholder to contact them.",
+  call_bank: "The bank asked the cardholder to contact them.",
   closed: "The card's account is closed.",
-  declined: "The bank gave no reason.",
+  declined: "The bank did not provide a reason for the decline.",
 };
 
 /** A receipt number, as `memberBills.ts` has it (which reads this file, so it is not read from there). */
@@ -163,13 +163,13 @@ export const CARD_CHARGE_WORDS = {
   charge_gone: "This charge is no longer here.",
   disconnect_charging: "A card on file is being charged. Wait a minute for Square's answer, then disconnect.",
   void_card: "This was charged to the card on file. To give the money back, refund it in your Square Dashboard, then note the refund here.",
-  stopped: "The bank declined this card for good, so it can't be charged again. Save another card, or take payment another way.",
-  tried_out: "This card has been tried 3 times for this payment, so it can't be charged for it again. Ask for another card, or take payment another way.",
+  stopped: "The bank declined this card permanently, so it cannot be charged again. Save another card, or collect payment using another method.",
+  tried_out: "This card has been tried 3 times for this payment and cannot be charged for it again. Ask the cardholder for another card, or collect payment using another method.",
 } as const;
 
 /** Said after the decline on a bill (18d-iii-ii-a). */
 export const CARD_RETRY_WORDS: Readonly<Record<CardRetryStop, string>> = {
-  bank: "It won't be tried again by itself. Ask the cardholder to call their bank, then charge it again, or take payment another way.",
-  new_card: "The bank declined this card for good. Ask for another card, or take payment another way.",
-  tried_out: "It was tried 3 times. Ask for another card, or take payment another way.",
+  bank: "The payment will not be retried automatically. Ask the cardholder to contact their bank for more information, then retry the payment, or collect payment using another method.",
+  new_card: "The bank declined this card permanently. Ask the cardholder for another card, or collect payment using another method.",
+  tried_out: "The payment was tried 3 times and will not be retried. Ask the cardholder for another card, or collect payment using another method.",
 };

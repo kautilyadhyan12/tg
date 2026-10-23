@@ -10,7 +10,7 @@ export const CARD_ON_FILE_METHOD = 'card_on_file';
  *  declined for good says so, and is not offered (18d-iii-ii-a). */
 export function cardOnFileLabel(card) {
   const whose = card.payerName === null ? '' : ` (${card.payerName}'s)`;
-  return `Card on file · ${cardName(card)}${whose}${card.stopped === true ? " · can't be charged" : ''}`;
+  return `Card on file · ${cardName(card)}${whose}${card.stopped === true ? ' · cannot be charged' : ''}`;
 }
 
 /** Under Payment method, where the card on file can't be charged again; null where it can. */
