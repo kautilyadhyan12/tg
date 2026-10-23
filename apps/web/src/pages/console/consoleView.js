@@ -6,7 +6,7 @@
 // does not know: a country the server would refuse, a timezone that is not the
 // user's own, a member count taken off one page of a cursor walk, or a join
 // code printed as usable when the join path will turn it away.
-import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES, orgWords } from '@app/shared';
+import { ROLE_PRIVILEGES, SUPPORTED_COUNTRIES, isServedCountry, orgWords } from '@app/shared';
 
 /** Region names from the browser's own database rather than a table typed here.
  *  A hand-written name table is a second place to be wrong about a country's
@@ -26,6 +26,13 @@ function regionNamer() {
       return code;
     }
   };
+}
+
+/** A gym stored in a country that has left the business list (18s): Gym details says so
+ *  under the picker, which shows no country for it. null for any other gym. */
+export function closedCountryLine(country, orgType) {
+  if (typeof country !== 'string' || country.trim() === '' || isServedCountry(country)) return null;
+  return `We don't take businesses in ${regionNamer()(country.trim().toUpperCase())}. Choose the country your ${orgWords(orgType).it} is in.`;
 }
 
 /** The country picker's options — built from the SERVER'S OWN supported list.

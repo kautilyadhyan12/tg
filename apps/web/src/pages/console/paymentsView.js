@@ -38,7 +38,7 @@ export function paymentsSummary(payments) {
     case 'not_available':
       return `Not available in ${countryNameOf(payments.country)} yet`;
     default:
-      return 'Add your country first';
+      return 'Choose your country first';
   }
 }
 
@@ -52,7 +52,7 @@ export function paymentsElsewhereLine(payments) {
     case 'not_available':
       return `Card payments aren't available for gyms in ${countryNameOf(payments.country)} yet. ${DESK_LINE}`;
     case 'no_country':
-      return 'Add your country first. The card payments you can take depend on where you are.';
+      return 'Choose your country first. The card payments you can take depend on where you are.';
     default:
       return null;
   }

@@ -799,7 +799,7 @@ export default function MembershipTypesPanel({ org, readOnly, openBox = null, on
               <p className="c-s15 m-0">
                 {canSetCountry
                   ? `Set your country in ${details} before adding a membership type. Prices are in your country's own money.`
-                  : `Your country isn't set yet, so a membership type can't be added. Ask the owner to set it in ${details}. Prices are in your country's own money.`}
+                  : `A membership type can't be added until your country is set. Ask the owner to set it in ${details}. Prices are in your country's own money.`}
               </p>
               <PlaceLink to={countryTo} className="c-btn c-btn-s">
                 Set your country

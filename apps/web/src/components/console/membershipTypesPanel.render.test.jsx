@@ -220,7 +220,7 @@ describe('adding a type', () => {
   it('a gym with no country is told to set it, and is offered no form', async () => {
     open(listOf({ currency: null }));
     // Somebody who may not change the gym's details is told who can, and given no button.
-    expect(await screen.findByText(/Your country isn't set yet, so a membership type can't be added\. Ask the owner to set it in Gym details\./)).toBeTruthy();
+    expect(await screen.findByText(/A membership type can't be added until your country is set\. Ask the owner to set it in Gym details\./)).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add a membership type' })).toBeNull();
   });

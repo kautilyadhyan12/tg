@@ -933,9 +933,9 @@ describe('reading a failure', () => {
     const err = apiError(
       400,
       'country_unsupported',
-      "We're not open in that country yet. Right now we support the United States, India, Canada, the UK and countries using the euro.",
+      "We don't take businesses in that country. A business can be in India, the United States, Canada, the United Kingdom, Ireland, France, Spain, Australia or Japan.",
     );
-    expect(errorText(err, 'fallback')).toContain('not open in that country yet');
+    expect(errorText(err, 'fallback')).toContain("We don't take businesses in that country");
     expect(errorCode(err)).toBe('country_unsupported');
     expect(errorStatus(err)).toBe(400);
   });

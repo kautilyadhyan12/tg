@@ -129,7 +129,8 @@ describe("the money a gym's members pay in", () => {
     expect(memberCurrencyForCountry("IN")).toBe("INR");
     expect(memberCurrencyForCountry("GB")).toBe("GBP");
     expect(memberCurrencyForCountry("CA")).toBe("CAD");
-    expect(memberCurrencyForCountry("DE")).toBe("EUR");
+    expect(memberCurrencyForCountry("FR")).toBe("EUR");
+    expect(memberCurrencyForCountry("JP")).toBe("JPY");
     expect(memberCurrencyForCountry(" ie ")).toBe("EUR");
     for (const country of SUPPORTED_COUNTRIES) {
       const currency = memberCurrencyForCountry(country);
@@ -139,7 +140,7 @@ describe("the money a gym's members pay in", () => {
 
   it("is nothing, never a fallback, where the country is unknown", () => {
     expect(memberCurrencyForCountry(null)).toBeNull();
-    expect(memberCurrencyForCountry("JP")).toBeNull();
+    expect(memberCurrencyForCountry("DE")).toBeNull();
     expect(memberCurrencyForCountry("constructor")).toBeNull();
   });
 });
