@@ -104,6 +104,7 @@ describe('where each place is', () => {
       frontDesk: 'check-in-devices',
       leadEmails: 'follow-up-emails',
       waiver: 'waiver',
+      agreement: 'membership-agreement',
       referrals: 'refer-a-friend',
       payments: 'payments',
     });
