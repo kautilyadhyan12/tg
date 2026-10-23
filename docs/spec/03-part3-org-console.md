@@ -4295,7 +4295,7 @@ desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Vi
 13.2 is a charge after a cancel); an offer to stay appears only beside the cancel button
 (California). The gym's switch to turn the button off is gone.
 
-**Each place's rules** (18u, 18v; the lawyer's words): renewal on or off per type (Quebec: no
+**Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years
 without a 30-day exit; California, New York and Texas 3 years; Illinois a first term of 1
 year); days to cancel after signing (California 5 business days; New York, Texas and Illinois
