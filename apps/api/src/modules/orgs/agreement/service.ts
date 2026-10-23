@@ -15,6 +15,7 @@ import {
   agreementSignable,
   dayWords,
   emailAgreementCopyResponseSchema,
+  firstBillOf,
   gymAgreementResponseSchema,
   isUnder18,
   membershipAgreementResponseSchema,
@@ -130,7 +131,7 @@ async function current(deps: AgreementDeps, org: OrgRow, entryId: string, member
   const membership = held.memberships.find((m) => m.id === membershipId);
   if (membership === undefined) throw membershipNotFound();
   if (!agreementSignable(membership.view.status)) return { record, facts: null };
-  const facts = agreementFacts({ gym: { name: org.name, ...contact }, personName: record.fullName, membership, taxIncluded: held.taxIncluded });
+  const facts = agreementFacts({ gym: { name: org.name, ...contact }, personName: record.fullName, membership, firstBill: firstBillOf(membership.billing), taxIncluded: held.taxIncluded });
   return { record, facts };
 }
 

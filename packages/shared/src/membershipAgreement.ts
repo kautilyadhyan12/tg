@@ -13,6 +13,7 @@
 import { z } from "zod";
 import { formatMinor } from "./memberships.js";
 import type { HeldMembershipItem } from "./heldMemberships.js";
+import type { MemberBill, MemberBilling } from "./memberBills.js";
 import { coversWords, dayWords } from "./paymentsDownload.js";
 import { deskSignerSchema, signedNameSchema, waiverTextSchema, waiverToReadSchema } from "./waiver.js";
 
@@ -128,8 +129,10 @@ export interface AgreementFactsInput {
   personName: string;
   membership: Pick<
     HeldMembershipItem,
-    "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "tax" | "view" | "billing"
+    "typeName" | "kind" | "priceMinor" | "currency" | "termCount" | "termUnit" | "packClasses" | "startsOn" | "discount" | "tax" | "view"
   >;
+  /** Its first bill, as opened with it (`firstBillOf`); null where it has none listed. */
+  firstBill: Pick<MemberBill, "amountMinor" | "joiningFeeMinor" | "part" | "covers" | "dueOn"> | null;
   /** The business's prices hold the tax, or it is added on top. */
   taxIncluded: boolean;
 }
@@ -175,7 +178,7 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
     });
   }
   // The first bill, as opened with the membership: the part month, the joining fee and the tax in.
-  const first = m.billing?.bills.find((bill) => bill.periodIndex === 0) ?? null;
+  const first = input.firstBill;
   if (first !== null && first.amountMinor > 0) {
     const amount = formatMinor(first.amountMinor, m.currency);
     const part = first.part && first.covers !== null ? ` for ${coversWords(first.covers.from, first.covers.to)}` : "";
@@ -192,6 +195,9 @@ export function agreementFacts(input: AgreementFactsInput): AgreementFact[] {
   }
   return facts;
 }
+
+/** A membership's first bill among those listed: the one for its first period. */
+export const firstBillOf = (billing: MemberBilling | null): MemberBill | null => billing?.bills.find((bill) => bill.periodIndex === 0) ?? null;
 
 /** A membership can be signed while it is running or still to start. */
 export const agreementSignable = (status: HeldMembershipItem["view"]["status"]): boolean => status === "active" || status === "upcoming";
