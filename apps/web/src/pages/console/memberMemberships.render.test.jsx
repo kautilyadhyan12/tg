@@ -1816,6 +1816,14 @@ describe('the membership agreement (18u-i)', () => {
     expect(screen.getByRole('button', { name: 'Sign agreement' })).toBeTruthy();
   });
 
+  it('a past member with a membership still running is not offered Sign agreement', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], true, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    await (await boxSoon()).findByText('Gold Monthly');
+    expect(screen.queryByText('Agreement not signed')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign agreement' })).toBeNull();
+  });
+
   it('a business that asks for no agreement gives a membership with no agreement box', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([]));
     orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, false)]));

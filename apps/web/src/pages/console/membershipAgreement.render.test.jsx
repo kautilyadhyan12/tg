@@ -140,6 +140,13 @@ describe('signing at the desk', () => {
     await waitFor(() => expect(orgService.signMembershipAgreement).toHaveBeenCalledWith(GYM, MAYA, GOLD.id, expect.objectContaining({ signer: 'guardian', name: 'Rosa Reyes' })));
   });
 
+  it('somebody no longer on the list has nothing to sign, and the box says why', async () => {
+    orgService.getMembershipAgreement.mockResolvedValue({ data: { ...BOX, facts: null, factsKey: null, past: true } });
+    draw({ open: true });
+    expect(await screen.findByText('Maya Patel is no longer on your list, so there is nothing to sign.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Sign' })).toBeNull();
+  });
+
   it('a membership that can no longer be signed says so, with Close', async () => {
     orgService.getMembershipAgreement.mockResolvedValue({ data: { ...BOX, facts: null, factsKey: null } });
     const { onClose } = draw({ open: true });

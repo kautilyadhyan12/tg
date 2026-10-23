@@ -118,7 +118,7 @@ export async function stopGymAgreement(deps: AgreementDeps, userId: string, gymI
 // ── One membership, at the desk ──
 
 interface Current {
-  record: { fullName: string; dateOfBirth: string | null; email: string | null };
+  record: { fullName: string; dateOfBirth: string | null; email: string | null; former: boolean };
   /** Its details now, or null where it is over, cancelled or frozen. */
   facts: AgreementFact[] | null;
 }
@@ -172,6 +172,7 @@ export async function getMembershipAgreement(
     factsKey: now.facts === null ? null : factsKeyOf(now.facts),
     signed: signed === null ? null : toSigned(signed),
     hasEmail: now.record.email !== null,
+    past: now.record.former,
   });
 }
 

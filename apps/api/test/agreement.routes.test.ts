@@ -568,6 +568,9 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
       const benGold = await give(gymId, ben, owner.cookies, gold, { priceMinor: 5000, totalMinor: 5000 });
       const benBox = await box(gymId, ben, benGold, owner.cookies);
       expect((await send("DELETE", `/v1/orgs/${gymId}/member-list/entries/${ben}`, owner.cookies)).statusCode).toBe(200);
+      // His box says he is a past member, with nothing to sign.
+      const benPast = await box(gymId, ben, benGold, owner.cookies);
+      expect([benPast.past, benPast.signed, benPast.facts]).toEqual([true, null, null]);
       const late = await sign(gymId, ben, benGold, owner.cookies, { ...body, factsKey: benBox.factsKey, name: "Ben Stone" });
       expect(late.statusCode).toBe(404);
     },

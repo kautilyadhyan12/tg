@@ -83,6 +83,8 @@ export const membershipAgreementResponseSchema = z
     signed: agreementSignedSchema.nullable(),
     /** The record has an email address for the copy. */
     hasEmail: z.boolean(),
+    /** The person is no longer on the business's list: what they signed is shown, and nothing is signed. */
+    past: z.boolean().default(false),
   })
   .strict();
 export type MembershipAgreementResponse = z.infer<typeof membershipAgreementResponseSchema>;

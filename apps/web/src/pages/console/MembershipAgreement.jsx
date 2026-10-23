@@ -227,6 +227,13 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
                 Close
               </button>
             </>
+          ) : box.past ? (
+            <>
+              <p className="c-s14 c-t2 m-0">{box.personName === '' ? 'This person is' : `${box.personName} is`} no longer on your list, so there is nothing to sign.</p>
+              <button type="button" onClick={close} className="c-btn c-btn-ghost self-start">
+                Close
+              </button>
+            </>
           ) : box.facts === null ? (
             <>
               <p className="c-s14 c-t2 m-0">This membership is over, cancelled or frozen, so it can&apos;t be signed now.</p>
