@@ -4322,6 +4322,24 @@ directly."), in the words Kd gave on 2026-10-24. A card declined for good reads 
 Payment method and cannot be picked. Resend's reports about these emails are kept but
 not yet read back onto the bill.
 
+*As built, 18d-iii-ii-b (the Failed payments list):* a page of its own, **Failed payments**, in the
+menu after Sell, for staff with `members.read` and `billing.members` (the server refuses anyone
+else, and another gym's staff are answered 404). It lists every bill and fee still owed whose newest
+charge to a card on file was declined, the newest decline first, 25 rows a page: the person (a past
+member marked so), what it is for ("Gold Weekly · 23 Oct – 29 Oct 2026", "Late cancel fee · Spin on
+…"), what is left to pay, and the bill's own decline line, read by the same function as the person's
+page. **Try again** opens a box under its row that names the card and the amount ("$25.00 is charged
+to Gina Declined's Visa ending 1000 as soon as you press Charge $25.00.", the payer's card where
+somebody pays), and Charge sends Record payment's own Card on file press, which the server decides
+again under the record's lock; what happened is said in that row. Try again is offered only where that
+press would be taken: Square connected, the bill the one a payment is taken for, a card on file, and the
+retry rule allowing it now; otherwise the row says why ("It can be retried from 2:15 PM on 24 Oct.",
+no card on file, Square not connected, an earlier payment due first) or the decline line already does
+(declined for good, tried 3 times). Every row has Open their page, where every other way to pay is.
+Overview shows "3 card payments were declined and are still owed." with the amount owed and Open
+Failed payments, only where there are some. No new table: the gym's declines are found by
+`gym_card_charges_card_idx`.
+
 **Cancelling** (18l): every member can cancel in the app, including those who joined at the
 desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Visa's dispute
 13.2 is a charge after a cancel); an offer to stay appears only beside the cancel button
