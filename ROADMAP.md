@@ -278,7 +278,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-vi-c. [ ] **The card kept from a Terminal payment** for a membership that renews, the member agreeing on the Terminal first. Waits for web folder 2's 18u: the gym's own agreement with the facts filled in, to which it adds the card's tick and details (Kd, 2026-10-22, `rulings/2026-10-22-18r.md`). Web folder 1.
      - 18r. [x] **UPI for gyms in India** — merged 2026-10-23 (PR #341).
      - 18d-iii. **Bills charged to the saved card**, in two parts since 2026-10-23 (`handoff/2026-10-23-18d-iii-i.md` keeps its line as first written):
-       - 18d-iii-i. [ ] **The saved card charged on the bill's date**: a renewing membership's bill after its first, and a freeze fee, from 6 a.m. gym time, on the card of whoever pays; Charge card on file in Record payment; one try, a decline said on the bill. Web folder 1.
+       - 18d-iii-i. [x] **The saved card charged on the bill's date** — merged 2026-10-23 (PR #344).
        - 18d-iii-ii. [ ] **Failed payments**: at most 3 tries over several days, never after a decline the card companies forbid; the member told in writing with 7 days to pay another way; a Failed payments list for staff with Try again. Web folder 1.
      - 18d-iii-c. [ ] **A reminder before a card expires**, a gym's choice (Kd, 2026-10-22; Wodify and Mindbody do it). Web folder 1.
      - 18d-iii-b. [ ] **A payment taken in Square's own app recorded on the member** (Kd, 2026-10-21): staff pick the member in Square's Point of Sale app and take it on the Reader; Square's payment message is matched by the Square customer we made for them; tested in Square's test area.
