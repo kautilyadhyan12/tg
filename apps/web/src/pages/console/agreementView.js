@@ -100,6 +100,7 @@ export function agreementBoxWords(personName, signer, minor) {
 export function agreementSignedLine(emailed) {
   if (emailed === 'sent') return 'Signed. A copy was emailed to them.';
   if (emailed === 'no_email') return 'Signed. There is no email address on their record, so no copy was emailed.';
+  if (emailed === 'blocked') return "Signed. Their email address can't receive our emails, so no copy was sent. Check it in their details.";
   return "Signed, but the copy didn't send. Press View, then Email a copy to try again.";
 }
 
@@ -123,5 +124,6 @@ export function agreementCopyLine(signed, hasEmail, when) {
 export function agreementResentLine(emailed) {
   if (emailed === 'sent') return 'A copy was emailed to them.';
   if (emailed === 'no_email') return 'There is no email address on their record. Add one to their details, then try again.';
+  if (emailed === 'blocked') return "Their email address can't receive our emails. Check it in their details.";
   return "The copy didn't send. Try again later.";
 }

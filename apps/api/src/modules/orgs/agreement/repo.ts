@@ -54,12 +54,12 @@ export async function setStopped(tx: TransactionSql, gymId: string, agreementId:
   await tx`UPDATE gym_agreements SET stopped_at = ${at} WHERE gym_id = ${gymId} AND id = ${agreementId}`;
 }
 
-/** How many memberships were signed with this wording. */
-export async function signedCount(sql: SqlOrTx, gymId: string, agreementId: string | null): Promise<number> {
-  if (agreementId === null) return 0;
+/** How many of the business's memberships were signed, with any wording: changing the words
+ *  keeps every one of them. */
+export async function signedCount(sql: SqlOrTx, gymId: string): Promise<number> {
   const rows = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM gym_agreement_signatures
-    WHERE gym_id = ${gymId} AND agreement_id = ${agreementId} AND held_membership_id IS NOT NULL`;
+    WHERE gym_id = ${gymId} AND held_membership_id IS NOT NULL`;
   return rows[0]?.n ?? 0;
 }
 
@@ -118,12 +118,14 @@ export async function membershipRecord(
   gymId: string,
   entryId: string,
   membershipId: string,
+  /** A past member's too: their signed copy can still be sent to them. */
+  opts: { former: boolean } = { former: false },
 ): Promise<{ fullName: string; dateOfBirth: string | null; email: string | null } | null> {
   const rows = await sql<{ full_name: string; date_of_birth: string | null; email: string | null }[]>`
     SELECT e.full_name, e.date_of_birth::text AS date_of_birth, e.email::text AS email
     FROM gym_member_list_entries e
     JOIN gym_held_memberships h ON h.gym_id = e.gym_id AND h.entry_id = e.id AND h.id = ${membershipId}
-    WHERE e.gym_id = ${gymId} AND e.id = ${entryId} AND e.former_at IS NULL`;
+    WHERE e.gym_id = ${gymId} AND e.id = ${entryId} AND (${opts.former} OR e.former_at IS NULL)`;
   const row = rows[0];
   return row === undefined ? null : { fullName: row.full_name.trim(), dateOfBirth: row.date_of_birth, email: row.email };
 }
@@ -170,9 +172,22 @@ export async function signAtDesk(
   return rows[0]?.id ?? null;
 }
 
-/** The copy went to the person's email. */
-export async function markEmailed(sql: SqlOrTx, gymId: string, signatureId: string, at: Date): Promise<void> {
-  await sql`UPDATE gym_agreement_signatures SET emailed_at = ${at} WHERE gym_id = ${gymId} AND id = ${signatureId}`;
+/** Claims the sending of a copy, in one statement: written only where no copy went in the last
+ *  minute, so two presses at once send one. What `emailed_at` was before, to put back if the
+ *  email then fails; `claimed: false` where another press has just sent it. */
+export async function claimCopy(sql: SqlOrTx, gymId: string, signatureId: string, at: Date): Promise<{ claimed: boolean; was: Date | null }> {
+  const rows = await sql<{ was: Date | null }[]>`
+    UPDATE gym_agreement_signatures s SET emailed_at = ${at}
+    FROM (SELECT id, emailed_at AS was FROM gym_agreement_signatures WHERE gym_id = ${gymId} AND id = ${signatureId} FOR UPDATE) o
+    WHERE s.id = o.id AND (o.was IS NULL OR o.was < ${at}::timestamptz - interval '1 minute')
+    RETURNING o.was`;
+  const row = rows[0];
+  return row === undefined ? { claimed: false, was: null } : { claimed: true, was: row.was };
+}
+
+/** The claimed copy did not go: `emailed_at` goes back to what it was. */
+export async function unclaimCopy(sql: SqlOrTx, gymId: string, signatureId: string, at: Date, was: Date | null): Promise<void> {
+  await sql`UPDATE gym_agreement_signatures SET emailed_at = ${was} WHERE gym_id = ${gymId} AND id = ${signatureId} AND emailed_at = ${at}`;
 }
 
 /** A record deleted for good: its memberships' signatures stay as the business's proof, with

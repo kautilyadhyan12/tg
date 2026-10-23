@@ -67,7 +67,7 @@ async function gymAgreement(sql: repo.SqlOrTx, gymId: string): Promise<GymAgreem
   return gymAgreementResponseSchema.parse({
     agreement: latest === null ? null : { ...toRead(latest), savedAt: latest.savedAt.toISOString() },
     inUse: latest !== null && latest.stoppedAt === null,
-    signed: await repo.signedCount(sql, gymId, latest?.id ?? null),
+    signed: await repo.signedCount(sql, gymId),
   });
 }
 
@@ -172,11 +172,15 @@ export async function getMembershipAgreement(
   });
 }
 
-/** Emails the copy of a signature, where the record has an address that takes our email. */
+/** Emails the copy of a signature, where the record has an address that takes our email. One
+ *  copy a minute: a press while another sends it answers "sent" and sends nothing. */
 async function sendCopy(deps: AgreementDeps, org: OrgRow, email: string | null, signed: repo.SignatureRow): Promise<AgreementEmailed> {
   if (email === null) return "no_email";
   const suppressed = deps.addressKey !== null && (await suppressionsFor(deps.sql, org.id, [emailHmac(deps.addressKey, email)])).size > 0;
-  if (suppressed) return "failed";
+  if (suppressed) return "blocked";
+  const at = deps.now();
+  const claim = await repo.claimCopy(deps.sql, org.id, signed.id, at);
+  if (!claim.claimed) return "sent";
   try {
     await deps.email.sendAgreementCopy({
       to: email,
@@ -189,9 +193,9 @@ async function sendCopy(deps: AgreementDeps, org: OrgRow, email: string | null, 
     });
   } catch (err) {
     deps.log.warn({ event: "agreement.copy_failed", gymId: org.id, errName: err instanceof Error ? err.name : typeof err }, "an agreement copy was not emailed");
+    await repo.unclaimCopy(deps.sql, org.id, signed.id, at, claim.was);
     return "failed";
   }
-  await repo.markEmailed(deps.sql, org.id, signed.id, deps.now());
   return "sent";
 }
 
@@ -216,6 +220,8 @@ export async function signMembershipAgreement(
   // The record says they are an adult: they sign themselves, never a parent for them.
   if (body.signer === "guardian" && minor === false) throw new OrgsError(409, "person_signs", WAIVER_DESK_WORDS.person_signs(now.record.fullName));
   const existing = await repo.signatureOf(deps.sql, gymId, membershipId);
+  // Only the press that wrote the signature sends its copy: presses at once send one.
+  let wrote = false;
   if (existing === null) {
     if (now.facts === null) throw new OrgsError(409, "membership_not_signable", AGREEMENT_WORDS.membership_not_signable);
     // THE RULE: only the details the screen showed are signed and kept.
@@ -229,6 +235,7 @@ export async function signMembershipAgreement(
       }
       return id;
     });
+    wrote = written !== null;
     if (written === null) {
       const agreement = await repo.agreementInUse(deps.sql, gymId);
       if (agreement === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
@@ -239,9 +246,14 @@ export async function signMembershipAgreement(
   // Taken off the list, its membership ended, or its date of birth changed, between the read and the write.
   if (signed === null) throw membershipNotFound();
   // A second press tells what became of the first one's copy, and sends nothing.
-  const emailed: AgreementEmailed =
-    existing !== null ? (signed.emailedAt !== null ? "sent" : now.record.email === null ? "no_email" : "failed") : await sendCopy(deps, org, now.record.email, signed);
-  const after = emailed === "sent" && existing === null ? await repo.signatureOf(deps.sql, gymId, membershipId) : signed;
+  const emailed: AgreementEmailed = wrote
+    ? await sendCopy(deps, org, now.record.email, signed)
+    : signed.emailedAt !== null
+      ? "sent"
+      : now.record.email === null
+        ? "no_email"
+        : "failed";
+  const after = wrote && emailed === "sent" ? await repo.signatureOf(deps.sql, gymId, membershipId) : signed;
   return signMembershipAgreementResponseSchema.parse({ signed: toSigned(after ?? signed), emailed });
 }
 
@@ -256,7 +268,8 @@ export async function emailAgreementCopy(
 ): Promise<EmailAgreementCopyResponse | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, userId, DESK_TICK);
   if (!(await limit())) return null;
-  const record = await repo.membershipRecord(deps.sql, gymId, entryId, membershipId);
+  // A past member's too: the signature is kept as the business's proof, and they may ask for it.
+  const record = await repo.membershipRecord(deps.sql, gymId, entryId, membershipId, { former: true });
   if (record === null) throw membershipNotFound();
   const signed = await repo.signatureOf(deps.sql, gymId, membershipId);
   if (signed === null) throw new OrgsError(409, "not_signed", AGREEMENT_WORDS.not_signed);

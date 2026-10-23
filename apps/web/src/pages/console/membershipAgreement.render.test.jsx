@@ -110,6 +110,25 @@ describe('signing at the desk', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Signed. There is no email address on their record, so no copy was emailed.');
   });
 
+  it('closed by the page and opened again on new words: the name and the tick given to the old ones are gone, and Sign waits', async () => {
+    const NEW = { ...AGREEMENT, id: '55555555-5555-4555-8555-555555555555', version: 3, text: 'NEW WORDS: no refunds ever.' };
+    orgService.getMembershipAgreement.mockResolvedValueOnce({ data: BOX }).mockResolvedValueOnce({ data: { ...BOX, agreement: NEW, factsKey: 'b'.repeat(64) } });
+    const handlers = { onOpen: vi.fn(), onClose: vi.fn(), onSigned: vi.fn() };
+    const props = { gymId: GYM, entryId: MAYA, membership: GOLD, inUse: true, signable: true, readOnly: false, justGiven: false, when, ...handlers };
+    const { rerender } = render(<MembershipAgreement {...props} open />);
+    await screen.findByLabelText('Your full name');
+    typeAndTick();
+    expect(screen.getByRole('button', { name: 'Sign' }).disabled).toBe(false);
+    // The page closes it (another membership's box opened), then opens it again.
+    rerender(<MembershipAgreement {...props} open={false} />);
+    rerender(<MembershipAgreement {...props} open />);
+    expect(await screen.findByText('NEW WORDS: no refunds ever.')).toBeTruthy();
+    expect(screen.getByLabelText('Your full name').value).toBe('');
+    expect(screen.getByRole('checkbox', { name: 'I have read this agreement and I agree to it.' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Sign' }).disabled).toBe(true);
+    expect(orgService.signMembershipAgreement).not.toHaveBeenCalled();
+  });
+
   it('a child is signed for by a parent or guardian', async () => {
     orgService.getMembershipAgreement.mockResolvedValue({ data: { ...BOX, personName: 'Mia Reyes', minor: true } });
     orgService.signMembershipAgreement.mockResolvedValue({ data: { signed: { ...SIGNED, signer: 'guardian', name: 'Rosa Reyes' }, emailed: 'sent' } });

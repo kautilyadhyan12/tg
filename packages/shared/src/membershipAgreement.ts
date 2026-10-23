@@ -40,7 +40,7 @@ export const gymAgreementResponseSchema = z
     agreement: waiverToReadSchema.extend({ savedAt: z.string() }).strict().nullable(),
     /** Memberships are signed with it. False where there is none, or it was stopped. */
     inUse: z.boolean(),
-    /** How many memberships were signed with the newest wording. */
+    /** How many of its memberships were signed, with any of its wordings. */
     signed: z.number().int().min(0),
   })
   .strict();
@@ -93,8 +93,9 @@ export const signMembershipAgreementBodySchema = z
   .strict();
 export type SignMembershipAgreementBody = z.infer<typeof signMembershipAgreementBodySchema>;
 
-/** What happened to the copy: sent, nowhere to send it, or the email did not go. */
-export const agreementEmailedSchema = z.enum(["sent", "no_email", "failed"]);
+/** What happened to the copy: sent, nowhere to send it, an address that refuses our email
+ *  (it bounced, or its owner said stop), or the email did not go. */
+export const agreementEmailedSchema = z.enum(["sent", "no_email", "blocked", "failed"]);
 export type AgreementEmailed = z.infer<typeof agreementEmailedSchema>;
 
 export const signMembershipAgreementResponseSchema = z.object({ signed: agreementSignedSchema, emailed: agreementEmailedSchema }).strict();

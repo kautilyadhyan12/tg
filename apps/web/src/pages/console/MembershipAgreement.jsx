@@ -70,13 +70,29 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
   const [done, setDone] = useState(null);
   const [copyLine, setCopyLine] = useState(null);
 
+  // Opened or closed, by this box or by the page: nothing typed or ticked before is kept, so
+  // a tick given to one wording or one set of details never signs another.
+  const [openSeen, setOpenSeen] = useState(open);
+  if (open !== openSeen) {
+    setOpenSeen(open);
+    setLoadError(null);
+    setBox(null);
+    setPicked(null);
+    setName('');
+    setAgreed(false);
+    setProblem(null);
+    setCopyLine(null);
+  }
+
   // The box reads the details and the words each time it opens, and again after a change.
   useEffect(() => {
     if (!open) return undefined;
     let live = true;
     orgService.getMembershipAgreement(gymId, entryId, membership.id).then(
       (res) => {
-        if (live) setBox(res.data);
+        if (!live) return;
+        setLoadError(null);
+        setBox(res.data);
       },
       (err) => {
         if (live) setLoadError(errorText(err, "We couldn't load the agreement."));

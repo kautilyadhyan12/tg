@@ -21,6 +21,10 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { AgreementCopyLetter } from "../src/modules/orgs/agreement/email.js";
+import * as agreementRepo from "../src/modules/orgs/agreement/repo.js";
+import { emailHmac } from "../src/modules/orgs/invites/address.js";
+import { inviteSettings } from "../src/modules/orgs/invites/settings.js";
+import { consentProofCutoff } from "../src/modules/privacy/purge.js";
 import { deleteExpiredWaiverSignatures } from "../src/modules/privacy/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
@@ -84,6 +88,8 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
   // 12:00 in Chicago on 15 October 2026.
   const clock = new Date("2026-10-15T17:00:00Z");
   const sent: AgreementCopyLetter[] = [];
+  const settings = inviteSettings(loadConfig({ ...baseEnv, DATABASE_URL: "postgres://unused@localhost:5432/unused" }));
+  if (settings === null) throw new Error("invitations are off in the test config");
   let emailFails = false;
   let app: App | undefined;
   const api = (): App => {
@@ -93,6 +99,7 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
 
   const mine = () => sql`SELECT id FROM gyms WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE 'agree-t-%@example.com')`;
   const cleanup = async () => {
+    await sql`DELETE FROM email_suppressions WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_agreement_signatures WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_agreements WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mine()})`;
@@ -512,12 +519,109 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
       const [kept] = await signatures(gymId);
       expect(kept?.record_deleted_at).not.toBeNull();
       expect(kept?.signed_name).toBe("Maya Patel");
-      // Five years on it stays; six years on it goes.
+      // The purge's own cutoff: a day short of six years on it stays; a few days past six years it goes.
       const deletedAt = kept?.record_deleted_at ?? new Date();
-      await deleteExpiredWaiverSignatures(sql, new Date(deletedAt.getTime() - 1));
+      const yearsOn = (years: number, days: number) => {
+        const on = new Date(deletedAt);
+        on.setUTCFullYear(on.getUTCFullYear() + years);
+        return new Date(on.getTime() + days * 24 * 60 * 60 * 1000);
+      };
+      await deleteExpiredWaiverSignatures(sql, consentProofCutoff(yearsOn(6, -1)));
       expect(await signatures(gymId)).toHaveLength(1);
-      await deleteExpiredWaiverSignatures(sql, new Date(deletedAt.getTime() + 1));
+      await deleteExpiredWaiverSignatures(sql, consentProofCutoff(yearsOn(6, 3)));
       expect(await signatures(gymId)).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    "presses at once sign once and email once; Email a copy pressed twice at once sends one; a past member's copy can still be sent",
+    async () => {
+      const owner = await makeUser("race-owner");
+      const gymId = (await makeGym(owner, "Agree Race Gym")).org.id;
+      const v1 = (await saveWords(gymId, owner.cookies, WORDS)).agreement?.id ?? "";
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      const mayaGold = await give(gymId, maya, owner.cookies, gold, { priceMinor: 5000, totalMinor: 5000 });
+      const shown = await box(gymId, maya, mayaGold, owner.cookies);
+      const before = sent.length;
+      const body = { agreementId: v1, factsKey: shown.factsKey, signer: "person", name: "Maya Patel" };
+      const presses = await Promise.all([1, 2, 3].map(() => sign(gymId, maya, mayaGold, owner.cookies, body)));
+      expect(presses.map((r) => r.statusCode)).toEqual([200, 200, 200]);
+      expect(await signatures(gymId)).toHaveLength(1);
+      expect(sent.length - before).toBe(1);
+      // A minute later, two presses of Email a copy at once: one email.
+      const copyUrl = `${boxUrl(gymId, maya, mayaGold)}/email`;
+      await sql`UPDATE gym_agreement_signatures SET emailed_at = emailed_at - interval '2 minutes' WHERE held_membership_id = ${mayaGold}`;
+      const resent = await Promise.all([post(copyUrl, {}, owner.cookies), post(copyUrl, {}, owner.cookies)]);
+      expect(resent.map((r) => emailAgreementCopyResponseSchema.parse(JSON.parse(r.body)).emailed)).toEqual(["sent", "sent"]);
+      expect(sent.length - before).toBe(2);
+      // Taken off the list: the signed copy can still be sent to them.
+      expect((await send("DELETE", `/v1/orgs/${gymId}/member-list/entries/${maya}`, owner.cookies)).statusCode).toBe(200);
+      await sql`UPDATE gym_agreement_signatures SET emailed_at = emailed_at - interval '2 minutes' WHERE held_membership_id = ${mayaGold}`;
+      const former = await post(copyUrl, {}, owner.cookies);
+      expect([former.statusCode, emailAgreementCopyResponseSchema.parse(JSON.parse(former.body)).emailed]).toEqual([200, "sent"]);
+      // Signing stays for people on the list today.
+      const ben = await addPerson(gymId, owner.cookies, "Ben Stone");
+      const benGold = await give(gymId, ben, owner.cookies, gold, { priceMinor: 5000, totalMinor: 5000 });
+      const benBox = await box(gymId, ben, benGold, owner.cookies);
+      expect((await send("DELETE", `/v1/orgs/${gymId}/member-list/entries/${ben}`, owner.cookies)).statusCode).toBe(200);
+      const late = await sign(gymId, ben, benGold, owner.cookies, { ...body, factsKey: benBox.factsKey, name: "Ben Stone" });
+      expect(late.statusCode).toBe(404);
+    },
+    T,
+  );
+
+  it(
+    "an address that refuses our email is told so, and never sent to; Settings counts the memberships signed with every wording, not the newest alone",
+    async () => {
+      const owner = await makeUser("blocked-owner");
+      const gymId = (await makeGym(owner, "Agree Blocked Gym")).org.id;
+      const v1 = (await saveWords(gymId, owner.cookies, WORDS)).agreement?.id ?? "";
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      const mayaGold = await give(gymId, maya, owner.cookies, gold, { priceMinor: 5000, totalMinor: 5000 });
+      const [address] = await sql<{ email: string }[]>`SELECT email::text AS email FROM gym_member_list_entries WHERE id = ${maya}`;
+      const hmac = emailHmac(settings.hmacKey, address?.email ?? "");
+      // A bounce is kept for every business at once.
+      await sql`INSERT INTO email_suppressions (gym_id, email_hmac, reason) VALUES (NULL, ${hmac}, 'bounced')`;
+      const before = sent.length;
+      const shown = await box(gymId, maya, mayaGold, owner.cookies);
+      const signed = signMembershipAgreementResponseSchema.parse(
+        JSON.parse((await sign(gymId, maya, mayaGold, owner.cookies, { agreementId: v1, factsKey: shown.factsKey, signer: "person", name: "Maya Patel" })).body),
+      );
+      expect([signed.emailed, signed.signed.emailedAt]).toEqual(["blocked", null]);
+      const again = emailAgreementCopyResponseSchema.parse(JSON.parse((await post(`${boxUrl(gymId, maya, mayaGold)}/email`, {}, owner.cookies)).body));
+      expect(again.emailed).toBe("blocked");
+      expect(sent.length).toBe(before);
+      await sql`DELETE FROM email_suppressions WHERE email_hmac = ${hmac}`;
+      // New words: the membership signed with the old ones still counts.
+      const changed = await saveWords(gymId, owner.cookies, CHANGED);
+      expect([changed.agreement?.version, changed.signed]).toEqual([2, 1]);
+    },
+    T,
+  );
+
+  it(
+    "the one statement that signs refuses by itself a membership no longer in use, and a date of birth that changed since it was read",
+    async () => {
+      const owner = await makeUser("guard-owner");
+      const gymId = (await makeGym(owner, "Agree Guard Gym")).org.id;
+      const v1 = (await saveWords(gymId, owner.cookies, WORDS)).agreement?.id ?? "";
+      const gold = await addType(gymId, owner.cookies, monthly());
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", { dateOfBirth: ADULT_BORN });
+      const mayaGold = await give(gymId, maya, owner.cookies, gold, { priceMinor: 5000, totalMinor: 5000 });
+      const facts = [{ label: "Membership", value: "Gold Monthly" }];
+      const input = { gymId, agreementId: v1, entryId: maya, membershipId: mayaGold, dateOfBirth: ADULT_BORN, signer: "person" as const, name: "Maya Patel", facts, witnessedBy: owner.userId, at: clock };
+      // The date of birth the check read is not the record's any more.
+      expect(await agreementRepo.signAtDesk(sql, { ...input, dateOfBirth: CHILD_BORN })).toBeNull();
+      // Cancelled between the read and the write.
+      await sql`UPDATE gym_held_memberships SET status = 'cancelled', cancelled_on = '2026-10-15' WHERE id = ${mayaGold}`;
+      expect(await agreementRepo.signAtDesk(sql, input)).toBeNull();
+      expect(await signatures(gymId)).toEqual([]);
+      // Back in use, the same statement writes it.
+      await sql`UPDATE gym_held_memberships SET status = 'active', cancelled_on = NULL WHERE id = ${mayaGold}`;
+      expect(await agreementRepo.signAtDesk(sql, input)).not.toBeNull();
     },
     T,
   );
