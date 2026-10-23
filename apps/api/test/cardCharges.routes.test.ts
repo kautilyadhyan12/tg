@@ -651,7 +651,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(shown?.cardUnchecked).toEqual({ brand: "VISA", last4: "1111", on: today });
   });
 
-  it("a card declined on a staff press is not tried again by itself", async () => {
+  it("a card declined on a staff press is not tried again by itself the same day", async () => {
     const gym = await makeGym(`Press Gym ${uniq()}`, `MPR${uniq()}`);
     const typeId = await typeOf(gym);
     const pia = await holding(gym, typeId, await person(gym, "Pia Pressed"));

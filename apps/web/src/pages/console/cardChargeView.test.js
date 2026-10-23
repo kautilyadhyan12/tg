@@ -98,6 +98,7 @@ describe("a bill's card lines", () => {
     [{ next: null, stop: 'bank', notice: { state: 'sending', on: null } }, ' The payment will not be retried automatically. Ask the cardholder to contact their bank for more information, then retry the payment, or collect payment using another method. An email to the cardholder is being sent.'],
     [{ next: null, stop: 'new_card', notice: { state: 'no_email', on: null } }, ' The bank declined this card permanently. Ask the cardholder for another card, or collect payment using another method. The cardholder was not emailed because there is no email address on file. Please contact them directly.'],
     [{ next: null, stop: 'tried_out', notice: { state: 'not_sent', on: null } }, ' The payment was tried 3 times and will not be retried. Ask the cardholder for another card, or collect payment using another method. The email to the cardholder could not be sent. Please contact them directly.'],
+    [{ next: null, stop: 'manual', notice: { state: 'emailed', on: '2026-10-20' } }, ' The payment will not be retried automatically. Retry the payment, or collect payment using another method. The cardholder was emailed on 20 Oct.'],
     [{ next: null, stop: null, notice: null }, ''],
   ])('what happens next, and the email (18d-iii-ii-a): %o', (after, words) => {
     const declined = { brand: 'VISA', last4: '1111', on: '2026-10-20', reason: 'insufficient_funds', ...after };

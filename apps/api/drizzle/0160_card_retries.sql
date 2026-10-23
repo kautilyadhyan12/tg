@@ -17,15 +17,19 @@ CREATE INDEX "gym_card_charges_card_idx" ON "gym_card_charges" USING btree ("gym
 -- The worker's search for declines due a try.
 CREATE INDEX "gym_card_charges_retry_idx" ON "gym_card_charges" USING btree ("next_try_on") WHERE "next_try_on" IS NOT NULL;--> statement-breakpoint
 --
--- One email a bill, written with its first decline, telling whoever's card it is that the payment
--- did not go through and to pay another way within 7 days (Visa). The address is kept only while the
--- email waits to go (a CHECK), as the other email queues keep theirs. `skipped` with `no_email`: the
--- cardholder's record has no address, and the bill tells staff to tell them. `bill_id` has no link,
--- as `gym_card_charges`' has none; a record deleted for good lets go of `entry_id` alone.
+-- One email a period of a membership, or one a fee, written with its first decline, telling whoever's
+-- card it is that the payment did not go through and to pay another way within 7 days (Visa). A
+-- period's is kept by the period, so a press paying ahead, before the bill is open, is told too
+-- (`bill_id` null); a fee's by its bill. The address is kept only while the email waits to go (a
+-- CHECK), as the other email queues keep theirs. `skipped` with `no_email`: the cardholder's record
+-- has no address, and the bill tells staff to tell them. The membership and the bill have no link,
+-- as `gym_card_charges`' have none; a record deleted for good lets go of `entry_id` alone.
 CREATE TABLE "gym_card_decline_notices" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"gym_id" uuid NOT NULL,
-	"bill_id" uuid NOT NULL,
+	"held_membership_id" uuid NOT NULL,
+	"period_index" integer,
+	"bill_id" uuid,
 	"charge_id" uuid NOT NULL,
 	"entry_id" uuid,
 	"email" "citext",
@@ -38,6 +42,7 @@ CREATE TABLE "gym_card_decline_notices" (
 	"provider_id" text,
 	"created_at" timestamp with time zone NOT NULL,
 	"finished_at" timestamp with time zone,
+	CONSTRAINT "gym_card_decline_notices_target_check" CHECK (("period_index" IS NULL) = ("bill_id" IS NOT NULL) AND ("period_index" IS NULL OR "period_index" >= 0)),
 	CONSTRAINT "gym_card_decline_notices_state_check" CHECK ("state" IN ('queued','sending','sent','skipped','failed')),
 	CONSTRAINT "gym_card_decline_notices_email_check" CHECK (("state" IN ('queued','sending') OR "email" IS NULL) AND ("email" IS NULL OR length("email") <= 254)),
 	CONSTRAINT "gym_card_decline_notices_waiting_check" CHECK ("state" NOT IN ('queued','sending') OR "email" IS NOT NULL),
@@ -50,8 +55,9 @@ CREATE TABLE "gym_card_decline_notices" (
 ALTER TABLE "gym_card_decline_notices" ADD CONSTRAINT "gym_card_decline_notices_gym_id_gyms_id_fk" FOREIGN KEY ("gym_id") REFERENCES "public"."gyms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gym_card_decline_notices" ADD CONSTRAINT "gym_card_decline_notices_charge_fk" FOREIGN KEY ("charge_id") REFERENCES "public"."gym_card_charges"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "gym_card_decline_notices" ADD CONSTRAINT "gym_card_decline_notices_entry_fk" FOREIGN KEY ("gym_id","entry_id") REFERENCES "public"."gym_member_list_entries"("gym_id","id") ON DELETE SET NULL ("entry_id") ON UPDATE no action;--> statement-breakpoint
--- One email a bill.
-CREATE UNIQUE INDEX "gym_card_decline_notices_bill_uq" ON "gym_card_decline_notices" USING btree ("gym_id","bill_id");--> statement-breakpoint
+-- One email a period of a membership, and one a fee.
+CREATE UNIQUE INDEX "gym_card_decline_notices_period_uq" ON "gym_card_decline_notices" USING btree ("gym_id","held_membership_id","period_index") WHERE "period_index" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "gym_card_decline_notices_fee_uq" ON "gym_card_decline_notices" USING btree ("gym_id","bill_id") WHERE "bill_id" IS NOT NULL;--> statement-breakpoint
 -- The worker's search for emails due.
 CREATE INDEX "gym_card_decline_notices_due_idx" ON "gym_card_decline_notices" USING btree ("not_before","id") WHERE "state" IN ('queued','sending');--> statement-breakpoint
 -- The app's daily count of emails sent.

@@ -4301,8 +4301,12 @@ your bank", verification, CVV, postal code), a whole day after it. Every other c
 later among them, stops the card for every bill of the gym until another card is saved: expired,
 closed or unknown account, a card not allowed this payment (Visa's Category 1). One bill is charged
 to one card at most 3 times in all, the app's and staff's together. Each of the app's tries is asked
-of Square under its own key (the bill's id, then `<bill>:2`, `<bill>:3`). A bill's first decline
-queues one email (`gym_card_decline_notices`, migration `0160`) to whoever's card it is, the payer
+of Square under its own key (the bill's id, then `<bill>:2`, `<bill>:3`); a try the worker could not
+make within 3 days of its day is left to staff. The bill's "retried automatically on" and the email's
+are read from the worker's own rule, so neither promises a try the worker will not make; where the app
+will not, the bill says why ("…Retry the payment, or collect payment using another method." for a bill
+the app does not charge by itself). A period's first decline, or a fee's, queues one email (a press
+paying ahead, before the bill is open, too) (`gym_card_decline_notices`, migration `0160`) to whoever's card it is, the payer
 where somebody pays, from the gym (named "<gym> via" the app, replies to the gym's contact email): the amount,
 what for, the card, the reason, whether it will be retried automatically and on which day, and "Please
 make your payment by <7 days on> using one of the following options: • Pay at the front desk • Pay

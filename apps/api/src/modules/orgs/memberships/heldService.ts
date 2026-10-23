@@ -289,7 +289,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   ]);
   // What the card on file did on each bill and fee (18d-iii-i), for staff who take payments.
   const charges: Charges = canBill
-    ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)])
+    ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)], deps.now())
     : NO_CHARGES;
   const ctx = { today, past: list.past, overdueAfterDays: list.overdueAfterDays, gifts, charges };
   // The page reads a membership as the next write will find it: with its count moved

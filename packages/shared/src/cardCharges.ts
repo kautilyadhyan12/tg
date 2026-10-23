@@ -54,8 +54,9 @@ const daySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /** What becomes of a declined bill next (18d-iii-ii-a, `cardRetries.ts`): `bank`, staff charge it
  *  again once the cardholder has spoken to their bank; `new_card`, the bank declined the card for
- *  good; `tried_out`, it was charged as often as one bill allows. */
-export const cardRetryStopSchema = z.enum(["bank", "new_card", "tried_out"]);
+ *  good; `tried_out`, it was charged as often as one bill allows; `manual`, the app does not charge
+ *  this bill by itself (a first bill, a fee, a new card, a past member), so staff do. */
+export const cardRetryStopSchema = z.enum(["bank", "new_card", "tried_out", "manual"]);
 export type CardRetryStop = z.infer<typeof cardRetryStopSchema>;
 
 /** The email telling the cardholder (18d-iii-ii-a): `emailed` on its day; `sending` until it goes;
@@ -172,4 +173,5 @@ export const CARD_RETRY_WORDS: Readonly<Record<CardRetryStop, string>> = {
   bank: "The payment will not be retried automatically. Ask the cardholder to contact their bank for more information, then retry the payment, or collect payment using another method.",
   new_card: "The bank declined this card permanently. Ask the cardholder for another card, or collect payment using another method.",
   tried_out: "The payment was tried 3 times and will not be retried. Ask the cardholder for another card, or collect payment using another method.",
+  manual: "The payment will not be retried automatically. Retry the payment, or collect payment using another method.",
 };

@@ -6,7 +6,7 @@
 // its bank said never, a bill charged more than 3 times or twice within a day, or a bill charged that
 // was already paid at the desk. Every claim is read from what the fake Square was asked, never from a
 // reply alone.
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
@@ -100,11 +100,13 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
   const gyms: Gym[] = [];
   const work = () => processSquareWork({ sql, square: squareSettings(config(), square.api), log: quiet, now: () => clock }, [], gyms.map((g) => g.id));
   const mail: InviteEmail[] = [];
+  const HMAC_KEY = Buffer.alloc(32, 3);
+  // The app's daily cap is 0: these emails are owed, so no cap holds them.
   const notify = () =>
     sendDueCardNotices({
       sql,
       log: quiet,
-      settings: { hmacKey: Buffer.alloc(32, 3), webOrigin: "http://localhost:5173", perDay: 1000, paused: false, sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" } },
+      settings: { hmacKey: HMAC_KEY, webOrigin: "http://localhost:5173", perDay: 0, paused: false, sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" } },
       sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" },
       transport: {
         send: (m) => {
@@ -121,6 +123,7 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
   const cleanup = async () => {
     const myUsers = sql`SELECT id FROM users WHERE email LIKE 'crty-t-%@example.com'`;
     await sql`DELETE FROM gym_card_decline_notices WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM email_suppressions WHERE email_hmac = ${createHmac("sha256", HMAC_KEY).update("crty-bounced@example.com").digest("hex")}`;
     await sql`DELETE FROM gym_card_charges WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_terminal_payments WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_member_cards WHERE gym_id IN (${mineSql})`;
@@ -406,7 +409,8 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     const old = await cardFor(gym, sam.entryId, "insufficient");
     await work();
     const fresh = await cardFor(gym, sam.entryId, "pays");
-    expect((await shown(gym, sam))?.cardDeclined).toMatchObject({ next: null, stop: null });
+    // The new card is staff's to charge: the bill says so (review round one, Low-1).
+    expect((await shown(gym, sam))?.cardDeclined).toMatchObject({ next: null, stop: "manual" });
     for (const n of [3, 7]) {
       clock = new Date(noon.getTime() + n * DAY);
       await work();
@@ -416,6 +420,63 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     const res = await press(gym, sam);
     expect(res.statusCode, res.body).toBe(200);
     expect(askedOf(fresh).map((p) => p.status)).toEqual(["COMPLETED"]);
+  });
+
+  it("a retry the worker will not make is never promised: a member who became past after the decline", async () => {
+    const gym = await makeGym(`Past Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const today = (await held(gym, await person(gym, "Clock Reader"))).today;
+    const noon = new Date(`${today}T18:00:00Z`);
+    clock = noon;
+    const paul = await renewingToday(gym, typeId, await person(gym, "Paul Past", "crty-paul@example.com"));
+    const card = await cardFor(gym, paul.entryId, "insufficient");
+    await work();
+    expect((await shown(gym, paul))?.cardDeclined?.next).toBe(new Date(noon.getTime() + 3 * DAY).toISOString().slice(0, 10));
+    // A file that no longer lists him marks him a past member; his membership stays as it was.
+    await sql`UPDATE gym_member_list_entries SET former_at = now() WHERE gym_id = ${gym.id} AND id = ${paul.entryId}`;
+    const page = (await held(gym, paul.entryId)).memberships.find((m) => m.id === paul.membershipId)?.billing?.bills.find((b) => b.periodIndex === 1);
+    expect(page?.cardDeclined).toMatchObject({ next: null, stop: "manual" });
+    // His email, sent now, promises nothing either.
+    await notify();
+    const paulMail = mail.find((m) => m.to === "crty-paul@example.com");
+    expect(paulMail?.text).toContain("We will not automatically retry this payment.");
+    expect(paulMail?.text).not.toContain("We will retry this payment automatically");
+    for (const n of [3, 7]) {
+      clock = new Date(noon.getTime() + n * DAY);
+      await work();
+    }
+    expect(askedOf(card)).toHaveLength(1);
+  });
+
+  it("a press paying ahead, declined before its bill is open, emails the cardholder, and the bill says so once open", async () => {
+    const gym = await makeGym(`Ahead Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const today = (await held(gym, await person(gym, "Clock Reader"))).today;
+    clock = new Date(`${today}T18:00:00Z`);
+    const abe = await person(gym, "Abe Ahead", "crty-abe@example.com");
+    const given = await send("POST", `${entryUrl(gym, abe)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId, startsOn: today, paid: true });
+    expect(given.statusCode, given.body).toBe(201);
+    const m = heldMembershipsResponseSchema.parse(JSON.parse(given.body)).memberships[0];
+    if (m === undefined) throw new Error("no membership");
+    const h = { entryId: abe, membershipId: m.id };
+    await cardFor(gym, abe, "insufficient");
+    // Next week paid ahead at the desk on the card on file: declined, and no bill for it yet.
+    const pressed = await press(gym, h);
+    expect(pressed.statusCode, pressed.body).toBe(200);
+    expect(cardChargeResponseSchema.parse(JSON.parse(pressed.body)).charge.outcome).toBe("declined");
+    expect(await sql`SELECT id FROM gym_member_bills WHERE held_membership_id = ${m.id} AND period_index = 1`).toHaveLength(0);
+    await notify();
+    const abeMail = mail.find((x) => x.to === "crty-abe@example.com");
+    expect(abeMail?.text).toMatch(/Your \$25\.00 membership payment to Ahead Gym \d+ could not be processed\./);
+    expect(abeMail?.text).toContain("We will not automatically retry this payment.");
+    // A week on, the bill opens and says what happened.
+    await sql`UPDATE gym_held_memberships SET starts_on = starts_on - 7 WHERE gym_id = ${gym.id} AND id = ${m.id}`;
+    await sql`UPDATE gym_member_bills SET due_on = due_on - 7, covers_from = covers_from - 7, covers_to = covers_to - 7 WHERE gym_id = ${gym.id} AND held_membership_id = ${m.id}`;
+    await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+    expect((await shown(gym, h))?.cardDeclined).toMatchObject({ reason: "insufficient_funds", next: null, stop: "manual", notice: { state: "emailed", on: today } });
+    // One email for that week, however often the sender runs.
+    await notify();
+    expect(mail.filter((x) => x.to === "crty-abe@example.com")).toHaveLength(1);
   });
 
   it("the cardholder is emailed once a bill, at their own address or their payer's, and the bill says so", async () => {
@@ -433,16 +494,26 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     const phoneOnly = await renewingToday(gym, typeId, await person(gym, "Phil Phone", null));
     const paidFirst = await renewingToday(gym, typeId, await person(gym, "Paige Paid", "crty-paige@example.com"));
     const gone = await renewingToday(gym, typeId, await person(gym, "Gwen Gone", "crty-gwen@example.com"));
+    const bounced = await renewingToday(gym, typeId, await person(gym, "Bea Bounced", "crty-bounced@example.com"));
+    // Bea's address bounced at another gym's email: no gym's email goes to it again.
+    await sql`INSERT INTO email_suppressions (email_hmac, gym_id, reason) VALUES (${createHmac("sha256", HMAC_KEY).update("crty-bounced@example.com").digest("hex")}, NULL, 'bounced')`;
     await cardFor(gym, nadia.entryId, "insufficient");
     await cardFor(gym, meiId, "expired");
     await cardFor(gym, phoneOnly.entryId, "declines");
     await cardFor(gym, paidFirst.entryId, "insufficient");
     await cardFor(gym, gone.entryId, "insufficient");
+    await cardFor(gym, bounced.entryId, "insufficient");
 
     await work();
-    // Gwen's record deleted for good before her email goes: the link lets go of it, as deleting
-    // does (0160), and nothing is sent to an address the gym was asked to forget.
-    await sql`UPDATE gym_card_decline_notices SET entry_id = NULL WHERE gym_id = ${gym.id} AND entry_id = ${gone.entryId}`;
+    // Gwen's record deleted for good before her email goes, through the gym's own buttons: taken off
+    // the list, then deleted from past members. Nothing is sent to an address the gym was asked to
+    // forget, and the notice keeps no link to her record.
+    const cancel = await send("POST", `${entryUrl(gym, gone.entryId)}/memberships/${gone.membershipId}/cancel`, gym.owner.cookies, { when: "today" });
+    expect(cancel.statusCode, cancel.body).toBe(200);
+    const off = await api().inject({ method: "DELETE", url: entryUrl(gym, gone.entryId), remoteAddress: nextIp(), cookies: gym.owner.cookies });
+    expect(off.statusCode, off.body).toBe(200);
+    const forgotten = await api().inject({ method: "DELETE", url: `/v1/orgs/${gym.id}/member-list/former/${gone.entryId}`, remoteAddress: nextIp(), cookies: gym.owner.cookies });
+    expect(forgotten.statusCode, forgotten.body).toBe(200);
     // Paige pays at the desk before the email goes: nothing is sent to her.
     const pay = (await held(gym, paidFirst.entryId)).memberships[0]?.billing?.pay;
     expect(
@@ -484,7 +555,16 @@ d("A declined card tried again, and the cardholder told (real Postgres)", { time
     expect((await shown(gym, kai))?.cardDeclined).toMatchObject({ stop: "new_card", notice: { state: "emailed" } });
     expect((await shown(gym, phoneOnly))?.cardDeclined).toMatchObject({ stop: "bank", notice: { state: "no_email", on: null } });
     const rows = await sql<{ state: string; reason: string | null; email: string | null }[]>`SELECT state, reason, email::text AS email FROM gym_card_decline_notices WHERE gym_id = ${gym.id} ORDER BY created_at`;
-    expect(rows.map((r) => r.email)).toEqual([null, null, null, null, null]);
-    expect(rows.map((r) => `${r.state}:${r.reason ?? ""}`).sort()).toEqual(["sent:", "sent:", "skipped:no_email", "skipped:paid", "skipped:record_gone"]);
+    expect(rows.map((r) => r.email)).toEqual([null, null, null, null, null, null]);
+    expect(rows.map((r) => `${r.state}:${r.reason ?? ""}`).sort()).toEqual([
+      "sent:",
+      "sent:",
+      "skipped:address_blocked",
+      "skipped:no_email",
+      "skipped:paid",
+      "skipped:record_gone",
+    ]);
+    const [goneRow] = await sql<{ entry_id: string | null }[]>`SELECT n.entry_id FROM gym_card_decline_notices n JOIN gym_card_charges c ON c.id = n.charge_id WHERE n.gym_id = ${gym.id} AND c.held_membership_id = ${gone.membershipId}`;
+    expect(goneRow?.entry_id, "the deleted record let go of").toBeNull();
   });
 });

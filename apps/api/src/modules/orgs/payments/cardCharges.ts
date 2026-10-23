@@ -138,7 +138,8 @@ async function answered(deps: PaymentsDeps, charge: charges.ChargeRow, result: C
     if (kept?.outcome === "not_recorded") deps.log.error({ event: "square.card_charge_not_recorded", gymId: charge.gymId }, "money taken from a card on file could not be recorded on its bill");
     return kept === null ? null : { done: kept.outcome };
   }
-  if (payment.status === "FAILED") return await end("declined", "GENERIC_DECLINE", payment.id);
+  // FAILED with no code given: a code nobody has placed, so the card is stopped (review round one).
+  if (payment.status === "FAILED") return await end("declined", "UNKNOWN", payment.id);
   if (payment.status === "CANCELED") return await end("refused", "CANCELED", null);
   // APPROVED or PENDING: asked again.
   return null;

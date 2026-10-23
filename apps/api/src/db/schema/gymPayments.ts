@@ -495,7 +495,8 @@ export const gymCardCharges = pgTable(
 );
 
 /** The email telling a cardholder their payment did not go through (0160; 18d-iii-ii-a): one a
- *  bill, written with its first decline. The address is kept only while it waits to go. The record
+ *  period of a membership (`bill_id` null; a press paying ahead has no bill yet) or one a fee (by its
+ *  bill), written with its first decline. The address is kept only while it waits to go. The record
  *  link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the migration only. */
 export const gymCardDeclineNotices = pgTable(
   "gym_card_decline_notices",
@@ -504,7 +505,11 @@ export const gymCardDeclineNotices = pgTable(
     gymId: uuid("gym_id")
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
-    billId: uuid("bill_id").notNull(),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    /** The period it is about; null for a fee. */
+    periodIndex: integer("period_index"),
+    /** The fee it is about; null for a period. */
+    billId: uuid("bill_id"),
     chargeId: uuid("charge_id")
       .notNull()
       .references(() => gymCardCharges.id, { onDelete: "cascade" }),
@@ -522,6 +527,7 @@ export const gymCardDeclineNotices = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [
+    check("gym_card_decline_notices_target_check", sql`(${t.periodIndex} IS NULL) = (${t.billId} IS NOT NULL) AND (${t.periodIndex} IS NULL OR ${t.periodIndex} >= 0)`),
     check("gym_card_decline_notices_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
     check("gym_card_decline_notices_email_check", sql`(${t.state} IN ('queued','sending') OR ${t.email} IS NULL) AND (${t.email} IS NULL OR length(${t.email}) <= 254)`),
     check("gym_card_decline_notices_waiting_check", sql`${t.state} NOT IN ('queued','sending') OR ${t.email} IS NOT NULL`),
@@ -530,7 +536,8 @@ export const gymCardDeclineNotices = pgTable(
     check("gym_card_decline_notices_reason_check", sql`((${t.state} IN ('skipped','failed')) = (${t.reason} IS NOT NULL)) AND (${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$')`),
     check("gym_card_decline_notices_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
     check("gym_card_decline_notices_attempts_check", sql`${t.attempts} >= 0`),
-    uniqueIndex("gym_card_decline_notices_bill_uq").on(t.gymId, t.billId),
+    uniqueIndex("gym_card_decline_notices_period_uq").on(t.gymId, t.heldMembershipId, t.periodIndex).where(sql`${t.periodIndex} IS NOT NULL`),
+    uniqueIndex("gym_card_decline_notices_fee_uq").on(t.gymId, t.billId).where(sql`${t.billId} IS NOT NULL`),
     index("gym_card_decline_notices_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_card_decline_notices_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
   ],

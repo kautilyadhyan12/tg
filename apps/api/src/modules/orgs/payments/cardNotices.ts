@@ -82,7 +82,7 @@ async function sendOne(deps: CardNoticeDeps, claim: repo.ClaimedNotice): Promise
   }
   const email = claim.email;
   if (email === null || !authEmailSchema.safeParse(email).success) return await stop(deps, claim, "address_invalid");
-  const facts = await repo.noticeFacts(deps.sql, claim);
+  const facts = await repo.noticeFacts(deps.sql, claim, now);
   if (facts.recordGone) return await stop(deps, claim, "record_gone");
   if (facts.gym === null || !facts.gym.active || facts.charge === null) return await stop(deps, claim, "gym_gone");
   if (facts.bill === null) return await stop(deps, claim, "paid");
@@ -92,7 +92,7 @@ async function sendOne(deps: CardNoticeDeps, claim: repo.ClaimedNotice): Promise
   const message = noticeMessage(deps, claim, email, gymName, facts.gym, facts.bill, facts.charge);
   if (!(await repo.markMaybeSent(deps.sql, claim, hmac, now))) {
     // Paid meanwhile, the record gone, the address blocked, or the claim no longer this run's.
-    const again = await repo.noticeFacts(deps.sql, claim);
+    const again = await repo.noticeFacts(deps.sql, claim, now);
     return await stop(deps, claim, again.bill === null ? "paid" : again.recordGone ? "record_gone" : "address_blocked");
   }
   const result = await deps.transport.send(message);
