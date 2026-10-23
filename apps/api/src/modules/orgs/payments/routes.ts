@@ -41,9 +41,14 @@
 //   POST   /v1/orgs/:gymId/terminal-sales                     the basket goes to the Terminal
 //   GET    /v1/orgs/:gymId/terminal-sales/:paymentId          where it stands (every few seconds)
 //   POST   /v1/orgs/:gymId/terminal-sales/:paymentId/cancel   Cancel
+//
+// Failed payments (ROADMAP 18d-iii-ii-b), `billing.members`; Try again is Charge card on file above:
+//   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
+//   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
 import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
+  failedPaymentsQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -73,6 +78,7 @@ import {
 import { staffOnly } from "../staffLimit.js";
 import * as cardCharges from "./cardCharges.js";
 import * as cards from "./cards.js";
+import * as failedPayments from "./failedPayments.js";
 import * as service from "./service.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import * as terminalCards from "./terminalCards.js";
@@ -293,6 +299,25 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalPayments.cancelTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Failed payments: the list is opened from the menu and Overview asks its count each time it opens.
+  const failedLimit = createDualRateLimit({ name: "failed_payments", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+
+  app.get("/v1/orgs/:gymId/failed-payments", { preHandler: [app.authenticate, staffOnly(deps.sql, failedLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(failedPaymentsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await failedPayments.readFailedPayments(paymentsDeps, callerId(req), params.gymId, query.from);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get("/v1/orgs/:gymId/failed-payments/summary", { preHandler: [app.authenticate, staffOnly(deps.sql, failedLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await failedPayments.readFailedSummary(paymentsDeps, callerId(req), params.gymId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
