@@ -168,6 +168,15 @@ describe('Charge card on file: the form', () => {
     expect(optionsOf(howPaid(form))).toEqual(['Choose one', 'Cash', 'Card at the desk', 'Bank transfer']);
   });
 
+  it('a card saved in Card on file after the page opened is offered when Record payment opens', async () => {
+    // The page opens with no card; the card is saved in its own box; then Record payment is pressed.
+    orgService.getTerminalPayments.mockReturnValueOnce(box(null)).mockReturnValue(box(VISA));
+    draw();
+    await waitFor(() => expect(orgService.getTerminalPayments).toHaveBeenCalledTimes(1));
+    const form = await openPay();
+    await waitFor(() => expect(optionsOf(howPaid(form))).toContain('Card on file · Visa ending 1111'));
+  });
+
   it("names the payer whose card it is, and an expired card's chance", async () => {
     orgService.getTerminalPayments.mockReturnValue(box({ ...VISA, payerName: 'Priya Sharma', expired: true }));
     draw();

@@ -211,6 +211,9 @@ export default function MemberMemberships({
   /** Charge card on file (18d-iii-i): a press that did not take the money, said in its own box:
    *  { membershipId, feeBillId, line }. */
   const [chargeSaid, setChargeSaid] = useState(null);
+  /** Counts each opening of a Record payment box: the Terminals and the card on file are read again
+   *  then, so a card saved in Card on file a moment before is offered (18d-iii-i). */
+  const [payOpened, setPayOpened] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -249,7 +252,7 @@ export default function MemberMemberships({
     return () => {
       live = false;
     };
-  }, [gymId, entryId, canBillHere, attempt]);
+  }, [gymId, entryId, canBillHere, attempt, payOpened]);
   const terminalList = terminals.entryId === entryId ? terminals.list : [];
   // The card Record payment can charge, theirs or their payer's (18d-iii-i).
   const cardOnFile = terminals.entryId === entryId ? terminals.cardOnFile : null;
@@ -414,6 +417,7 @@ export default function MemberMemberships({
 
 
   const startPay = (m) => {
+    setPayOpened((n) => n + 1);
     setNotice(null);
     setRefusal(null);
     setEnding(null);
@@ -472,6 +476,7 @@ export default function MemberMemberships({
 
   /** A fee's own box, opened by its button: pay it, waive it, or void its payment. */
   const startFee = (m, what, fee) => {
+    if (what === 'payFee') setPayOpened((n) => n + 1);
     setNotice(null);
     setRefusal(null);
     setEnding(null);
