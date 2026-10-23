@@ -623,6 +623,22 @@ export async function terminalWaiting(tx: TransactionSql, gymId: string, members
   return row !== undefined;
 }
 
+/** Whether the card on file is being charged for this membership (18d-iii-i): Square has not
+ *  answered. Read under the record's lock, which a charge's own start takes too. */
+export async function cardCharging(tx: TransactionSql, gymId: string, membershipId: string): Promise<boolean> {
+  const [row] = await tx<{ id: string }[]>`
+    SELECT id FROM gym_card_charges WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId} AND state = 'charging'`;
+  return row !== undefined;
+}
+
+/** Money on its way through Square for this membership, on the Terminal or from the card on file:
+ *  nothing else is paid, voided or cancelled on it until Square has answered. */
+export async function squareMoneyOut(tx: TransactionSql, gymId: string, membershipId: string): Promise<{ kind: "terminal_waiting" } | { kind: "card_charging" } | null> {
+  if (await terminalWaiting(tx, gymId, membershipId)) return { kind: "terminal_waiting" };
+  if (await cardCharging(tx, gymId, membershipId)) return { kind: "card_charging" };
+  return null;
+}
+
 export async function setOverdueDays(tx: TransactionSql, gymId: string, days: number): Promise<void> {
   await tx`UPDATE gyms SET bills_overdue_days = ${days} WHERE id = ${gymId}`;
 }

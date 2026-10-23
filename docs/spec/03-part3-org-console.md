@@ -4240,6 +4240,25 @@ amount or how it is worked out, and the currency; the cancellation and refund po
 gym's address and contact; how changes are told; the card's last 4 digits; any end date or
 trial. The same words typed, on the Terminal and in the app; 18d-vi changes them first.
 
+**The saved card charged on the bill's date** (18d-iii-i, as built): every minute the worker
+charges a renewing membership's bill after its first, and a freeze fee, that fell due today or in
+the two days before on the gym's clock, from 6 a.m. there, to the card on file of whoever pays for
+the person (18i), in the Square account the gym is connected to now. The first bill is taken at
+the desk when the membership is given; late cancel and no-show fees are taken by hand; a membership
+set to stop, cancelled, frozen (but for its freeze fee), or a past member's is never charged by
+itself, nor a bill with an earlier period still owed, nor a bill a card was charged for before, by the
+app or by staff (one try: never again after a decline, or after a charge Square did not answer, which
+the bill says to check in Square). Square is asked with the bill's own id as its idempotency key (Square gives back
+the same payment, paid or failed, and refuses the same key with another body: measured 2026-10-23);
+the app charges a bill by itself once. A payment Square took is recorded as Card on file
+(`company`) with Square's payment id and the card's brand and last four on the bill; it is refunded
+in Square, never voided here. A decline leaves the bill owed and says "Visa ending 1111 was
+declined on 23 Oct", with the reason Square's code gives. While a charge waits for Square's answer
+nothing else pays, voids, cancels, freezes or changes that membership, and no answer is asked
+again with the same key for a day. Staff with the payments tick charge it themselves from Record
+payment: Card on file · Visa ending 1111, the card named before the press. One try only here; the
+retries, the member's notice and the Failed payments list are 18d-iii-ii.
+
 **A failed charge** (18d-iii): at most 3 tries over several days (Square: "Limit retries to 2 to
 3 attempts over several days"; never `GENERIC_DECLINE`), never again after a decline the card
 companies forbid (Visa's Category 1, such as a stolen card, a closed account or a stopped

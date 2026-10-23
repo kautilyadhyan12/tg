@@ -11,7 +11,7 @@ import { insertAudit, lockOrgRow } from "../repo.js";
 import { priceBasket, pricedSaleSchema, recordTakenSale, type SaleRefusal, type SellLineInput } from "../register/repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
-import { billsFor } from "../memberships/billsSql.js";
+import { billsFor, cardCharging } from "../memberships/billsSql.js";
 import { lockedEntry, lockedHeld, settle } from "../memberships/heldRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import type { SquareEnvironment } from "./square.js";
@@ -189,6 +189,8 @@ export type StartOutcome =
   | { kind: "fee_not_found" | "fee_changed" }
   /** Another payment for the membership waits on a Terminal. */
   | { kind: "other_waiting" }
+  /** The card on file is being charged for the membership (18d-iii-i). */
+  | { kind: "card_charging" }
   | { kind: "too_much"; leftMinor: number; currency: string };
 
 /** A new press, or why not. Asked under the record's lock with the same rules as a payment by
@@ -218,6 +220,7 @@ export async function startPayment(sql: Sql, s: NewPay): Promise<StartOutcome> {
     if (waiting !== undefined) {
       return waiting.period_index === periodIndex && waiting.fee_bill_id === feeBillId ? { kind: "membership_waiting", payment: toRow(waiting) } : { kind: "other_waiting" };
     }
+    if (await cardCharging(tx, s.gymId, row.id)) return { kind: "card_charging" };
     let currency = row.currency;
     if (s.target.kind === "period") {
       const bills = await billsFor(tx, s.gymId, [row.id]);

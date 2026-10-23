@@ -683,7 +683,8 @@ if (square === null) {
       const cardStops = run.cardStops.sent + run.cardStops.deferred + run.cardStops.givenUp;
       const terminalSaves = run.terminalSaves.asked + run.terminalSaves.forgotten;
       const terminalPayments = run.terminalPayments.asked + run.terminalPayments.forgotten;
-      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + terminalSaves + terminalPayments + run.renewed + run.renewalsWaiting > 0) {
+      const cardCharges = run.cardCharges.asked + run.cardCharges.charged;
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + terminalSaves + terminalPayments + cardCharges + run.renewed + run.renewalsWaiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },
