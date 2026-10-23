@@ -241,3 +241,34 @@ export function accountDeletionEmail(
     `<p>— ${APP_NAME}</p>`;
   return { to, subject: `Your ${APP_NAME} account will be deleted in ${String(days)} days`, text, html };
 }
+
+/** The copy of a membership agreement a person signed at the desk (ROADMAP 18u-i): the
+ *  details the app filled in, the business's own words and the signature, as signed. Plain
+ *  text in both: the business's words are never made into links here. The gym name arrives
+ *  already cleaned (`gymNameForEmail`). */
+export function membershipAgreementEmail(words: {
+  to: string;
+  gymName: string;
+  signedName: string;
+  byGuardian: boolean;
+  signedOn: string;
+  facts: readonly { label: string; value: string }[];
+  text: string;
+}): EmailMessage {
+  const gym = words.gymName;
+  const lead = `Here is the membership agreement signed with ${gym} on ${words.signedOn}. Keep this email as your copy.`;
+  const signed = `Signed by ${words.signedName}${words.byGuardian ? ", parent or guardian," : ""} on ${words.signedOn}.`;
+  const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
+  const facts = words.facts.map((fact) => `${fact.label}: ${fact.value}`).join("\n");
+  const text = `${lead}\n\nThe membership\n${facts}\n\n${gym}'s terms\n${words.text}\n\n${signed}\n\n${footer}\n`;
+  const factRows = words.facts.map((fact) => `<tr><td style="padding:2px 12px 2px 0;color:#666;vertical-align:top">${escapeHtml(fact.label)}</td><td style="padding:2px 0">${escapeHtml(fact.value)}</td></tr>`).join("");
+  const html =
+    `<p>${escapeHtml(lead)}</p>` +
+    `<p style="font-weight:700;margin-bottom:4px">The membership</p>` +
+    `<table style="border-collapse:collapse">${factRows}</table>` +
+    `<p style="font-weight:700;margin-bottom:4px">${escapeHtml(`${gym}'s terms`)}</p>` +
+    `<div style="white-space:pre-wrap">${escapeHtml(words.text)}</div>` +
+    `<p>${escapeHtml(signed)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `Your membership agreement with ${gym}`, text, html };
+}

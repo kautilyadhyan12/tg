@@ -61,6 +61,7 @@ import { identityKey } from "./fields.js";
 import { keptWith, nextMemberNumber } from "./memberNumbers.js";
 import { nameKey, sameName } from "./samePerson.js";
 import { letGoOfCards } from "../payments/cardsRepo.js";
+import { letGoOfAgreementSignatures } from "../agreement/repo.js";
 
 export type SqlOrTx = Sql | TransactionSql;
 
@@ -1152,6 +1153,7 @@ export async function deleteListForGym(tx: TransactionSql, gymId: string, at: Da
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id IS NOT NULL AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, null, at);
+  await letGoOfAgreementSignatures(tx, gymId, null, at);
   // Saved cards are owed their stop at Square, and the agreements stay as the gym's proof (18d-ii).
   await letGoOfCards(tx, gymId, null, at);
   await tx`DELETE FROM gym_member_list_entries WHERE gym_id = ${gymId}`;
@@ -2275,6 +2277,8 @@ export async function deleteEntry(tx: TransactionSql, gymId: string, entryId: st
     UPDATE gym_attendance_removed SET entry_id = NULL
     WHERE gym_id = ${gymId} AND entry_id = ${entryId} AND user_id IS NOT NULL`;
   await letGoOfDeskSignatures(tx, gymId, entryId, at);
+  // Its memberships' signed agreements stay as the gym's proof, with the day (18u-i).
+  await letGoOfAgreementSignatures(tx, gymId, entryId, at);
   // Its saved card is owed its stop at Square; the agreement stays as the gym's proof (18d-ii).
   await letGoOfCards(tx, gymId, entryId, at);
   await keepPaidMemberships(tx, gymId, entryId, at);

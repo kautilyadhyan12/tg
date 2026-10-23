@@ -420,7 +420,14 @@ export async function deleteExpiredWaiverSignatures(sql: Sql, cutoff: Date): Pro
         AND record_deleted_at IS NOT NULL
         AND record_deleted_at <= ${cutoff}
       RETURNING id`;
-    return app.length + desk.length;
+    // A membership agreement signed at the desk (18u-i), on the desk waiver's footing: six
+    // years after its record was deleted for good.
+    const agreements = await tx<{ id: string }[]>`
+      DELETE FROM gym_agreement_signatures
+      WHERE record_deleted_at IS NOT NULL
+        AND record_deleted_at <= ${cutoff}
+      RETURNING id`;
+    return app.length + desk.length + agreements.length;
   });
 }
 
