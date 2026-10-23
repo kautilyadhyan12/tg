@@ -31,9 +31,13 @@
 //      different sentences: one is "we could not ask", the other is "there is
 //      nothing to buy", and this console has shipped that confusion before.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within, configure } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { attendanceDay, overview } from './__fixtures__/overview';
+
+// Under a whole run's load the prompt has taken 1.9 s to draw (master, 2026-10-23): wait as long
+// as the other new-gym files do.
+configure({ asyncUtilTimeout: 3000 });
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
