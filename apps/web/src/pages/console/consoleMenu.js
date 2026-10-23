@@ -10,6 +10,7 @@ import { canManagePosts } from '../../components/gym/postsView';
 import { canReadReports } from './reportsView';
 import { canSeeAtRisk } from './atRiskView';
 import { canOpenSell } from './sellView';
+import { canSeeFailedPayments } from './failedPaymentsAccess';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -44,6 +45,8 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     canManageMemberships(privileges) && { key: 'memberships', to: `${base}/memberships`, end: false, label: 'Memberships', phone: 'more' },
     // The desk's register (18b-i): used every day, so a line of its own, beside what it sells.
     canOpenSell(privileges) && { key: 'sell', to: `${base}/sell`, end: false, label: 'Sell', phone: 'more' },
+    // Card payments declined and still owed (18d-iii-ii-b): looked at every week, beside Sell.
+    canSeeFailedPayments(privileges) && { key: 'failed-payments', to: `${base}/failed-payments`, end: false, label: 'Failed payments', phone: 'more' },
     has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more' },
     canReadAttendance(privileges) && {
       key: 'attendance',
