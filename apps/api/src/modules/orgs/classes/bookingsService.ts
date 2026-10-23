@@ -15,6 +15,7 @@ import {
   CLASS_BOOKINGS_ENDING_PAGE,
   CLASS_BOOKINGS_LATE_SHOWN,
   CLASS_BOOKING_HOLDS_PLACE,
+  BOOKING_OVERDUE_NAMES,
   CLASS_BOOKING_WORDS,
   CLASS_LATE_CANCEL_ERROR,
   CLASS_MARK_WORDS,
@@ -58,7 +59,8 @@ import { dayInTz } from "../../gamification/streak.js";
 import { fullName } from "../leaderboard/rank.js";
 import { chargePack, givePackClassBack } from "../memberships/heldRepo.js";
 import { classFeesOf, openClassFees, removeClassFees } from "../memberships/feesRepo.js";
-import { handOver, handOverComing, handOverPlan, handsOverTo, pick, planHandOver, type HandOverPlan } from "./bookingChanges.js";
+import { bookersOf, handOver, handOverComing, handOverPlan, handsOverTo, pick, planHandOver, type HandOverPlan } from "./bookingChanges.js";
+import { overduePeople, stoppedBookers } from "./bookingStops.js";
 import { handOverComingEvents } from "../events/places.js";
 import * as repo from "./bookingsRepo.js";
 import { endingPerson } from "./service.js";
@@ -97,6 +99,7 @@ const STATUS: Record<ClassBookRefusal, number> = {
   limit_month: 409,
   class_full: 409,
   waitlist_full: 409,
+  payment_overdue: 403,
 };
 
 /** One booking write a gym at a time in this process. The database's lock is what makes a
@@ -151,20 +154,27 @@ async function viewOf(deps: Pick<BookingsDeps, "sql" | "now">, gymId: string, se
     await viewFrom(deps.sql, gymId, ctx, userId, now, {
       cover: (entryId) => coverFor(deps.sql, gymId, ctx, entryId),
       plan: () => handOverPlan(deps.sql, gymId, ctx, now),
+      overdue: () => overdueFor(deps.sql, gymId, ctx, userId, now),
     }),
   );
 }
 
+/** Whether the gym stops this person's new bookings now for an overdue payment (17i). */
+async function overdueFor(sql: Sql | TransactionSql, gymId: string, ctx: repo.BookingContext, userId: string, now: Date): Promise<boolean> {
+  if (ctx.booker === null) return false;
+  return (await stoppedBookers(sql, gymId, ctx.overdue, [{ userId, entryId: ctx.booker.entryId }], now)).has(userId);
+}
+
 /** The view of one class from what was read about it, for the caller to parse. `read`:
- *  which membership covers this person for it, and who its free places are about to be
- *  handed to, each read now or already. */
+ *  which membership covers this person for it, who its free places are about to be
+ *  handed to, and whether the gym stops their new bookings, each read now or already. */
 async function viewFrom(
   sql: Sql,
   gymId: string,
   ctx: repo.BookingContext,
   userId: string,
   now: Date,
-  read: { cover: (entryId: string | null) => Promise<Cover>; plan: () => Promise<HandOverPlan> },
+  read: { cover: (entryId: string | null) => Promise<Cover>; plan: () => Promise<HandOverPlan>; overdue: () => Promise<boolean> },
 ): Promise<ClassBookingView> {
   const { session, settings, counts, latest, booker } = ctx;
   const time = bookingTime(now.getTime(), session.startsAt.getTime(), settings);
@@ -178,6 +188,7 @@ async function viewFrom(
   const left = mine === "waitlisted" && promised === plan?.moves.length && booker?.entryId != null ? plan.covers.get(booker.entryId) : undefined;
   const cover: Cover =
     booker === null ? { ok: false, reason: "no_membership" } : left !== undefined ? pick(ctx, left) : await read.cover(booker.entryId);
+  const overdue = booker !== null && (await read.overdue());
   const ask = (joinWaitlist: boolean) =>
     decideBook({
       time,
@@ -189,6 +200,7 @@ async function viewFrom(
       mine,
       joinWaitlist,
       cover,
+      overdue,
     });
   const book = ask(false);
   const wait = ask(true);
@@ -290,6 +302,9 @@ export async function getMemberClasses(
   const record = contexts.find((ctx) => ctx.gymHasTypes)?.booker?.entryId ?? null;
   const reader = record === null ? [] : [record];
   const own = await repo.coversOfClasses(deps.sql, gymId, contexts.map((ctx) => ctx.session), () => reader);
+  // Whether the gym stops their new bookings for an overdue payment (17i): one read for the page.
+  const booking = contexts.find((ctx) => ctx.booker !== null);
+  const overdue = booking === undefined ? false : await overdueFor(deps.sql, gymId, booking, userId, now);
   // The classes whose free place the waitlist is about to be handed, as one class's read
   // asks it (`viewFrom`): their lines, and the memberships of the people on them.
   const handing = contexts.filter((ctx) => mineOf(ctx) !== "booked" && ctx.booker !== null && handsOverTo(ctx, now));
@@ -305,11 +320,13 @@ export async function getMemberClasses(
     const theirs = await repo.coversOfClasses(deps.sql, gymId, todo.map((ctx) => ctx.session), (sessionId) =>
       typed ? head(sessionId).flatMap((w) => w.booker?.entryId ?? []) : [],
     );
+    const rule = todo[0]?.overdue;
+    const stopped = rule === undefined ? new Set<string>() : await stoppedBookers(deps.sql, gymId, rule, todo.flatMap((ctx) => bookersOf(head(ctx.session.id))), now);
     const further: repo.BookingContext[] = [];
     for (const ctx of todo) {
       const { id } = ctx.session;
       const read = head(id);
-      const plan = planHandOver(ctx, now, read, new Map(theirs.get(id)));
+      const plan = planHandOver(ctx, now, read, new Map(theirs.get(id)), stopped);
       plans.set(id, plan);
       if (plan.moves.length < freeIn(ctx) && read.length < (lines.get(id) ?? []).length) {
         depth.set(id, read.length * 2);
@@ -325,6 +342,7 @@ export async function getMemberClasses(
       await viewFrom(deps.sql, gymId, ctx, userId, now, {
         cover: (entryId) => Promise.resolve(pick(ctx, !ctx.gymHasTypes || entryId === null ? [] : (own.get(id)?.get(entryId) ?? []))),
         plan: () => Promise.resolve(plans.get(id) ?? { moves: [], covers: new Map<string, HeldCover[]>() }),
+        overdue: () => Promise.resolve(overdue),
       }),
     );
   }
@@ -359,6 +377,7 @@ export async function book(
       mine: mineOf(seen),
       joinWaitlist: req.joinWaitlist,
       cover: await coverFor(deps.sql, gymId, seen, seen.booker.entryId),
+      overdue: await overdueFor(deps.sql, gymId, seen, userId, deps.now()),
     });
     if (first.kind === "refuse") throw new OrgsError(STATUS[first.reason], first.reason, CLASS_BOOKING_WORDS[first.reason]);
   }
@@ -396,6 +415,7 @@ export async function book(
         mine,
         joinWaitlist: req.joinWaitlist,
         cover: await coverFor(tx, gymId, ctx, booker.entryId),
+        overdue: await overdueFor(tx, gymId, ctx, userId, now),
       });
       switch (decision.kind) {
         case "already":
@@ -739,22 +759,31 @@ export async function getEndingBookings(
 /** A fee charges people money, so changing one also needs the payments' own tick. */
 const BILLING = "billing.members";
 const NO_FEES = "Changing fees isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
+const NO_OVERDUE = "Changing what happens to overdue payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 
 /** The settings as a reader is sent them, with the class fees in the gym's money. */
-async function rulesView(deps: Pick<BookingsDeps, "sql">, org: OrgRow, staffId: string, rules: repo.BookingRules): Promise<ClassBookingSettingsResponse> {
-  const [canChange, onBills] = await Promise.all([holdsPrivilege(deps, org.id, staffId, BILLING), repo.hasMembershipTypes(deps.sql, org.id)]);
+async function rulesView(deps: Pick<BookingsDeps, "sql" | "now">, org: OrgRow, staffId: string, rules: repo.BookingRules): Promise<ClassBookingSettingsResponse> {
+  const [canChange, onBills, overdue] = await Promise.all([
+    holdsPrivilege(deps, org.id, staffId, BILLING),
+    repo.hasMembershipTypes(deps.sql, org.id),
+    repo.overdueRule(deps.sql, org.id),
+  ]);
+  if (overdue === null) throw notFound();
+  // Who owes is the payments' business: their names go only to a reader holding that tick.
+  const stopped = canChange ? await overduePeople(deps.sql, org.id, overdue, deps.now(), BOOKING_OVERDUE_NAMES) : null;
   return classBookingSettingsResponseSchema.parse({
     settings: rules.settings,
     pt: rules.pt,
     fees: { ...rules.fees, currency: memberCurrencyForCountry(org.country) ?? org.currencyDisplay, canChange, onBills },
     ptFees: rules.ptFees,
+    overdue: { rule: rules.overdue, afterDays: overdue.afterDays, stopped },
   });
 }
 
 /** The gym's four booking settings and personal training's two, and the class fees, for
  *  staff holding `schedule.manage`. */
 export async function getBookingSettings(
-  deps: Pick<BookingsDeps, "sql">,
+  deps: Pick<BookingsDeps, "sql" | "now">,
   staffId: string,
   gymId: string,
   limit: Limit,
@@ -780,7 +809,7 @@ export async function setBookingSettings(
 ): Promise<(ClassBookingSettingsResponse & { movedIn: number }) | null> {
   const { org } = await requireWritablePrivilege(deps, gymId, staffId, "schedule.manage");
   if (!(await limit())) return null;
-  const { pt, fees: asked, ptFees: askedPt, ...settings } = body;
+  const { pt, fees: asked, ptFees: askedPt, overdue: askedOverdue, ...settings } = body;
   const mayFees = await holdsPrivilege(deps, gymId, staffId, BILLING);
   let movedIn = 0;
   const saved = await deps.sql.begin(async (tx): Promise<repo.BookingRules | OrgsError | null> => {
@@ -789,6 +818,7 @@ export async function setBookingSettings(
     if (before === null) return null;
     const fees = asked ?? before.fees;
     const ptFees = askedPt ?? before.ptFees;
+    const overdue = askedOverdue ?? before.overdue;
     const keys = ["opensDays", "freeCancelMinutes", "handoverMinutes", "waitlistMax"] as const;
     const ptKeys = ["opensDays", "freeCancelMinutes"] as const;
     const feeKeys = ["lateCancelMinor", "noShowMinor"] as const;
@@ -796,9 +826,11 @@ export async function setBookingSettings(
     const ptChanged = ptKeys.filter((k) => before.pt[k] !== pt[k]);
     const feesChanged = feeKeys.filter((k) => before.fees[k] !== fees[k]);
     const ptFeesChanged = feeKeys.filter((k) => before.ptFees[k] !== ptFees[k]);
+    const overdueChanged = overdue !== before.overdue;
     if ((feesChanged.length > 0 || ptFeesChanged.length > 0) && !mayFees) return new OrgsError(403, "forbidden", NO_FEES);
-    if (changed.length === 0 && ptChanged.length === 0 && feesChanged.length === 0 && ptFeesChanged.length === 0) return before;
-    await repo.writeSettings(tx, gymId, { settings, pt, fees, ptFees });
+    if (overdueChanged && !mayFees) return new OrgsError(403, "forbidden", NO_OVERDUE);
+    if (changed.length === 0 && ptChanged.length === 0 && feesChanged.length === 0 && ptFeesChanged.length === 0 && !overdueChanged) return before;
+    await repo.writeSettings(tx, gymId, { settings, pt, fees, ptFees, overdue });
     await insertAudit(tx, {
       actorUserId: staffId,
       gymId,
@@ -810,6 +842,7 @@ export async function setBookingSettings(
         ...ptChanged.map((k): [string, string] => [`pt.${k}`, `${String(before.pt[k])} -> ${String(pt[k])}`]),
         ...feesChanged.map((k): [string, string] => [`fees.${k}`, `${String(before.fees[k])} -> ${String(fees[k])}`]),
         ...ptFeesChanged.map((k): [string, string] => [`ptFees.${k}`, `${String(before.ptFees[k])} -> ${String(ptFees[k])}`]),
+        ...(overdueChanged ? [["overdue", `${before.overdue} -> ${overdue}`] satisfies [string, string]] : []),
       ]),
     });
     if (settings.handoverMinutes < before.settings.handoverMinutes) {
@@ -817,7 +850,7 @@ export async function setBookingSettings(
       // An event's waitlist is handed over by the same setting (19c-ii).
       movedIn += await handOverComingEvents(tx, gymId, deps.now());
     }
-    return { settings, pt, fees, ptFees };
+    return { settings, pt, fees, ptFees, overdue };
   });
   if (saved === null) throw notFound();
   if (saved instanceof OrgsError) throw saved;

@@ -42,6 +42,13 @@ export function billCovers(m: HeldMembership, index: number): { from: string; to
   return { from: periodStart(m, index), to: addDays(periodStart(m, index + 1), -1) };
 }
 
+/** Whether a payment still open since `owedSince` reads Overdue on `today`: more than the
+ *  gym's `overdueAfterDays` whole days after it fell due. The ONE test the bill, the front
+ *  desk (16d) and bookings (17i) read; null owes nothing. */
+export function paymentOverdue(owedSince: string | null, today: string, overdueAfterDays: number): boolean {
+  return owedSince !== null && today > addDays(owedSince, overdueAfterDays);
+}
+
 /** What a bill reads on `today`. Worked out, never stored: a bill is Overdue only while
  *  it is open and `overdueAfterDays` whole days have passed since its due date. */
 export function memberBillState(
@@ -50,7 +57,7 @@ export function memberBillState(
   overdueAfterDays: number,
 ): MemberBillState {
   if (bill.status !== "open") return bill.status;
-  return today > addDays(bill.dueOn, overdueAfterDays) ? "overdue" : "due";
+  return paymentOverdue(bill.dueOn, today, overdueAfterDays) ? "overdue" : "due";
 }
 
 export type PayMemberBill =

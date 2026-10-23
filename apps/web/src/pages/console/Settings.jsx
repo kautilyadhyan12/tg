@@ -245,7 +245,7 @@ export default function Settings() {
             orgSlug={orgSlug}
             privileges={privileges}
             readOnly={readOnly}
-            startOpen={linked(section === SETTINGS_SECTION.bookingRules)}
+            startOpen={linked(section === SETTINGS_SECTION.bookingRules || section === SETTINGS_SECTION.overdueBookings)}
           />
         </div>
       ) : null}

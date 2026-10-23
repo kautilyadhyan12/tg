@@ -922,6 +922,9 @@ export const heldMembershipsResponseSchema = z
     taxIncluded: z.boolean(),
     /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */
     billDay: z.number().int().min(1).max(BILL_DAY_MAX).nullable().default(null),
+    /** The gym stops this person's new bookings in the app while their payment is overdue,
+     *  and it is (17i): said beside the overdue bill, to a reader who takes payments. */
+    bookingsStopped: z.boolean().default(false),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

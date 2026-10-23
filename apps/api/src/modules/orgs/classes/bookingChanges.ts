@@ -13,6 +13,7 @@ import { removeClassFeesOf } from "../memberships/feesRepo.js";
 import { endLeaversPlaces } from "../events/places.js";
 import { endSessionsOf, sessionsEndingFor } from "../pt/changes.js";
 import * as repo from "./bookingsRepo.js";
+import { stoppedBookers } from "./bookingStops.js";
 
 export const pick = (ctx: Pick<repo.ClassContext, "session" | "gymHasTypes">, held: readonly HeldCover[]): Cover =>
   pickCover({ gymHasTypes: ctx.gymHasTypes, openGym: ctx.session.openGym, classDay: ctx.session.localDate, held });
@@ -38,8 +39,14 @@ export function handsOverTo(ctx: repo.ClassContext, now: Date): boolean {
 /** Who the class's free places go to, from its waitlist and the memberships of the
  *  people on it, both read already: the first in line who may book, and so on down the
  *  line. Somebody who may not is passed over and keeps their place. `covers` is changed as
- *  places are given. */
-export function planHandOver(ctx: repo.ClassContext, now: Date, waiters: readonly repo.Waiter[], covers: Map<string, HeldCover[]>): HandOverPlan {
+ *  places are given. `stopped`: the accounts the gym stops for an overdue payment (17i). */
+export function planHandOver(
+  ctx: repo.ClassContext,
+  now: Date,
+  waiters: readonly repo.Waiter[],
+  covers: Map<string, HeldCover[]>,
+  stopped: ReadonlySet<string>,
+): HandOverPlan {
   const time = bookingTime(now.getTime(), ctx.session.startsAt.getTime(), ctx.settings);
   let booked = ctx.counts.booked;
   const free = () => handsOverNow({ time, cancelled: ctx.session.cancelled, places: ctx.session.places, booked });
@@ -47,6 +54,8 @@ export function planHandOver(ctx: repo.ClassContext, now: Date, waiters: readonl
   for (const waiter of waiters) {
     if (!free()) break;
     if (waiter.booker === null) continue;
+    // Somebody whose payment the gym stops new bookings for keeps their place in line (17i).
+    if (stopped.has(waiter.userId)) continue;
     const { entryId } = waiter.booker;
     const cover = pick(ctx, entryId === null ? [] : (covers.get(entryId) ?? []));
     if (!cover.ok) continue;
@@ -71,13 +80,19 @@ export function planHandOver(ctx: repo.ClassContext, now: Date, waiters: readonl
 
 /** Who the class's free places go to at this moment, while the rule says a free place
  *  goes to the waitlist by itself. It reads and changes nothing, in three statements
- *  whatever the waitlist's length. */
+ *  whatever the waitlist's length, and two more where the gym stops new bookings while a
+ *  payment is overdue and somebody waiting owes. */
 export async function handOverPlan(sql: Sql | TransactionSql, gymId: string, ctx: repo.ClassContext, now: Date): Promise<HandOverPlan> {
   if (!handsOverTo(ctx, now)) return { moves: [], covers: new Map() };
   const waiters = await repo.waitlistOf(sql, gymId, ctx.session.id);
   const entryIds = ctx.gymHasTypes ? waiters.flatMap((w) => w.booker?.entryId ?? []) : [];
-  return planHandOver(ctx, now, waiters, await repo.coversOf(sql, gymId, entryIds, ctx.session));
+  const covers = await repo.coversOf(sql, gymId, entryIds, ctx.session);
+  return planHandOver(ctx, now, waiters, covers, await stoppedBookers(sql, gymId, ctx.overdue, bookersOf(waiters), now));
 }
+
+/** The people on a waitlist who are members now, as bookers. */
+export const bookersOf = (waiters: readonly repo.Waiter[]): { userId: string; entryId: string | null }[] =>
+  waiters.flatMap((w) => (w.booker === null ? [] : [{ userId: w.userId, entryId: w.booker.entryId }]));
 
 /** The plan carried out, under the gym's lock and the class's. Answers how many were
  *  moved in. */

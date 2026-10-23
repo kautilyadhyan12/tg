@@ -9,6 +9,7 @@ import { classOnlineViewSchema } from "./classOnline.js";
 import { ptSessionsEndingSchema } from "./ptSessionsEnding.js";
 import { addDays, heldMembershipView, type HeldMembership } from "./heldMemberships.js";
 import { MEMBERSHIP_PRICE_MINOR_MAX, formatMinor, type MembershipAccess, type MembershipLimitPeriod } from "./memberships.js";
+import { paymentOverdue } from "./memberBillRules.js";
 
 export const CLASS_BOOKING_STATUSES = ["booked", "waitlisted", "cancelled", "late_cancelled", "attended", "no_show"] as const;
 export const classBookingStatusSchema = z.enum(CLASS_BOOKING_STATUSES);
@@ -141,6 +142,7 @@ export const CLASS_BOOK_REFUSALS = [
   "limit_month",
   "class_full",
   "waitlist_full",
+  "payment_overdue",
 ] as const;
 export const classBookRefusalSchema = z.enum(CLASS_BOOK_REFUSALS);
 export type ClassBookRefusal = z.infer<typeof classBookRefusalSchema>;
@@ -160,6 +162,9 @@ export interface BookInput {
   /** The person asked for the waitlist if the class is full. */
   joinWaitlist: boolean;
   cover: Cover;
+  /** The gym stops new bookings while a payment is overdue, and this person's is
+   *  (`bookingStopped`, 17i). */
+  overdue: boolean;
 }
 
 export type BookDecision =
@@ -170,7 +175,9 @@ export type BookDecision =
   | { kind: "refuse"; reason: ClassBookRefusal };
 
 /** Book, Join waitlist and Claim: one rule. A free place goes to whoever asks and is
- *  covered, on the waitlist or not; with none free, the waitlist if they asked for it. */
+ *  covered, on the waitlist or not; with none free, the waitlist if they asked for it.
+ *  Somebody the gym stops for an overdue payment (17i) is given no place and joins no
+ *  waitlist; a place they hold already, or are waiting for already, stays theirs. */
 export function decideBook(i: BookInput): BookDecision {
   if (i.mine === "booked") return { kind: "already", status: "booked" };
   if (i.cancelled) return { kind: "refuse", reason: "class_cancelled" };
@@ -178,9 +185,11 @@ export function decideBook(i: BookInput): BookDecision {
   if (i.time.phase === "before_opening") return { kind: "refuse", reason: "not_open_yet" };
   if (!i.cover.ok) return { kind: "refuse", reason: i.cover.reason };
   if (i.places === null || i.booked < i.places) {
+    if (i.overdue) return { kind: "refuse", reason: "payment_overdue" };
     return { kind: "book", membershipId: i.cover.membershipId, chargePack: i.cover.chargePack, fromWaitlist: i.mine === "waitlisted" };
   }
   if (i.mine === "waitlisted") return { kind: "already", status: "waitlisted" };
+  if (i.overdue) return { kind: "refuse", reason: "payment_overdue" };
   if (!i.joinWaitlist) return { kind: "refuse", reason: "class_full" };
   if (i.waitlisted >= i.waitlistMax) return { kind: "refuse", reason: "waitlist_full" };
   return { kind: "waitlist" };
@@ -214,6 +223,25 @@ export function decideCancel(i: {
   return { kind: "cancel", status: "late_cancelled", refundPack: false, freesPlace: true };
 }
 
+// ── NO NEW BOOKINGS WHILE A PAYMENT IS OVERDUE (17i; Kd, 2026-10-22) ──
+
+/** The gym's choice, in Booking settings: every gym starts on `let_book`. */
+export const BOOKING_OVERDUE_CHOICES = ["let_book", "stop"] as const;
+export const bookingOverdueSchema = z.enum(BOOKING_OVERDUE_CHOICES);
+export type BookingOverdue = z.infer<typeof bookingOverdueSchema>;
+
+/** What a member reads where a class or a session cannot be booked for it. */
+export const OVERDUE_BOOKING_WORDS = "Your payment is overdue. Please pay at the front desk to book.";
+
+/** Whether the gym's choice stops this person making a new booking today: a class, its
+ *  waitlist, a freed place or a personal training session. Their payment is overdue as
+ *  the bill on their page reads Overdue (`paymentOverdue`): `owedSince` is the day the
+ *  oldest bill still open on their own record fell due. The gym's owner and staff are never
+ *  stopped, as at the front desk (16d). */
+export function bookingStopped(i: { rule: BookingOverdue; staff: boolean; owedSince: string | null; today: string; overdueAfterDays: number }): boolean {
+  return i.rule === "stop" && !i.staff && paymentOverdue(i.owedSince, i.today, i.overdueAfterDays);
+}
+
 /** What the person reads when the server says no. */
 export const CLASS_BOOKING_WORDS = {
   class_cancelled: "This class has been cancelled.",
@@ -225,6 +253,7 @@ export const CLASS_BOOKING_WORDS = {
   limit_month: "You've used all the bookings your membership includes for that month.",
   class_full: "This class is full.",
   waitlist_full: "This class and its waitlist are full.",
+  payment_overdue: OVERDUE_BOOKING_WORDS,
   no_booking: "You don't have a booking for this class.",
   cancel_started: "This class has already started, so the booking can't be cancelled.",
   late_cancel: "It's too late to cancel for free. Cancelling now counts as a late cancel.",
@@ -504,9 +533,12 @@ export type PtBookingSettings = z.infer<typeof ptBookingSettingsSchema>;
  *  and the class fees (18h-i) and personal training's (18h-ii) from a screen that shows them;
  *  left out, they stay as they are. */
 export const bookingSettingsBodySchema = classBookingSettingsSchema
-  .extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional(), ptFees: classFeesSchema.optional() })
+  .extend({ pt: ptBookingSettingsSchema, fees: classFeesSchema.optional(), ptFees: classFeesSchema.optional(), overdue: bookingOverdueSchema.optional() })
   .strict();
 export type BookingSettingsBody = z.infer<typeof bookingSettingsBodySchema>;
+
+/** How many of the people with an overdue payment the box is sent by name. */
+export const BOOKING_OVERDUE_NAMES = 500;
 
 /** `movedIn`, on a save only: how many waiting people a shorter hand-over time gave a
  *  free place to at once. */
@@ -520,6 +552,23 @@ export const classBookingSettingsResponseSchema = z
     fees: classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/), canChange: z.boolean(), onBills: z.boolean() }).strict(),
     /** Personal training's own two fees (18h-ii), in the same money, under the same tick. */
     ptFees: classFeesSchema,
+    /** No new bookings while a payment is overdue (17i), changed under the fees' tick.
+     *  `afterDays`: the gym's days of grace before a bill reads Overdue. `stopped`: the
+     *  people on the list whose payment is overdue today, its staff left out, and the first
+     *  of them by name; sent only to a reader holding the tick (null otherwise). */
+    overdue: z
+      .object({
+        rule: bookingOverdueSchema,
+        afterDays: z.number().int().min(0),
+        stopped: z
+          .object({
+            count: z.number().int().min(0),
+            people: z.array(z.object({ entryId: z.string().uuid(), name: z.string() }).strict()).max(BOOKING_OVERDUE_NAMES),
+          })
+          .strict()
+          .nullable(),
+      })
+      .strict(),
     movedIn: z.number().int().optional(),
   })
   .strict();

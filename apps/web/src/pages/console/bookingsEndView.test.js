@@ -228,3 +228,39 @@ describe('the booking rules line, in each kind of business’s own words', () =>
     expect(bookingRulesLine(rules, 'gym', { ...fees, onBills: false })).toBe('Members can book up to 7 days ahead and cancel for free until 2 hours before it starts.');
   });
 });
+
+describe('no new bookings while a payment is overdue (17i): the words', async () => {
+  const { bookingsStoppedLine, overdueNames, overduePeopleWords } = await import('./bookingsEndView');
+  const { whyText } = await import('../../components/gym/classesView');
+  const { payText } = await import('../../components/gym/personalTrainingView');
+
+  it('one person, several, nobody, and nothing sent to staff who do not take payments', () => {
+    expect(overduePeopleWords({ count: 1, people: [] }, 'stop', false)).toEqual({
+      title: 'Today 1 person on your list has an overdue payment:',
+      rest: "They can't book classes or personal training in the app until they pay.",
+    });
+    expect(overduePeopleWords({ count: 1200, people: [] }, 'let_book', true)).toEqual({
+      title: 'Today 1,200 people on your list have an overdue payment:',
+      rest: 'Once you save, they can book in the app again.',
+    });
+    expect(overduePeopleWords({ count: 0, people: [] }, 'stop', false)).toEqual({ title: 'Nobody on your list has an overdue payment today.', rest: null });
+    expect(overduePeopleWords(null, 'stop', false)).toBeNull();
+    const many = { count: 700, people: Array.from({ length: 500 }, (_, n) => ({ entryId: String(n), name: n === 0 ? '' : `P${String(n)}` })) };
+    expect(overdueNames(many, false)).toMatchObject({ more: 697, canSeeAll: true, notSent: 200 });
+    expect(overdueNames(many, false).shown[0].name).toBe('No name');
+    expect(overdueNames(many, true)).toMatchObject({ more: 200, canSeeAll: false, notSent: 200 });
+  });
+
+  it("the person's page, the summary, and what a member reads on a class", () => {
+    expect(bookingsStoppedLine('Ana Lopez')).toBe("Ana Lopez can't book classes or personal training in the app until the overdue payment is paid.");
+    expect(bookingsStoppedLine('  ')).toBe("This person can't book classes or personal training in the app until the overdue payment is paid.");
+    const settings = { opensDays: 7, freeCancelMinutes: 120, handoverMinutes: 60, waitlistMax: 20 };
+    expect(bookingSettingsSummary(settings, null, null, null, 'stop')).toMatch(/waitlist of 20\. No new bookings while a payment is overdue\.$/);
+    expect(bookingSettingsSummary(settings, null, null, null, 'let_book')).toBe(bookingSettingsSummary(settings, null));
+    expect(whyText({ cancelled: false, can: { why: 'payment_overdue' } })).toBe('Your payment is overdue. Please pay at the front desk to book.');
+    expect(payText({ record: 'own', today: '2026-10-07' }, { localDate: '2026-10-09', pays: null, why: 'payment_overdue', limit: null })).toEqual({
+      text: 'Your payment is overdue. Please pay at the front desk to book.',
+      can: false,
+    });
+  });
+});

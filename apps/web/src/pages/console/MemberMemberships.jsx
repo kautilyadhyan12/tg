@@ -17,7 +17,7 @@ import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './Mem
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
 import { useCameBack } from './useCameBack';
-import { ENDING_NOT_TOLD } from './bookingsEndView';
+import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
@@ -206,6 +206,8 @@ export default function MemberMemberships({
   const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false });
   const routed = useInRouterContext();
   const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
+  // Booking rules, where a gym stops new bookings while a payment is overdue (17i).
+  const bookingRulesTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'overdueBookings') : null;
   const [terminalPay, setTerminalPay] = useState(null);
 
   useEffect(() => {
@@ -1838,6 +1840,18 @@ export default function MemberMemberships({
       </div>
       {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
       {shown.canBill && shown.memberGiftAtSell !== null && shown.memberGiftAtSell !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGiftAtSell} /> : null}
+      {shown.bookingsStopped === true && open === null ? (
+        <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="bookings-stopped">
+          <span>{bookingsStoppedLine(`${name.charAt(0).toUpperCase()}${name.slice(1)}`)}</span>
+          {bookingRulesTo === null ? (
+            <span className="c-t3">Staff who manage the timetable can change this in Booking rules.</span>
+          ) : (
+            <PlaceLink to={bookingRulesTo} className="c-lk c-w6">
+              Booking rules
+            </PlaceLink>
+          )}
+        </p>
+      ) : null}
       {shown.past && shown.memberships.length > 0 ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-past-note">
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}
