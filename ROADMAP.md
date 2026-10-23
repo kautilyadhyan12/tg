@@ -280,7 +280,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
      - 18d-iii. **Bills charged to the saved card**, in two parts since 2026-10-23 (`handoff/2026-10-23-18d-iii-i.md` keeps its line as first written):
        - 18d-iii-i. [x] **The saved card charged on the bill's date** — merged 2026-10-23 (PR #344).
        - 18d-iii-ii. **Failed payments**, in two parts since 2026-10-23 (`handoff/2026-10-23-18d-iii-ii-a.md` keeps its line as first written):
-         - 18d-iii-ii-a. [ ] **A declined card tried again, and the cardholder told**: up to 3 tries in 7 days, never after a decline the card companies forbid; an email with 7 days to pay another way. Web folder 1.
+         - 18d-iii-ii-a. [x] **A declined card tried again, and the cardholder told** — merged 2026-10-24 (PR #350).
          - 18d-iii-ii-b. [ ] **Failed payments list for staff**, with Try again. Web folder 1.
      - 18d-iii-c. [ ] **A reminder before a card expires**, a gym's choice (Kd, 2026-10-22; Wodify and Mindbody do it). Web folder 1.
      - 18d-iii-b. [ ] **A payment taken in Square's own app recorded on the member** (Kd, 2026-10-21): staff pick the member in Square's Point of Sale app and take it on the Reader; Square's payment message is matched by the Square customer we made for them; tested in Square's test area.
