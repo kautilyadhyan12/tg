@@ -3031,6 +3031,20 @@ has started staff mark the place instead (409 `class_started`). The screen asks 
 a box under that person that names them and the class and says nobody else is changed;
 nothing is sent until its Yes. Nobody is told until the inbox (20a).)*
 
+**No new bookings while a payment is overdue, as built (17i; Kd, 2026-10-22 and 2026-10-23).** A
+gym's choice in Booking rules, its own part **Overdue payments**: **Let them book** (where every
+gym starts) or **Stop new bookings until they pay** (`gyms.bookings_overdue`, migration `0157`).
+Under Stop, a member whose own record has a bill that reads Overdue (`paymentOverdue` in
+`@app/shared`, the one test the bill, the front desk and bookings read) books no class, joins no
+waitlist, claims no freed place and books no personal training session in the app (403
+`payment_overdue`: "Your payment is overdue. Please pay at the front desk to book."); a place they
+hold stays theirs and they can cancel it; a place they wait for stays theirs in line, and a freed
+place goes past them to the next in line who may book. The gym's owner and staff are never
+stopped, staff still book a session for the person, and an event's "I'm coming" is not a
+booking. The choice is changed by staff who record members' payments, and only they read the
+part's list of who owes today; the person's page says beside the bill that they can't book, with
+a button to the part (`/settings#overdue-bookings`). Paid, they book again at once.
+
 ### 13.5 Personal training
 
 `gym_trainer_hours` (a member of staff, weekday, local from and to) and the session

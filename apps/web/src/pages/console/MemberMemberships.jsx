@@ -207,7 +207,7 @@ export default function MemberMemberships({
   const routed = useInRouterContext();
   const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   // Booking rules, where a gym stops new bookings while a payment is overdue (17i).
-  const bookingRulesTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'bookingRules') : null;
+  const bookingRulesTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'overdueBookings') : null;
   const [terminalPay, setTerminalPay] = useState(null);
 
   useEffect(() => {

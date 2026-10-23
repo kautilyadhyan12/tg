@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useInRouterContext } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
-import { placeFor } from '../../pages/console/consolePlaces';
+import { SETTINGS_SECTION, placeFor } from '../../pages/console/consolePlaces';
+import { useSectionLink } from '../../pages/console/useSectionLink';
 import PlaceLink from './PlaceLink';
 import { overdueHint } from '../../pages/console/checkinRulesView';
 import {
@@ -165,9 +167,17 @@ function OverduePeople({ stopped, rule, changed }) {
   );
 }
 
+/** "/settings#overdue-bookings" (a person's page, beside an overdue bill) brings the part into
+ *  view once the box has drawn it. */
+function ToPart({ ready }) {
+  useSectionLink(ready);
+  return null;
+}
+
 // `startOpen`: the page was opened by a link to this box (the Classes and Personal training pages).
 export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnly, startOpen = false }) {
   const gymId = org.id;
+  const routed = useInRouterContext();
   const [settings, setSettings] = useState(null);
   const [pt, setPt] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -431,48 +441,51 @@ export default function BookingSettingsPanel({ org, orgSlug, privileges, readOnl
           </Part>
 
           {hasOverdue ? (
-            <Part title="Overdue payments" intro={`What happens when a member with an overdue payment tries to book in the app. ${overdueHint(overdue.afterDays)}`}>
-              <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
-                <legend className="text-sm font-semibold p-0 mb-1" style={labelStyle}>
-                  New bookings
-                </legend>
-                {OVERDUE_BOOKING_CHOICES.map((choice) => (
-                  <label key={choice.value} className="flex items-center gap-3 py-2 min-h-11 cursor-pointer text-sm" style={labelStyle}>
-                    <input
-                      type="radio"
-                      name="overdue-bookings"
-                      value={choice.value}
-                      checked={overdueDraft === choice.value}
-                      onChange={() => pickOverdue(choice.value)}
-                      disabled={feesOff}
-                      className="w-4 h-4 flex-shrink-0"
-                      style={{ accentColor: '#FF8A1F' }}
-                    />
-                    <span>{choice.label}</span>
-                  </label>
-                ))}
-                <span className="text-xs" style={hintStyle}>
-                  {OVERDUE_BOOKING_HINT}
-                </span>
-              </fieldset>
-              <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="overdue-grace">
-                <span>The grace period is set in the Bills box on Memberships.</span>
-                {billsTo === null ? (
-                  <span style={hintStyle}>Staff who can change the price list change it there.</span>
-                ) : (
-                  <PlaceLink to={billsTo} className="c-lk c-w6">
-                    Change the grace period
-                  </PlaceLink>
-                )}
-              </p>
-              {fees.canChange ? (
-                <OverduePeople stopped={overdue.stopped} rule={overdueDraft} changed={overdueChanged} />
-              ) : (
-                <p className="text-xs m-0" style={hintStyle} data-testid="overdue-who">
-                  Only staff who record members' payments can change this. Ask the owner.
+            <div id={SETTINGS_SECTION.overdueBookings} style={{ scrollMarginTop: 16 }}>
+              {routed ? <ToPart ready /> : null}
+              <Part title="Overdue payments" intro={`What happens when a member with an overdue payment tries to book in the app. ${overdueHint(overdue.afterDays)}`}>
+                <fieldset className="flex flex-col gap-1 m-0 p-0 border-0 min-w-0">
+                  <legend className="text-sm font-semibold p-0 mb-1" style={labelStyle}>
+                    New bookings
+                  </legend>
+                  {OVERDUE_BOOKING_CHOICES.map((choice) => (
+                    <label key={choice.value} className="flex items-center gap-3 py-2 min-h-11 cursor-pointer text-sm" style={labelStyle}>
+                      <input
+                        type="radio"
+                        name="overdue-bookings"
+                        value={choice.value}
+                        checked={overdueDraft === choice.value}
+                        onChange={() => pickOverdue(choice.value)}
+                        disabled={feesOff}
+                        className="w-4 h-4 flex-shrink-0"
+                        style={{ accentColor: '#FF8A1F' }}
+                      />
+                      <span>{choice.label}</span>
+                    </label>
+                  ))}
+                  <span className="text-xs" style={hintStyle}>
+                    {OVERDUE_BOOKING_HINT}
+                  </span>
+                </fieldset>
+                <p className="text-sm m-0 flex flex-wrap items-center gap-x-3 gap-y-1" style={labelStyle} data-testid="overdue-grace">
+                  <span>The grace period is set in the Bills box on Memberships.</span>
+                  {billsTo === null ? (
+                    <span style={hintStyle}>Staff who can change the price list change it there.</span>
+                  ) : (
+                    <PlaceLink to={billsTo} className="c-lk c-w6">
+                      Change the grace period
+                    </PlaceLink>
+                  )}
                 </p>
-              )}
-            </Part>
+                {fees.canChange ? (
+                  <OverduePeople stopped={overdue.stopped} rule={overdueDraft} changed={overdueChanged} />
+                ) : (
+                  <p className="text-xs m-0" style={hintStyle} data-testid="overdue-who">
+                    Only staff who record members' payments can change this. Ask the owner.
+                  </p>
+                )}
+              </Part>
+            </div>
           ) : null}
 
           {problem === null ? null : (
