@@ -603,6 +603,50 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(await chargesOf(rosa)).toHaveLength(1);
   });
 
+  it("a press paying ahead that Square never answered: the week's bill, once open, says so, and the app does not charge it", async () => {
+    const gym = await makeGym(`Ahead Gym ${uniq()}`, `MAH${uniq()}`);
+    const typeId = await typeOf(gym);
+    const abe = await holding(gym, typeId, await person(gym, "Abe Ahead"));
+    const today = await todayOf(gym, abe.entryId);
+    clock = new Date(`${today}T18:00:00Z`);
+    const card = await cardFor(gym, abe.entryId);
+    const box = terminalPaymentsResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, abe.entryId)}/terminal-payments`, gym.owner.cookies)).body));
+    // The second week, paid ahead before its bill is open; Square's answer is lost.
+    const ahead = (await held(gym, gym.owner, abe.entryId)).memberships[0]?.billing?.pay;
+    if (ahead === undefined || ahead === null) throw new Error("nothing to pay ahead");
+    expect((await billsOf(abe)).some((b) => b.period_index === ahead.periodIndex)).toBe(false);
+    square.state.loseAnswers = true;
+    try {
+      const pressed = await send("POST", `${entryUrl(gym, abe.entryId)}/memberships/${abe.membershipId}/card-charge`, gym.owner.cookies, {
+        requestKey: randomUUID(),
+        periodIndex: ahead.periodIndex,
+        amountMinor: ahead.leftMinor,
+        cardRef: box.cardOnFile?.ref,
+      });
+      expect(cardChargeResponseSchema.parse(JSON.parse(pressed.body)).charge.step).toBe("charging");
+    } finally {
+      square.state.loseAnswers = false;
+    }
+    expect(takenFrom(card)).toHaveLength(1);
+    // Square gives no answer for a day: the charge is one to check in Square.
+    square.state.down = true;
+    try {
+      clock = new Date(clock.getTime() + CARD_CHARGE.giveUpMs + 60_000);
+      await work();
+    } finally {
+      square.state.down = false;
+    }
+    expect((await chargesOf(abe)).map((c) => [c.bill_id, c.outcome])).toEqual([[null, "gone"]]);
+    // The week begins: its bill opens, owed, and says to check Square before taking payment again.
+    clock = new Date(`${ahead.dueOn}T18:00:00Z`);
+    await openDueBills({ sql, log: quiet }, { now: clock, gymIds: [gym.id] });
+    await work();
+    expect(takenFrom(card)).toHaveLength(1);
+    const shown = (await held(gym, gym.owner, abe.entryId)).memberships[0]?.billing?.bills.find((b) => b.periodIndex === ahead.periodIndex);
+    expect(shown?.state).not.toBe("paid");
+    expect(shown?.cardUnchecked).toEqual({ brand: "VISA", last4: "1111", on: today });
+  });
+
   it("a card declined on a staff press is not tried again by itself", async () => {
     const gym = await makeGym(`Press Gym ${uniq()}`, `MPR${uniq()}`);
     const typeId = await typeOf(gym);

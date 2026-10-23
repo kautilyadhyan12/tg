@@ -497,12 +497,25 @@ export async function chargesOfBills(
   const cardOfPayment = new Map<string, { brand: string; last4: string }>();
   if (billIds.length === 0 && paymentIds.length === 0) return { declined, unchecked, charging, cardOfPayment };
   const rows = await sql<{ bill_id: string | null; state: string; outcome: string | null; decline_code: string | null; brand: string; last4: string; on: string; member_payment_id: string | null; newest: boolean }[]>`
-    SELECT c.bill_id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id,
-           (c.started_at AT TIME ZONE g.timezone)::date::text AS on,
-           row_number() OVER (PARTITION BY c.bill_id ORDER BY c.started_at DESC, c.id DESC) = 1 AS newest
-    FROM gym_card_charges c
-    JOIN gyms g ON g.id = c.gym_id
-    WHERE c.gym_id = ${gymId} AND (c.bill_id = ANY(${[...billIds]}::uuid[]) OR c.member_payment_id = ANY(${[...paymentIds]}::uuid[]))`;
+    WITH asked AS (
+      -- Each bill's charges: by the bill, and a press for its period made before it was open, which
+      -- keeps no bill (re-check: such a charge Square never answered must still be said on the bill).
+      SELECT b.id AS bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
+      FROM gym_member_bills b
+      JOIN gym_card_charges c
+        ON c.gym_id = b.gym_id
+       AND (c.bill_id = b.id OR (c.bill_id IS NULL AND b.fee IS NULL AND c.held_membership_id = b.held_membership_id AND c.period_index = b.period_index))
+      WHERE b.gym_id = ${gymId} AND b.id = ANY(${[...billIds]}::uuid[])
+      UNION
+      SELECT c.bill_id, c.id, c.state, c.outcome, c.decline_code, c.brand, c.last4, c.member_payment_id, c.started_at, c.gym_id
+      FROM gym_card_charges c
+      WHERE c.gym_id = ${gymId} AND c.member_payment_id = ANY(${[...paymentIds]}::uuid[])
+    )
+    SELECT a.bill_id, a.state, a.outcome, a.decline_code, a.brand, a.last4, a.member_payment_id,
+           (a.started_at AT TIME ZONE g.timezone)::date::text AS on,
+           row_number() OVER (PARTITION BY a.bill_id ORDER BY a.started_at DESC, a.id DESC) = 1 AS newest
+    FROM asked a
+    JOIN gyms g ON g.id = a.gym_id`;
   for (const r of rows) {
     if (r.member_payment_id !== null) cardOfPayment.set(r.member_payment_id, { brand: r.brand, last4: r.last4 });
     if (!r.newest || r.bill_id === null) continue;
