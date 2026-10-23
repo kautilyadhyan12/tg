@@ -131,7 +131,7 @@ describe('Charge card on file: the worst thing first', () => {
     await waitFor(() => expect(optionsOf(howPaid(form))[1]).toBe('Card on file · Visa ending 1111'));
     fireEvent.change(howPaid(form), { target: { value: 'card_on_file' } });
     expect(form.getByText("Take a payment for Tara Singh's Gold Monthly")).toBeTruthy();
-    expect(form.getByText("$49.99 is charged to Tara Singh's Visa ending 1111 as soon as you press Charge card.")).toBeTruthy();
+    expect(form.getByText("$49.99 is charged to Tara Singh's Visa ending 1111 as soon as you press Charge $49.99.")).toBeTruthy();
     // The by-hand line says no money is taken, which is false here.
     expect(form.queryByText(/no money is taken/)).toBeNull();
     fireEvent.click(form.getByRole('button', { name: 'Charge $49.99' }));
@@ -176,7 +176,7 @@ describe('Charge card on file: the form', () => {
     fireEvent.change(howPaid(form), { target: { value: 'card_on_file' } });
     expect(
       form.getByText(
-        "$49.99 is charged to Priya Sharma's Visa ending 1111 as soon as you press Charge card. Priya Sharma pays for Tara Singh. The card shows as expired: if the bank has issued a new one, Square may still take it.",
+        "$49.99 is charged to Priya Sharma's Visa ending 1111 as soon as you press Charge $49.99. Priya Sharma pays for Tara Singh. The card shows as expired: if the bank has issued a new one, Square may still take it.",
       ),
     ).toBeTruthy();
   });

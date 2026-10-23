@@ -40,7 +40,8 @@ try {
   console.log(rows.length === 1 ? `That person's card on file is now Square's practice card that ${kind === "declines" ? "declines" : "pays"} (Visa ending ${card.last4}).` : "That person has no card on file in the Square test account this gym is connected to. Save a card for them first.");
 } catch (err) {
   // Square's practice card is on one record of the account at a time.
-  console.error(err instanceof Error ? err.message : "failed");
+  const taken = err instanceof Error && err.message.includes("gym_member_cards_card_uq");
+  console.error(taken ? `Square's practice card that ${kind} is on another person in this Square test account already: remove that person's card on file first.` : err instanceof Error ? err.message : "failed");
   process.exitCode = 1;
 } finally {
   await sql.end();

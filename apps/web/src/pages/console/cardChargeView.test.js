@@ -14,7 +14,7 @@ describe('Record payment: Card on file', () => {
   });
 
   it('says what pressing it does before it is pressed', () => {
-    expect(cardOnFileDetail(card, 2500, 'USD', 'Tara Singh')).toBe("$25.00 is charged to Tara Singh's Visa ending 1111 as soon as you press Charge card.");
+    expect(cardOnFileDetail(card, 2500, 'USD', 'Tara Singh')).toBe("$25.00 is charged to Tara Singh's Visa ending 1111 as soon as you press Charge $25.00.");
     expect(cardOnFileDetail(card, null, 'USD', 'Tara Singh')).toBe("The amount is charged to Tara Singh's Visa ending 1111 as soon as you press Charge card.");
   });
 

@@ -18,7 +18,8 @@ export function cardOnFileDetail(card, amountMinor, currency, name) {
   const whose = card.payerName === null ? name : card.payerName;
   const payer = card.payerName === null ? '' : ` ${card.payerName} pays for ${name}.`;
   const expired = card.expired ? ' The card shows as expired: if the bank has issued a new one, Square may still take it.' : '';
-  return `${amount} is charged to ${whose}'s ${cardName(card)} as soon as you press Charge card.${payer}${expired}`;
+  const button = amountMinor === null ? 'Charge card' : `Charge ${amount}`;
+  return `${amount} is charged to ${whose}'s ${cardName(card)} as soon as you press ${button}.${payer}${expired}`;
 }
 
 /** How a press ended, as the line under the box says it: `good` where the money is on the bill. */
