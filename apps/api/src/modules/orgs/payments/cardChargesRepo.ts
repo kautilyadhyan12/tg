@@ -207,9 +207,11 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
       const target = memberPayTarget(row.membership, row.nextBillMinor, s.today, bills, entry.past);
       if (target === null || target.periodIndex !== s.target.periodIndex || target.leftMinor <= 0) return { kind: "not_allowed" };
       const bill = bills.find((b) => b.periodIndex === target.periodIndex);
-      // The app's own charge: a bill that has fallen due, and never the first, which is taken at the
-      // desk when the membership is given.
-      if (s.bySchedule && (bill === undefined || bill.status !== "open" || target.periodIndex < 1 || bill.dueOn > s.today)) return { kind: "not_allowed" };
+      // The app's own charge: a bill that has fallen due, and never the membership's first, which is
+      // taken at the desk when it is given; a membership given with an earlier start has its first
+      // bill for a later period, so it is the bill with none before it, not period 0.
+      const renewal = bills.some((b) => b.periodIndex < target.periodIndex);
+      if (s.bySchedule && (bill === undefined || bill.status !== "open" || !renewal || bill.dueOn > s.today)) return { kind: "not_allowed" };
       billId = bill?.id ?? null;
       amountMinor = s.amountMinor ?? target.leftMinor;
       if (amountMinor > target.leftMinor) return { kind: "too_much", leftMinor: target.leftMinor, currency: row.currency };
@@ -409,7 +411,7 @@ export interface DueBill {
 }
 
 /** Bills the app charges by itself now, across gyms, after `after` in (gym, bill) order: a renewing
- *  membership's bill after its first, or its freeze fee, open, due today or in the two days before
+ *  membership's bill with a bill before it, or its freeze fee, open, due today or in the two days before
  *  on its gym's clock and from 6 in the morning there, never charged by the app before, whose payer
  *  has a card in the Square account the gym is connected to, and with nothing else on its way
  *  through Square for that membership. The write checks it all again under the record's lock. */
@@ -433,11 +435,16 @@ export async function dueBills(
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     WHERE d.hour >= 6
       AND h.kind = 'recurring' AND h.renews AND h.entry_id IS NOT NULL
-      AND ((b.fee IS NULL AND b.period_index >= 1) OR (b.fee = 'freeze' AND NOT b.freeze_stopped))
-      -- Periods are paid in order: one with an earlier period still owed waits for the desk.
-      AND (b.fee IS NOT NULL OR NOT EXISTS (
-        SELECT 1 FROM gym_member_bills o
-        WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.status = 'open' AND o.period_index < b.period_index))
+      AND (b.fee IS NULL OR (b.fee = 'freeze' AND NOT b.freeze_stopped))
+      -- A renewal: the membership had a bill before this one (its first is taken at the desk), and
+      -- none of those is still owed (periods are paid in order).
+      AND (b.fee IS NOT NULL OR (
+        EXISTS (
+          SELECT 1 FROM gym_member_bills o
+          WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.period_index < b.period_index)
+        AND NOT EXISTS (
+          SELECT 1 FROM gym_member_bills o
+          WHERE o.gym_id = b.gym_id AND o.held_membership_id = b.held_membership_id AND o.fee IS NULL AND o.status = 'open' AND o.period_index < b.period_index)))
       AND (${q.after === null}::boolean OR (b.gym_id, b.id) > (${q.after?.gymId ?? null}::uuid, ${q.after?.billId ?? null}::uuid))
       AND EXISTS (
         SELECT 1 FROM gym_member_cards k

@@ -338,6 +338,24 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(secondShown?.cardDeclined).toBeNull();
   });
 
+  it("a membership given today with an earlier start: its first bill, for a later period, is taken at the desk, never by itself", async () => {
+    const gym = await makeGym(`Back Gym ${uniq()}`, `MBK${uniq()}`);
+    const typeId = await typeOf(gym);
+    const entryId = await person(gym, "Bea Backdated");
+    const today = await todayOf(gym, entryId);
+    clock = new Date(`${today}T18:00:00Z`);
+    const weekAgo = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    const given = await send("POST", `${entryUrl(gym, entryId)}/memberships`, gym.owner.cookies, { requestKey: randomUUID(), method: "cash", typeId, startsOn: weekAgo, paid: false });
+    expect(given.statusCode, given.body).toBe(201);
+    const bea = { entryId, membershipId: heldMembershipsResponseSchema.parse(JSON.parse(given.body)).memberships[0]?.id ?? "" };
+    // Its one bill is the second week's, due today and owed.
+    expect((await billsOf(bea)).map((b) => [b.period_index, b.status, b.due_on])).toEqual([[1, "open", today]]);
+    const card = await cardFor(gym, entryId);
+    await work();
+    expect(square.charged.filter((p) => p.cardId === card)).toEqual([]);
+    expect(await chargesOf(bea)).toEqual([]);
+  });
+
   it("a declined card leaves the bill owed and says so, and is not charged again by itself", async () => {
     const gym = await makeGym(`Decline Gym ${uniq()}`, `MDC${uniq()}`);
     const typeId = await typeOf(gym);
