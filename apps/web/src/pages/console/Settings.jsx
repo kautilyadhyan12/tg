@@ -10,6 +10,7 @@ import ReferralPanel from '../../components/console/ReferralPanel';
 import CheckinDevicesPanel from '../../components/console/CheckinDevicesPanel';
 import CheckinRulesPanel from '../../components/console/CheckinRulesPanel';
 import WaiverPanel from '../../components/console/WaiverPanel';
+import AgreementPanel from '../../components/console/AgreementPanel';
 import BookingSettingsPanel from '../../components/console/BookingSettingsPanel';
 import PaymentsPanel from '../../components/console/PaymentsPanel';
 import { useConsoleOrg } from './useConsoleOrg';
@@ -286,6 +287,21 @@ export default function Settings() {
             org={org}
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.waiver)}
+            membersTo={placeTo(orgSlug, 'members') ?? '../members'}
+            membersName={membersPageName(privileges, org.orgType)}
+          />
+        </div>
+      ) : null}
+
+      {/* MEMBERSHIP AGREEMENT (18u-i): the business's own terms, signed for each membership it
+          gives, on `org.manage` as the server gates it. Keyed per gym: it holds words not saved yet. */}
+      {canEditGym ? (
+        <div id={SETTINGS_SECTION.agreement} style={{ scrollMarginTop: 16 }}>
+          <AgreementPanel
+            key={`agreement-${org.id}`}
+            org={org}
+            readOnly={readOnly}
+            startOpen={linked(section === SETTINGS_SECTION.agreement)}
             membersTo={placeTo(orgSlug, 'members') ?? '../members'}
             membersName={membersPageName(privileges, org.orgType)}
           />

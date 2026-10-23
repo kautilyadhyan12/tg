@@ -35,6 +35,9 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
       addMemberListEntry: vi.fn(),
       matchLead: vi.fn(() => Promise.resolve({ data: { lead: null } })),
       changeMemberListEntry: vi.fn(),
+      getMembershipAgreement: vi.fn(),
+      signMembershipAgreement: vi.fn(),
+      emailAgreementCopy: vi.fn(),
     },
   };
 });
@@ -1080,6 +1083,34 @@ describe('Add member gives a membership in the same form', () => {
     expect(orgService.addMemberListEntry).toHaveBeenCalledWith(GYM, { fullName: 'Bea Hart', email: 'bea@members.example' });
   });
 
+  it('where the business asks for its membership agreement, the new person opens with it under the membership just given, with Sign later (18u-i)', async () => {
+    const given = held(1, GOLD, TODAY, false);
+    orgService.giveHeldMembership.mockResolvedValue(answer([given], false, { agreementInUse: true }));
+    orgService.getHeldMemberships.mockResolvedValue(answer([given], false, { agreementInUse: true }));
+    orgService.getMembershipAgreement.mockResolvedValue({
+      data: {
+        gymName: 'Iron House',
+        personName: 'Bea Hart',
+        timezone: 'Europe/London',
+        minor: false,
+        agreement: { id: '66666666-6666-4666-8666-666666666666', version: 1, text: 'Cancel at the desk.' },
+        facts: [{ label: 'Membership', value: 'Gold Monthly' }],
+        factsKey: 'a'.repeat(64),
+        signed: null,
+        hasEmail: true,
+      },
+    });
+    openAdd();
+    const choice = within(await screen.findByTestId('add-membership'));
+    fireEvent.change(choice.getByLabelText('Membership type'), { target: { value: GOLD.id } });
+    typeName('Name', 'Bea Hart');
+    typeName('Email', 'bea@members.example');
+    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
+    expect(await screen.findByText('Hand this screen to Bea Hart. They read the agreement and sign it themselves.')).toBeTruthy();
+    expect(orgService.getMembershipAgreement).toHaveBeenCalledWith(GYM, BEA, given.id);
+    expect(screen.getByRole('button', { name: 'Sign later' })).toBeTruthy();
+  });
+
   describe("the person typed is in Leads (20e-ii-b-i)", () => {
     const gift = {
       kind: 'percent', percentBp: 2000, amountMinor: null, currency: null, startsOn: null, endsOn: null, maxUses: null, uses: 0, archivedAt: null, updatedAt: '2026-10-12T10:00:00.000Z',
@@ -1753,5 +1784,56 @@ describe('cancelling a membership that personal training is booked with', () => 
     fireEvent.click(again.getByRole('button', { name: 'Keep it' }));
     expect(screen.queryByTestId('held-ending')).toBeNull();
     expect(orgService.changeHeldMembership).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the membership agreement (18u-i)', () => {
+  it('a membership just given opens its agreement under it, handed over, with Sign later; afterwards the membership says it is not signed, with Sign agreement', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { agreementInUse: true }));
+    orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], false, { agreementInUse: true }));
+    orgService.getMembershipAgreement.mockResolvedValue({
+      data: {
+        gymName: 'Iron House',
+        personName: 'Ada Lovelace',
+        timezone: 'Europe/London',
+        minor: false,
+        agreement: { id: '66666666-6666-4666-8666-666666666666', version: 1, text: 'Cancel at the desk.' },
+        facts: [{ label: 'Membership', value: 'Gold Monthly' }],
+        factsKey: 'a'.repeat(64),
+        signed: null,
+        hasEmail: true,
+      },
+    });
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    expect(await screen.findByText('Hand this screen to Ada Lovelace. They read the agreement and sign it themselves.')).toBeTruthy();
+    expect(orgService.getMembershipAgreement).toHaveBeenCalledWith(GYM, ADA, '44444444-4444-4444-8444-000000000001');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign later' }));
+    expect(screen.getByText('Agreement not signed')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign agreement' })).toBeTruthy();
+  });
+
+  it('a past member with a membership still running is not offered Sign agreement', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], true, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    await (await boxSoon()).findByText('Gold Monthly');
+    expect(screen.queryByText('Agreement not signed')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign agreement' })).toBeNull();
+  });
+
+  it('a business that asks for no agreement gives a membership with no agreement box', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([]));
+    orgService.giveHeldMembership.mockResolvedValue(answer([held(1, GOLD, TODAY, false)]));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    expect(await (await boxSoon()).findByText('Membership added.')).toBeTruthy();
+    expect(screen.queryByTestId('held-agreement')).toBeNull();
+    expect(orgService.getMembershipAgreement).not.toHaveBeenCalled();
   });
 });

@@ -69,6 +69,7 @@ import { friendGiftOffer } from "../referrals/friendGift.js";
 import { giftDaysOn, giftsOnBills, waitingGiftFor } from "../referrals/memberGiftRepo.js";
 import { billDayOf, overdueDaysOf, type BillRow, type PaymentRow, type RefundRow, type VoidedPaymentRow, type VoidedRefundRow } from "./billsSql.js";
 import * as feesRepo from "./feesRepo.js";
+import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
@@ -372,10 +373,16 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const over = all.filter((m) => ORDER[m.view.status] === 2);
   const shown = over.slice(0, HELD_EARLIER_PAGE);
   const stored = list.overTotal - list.over.length;
+  // The membership agreement (18u-i): whether the business asks for one, and which were signed.
+  const [agreement, agreementSigned] = await Promise.all([
+    agreementRepo.agreementInUse(deps.sql, gymId),
+    agreementRepo.signedAtOf(deps.sql, gymId, [...inUse, ...shown].map((m) => m.id)),
+  ]);
   return heldMembershipsResponseSchema.parse({
     today,
     past: list.past,
-    memberships: [...inUse, ...shown],
+    memberships: [...inUse, ...shown].map((m) => ({ ...m, agreement: ((at) => (at === undefined ? null : { at: at.toISOString() }))(agreementSigned.get(m.id)) })),
+    agreementInUse: agreement !== null,
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
     listed: list.listed,

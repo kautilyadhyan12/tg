@@ -847,6 +847,8 @@ export const heldMembershipSchema = z
     changedTo: z.object({ typeName: z.string(), startsOn: daySchema }).strict().nullable().default(null),
     /** Its bills and payments (18a-i); null for a reader without the `billing.members` tick. */
     billing: memberBillingSchema.nullable(),
+    /** Its membership agreement, where it was signed (18u-i): when. */
+    agreement: z.object({ at: z.string() }).strict().nullable().default(null),
   })
   .strict();
 export type HeldMembershipItem = z.infer<typeof heldMembershipSchema>;
@@ -925,6 +927,8 @@ export const heldMembershipsResponseSchema = z
     /** The gym stops this person's new bookings in the app while their payment is overdue,
      *  and it is (17i): said beside the overdue bill, to a reader who takes payments. */
     bookingsStopped: z.boolean().default(false),
+    /** The business asks for its membership agreement to be signed for each membership (18u-i). */
+    agreementInUse: z.boolean().default(false),
   })
   .strict();
 export type HeldMembershipsResponse = z.infer<typeof heldMembershipsResponseSchema>;

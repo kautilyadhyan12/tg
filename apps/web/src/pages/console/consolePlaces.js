@@ -27,6 +27,7 @@ export const SETTINGS_SECTION = {
   frontDesk: 'check-in-devices',
   leadEmails: 'follow-up-emails',
   waiver: 'waiver',
+  agreement: 'membership-agreement',
   referrals: 'refer-a-friend',
   payments: 'payments',
 };
@@ -54,6 +55,7 @@ const PLACES = {
   frontDesk: { path: `/settings#${SETTINGS_SECTION.frontDesk}`, may: canManageOrg },
   leadEmails: { path: `/settings#${SETTINGS_SECTION.leadEmails}`, may: canManageOrg },
   waiver: { path: `/settings#${SETTINGS_SECTION.waiver}`, may: canManageOrg },
+  agreement: { path: `/settings#${SETTINGS_SECTION.agreement}`, may: canManageOrg },
   referrals: { path: `/settings#${SETTINGS_SECTION.referrals}`, may: canManageOrg },
   payments: { path: `/settings#${SETTINGS_SECTION.payments}`, may: canManageOrg },
   memberships: { path: '/memberships', may: canManageMemberships },

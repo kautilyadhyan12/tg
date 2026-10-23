@@ -23,6 +23,8 @@ import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { placeFor } from './consolePlaces';
+import MembershipAgreement from './MembershipAgreement';
+import { noteDay } from './memberListPeople';
 import {
   ENDING_CLASSES_SHOWN,
   ENDING_MOVED,
@@ -162,6 +164,8 @@ export default function MemberMemberships({
   managesTypes = true,
   membershipsTo = null,
   addNow = false,
+  /** A membership Add member has just given (18u-i): its agreement box opens, with Sign later. */
+  signNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
 }) {
@@ -177,6 +181,14 @@ export default function MemberMemberships({
   const [notice, setNotice] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [showPast, setShowPast] = useState(false);
+  /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
+  const [agreementFor, setAgreementFor] = useState(() => (signNow === null ? null : { id: signNow, justGiven: true }));
+  // A membership Add member gives after this box was drawn opens its agreement too.
+  const [signNowSeen, setSignNowSeen] = useState(signNow);
+  if (signNow !== signNowSeen) {
+    setSignNowSeen(signNow);
+    if (signNow !== null) setAgreementFor({ id: signNow, justGiven: true });
+  }
   /** The receipt open under its payment or refund, by its number. */
   const [receiptFor, setReceiptFor] = useState(null);
   const toggleReceipt = (number) => setReceiptFor((was) => (was === number ? null : number));
@@ -346,12 +358,19 @@ export default function MemberMemberships({
    *  shown when it is done, where the press has its own. */
   const run = async (what, m, work, said = null) => {
     const asked = entryId;
+    const before = new Set((held?.memberships ?? []).map((x) => x.id));
     setBusy(true);
     setNotice(null);
     setRefusal(null);
     try {
       const res = await work();
       setHeld({ entryId: asked, ...res.data });
+      // A membership just given is signed there and then, where the business asks for its
+      // agreement (18u-i): its box opens under it, with Sign later.
+      if (what === 'give' && res.data.agreementInUse) {
+        const given = res.data.memberships.find((x) => !before.has(x.id) && x.agreement === null);
+        setAgreementFor(given === undefined ? null : { id: given.id, justGiven: true });
+      }
       setOpen(null);
       setForm(null);
       setEnding(null);
@@ -1750,6 +1769,23 @@ export default function MemberMemberships({
             {pay.text}
           </span>
         ) : null}
+        <MembershipAgreement
+          gymId={gymId}
+          entryId={entryId}
+          membership={m}
+          inUse={shown.agreementInUse === true}
+          signable={!shown.past && (m.view.status === 'active' || m.view.status === 'upcoming')}
+          readOnly={readOnly}
+          open={agreementFor?.id === m.id}
+          justGiven={agreementFor?.id === m.id && agreementFor.justGiven}
+          onOpen={() => setAgreementFor({ id: m.id, justGiven: false })}
+          onClose={() => setAgreementFor(null)}
+          onSigned={(at) => {
+            setHeld((h) => (h === null || h.entryId !== entryId ? h : { ...h, memberships: h.memberships.map((x) => (x.id === m.id ? { ...x, agreement: { at } } : x)) }));
+            setAgreementFor(null);
+          }}
+          when={(iso) => noteDay(iso, gym?.timezone ?? null)}
+        />
         {renderBills(m, payInBill)}
         {renderFees(m)}
         {inUse && !shown.canBill && can.markPaid !== null ? (
