@@ -282,6 +282,7 @@ d("void a payment, a refund or a sale (real Postgres)", () => {
           by: "Sam Owner",
           voidedRefunds: [],
           receiptNumber: mayaPay.receiptNumber,
+          card: null,
           voided: { reason: "wrong_amount", on: "2026-10-15", by: "Priya Desk" },
         },
       ]);
