@@ -150,7 +150,8 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', resize: 'vertical' }}
             />
             <p className="text-sm m-0" style={softStyle}>
-              Members see their membership&apos;s price and dates above your terms. You don&apos;t need to type them.
+              These are your own terms: this app doesn&apos;t write or check them. Members see their membership&apos;s price and dates above them, so
+              you don&apos;t need to type those.
             </p>
             {state.problem !== null ? (
               <p role="alert" className="text-sm m-0" style={{ color: '#f87171' }}>
