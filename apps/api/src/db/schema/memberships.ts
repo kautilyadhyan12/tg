@@ -55,6 +55,10 @@ export const gymMembershipTypes = pgTable(
     taxRateId: uuid("tax_rate_id"),
     /** Charged on the first bill of a membership given from it (0150; 18t); 0 for none. */
     joiningFeeMinor: integer("joining_fee_minor").notNull().default(0),
+    /** The business's agreement a membership given from it is signed with (0161; 18u-ii-a);
+     *  null for its main one. The key to `gym_agreement_documents` is in `0161`: `agreement.ts`
+     *  already reads this file. */
+    agreementDocumentId: uuid("agreement_document_id"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -100,6 +104,9 @@ export const gymMembershipTypes = pgTable(
     uniqueIndex("gym_membership_types_live_name_uq")
       .on(t.gymId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} IS NULL`),
+    index("gym_membership_types_agreement_idx")
+      .on(t.gymId, t.agreementDocumentId)
+      .where(sql`${t.agreementDocumentId} IS NOT NULL`),
     // `0112` clears only `tax_rate_id` when the rate goes; Drizzle cannot say which column.
     foreignKey({
       name: "gym_membership_types_tax_rate_fk",

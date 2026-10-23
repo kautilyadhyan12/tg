@@ -1121,6 +1121,13 @@
       "when": 1790726400160,
       "tag": "0160_card_retries",
       "breakpoints": true
+    },
+    {
+      "idx": 160,
+      "version": "7",
+      "when": 1790726400161,
+      "tag": "0161_agreement_per_price",
+      "breakpoints": true
     }
   ]
 }

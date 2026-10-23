@@ -1,4 +1,7 @@
-// A BUSINESS'S MEMBERSHIP AGREEMENT (ROADMAP 18u-i; rulings/2026-10-23-18u-i.md).
+// A BUSINESS'S MEMBERSHIP AGREEMENTS (ROADMAP 18u-i, 18u-ii-a; rulings/2026-10-23-18u-i.md).
+//
+// The business's main agreement is signed for every line of its price list, unless the line is
+// ticked on another agreement of its own; a membership is signed with the one its line uses.
 //
 // THE WORST THING: somebody held to a price or terms they never saw. So a membership's details
 // are worked out here from the membership as stored (`agreementFacts`), the screen sends back
@@ -26,6 +29,7 @@ import {
   type EmailAgreementCopyResponse,
   type GymAgreementResponse,
   type MembershipAgreementResponse,
+  type SaveOtherAgreementBody,
   type SignMembershipAgreementBody,
   type SignMembershipAgreementResponse,
   type WaiverToRead,
@@ -62,12 +66,22 @@ const toRead = (row: repo.AgreementRow): WaiverToRead => ({ id: row.id, version:
 /** The key of a membership's details: what the screen sends back to sign them. */
 export const factsKeyOf = (facts: readonly AgreementFact[]): string => createHash("sha256").update(JSON.stringify(facts), "utf8").digest("hex");
 
+const saved = (row: repo.AgreementRow) => ({ ...toRead(row), savedAt: row.savedAt.toISOString() });
+
 async function gymAgreement(sql: repo.SqlOrTx, gymId: string): Promise<GymAgreementResponse> {
-  const latest = await repo.latestAgreement(sql, gymId);
+  const main = await repo.mainDocumentId(sql, gymId);
+  const [latest, signed, others, prices] = await Promise.all([
+    main === null ? null : repo.latestOf(sql, gymId, main),
+    main === null ? 0 : repo.signedCount(sql, gymId, main),
+    repo.otherDocuments(sql, gymId),
+    repo.agreementPrices(sql, gymId),
+  ]);
   return gymAgreementResponseSchema.parse({
-    agreement: latest === null ? null : { ...toRead(latest), savedAt: latest.savedAt.toISOString() },
+    agreement: latest === null ? null : saved(latest),
     inUse: latest !== null && latest.stoppedAt === null,
-    signed: await repo.signedCount(sql, gymId),
+    signed,
+    others: others.map((other) => ({ id: other.id, name: other.name, agreement: saved(other.latest), inUse: other.latest.stoppedAt === null, signed: other.signed })),
+    prices,
   });
 }
 
@@ -92,8 +106,91 @@ export async function saveGymAgreement(deps: AgreementDeps, userId: string, gymI
         await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_in_use_again", targetType: "gym_agreement", targetId: latest.id, meta: { version: String(latest.version) } });
       }
     } else {
-      const saved = await repo.insertVersion(tx, { gymId, version: (latest?.version ?? 0) + 1, body: text, savedBy: userId, at });
-      await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_saved", targetType: "gym_agreement", targetId: saved.id, meta: { version: String(saved.version) } });
+      const documentId = await repo.ensureMainDocument(tx, gymId, at);
+      const wording = await repo.insertVersion(tx, { gymId, documentId, version: (latest?.version ?? 0) + 1, body: text, savedBy: userId, at });
+      await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_saved", targetType: "gym_agreement", targetId: wording.id, meta: { version: String(wording.version) } });
+    }
+    return await gymAgreement(tx, gymId);
+  });
+}
+
+const priceNotFound = (): OrgsError => new OrgsError(409, "price_not_found", AGREEMENT_WORDS.price_not_found);
+
+/** Adds another agreement, with its name, its words and the lines of the price list it is used
+ *  for. The same name and words again (a second press) change nothing but the ticks. */
+export async function addOtherAgreement(deps: AgreementDeps, userId: string, gymId: string, body: SaveOtherAgreementBody, limit: Limit): Promise<GymAgreementResponse | null> {
+  await requireWritablePrivilege(deps, gymId, userId, TICK);
+  if (!(await limit())) return null;
+  const at = deps.now();
+  return await deps.sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    const named = await repo.documentNamed(tx, gymId, body.name);
+    let documentId: string;
+    if (named !== null) {
+      const latest = await repo.latestOf(tx, gymId, named.id);
+      if (latest === null || latest.body !== body.text) throw new OrgsError(409, "name_taken", AGREEMENT_WORDS.name_taken(named.name));
+      documentId = named.id;
+    } else {
+      documentId = await repo.insertDocument(tx, gymId, body.name, at);
+      const wording = await repo.insertVersion(tx, { gymId, documentId, version: 1, body: body.text, savedBy: userId, at });
+      await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_added", targetType: "gym_agreement", targetId: wording.id, meta: { agreement: body.name } });
+    }
+    if (!(await repo.setUsedFor(tx, gymId, documentId, body.usedFor))) throw priceNotFound();
+    return await gymAgreement(tx, gymId);
+  });
+}
+
+/** Saves one of the business's other agreements: its name, its words (new words make a new
+ *  numbered wording; the same words bring a stopped one back) and the lines it is used for. */
+export async function saveOtherAgreement(
+  deps: AgreementDeps,
+  userId: string,
+  gymId: string,
+  documentId: string,
+  body: SaveOtherAgreementBody,
+  limit: Limit,
+): Promise<GymAgreementResponse | null> {
+  await requireWritablePrivilege(deps, gymId, userId, TICK);
+  if (!(await limit())) return null;
+  const at = deps.now();
+  return await deps.sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    const document = await repo.otherDocument(tx, gymId, documentId);
+    if (document === null) throw new OrgsError(404, "not_found", AGREEMENT_WORDS.not_found);
+    if (document.name !== body.name) {
+      const named = await repo.documentNamed(tx, gymId, body.name);
+      if (named !== null && named.id !== documentId) throw new OrgsError(409, "name_taken", AGREEMENT_WORDS.name_taken(named.name));
+      await repo.renameDocument(tx, gymId, documentId, body.name);
+    }
+    const latest = await repo.latestOf(tx, gymId, documentId);
+    if (latest !== null && latest.body === body.text) {
+      if (latest.stoppedAt !== null) {
+        await repo.setStopped(tx, gymId, latest.id, null);
+        await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_in_use_again", targetType: "gym_agreement", targetId: latest.id, meta: { version: String(latest.version), agreement: body.name } });
+      }
+    } else {
+      const wording = await repo.insertVersion(tx, { gymId, documentId, version: (latest?.version ?? 0) + 1, body: body.text, savedBy: userId, at });
+      await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_saved", targetType: "gym_agreement", targetId: wording.id, meta: { version: String(wording.version), agreement: body.name } });
+    }
+    if (!(await repo.setUsedFor(tx, gymId, documentId, body.usedFor))) throw priceNotFound();
+    return await gymAgreement(tx, gymId);
+  });
+}
+
+/** Stops asking for one of the business's other agreements: the lines it is used for ask for
+ *  none. Its words, its ticks and every signature are kept. Twice is once. */
+export async function stopOtherAgreement(deps: AgreementDeps, userId: string, gymId: string, documentId: string, limit: Limit): Promise<GymAgreementResponse | null> {
+  await requireWritablePrivilege(deps, gymId, userId, TICK);
+  if (!(await limit())) return null;
+  const at = deps.now();
+  return await deps.sql.begin(async (tx) => {
+    await lockOrgRow(tx, gymId);
+    const document = await repo.otherDocument(tx, gymId, documentId);
+    if (document === null) throw new OrgsError(404, "not_found", AGREEMENT_WORDS.not_found);
+    const latest = await repo.latestOf(tx, gymId, documentId);
+    if (latest !== null && latest.stoppedAt === null) {
+      await repo.setStopped(tx, gymId, latest.id, at);
+      await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_stopped", targetType: "gym_agreement", targetId: latest.id, meta: { version: String(latest.version), agreement: document.name } });
     }
     return await gymAgreement(tx, gymId);
   });
@@ -146,7 +243,15 @@ const toSigned = (row: repo.SignatureRow): AgreementSigned => ({
   text: row.text,
   facts: row.facts,
   emailedAt: row.emailedAt === null ? null : row.emailedAt.toISOString(),
+  agreementName: row.agreementName,
 });
+
+/** The agreement a membership's line of the price list asks for today, or null for none. */
+async function askedOf(sql: repo.SqlOrTx, gymId: string, membershipId: string): Promise<{ row: repo.AgreementRow; name: string | null } | null> {
+  const found = await repo.agreementForMembership(sql, gymId, membershipId);
+  if (found === null || found.latest === null || found.latest.stoppedAt !== null) return null;
+  return { row: found.latest, name: found.name };
+}
 
 export async function getMembershipAgreement(
   deps: AgreementDeps,
@@ -161,13 +266,13 @@ export async function getMembershipAgreement(
   const today = dayInTz(deps.now(), org.timezone);
   // A past member's page shows what they signed, and sends its copy again.
   const now = await current(deps, org, entryId, membershipId, today, { former: true });
-  const [agreement, signed] = await Promise.all([repo.agreementInUse(deps.sql, gymId), repo.signatureOf(deps.sql, gymId, membershipId)]);
+  const [agreement, signed] = await Promise.all([askedOf(deps.sql, gymId, membershipId), repo.signatureOf(deps.sql, gymId, membershipId)]);
   return membershipAgreementResponseSchema.parse({
     gymName: org.name,
     personName: now.record.fullName,
     timezone: org.timezone,
     minor: isUnder18(now.record.dateOfBirth, today),
-    agreement: agreement === null ? null : toRead(agreement),
+    agreement: agreement === null ? null : { ...toRead(agreement.row), name: agreement.name },
     facts: now.facts,
     factsKey: now.facts === null ? null : factsKeyOf(now.facts),
     signed: signed === null ? null : toSigned(signed),
@@ -194,6 +299,7 @@ async function sendCopy(deps: AgreementDeps, org: OrgRow, email: string | null, 
       signedOn: dayWords(dayInTz(signed.at, org.timezone)),
       facts: signed.facts,
       text: signed.text,
+      agreementName: signed.agreementName,
     });
   } catch (err) {
     deps.log.warn({ event: "agreement.copy_failed", gymId: org.id, errName: err instanceof Error ? err.name : typeof err }, "an agreement copy was not emailed");
@@ -241,9 +347,9 @@ export async function signMembershipAgreement(
     });
     wrote = written !== null;
     if (written === null) {
-      const agreement = await repo.agreementInUse(deps.sql, gymId);
+      const agreement = await askedOf(deps.sql, gymId, membershipId);
       if (agreement === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
-      if (agreement.id !== body.agreementId) throw new OrgsError(409, "agreement_changed", AGREEMENT_WORDS.agreement_changed(org.name));
+      if (agreement.row.id !== body.agreementId) throw new OrgsError(409, "agreement_changed", AGREEMENT_WORDS.agreement_changed(org.name));
     }
   }
   const signed = await repo.signatureOf(deps.sql, gymId, membershipId);

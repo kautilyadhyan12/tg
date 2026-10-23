@@ -104,6 +104,7 @@ import * as repo from "./repo.js";
 import * as goneForGoodRepo from "../goneForGood/repo.js";
 import { currentRecordOf, inAppRecordIds, pastRecordOf } from "./whose.js";
 import { signedRecords } from "../waiver/signed.js";
+import { agreementNotSignedRecords } from "../agreement/notSigned.js";
 import { withdrawForAccounts, withdrawForAddresses } from "../invites/join.js";
 import { bustAfterRemoval } from "./byHandService.js";
 import { sessionsAuditMeta } from "../pt/changes.js";
@@ -1502,13 +1503,14 @@ export async function readList(
   ]);
   const inApp = inAppEntryIds(members);
   const mine = heldChips(held, new Set(inApp));
-  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review, duplicates, signed, goneDeletedAt] = await Promise.all([
+  const [{ totals, statuses, membershipTypes, paymentStatuses }, app, review, duplicates, signed, goneDeletedAt, agreementToSign] = await Promise.all([
     repo.listStatusCounts(deps.sql, gymId, inApp, [...held.keys()]),
     currentAppWords(deps.sql, deps.invites ?? null, gymId, members, deps.now()),
     repo.reviewSign(deps.sql, gymId),
     repo.duplicatesSign(deps.sql, gymId),
     signedRecords(deps.sql, gymId, members),
     goneForGoodRepo.listDeletedAt(deps.sql, gymId),
+    agreementNotSignedRecords(deps.sql, gymId, today),
   ]);
   // THE WHOLE-LIST NUMBERS AND THE CHIPS COME FROM ONE STATEMENT, never two: two
   // statements counting one gym's people two ways is two answers to one question, and
@@ -1534,6 +1536,8 @@ export async function readList(
     appWords: app.counts,
     // The current records that have not signed the waiver in use (3e-ii).
     waiverNotSigned: signed === null ? null : Math.max(0, totals.entries - signed.records.size),
+    // The current records with a membership agreement to sign (18u-ii-a).
+    agreementNotSigned: agreementToSign === null ? null : agreementToSign.size,
     review,
     duplicates,
     over: { count: tidy.length, owing: overOwing.length },
@@ -1639,6 +1643,12 @@ export async function entriesFilter(
     const signed = await signedRecords(deps.sql, gymId, members);
     waiverNotSigned = { inUse: signed !== null, signed: [...(signed?.records ?? [])] };
   }
+  // "AGREEMENT NOT SIGNED" (18u-ii-a): by the one rule its count reads; nobody where none is asked.
+  let agreementNotSigned: string[] | null = null;
+  if (query.agreement === "not_signed" && records === "current") {
+    const toSign = await agreementNotSignedRecords(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId)));
+    agreementNotSigned = [...(toSign ?? [])];
+  }
   return {
     members,
     input: {
@@ -1663,6 +1673,7 @@ export async function entriesFilter(
           : await (query.membership === "over" ? tidyIdsOf : overOwingIdsOf)(deps.sql, gymId, dayInTz(deps.now(), await repo.gymTimeZone(deps.sql, gymId))),
       like: typed === "" ? null : `%${escapeLike(typed)}%`,
       waiverNotSigned,
+      agreementNotSigned,
     },
   };
 }

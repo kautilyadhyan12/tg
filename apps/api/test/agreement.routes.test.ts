@@ -352,7 +352,7 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
       const owner = await makeUser("settings-owner");
       const gymId = (await makeGym(owner, "Agree Settings Gym")).org.id;
       const empty = gymAgreementResponseSchema.parse(JSON.parse((await get(`/v1/orgs/${gymId}/agreement`, owner.cookies)).body));
-      expect(empty).toEqual({ agreement: null, inUse: false, signed: 0 });
+      expect(empty).toEqual({ agreement: null, inUse: false, signed: 0, others: [], prices: [] });
       const first = await saveWords(gymId, owner.cookies, `  ${WORDS}\r\n  `);
       expect([first.agreement?.version, first.agreement?.text, first.inUse]).toEqual([1, WORDS, true]);
       expect((await saveWords(gymId, owner.cookies, WORDS)).agreement?.version).toBe(1);

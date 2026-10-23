@@ -32,6 +32,8 @@ export interface MembershipTypeRow {
   taxRateId: string | null;
   /** Charged on the first bill of a membership given from it (18t); 0 for none. */
   joiningFeeMinor: number;
+  /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
+  agreementId: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
 }
@@ -47,6 +49,8 @@ export interface PriceListRow {
   taxIncluded: boolean;
   /** The day of the month the gym bills everyone on (18y), for Add member's total; null for none. */
   billDay: number | null;
+  /** The business's other agreements, by name (18u-ii-a). */
+  agreements: { id: string; name: string }[];
 }
 
 interface RawType {
@@ -69,6 +73,7 @@ interface RawType {
   pt_period: string | null;
   tax_rate_id: string | null;
   joining_fee_minor: number;
+  agreement_document_id: string | null;
   archived_at: Date | null;
   updated_at: Date;
 }
@@ -80,13 +85,13 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
   const readTypes = (archived: boolean, limit: number) => sql<RawType[]>`
     SELECT id, name, description, kind, price_minor, currency, term_count, term_unit,
            pack_classes, pack_days, access, bookings_limit, bookings_period,
-           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, archived_at, updated_at
+           covers_all_classes, includes_pt, pt_limit, pt_period, tax_rate_id, joining_fee_minor, agreement_document_id, archived_at, updated_at
     FROM gym_membership_types
     WHERE gym_id = ${gymId} AND (archived_at IS NOT NULL) = ${archived}
     ORDER BY ${archived ? sql`archived_at DESC, id` : sql`lower(name), id`}
     LIMIT ${limit}`;
 
-  const [gymRows, live, archived, totals, covered, classChoices, rates, taxIncluded] = await Promise.all([
+  const [gymRows, live, archived, totals, covered, classChoices, rates, taxIncluded, agreements] = await Promise.all([
     sql<{ country: string | null; bills_day: number | null }[]>`SELECT country, bills_day FROM gyms WHERE id = ${gymId}`,
     readTypes(false, MEMBERSHIP_TYPES_MAX),
     readTypes(true, MEMBERSHIP_ARCHIVED_PAGE),
@@ -105,6 +110,10 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
       ORDER BY lower(name), id`,
     readRates(sql, gymId, null),
     taxIncludedOf(sql, gymId),
+    sql<{ id: string; name: string }[]>`
+      SELECT id, name FROM gym_agreement_documents
+      WHERE gym_id = ${gymId} AND name IS NOT NULL
+      ORDER BY lower(name), id`,
   ]);
   const gym = gymRows[0];
   if (gym === undefined || taxIncluded === null) return null;
@@ -135,6 +144,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     ptPeriod: r.pt_period,
     taxRateId: r.tax_rate_id,
     joiningFeeMinor: r.joining_fee_minor,
+    agreementId: r.agreement_document_id,
     archivedAt: r.archived_at,
     updatedAt: r.updated_at,
   });
@@ -147,6 +157,7 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     taxRates: rates.map((r) => ({ id: r.id, name: r.name, bp: r.bp })),
     taxIncluded,
     billDay: gym.bills_day,
+    agreements: agreements.map((a) => ({ id: a.id, name: a.name })),
   };
 }
 

@@ -118,6 +118,8 @@ export const gymMembershipTypeSchema = z
     taxRateId: z.string().uuid().nullable(),
     /** Charged on the first bill of a membership given from it (18t); 0 for none. */
     joiningFeeMinor: priceMinorSchema,
+    /** The business's other agreement it is signed with (18u-ii-a); null for the main one. */
+    agreementId: z.string().uuid().nullable().default(null),
     archivedAt: z.string().datetime({ offset: true }).nullable(),
     /** When it was last changed. A change sends it back, so a form opened before
      *  somebody else's change is refused, never saved over theirs. */
@@ -141,6 +143,9 @@ export const gymMembershipTypesResponseSchema = z
     taxIncluded: z.boolean(),
     /** The day of the month the gym bills everyone on (18y); null where each is billed from its start. */
     billDay: z.number().int().min(1).max(28).nullable().default(null),
+    /** The business's other agreements, by name (18u-ii-a): each line says which it uses. Empty
+     *  where it has only its main one. */
+    agreements: z.array(z.object({ id: z.string().uuid(), name: z.string() }).strict()).default([]),
   })
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;

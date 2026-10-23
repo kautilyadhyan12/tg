@@ -17,6 +17,8 @@ export interface AgreementCopyLetter {
   signedOn: string;
   facts: readonly AgreementFact[];
   text: string;
+  /** The name of the business's other agreement it was signed with; null for the main one. */
+  agreementName: string | null;
 }
 
 export interface AgreementEmailSender {
