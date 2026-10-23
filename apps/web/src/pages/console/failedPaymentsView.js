@@ -1,8 +1,10 @@
 // FAILED PAYMENTS, its words (ROADMAP 18d-iii-ii-b). Pure, so the tests read every row without a
-// browser. A row's decline is said in the words the person's page uses for that bill
-// (`cardDeclinedLine`), and Try again's box in Record payment's own (`cardOnFileDetail`).
-import { CARD_CHARGE_WORDS, MEMBER_FEE_WORDS, formatMinor } from '@app/shared';
-import { billDays, cardDeclinedLine, feeForWords } from './memberBillsView';
+// browser. A row is short facts in a list, as a payments list in gym software shows them (Kd at the
+// click-through: the person's page's whole sentence on every row read strangely); the facts are the
+// ones the person's page says of that bill, and Try again's box uses Record payment's own words
+// (`cardOnFileDetail`).
+import { MEMBER_FEE_WORDS, cardName, formatMinor } from '@app/shared';
+import { billDays, feeForWords, shortDay } from './memberBillsView';
 import { cardOnFileDetail } from './cardChargeView';
 
 export { canSeeFailedPayments } from './failedPaymentsAccess';
@@ -32,8 +34,29 @@ export function rowWhat(row) {
 
 export const rowAmount = (row) => formatMinor(row.leftMinor, row.currency);
 
-/** Why it was declined, what happens next, and whether the cardholder was emailed. */
-export const rowDeclined = (row) => cardDeclinedLine(row.declined);
+/** Why the bank declined it, in a few words. */
+const REASONS = {
+  insufficient_funds: 'Not enough funds',
+  expired: 'Card expired',
+  call_bank: 'The bank asked the cardholder to contact them',
+  closed: 'Card account closed',
+  declined: 'No reason given by the bank',
+};
+
+/** The email to the cardholder about the decline. */
+function emailWords(notice) {
+  if (notice === null || notice === undefined) return null;
+  switch (notice.state) {
+    case 'emailed':
+      return `Emailed on ${shortDay(notice.on, false)}`;
+    case 'sending':
+      return 'Being sent';
+    case 'no_email':
+      return 'No email address on file. Contact them directly.';
+    default:
+      return 'Could not be sent. Contact them directly.';
+  }
+}
 
 /** "1:15 pm on 24 Oct", in the gym's own time. */
 function whenWords(iso, timezone, country) {
@@ -43,25 +66,47 @@ function whenWords(iso, timezone, country) {
   return `${time} on ${day}`;
 }
 
-/** Said where Try again is not offered; null where the decline's own line already says why (a card
- *  declined for good, or tried 3 times), and where it is offered. */
-export function retryLine(row, timezone, country) {
+/** What happens next, or what staff do: the one line a row's buttons act on. */
+export function nextStep(row, timezone, country) {
   const retry = row.retry;
-  if (retry.kind === 'charge') return null;
-  if (retry.kind === 'wait') return `Square recommends waiting 24 hours before retrying. It can be retried from ${whenWords(retry.from, timezone, country)}.`;
-  switch (retry.why) {
-    case 'no_card':
-      return 'There is no card on file now. Save a card on their page, or collect payment using another method.';
-    case 'square':
-      return 'Square is not connected, so the card on file cannot be charged. Collect payment using another method.';
-    case 'currency':
-      return CARD_CHARGE_WORDS.currency;
-    case 'elsewhere':
-      return 'An earlier payment for this membership is due first. Open their page to collect it.';
-    default:
-      return null;
+  const d = row.declined;
+  if (retry.kind === 'wait') return `Can be retried from ${whenWords(retry.from, timezone, country)} (Square recommends waiting 24 hours)`;
+  if (retry.kind === 'no') {
+    switch (retry.why) {
+      case 'no_card':
+        return 'No card on file. Add a new card, or take payment another way.';
+      case 'new_card':
+        return 'The bank declined this card permanently. Add a new card, or take payment another way.';
+      case 'tried_out':
+        return 'Tried 3 times. Add a new card, or take payment another way.';
+      case 'square':
+        return 'Square is not connected. Take payment another way.';
+      case 'currency':
+        return 'Priced in another currency from your Square account. Take payment another way.';
+      default:
+        return 'An earlier payment for this membership is due first. Open their page to take it.';
+    }
   }
+  if (d.next !== null && d.next !== undefined) return `Retried automatically on ${shortDay(d.next, false)}, or try again now`;
+  if (d.stop === 'bank') return 'Not retried automatically. Ask the cardholder to contact their bank, then try again.';
+  return 'Not retried automatically. Try again, or take payment another way.';
 }
+
+/** The row's facts, label and value, in the order a payments list shows them. */
+export function rowFacts(row, timezone, country) {
+  const d = row.declined;
+  const email = emailWords(d.notice);
+  return [
+    { label: 'Declined card', value: cardName(d) },
+    { label: 'Declined on', value: shortDay(d.on, false) },
+    { label: 'Reason', value: REASONS[d.reason] ?? REASONS.declined },
+    { label: 'Next step', value: nextStep(row, timezone, country) },
+    ...(email === null ? [] : [{ label: 'Cardholder email', value: email }]),
+  ];
+}
+
+/** A new card is what this row needs before the card can be charged. */
+export const needsCard = (row) => row.retry.kind === 'no' && ['no_card', 'new_card', 'tried_out'].includes(row.retry.why);
 
 /** Try again's box: what pressing Charge does, said before it is pressed. */
 export function tryAgainDetail(row) {

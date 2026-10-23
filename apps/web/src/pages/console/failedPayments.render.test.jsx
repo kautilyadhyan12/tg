@@ -14,6 +14,16 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, orgService: orgApi };
 });
+// The person's card box: here it saves a card on one press, as Square's form or a Terminal would.
+vi.mock('./MemberCard', () => ({
+  default: ({ entryId, onCardSaved }) => (
+    <div aria-label={`card box ${entryId}`}>
+      <button type="button" onClick={() => onCardSaved?.()}>
+        Save the card
+      </button>
+    </div>
+  ),
+}));
 vi.mock('./MemberListPerson', () => ({
   default: ({ entryId, onClose }) => (
     <div role="dialog" aria-label={`person ${entryId}`}>
@@ -182,15 +192,35 @@ describe('Failed payments', () => {
     open();
     const nina = await waitFor(() => row('Nina Short'));
     expect(within(nina).queryByRole('button', { name: 'Try again' })).toBeNull();
-    expect(nina.textContent).toContain('The payment will be retried automatically on 26 Oct.');
-    expect(nina.textContent).toContain('It can be retried from 2:15 PM on 24 Oct.');
+    expect(nina.textContent).toContain('Not enough funds');
+    expect(nina.textContent).toContain('Can be retried from 2:15 PM on 24 Oct (Square recommends waiting 24 hours)');
     const ezra = row('Ezra Expired');
     expect(within(ezra).queryByRole('button', { name: 'Try again' })).toBeNull();
-    expect(ezra.textContent).toContain('The bank declined this card permanently.');
+    expect(ezra.textContent).toContain('The bank declined this card permanently. Add a new card, or take payment another way.');
     expect(ezra.textContent).toContain('Past member');
     // Every row opens the person's page, where every other way to pay is.
     fireEvent.click(within(ezra).getByRole('button', { name: 'Open their page' }));
     expect(screen.getByRole('dialog', { name: `person ${EZRA.entryId}` })).toBeTruthy();
+  });
+
+  it('a card declined for good: Add a new card opens the card box under the row, and once saved the charge is offered there', async () => {
+    const withCard = { ...EZRA, retry: { kind: 'charge', card: { brand: 'VISA', last4: '1111' }, payerName: null, expired: false, cardRef: 'ref-ezra-new', amountMinor: 2500 } };
+    open();
+    const ezra = await waitFor(() => row('Ezra Expired'));
+    expect(within(ezra).queryByRole('button', { name: 'Try again' })).toBeNull();
+    fireEvent.click(within(ezra).getByRole('button', { name: 'Add a new card' }));
+    within(ezra).getByLabelText(`card box ${EZRA.entryId}`);
+    // The list, read again once the card is saved, offers the charge on the new card.
+    svc.list.mockResolvedValue(answer({ payments: [GINA, NINA, FAY, withCard] }));
+    fireEvent.click(within(ezra).getByRole('button', { name: 'Save the card' }));
+    const box = await within(row('Ezra Expired')).findByTestId('failed-payment-box');
+    expect(box.textContent).toContain("Card saved. Charge Ezra Expired's new card now?");
+    expect(box.textContent).toContain("$25.00 is charged to Ezra Expired's Visa ending 1111 as soon as you press Charge $25.00.");
+    expect(orgApi.chargeCardOnFile).not.toHaveBeenCalled();
+    orgApi.chargeCardOnFile.mockResolvedValue(paid(withCard, 35));
+    fireEvent.click(within(box).getByRole('button', { name: 'Charge $25.00' }));
+    await within(row('Ezra Expired')).findByText('Charged $25.00 to Visa ending 1111. Receipt 35.');
+    expect(orgApi.chargeCardOnFile.mock.calls[0][3]).toMatchObject({ periodIndex: 1, amountMinor: 2500, cardRef: 'ref-ezra-new' });
   });
 
   it('a decline the server answers on the press is said in that row, and nothing is marked paid', async () => {

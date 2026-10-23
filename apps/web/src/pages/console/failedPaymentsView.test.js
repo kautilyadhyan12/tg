@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { canSeeFailedPayments, failedHeadline, overviewLine, retryLine, rowWhat } from './failedPaymentsView';
+import { canSeeFailedPayments, failedHeadline, needsCard, nextStep, overviewLine, rowFacts, rowWhat } from './failedPaymentsView';
 
+const declined = (over = {}) => ({ brand: 'VISA', last4: '0002', on: '2026-10-23', reason: 'declined', next: null, stop: 'bank', notice: { state: 'emailed', on: '2026-10-23' }, ...over });
 const row = (over = {}) => ({
   typeName: 'Gold Weekly',
+  declined: declined(),
   covers: { from: '2026-10-23', to: '2026-10-29' },
   fee: null,
   retry: { kind: 'charge' },
@@ -26,16 +28,36 @@ describe('Failed payments, in words', () => {
     expect(rowWhat(row({ fee: { kind: 'freeze', forName: 'Gold Monthly', on: '2026-10-22', to: '2026-11-21' } }))).toBe('Freeze fee · Gold Monthly, frozen 22 Oct – 21 Nov 2026');
   });
 
-  it("why there is no Try again, in the gym's own time; nothing said twice where the decline already says it", () => {
-    expect(retryLine(row(), 'America/Chicago', 'US')).toBeNull();
-    expect(retryLine(row({ retry: { kind: 'wait', from: '2026-10-24T19:15:00.000Z' } }), 'America/Chicago', 'US')).toBe(
-      'Square recommends waiting 24 hours before retrying. It can be retried from 2:15 PM on 24 Oct.',
+  it('a row is short facts: the card, the day, the reason, the next step and the email', () => {
+    expect(rowFacts(row(), 'America/Chicago', 'US')).toEqual([
+      { label: 'Declined card', value: 'Visa ending 0002' },
+      { label: 'Declined on', value: '23 Oct' },
+      { label: 'Reason', value: 'No reason given by the bank' },
+      { label: 'Next step', value: 'Not retried automatically. Ask the cardholder to contact their bank, then try again.' },
+      { label: 'Cardholder email', value: 'Emailed on 23 Oct' },
+    ]);
+    const short = row({ declined: declined({ reason: 'insufficient_funds', next: '2026-10-26', stop: null, notice: { state: 'no_email', on: null } }) });
+    expect(rowFacts(short, 'America/Chicago', 'US').map((f) => f.value)).toEqual([
+      'Visa ending 0002',
+      '23 Oct',
+      'Not enough funds',
+      'Retried automatically on 26 Oct, or try again now',
+      'No email address on file. Contact them directly.',
+    ]);
+  });
+
+  it("the next step says when it can be retried, in the gym's own time, or what to do instead", () => {
+    expect(nextStep(row({ retry: { kind: 'wait', from: '2026-10-24T19:15:00.000Z' } }), 'America/Chicago', 'US')).toBe(
+      'Can be retried from 2:15 PM on 24 Oct (Square recommends waiting 24 hours)',
     );
-    expect(retryLine(row({ retry: { kind: 'no', why: 'new_card' } }), 'America/Chicago', 'US')).toBeNull();
-    expect(retryLine(row({ retry: { kind: 'no', why: 'tried_out' } }), 'America/Chicago', 'US')).toBeNull();
-    for (const why of ['no_card', 'square', 'currency', 'elsewhere']) {
-      expect(retryLine(row({ retry: { kind: 'no', why } }), 'America/Chicago', 'US')).toMatch(/\.$/);
+    expect(nextStep(row({ retry: { kind: 'no', why: 'new_card' } }), 'America/Chicago', 'US')).toMatch(/^The bank declined this card permanently\. Add a new card/);
+    expect(nextStep(row({ retry: { kind: 'no', why: 'no_card' } }), 'America/Chicago', 'US')).toMatch(/^No card on file\. Add a new card/);
+    for (const why of ['tried_out', 'square', 'currency', 'elsewhere']) {
+      expect(nextStep(row({ retry: { kind: 'no', why } }), 'America/Chicago', 'US')).toMatch(/\.$/);
     }
+    expect(['no_card', 'new_card', 'tried_out'].every((why) => needsCard(row({ retry: { kind: 'no', why } })))).toBe(true);
+    expect(['square', 'currency', 'elsewhere'].some((why) => needsCard(row({ retry: { kind: 'no', why } })))).toBe(false);
+    expect(needsCard(row())).toBe(false);
   });
 
   it('who sees it: people and payments both', () => {

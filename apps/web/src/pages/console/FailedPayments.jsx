@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Loader2, RotateCw } from 'lucide-react';
+import { CreditCard, Loader2, RotateCw } from 'lucide-react';
 import { failedPaymentsService } from '../../api/failedPaymentsApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -10,6 +10,7 @@ import { canRemoveMembers, orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
 import { placeFor } from './consolePlaces';
 import { cardChargeOutcome } from './cardChargeView';
+import MemberCard from './MemberCard';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import {
@@ -20,9 +21,9 @@ import {
   canSeeFailedPayments,
   chargeButton,
   failedHeadline,
-  retryLine,
+  needsCard,
   rowAmount,
-  rowDeclined,
+  rowFacts,
   rowWhat,
   tryAgainDetail,
 } from './failedPaymentsView';
@@ -34,14 +35,18 @@ import {
 
 const newKey = () => globalThis.crypto.randomUUID();
 
-/** One failed payment: who, what for, how much, why it was declined, and Try again. */
-function Row({ row, org, readOnly, onOpenPerson, onCharged }) {
-  const [open, setOpen] = useState(false);
+/** One failed payment: who, what for, how much, the facts of the decline, and what can be done
+ *  here: Try again where the card can be charged now, Add a new card where it needs one (the card
+ *  box of the person's page, under the row, then the charge in the same place), and their page. */
+function Row({ row, org, readOnly, onOpenPerson, onCharged, onCardSaved }) {
+  /** What is open under the row: 'charge', 'card', or 'saved' (a card just added: the charge box
+   *  opens by itself once the list says it can be charged). */
+  const [opened, setOpened] = useState(null);
   const [key, setKey] = useState(newKey);
   const [state, setState] = useState({ busy: false, error: null, said: null, done: false });
   const words = orgWords(org.orgType);
-  const why = retryLine(row, org.timezone, org.country);
   const canTry = row.retry.kind === 'charge' && !state.done;
+  const charging = canTry && (opened === 'charge' || opened === 'saved');
 
   const charge = async () => {
     setState((was) => ({ ...was, busy: true, error: null }));
@@ -56,13 +61,17 @@ function Row({ row, org, readOnly, onOpenPerson, onCharged }) {
       // Answered either way: never pressed again from here. Paid or with Square, it is not owed by
       // card; declined, Square asks for a day first, which the list says once it is opened again.
       setState({ busy: false, error: null, said, done: true });
-      setOpen(false);
+      setOpened(null);
       setKey(newKey());
       onCharged();
     } catch (err) {
       setState((was) => ({ ...was, busy: false, error: errorText(err, "We couldn't charge the card. Try again.") }));
       if (errorStatus(err) === 409) onCharged();
     }
+  };
+  const close = () => {
+    setOpened(null);
+    setState((was) => ({ ...was, error: null }));
   };
 
   return (
@@ -74,16 +83,31 @@ function Row({ row, org, readOnly, onOpenPerson, onCharged }) {
               {row.name}
             </button>
             {row.past ? <span className="c-tag">{`Past ${words.person}`}</span> : null}
+            <span className="c-s16 c-w6 c-t1">{rowAmount(row)}</span>
           </div>
-          <p className="c-s14 c-t2">{`${rowWhat(row)} · ${rowAmount(row)}`}</p>
-          <p className="c-s14 c-t2" data-testid="failed-payment-declined">{rowDeclined(row)}</p>
-          {why !== null && !state.done ? <p className="c-s14 c-t3">{why}</p> : null}
+          <p className="c-s14 c-t2">{rowWhat(row)}</p>
+          {!state.done ? (
+            <dl className="grid gap-x-4 gap-y-1 m-0 mt-1" style={{ gridTemplateColumns: 'minmax(96px, max-content) 1fr' }} data-testid="failed-payment-facts">
+              {rowFacts(row, org.timezone, org.country).map((fact) => (
+                <Fragment key={fact.label}>
+                  <dt className="c-s13 c-t3">{fact.label}</dt>
+                  <dd className="c-s14 c-t1 m-0">{fact.value}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2 self-start flex-shrink-0">
-          {canTry && !open ? (
-            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={readOnly} onClick={() => setOpen(true)}>
+          {canTry && opened === null ? (
+            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={readOnly} onClick={() => setOpened('charge')}>
               <RotateCw aria-hidden="true" className="w-4 h-4" />
               Try again
+            </button>
+          ) : null}
+          {needsCard(row) && opened === null && !state.done ? (
+            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={readOnly} onClick={() => setOpened('card')}>
+              <CreditCard aria-hidden="true" className="w-4 h-4" />
+              Add a new card
             </button>
           ) : null}
           <button type="button" className="c-btn c-btn-s c-btn-lg" onClick={() => onOpenPerson(row.entryId)}>
@@ -91,33 +115,49 @@ function Row({ row, org, readOnly, onOpenPerson, onCharged }) {
           </button>
         </div>
       </div>
-      {canTry && readOnly ? <p className="c-s13 c-t3">{readOnlyNote(org.orgType)}</p> : null}
+      {(canTry || needsCard(row)) && readOnly ? <p className="c-s13 c-t3">{readOnlyNote(org.orgType)}</p> : null}
 
-      {open && canTry ? (
+      {opened === 'card' && !readOnly ? (
+        <div className="flex flex-col gap-3" data-testid="failed-payment-card-box">
+          <MemberCard
+            gymId={org.id}
+            gym={org}
+            entryId={row.entryId}
+            name={row.name}
+            readOnly={readOnly}
+            onCardSaved={() => {
+              setOpened('saved');
+              onCardSaved();
+            }}
+          />
+          <button type="button" className="c-btn c-btn-s c-btn-lg self-start" onClick={close}>
+            Close
+          </button>
+        </div>
+      ) : null}
+      {opened === 'saved' && !canTry && !state.done ? (
+        <p className="c-s14 c-t2" role="status">
+          Card saved. Checking it can be charged…
+        </p>
+      ) : null}
+
+      {charging ? (
         <div className="flex flex-col gap-3 p-4" style={{ border: '1px solid var(--line)', borderRadius: 12 }} data-testid="failed-payment-box">
-          <p className="c-s15 c-w6 c-t1">{`Charge ${row.name}'s card again`}</p>
+          <p className="c-s15 c-w6 c-t1">{opened === 'saved' ? `Card saved. Charge ${row.name}'s new card now?` : `Charge ${row.name}'s card again`}</p>
           <p className="c-s14 c-t2">{tryAgainDetail(row)}</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={state.busy || readOnly} onClick={() => void charge()}>
               {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
               {state.busy ? 'Charging…' : chargeButton(row)}
             </button>
-            <button
-              type="button"
-              className="c-btn c-btn-s c-btn-lg"
-              disabled={state.busy}
-              onClick={() => {
-                setOpen(false);
-                setState((was) => ({ ...was, error: null }));
-              }}
-            >
-              Cancel
+            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={state.busy} onClick={close}>
+              {opened === 'saved' ? 'Not now' : 'Cancel'}
             </button>
           </div>
           {state.error !== null ? <Refusal>{state.error}</Refusal> : null}
         </div>
       ) : null}
-      {!open && state.error !== null ? <Refusal>{state.error}</Refusal> : null}
+      {!charging && state.error !== null ? <Refusal>{state.error}</Refusal> : null}
       {state.said !== null ? (
         <p className="c-s14 c-w6" style={{ color: state.said.good ? 'var(--good)' : 'var(--bad)' }} role="status" data-testid="failed-payment-said">
           {state.said.line}
@@ -260,7 +300,7 @@ export default function FailedPayments() {
               </p>
               <ul className="list-none m-0 p-0">
                 {list.payments.map((row) => (
-                  <Row key={row.billId} row={row} org={org} readOnly={readOnly} onOpenPerson={openPerson} onCharged={recount} />
+                  <Row key={row.billId} row={row} org={org} readOnly={readOnly} onOpenPerson={openPerson} onCharged={recount} onCardSaved={() => void load()} />
                 ))}
               </ul>
               {list.next !== null ? (
