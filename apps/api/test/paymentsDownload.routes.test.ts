@@ -480,6 +480,32 @@ d("download payments (real Postgres)", () => {
   );
 
   it(
+    "a gym in Japan: whole yen in the file, never a hundredth of them, and a day with nothing is in yen (18s)",
+    async () => {
+      const owner = await makeUser("yen-owner");
+      const gymId = await makeGym(owner, "Pd Yen Gym");
+      await sql`UPDATE gyms SET country = 'JP' WHERE id = ${gymId}`;
+      const water = await addProduct(gymId, owner.cookies, "Water", 1100);
+      expect(water.currency).toBe("JPY");
+      await sold(gymId, owner.cookies, water.id, 1100);
+
+      const file = await download(gymId, owner.cookies, { from: "2026-10-15", to: "2026-10-15" });
+      const rows = sheetOf(file.sheets, "Payments");
+      expect(rows[0]?.slice(9, 12)).toEqual(["Amount (JPY)", "Tax (JPY)", "Amount counted (JPY)"]);
+      expect(rows[1]?.slice(9, 12)).toEqual([1100, 0, 1100]);
+      const totals = sheetOf(file.sheets, "Totals");
+      expect(totals[0]).toEqual(["Totals", "JPY"]);
+      expect(totals.find((r) => r[0] === "Collected")).toEqual(["Collected", 1100]);
+      // Reports counts the members' money, so the file says its Collected is the same.
+      expect(totals.at(-1)?.[0]).toBe("Voided transactions are listed and count 0. Collected is the same as Collected on Reports for these days.");
+
+      const quiet = await summary(gymId, owner.cookies, "?from=2026-10-13&to=2026-10-13");
+      expect(quiet.totals).toEqual([{ currency: "JPY", paidMinor: 0, soldMinor: 0, refundedMinor: 0, netMinor: 0 }]);
+    },
+    T,
+  );
+
+  it(
     "a file longer than one page holds every line once, in date order, then receipt order",
     async () => {
       const owner = await makeUser("long-owner");

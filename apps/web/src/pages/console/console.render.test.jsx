@@ -474,14 +474,15 @@ describe('Create a gym', () => {
 
     expect(labels).toContain('United States');
     expect(labels).toContain('India');
-    expect(labels).toContain('Germany');
+    expect(labels).toContain('Japan');
     expect(labels).toContain('United Kingdom');
+    expect(labels).toContain('Australia');
     // A gym owner must never be able to pick a country and then be refused.
-    expect(labels).not.toContain('Australia');
+    expect(labels).not.toContain('Germany');
     expect(labels).not.toContain('Poland');
     expect(labels).not.toContain('Switzerland');
     // The whole supported set and nothing beyond it.
-    expect(labels).toHaveLength(24);
+    expect(labels).toHaveLength(9);
   });
 
   it('offers the five kinds of business, and neither a clinic nor a personal trainer', () => {
@@ -600,7 +601,7 @@ describe('Create a gym', () => {
       apiError(
         400,
         'country_unsupported',
-        "We're not open in that country yet. Right now we support the United States, India, Canada, the UK and countries using the euro.",
+        "We don't take businesses in that country. A business can be in India, the United States, Canada, the United Kingdom, Ireland, France, Spain, Australia or Japan.",
       ),
     );
     drawNew();
@@ -609,7 +610,7 @@ describe('Create a gym', () => {
     fireEvent.change(screen.getByLabelText('Mobile number for payments'), { target: { value: '98765 43210' } });
     fireEvent.click(screen.getByRole('radio', { name: /^Yes/ }));
     fireEvent.click(screen.getByText('Create'));
-    expect(await screen.findByText(/not open in that country yet/i)).toBeTruthy();
+    expect(await screen.findByText(/take businesses in that country/i)).toBeTruthy();
   });
 
   it('sends one key with every press of Create, so a press sent again after a lost answer makes no second gym', async () => {

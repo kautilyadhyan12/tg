@@ -1,6 +1,6 @@
 // A small Excel (.xlsx) writer for the payments download (ROADMAP 18n): a file that opens
 // tidy — bold headings with filter arrows, the top row kept in place, columns wide enough,
-// real dates and money with two decimals — which a CSV cannot carry.
+// real dates and money with its currency's own decimals — which a CSV cannot carry.
 //
 // An .xlsx is a ZIP of XML parts. Each part is deflated as it is written and the file goes
 // out a slice at a time, so a gym's whole history is never held in memory whole. Each
@@ -9,11 +9,13 @@
 // ever text; characters XML cannot hold are dropped.
 import { Readable, pipeline } from "node:stream";
 import { createDeflateRaw, crc32 } from "node:zlib";
+import { currencyDecimals, minorToPriceText } from "@app/shared";
 
 export type Cell =
   | { kind: "text"; value: string; bold?: boolean }
   | { kind: "int"; value: number }
-  | { kind: "money"; minor: number; bold?: boolean }
+  /** In `currency`'s minor units: yen has none smaller, so 5000 JPY is 5,000 (18s). */
+  | { kind: "money"; minor: number; currency: string; bold?: boolean }
   | { kind: "date"; day: string }
   | null;
 
@@ -29,19 +31,19 @@ export interface Sheet {
 }
 
 // Styles, by their place in cellXfs below.
-const STYLE = { text: 0, header: 1, date: 2, money: 3, int: 4, moneyBold: 5, textBold: 6 } as const;
+const STYLE = { text: 0, header: 1, date: 2, money: 3, int: 4, moneyBold: 5, textBold: 6, whole: 7, wholeBold: 8, three: 9, threeBold: 10 } as const;
 
 const STYLES_XML =
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-  '<numFmts count="1"><numFmt numFmtId="164" formatCode="d mmm yyyy"/></numFmts>' +
+  '<numFmts count="2"><numFmt numFmtId="164" formatCode="d mmm yyyy"/><numFmt numFmtId="165" formatCode="#,##0.000"/></numFmts>' +
   '<fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>' +
   '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
   '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>' +
   '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>' +
   '<border><left/><right/><top/><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>' +
   '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-  '<cellXfs count="7">' +
+  '<cellXfs count="11">' +
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
   '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>' +
   '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
@@ -49,6 +51,10 @@ const STYLES_XML =
   '<xf numFmtId="1" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
   '<xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
   '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+  '<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="3" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
+  '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+  '<xf numFmtId="165" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>' +
   "</cellXfs>" +
   '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
   "</styleSheet>";
@@ -78,6 +84,19 @@ export function excelDay(day: string): number {
   return Math.round(Date.parse(`${day}T00:00:00Z`) / 86_400_000) + 25_569;
 }
 
+/** A money cell's style: whole numbers for yen, two places for most, three for a dinar. */
+function moneyStyle(currency: string, bold: boolean): number {
+  const decimals = currencyDecimals(currency) ?? 2;
+  if (decimals === 0) return bold ? STYLE.wholeBold : STYLE.whole;
+  if (decimals === 3) return bold ? STYLE.threeBold : STYLE.three;
+  return bold ? STYLE.moneyBold : STYLE.money;
+}
+
+/** Minor units as the number a cell holds: 4999 USD → 49.99, 5000 JPY → 5000, -250 → -2.50. */
+export function moneyValue(minor: number, currency: string): string {
+  return `${minor < 0 ? "-" : ""}${minorToPriceText(minor, currency)}`;
+}
+
 function cellXml(cell: Cell, ref: string): string {
   if (cell === null) return "";
   switch (cell.kind) {
@@ -87,7 +106,7 @@ function cellXml(cell: Cell, ref: string): string {
     case "int":
       return `<c r="${ref}" s="${String(STYLE.int)}"><v>${String(cell.value)}</v></c>`;
     case "money":
-      return `<c r="${ref}" s="${String(cell.bold === true ? STYLE.moneyBold : STYLE.money)}"><v>${(cell.minor / 100).toFixed(2)}</v></c>`;
+      return `<c r="${ref}" s="${String(moneyStyle(cell.currency, cell.bold === true))}"><v>${moneyValue(cell.minor, cell.currency)}</v></c>`;
     case "date":
       return `<c r="${ref}" s="${String(STYLE.date)}"><v>${String(excelDay(cell.day))}</v></c>`;
   }

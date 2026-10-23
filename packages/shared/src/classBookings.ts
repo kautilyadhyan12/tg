@@ -278,6 +278,9 @@ export interface ClassFees {
 
 export const CLASS_FEES_OFF: ClassFees = { lateCancelMinor: 0, noShowMinor: 0 };
 
+/** A fee asked of a gym with no country it can sell in (18s): fees are in its members' money. */
+export const CLASS_FEES_NO_CURRENCY = "Set your country in Settings before setting a fee. Fees are in your country's own money.";
+
 /** THE ONE RULE for whether a late cancel or a no-show costs money, and how much: the
  *  gym's own amount, where the place was booked on a membership that is not a pack. A pack
  *  holder's class stays used on their pack and that is all (Kd, 2026-10-17, as Mindbody
@@ -548,8 +551,9 @@ export const classBookingSettingsResponseSchema = z
     pt: ptBookingSettingsSchema,
     /** The class fees (18h-i), in the gym's money. `canChange`: this reader also records
      *  members' payments, the tick a fee needs. `onBills`: the gym sells memberships here,
-     *  so a fee has bills to go on. */
-    fees: classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/), canChange: z.boolean(), onBills: z.boolean() }).strict(),
+     *  so a fee has bills to go on. `currency` null: the gym has no country it can sell in
+     *  (none set, or one that left the list, 18s), so no fee is shown, set or charged. */
+    fees: classFeesSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/).nullable(), canChange: z.boolean(), onBills: z.boolean() }).strict(),
     /** Personal training's own two fees (18h-ii), in the same money, under the same tick. */
     ptFees: classFeesSchema,
     /** No new bookings while a payment is overdue (17i), changed under the fees' tick.

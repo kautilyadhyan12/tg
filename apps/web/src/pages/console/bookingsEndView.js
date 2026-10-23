@@ -260,7 +260,7 @@ export function bookingSettingsSummary(settings, pt, fees = null, ptFees = null,
   if (overdue === 'stop') return `${bookingSettingsSummary(settings, pt, fees, ptFees).replace(/\.$/, '')}. No new bookings while a payment is overdue.`;
   const waitlist = settings.waitlistMax === 0 ? 'no waitlist' : `waitlist of ${settings.waitlistMax}`;
   const said = (f) => {
-    const line = f === null || f === undefined ? null : classFeesLine(f);
+    const line = f === null || f === undefined || !f.currency ? null : classFeesLine(f);
     return line === null ? '' : ` · ${line.toLowerCase()}`;
   };
   const classes = `Classes: ${opensAndFree(settings)} · ${waitlist}${said(fees)}`;
@@ -275,7 +275,7 @@ const freeUntil = (minutes) => (minutes === 0 ? 'until it starts' : `until ${spa
 export function bookingRulesLine(settings, orgType, fees = null) {
   const ahead = `${settings.opensDays} ${settings.opensDays === 1 ? 'day' : 'days'} ahead`;
   const line = `${orgWords(orgType).peopleCap} can book up to ${ahead} and cancel for free ${freeUntil(settings.freeCancelMinutes)}.`;
-  const charged = fees === null || fees === undefined || fees.onBills === false ? null : classFeesLine(fees);
+  const charged = fees === null || fees === undefined || fees.onBills === false || !fees.currency ? null : classFeesLine(fees);
   return charged === null ? line : `${line} ${charged}.`;
 }
 

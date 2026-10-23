@@ -34,17 +34,15 @@ describe('the country picker cannot offer a country the server refuses', () => {
   it('is exactly the shared supported set', () => {
     const values = countryOptions().map((o) => o.value);
     expect(values.slice().sort()).toEqual(SUPPORTED_COUNTRIES.slice().sort());
-    expect(values).toHaveLength(24);
+    expect(values).toHaveLength(9);
   });
 
   it('omits the countries org-create answers `country_unsupported` to', () => {
-    // Named one by one rather than "not in the list", because these are real
-    // markets a later chat will be tempted to add here instead of adding a
-    // currency to the server. Poland/Sweden/Denmark/Switzerland/Norway are the
-    // Europe-is-not-one-currency cases; Australia and Brazil are simply not
-    // open yet.
+    // Named one by one rather than "not in the list": a business only from India and
+    // Square's countries (18s), so Germany, Italy and the Netherlands are out though
+    // they use the euro, and Poland, Sweden and Brazil were never in.
     const values = countryOptions().map((o) => o.value);
-    for (const code of ['AU', 'PL', 'SE', 'DK', 'CH', 'NO', 'BR', 'CZ', 'HU', 'RO']) {
+    for (const code of ['DE', 'IT', 'NL', 'AT', 'FI', 'PL', 'SE', 'DK', 'CH', 'NO', 'BR', 'CZ', 'HU', 'RO', 'NZ']) {
       expect(values).not.toContain(code);
     }
   });
@@ -52,7 +50,13 @@ describe('the country picker cannot offer a country the server refuses', () => {
   it('shows the UK, and shows it separately from the euro countries', () => {
     const values = countryOptions().map((o) => o.value);
     expect(values).toContain('GB');
-    expect(values).toContain('DE');
+    expect(values).toContain('FR');
+  });
+
+  it('offers Australia and Japan', () => {
+    const options = countryOptions();
+    expect(options.find((o) => o.value === 'AU')?.label).toBe('Australia');
+    expect(options.find((o) => o.value === 'JP')?.label).toBe('Japan');
   });
 
   it('labels each option with a readable name and sorts by it', () => {

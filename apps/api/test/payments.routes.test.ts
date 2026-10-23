@@ -422,7 +422,10 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       const stranger = await person("read-stranger");
       const gb = await gym(owner, "Read GB Gym");
       const india = await gym(owner, "Read India Gym", "IN");
-      const germany = await gym(owner, "Read Germany Gym", "DE");
+      // Germany left the list a business is in (18s): a gym stored there before is asked
+      // for its country again, as a gym with none is.
+      const germany = await gym(owner, "Read Germany Gym");
+      await sql`UPDATE gyms SET country = 'DE' WHERE id = ${germany}`;
       const nowhere = await gym(owner, "Read No Country Gym");
       await sql`UPDATE gyms SET country = NULL WHERE id = ${nowhere}`;
       await staff(gb, manager, "manager");
@@ -432,7 +435,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect((await send("GET", `/v1/orgs/${gb}/payments`, stranger.cookies)).statusCode).toBe(404);
       expect((await send("GET", `/v1/orgs/${gb}/payments`, {})).statusCode).toBe(401);
       expect((await read(india, owner)).availability).toBe("india_soon");
-      expect((await read(germany, owner)).availability).toBe("not_available");
+      expect(await read(germany, owner)).toMatchObject({ availability: "no_country", country: "DE" });
       expect((await read(nowhere, owner)).availability).toBe("no_country");
       // Square is not offered where it takes no card payments.
       for (const gymId of [india, germany, nowhere]) expect((await connectPress(gymId, owner)).statusCode).toBe(409);
@@ -787,7 +790,7 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       const gymId = await gym(owner, "H3 Gym");
       await connect(gymId, owner, account("MLHTHREE"));
       const patch = (country: string) => send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country });
-      for (const country of ["DE", "IN", "IE"]) {
+      for (const country of ["JP", "IN", "IE"]) {
         const refused = await patch(country);
         expect(refused.statusCode, country).toBe(409);
         expect((JSON.parse(refused.body) as { error: string }).error).toBe("square_connected");

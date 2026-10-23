@@ -17,6 +17,7 @@ import {
   PLAN_CANCEL_DECIDE_HOURS,
   SMALLER_SIZE_DECIDE_HOURS,
   STAFF_INVITE_WORDS,
+  COUNTRY_UNSUPPORTED_WORDS,
   currencyForCountry,
   GYM_PAYMENTS_WORDS,
   normaliseIndianMobile,
@@ -252,7 +253,7 @@ function resolveCurrency(country: string): string {
     throw new OrgsError(
       400,
       "country_unsupported",
-      "We're not open in that country yet. Right now we support the United States, India, Canada, the UK and countries using the euro.",
+      COUNTRY_UNSUPPORTED_WORDS,
     );
   }
   return currencyDisplay;

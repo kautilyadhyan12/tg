@@ -2,7 +2,7 @@
 // file's XML as text. A character XML refuses, or an unescaped & or <, and Excel will not
 // open the file at all; so every name below comes out as characters XML 1.0 takes, escaped.
 import { describe, expect, it } from "vitest";
-import { xmlText } from "../src/modules/orgs/paymentsDownload/xlsx.js";
+import { moneyValue, xmlText } from "../src/modules/orgs/paymentsDownload/xlsx.js";
 
 /** XML 1.0's Char production, with & and < only as the start of an entity. */
 const XML_CHARS = /^[\t\n\r -퟿-�\u{10000}-\u{10FFFF}]*$/u;
@@ -31,5 +31,22 @@ describe("payments file: text as XML holds it", () => {
   it("a cell longer than Excel takes is cut, and the cut never leaves half an entity", () => {
     const said = xmlText("&".repeat(40_000));
     expect(said).toBe("&amp;".repeat(32_000));
+  });
+});
+
+describe("payments file: an amount in its own money", () => {
+  it("has its currency's own decimals: none for yen, two for most, three for a dinar", () => {
+    expect(moneyValue(5000, "JPY")).toBe("5000");
+    expect(moneyValue(1100, "JPY")).toBe("1100");
+    expect(moneyValue(4999, "USD")).toBe("49.99");
+    expect(moneyValue(4999, "AUD")).toBe("49.99");
+    expect(moneyValue(5, "EUR")).toBe("0.05");
+    expect(moneyValue(0, "INR")).toBe("0.00");
+    expect(moneyValue(12500, "KWD")).toBe("12.500");
+  });
+
+  it("keeps a refund's minus", () => {
+    expect(moneyValue(-250, "USD")).toBe("-2.50");
+    expect(moneyValue(-1100, "JPY")).toBe("-1100");
   });
 });

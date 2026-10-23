@@ -3,7 +3,7 @@ import { GYM_POSTAL_ADDRESS_MAX_CHARS, orgWords } from '@app/shared';
 import { Loader2 } from 'lucide-react';
 import Select from '../common/Select';
 import { ConsoleFailed, ConsoleSection } from './ConsoleStates';
-import { countryOptions, detectTimezone, viewerPrivileges } from '../../pages/console/consoleView';
+import { closedCountryLine, countryOptions, detectTimezone, viewerPrivileges } from '../../pages/console/consoleView';
 import {
   canManageOrg,
   gymDetailsDraft,
@@ -185,6 +185,7 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false, sta
   // a null one — we do not have it. Anything else would print that claim over a
   // country the gym does hold.
   const countryOnRecord = typeof org?.country === 'string' && org.country.trim() !== '';
+  const closedCountry = closedCountryLine(org?.country, org?.orgType);
 
   const save = async (e) => {
     e.preventDefault();
@@ -320,6 +321,11 @@ export default function GymDetailsPanel({ org, privileges, readOnly = false, sta
             Your {words.it} is billed in {org.currencyDisplay}. We work that out from your
             country — you can&apos;t set it here.
           </p>
+          {closedCountry === null ? null : (
+            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.45)' }}>
+              {closedCountry}
+            </p>
+          )}
           {countryOnRecord ? null : (
             /* TRUE, AND NOT A DEFECT. Gyms created before the country column
                existed have none: the create wizard asked, the server turned the

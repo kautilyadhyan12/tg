@@ -5,7 +5,7 @@
 // The owner alone: `staff.manage` is the one privilege no other role can hold, the same
 // that guards the Staff tab.
 import type { Sql } from "postgres";
-import { STAFF_ACTIVITY_PAGE, orgWords, staffActivityResponseSchema, type StaffActivityQuery, type StaffActivityResponse } from "@app/shared";
+import { STAFF_ACTIVITY_PAGE, memberCurrencyForCountry, orgWords, staffActivityResponseSchema, type StaffActivityQuery, type StaffActivityResponse } from "@app/shared";
 import { requirePrivilege } from "../service.js";
 import type { OrgRow } from "../repo.js";
 import * as repo from "./repo.js";
@@ -137,6 +137,8 @@ export async function getStaffActivity(deps: StaffActivityDeps, org: OrgRow, que
   const names = ids.size === 0 ? new Map<string, string>() : await repo.readNames(deps.sql, org.id, ids, formerStaff);
 
   const words = orgWords(org.orgType);
+  // A price note without its money is in the members' money, never the one the gym pays us in.
+  const memberCurrency = memberCurrencyForCountry(org.country) ?? org.currencyDisplay;
   const lines = page.map((note) => {
     const subject = subjectOf(note);
     const second = subject === null ? null : alsoAsked(subject);
@@ -144,7 +146,7 @@ export async function getStaffActivity(deps: StaffActivityDeps, org: OrgRow, que
     const say = STAFF_LINES[note.action];
     const payer = payerOf(note);
     const payerName = payer === null ? null : (names.get(`entry:${payer}`) ?? null);
-    const line = say === undefined ? "Made a change" : say({ meta: note.meta, about, words, currency: org.currencyDisplay, payer: payerName });
+    const line = say === undefined ? "Made a change" : say({ meta: note.meta, about, words, currency: memberCurrency, payer: payerName });
     return { id: note.id, day: note.day, minute: note.minute, workerId: note.actorId, worker: note.actorName, line };
   });
 

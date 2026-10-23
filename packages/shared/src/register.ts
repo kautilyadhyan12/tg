@@ -591,7 +591,7 @@ export const REGISTER_WORDS = {
 /** A product priced in a money the gym no longer uses (it changed its country): it is
  *  not sold until its price is saved again, so a day's total is never two moneys added. */
 export function productCurrencyWords(name: string, was: string, now: string | null): string {
-  if (now === null) return `${name} is priced in ${was}, and your country is not set. Nothing was sold: set your country in Settings first.`;
+  if (now === null) return `${name} is priced in ${was}. Nothing was sold: set your country in Settings first.`;
   return `${name} is priced in ${was}, and you now sell in ${now}. Nothing was sold: open ${name} under Products and save its price in ${now}.`;
 }
 

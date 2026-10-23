@@ -299,6 +299,28 @@ d("a fee for a late cancel or a no-show, for personal training (real Postgres)",
     expect(await feesOf(asha)).toEqual([]);
   });
 
+  // 18s: a gym stored in a country that left the list has no money its members pay in, so a
+  // late cancel and a no-show cost nothing there.
+  it("a gym in a country that left the list charges no late cancel and no no-show", async () => {
+    clock = NOW;
+    const gym = await makeGym("Moved PT");
+    const asha = await member(gym, "Asha Rao");
+    const bina = await member(gym, "Bina Shah");
+    const ashas = await book(gym, asha, 540);
+    const binas = await book(gym, bina, 600);
+    await sql`UPDATE gyms SET country = 'DE' WHERE id = ${gym.id}`;
+
+    clock = LATE_ON_FRIDAY;
+    const late = await memberCancel(gym, asha, ashas, { lateOk: true });
+    expect(late.statusCode, late.body).toBe(200);
+    expect(await statusOf(ashas)).toBe("late_cancelled");
+    clock = AFTER_FRIDAY;
+    expect((await mark(gym, binas, "no_show")).statusCode).toBe(200);
+    expect(await feesOf(asha)).toEqual([]);
+    expect(await feesOf(bina)).toEqual([]);
+    expect(await allFeesOfGym(gym)).toBe(0);
+  });
+
   it("every class of case: who pays, how much, and what a late cancel must say yes to", async () => {
     clock = NOW;
     const gym = await makeGym("Case PT");

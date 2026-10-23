@@ -63,9 +63,11 @@ export const MEMBER_CURRENCY: Readonly<Record<SupportedCountry, string>> = {
   IN: "INR",
   CA: "CAD",
   GB: "GBP",
-  AT: "EUR", BE: "EUR", HR: "EUR", CY: "EUR", EE: "EUR", FI: "EUR", FR: "EUR",
-  DE: "EUR", GR: "EUR", IE: "EUR", IT: "EUR", LV: "EUR", LT: "EUR", LU: "EUR",
-  MT: "EUR", NL: "EUR", PT: "EUR", SK: "EUR", SI: "EUR", ES: "EUR",
+  IE: "EUR",
+  FR: "EUR",
+  ES: "EUR",
+  AU: "AUD",
+  JP: "JPY",
 };
 
 /** null where the gym's country is not one we serve: never a fallback currency. */

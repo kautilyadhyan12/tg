@@ -302,7 +302,7 @@ export default function PaymentsPanel({ org, readOnly, startOpen = false, outcom
           </p>
           {data.availability === 'no_country' && countryTo !== null ? (
             <PlaceLink to={countryTo} className="c-lk text-sm self-start">
-              Add your country
+              Choose your country
             </PlaceLink>
           ) : null}
         </div>
