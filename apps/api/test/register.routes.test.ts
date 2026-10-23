@@ -9,7 +9,7 @@
 // Every refusal is checked by reading the tables, not the reply.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
-import { PRODUCTS_MAX, REGISTER_WORDS, sellPageResponseSchema, type MemberPurchasesResponse, type SalePeopleResponse, type SellPageResponse } from "@app/shared";
+import { PRODUCTS_MAX, REGISTER_WORDS, SALES_SHOWN, sellPageResponseSchema, type MemberPurchasesResponse, type SalePeopleResponse, type SellPageResponse } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { createMemoryRedis } from "../src/redis.js";
@@ -848,6 +848,139 @@ d("the register: products, sales and tax (real Postgres)", () => {
       expect((await at(gymB, ownerB, b.id)).statusCode).toBe(201);
       expect(await salesOf(gymA)).toHaveLength(2);
       expect(await salesOf(gymB)).toHaveLength(1);
+    },
+    T,
+  );
+
+  // 18q-ii's worst thing: a tab whose total is not the sum of its own rows, or a sale under the
+  // wrong tab, so the desk cashes up wrong. The three kinds must come to the day's total, money
+  // by money, and each payment must say which kind it is.
+  it(
+    "the day split by kind: products, memberships and fees each add up to their own rows, and together to the day's total",
+    async () => {
+      const owner = await makeUser("kind-owner");
+      const pricer = await makeUser("kind-pricer");
+      const other = await makeUser("kind-other");
+      const gymId = await makeGym(owner, "Reg Kinds Gym");
+      const otherGym = await makeGym(other, "Reg Kinds Other");
+      await staffWith(gymId, pricer, "trainer", ["members.read", "memberships.manage"]);
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel");
+      const theirs = await addPerson(otherGym, other.cookies, "Noor Next");
+      const water = await addProduct(gymId, owner.cookies, { name: "Water", priceMinor: 199 });
+      const type = { name: "One month", description: null, kind: "one_time", priceMinor: 4999, termCount: 1, termUnit: "month", packClasses: null, packDays: null, access: "all_classes", bookingsLimit: null, bookingsPeriod: null, classTypeIds: null, includesPt: false, ptLimit: null, ptPeriod: null };
+      const give = async (gym: string, cookies: Cookies, entry: string, method: string) => {
+        const made = await post(`/v1/orgs/${gym}/membership-types`, type, cookies);
+        expect(made.statusCode, made.body).toBe(201);
+        const typeId = (JSON.parse(made.body) as { types: { id: string }[] }).types[0]?.id;
+        const today = (await read(gym, cookies)).today;
+        const given = await post(`/v1/orgs/${gym}/member-list/entries/${entry}/memberships`, { requestKey: nextKey(), typeId, startsOn: today, paid: true, method }, cookies);
+        expect(given.statusCode, given.body).toBe(201);
+        const id = (JSON.parse(given.body) as { memberships: { id: string }[] }).memberships[0]?.id;
+        if (id === undefined) throw new Error("no membership");
+        return { id, today };
+      };
+      /** A late cancel fee on the membership, paid at the desk through its own route. */
+      const payFee = async (gym: string, cookies: Cookies, entry: string, membershipId: string, today: string, amountMinor: number, method: string) => {
+        const [bill] = await sql<{ id: string }[]>`
+          INSERT INTO gym_member_bills (gym_id, held_membership_id, amount_minor, currency, due_on, covers_from, covers_to, fee, fee_for)
+          SELECT gym_id, id, ${amountMinor}, currency, ${today}, ${today}, ${today}, 'late_cancel', 'Spin'
+          FROM gym_held_memberships WHERE id = ${membershipId}
+          RETURNING id`;
+        if (bill === undefined) throw new Error("no fee");
+        const paid = await post(`/v1/orgs/${gym}/member-list/entries/${entry}/memberships/${membershipId}/fees/${bill.id}/payments`, { requestKey: nextKey(), amountMinor, method }, cookies);
+        expect(paid.statusCode, paid.body).toBe(200);
+      };
+
+      // Two waters, one voided; a month by card, 10.00 of it refunded; a late cancel fee in cash.
+      expect((await sell(gymId, owner.cookies, sale(water.id, 199))).statusCode).toBe(201);
+      const voided = await sell(gymId, owner.cookies, sale(water.id, 199, { method: "card_at_desk" }));
+      expect(voided.statusCode).toBe(201);
+      const voidedId = (await read(gymId, owner.cookies)).sales.find((x) => x.method === "card_at_desk")?.id;
+      expect((await post(`${base(gymId)}/sales/${String(voidedId)}/void`, { reason: "mistake" }, owner.cookies)).statusCode).toBe(200);
+      const month = await give(gymId, owner.cookies, maya, "card_at_desk");
+      await payFee(gymId, owner.cookies, maya, month.id, month.today, 1500, "cash");
+      const monthPayment = (await read(gymId, owner.cookies)).payments?.find((p) => p.kind === "membership");
+      if (monthPayment === undefined) throw new Error("no membership payment listed");
+      const refund = await post(
+        `/v1/orgs/${gymId}/member-list/entries/${maya}/memberships/${month.id}/payments/${monthPayment.id}/refunds`,
+        { requestKey: nextKey(), amountMinor: 1000, method: "cash", reason: "charged_too_much" },
+        owner.cookies,
+      );
+      expect(refund.statusCode, refund.body).toBe(200);
+      // Next door's month and fee are its own.
+      const theirMonth = await give(otherGym, other.cookies, theirs, "cash");
+      await payFee(otherGym, other.cookies, theirs, theirMonth.id, theirMonth.today, 700, "cash");
+
+      const now = await read(gymId, owner.cookies);
+      expect(now.payments?.map((p) => [p.kind, p.typeName, p.amountMinor, p.method])).toEqual([
+        ["fee", "Late cancel fee · Spin", 1500, "cash"],
+        ["membership", "One month", 4999, "card_at_desk"],
+      ]);
+      const none = { link: 0, company: 0, upi: 0, bank_transfer: 0, terminal: 0, otherCurrency: 0, notShown: 0 };
+      expect(now.kinds).toEqual({
+        products: { ...none, count: 1, totalMinor: 199, cash: 199, card_at_desk: 0, refundedMinor: 0 },
+        memberships: { ...none, count: 1, totalMinor: 4999, cash: 0, card_at_desk: 4999, refundedMinor: 1000 },
+        fees: { ...none, count: 1, totalMinor: 1500, cash: 1500, card_at_desk: 0, refundedMinor: 0 },
+      });
+      // Together they are the day's total, money by money.
+      const kinds = [now.kinds.products, now.kinds.memberships, now.kinds.fees];
+      for (const field of ["totalMinor", "cash", "upi", "card_at_desk", "bank_transfer", "link", "company", "terminal", "refundedMinor", "otherCurrency"] as const) {
+        expect(kinds.reduce((n, k) => n + k[field], 0), field).toBe(now.totals[field]);
+      }
+      expect(now.kinds.products.count).toBe(now.totals.count);
+      expect(now.kinds.memberships.count + now.kinds.fees.count).toBe(now.totals.payments);
+      expect((await read(otherGym, other.cookies)).kinds).toMatchObject({ products: { count: 0 }, memberships: { count: 1, totalMinor: 4999 }, fees: { count: 1, totalMinor: 700 } });
+
+      // Whoever cannot record a payment is sent no money of any kind.
+      const forPricer = await read(gymId, pricer.cookies);
+      for (const k of [forPricer.kinds.products, forPricer.kinds.memberships, forPricer.kinds.fees]) expect(k).toEqual({ ...none, count: 0, totalMinor: 0, cash: 0, card_at_desk: 0, refundedMinor: 0 });
+
+      // A busy day of memberships never pushes the fees off their own list: 100 more month
+      // payments still leave the fee listed, and the left-out ones are counted by kind.
+      await sql`
+        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by, receipt_number)
+        SELECT p.gym_id, p.bill_id, p.amount_minor, p.currency, p.method, gen_random_uuid(), p.paid_on, p.recorded_by, 100000 + n
+        FROM gym_member_payments p
+        JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+        CROSS JOIN generate_series(1, ${SALES_SHOWN}::int) AS n
+        WHERE p.gym_id = ${gymId} AND b.fee IS NULL AND p.undone_at IS NULL`;
+      const busy = await read(gymId, owner.cookies);
+      const listedMonths = busy.payments?.filter((p) => p.kind === "membership") ?? [];
+      expect(listedMonths).toHaveLength(SALES_SHOWN);
+      // The newest are listed: the last one added is there, and the first month paid is the one left out.
+      expect(listedMonths[0]?.receiptNumber).toBe(100000 + SALES_SHOWN);
+      expect(listedMonths.map((p) => p.id)).not.toContain(monthPayment.id);
+      expect(busy.payments?.filter((p) => p.kind === "fee").map((p) => p.amountMinor)).toEqual([1500]);
+      expect(busy.kinds.memberships).toMatchObject({ count: SALES_SHOWN + 1, notShown: 1 });
+      expect(busy.kinds.fees).toMatchObject({ count: 1, notShown: 0 });
+      expect(busy.paymentsNotShown).toBe(1);
+
+      // And the other way: a day of fees is cut at the same number and pushes no membership off.
+      await sql`
+        INSERT INTO gym_member_payments (gym_id, bill_id, amount_minor, currency, method, request_key, paid_on, recorded_by, receipt_number)
+        SELECT p.gym_id, p.bill_id, p.amount_minor, p.currency, p.method, gen_random_uuid(), p.paid_on, p.recorded_by, 200000 + n
+        FROM gym_member_payments p
+        JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
+        CROSS JOIN generate_series(1, ${SALES_SHOWN}::int) AS n
+        WHERE p.gym_id = ${gymId} AND b.fee IS NOT NULL AND p.undone_at IS NULL`;
+      const fees = await read(gymId, owner.cookies);
+      const listedFees = fees.payments?.filter((p) => p.kind === "fee") ?? [];
+      expect(listedFees).toHaveLength(SALES_SHOWN);
+      expect(listedFees[0]?.receiptNumber).toBe(200000 + SALES_SHOWN);
+      expect(fees.payments?.filter((p) => p.kind === "membership")).toHaveLength(SALES_SHOWN);
+      expect(fees.kinds.fees).toMatchObject({ count: SALES_SHOWN + 1, notShown: 1 });
+      expect(fees.paymentsNotShown).toBe(2);
+
+      // The gym moves to the UK: what was taken in dollars is in no kind's sum, and each kind counts its own.
+      const moved = await send("PATCH", `/v1/orgs/${gymId}`, owner.cookies, { country: "GB" });
+      expect(moved.statusCode, moved.body).toBe(200);
+      const after = await read(gymId, owner.cookies);
+      expect([after.kinds.products, after.kinds.memberships, after.kinds.fees].map((k) => [k.count, k.totalMinor, k.otherCurrency])).toEqual([
+        [0, 0, 1],
+        [0, 0, SALES_SHOWN + 1],
+        [0, 0, SALES_SHOWN + 1],
+      ]);
+      expect(after.kinds.products.otherCurrency + after.kinds.memberships.otherCurrency + after.kinds.fees.otherCurrency).toBe(after.totals.otherCurrency);
     },
     T,
   );

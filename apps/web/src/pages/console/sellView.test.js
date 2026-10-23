@@ -22,8 +22,11 @@ import {
   saleProblem,
   saleSummary,
   soldWords,
+  rowsOfKind,
   takingsNotes,
+  takingsPaymentsNote,
   takingsRows,
+  takingsTabTotal,
   takingsWords,
   draftFromRate,
   emptyRateDraft,
@@ -69,6 +72,78 @@ const sale = (over = {}) => ({
 });
 const totals = (over = {}) => ({ count: 0, payments: 0, totalMinor: 0, taxMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, refundedMinor: 0, otherCurrency: 0, ...over });
 const page = (over = {}) => ({ currency: 'USD', sales: [], payments: [], salesNotShown: 0, paymentsNotShown: 0, totals: totals(), ...over });
+const kind = (over = {}) => ({ count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0, ...over });
+
+describe("the day's takings by kind (18q-ii)", () => {
+  // A day of one water, a month by card with 10.00 refunded, and a late cancel fee in cash.
+  const day = (over = {}) =>
+    page({
+      totals: totals({ count: 1, payments: 2, totalMinor: 199 + 4999 + 1500, cash: 199 + 1500, card_at_desk: 4999, refundedMinor: 1000, taxMinor: 16 }),
+      kinds: {
+        products: kind({ count: 1, totalMinor: 199, cash: 199 }),
+        memberships: kind({ count: 1, totalMinor: 4999, card_at_desk: 4999, refundedMinor: 1000 }),
+        fees: kind({ count: 1, totalMinor: 1500, cash: 1500 }),
+      },
+      sales: [sale({ totalMinor: 199 })],
+      payments: [
+        { id: 'm1', kind: 'membership', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'card_at_desk', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: { entryId: 'e2', name: 'Omar Diaz' }, receiptNumber: 50 },
+        { id: 'f1', kind: 'fee', typeName: 'Late cancel fee · Spin', amountMinor: 1500, currency: 'USD', method: 'cash', paidAt: '2026-10-12T16:00:00.000Z', by: null, person: { entryId: 'e2', name: 'Omar Diaz' }, receiptNumber: 51 },
+      ],
+      ...over,
+    });
+
+  it('each tab says its own money, and All says the day', () => {
+    expect(['all', 'products', 'memberships', 'fees'].map((key) => takingsTabTotal(day(), key))).toEqual(['$66.98', '$1.99', '$49.99', '$15.00']);
+  });
+  it('the line names the kind, its money and how it was paid; All names every kind', () => {
+    expect(takingsWords(day())).toBe('Taken today: $66.98 from 1 sale, 1 membership payment and 1 fee. Cash $16.99 · Card at the desk $49.99.');
+    expect(takingsWords(day(), 'products')).toBe('Products today: $1.99 from 1 sale. Cash $1.99.');
+    expect(takingsWords(day(), 'memberships')).toBe('Memberships today: $49.99 from 1 membership payment. Card at the desk $49.99.');
+    expect(takingsWords(day(), 'fees')).toBe('Fees today: $15.00 from 1 fee. Cash $15.00.');
+    expect(takingsWords(day({ day: '2026-10-09', today: '2026-10-12' }), 'fees')).toBe('Fees on 9 Oct 2026: $15.00 from 1 fee. Cash $15.00.');
+  });
+  it('a kind with nothing in it says so, today or on the day picked', () => {
+    const empty = page({ kinds: { products: kind(), memberships: kind(), fees: kind() } });
+    expect(takingsWords(empty, 'products')).toBe('No product sales yet today.');
+    expect(takingsWords(empty, 'memberships')).toBe('No membership payments yet today.');
+    expect(takingsWords(empty, 'fees')).toBe('No fees taken yet today.');
+    expect(takingsWords({ ...empty, day: '2026-10-09', today: '2026-10-12' }, 'fees')).toBe('No fees taken on 9 Oct 2026.');
+  });
+  it('a kind whose only rows are in another money never says it had nothing: it says none of the gym’s own money, and the note says why they are listed', () => {
+    const moved = page({
+      currency: 'GBP',
+      totals: totals({ otherCurrency: 2 }),
+      kinds: { products: kind(), memberships: kind({ otherCurrency: 1 }), fees: kind({ otherCurrency: 1 }) },
+      payments: [{ id: 'm1', kind: 'membership', typeName: '1 Month', amountMinor: 4999, currency: 'USD', method: 'cash', paidAt: '2026-10-12T15:30:00.000Z', by: null, person: null, receiptNumber: 50 }],
+    });
+    expect(takingsWords(moved, 'memberships')).toBe('Memberships today: £0.00.');
+    expect(takingsNotes(moved, 'memberships')).toEqual(['1 sale or payment today was taken in another currency. It is listed below and not added to the total above.']);
+    expect(takingsWords(moved)).toBe('Taken today: £0.00.');
+    expect(takingsWords(moved, 'products')).toBe('No product sales yet today.');
+  });
+  it('each tab notes only its own tax, refunds and left-out rows', () => {
+    expect(takingsNotes(day(), 'products')).toEqual(['$0.16 of the product sales is tax.']);
+    expect(takingsNotes(day(), 'memberships')).toEqual(['Refunds noted today: $10.00. They are not taken off the total above.']);
+    expect(takingsNotes(day(), 'fees')).toEqual([]);
+    const busy = day({ paymentsNotShown: 3, kinds: { products: kind(), memberships: kind({ count: 103, notShown: 3 }), fees: kind({ count: 1 }) } });
+    expect(takingsNotes(busy, 'memberships')).toContain('The list shows the newest. 3 earlier ones are not listed.');
+    expect(takingsNotes(busy, 'fees')).toEqual([]);
+  });
+  it('each tab lists only its own rows, and a fee is never called a membership', () => {
+    const rows = takingsRows(day(), 'America/Chicago', '12h');
+    expect(rowsOfKind(rows, 'all').map((r) => r.title)).toEqual(['Late cancel fee · Spin', '1 Month (membership)', '2 × Water']);
+    expect(rowsOfKind(rows, 'products').map((r) => r.title)).toEqual(['2 × Water']);
+    expect(rowsOfKind(rows, 'memberships').map((r) => r.title)).toEqual(['1 Month (membership)']);
+    expect(rowsOfKind(rows, 'fees').map((r) => r.title)).toEqual(['Late cancel fee · Spin']);
+  });
+  it('the line under the list says where a payment or a fee is voided, only for what is listed', () => {
+    const rows = takingsRows(day(), 'America/Chicago', '12h');
+    expect(takingsPaymentsNote(rowsOfKind(rows, 'all'))).toBe("To void or refund a membership payment, or to void a fee, open the member's page.");
+    expect(takingsPaymentsNote(rowsOfKind(rows, 'memberships'))).toBe("To void or refund a membership payment, open the member's page.");
+    expect(takingsPaymentsNote(rowsOfKind(rows, 'fees'))).toBe("To void a fee, open the member's page.");
+    expect(takingsPaymentsNote(rowsOfKind(rows, 'products'))).toBeNull();
+  });
+});
 
 describe('who may', () => {
   it('each tick opens its own half, and either opens the page', () => {

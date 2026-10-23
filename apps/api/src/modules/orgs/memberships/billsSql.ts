@@ -551,40 +551,47 @@ export interface DayPaymentRow {
   entryId: string | null;
   personName: string | null;
   receiptNumber: number;
+  /** A late cancel, no-show or freeze fee, not the membership itself (18q-ii). */
+  fee: boolean;
 }
 
 /** THE MEMBERSHIP PAYMENTS RECORDED ON ONE OF THE GYM'S DAYS that stand (18b-i: the Sell
  *  page's takings), newest first, with what they add up to by how they were paid and in
- *  which money, and the refunds noted that day. */
+ *  which money, and the refunds noted that day. Fees and membership payments are counted
+ *  apart, and the newest `limit` of each are listed, so neither crowds the other out (18q-ii). */
 export async function paymentsOn(
   sql: Sql | TransactionSql,
   gymId: string,
   day: string,
   limit: number,
-): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; count: number; totalMinor: number }[]; refunds: { currency: string; totalMinor: number }[] }> {
+): Promise<{ payments: DayPaymentRow[]; count: number; sums: { method: MemberPaymentMethod; currency: string; fee: boolean; count: number; totalMinor: number }[]; refunds: { currency: string; fee: boolean; totalMinor: number }[] }> {
   const [rows, sums, refunds] = await Promise.all([
     sql<{ id: string; type_name: string; fee: string | null; fee_for: string | null; amount_minor: number; currency: string; method: string; created_at: Date; by: string | null; entry_id: string | null; full_name: string | null; receipt_number: number }[]>`
-      SELECT p.id, t.name AS type_name, b.fee, b.fee_for, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name, p.receipt_number
-      FROM gym_member_payments p
+      SELECT p.id, t.name AS type_name, p.fee, b.fee_for, p.amount_minor, p.currency, p.method, p.created_at, u.display_name AS by, h.entry_id, e.full_name, p.receipt_number
+      FROM (SELECT d.*, b.fee, row_number() OVER (PARTITION BY b.fee IS NULL ORDER BY d.seq DESC) AS nth
+            FROM gym_member_payments d
+            JOIN gym_member_bills b ON b.gym_id = d.gym_id AND b.id = d.bill_id
+            WHERE d.gym_id = ${gymId} AND d.paid_on = ${day}::date AND d.undone_at IS NULL) p
       JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
       JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
       LEFT JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
       LEFT JOIN users u ON u.id = p.recorded_by
+      WHERE p.nth <= ${limit}
+      ORDER BY p.seq DESC`,
+    sql<{ method: string; currency: string; fee: boolean; n: number; total: string }[]>`
+      SELECT p.method, p.currency, b.fee IS NOT NULL AS fee, count(*)::int AS n, sum(p.amount_minor)::text AS total
+      FROM gym_member_payments p
+      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       WHERE p.gym_id = ${gymId} AND p.paid_on = ${day}::date AND p.undone_at IS NULL
-      ORDER BY p.seq DESC
-      LIMIT ${limit}`,
-    sql<{ method: string; currency: string; n: number; total: string }[]>`
-      SELECT method, currency, count(*)::int AS n, sum(amount_minor)::text AS total
-      FROM gym_member_payments
-      WHERE gym_id = ${gymId} AND paid_on = ${day}::date AND undone_at IS NULL
-      GROUP BY method, currency`,
-    sql<{ currency: string; total: string }[]>`
-      SELECT r.currency, sum(r.amount_minor)::text AS total
+      GROUP BY p.method, p.currency, b.fee IS NOT NULL`,
+    sql<{ currency: string; fee: boolean; total: string }[]>`
+      SELECT r.currency, b.fee IS NOT NULL AS fee, sum(r.amount_minor)::text AS total
       FROM gym_member_refunds r
       JOIN gym_member_payments p ON p.gym_id = r.gym_id AND p.id = r.payment_id
+      JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       WHERE r.gym_id = ${gymId} AND r.refunded_on = ${day}::date AND r.undone_at IS NULL AND p.undone_at IS NULL
-      GROUP BY r.currency`,
+      GROUP BY r.currency, b.fee IS NOT NULL`,
   ]);
   const count = sums.reduce((n, row) => n + row.n, 0);
   return {
@@ -600,11 +607,12 @@ export async function paymentsOn(
       entryId: r.entry_id,
       personName: r.full_name,
       receiptNumber: r.receipt_number,
+      fee: r.fee !== null,
     })),
     count,
     // One money is never added to another: each sum says which it is in.
-    sums: sums.map((row) => ({ method: memberPaymentMethodSchema.parse(row.method), currency: row.currency, count: row.n, totalMinor: Number(row.total) })),
-    refunds: refunds.map((row) => ({ currency: row.currency, totalMinor: Number(row.total) })),
+    sums: sums.map((row) => ({ method: memberPaymentMethodSchema.parse(row.method), currency: row.currency, fee: row.fee, count: row.n, totalMinor: Number(row.total) })),
+    refunds: refunds.map((row) => ({ currency: row.currency, fee: row.fee, totalMinor: Number(row.total) })),
   };
 }
 

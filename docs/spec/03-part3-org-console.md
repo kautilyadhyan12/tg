@@ -4061,6 +4061,17 @@ payment, one receipt.
   on a sale of several asks "Which product was it for?" first; each refund line under the sale
   names its product, and the sale's receipt says "given back for Water".
 
+**As built, 18q-ii (2026-10-23; `rulings/2026-10-23-18d-iii-i.md`).** **The day split by kind**, as
+Mindbody's Sales by category run for one day: tabs above the day's list, **All · Products ·
+Memberships · Fees**, each with its total. Products are the sales of products; Memberships are
+membership payments, class packs and drop-ins among them; Fees are late cancel, no-show and freeze
+fees. A tab's line names its kind, its money and how it was paid ("Fees today: $15.00 from 1 fee.
+Cash $15.00."), or "No fees taken yet today."; its notes are its own (tax and discounts under
+Products, refunds where they were noted, rows in another money, rows left out). The server adds up
+each kind as it adds up the day, so the three come to All; it lists the newest 100 of product
+sales, of membership payments and of fees, so one kind never pushes another off its tab. A fee's
+row is named for what it was for ("Late cancel fee · Spin"), never "(membership)".
+
 ### 14.4 Pay by the gym's own link
 
 **DROPPED 2026-10-15** (Kd, `rulings/2026-10-15-18g-i.md`: not standard practice; members pay

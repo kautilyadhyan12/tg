@@ -292,7 +292,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18o. [x] **Void a payment, as gym software does** — merged 2026-10-16 (PR #282).
    - 18p. [x] **Refund a sale at the desk** — merged 2026-10-16 (PR #295).
    - 18q. [x] **A basket at Sell** — merged 2026-10-17 (PR #306).
-   - 18q-ii. [ ] **Today's sales by kind at Sell**: All · Products · Memberships · Fees above the day's list, each with its total and only its sales (Mindbody's Sales by category, run daily). Kd, 2026-10-23: next in web folder 1, before 18d-iii-ii. A screen job.
+   - 18q-ii. [x] **Today's sales by kind at Sell** — merged 2026-10-23 (PR #347).
    - 18n. [x] **Download payments and receipts** — merged 2026-10-16 (PR #298).
    - 18h-i. [x] **A fee for a late cancel or a no-show, for classes** — merged 2026-10-17 (PR #309).
    - 18h-ii. [x] **The same fees for personal training** — merged 2026-10-17 (PR #311).

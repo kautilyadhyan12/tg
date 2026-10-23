@@ -345,6 +345,8 @@ export const dayPaymentSchema = z
     person: z.object({ entryId: z.string().uuid(), name: z.string() }).strict().nullable(),
     /** Its receipt's number, the gym's own (18g-i). */
     receiptNumber: receiptNumberSchema,
+    /** A late cancel, no-show or freeze fee rather than the membership itself (18q-ii). */
+    kind: z.enum(["membership", "fee"]),
   })
   .strict();
 export type DayPayment = z.infer<typeof dayPaymentSchema>;
@@ -376,6 +378,29 @@ export const saleTotalsSchema = z
   })
   .strict();
 export type SaleTotals = z.infer<typeof saleTotalsSchema>;
+
+/** One kind's share of the day (18q-ii): product sales, membership payments (class packs and
+ *  drop-ins among them), or late cancel, no-show and freeze fees. Worked out like `totals`:
+ *  what stands, in the gym's own money, by how it was paid; the three add up to `totals`. */
+export const kindTotalsSchema = z
+  .object({
+    /** Sales or payments that stand. */
+    count: z.number().int().min(0),
+    totalMinor: z.number().int().min(0),
+    cash: z.number().int().min(0),
+    upi: z.number().int().min(0),
+    card_at_desk: z.number().int().min(0),
+    bank_transfer: z.number().int().min(0),
+    link: z.number().int().min(0),
+    company: z.number().int().min(0),
+    terminal: z.number().int().min(0),
+    refundedMinor: z.number().int().min(0),
+    otherCurrency: z.number().int().min(0),
+    /** Earlier ones of this kind the list leaves out. */
+    notShown: z.number().int().min(0),
+  })
+  .strict();
+export type KindTotals = z.infer<typeof kindTotalsSchema>;
 
 /** The Sell page: what there is to sell, the gym's tax, and today's sales. */
 export const sellPageResponseSchema = z
@@ -415,12 +440,14 @@ export const sellPageResponseSchema = z
      *  totals at nothing, since a sale names who bought it. */
     sales: z.array(gymSaleSchema),
     salesNotShown: z.number().int().min(0),
-    /** Membership payments recorded today, newest first; null for a reader who cannot
-     *  record payments. */
+    /** Membership payments and fees recorded today, newest first: the newest of each kind
+     *  (`SALES_SHOWN` apiece); null for a reader who cannot record payments. */
     payments: z.array(dayPaymentSchema).nullable(),
     paymentsNotShown: z.number().int().min(0),
     /** Today's takings, added up. */
     totals: saleTotalsSchema,
+    /** The same, for each kind (18q-ii). */
+    kinds: z.object({ products: kindTotalsSchema, memberships: kindTotalsSchema, fees: kindTotalsSchema }).strict(),
   })
   .strict();
 export type SellPageResponse = z.infer<typeof sellPageResponseSchema>;

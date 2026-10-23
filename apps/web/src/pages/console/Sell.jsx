@@ -38,10 +38,14 @@ import {
   productOption,
   quantityMax,
   soldWords,
+  rowsOfKind,
   takingsHeading,
   takingsNotes,
+  takingsPaymentsNote,
   takingsRows,
+  takingsTabTotal,
   takingsWords,
+  TAKINGS_TABS,
   SALE_VOID_CHOICES,
   saleVoidedWords,
   voidSaleQuestion,
@@ -845,6 +849,8 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
   const [receiptFor, setReceiptFor] = useState(null);
   const [state, setState] = useState({ busy: false, error: null, done: null });
   const [all, setAll] = useState(false);
+  /** Which kind of the day's takings is shown (18q-ii): all, products, memberships or fees. */
+  const [tab, setTab] = useState('all');
 
   const loadOther = useCallback(
     (day) =>
@@ -896,8 +902,8 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
     setAsking(null);
   };
 
-  const rows = shownPage === null ? [] : takingsRows(shownPage, org.timezone, org.clockFormat);
-  const hasPayments = rows.some((r) => r.kind === 'payment');
+  const rows = shownPage === null ? [] : rowsOfKind(takingsRows(shownPage, org.timezone, org.clockFormat), tab);
+  const paymentsNote = takingsPaymentsNote(rows);
   const shown = all ? rows : rows.slice(0, TAKINGS_FOLDED);
 
   return (
@@ -924,10 +930,27 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
           )
         ) : (
           <>
+            <div className="flex flex-wrap gap-2 py-1" role="group" aria-label="Kind of sale">
+              {TAKINGS_TABS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={tab === key}
+                  className={tab === key ? 'c-chip c-chip-on' : 'c-chip'}
+                  onClick={() => {
+                    setTab(key);
+                    setAll(false);
+                  }}
+                >
+                  {label}
+                  <span className="c-n">{takingsTabTotal(shownPage, key)}</span>
+                </button>
+              ))}
+            </div>
             <p className="c-s15 c-w6 c-t1 m-0" data-testid="takings-line">
-              {takingsWords(shownPage)}
+              {takingsWords(shownPage, tab)}
             </p>
-            {takingsNotes(shownPage).map((note) => (
+            {takingsNotes(shownPage, tab).map((note) => (
               <p key={note} className="c-s13 c-t3 m-0">
                 {note}
               </p>
@@ -1043,9 +1066,9 @@ function Takings({ gymId, org, page, locked, canOpenPeople, onOpenPerson, onPage
           </button>
         </div>
       ) : null}
-      {hasPayments ? (
+      {paymentsNote !== null ? (
         <p className="px-4 py-3 c-s13 c-t3 m-0" style={LINE}>
-          To void or refund a membership payment, open the member&apos;s page.
+          {paymentsNote}
         </p>
       ) : null}
     </section>

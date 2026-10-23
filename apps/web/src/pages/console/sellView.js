@@ -204,30 +204,77 @@ export function takingsHeading(page) {
   return pastDay(page) ? shortDay(page.day) : 'Today';
 }
 
-/** The line above the day's list: how much was taken and how. */
-export function takingsWords(page) {
+/** How a total was paid: "Cash $1.99 · Card at the desk $49.99". */
+const howWords = (t, money) => {
+  const how = [];
+  if (t.cash > 0) how.push(`Cash ${money(t.cash)}`);
+  if (t.upi > 0) how.push(`UPI ${money(t.upi)}`);
+  if (t.card_at_desk > 0) how.push(`Card at the desk ${money(t.card_at_desk)}`);
+  if (t.bank_transfer > 0) how.push(`Bank transfer ${money(t.bank_transfer)}`);
+  // Named as each payment's own row names it.
+  if (t.link > 0) how.push(`${methodWords('link')} ${money(t.link)}`);
+  if (t.company > 0) how.push(`${methodWords('company')} ${money(t.company)}`);
+  if (t.terminal > 0) how.push(`${methodWords('terminal')} ${money(t.terminal)}`);
+  return how.join(' · ');
+};
+
+/** "a, b and c". */
+const listed = (parts) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
+
+/** The kinds the day's list is split into (18q-ii), as the tabs above it name them. */
+export const TAKINGS_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'products', label: 'Products' },
+  { key: 'memberships', label: 'Memberships' },
+  { key: 'fees', label: 'Fees' },
+];
+
+const KIND_WORDS = {
+  products: { one: 'sale', many: 'sales', title: 'Products', none: 'No product sales' },
+  memberships: { one: 'membership payment', many: 'membership payments', title: 'Memberships', none: 'No membership payments' },
+  fees: { one: 'fee', many: 'fees', title: 'Fees', none: 'No fees taken' },
+};
+
+const NO_KIND = { count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0 };
+/** One kind's share of the day, as the server added it up. */
+export const kindTotals = (page, key) => page.kinds?.[key] ?? NO_KIND;
+
+/** What a tab says beside its name: the money it holds. */
+export function takingsTabTotal(page, key) {
+  return formatMinor(key === 'all' ? page.totals.totalMinor : kindTotals(page, key).totalMinor, page.currency ?? 'USD');
+}
+
+/** The line above the day's list: how much was taken and how, for the whole day or one kind. */
+export function takingsWords(page, key = 'all') {
   const { totals, currency } = page;
   const past = pastDay(page);
-  if (totals.count === 0 && totals.payments === 0) return past ? `Nothing was taken on ${shortDay(page.day)}.` : 'Nothing taken yet today.';
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
+  if (key !== 'all') {
+    const t = kindTotals(page, key);
+    const words = KIND_WORDS[key];
+    if (t.count === 0 && t.otherCurrency === 0) return past ? `${words.none} on ${shortDay(page.day)}.` : `${words.none} yet today.`;
+    // Only rows in another money: nothing in the gym's own, and the note under it says why they are listed.
+    if (t.count === 0) return `${words.title} ${past ? `on ${shortDay(page.day)}` : 'today'}: ${money(0)}.`;
+    return `${words.title} ${past ? `on ${shortDay(page.day)}` : 'today'}: ${money(t.totalMinor)} from ${count(t.count, words.one, words.many)}. ${howWords(t, money)}.`;
+  }
+  if (totals.count === 0 && totals.payments === 0) {
+    if (totals.otherCurrency > 0) return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(0)}.`;
+    return past ? `Nothing was taken on ${shortDay(page.day)}.` : 'Nothing taken yet today.';
+  }
   const what = [];
   if (totals.count > 0) what.push(count(totals.count, 'sale', 'sales'));
-  if (totals.payments > 0) what.push(count(totals.payments, 'membership payment', 'membership payments'));
-  const how = [];
-  if (totals.cash > 0) how.push(`Cash ${money(totals.cash)}`);
-  if (totals.upi > 0) how.push(`UPI ${money(totals.upi)}`);
-  if (totals.card_at_desk > 0) how.push(`Card at the desk ${money(totals.card_at_desk)}`);
-  if (totals.bank_transfer > 0) how.push(`Bank transfer ${money(totals.bank_transfer)}`);
-  // Named as each payment's own row names it.
-  if (totals.link > 0) how.push(`${methodWords('link')} ${money(totals.link)}`);
-  if (totals.company > 0) how.push(`${methodWords('company')} ${money(totals.company)}`);
-  if (totals.terminal > 0) how.push(`${methodWords('terminal')} ${money(totals.terminal)}`);
-  return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(totals.totalMinor)} from ${what.join(' and ')}. ${how.join(' · ')}.`;
+  const fees = kindTotals(page, 'fees').count;
+  if (totals.payments - fees > 0) what.push(count(totals.payments - fees, 'membership payment', 'membership payments'));
+  if (fees > 0) what.push(count(fees, 'fee', 'fees'));
+  return `${past ? `Taken on ${shortDay(page.day)}` : 'Taken today'}: ${money(totals.totalMinor)} from ${listed(what)}. ${howWords(totals, money)}.`;
 }
 
 /** The smaller lines under it, each only where it is true. */
-export function takingsNotes(page) {
-  const { totals, currency } = page;
+export function takingsNotes(page, key = 'all') {
+  const { currency } = page;
+  const all = key === 'all';
+  const kind = kindTotals(page, key);
+  const totals = all ? page.totals : { ...kind, taxMinor: key === 'products' ? page.totals.taxMinor : 0, discountMinor: key === 'products' ? (page.totals.discountMinor ?? 0) : 0 };
   const money = (minor) => formatMinor(minor, currency ?? 'USD');
   const notes = [];
   const past = pastDay(page);
@@ -240,7 +287,7 @@ export function takingsNotes(page) {
       `${count(totals.otherCurrency, `sale or payment ${that} was`, `sales or payments ${that} were`)} taken in another currency. ${totals.otherCurrency === 1 ? 'It is' : 'They are'} listed below and not added to the total above.`,
     );
   }
-  const hidden = page.salesNotShown + page.paymentsNotShown;
+  const hidden = all ? page.salesNotShown + page.paymentsNotShown : kind.notShown;
   if (hidden > 0) notes.push(`The list shows the newest. ${count(hidden, 'earlier one is', 'earlier ones are')} not listed.`);
   return notes;
 }
@@ -270,6 +317,7 @@ export function takingsRows(page, timeZone, clockFormat) {
     return {
       key: `sale-${sale.id}`,
       kind: 'sale',
+      group: 'products',
       at: sale.soldAt,
       title: basketTitle(basket),
       amount: formatMinor(basket.totalMinor, sale.currency),
@@ -288,8 +336,10 @@ export function takingsRows(page, timeZone, clockFormat) {
   const payments = (page.payments ?? []).map((payment) => ({
     key: `payment-${payment.id}`,
     kind: 'payment',
+    // A fee is named for what it was for ("Late cancel fee · Spin"), never as a membership.
+    group: payment.kind === 'fee' ? 'fees' : 'memberships',
     at: payment.paidAt,
-    title: `${payment.typeName} (membership)`,
+    title: payment.kind === 'fee' ? payment.typeName : `${payment.typeName} (membership)`,
     amount: formatMinor(payment.amountMinor, payment.currency),
     facts: facts(takingsPerson(payment.person, true), payment.method, payment.paidAt, payment.by),
     person: payment.person,
@@ -303,6 +353,21 @@ export function takingsRows(page, timeZone, clockFormat) {
     basket: null,
   }));
   return [...sales, ...payments].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+/** The rows of one tab: every row for All, or only those of its kind. */
+export function rowsOfKind(rows, key) {
+  return key === 'all' ? rows : rows.filter((row) => row.group === key);
+}
+
+/** Where a membership payment or a fee is voided or refunded: the member's page. */
+export function takingsPaymentsNote(rows) {
+  const memberships = rows.some((r) => r.group === 'memberships');
+  const fees = rows.some((r) => r.group === 'fees');
+  if (memberships && fees) return "To void or refund a membership payment, or to void a fee, open the member's page.";
+  if (memberships) return "To void or refund a membership payment, open the member's page.";
+  if (fees) return "To void a fee, open the member's page.";
+  return null;
 }
 
 /** Why a sale was voided, for a list to pick from (18o). */
