@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, orgService: { getMembershipAgreement: vi.fn(), signMembershipAgreement: vi.fn(), emailAgreementCopy: vi.fn() } };
+  return { ...actual, orgService: { getMembershipAgreement: vi.fn(), signMembershipAgreement: vi.fn(), emailAgreementCopy: vi.fn(), sendAgreementLink: vi.fn() } };
 });
 
 const { orgService } = await import('../../api/orgsApi');
@@ -175,5 +175,66 @@ describe('what was signed', () => {
     draw({ membership: { ...GOLD, agreement: { at: SIGNED.at } }, open: true });
     expect(await screen.findByText('There is no email address on their record, so no copy was emailed.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Email a copy' })).toBeNull();
+  });
+});
+
+describe('the emailed link to sign (18u-ii-b)', () => {
+  const LINK = { sentAt: '2026-10-15T17:00:00.000Z', expiresAt: '2026-10-29T17:00:00.000Z' };
+
+  it('emails the record a link from the line, says so in that place, and hands the link that works to the page', async () => {
+    orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'sent', link: LINK } });
+    const onLinkSent = vi.fn();
+    draw({ hasEmail: true, onLinkSent });
+    fireEvent.click(screen.getByRole('button', { name: 'Email a link to sign' }));
+    expect(await screen.findByText('A link to sign was emailed to them. It works for 14 days.')).toBeTruthy();
+    expect(orgService.sendAgreementLink).toHaveBeenCalledWith(GYM, MAYA, GOLD.id);
+    expect(onLinkSent).toHaveBeenCalledWith(LINK);
+  });
+
+  it('says a link went, with Send link again; no button for a record with no email address, or a reader who cannot change anything', () => {
+    draw({ hasEmail: true, membership: { ...GOLD, agreementLink: LINK } });
+    expect(screen.getByText('Link to sign emailed on 15 October 2026')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Send link again' })).toBeTruthy();
+    cleanup();
+    draw({ hasEmail: false });
+    expect(screen.queryByRole('button', { name: /link/ })).toBeNull();
+    cleanup();
+    draw({ hasEmail: true, readOnly: true });
+    expect(screen.queryByRole('button', { name: /link/ })).toBeNull();
+  });
+
+  it('says a link went less than a minute ago where another press sent it, and sends nothing more', async () => {
+    orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'recent', link: LINK } });
+    const onLinkSent = vi.fn();
+    draw({ hasEmail: true, onLinkSent });
+    fireEvent.click(screen.getByRole('button', { name: 'Email a link to sign' }));
+    expect(await screen.findByText("A link to sign was emailed to them less than a minute ago. If it hasn't arrived, try again in a minute.")).toBeTruthy();
+    expect(onLinkSent).toHaveBeenCalledWith(LINK);
+  });
+
+  it('says what went wrong where the link did not go, and hands nothing on', async () => {
+    orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'blocked', link: null } });
+    const onLinkSent = vi.fn();
+    draw({ hasEmail: true, onLinkSent });
+    fireEvent.click(screen.getByRole('button', { name: 'Email a link to sign' }));
+    expect(await screen.findByText("Their email address can't receive our emails. Check it in their details.")).toBeTruthy();
+    expect(onLinkSent).not.toHaveBeenCalled();
+  });
+
+  it('offers the link beside Sign later after Add membership, and closes the box once it went', async () => {
+    orgService.getMembershipAgreement.mockResolvedValue({ data: BOX });
+    orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'sent', link: LINK } });
+    const { onClose } = draw({ open: true, justGiven: true, hasEmail: true });
+    await screen.findByText('Hand this screen to Maya Patel. They read the agreement and sign it themselves.');
+    expect(screen.getByRole('button', { name: 'Sign later' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Email a link to sign' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(await screen.findByText('A link to sign was emailed to them. It works for 14 days.')).toBeTruthy();
+  });
+
+  it('says a signature came from the emailed link', async () => {
+    orgService.getMembershipAgreement.mockResolvedValue({ data: { ...BOX, signed: { ...SIGNED, by: null, via: 'link' } } });
+    draw({ open: true, membership: { ...GOLD, agreement: { at: SIGNED.at } } });
+    expect(await screen.findByText('Signed by Maya Patel on 15 October 2026, from the emailed link.')).toBeTruthy();
   });
 });

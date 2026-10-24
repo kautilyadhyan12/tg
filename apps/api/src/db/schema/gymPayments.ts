@@ -543,7 +543,7 @@ export const gymCardDeclineNotices = pgTable(
   ],
 );
 
-/** The email reminding a cardholder that their card on file expires this month (0162; 18d-iii-c):
+/** The email reminding a cardholder that their card on file expires this month (0163; 18d-iii-c):
  *  one a card and expiry date, for a gym that switched it on. The address is kept only while it
  *  waits to go. The record link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the
  *  migration only. */

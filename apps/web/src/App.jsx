@@ -26,6 +26,7 @@ import InvitationLink  from './pages/InvitationLink';
 import StaffInvitationLink from './pages/StaffInvitationLink';
 import GymPublicPage   from './pages/GymPublicPage';
 import InvitePage       from './pages/InvitePage';
+import AgreementSignPage from './pages/AgreementSignPage';
 import Invitations     from './pages/Invitations';
 import MyGyms          from './pages/MyGyms';
 import Running         from './pages/Running';
@@ -190,6 +191,8 @@ export default function App() {
             <Route path="/gyms/:slug" element={<GymPublicPage />} />
             {/* A member's invite link (20e-ii-a): public, for every business. */}
             <Route path="/invite/:code" element={<InvitePage />} />
+            {/* The emailed link to sign a membership agreement (18u-ii-b): public, the token after "#". */}
+            <Route path="/sign-agreement" element={<AgreementSignPage />} />
             {/* THE FRONT DESK (16b-i): a device the owner set up in Settings, no sign-in.
                 `/check-in/setup` takes the one-time link; `/check-in` is the desk. */}
             <Route path="/check-in/setup" element={<CheckinDesk />} />

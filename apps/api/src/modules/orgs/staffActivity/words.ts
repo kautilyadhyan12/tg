@@ -419,6 +419,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     text(s, "signer") === "guardian"
       ? `Had ${whose(s, "parent or guardian")} sign the membership agreement at the desk`
       : `Had ${person(s)} sign the membership agreement at the desk`,
+  // Signing from afar (18u-ii-b): the link staff emailed. The signing itself has nobody at the desk (NOT_STAFF).
+  "org.agreement_link_sent": (s) => `Emailed ${person(s)} a link to sign the membership agreement`,
   // Another of the business's agreements (18u-ii-a) names itself.
   "org.agreement_saved": (s) => `Saved ${agreementOf(s)}`,
   "org.agreement_stopped": (s) => `Stopped asking for ${agreementOf(s)}`,
@@ -484,6 +486,8 @@ export const NOT_STAFF: ReadonlySet<string> = new Set([
   "org.member_post_added",
   "org.member_post_removed",
   "org.lead_enquiry",
+  // The person signs from the emailed link, with nobody at the desk (18u-ii-b).
+  "org.agreement_signed_by_link",
   "org.lead_unsubscribed",
   "org.lead_complained",
   "org.restored",

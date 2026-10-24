@@ -852,6 +852,9 @@ export const heldMembershipSchema = z
     /** The business asks for an agreement to be signed for it (18u-ii-a): the one its line of the
      *  price list uses is in use. */
     agreementAsked: z.boolean().default(false),
+    /** The emailed link to sign its agreement (18u-ii-b), while it works: unused, not expired,
+     *  and sent to the address the record has now. */
+    agreementLink: z.object({ sentAt: z.string(), expiresAt: z.string() }).strict().nullable().default(null),
   })
   .strict();
 export type HeldMembershipItem = z.infer<typeof heldMembershipSchema>;

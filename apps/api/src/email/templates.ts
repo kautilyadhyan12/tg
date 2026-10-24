@@ -338,3 +338,35 @@ export function membershipAgreementEmail(words: {
     `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
   return { to: words.to, subject: `Your membership agreement with ${gym}`, text, html };
 }
+
+/** The link to sign a membership agreement from afar (ROADMAP 18u-ii-b), sent by the business to
+ *  the address on the person's record. The gym and membership names arrive already cleaned
+ *  (`gymNameForEmail`); the one link is to our own website, with the token after "#", so no
+ *  server's log keeps it. */
+export function agreementLinkEmail(words: {
+  to: string;
+  gymName: string;
+  membershipName: string;
+  /** The last day it works, in the business's own calendar: "7 Nov 2026". */
+  worksUntil: string;
+  signLink: string;
+}): EmailMessage {
+  const gym = words.gymName;
+  const lines = {
+    lead: `${gym} has asked you to read and sign your membership agreement for ${words.membershipName}.`,
+    how: "Open this link to read the agreement and sign it:",
+    until: `The link works until ${words.worksUntil}. Once you sign, a copy is emailed to you.`,
+    ignore: `If you weren't expecting this email, you can ignore it, or contact ${gym}.`,
+    footer: `Sent by ${APP_NAME} on behalf of ${gym}.`,
+  };
+  const text = `${lines.lead}\n\n${lines.how}\n${words.signLink}\n\n${lines.until}\n\n${lines.ignore}\n\n${lines.footer}\n`;
+  const html =
+    `<p>${escapeHtml(lines.lead)}</p>` +
+    `<p>${escapeHtml(lines.how)}</p>` +
+    `<p><a href="${escapeHtml(words.signLink)}" style="display:inline-block;padding:12px 22px;border-radius:999px;background:#111;color:#fff;text-decoration:none;font-weight:600">Read and sign</a></p>` +
+    `<p style="color:#666;font-size:13px">${escapeHtml(words.signLink)}</p>` +
+    `<p>${escapeHtml(lines.until)}</p>` +
+    `<p>${escapeHtml(lines.ignore)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(lines.footer)}</p>`;
+  return { to: words.to, subject: `Sign your membership agreement with ${gym}`, text, html };
+}

@@ -1489,6 +1489,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           addNow={addMembership}
           payNow={payNow}
           signNow={signNow !== null && signNow.entryId === p.entryId ? signNow.membershipId : null}
+          hasEmail={typeof p.email === 'string' && p.email !== ''}
         />
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
         {/* The card on file is for staff holding the payments tick alone (18d-ii). */}

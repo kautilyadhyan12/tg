@@ -1133,7 +1133,7 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // (`cardRetries.routes.test.ts`).
       "gym_card_decline_notices.entry_id",
       "gym_card_decline_notices.gym_id",
-      // The reminder before a card expires (0162; 18d-iii-c): the same. An email still waiting for
+      // The reminder before a card expires (0163; 18d-iii-c): the same. An email still waiting for
       // a record that is gone is never sent (`cardExpiry.routes.test.ts`).
       "gym_card_expiry_notices.entry_id",
       "gym_card_expiry_notices.gym_id",

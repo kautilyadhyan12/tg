@@ -1,11 +1,12 @@
-// A business's membership agreements and their signatures (ROADMAP 18u-i, 18u-ii-a). Mirrors
-// `0159_membership_agreement.sql` and `0161_agreement_per_price.sql`.
+// A business's membership agreements and their signatures (ROADMAP 18u-i, 18u-ii-a, 18u-ii-b).
+// Mirrors `0159_membership_agreement.sql`, `0161_agreement_per_price.sql` and
+// `0162_agreement_sign_links.sql`.
 //
 // A business has its main agreement (`name` null) and may write others, each named; a line of
 // the price list uses the one it names, or the main one. Every wording saved is a row, numbered
 // from 1 within its agreement, as a waiver's is; an agreement today is its highest version,
-// unless `stoppedAt` is set. A signature is one membership's, made at the desk, and keeps the
-// membership's details as the screen showed them.
+// unless `stoppedAt` is set. A signature is one membership's, made at the desk or from the emailed
+// link, and keeps the membership's details as the screen showed them.
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
@@ -75,11 +76,14 @@ export const gymAgreementSignatures = pgTable(
     witnessedBy: uuid("witnessed_by").references(() => users.id, { onDelete: "set null" }),
     signedAt: timestamp("signed_at", { withTimezone: true }).notNull().defaultNow(),
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    /** 'desk' or 'link' (18u-ii-b). */
+    signedVia: text("signed_via").notNull().default("desk"),
     recordDeletedAt: timestamp("record_deleted_at", { withTimezone: true }),
   },
   (t) => [
     check("gym_agreement_signatures_signer_check", sql`${t.signer} IN ('person', 'guardian')`),
     check("gym_agreement_signatures_name_check", sql`char_length(${t.signedName}) BETWEEN 2 AND 100`),
+    check("gym_agreement_signatures_via_check", sql`${t.signedVia} IN ('desk', 'link')`),
     check("gym_agreement_signatures_facts_check", sql`jsonb_typeof(${t.facts}) = 'array' AND jsonb_array_length(${t.facts}) BETWEEN 1 AND 30`),
     foreignKey({ name: "gym_agreement_signatures_agreement_fk", columns: [t.gymId, t.agreementId], foreignColumns: [gymAgreements.gymId, gymAgreements.id] }).onDelete(
       "cascade",
@@ -95,5 +99,37 @@ export const gymAgreementSignatures = pgTable(
     index("gym_agreement_signatures_deleted_idx")
       .on(t.recordDeletedAt)
       .where(sql`${t.recordDeletedAt} IS NOT NULL`),
+  ],
+);
+
+/** The emailed link to sign one membership's agreement (18u-ii-b): the newest only, kept as the
+ *  SHA-256 of its token, in hex. */
+export const gymAgreementSignLinks = pgTable(
+  "gym_agreement_sign_links",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id").notNull(),
+    heldMembershipId: uuid("held_membership_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    /** The record's address it was sent to: the link works only while the record still has it. */
+    sentTo: text("sent_to").notNull(),
+    sentBy: uuid("sent_by").references(() => users.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Its email went; until then it opens nothing and nothing says it was sent. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (t) => [
+    foreignKey({
+      name: "gym_agreement_sign_links_membership_fk",
+      columns: [t.gymId, t.heldMembershipId],
+      foreignColumns: [gymHeldMemberships.gymId, gymHeldMemberships.id],
+    }).onDelete("cascade"),
+    unique("gym_agreement_sign_links_one_uq").on(t.heldMembershipId),
+    unique("gym_agreement_sign_links_token_uq").on(t.tokenHash),
+    check("gym_agreement_sign_links_token_check", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
+    check("gym_agreement_sign_links_sent_to_check", sql`char_length(${t.sentTo}) BETWEEN 3 AND 320`),
+    check("gym_agreement_sign_links_expiry_check", sql`${t.expiresAt} > ${t.sentAt}`),
   ],
 );

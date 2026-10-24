@@ -142,6 +142,11 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
 const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
+/** While an emailed link to sign waits (18u-ii-b), how often the person's page looks again, and for
+ *  how long after staff last came back to the window: never a timer that runs on and on. Live
+ *  updates replace both (ROADMAP Stage 4 item 18; Kd, 2026-10-24). */
+const LINK_CHECK_MS = 30_000;
+const LINK_CHECK_FOR_MS = 15 * 60_000;
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -173,6 +178,11 @@ export default function MemberMemberships({
   payNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
+  /** The record has an email address: its memberships' agreements can be signed from an emailed link (18u-ii-b). */
+  hasEmail = false,
+  /** How often, and for how long, the page looks again while a link waits; the page's own unless a test says. */
+  linkCheckMs = LINK_CHECK_MS,
+  linkCheckForMs = LINK_CHECK_FOR_MS,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -250,6 +260,54 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  // An emailed link to sign is waiting (18u-ii-b): the person may sign it in another window or on
+  // their phone. Their memberships are read again, quietly, when staff come back to this window,
+  // and every 30 seconds while it is on screen for 15 minutes after that, so "Agreement signed"
+  // shows without a refresh and no page keeps asking for ever.
+  const linkWaiting = shown?.memberships.some((m) => m.agreement == null && m.agreementLink != null) === true;
+  useEffect(() => {
+    if (!linkWaiting || typeof window === 'undefined') return undefined;
+    let live = true;
+    let since = Date.now();
+    let every = null;
+    const readAgain = () => {
+      if (document.visibilityState !== 'visible') return;
+      orgService.getHeldMemberships(gymId, entryId).then(
+        (res) => {
+          if (live) setHeld({ entryId, ...res.data });
+        },
+        () => undefined,
+      );
+    };
+    const tick = () => {
+      if (Date.now() - since >= linkCheckForMs) {
+        window.clearInterval(every);
+        every = null;
+        return;
+      }
+      readAgain();
+    };
+    const keepChecking = () => {
+      since = Date.now();
+      if (every === null) every = window.setInterval(tick, linkCheckMs);
+    };
+    const cameBack = () => {
+      readAgain();
+      keepChecking();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') cameBack();
+    };
+    window.addEventListener('focus', cameBack);
+    document.addEventListener('visibilitychange', onVisible);
+    keepChecking();
+    return () => {
+      live = false;
+      window.removeEventListener('focus', cameBack);
+      document.removeEventListener('visibilitychange', onVisible);
+      if (every !== null) window.clearInterval(every);
+    };
+  }, [gymId, entryId, linkWaiting, linkCheckMs, linkCheckForMs]);
   const canBillHere = shown?.canBill === true;
   useEffect(() => {
     if (!canBillHere) return undefined;
@@ -1822,6 +1880,10 @@ export default function MemberMemberships({
             setAgreementFor(null);
           }}
           when={(iso) => noteDay(iso, gym?.timezone ?? null)}
+          hasEmail={hasEmail}
+          onLinkSent={(link) =>
+            setHeld((h) => (h === null || h.entryId !== entryId ? h : { ...h, memberships: h.memberships.map((x) => (x.id === m.id ? { ...x, agreementLink: link } : x)) }))
+          }
         />
         {renderBills(m, payInBill)}
         {renderFees(m)}

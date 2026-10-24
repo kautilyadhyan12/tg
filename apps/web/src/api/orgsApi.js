@@ -98,6 +98,7 @@ import {
   membershipAgreementResponseSchema,
   signMembershipAgreementResponseSchema,
   emailAgreementCopyResponseSchema,
+  sendAgreementLinkResponseSchema,
   notMeInvitationResponseSchema,
   billSettingsResponseSchema,
   classBookingSettingsResponseSchema,
@@ -757,6 +758,13 @@ export const orgService = {
       signMembershipAgreementResponseSchema,
       'the agreement',
       authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/agreement/sign`, body),
+    ),
+  /** Emails the record's address a link to sign this membership's agreement (18u-ii-b). */
+  sendAgreementLink: (gymId, entryId, membershipId) =>
+    readThrough(
+      sendAgreementLinkResponseSchema,
+      'the link to sign',
+      authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/member-list/entries/${encodeURIComponent(entryId)}/memberships/${encodeURIComponent(membershipId)}/agreement/link`, {}),
     ),
   emailAgreementCopy: (gymId, entryId, membershipId) =>
     readThrough(
