@@ -123,7 +123,7 @@ describe('Who pays', () => {
     orgService.getHeldMemberships.mockImplementation((_gym, entryId) => (entryId === AARAV ? Promise.resolve(heldAnswer([aaravGold])) : Promise.reject(new Error('not asked'))));
     const { rerender } = render(draw(RAVI, 'Ravi Kumar'));
     rerender(draw(PRIYA, 'Priya Sharma'));
-    await screen.findByText('Priya Sharma pays for 1 person.');
+    await screen.findByText('Priya Sharma pays their own bills and for 1 other person.');
     // Ravi's answer arrives late: Priya's page stays Priya's.
     await act(async () => lateForRavi(payers({ paidBy: person(DIYA, 'Diya Someone') })));
     expect(within(box()).queryByText(/Diya/)).toBeNull();
@@ -221,7 +221,7 @@ describe('Who pays', () => {
     await screen.findByText('Priya Sharma now pays for Diya Sharma.');
     expect(orgService.setPayer).toHaveBeenCalledWith(GYM, DIYA, PRIYA);
     expect(await screen.findByText('Nothing to pay now.')).toBeTruthy();
-    expect(screen.getByText('Priya Sharma pays for 1 person.')).toBeTruthy();
+    expect(screen.getByText('Priya Sharma pays their own bills and for 1 other person.')).toBeTruthy();
   });
 
   it("Remove asks first and says what happens to what is still unpaid; the server's refusal is said in the box", async () => {
@@ -244,7 +244,7 @@ describe('Who pays', () => {
   it('staff who may not record payments read who pays, are told who can change it, and see no bills', async () => {
     orgService.getPayers.mockResolvedValue(payers({ paysFor: [person(AARAV, 'Aarav Sharma')], canChange: false }));
     render(draw(PRIYA, 'Priya Sharma', { ...IRON, privileges: ['members.confirm'] }));
-    await screen.findByText('Priya Sharma pays for 1 person.');
+    await screen.findByText('Priya Sharma pays their own bills and for 1 other person.');
     expect(within(box()).getByText('Only staff who record payments can change who pays.')).toBeTruthy();
     expect(within(box()).queryAllByRole('button')).toHaveLength(0);
     await waitFor(() => expect(orgService.getHeldMemberships).not.toHaveBeenCalled());
