@@ -412,12 +412,18 @@ export const billSettingsSchema = z
   .strict();
 export type BillSettings = z.infer<typeof billSettingsSchema>;
 
+/** The last day of its month a reminder before a card expires is written (18d-iii-c): one written
+ *  later could not reach the front desk before the card stops (review round one). */
+export const CARD_EXPIRY_LAST_DAY = 25;
+
 /** What happens this month to a card on file that expires this month (18d-iii-c), from the
  *  cardholder's side. `will_email`: emailed this month while reminders are on (from 6 in the
- *  morning, gym time); `sending`: on its way; `emailed` on `on`; `no_email`: no email address on
- *  their record; `not_renewing`: the card pays for no membership that renews, so nothing is due on
- *  it; `not_sent`: tried and not sent (a bounced address, or the email service refused it). */
-export const cardExpiryOutcomeSchema = z.enum(["will_email", "sending", "emailed", "no_email", "not_renewing", "not_sent"]);
+ *  morning, gym time, up to the `CARD_EXPIRY_LAST_DAY`); `sending`: on its way; `emailed` on
+ *  `on`; `maybe_emailed`: handed to the email service, which never confirmed it; `no_email`: no
+ *  email address on their record; `not_renewing`: the card pays for no membership that renews, so
+ *  nothing is due on it; `not_sent`: an address that bounced or was refused, or the email service
+ *  refused it; `too_late`: past the `CARD_EXPIRY_LAST_DAY` with none written. */
+export const cardExpiryOutcomeSchema = z.enum(["will_email", "sending", "emailed", "maybe_emailed", "no_email", "not_renewing", "not_sent", "too_late"]);
 export type CardExpiryOutcome = z.infer<typeof cardExpiryOutcomeSchema>;
 
 export const cardExpiryPersonSchema = z

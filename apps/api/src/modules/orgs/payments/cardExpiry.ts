@@ -43,6 +43,8 @@ export interface CardExpiryDeps {
 }
 
 export interface CardExpiryRun {
+  /** Skipped for an address that can now be emailed (corrected, or no longer refused): written again. */
+  revived: number;
   queued: number;
   sent: number;
   skipped: number;
@@ -60,9 +62,12 @@ type Tally = "sent" | "skipped" | "dropped" | "failed" | "retried";
 /** Write the reminders that are due, then send what is due, up to one run's worth. Safe to run twice
  *  at once. */
 export async function sendDueCardExpiryNotices(deps: CardExpiryDeps): Promise<CardExpiryRun> {
-  const run: CardExpiryRun = { queued: 0, sent: 0, skipped: 0, dropped: 0, failed: 0, retried: 0, stoppedByProvider: false };
+  const run: CardExpiryRun = { revived: 0, queued: 0, sent: 0, skipped: 0, dropped: 0, failed: 0, retried: 0, stoppedByProvider: false };
   if (deps.settings.paused) return run;
-  if (deps.environment !== null) run.queued = await repo.queueDueNotices(deps.sql, { environment: deps.environment, now: deps.now(), gymIds: deps.gymIds ?? null });
+  if (deps.environment !== null) {
+    run.revived = await reviveCorrected(deps);
+    run.queued = await repo.queueDueNotices(deps.sql, { environment: deps.environment, now: deps.now(), gymIds: deps.gymIds ?? null });
+  }
   for (let taken = 0; taken < INVITE_SENDING.perRun; taken++) {
     const claim = await repo.claimNextNotice(deps.sql, { now: deps.now(), leaseMs: INVITE_SENDING.leaseMs, gymIds: deps.gymIds ?? null });
     if (claim === null) break;
@@ -76,6 +81,21 @@ export async function sendDueCardExpiryNotices(deps: CardExpiryDeps): Promise<Ca
     if (outcome === "sent") await deps.sleep(INVITE_SENDING.gapMs);
   }
   return run;
+}
+
+/** A reminder skipped for its address, whose record has an address now that can be emailed, is taken
+ *  off so the queue writes it again for that address. Answers how many. */
+async function reviveCorrected(deps: CardExpiryDeps): Promise<number> {
+  const skipped = (await repo.skippedForAddress(deps.sql, { now: deps.now(), gymIds: deps.gymIds ?? null })).flatMap((row) =>
+    row.email !== null && authEmailSchema.safeParse(row.email).success ? [{ ...row, hmac: emailHmac(deps.settings.hmacKey, row.email) }] : [],
+  );
+  const blocked = await repo.blockedOf(
+    deps.sql,
+    skipped.map((row) => row.hmac),
+  );
+  const open = skipped.filter((row) => !blocked.has(row.hmac));
+  for (const row of open) await repo.dropSkipped(deps.sql, row);
+  return open.length;
 }
 
 async function sendOne(deps: CardExpiryDeps, claim: repo.ClaimedNotice): Promise<Tally | "stop"> {

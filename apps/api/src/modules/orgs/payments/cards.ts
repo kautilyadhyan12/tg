@@ -49,7 +49,7 @@ import { readerOf } from "../myMembership/repo.js";
 import { payerOf } from "../payers/repo.js";
 import { gymHasLivePlan, insertAudit, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
-import { noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
+import { cardPaysForRenewal, noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
 import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
@@ -98,15 +98,25 @@ type Reminder = Pick<MemberCard, "expiryReminder" | "expiryReminderOn">;
 const NO_REMINDER: Reminder = { expiryReminder: null, expiryReminderOn: null };
 
 /** The reminder before the card expires (18d-iii-c), in its expiry month: the one written for this
- *  card and date, or, where the gym sends them, that none can go for want of an address. */
+ *  card and date, or, where the gym sends them and the card pays for a renewal, that none can go for
+ *  want of an address. */
 async function reminderOf(deps: PaymentsDeps, card: cards.CardRow, today: string, person: cards.CardPerson): Promise<Reminder> {
   if (!cardExpiresThisMonth(card, today)) return NO_REMINDER;
   const notice = await noticeOfCard(deps.sql, card);
   if (notice !== null) {
-    const state = notice.state === "sent" ? "emailed" : notice.state === "queued" || notice.state === "sending" ? "sending" : "not_sent";
+    const state =
+      notice.state === "sent"
+        ? "emailed"
+        : notice.state === "queued" || notice.state === "sending"
+          ? "sending"
+          : // Handed to the email service, which never confirmed it: it may have gone.
+            notice.reason === "send_unknown"
+            ? "maybe_emailed"
+            : "not_sent";
     return { expiryReminder: state, expiryReminderOn: notice.on };
   }
-  return person.email === null && (await remindersOn(deps.sql, card.gymId)) ? { expiryReminder: "no_email", expiryReminderOn: null } : NO_REMINDER;
+  if (person.email !== null || !(await remindersOn(deps.sql, card.gymId)) || !(await cardPaysForRenewal(deps.sql, card))) return NO_REMINDER;
+  return { expiryReminder: "no_email", expiryReminderOn: null };
 }
 
 const cardOf = (c: cards.CardRow, today: string, reminder: Reminder = NO_REMINDER): MemberCard => ({

@@ -36,6 +36,7 @@ const baseEnv = {
   DATABASE_URL: url ?? "",
   WEB_ORIGIN: "http://localhost:5173",
   JWT_SECRET: "card-expiry-secret-0123456789abcdef", // dummy test value, gitleaks:allow
+  INVITE_HMAC_SECRET: "card-expiry-address-key-0123456789abcdef", // dummy test value, gitleaks:allow
   LOG_LEVEL: "error",
   SQUARE_APPLICATION_ID: "sq0idp-CARDEXPIRYAPP", // dummy, gitleaks:allow
   SQUARE_ENV: "production",
@@ -93,18 +94,21 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
   const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
   const gyms: Gym[] = [];
   const mail: InviteEmail[] = [];
-  const HMAC_KEY = Buffer.alloc(32, 3);
-  // The app's daily cap is 0: a reminder about the card they saved is not held by it.
-  const remind = () =>
+  // The api's own key for addresses, so the box and the sender read the same bounced addresses.
+  const HMAC_KEY = Buffer.from(baseEnv.INVITE_HMAC_SECRET, "utf8");
+  // The app's daily cap is 0: a reminder about the card they saved is not held by it. `waitMs`: the
+  // email service takes that long to answer each email, so runs at once overlap.
+  const remind = (waitMs = 0) =>
     sendDueCardExpiryNotices({
       sql,
       log: quiet,
       settings: { hmacKey: HMAC_KEY, webOrigin: "http://localhost:5173", perDay: 0, paused: false, sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" } },
       sender: { from: "Invites <invites@example.test>", apiOrigin: "http://localhost:3000" },
       transport: {
-        send: (m) => {
+        send: async (m) => {
           mail.push(m);
-          return Promise.resolve({ kind: "sent", id: `re_${uniq()}` });
+          if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+          return { kind: "sent", id: `re_${uniq()}` };
         },
       },
       environment: "production",
@@ -186,7 +190,7 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
   const entryUrl = (gym: Gym, entryId: string) => `/v1/orgs/${gym.id}/member-list/entries/${entryId}`;
   /** A person on the list; `email: null` for one with a phone only. */
   const person = async (gym: Gym, fullName: string, email: string | null = `cexp-r-${uniq()}@example.com`): Promise<string> => {
-    const add = await send("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, email === null ? { fullName, phone: "+1 312 555 0100" } : { fullName, email });
+    const add = await send("POST", `/v1/orgs/${gym.id}/member-list/entries`, gym.owner.cookies, email === null ? { fullName, phone: `+1 312 555 ${String(1000 + (seq++ % 9000))}` } : { fullName, email });
     expect(add.statusCode, add.body).toBe(201);
     return (JSON.parse(add.body) as { entry: { entryId: string } }).entry.entryId;
   };
@@ -395,7 +399,8 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
       "Carl Cancelled": "not_renewing",
       "Pam Past Member": "not_renewing",
       "Nina Nothing": "not_renewing",
-      "Bo Bounced": "will_email",
+      // Bounced before: never emailed, and the box says so before anything is sent (round one).
+      "Bo Bounced": "not_sent",
     });
 
     await switchOn(gym);
@@ -410,6 +415,25 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     expect(await cardBox(gym, ids.get("Nell No Email") ?? "")).toMatchObject({ expiryReminder: "no_email" });
     expect(await cardBox(gym, ids.get("Stan Stopping") ?? "")).toMatchObject({ expiresThisMonth: true, expiryReminder: null });
     expect(await cardBox(gym, ids.get("Bo Bounced") ?? "")).toMatchObject({ expiryReminder: "not_sent" });
+
+    // Bo's address corrected at the desk: the next minute emails the new one (round one).
+    const boNew = `cexp-r-bo-${uniq()}@example.com`;
+    await sql`UPDATE gym_member_list_entries SET email = ${boNew} WHERE id = ${ids.get("Bo Bounced") ?? ""}`;
+    await remind();
+    expect(mailTo(boNew)).toHaveLength(1);
+    expect(mailTo(BOUNCED)).toHaveLength(0);
+    expect((await outcomes(gym))["Bo Bounced"]).toBe("emailed");
+    // An email the email service never confirmed may have gone: it is never said "not delivered".
+    await sql`
+      UPDATE gym_card_expiry_notices SET state = 'failed', reason = 'send_unknown', provider_id = NULL
+      WHERE gym_id = ${gym.id} AND entry_id = ${ids.get("Fred Frozen") ?? ""}`;
+    expect((await outcomes(gym))["Fred Frozen"]).toBe("maybe_emailed");
+    expect(await cardBox(gym, ids.get("Fred Frozen") ?? "")).toMatchObject({ expiryReminder: "maybe_emailed" });
+    // A card paying for nothing that renews, with no address: the reason is the renewal, not the address.
+    const ned = await person(gym, "Ned Nothing", null);
+    await cardFor(gym, ned, "5151", now);
+    expect((await outcomes(gym))["Ned Nothing"]).toBe("not_renewing");
+    expect(await cardBox(gym, ned)).toMatchObject({ expiresThisMonth: true, expiryReminder: null });
   });
 
   it("waits until 6 in the morning, and sends nothing for a card that changed, a gym that switched off or an address that changed meanwhile", async () => {
@@ -465,6 +489,67 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     expect(mailTo(await emailOf(una))).toHaveLength(0);
     // Una's card's new date has no reminder until its own last month.
     expect(await cardBox(gym, una)).toMatchObject({ expiresThisMonth: false, expiryReminder: null });
+  });
+
+  it("several workers at once, each email slow to answer: every cardholder is emailed exactly once", async () => {
+    clock = noonToday();
+    const now = chicagoMonth(clock);
+    const gym = await makeGym("Race Gym");
+    const typeId = await typeOf(gym);
+    const people: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const e = await person(gym, `Racer ${String(i)}`);
+      await renewing(gym, typeId, e);
+      await cardFor(gym, e, "6060", now);
+      people.push(e);
+    }
+    await switchOn(gym);
+    await Promise.all([remind(150), remind(150), remind(150)]);
+    for (const e of people) expect(mailTo(await emailOf(e))).toHaveLength(1);
+    const [rows] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_card_expiry_notices WHERE gym_id = ${gym.id} AND state = 'sent'`;
+    expect(rows?.n).toBe(6);
+  });
+
+  it("the statement before each email reads the rule again: a gym switched off, or another address, between the reads sends nothing", async () => {
+    clock = noonToday();
+    const now = chicagoMonth(clock);
+    const gym = await makeGym("Mark Gym");
+    const typeId = await typeOf(gym);
+    const ivy = await person(gym, "Ivy Between");
+    await renewing(gym, typeId, ivy);
+    await cardFor(gym, ivy, "7070", now);
+    await switchOn(gym);
+    const repo = await import("../src/modules/orgs/payments/cardExpiryRepo.js");
+    expect(await repo.queueDueNotices(sql, { environment: "production", now: clock, gymIds: [gym.id] })).toBe(1);
+    const claim = await repo.claimNextNotice(sql, { now: clock, leaseMs: 60_000, gymIds: [gym.id] });
+    if (claim === null) throw new Error("nothing to claim");
+    expect((await repo.noticeFacts(sql, claim, clock)).due).toBe(true);
+    // Switched off after the facts were read: the statement that comes before the email refuses.
+    await sql`UPDATE gyms SET card_expiry_reminders = false WHERE id = ${gym.id}`;
+    expect(await repo.markMaybeSent(sql, claim, "0".repeat(64), clock)).toBe(false);
+    await sql`UPDATE gyms SET card_expiry_reminders = true WHERE id = ${gym.id}`;
+    // Another address on the record after the facts were read: refused too.
+    const was = await emailOf(ivy);
+    await sql`UPDATE gym_member_list_entries SET email = ${`cexp-r-ivy-${uniq()}@example.com`} WHERE id = ${ivy}`;
+    expect(await repo.markMaybeSent(sql, claim, "0".repeat(64), clock)).toBe(false);
+    await sql`UPDATE gym_member_list_entries SET email = ${was} WHERE id = ${ivy}`;
+    expect(await repo.markMaybeSent(sql, claim, "0".repeat(64), clock)).toBe(true);
+  });
+
+  it("writes none after the 25th: one written so late could not reach the desk before the card stops", async () => {
+    // Noon in Chicago on the 26th of this month.
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+    clock = new Date(`${day.slice(0, 8)}26T17:00:00Z`);
+    const now = chicagoMonth(clock);
+    const gym = await makeGym("Late Gym");
+    const typeId = await typeOf(gym);
+    const lou = await person(gym, "Lou Late");
+    await renewing(gym, typeId, lou);
+    await cardFor(gym, lou, "8080", now);
+    await switchOn(gym);
+    await remind();
+    expect(mailTo(await emailOf(lou))).toHaveLength(0);
+    expect(await outcomes(gym)).toEqual({ "Lou Late": "too_late" });
   });
 
   it("is changed only by staff who record payments, refuses a bad value, and is kept in the gym's activity", async () => {

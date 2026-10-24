@@ -76,9 +76,10 @@ export const memberCardSchema = z
     /** In its expiry month, on the gym's day (18d-iii-c). */
     expiresThisMonth: z.boolean(),
     /** The reminder emailed this month to the cardholder (18d-iii-c), where the gym sends them:
-     *  `sending`, `emailed` on `expiryReminderOn`, `no_email` (none on their record) or `not_sent`.
-     *  Null where none was written. */
-    expiryReminder: z.enum(["sending", "emailed", "no_email", "not_sent"]).nullable(),
+     *  `sending`, `emailed` on `expiryReminderOn`, `maybe_emailed` (the email service never
+     *  confirmed it), `no_email` (none on their record, the card paying for a renewal) or
+     *  `not_sent`. Null where none was written. */
+    expiryReminder: z.enum(["sending", "emailed", "maybe_emailed", "no_email", "not_sent"]).nullable(),
     expiryReminderOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
     savedAt: z.string().datetime(),
     /** `desk`: on staff's screen; `app`: the member's own; `terminal`: on the gym's Square

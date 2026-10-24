@@ -22,6 +22,7 @@ import {
   changeFrom,
   MEMBER_LIST_BY_HAND_WORDS,
   billSettingsResponseSchema,
+  CARD_EXPIRY_LAST_DAY,
   type CardExpiryOutcome,
   type CardExpiryPreview,
   countAfterGap,
@@ -75,12 +76,16 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
-import { expiringCards, remindersOn, type ExpiringCard } from "../payments/cardExpiryRepo.js";
+import { blockedOf, expiringCards, remindersOn, type ExpiringCard } from "../payments/cardExpiryRepo.js";
+import { emailHmac } from "../invites/address.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 
 export interface HeldDeps {
   sql: Sql;
   now: () => Date;
+  /** The key the app's email addresses are kept by (`emailHmac`), for the card reminders' list
+   *  (18d-iii-c); null or left out: no address is read as bounced. */
+  emailKey?: Buffer | null;
 }
 
 const notFound = (): OrgsError => new OrgsError(404, "entry_not_found", MEMBER_LIST_BY_HAND_WORDS.entry_not_found);
@@ -901,16 +906,25 @@ export async function undoPaidMark(
   return await readOr404(deps, gymId, entryId, today, true);
 }
 
-/** What happens this month to each card that expires this month (18d-iii-c), by the worker's rule. */
-function expiryOutcome(card: ExpiringCard): CardExpiryOutcome {
-  if (card.notice !== null) {
-    if (card.notice.state === "sent") return "emailed";
-    if (card.notice.state === "queued" || card.notice.state === "sending") return "sending";
+/** What happens this month to each card that expires this month (18d-iii-c), by the worker's rule:
+ *  `blocked`, its holder's address bounced or was refused; `late`, past the last day one is written. */
+function expiryOutcome(card: ExpiringCard, blocked: boolean, late: boolean): CardExpiryOutcome {
+  const notice = card.notice;
+  // Skipped for an address that can be emailed now: the worker writes it again within the minute.
+  const revived = notice !== null && notice.state === "skipped" && ADDRESS_REASONS.includes(notice.reason ?? "") && card.email !== null && !blocked;
+  if (notice !== null && !revived) {
+    if (notice.state === "sent") return "emailed";
+    if (notice.state === "queued" || notice.state === "sending") return "sending";
+    // Handed to the email service, which never confirmed it: it may have gone.
+    if (notice.reason === "send_unknown") return "maybe_emailed";
     return "not_sent";
   }
-  if (!card.hasEmail) return "no_email";
-  return card.renewing ? "will_email" : "not_renewing";
+  if (!card.renewing) return "not_renewing";
+  if (card.email === null) return "no_email";
+  if (blocked) return "not_sent";
+  return late ? "too_late" : "will_email";
 }
+const ADDRESS_REASONS: readonly string[] = ["address_blocked", "address_invalid"];
 
 /** The saved cards that expire this month, for staff with the payments tick at a gym connected to
  *  Square: who the reminder goes to, and who it doesn't and why. */
@@ -918,14 +932,21 @@ async function cardExpiryPreview(deps: HeldDeps, gymId: string, privileges: read
   if (!privileges.includes(BILLING)) return null;
   const read = await expiringCards(deps.sql, { gymId, environment: null, now: deps.now() });
   if (read === null) return null;
+  const key = deps.emailKey ?? null;
+  const hmacOf = (email: string | null): string | null => (key === null || email === null ? null : emailHmac(key, email));
+  const blocked = await blockedOf(
+    deps.sql,
+    read.cards.flatMap((card) => hmacOf(card.email) ?? []),
+  );
+  const late = Number(read.today.slice(8, 10)) > CARD_EXPIRY_LAST_DAY;
   return {
-    month: read.month,
+    month: read.today.slice(0, 7),
     people: read.cards.map((card) => ({
       entryId: card.entryId,
       name: card.name,
       brand: card.brand,
       last4: card.last4,
-      outcome: expiryOutcome(card),
+      outcome: expiryOutcome(card, blocked.has(hmacOf(card.email) ?? ""), late),
       on: card.notice?.state === "sent" ? card.notice.on : null,
     })),
   };

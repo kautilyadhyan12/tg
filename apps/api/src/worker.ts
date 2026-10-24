@@ -578,7 +578,7 @@ if (invites === null || inviteSender === null) {
         now: () => new Date(),
         sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       });
-      if (expiry.queued + expiry.sent + expiry.skipped + expiry.dropped + expiry.failed + expiry.retried > 0) {
+      if (expiry.revived + expiry.queued + expiry.sent + expiry.skipped + expiry.dropped + expiry.failed + expiry.retried > 0) {
         log.info({ ...expiry, durationMs: Date.now() - expiryStartedAt, event: "job.finished", job: "invites.card_expiry" }, "job finished");
       }
     },

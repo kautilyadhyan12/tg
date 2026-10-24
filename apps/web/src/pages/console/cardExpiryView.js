@@ -1,4 +1,4 @@
-import { cardName } from '@app/shared';
+import { CARD_EXPIRY_LAST_DAY, cardName } from '@app/shared';
 import { shortDay } from './memberBillsView';
 
 // A REMINDER BEFORE A CARD EXPIRES (ROADMAP 18d-iii-c): what the Bills box lists under its tick,
@@ -14,7 +14,7 @@ export function monthWords(month) {
 
 export const CARD_EXPIRY_WORDS = {
   label: 'Email a reminder before a saved card expires',
-  hint: 'Sent on the 1st of the month a card expires, to whoever pays with it for a membership that renews. It asks them to give you their new card at the front desk.',
+  hint: `Emailed in the month a card expires: on the 1st, or on the day you turn this on or the card is saved, up to the ${String(CARD_EXPIRY_LAST_DAY)}th. It goes to whoever pays with it for a membership that renews, and asks them to give you their new card at the front desk.`,
 };
 
 /** The box's groups, in the order a person reads them. `on`: the reminders are saved as on. */
@@ -22,6 +22,8 @@ function groupTitle(outcome, on) {
   switch (outcome) {
     case 'emailed':
       return 'Emailed';
+    case 'maybe_emailed':
+      return 'May have been emailed: the email service did not confirm it';
     case 'sending':
       return 'Being sent';
     case 'will_email':
@@ -30,11 +32,13 @@ function groupTitle(outcome, on) {
       return 'Not emailed: no email address on their record';
     case 'not_renewing':
       return 'Not emailed: their card pays for no membership that renews';
+    case 'too_late':
+      return 'Not emailed: too close to the end of the month';
     default:
       return 'Not emailed: the email could not be delivered';
   }
 }
-const ORDER = ['emailed', 'sending', 'will_email', 'no_email', 'not_renewing', 'not_sent'];
+const ORDER = ['emailed', 'maybe_emailed', 'sending', 'will_email', 'no_email', 'not_renewing', 'not_sent', 'too_late'];
 
 /** What the box under the tick lists while it is ticked, or null. */
 export function cardExpiryBox(preview, { on, ticked }) {
@@ -67,6 +71,8 @@ export function cardReminderLine(card) {
       return card.expiryReminderOn ? `Expiry reminder emailed on ${shortDay(card.expiryReminderOn, false)}.` : 'Expiry reminder emailed.';
     case 'sending':
       return 'Expiry reminder being sent.';
+    case 'maybe_emailed':
+      return 'The expiry reminder may have been emailed: the email service did not confirm it.';
     case 'no_email':
       return 'No expiry reminder was sent: there is no email address on their record.';
     case 'not_sent':

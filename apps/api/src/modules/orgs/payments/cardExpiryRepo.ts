@@ -3,6 +3,7 @@
 // statement before each email all read it. The worker leases one row at a time and names its lease in
 // every write that finishes it, as the decline emails' queue does (`cardNoticesRepo.ts`). The address
 // is cleared in the statement that finishes a row.
+import { CARD_EXPIRY_LAST_DAY } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import type { SquareEnvironment } from "./square.js";
 
@@ -57,9 +58,9 @@ const gymDaySelect = (sql: SqlOrTx, q: DayQuery, only: ReturnType<typeof sql>) =
 const gymDay = (sql: SqlOrTx, q: DayQuery & { gymIds: readonly string[] | null }) => sql`
     gym_day AS (${gymDaySelect(sql, q, q.gymIds === null ? sql`true` : sql`c.gym_id = ANY(${[...q.gymIds]}::uuid[])`)})`;
 
-/** Write the reminders that are due, from 6 in the morning on each gym's clock, for the cards whose
- *  holder has an email address; once a card and expiry date. Safe to run twice at once. Answers how
- *  many were written. */
+/** Write the reminders that are due, from 6 in the morning on each gym's clock up to the
+ *  `CARD_EXPIRY_LAST_DAY` of the month, for the cards whose holder has an email address; once a card
+ *  and expiry date. Safe to run twice at once. Answers how many were written. */
 export async function queueDueNotices(sql: Sql, q: { environment: SquareEnvironment; now: Date; gymIds: readonly string[] | null }): Promise<number> {
   const rows = await sql<{ id: string }[]>`
     WITH ${gymDay(sql, { ...q, remindingOnly: true })}
@@ -68,7 +69,7 @@ export async function queueDueNotices(sql: Sql, q: { environment: SquareEnvironm
     FROM gym_day d
     JOIN gym_member_cards k ON k.gym_id = d.gym_id AND k.environment = d.environment AND k.account_id = d.account_id
     JOIN gym_member_list_entries e ON e.gym_id = k.gym_id AND e.id = k.entry_id
-    WHERE d.hour >= 6 AND e.email IS NOT NULL
+    WHERE d.hour >= 6 AND extract(day FROM d.today) <= ${CARD_EXPIRY_LAST_DAY} AND e.email IS NOT NULL
       AND NOT EXISTS (
         SELECT 1 FROM gym_card_expiry_notices n
         WHERE n.gym_id = k.gym_id AND n.environment = k.environment AND n.account_id = k.account_id AND n.card_id = k.card_id
@@ -97,16 +98,27 @@ export interface ExpiringCard {
   name: string;
   brand: string;
   last4: string;
-  hasEmail: boolean;
+  /** The holder's address, to be checked against the addresses that bounced; never sent to a screen. */
+  email: string | null;
   /** It pays for a membership that renews. */
   renewing: boolean;
   /** Its reminder for this expiry date, if one was written. */
-  notice: { state: NoticeState; on: string | null } | null;
+  notice: Notice | null;
+}
+
+/** A reminder written: its state, the gym's day it was sent, and why it was not. */
+export interface Notice {
+  state: NoticeState;
+  on: string | null;
+  reason: string | null;
 }
 
 /** The cards on file in the gym's connected account that expire in the gym's month now, whether the
  *  gym sends reminders or not, by name. Null where the gym is not connected to Square. */
-export async function expiringCards(sql: SqlOrTx, q: { gymId: string; environment: SquareEnvironment | null; now: Date }): Promise<{ month: string; cards: ExpiringCard[] } | null> {
+export async function expiringCards(
+  sql: SqlOrTx,
+  q: { gymId: string; environment: SquareEnvironment | null; now: Date },
+): Promise<{ today: string; cards: ExpiringCard[] } | null> {
   const [day] = await sql<{ today: string }[]>`
     SELECT ((${q.now}::timestamptz AT TIME ZONE g.timezone)::date)::text AS today
     FROM gyms g JOIN gym_payment_connections c ON c.gym_id = g.id
@@ -114,12 +126,12 @@ export async function expiringCards(sql: SqlOrTx, q: { gymId: string; environmen
     LIMIT 1`;
   if (day === undefined) return null;
   const rows = await sql<
-    { entry_id: string; full_name: string | null; brand: string; last4: string; has_email: boolean; renewing: boolean; state: NoticeState | null; on: string | null }[]
+    { entry_id: string; full_name: string | null; brand: string; last4: string; email: string | null; renewing: boolean; state: NoticeState | null; reason: string | null; on: string | null }[]
   >`
     WITH ${gymDay(sql, { environment: q.environment, now: q.now, gymIds: [q.gymId], remindingOnly: false })}
-    SELECT k.entry_id, e.full_name, k.brand, k.last4, e.email IS NOT NULL AS has_email,
+    SELECT k.entry_id, e.full_name, k.brand, k.last4, e.email::text AS email,
            ${paysForRenewal(sql)} AS renewing,
-           n.state, CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE d.timezone)::date)::text END AS on
+           n.state, n.reason, CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE d.timezone)::date)::text END AS on
     FROM gym_day d
     JOIN gym_member_cards k ON k.gym_id = d.gym_id AND k.environment = d.environment AND k.account_id = d.account_id
     JOIN gym_member_list_entries e ON e.gym_id = k.gym_id AND e.id = k.entry_id
@@ -129,17 +141,55 @@ export async function expiringCards(sql: SqlOrTx, q: { gymId: string; environmen
     WHERE k.exp_year = extract(year FROM d.today) AND k.exp_month = extract(month FROM d.today)
     ORDER BY e.full_name, k.entry_id`;
   return {
-    month: day.today.slice(0, 7),
+    today: day.today,
     cards: rows.map((r) => ({
       entryId: r.entry_id,
       name: r.full_name ?? "",
       brand: r.brand,
       last4: r.last4,
-      hasEmail: r.has_email,
+      email: r.email,
       renewing: r.renewing,
-      notice: r.state === null ? null : { state: r.state, on: r.on },
+      notice: r.state === null ? null : { state: r.state, on: r.on, reason: r.reason },
     })),
   };
+}
+
+/** Of these address keys (`emailHmac`), the ones that bounced or were refused anywhere: never sent to. */
+export async function blockedOf(sql: SqlOrTx, hmacs: readonly string[]): Promise<Set<string>> {
+  if (hmacs.length === 0) return new Set();
+  const rows = await sql<{ email_hmac: string }[]>`
+    SELECT email_hmac FROM email_suppressions WHERE gym_id IS NULL AND email_hmac = ANY(${[...hmacs]}::text[])`;
+  return new Set(rows.map((r) => r.email_hmac));
+}
+
+/** Whether the record's card pays for a membership that renews (`paysForRenewal`). */
+export async function cardPaysForRenewal(sql: SqlOrTx, card: { gymId: string; entryId: string }): Promise<boolean> {
+  const [row] = await sql<{ renewing: boolean }[]>`
+    SELECT ${paysForRenewal(sql)} AS renewing FROM gym_member_cards k WHERE k.gym_id = ${card.gymId} AND k.entry_id = ${card.entryId}`;
+  return row?.renewing === true;
+}
+
+/** This month's reminders not sent for their address (bounced or refused, or not an address), at the
+ *  gyms that send them, with the address on the cardholder's record now: the sender takes off those
+ *  whose address now can be sent to, so the queue writes them again for it (review round one). */
+export async function skippedForAddress(sql: Sql, q: { now: Date; gymIds: readonly string[] | null }): Promise<{ id: string; gymId: string; email: string | null }[]> {
+  const rows = await sql<{ id: string; gym_id: string; email: string | null }[]>`
+    SELECT s.id, s.gym_id, e.email::text AS email
+    FROM gym_card_expiry_notices s
+    JOIN gyms g ON g.id = s.gym_id AND g.card_expiry_reminders
+    JOIN gym_member_list_entries e ON e.gym_id = s.gym_id AND e.id = s.entry_id
+    WHERE s.state = 'skipped' AND s.reason IN ('address_blocked','address_invalid')
+      AND s.exp_year = extract(year FROM (${q.now}::timestamptz AT TIME ZONE g.timezone)::date)
+      AND s.exp_month = extract(month FROM (${q.now}::timestamptz AT TIME ZONE g.timezone)::date)
+      AND (${q.gymIds === null}::boolean OR s.gym_id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))`;
+  return rows.map((r) => ({ id: r.id, gymId: r.gym_id, email: r.email }));
+}
+
+/** Take off a reminder skipped for its address, so the queue writes it again. */
+export async function dropSkipped(sql: Sql, row: { id: string; gymId: string }): Promise<void> {
+  await sql`
+    DELETE FROM gym_card_expiry_notices
+    WHERE id = ${row.id} AND gym_id = ${row.gymId} AND state = 'skipped' AND reason IN ('address_blocked','address_invalid')`;
 }
 
 /** A record's card's reminder for the expiry date it has now: its state and the gym's day it was
@@ -147,9 +197,9 @@ export async function expiringCards(sql: SqlOrTx, q: { gymId: string; environmen
 export async function noticeOfCard(
   sql: SqlOrTx,
   card: { gymId: string; environment: SquareEnvironment; accountId: string; cardId: string; expMonth: number; expYear: number },
-): Promise<{ state: NoticeState; on: string | null } | null> {
-  const [row] = await sql<{ state: NoticeState; on: string | null }[]>`
-    SELECT n.state, CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE g.timezone)::date)::text END AS on
+): Promise<Notice | null> {
+  const [row] = await sql<Notice[]>`
+    SELECT n.state, n.reason, CASE WHEN n.state = 'sent' THEN ((n.finished_at AT TIME ZONE g.timezone)::date)::text END AS on
     FROM gym_card_expiry_notices n JOIN gyms g ON g.id = n.gym_id
     WHERE n.gym_id = ${card.gymId} AND n.environment = ${card.environment} AND n.account_id = ${card.accountId} AND n.card_id = ${card.cardId}
       AND n.exp_year = ${card.expYear} AND n.exp_month = ${card.expMonth}`;
