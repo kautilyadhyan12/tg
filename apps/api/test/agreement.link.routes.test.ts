@@ -22,6 +22,8 @@ import {
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { AgreementCopyLetter, AgreementLinkLetter } from "../src/modules/orgs/agreement/email.js";
+import * as agreementRepo from "../src/modules/orgs/agreement/repo.js";
+import { sha256Hex } from "../src/modules/auth/tokens.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -338,6 +340,26 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
       expect([late.statusCode, errorOf(late).error, errorOf(late).message]).toEqual([410, "link_expired", AGREEMENT_WORDS.link_expired("Link Worst Gym")]);
       expect(await signatures(gymId)).toEqual([]);
       expect(copies).toEqual([]);
+
+      // The one statement that signs refuses a link that no longer works, whatever a caller checked
+      // first: run out, sent again (the old token), or sent to another address.
+      const direct = {
+        gymId,
+        agreementId: mayaPage.agreement.id,
+        entryId: maya,
+        membershipId: mayaYearly,
+        dateOfBirth: null,
+        signer: "person" as const,
+        name: "Maya Patel",
+        facts: mayaPage.facts,
+        witnessedBy: null,
+      };
+      expect(await agreementRepo.signAtDesk(sql, { ...direct, at: clock, linkTokenHash: sha256Hex(mayaAgain) })).toBeNull();
+      const inTime = new Date(start.getTime() + 3 * 60 * 1000);
+      expect(await agreementRepo.signAtDesk(sql, { ...direct, at: inTime, linkTokenHash: sha256Hex(mayaToken) })).toBeNull();
+      await sql`UPDATE gym_member_list_entries SET email = 'agrlink-p-maya-new@example.com' WHERE gym_id = ${gymId} AND id = ${maya}`;
+      expect(await agreementRepo.signAtDesk(sql, { ...direct, at: inTime, linkTokenHash: sha256Hex(mayaAgain) })).toBeNull();
+      expect(await signatures(gymId)).toEqual([]);
     },
     T,
   );
