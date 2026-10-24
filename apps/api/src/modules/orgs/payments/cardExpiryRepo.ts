@@ -61,7 +61,7 @@ const gymDay = (sql: SqlOrTx, q: DayQuery & { gymIds: readonly string[] | null }
 /** Write the reminders that are due, from 6 in the morning on each gym's clock up to the
  *  `CARD_EXPIRY_LAST_DAY` of the month, for the cards whose holder has an email address; once a card
  *  and expiry date. Safe to run twice at once. Answers how many were written. */
-export async function queueDueNotices(sql: Sql, q: { environment: SquareEnvironment; now: Date; gymIds: readonly string[] | null }): Promise<number> {
+export async function queueDueNotices(sql: SqlOrTx, q: { environment: SquareEnvironment; now: Date; gymIds: readonly string[] | null }): Promise<number> {
   const rows = await sql<{ id: string }[]>`
     WITH ${gymDay(sql, { ...q, remindingOnly: true })}
     INSERT INTO gym_card_expiry_notices (gym_id, entry_id, environment, account_id, card_id, exp_month, exp_year, email, state, not_before, created_at)
@@ -218,7 +218,7 @@ export interface ClaimedNotice {
 
 /** Take the next email that is due, and lease it. One that may already have gone is taken first: it
  *  is the same email again. */
-export async function claimNextNotice(sql: Sql, q: { now: Date; leaseMs: number; gymIds: readonly string[] | null }): Promise<ClaimedNotice | null> {
+export async function claimNextNotice(sql: SqlOrTx, q: { now: Date; leaseMs: number; gymIds: readonly string[] | null }): Promise<ClaimedNotice | null> {
   const rows = await sql<{ id: string; gym_id: string; entry_id: string | null; email: string | null; attempts: number; maybe_sent_at: Date | null; created_at: Date }[]>`
     WITH next AS (
       SELECT n.id FROM gym_card_expiry_notices n

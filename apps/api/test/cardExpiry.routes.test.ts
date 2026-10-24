@@ -510,6 +510,55 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     expect(rows?.n).toBe(6);
   });
 
+  it("two workers at the very same moment: the second writes no second reminder and takes no email the first has", async () => {
+    clock = noonToday();
+    const now = chicagoMonth(clock);
+    const gym = await makeGym("Lock Gym");
+    const typeId = await typeOf(gym);
+    const ola = await person(gym, "Ola Overlap");
+    await renewing(gym, typeId, ola);
+    await cardFor(gym, ola, "9090", now);
+    await switchOn(gym);
+    const repo = await import("../src/modules/orgs/payments/cardExpiryRepo.js");
+    const q = { environment: "production" as const, now: clock, gymIds: [gym.id] };
+    // The first worker's queue writes Ola's reminder and has not committed; the second's runs now,
+    // waits on it, and must write nothing once it commits.
+    let release = (): void => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let written = -1;
+    const first = sql.begin(async (tx) => {
+      written = await repo.queueDueNotices(tx, q);
+      await held;
+    });
+    while (written === -1) await new Promise((resolve) => setTimeout(resolve, 10));
+    const second = repo.queueDueNotices(sql, q);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    await first;
+    expect(written).toBe(1);
+    expect(await second).toBe(0);
+    // The first worker takes Ola's email and has not committed; the second, at that moment, must not
+    // take it too.
+    let releaseClaim = (): void => undefined;
+    const heldClaim = new Promise<void>((resolve) => {
+      releaseClaim = resolve;
+    });
+    let taken: string | null | undefined;
+    const claimFirst = sql.begin(async (tx) => {
+      taken = (await repo.claimNextNotice(tx, { now: clock, leaseMs: 60_000, gymIds: [gym.id] }))?.id ?? null;
+      await heldClaim;
+    });
+    while (taken === undefined) await new Promise((resolve) => setTimeout(resolve, 10));
+    const claimSecond = repo.claimNextNotice(sql, { now: clock, leaseMs: 60_000, gymIds: [gym.id] });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    releaseClaim();
+    await claimFirst;
+    expect(taken).not.toBeNull();
+    expect(await claimSecond).toBeNull();
+  });
+
   it("the statement before each email reads the rule again: a gym switched off, or another address, between the reads sends nothing", async () => {
     clock = noonToday();
     const now = chicagoMonth(clock);
