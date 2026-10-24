@@ -4397,7 +4397,10 @@ that names nothing says "This link isn't valid" and names nobody. The page needs
 reads the same details and words as the desk's box, with the same parent-or-guardian choice, and
 signs by the same one statement, which also asks that the link still works; the signature is kept
 as "from the emailed link" with nobody's screen, and the copy is emailed as at the desk. The line
-says "Link to sign emailed on {day}" while the link works, with Send link again. The phone app
+says "Link to sign emailed on {day}" while the link works, with Send link again; while a link
+waits, the person's page reads their memberships again when staff come back to the window, and
+every 30 seconds for 15 minutes after that, until live updates replace it (ROADMAP Stage 4 item 18;
+Kd, 2026-10-24). The phone app
 signs in the app (Stage 5 item 20).
 
 **Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
