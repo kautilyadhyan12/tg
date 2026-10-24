@@ -1956,3 +1956,24 @@ describe('a link to sign waiting (18u-ii-b)', () => {
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('the checks while a link waits stop by themselves (18u-ii-b; Kd, 2026-10-24)', () => {
+  const LINK = { sentAt: '2026-10-20T15:00:00.000Z', expiresAt: '2026-11-03T15:00:00.000Z' };
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  it('checks on a timer only for a while after staff were last here, and starts again when they come back', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...held(1, GOLD, TODAY, true), agreementLink: LINK }], false, { agreementInUse: true }));
+    // A check every 30 ms for 150 ms stands for every 30 seconds for 15 minutes.
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true, linkCheckMs: 30, linkCheckForMs: 150 }));
+    await boxSoon();
+    const calls = () => orgService.getHeldMemberships.mock.calls.length;
+    await waitFor(() => expect(calls()).toBeGreaterThan(2));
+    await pause(300);
+    const stopped = calls();
+    await pause(300);
+    expect(calls()).toBe(stopped);
+    fireEvent(window, new Event('focus'));
+    expect(calls()).toBe(stopped + 1);
+    await waitFor(() => expect(calls()).toBeGreaterThan(stopped + 2));
+  });
+});

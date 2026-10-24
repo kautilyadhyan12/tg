@@ -135,8 +135,6 @@ const LINK = 'c-btn c-btn-link c-btn-sm';
 // page's main colour, ending a membership is red, and the rest (Freeze, View receipt, ⋯)
 // stay plain. In a ⋯ list a void is red and a refund plain.
 const PAY = 'c-btn c-btn-p c-btn-sm';
-/** How often a person's page looks again while an emailed link to sign waits (18u-ii-b). */
-const LINK_CHECK_MS = 30_000;
 const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
@@ -144,6 +142,11 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
 const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
+/** While an emailed link to sign waits (18u-ii-b), how often the person's page looks again, and for
+ *  how long after staff last came back to the window: never a timer that runs on and on. Live
+ *  updates replace both (ROADMAP Stage 4 item 18; Kd, 2026-10-24). */
+const LINK_CHECK_MS = 30_000;
+const LINK_CHECK_FOR_MS = 15 * 60_000;
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -177,6 +180,9 @@ export default function MemberMemberships({
   checkEveryMs,
   /** The record has an email address: its memberships' agreements can be signed from an emailed link (18u-ii-b). */
   hasEmail = false,
+  /** How often, and for how long, the page looks again while a link waits; the page's own unless a test says. */
+  linkCheckMs = LINK_CHECK_MS,
+  linkCheckForMs = LINK_CHECK_FOR_MS,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -255,12 +261,15 @@ export default function MemberMemberships({
 
   const shown = held !== null && held.entryId === entryId ? held : null;
   // An emailed link to sign is waiting (18u-ii-b): the person may sign it in another window or on
-  // their phone. Their memberships are read again, quietly, when staff come back to this window
-  // and every 30 seconds while it is on screen, so "Agreement signed" shows without a refresh.
+  // their phone. Their memberships are read again, quietly, when staff come back to this window,
+  // and every 30 seconds while it is on screen for 15 minutes after that, so "Agreement signed"
+  // shows without a refresh and no page keeps asking for ever.
   const linkWaiting = shown?.memberships.some((m) => m.agreement == null && m.agreementLink != null) === true;
   useEffect(() => {
     if (!linkWaiting || typeof window === 'undefined') return undefined;
     let live = true;
+    let since = Date.now();
+    let every = null;
     const readAgain = () => {
       if (document.visibilityState !== 'visible') return;
       orgService.getHeldMemberships(gymId, entryId).then(
@@ -270,19 +279,35 @@ export default function MemberMemberships({
         () => undefined,
       );
     };
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') readAgain();
+    const tick = () => {
+      if (Date.now() - since >= linkCheckForMs) {
+        window.clearInterval(every);
+        every = null;
+        return;
+      }
+      readAgain();
     };
-    window.addEventListener('focus', readAgain);
+    const keepChecking = () => {
+      since = Date.now();
+      if (every === null) every = window.setInterval(tick, linkCheckMs);
+    };
+    const cameBack = () => {
+      readAgain();
+      keepChecking();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') cameBack();
+    };
+    window.addEventListener('focus', cameBack);
     document.addEventListener('visibilitychange', onVisible);
-    const every = window.setInterval(readAgain, LINK_CHECK_MS);
+    keepChecking();
     return () => {
       live = false;
-      window.removeEventListener('focus', readAgain);
+      window.removeEventListener('focus', cameBack);
       document.removeEventListener('visibilitychange', onVisible);
-      window.clearInterval(every);
+      if (every !== null) window.clearInterval(every);
     };
-  }, [gymId, entryId, linkWaiting]);
+  }, [gymId, entryId, linkWaiting, linkCheckMs, linkCheckForMs]);
   const canBillHere = shown?.canBill === true;
   useEffect(() => {
     if (!canBillHere) return undefined;
