@@ -29,6 +29,6 @@ export function linkClosedLine(page) {
 
 /** What the page says once signed, by what became of the copy. */
 export function linkSignedLine(emailed, gymName) {
-  if (emailed === 'sent') return 'A copy was emailed to you.';
+  if (emailed === 'sent') return 'A copy has been emailed to you.';
   return `Your copy could not be emailed. Ask ${gymName} for one.`;
 }

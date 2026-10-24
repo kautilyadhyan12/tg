@@ -1927,3 +1927,32 @@ describe('Take payment on Failed payments (18d-iii-ii-b)', () => {
     expect(screen.queryByTestId('held-pay')).toBeNull();
   });
 });
+
+describe('a link to sign waiting (18u-ii-b)', () => {
+  const LINK = { sentAt: '2026-10-20T15:00:00.000Z', expiresAt: '2026-11-03T15:00:00.000Z' };
+
+  it('looks again when staff come back to the window, and says Agreement signed without a refresh', async () => {
+    const gold = held(1, GOLD, TODAY, true);
+    orgService.getHeldMemberships
+      .mockResolvedValueOnce(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true }))
+      .mockResolvedValue(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    const b = await boxSoon();
+    expect(b.getByText('Agreement not signed')).toBeTruthy();
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
+    fireEvent(window, new Event('focus'));
+    expect(await b.findByText('Agreement signed')).toBeTruthy();
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
+    // Nothing waits now: coming back again reads nothing.
+    fireEvent(window, new Event('focus'));
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not look again where no link is waiting', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    await boxSoon();
+    fireEvent(window, new Event('focus'));
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
+  });
+});

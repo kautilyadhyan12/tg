@@ -135,6 +135,8 @@ const LINK = 'c-btn c-btn-link c-btn-sm';
 // page's main colour, ending a membership is red, and the rest (Freeze, View receipt, ⋯)
 // stay plain. In a ⋯ list a void is red and a refund plain.
 const PAY = 'c-btn c-btn-p c-btn-sm';
+/** How often a person's page looks again while an emailed link to sign waits (18u-ii-b). */
+const LINK_CHECK_MS = 30_000;
 const STOP = 'c-btn c-btn-danger c-btn-sm';
 /** A payment or refund staff voided: crossed out, in the page's quiet colour. */
 const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
@@ -252,6 +254,35 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  // An emailed link to sign is waiting (18u-ii-b): the person may sign it in another window or on
+  // their phone. Their memberships are read again, quietly, when staff come back to this window
+  // and every 30 seconds while it is on screen, so "Agreement signed" shows without a refresh.
+  const linkWaiting = shown?.memberships.some((m) => m.agreement == null && m.agreementLink != null) === true;
+  useEffect(() => {
+    if (!linkWaiting || typeof window === 'undefined') return undefined;
+    let live = true;
+    const readAgain = () => {
+      if (document.visibilityState !== 'visible') return;
+      orgService.getHeldMemberships(gymId, entryId).then(
+        (res) => {
+          if (live) setHeld({ entryId, ...res.data });
+        },
+        () => undefined,
+      );
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') readAgain();
+    };
+    window.addEventListener('focus', readAgain);
+    document.addEventListener('visibilitychange', onVisible);
+    const every = window.setInterval(readAgain, LINK_CHECK_MS);
+    return () => {
+      live = false;
+      window.removeEventListener('focus', readAgain);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(every);
+    };
+  }, [gymId, entryId, linkWaiting]);
   const canBillHere = shown?.canBill === true;
   useEffect(() => {
     if (!canBillHere) return undefined;

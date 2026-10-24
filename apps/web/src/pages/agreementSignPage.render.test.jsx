@@ -80,7 +80,7 @@ describe('signing from the link', () => {
     expect(button.disabled).toBe(true);
     typeAndTick();
     fireEvent.click(button);
-    expect(await screen.findByText('A copy was emailed to you.')).toBeTruthy();
+    expect(await screen.findByText('A copy has been emailed to you.')).toBeTruthy();
     expect(agreementLinkService.sign).toHaveBeenCalledWith(TOKEN, { agreementId: AGREEMENT.id, factsKey: KEY, signer: 'person', name: 'Maya Patel' });
     expect(screen.queryByRole('button', { name: 'Sign agreement' })).toBeNull();
   });
@@ -98,7 +98,7 @@ describe('signing from the link', () => {
     expect(screen.getByRole('button', { name: 'Sign agreement' }).disabled).toBe(true);
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Sign agreement' }));
-    await screen.findByText('A copy was emailed to you.');
+    await screen.findByText('A copy has been emailed to you.');
     expect(agreementLinkService.sign).toHaveBeenLastCalledWith(TOKEN, { agreementId: AGREEMENT.id, factsKey: KEY2, signer: 'person', name: 'Maya Patel' });
   });
 
@@ -109,7 +109,7 @@ describe('signing from the link', () => {
     expect(await screen.findByText('Sam Young is under 18, so a parent or guardian signs this agreement for them.')).toBeTruthy();
     typeAndTick("Parent or guardian's full name", 'Pat Young', "I am Sam Young's parent or guardian. I have read this agreement and I agree to it for them.");
     fireEvent.click(screen.getByRole('button', { name: 'Sign agreement' }));
-    await screen.findByText('A copy was emailed to you.');
+    await screen.findByText('A copy has been emailed to you.');
     expect(agreementLinkService.sign).toHaveBeenCalledWith(TOKEN, expect.objectContaining({ signer: 'guardian', name: 'Pat Young' }));
   });
 
