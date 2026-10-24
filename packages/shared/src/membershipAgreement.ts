@@ -105,6 +105,8 @@ export const agreementSignedSchema = z
     emailedAt: z.string().nullable(),
     /** The name of the other agreement it was signed with (18u-ii-a); null for the main one. */
     agreementName: z.string().nullable().default(null),
+    /** Signed at the desk, or by the person from the emailed link (18u-ii-b). */
+    via: z.enum(["desk", "link"]).default("desk"),
   })
   .strict();
 export type AgreementSigned = z.infer<typeof agreementSignedSchema>;
@@ -151,6 +153,59 @@ export type SignMembershipAgreementResponse = z.infer<typeof signMembershipAgree
 export const emailAgreementCopyResponseSchema = z.object({ emailed: agreementEmailedSchema, emailedAt: z.string().nullable() }).strict();
 export type EmailAgreementCopyResponse = z.infer<typeof emailAgreementCopyResponseSchema>;
 
+// ── Signing from afar: the emailed link (18u-ii-b) ──
+//
+// Staff email the record's address a link to its membership's agreement. The link opens a page
+// of its own, with no sign-in, that reads the same details and words as the desk's box and signs
+// with the same rule. Only the newest link of a membership works, until it is used, for
+// AGREEMENT_LINK_DAYS days, and only while the record's email address is the one it was sent to.
+
+export const AGREEMENT_LINK_DAYS = 14;
+
+/** The token in the link: 32 random bytes, base64url. */
+export const agreementLinkTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+/** A link that works today: when it was sent and until when it works. */
+export const agreementLinkSchema = z.object({ sentAt: z.string(), expiresAt: z.string() }).strict();
+export type AgreementLink = z.infer<typeof agreementLinkSchema>;
+
+/** What Email a link to sign did: the four outcomes of a copy, or "recent" where another press
+ *  emailed one less than a minute ago and nothing more was sent; and the link that works now. */
+export const agreementLinkSentSchema = z.enum(["sent", "recent", "no_email", "blocked", "failed"]);
+export type AgreementLinkSent = z.infer<typeof agreementLinkSentSchema>;
+export const sendAgreementLinkResponseSchema = z.object({ emailed: agreementLinkSentSchema, link: agreementLinkSchema.nullable() }).strict();
+export type SendAgreementLinkResponse = z.infer<typeof sendAgreementLinkResponseSchema>;
+
+export const agreementLinkReadBodySchema = z.object({ token: agreementLinkTokenSchema }).strict();
+export type AgreementLinkReadBody = z.infer<typeof agreementLinkReadBodySchema>;
+
+/** The page the link opens: the agreement to sign; already signed; or closed, with why. */
+export const agreementLinkResponseSchema = z.discriminatedUnion("state", [
+  z
+    .object({
+      state: z.literal("open"),
+      gymName: z.string(),
+      personName: z.string(),
+      /** Under 18 by the record's date of birth on the business's own day; null with none. */
+      minor: z.boolean().nullable(),
+      agreement: waiverToReadSchema.extend({ name: z.string().nullable() }).strict(),
+      facts: agreementFactsSchema,
+      factsKey: factsKeySchema,
+      expiresAt: z.string(),
+    })
+    .strict(),
+  z.object({ state: z.literal("signed"), gymName: z.string() }).strict(),
+  z.object({ state: z.literal("closed"), gymName: z.string(), reason: z.enum(["expired", "not_signable", "not_in_use"]) }).strict(),
+]);
+export type AgreementLinkResponse = z.infer<typeof agreementLinkResponseSchema>;
+
+/** The person signs from the link: the same as the desk sends, with the link's token. */
+export const agreementLinkSignBodySchema = signMembershipAgreementBodySchema.extend({ token: agreementLinkTokenSchema }).strict();
+export type AgreementLinkSignBody = z.infer<typeof agreementLinkSignBodySchema>;
+
+export const agreementLinkSignResponseSchema = z.object({ emailed: agreementEmailedSchema }).strict();
+export type AgreementLinkSignResponse = z.infer<typeof agreementLinkSignResponseSchema>;
+
 export const AGREEMENT_WORDS = {
   /** The business saved new words after the screen loaded. */
   agreement_changed: (gymName: string): string => `${gymName} has changed its membership agreement. Read the new one below, then sign it.`,
@@ -170,6 +225,12 @@ export const AGREEMENT_WORDS = {
   /** Email a copy, for a membership nobody has signed. */
   not_signed: "This membership's agreement hasn't been signed yet.",
   nothing_to_stop: "You have no membership agreement in use.",
+  /** Email a link to sign, for a membership already signed. */
+  already_signed: "This membership's agreement is already signed.",
+  /** A link we did not make, one sent again since, or one whose address is no longer the record's. */
+  link_not_valid: "This link isn't valid. If you copied it from an email, check that you copied all of it. If it still doesn't work, ask the business for a new link.",
+  /** Signing from a link that has run out. */
+  link_expired: (gymName: string): string => `This link has expired. Ask ${gymName} to send you a new one.`,
   not_found: "We couldn't find that.",
 } as const;
 

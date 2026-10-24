@@ -63,15 +63,30 @@ export function agreementStopWords() {
 
 // ── On a person's page, under one membership ──
 
-/** The line under a membership: signed, or still to sign. Null where there is nothing to say:
- *  no agreement in use and none signed, or one over and never signed. `when` writes a day. */
+/** The line under a membership: signed, or still to sign, with the emailed link to sign while it
+ *  works (18u-ii-b). Null where there is nothing to say: no agreement in use and none signed, or
+ *  one over and never signed. `when` writes a day. */
 export function agreementLineParts(membership, inUse, signable, when) {
   if (membership.agreement != null) {
     const day = when(membership.agreement.at);
     return { tone: 'good', label: 'Agreement signed', rest: day === '' ? '' : ` on ${day}`, signed: true };
   }
-  if (inUse && signable) return { tone: 'warn', label: 'Agreement not signed', rest: '', signed: false };
+  if (inUse && signable) {
+    const link = membership.agreementLink ?? null;
+    const day = link === null ? '' : when(link.sentAt);
+    const rest = link === null ? '' : day === '' ? 'Link to sign emailed' : `Link to sign emailed on ${day}`;
+    return { tone: 'warn', label: 'Agreement not signed', rest, signed: false, linkSent: link !== null };
+  }
   return null;
+}
+
+/** What Email a link to sign did, said under the membership. */
+export function agreementLinkSentLine(emailed, days) {
+  if (emailed === 'sent') return `A link to sign was emailed to them. It works for ${String(days)} days.`;
+  if (emailed === 'recent') return "A link to sign was emailed to them less than a minute ago. If it hasn't arrived, try again in a minute.";
+  if (emailed === 'no_email') return 'There is no email address on their record. Add one to their details, then try again.';
+  if (emailed === 'blocked') return "Their email address can't receive our emails. Check it in their details.";
+  return "The link didn't send. Try again later.";
 }
 
 /** The box's words for the one signing. */
@@ -102,11 +117,12 @@ export function agreementSignedLine(emailed) {
   return "Signed, but the copy didn't send. Press View, then Email a copy to try again.";
 }
 
-/** Who signed, as the signed copy says it. */
+/** Who signed, as the signed copy says it, and from the emailed link where it was (18u-ii-b). */
 export function agreementSignedBy(signed, when) {
   const day = when(signed.at);
   const on = day === '' ? '' : ` on ${day}`;
-  return signed.signer === 'guardian' ? `Signed by ${signed.name}, parent or guardian,${on}.` : `Signed by ${signed.name}${on}.`;
+  const from = signed.via === 'link' ? ', from the emailed link' : '';
+  return signed.signer === 'guardian' ? `Signed by ${signed.name}, parent or guardian,${on}${from}.` : `Signed by ${signed.name}${on}${from}.`;
 }
 
 /** What became of the copy, under the signed copy. */

@@ -1,4 +1,4 @@
-// A BUSINESS'S MEMBERSHIP AGREEMENTS (ROADMAP 18u-i, 18u-ii-a; rulings/2026-10-23-18u-i.md).
+// A BUSINESS'S MEMBERSHIP AGREEMENTS (ROADMAP 18u-i, 18u-ii-a, 18u-ii-b; rulings/2026-10-23-18u-i.md).
 //
 // The business's main agreement is signed for every line of its price list, unless the line is
 // ticked on another agreement of its own; a membership is signed with the one its line uses.
@@ -9,12 +9,25 @@
 // the details worked out again have that same key and the wording is still the business's.
 // What is kept and emailed is what the screen showed. Saving changed words makes a new numbered
 // wording: memberships already signed keep the words they signed.
-import { createHash } from "node:crypto";
+//
+// Signing from afar (18u-ii-b): staff email the record's address a link; the page it opens reads
+// the same details and words and signs by the same one statement, which also asks that the link
+// still works. A link names one membership and nothing else: the token is the whole request.
+import { createHash, randomBytes } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import {
+  AGREEMENT_LINK_DAYS,
   AGREEMENT_WORDS,
   MAIN_AGREEMENT_NAME,
+  agreementLinkResponseSchema,
+  agreementLinkSignResponseSchema,
+  sendAgreementLinkResponseSchema,
+  type AgreementLinkResponse,
+  type AgreementLinkSignBody,
+  type AgreementLinkSignResponse,
+  type SendAgreementLinkResponse,
   WAIVER_DESK_WORDS,
+  addDays,
   agreementFacts,
   agreementSignable,
   dayWords,
@@ -36,12 +49,13 @@ import {
   type WaiverToRead,
 } from "@app/shared";
 import type { Sql } from "postgres";
+import { sha256Hex } from "../../auth/tokens.js";
 import { dayInTz } from "../../gamification/streak.js";
 import { emailHmac } from "../invites/address.js";
 import { gymNameForEmail } from "../invites/gymText.js";
 import { suppressionsFor } from "../invites/repo.js";
 import { readOwnHeld } from "../memberships/heldService.js";
-import { insertAudit, lockOrgRow, type OrgRow } from "../repo.js";
+import { getOrgById, insertAudit, lockOrgRow, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import type { AgreementEmailSender } from "./email.js";
 import * as repo from "./repo.js";
@@ -53,6 +67,8 @@ export interface AgreementDeps {
   /** The key the suppression list's addresses are kept under; null where invitations are off. */
   addressKey: Buffer | null;
   log: FastifyBaseLogger;
+  /** Our website's origin, for the link to sign. */
+  webOrigin: string;
 }
 
 type Limit = () => Promise<boolean>;
@@ -249,6 +265,8 @@ interface Current {
   record: { fullName: string; dateOfBirth: string | null; email: string | null; former: boolean };
   /** Its details now, or null where it is over, cancelled or frozen. */
   facts: AgreementFact[] | null;
+  /** Its line of the price list's name; null with no details. */
+  typeName: string | null;
 }
 
 /** A membership of this record, with its details worked out now from what is stored. */
@@ -256,13 +274,13 @@ async function current(deps: AgreementDeps, org: OrgRow, entryId: string, member
   const record = await repo.membershipRecord(deps.sql, org.id, entryId, membershipId, opts);
   if (record === null) throw membershipNotFound();
   // A past member: their signed copy is read, and nothing is signed for them.
-  if (record.former) return { record, facts: null };
+  if (record.former) return { record, facts: null, typeName: null };
   const [held, contact] = await Promise.all([readOwnHeld({ sql: deps.sql, now: deps.now }, org.id, entryId, today), repo.gymContact(deps.sql, org.id)]);
   const membership = held.memberships.find((m) => m.id === membershipId);
   if (membership === undefined) throw membershipNotFound();
-  if (!agreementSignable(membership.view.status)) return { record, facts: null };
+  if (!agreementSignable(membership.view.status)) return { record, facts: null, typeName: null };
   const facts = agreementFacts({ gym: { name: org.name, ...contact }, personName: record.fullName, membership, firstBill: firstBillOf(membership.billing), taxIncluded: held.taxIncluded });
-  return { record, facts };
+  return { record, facts, typeName: membership.typeName };
 }
 
 const toSigned = (row: repo.SignatureRow): AgreementSigned => ({
@@ -275,6 +293,7 @@ const toSigned = (row: repo.SignatureRow): AgreementSigned => ({
   facts: row.facts,
   emailedAt: row.emailedAt === null ? null : row.emailedAt.toISOString(),
   agreementName: row.agreementName,
+  via: row.via,
 });
 
 /** The agreement a membership's line of the price list asks for today, or null for none. */
@@ -417,4 +436,197 @@ export async function emailAgreementCopy(
   const emailed = await sendCopy(deps, org, record.email, signed);
   const after = await repo.signatureOf(deps.sql, gymId, membershipId);
   return emailAgreementCopyResponseSchema.parse({ emailed, emailedAt: after?.emailedAt?.toISOString() ?? null });
+}
+
+// ── Signing from afar: the emailed link (18u-ii-b) ──
+
+/** How long a press waits to learn what became of another press's email, a quarter second at a
+ *  time: an email is sent in well under that, or has failed. */
+const OTHER_PRESS_WAITS = 60;
+const OTHER_PRESS_STEP_MS = 250;
+const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A press that found another press's link sent less than a minute ago: "recent" once its email
+ *  went, "failed" if it did not go (its link is removed), never "sent" for an email still going. */
+async function otherPressOutcome(deps: AgreementDeps, gymId: string, membershipId: string): Promise<"recent" | "failed"> {
+  for (let i = 0; i < OTHER_PRESS_WAITS; i++) {
+    const state = await repo.linkState(deps.sql, gymId, membershipId);
+    if (state === "emailed") return "recent";
+    if (state === "none") return "failed";
+    await pause(OTHER_PRESS_STEP_MS);
+  }
+  return "failed";
+}
+
+/** What became of the copy of a signature another press made: a signature less than a minute old
+ *  may still be sending it, so this press waits to learn which, rather than saying it failed. */
+async function firstPressCopy(deps: AgreementDeps, gymId: string, membershipId: string, signed: repo.SignatureRow, email: string | null): Promise<AgreementEmailed> {
+  if (signed.emailedAt !== null) return "sent";
+  if (email === null) return "no_email";
+  if (deps.now().getTime() - signed.at.getTime() >= 60_000) return "failed";
+  for (let i = 0; i < OTHER_PRESS_WAITS; i++) {
+    await pause(OTHER_PRESS_STEP_MS);
+    if ((await repo.signatureOf(deps.sql, gymId, membershipId))?.emailedAt != null) return "sent";
+  }
+  return "failed";
+}
+
+const linkNotValid = (): OrgsError => new OrgsError(404, "link_not_valid", AGREEMENT_WORDS.link_not_valid);
+/** 32 random bytes, base64url: 43 characters (`agreementLinkTokenSchema`). */
+const newToken = (): string => randomBytes(32).toString("base64url");
+
+/** Emails the record's address a link to sign this membership's agreement. Sending again makes
+ *  a new link and the old one stops working; a press while another sends answers "sent". */
+export async function sendAgreementLink(
+  deps: AgreementDeps,
+  userId: string,
+  gymId: string,
+  entryId: string,
+  membershipId: string,
+  limit: Limit,
+): Promise<SendAgreementLinkResponse | null> {
+  const { org } = await requireWritablePrivilege(deps, gymId, userId, DESK_TICK);
+  if (!(await limit())) return null;
+  const at = deps.now();
+  const now = await current(deps, org, entryId, membershipId, dayInTz(at, org.timezone));
+  if (now.facts === null || now.typeName === null) throw new OrgsError(409, "membership_not_signable", AGREEMENT_WORDS.membership_not_signable);
+  if ((await askedOf(deps.sql, gymId, membershipId)) === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
+  if ((await repo.signatureOf(deps.sql, gymId, membershipId)) !== null) throw new OrgsError(409, "already_signed", AGREEMENT_WORDS.already_signed);
+  const email = now.record.email;
+  const answer = async (emailed: SendAgreementLinkResponse["emailed"]): Promise<SendAgreementLinkResponse> => {
+    const link = (await repo.workingLinksOf(deps.sql, gymId, [membershipId], deps.now())).get(membershipId);
+    return sendAgreementLinkResponseSchema.parse({ emailed, link: link === undefined ? null : { sentAt: link.sentAt.toISOString(), expiresAt: link.expiresAt.toISOString() } });
+  };
+  if (email === null) return await answer("no_email");
+  const suppressed = deps.addressKey !== null && (await suppressionsFor(deps.sql, org.id, [emailHmac(deps.addressKey, email)])).size > 0;
+  if (suppressed) return await answer("blocked");
+  const token = newToken();
+  const tokenHash = sha256Hex(token);
+  // It works to the end of its last day in the business's calendar, the day the email names.
+  const today = dayInTz(at, org.timezone);
+  const lastDay = addDays(today, AGREEMENT_LINK_DAYS);
+  const claimed = await repo.claimLink(deps.sql, { gymId, membershipId, tokenHash, sentTo: email, sentBy: userId, at, endsBefore: addDays(lastDay, 1), timezone: org.timezone });
+  if (claimed === null) {
+    // Signed meanwhile, at the desk or from a link: nothing to send.
+    if ((await repo.signatureOf(deps.sql, gymId, membershipId)) !== null) throw new OrgsError(409, "already_signed", AGREEMENT_WORDS.already_signed);
+    // Another press sent one less than a minute ago: what became of its email is the answer.
+    return await answer(await otherPressOutcome(deps, gymId, membershipId));
+  }
+  try {
+    await deps.email.sendAgreementLink({
+      to: email,
+      gymName: gymNameForEmail(org.name),
+      membershipName: gymNameForEmail(now.typeName),
+      worksUntil: dayWords(lastDay),
+      signLink: `${deps.webOrigin}/sign-agreement#${token}`,
+    });
+  } catch (err) {
+    deps.log.warn({ event: "agreement.link_failed", gymId, errName: err instanceof Error ? err.name : typeof err }, "an agreement link was not emailed");
+    await repo.dropLink(deps.sql, gymId, tokenHash);
+    return await answer("failed");
+  }
+  await repo.linkEmailed(deps.sql, gymId, tokenHash, deps.now());
+  await deps.sql.begin(async (tx) => {
+    await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_link_sent", targetType: "gym_held_membership", targetId: membershipId, meta: { entryId } });
+  });
+  return await answer("sent");
+}
+
+interface OpenLink {
+  link: repo.LinkRow;
+  org: OrgRow;
+}
+
+/** The link a token names, at a business still open. A token we did not make, one sent again
+ *  since, one whose record left the list or changed its address: not valid, and nothing named. */
+async function openLink(deps: AgreementDeps, tokenHash: string): Promise<OpenLink> {
+  const link = await repo.linkByToken(deps.sql, tokenHash, deps.now());
+  if (link === null) throw linkNotValid();
+  const org = await getOrgById(deps.sql, link.gymId);
+  if (org === null || org.status !== "active") throw linkNotValid();
+  return { link, org };
+}
+
+/** What the link's page shows: the agreement to sign, that it is signed, or why it is closed. */
+export async function readAgreementLink(deps: AgreementDeps, token: string): Promise<AgreementLinkResponse> {
+  const { link, org } = await openLink(deps, sha256Hex(token));
+  const gymName = org.name;
+  if ((await repo.signatureOf(deps.sql, org.id, link.membershipId)) !== null) return agreementLinkResponseSchema.parse({ state: "signed", gymName });
+  if (link.spent) return agreementLinkResponseSchema.parse({ state: "closed", gymName, reason: "expired" });
+  const today = dayInTz(deps.now(), org.timezone);
+  const now = await current(deps, org, link.entryId, link.membershipId, today);
+  if (now.facts === null) return agreementLinkResponseSchema.parse({ state: "closed", gymName, reason: "not_signable" });
+  const agreement = await askedOf(deps.sql, org.id, link.membershipId);
+  if (agreement === null) return agreementLinkResponseSchema.parse({ state: "closed", gymName, reason: "not_in_use" });
+  return agreementLinkResponseSchema.parse({
+    state: "open",
+    gymName,
+    personName: now.record.fullName,
+    minor: isUnder18(now.record.dateOfBirth, today),
+    agreement: { ...toRead(agreement.row), name: agreement.name },
+    facts: now.facts,
+    factsKey: factsKeyOf(now.facts),
+    expiresAt: link.expiresAt.toISOString(),
+  });
+}
+
+/** The person, or their parent or guardian, signs from the link. The same rule as the desk's:
+ *  only the details and the words the page showed; and the link must still work when it is
+ *  written. A second press answers with the first signature's copy. */
+export async function signByAgreementLink(deps: AgreementDeps, body: AgreementLinkSignBody): Promise<AgreementLinkSignResponse> {
+  const tokenHash = sha256Hex(body.token);
+  const { link, org } = await openLink(deps, tokenHash);
+  const gymId = org.id;
+  const existing = await repo.signatureOf(deps.sql, gymId, link.membershipId);
+  const email = (await repo.membershipRecord(deps.sql, gymId, link.entryId, link.membershipId))?.email ?? null;
+  if (existing !== null) {
+    return agreementLinkSignResponseSchema.parse({ emailed: await firstPressCopy(deps, gymId, link.membershipId, existing, email) });
+  }
+  if (link.spent) throw new OrgsError(410, "link_expired", AGREEMENT_WORDS.link_expired(org.name));
+  const at = deps.now();
+  const today = dayInTz(at, org.timezone);
+  const now = await current(deps, org, link.entryId, link.membershipId, today);
+  const minor = isUnder18(now.record.dateOfBirth, today);
+  if (body.signer === "person" && minor === true) throw new OrgsError(409, "guardian_needed", WAIVER_DESK_WORDS.guardian_needed(now.record.fullName));
+  if (body.signer === "guardian" && minor === false) throw new OrgsError(409, "person_signs", WAIVER_DESK_WORDS.person_signs(now.record.fullName));
+  if (now.facts === null) throw new OrgsError(409, "membership_not_signable", AGREEMENT_WORDS.membership_not_signable);
+  // THE RULE: only the details the page showed are signed and kept.
+  if (factsKeyOf(now.facts) !== body.factsKey) throw new OrgsError(409, "facts_changed", AGREEMENT_WORDS.facts_changed);
+  const facts = now.facts;
+  const written = await deps.sql.begin(async (tx) => {
+    // A link sent again waits here; once it has, this token names nothing and nothing is written.
+    if (!(await repo.lockLink(tx, gymId, tokenHash))) return null;
+    const input = {
+      gymId,
+      agreementId: body.agreementId,
+      entryId: link.entryId,
+      membershipId: link.membershipId,
+      dateOfBirth: now.record.dateOfBirth,
+      signer: body.signer,
+      name: body.name,
+      facts,
+      witnessedBy: null,
+      at,
+      linkTokenHash: tokenHash,
+    };
+    const id = await repo.signAtDesk(tx, input);
+    if (id !== null) {
+      await repo.useLink(tx, gymId, tokenHash, at);
+      await insertAudit(tx, { actorUserId: null, gymId, action: "org.agreement_signed_by_link", targetType: "gym_held_membership", targetId: link.membershipId, meta: { signer: body.signer, entryId: link.entryId } });
+    }
+    return id;
+  });
+  if (written === null) {
+    const signed = await repo.signatureOf(deps.sql, gymId, link.membershipId);
+    // Another press of this same link signed first.
+    if (signed !== null) return agreementLinkSignResponseSchema.parse({ emailed: await firstPressCopy(deps, gymId, link.membershipId, signed, now.record.email) });
+    const agreement = await askedOf(deps.sql, gymId, link.membershipId);
+    if (agreement === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
+    if (agreement.row.id !== body.agreementId) throw new OrgsError(409, "agreement_changed", AGREEMENT_WORDS.agreement_changed(org.name));
+    // Sent again, used, run out or its address changed between the read and the write.
+    throw linkNotValid();
+  }
+  const signed = await repo.signatureOf(deps.sql, gymId, link.membershipId);
+  if (signed === null) throw linkNotValid();
+  return agreementLinkSignResponseSchema.parse({ emailed: await sendCopy(deps, org, now.record.email, signed) });
 }

@@ -1,15 +1,17 @@
 import { useEffect, useId, useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { WAIVER_NAME_MAX_CHARS, waiverReadyToSign } from '@app/shared';
+import { AGREEMENT_LINK_DAYS, WAIVER_NAME_MAX_CHARS, waiverReadyToSign } from '@app/shared';
 import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { deskSigner } from './waiverView';
-import { agreementBoxWords, agreementCopyLine, agreementLineParts, agreementResentLine, agreementSignedBy, agreementSignedLine } from './agreementView';
+import { agreementBoxWords, agreementCopyLine, agreementLineParts, agreementLinkSentLine, agreementResentLine, agreementSignedBy, agreementSignedLine } from './agreementView';
 
 // THE MEMBERSHIP AGREEMENT UNDER ONE MEMBERSHIP (ROADMAP 18u-i; rulings/2026-10-23-18u-i.md),
 // on a person's page. The line says whether this membership's agreement was signed; Sign
 // agreement opens the box under it, where staff hand the screen over and the person (or, for
 // somebody under 18, a parent or guardian) reads the membership's details and the business's
-// terms, types their name and ticks. View opens what was signed, word for word.
+// terms, types their name and ticks. View opens what was signed, word for word. For somebody not
+// at the desk, Email a link to sign sends the record's address a link to sign it themselves
+// (18u-ii-b), beside Sign agreement and beside Sign later.
 //
 // The details are the server's: the box sends back the key of the ones it showed, and changed
 // details or words are read again before anything is signed.
@@ -57,7 +59,8 @@ function Terms({ label, text }) {
 
 // `open`: this membership's box is the one open on the page; `justGiven`: it opened by itself
 // after Add membership, so its way out is Sign later. `when` writes a day in the business's calendar.
-export default function MembershipAgreement({ gymId, entryId, membership, inUse, signable, readOnly, open, justGiven, onOpen, onClose, onSigned, when }) {
+// `hasEmail`: the record has an address to email a link to; `onLinkSent` takes the link that works now.
+export default function MembershipAgreement({ gymId, entryId, membership, inUse, signable, readOnly, open, justGiven, onOpen, onClose, onSigned, when, hasEmail = false, onLinkSent }) {
   const nameId = useId();
   const [box, setBox] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -69,6 +72,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
   const [problem, setProblem] = useState(null);
   const [done, setDone] = useState(null);
   const [copyLine, setCopyLine] = useState(null);
+  const [sending, setSending] = useState(false);
 
   // Opened or closed, by this box or by the page: nothing typed or ticked before is kept, so
   // a tick given to one wording or one set of details never signs another.
@@ -162,6 +166,28 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
     }
   };
 
+  const emailLink = async () => {
+    setSending(true);
+    setDone(null);
+    try {
+      const res = await orgService.sendAgreementLink(gymId, entryId, membership.id);
+      setDone(agreementLinkSentLine(res.data.emailed, AGREEMENT_LINK_DAYS));
+      if (res.data.link !== null) onLinkSent?.(res.data.link);
+      if (open) close();
+    } catch (err) {
+      setDone(errorText(err, "The link didn't send. Try again later."));
+    } finally {
+      setSending(false);
+    }
+  };
+  const linkButton = (className) =>
+    hasEmail && !readOnly ? (
+      <button type="button" className={className} disabled={sending || busy} onClick={() => void emailLink()}>
+        {sending ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+        {parts?.linkSent ? 'Send link again' : 'Email a link to sign'}
+      </button>
+    ) : null;
+
   const signed = box?.signed ?? null;
 
   return (
@@ -185,6 +211,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
               {parts.signed ? 'View' : 'Sign agreement'}
             </button>
           ) : null}
+          {!open && !parts.signed ? linkButton('c-btn c-btn-s') : null}
         </div>
       ) : null}
       {done !== null ? (
@@ -308,6 +335,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
                 <button type="button" onClick={close} disabled={busy} className="c-btn c-btn-ghost">
                   {justGiven ? 'Sign later' : 'Cancel'}
                 </button>
+                {linkButton('c-btn c-btn-ghost')}
               </div>
             </>
           )}

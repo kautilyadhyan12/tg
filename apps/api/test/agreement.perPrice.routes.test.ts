@@ -232,6 +232,7 @@ d("an agreement for each line of the price list (real Postgres)", () => {
           sent.push(letter);
           return Promise.resolve();
         },
+        sendAgreementLink: () => Promise.resolve(),
       },
     });
     await api().ready();

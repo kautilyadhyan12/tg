@@ -229,6 +229,13 @@ fault was between pages. Every job that adds or changes a screen follows all fou
 - Before the job is called done the terminal walks it in the real browser as a gym made that
   day, from Overview to the new thing and back, pressing every button it added.
 
+**Pages stay current by themselves (Kd, 2026-10-24, `rulings/2026-10-24-18u-ii-b.md`).** A page
+that shows what another person or another screen can change updates itself through live updates
+(ROADMAP Stage 4 item 18) once they exist: the server tells the page what to read again, and the
+page reads it through the normal checked route; never a check on a timer at scale. Until then it
+reads again when staff come back to the window, and checks every 30 seconds only while waiting on
+someone, for at most 15 minutes.
+
 **A person finishes the task from the screen alone (Kd, RULINGS 2026-10-11).** The app is
 used by people, not by the terminal that built it: staff do not know what the terminal
 knows. 21c-i shipped a row and a box that were tested hard and that nobody could find: Kd
