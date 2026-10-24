@@ -306,7 +306,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
    - 18u. **Membership agreement**, in two jobs since 2026-10-23 (no lawyer: `rulings/2026-10-23-18u-i.md`; the line as first written is in `handoff/2026-10-23-18u-i.md`). Web folder 2.
      - 18u-i. [x] **The business writes it, and the member signs at the desk** — merged 2026-10-23 (PR #349).
      - 18u-ii. **An agreement for each thing sold, and signing from afar**, in two jobs since 2026-10-24 (the line as first written is in `handoff/2026-10-24-18u-ii-a.md`).
-       - 18u-ii-a. [ ] **An agreement for each line of the price list, and Members' Agreement not signed**.
+       - 18u-ii-a. [x] **An agreement for each line of the price list, and Members' Agreement not signed** · merged 2026-10-24 · PR #353
        - 18u-ii-b. [ ] **Signing from afar**: an emailed link for people without the app.
      - 18u-iii. [ ] **The signed papers of people deleted for good**: in Settings, for the owner, each signed membership agreement and desk waiver of a record deleted for good, as signed, until the purge removes it six years on (Kd, 2026-10-23). Web folder 2, after 18u-ii.
      - 18u-iv. [ ] **No new bookings until the membership agreement is signed**: the business's own switch, off until it turns it on, as Wodify's Contract Enforcement and Glofox's are; Sign later stays (Kd, 2026-10-23). Web folder 2, after 18u-ii.
