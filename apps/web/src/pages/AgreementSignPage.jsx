@@ -5,12 +5,13 @@ import { agreementLinkService } from '../api/agreementLinkApi';
 import { errorCode, errorStatus, errorText } from '../api/orgsApi';
 import { deskSigner } from './console/waiverView';
 import { ACCENT, INK, LINE, MUTED } from './GymPublicPage';
-import { linkClosedLine, linkSignedLine, linkSignerWords, linkTokenFromHash } from './agreementLinkView';
+import { LINK_OPEN_AGAIN, linkClosedLine, linkSignedLine, linkSignerWords, linkTokenFromHash } from './agreementLinkView';
 
 // THE PAGE AN EMAILED LINK TO SIGN OPENS, `/sign-agreement#<token>` (ROADMAP 18u-ii-b; spec Part 3
 // §14.8). Public: no sign-in. The person, or a parent or guardian for somebody under 18, reads the
 // membership's details and the business's terms, types their name and ticks, as at the desk. The
-// token stays after "#", so no server sees it in an address; the page sends it in the body.
+// token is after "#", so no server sees it in an address; the page keeps it in memory, sends it in
+// the body, and takes it out of the address bar and the browser's history at once.
 // Changed details or words are read again before anything is signed.
 
 const WARM = '#FFF4EA';
@@ -43,6 +44,9 @@ function Card({ children, label }) {
 export default function AgreementSignPage() {
   const nameId = useId();
   const [token] = useState(() => (typeof window === 'undefined' ? null : linkTokenFromHash(window.location.hash)));
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash !== '') window.history.replaceState(window.history.state, '', window.location.pathname);
+  }, []);
   const [page, setPage] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
@@ -138,7 +142,7 @@ export default function AgreementSignPage() {
     </Card>
   );
 
-  if (token === null) return shell(notice(AGREEMENT_WORDS.link_not_valid));
+  if (token === null) return shell(notice(LINK_OPEN_AGAIN));
   if (loadError !== null && page === null) return shell(notice(loadError));
   if (page === null) {
     return shell(

@@ -116,6 +116,8 @@ export const gymAgreementSignLinks = pgTable(
     sentBy: uuid("sent_by").references(() => users.id, { onDelete: "set null" }),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** Its email went; until then it opens nothing and nothing says it was sent. */
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
     usedAt: timestamp("used_at", { withTimezone: true }),
   },
   (t) => [

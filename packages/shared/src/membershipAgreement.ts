@@ -169,8 +169,11 @@ export const agreementLinkTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const agreementLinkSchema = z.object({ sentAt: z.string(), expiresAt: z.string() }).strict();
 export type AgreementLink = z.infer<typeof agreementLinkSchema>;
 
-/** What Email a link to sign did: the same four outcomes as a copy, and the link that works now. */
-export const sendAgreementLinkResponseSchema = z.object({ emailed: agreementEmailedSchema, link: agreementLinkSchema.nullable() }).strict();
+/** What Email a link to sign did: the four outcomes of a copy, or "recent" where another press
+ *  emailed one less than a minute ago and nothing more was sent; and the link that works now. */
+export const agreementLinkSentSchema = z.enum(["sent", "recent", "no_email", "blocked", "failed"]);
+export type AgreementLinkSent = z.infer<typeof agreementLinkSentSchema>;
+export const sendAgreementLinkResponseSchema = z.object({ emailed: agreementLinkSentSchema, link: agreementLinkSchema.nullable() }).strict();
 export type SendAgreementLinkResponse = z.infer<typeof sendAgreementLinkResponseSchema>;
 
 export const agreementLinkReadBodySchema = z.object({ token: agreementLinkTokenSchema }).strict();

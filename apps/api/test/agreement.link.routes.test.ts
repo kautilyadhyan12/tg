@@ -24,6 +24,7 @@ import { loadConfig } from "../src/config.js";
 import type { AgreementCopyLetter, AgreementLinkLetter } from "../src/modules/orgs/agreement/email.js";
 import * as agreementRepo from "../src/modules/orgs/agreement/repo.js";
 import { sha256Hex } from "../src/modules/auth/tokens.js";
+import { deleteEntry } from "../src/modules/orgs/memberList/repo.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -55,7 +56,6 @@ interface Res {
 const T = 180_000;
 const LIVE_PLAN = "zz_agreement_link_routes";
 const WORDS = "MEMBERSHIP TERMS\n\nTwelve months. Cancel with 30 days' notice.";
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 let ipCounter = 0;
 const nextIp = () => `10.97.${String(Math.floor(ipCounter / 250) % 250)}.${String((ipCounter++ % 250) + 1)}`;
@@ -90,6 +90,8 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
   const links: AgreementLinkLetter[] = [];
   const copies: AgreementCopyLetter[] = [];
   let linkFails = false;
+  /** How long the email service takes to answer a link, for presses at once. */
+  let linkDelayMs = 0;
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -261,10 +263,10 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
           copies.push(letter);
           return Promise.resolve();
         },
-        sendAgreementLink: (letter) => {
-          if (linkFails) return Promise.reject(new Error("the email service is down"));
+        sendAgreementLink: async (letter) => {
+          if (linkDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, linkDelayMs));
+          if (linkFails) throw new Error("the email service is down");
           links.push(letter);
-          return Promise.resolve();
         },
       },
     });
@@ -311,6 +313,15 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
       expect([crossed.statusCode, errorOf(crossed).error]).toEqual([409, "facts_changed"]);
       expect(await signatures(gymId)).toEqual([]);
 
+      // Sent again within the minute: nothing more is emailed, the screen is told so, and the
+      // first link still works.
+      clock = new Date(start.getTime() + 30 * 1000);
+      const emailsBefore = links.length;
+      const soon = await sendLink(gymId, maya, mayaYearly, owner.cookies);
+      expect(sendAgreementLinkResponseSchema.parse(JSON.parse(soon.body)).emailed).toBe("recent");
+      expect(links.length).toBe(emailsBefore);
+      expect((await openPage(mayaToken)).personName).toBe("Maya Patel");
+
       // Sent again: the first email's link stops working, the newest one works.
       clock = new Date(start.getTime() + 2 * 60 * 1000);
       const mayaAgain = await linkFor(gymId, maya, mayaYearly, owner.cookies);
@@ -333,8 +344,12 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
       notValid(await signLink(benToken, { agreementId: benPage.agreement.id, factsKey: benPage.factsKey, signer: "person", name: "Ben Stone" }));
       await sql`UPDATE gym_member_list_entries SET former_at = NULL WHERE gym_id = ${gymId} AND id = ${ben}`;
 
-      // Fourteen days on, Maya's link has run out: the page says so, and nothing is signed.
-      clock = new Date(start.getTime() + 2 * 60 * 1000 + 14 * DAY_MS);
+      // Its last day is the day the email names, to its last minute in the business's calendar:
+      // sent on 15 Oct in Chicago, it works until midnight at the end of 29 Oct (05:00 UTC).
+      clock = new Date("2026-10-30T04:59:00Z");
+      expect((await openPage(mayaAgain)).personName).toBe("Maya Patel");
+      // Then it has run out: the page says so, and nothing is signed.
+      clock = new Date("2026-10-30T05:00:00Z");
       expect(await page(mayaAgain)).toEqual({ state: "closed", gymName: "Link Worst Gym", reason: "expired" });
       const late = await signLink(mayaAgain, { agreementId: mayaPage.agreement.id, factsKey: mayaPage.factsKey, signer: "person", name: "Maya Patel" });
       expect([late.statusCode, errorOf(late).error, errorOf(late).message]).toEqual([410, "link_expired", AGREEMENT_WORDS.link_expired("Link Worst Gym")]);
@@ -378,7 +393,7 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
       const listed = heldMembershipsResponseSchema.parse(JSON.parse((await get(heldUrl(gymId, maya), owner.cookies)).body));
       expect(listed.memberships.find((m) => m.id === yearly)?.agreementLink).toEqual({
         sentAt: start.toISOString(),
-        expiresAt: new Date(start.getTime() + 14 * DAY_MS).toISOString(),
+        expiresAt: "2026-10-30T05:00:00.000Z",
       });
 
       const open = await openPage(token);
@@ -483,9 +498,135 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
       // Two presses at once: one email.
       const [a, b] = await Promise.all([sendLink(gymId, maya, mayaYearly, owner.cookies), sendLink(gymId, maya, mayaYearly, owner.cookies)]);
       expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
-      expect([a, b].map((r) => sendAgreementLinkResponseSchema.parse(JSON.parse(r.body)).emailed)).toEqual(["sent", "sent"]);
+      // The press that sent it says so; the other, that one went a moment ago.
+      expect([a, b].map((r) => sendAgreementLinkResponseSchema.parse(JSON.parse(r.body)).emailed).sort()).toEqual(["recent", "sent"]);
       expect(links.length - before).toBe(1);
       expect(await count()).toBe(1);
+    },
+    T,
+  );
+  it(
+    "a record deleted for good takes its links, and the address they went to, with it, though its paid membership stays",
+    async () => {
+      clock = start;
+      const { gymId, owner, typeId } = await makeBusiness("Link Delete Gym");
+      const eve = await addPerson(gymId, owner.cookies, "Eve Private", "agrlink-p-eve-private@example.com");
+      const yearly = await give(gymId, eve, owner.cookies, typeId);
+      await linkFor(gymId, eve, yearly, owner.cookies);
+      expect((await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_agreement_sign_links WHERE gym_id = ${gymId}`)[0]?.n).toBe(1);
+      await sql.begin(async (tx) => {
+        expect(await deleteEntry(tx, gymId, eve, clock)).toBe(true);
+      });
+      const kept = await sql<{ entry_id: string | null }[]>`SELECT entry_id FROM gym_held_memberships WHERE gym_id = ${gymId} AND id = ${yearly}`;
+      expect(kept).toEqual([{ entry_id: null }]);
+      expect(await sql`SELECT sent_to FROM gym_agreement_sign_links WHERE gym_id = ${gymId}`).toEqual([]);
+    },
+    T,
+  );
+
+  it(
+    "two presses at once while the email is slow: the second waits for the first, and says sent only where the email went",
+    async () => {
+      clock = start;
+      const { gymId, owner, typeId } = await makeBusiness("Link Slow Gym");
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", "agrlink-p-slow@example.com");
+      const yearly = await give(gymId, maya, owner.cookies, typeId);
+      const twoPresses = async () => {
+        const first = sendLink(gymId, maya, yearly, owner.cookies);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const second = sendLink(gymId, maya, yearly, owner.cookies);
+        return [await first, await second].map((r) => sendAgreementLinkResponseSchema.parse(JSON.parse(r.body)));
+      };
+      const count = async () => (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM gym_agreement_sign_links WHERE gym_id = ${gymId}`)[0]?.n;
+
+      // The email service fails after 400 ms: neither press says a link went, and none is left.
+      linkDelayMs = 400;
+      linkFails = true;
+      const before = links.length;
+      const failed = await twoPresses();
+      linkFails = false;
+      expect(failed).toEqual([
+        { emailed: "failed", link: null },
+        { emailed: "failed", link: null },
+      ]);
+      expect([links.length - before, await count()]).toEqual([0, 0]);
+
+      // It answers after 400 ms: one email; the second press says one went a moment ago.
+      const sent = await twoPresses();
+      linkDelayMs = 0;
+      expect(sent.map((r) => r.emailed)).toEqual(["sent", "recent"]);
+      expect(sent[1]?.link).toEqual(sent[0]?.link);
+      expect([links.length - before, await count()]).toEqual([1, 1]);
+    },
+    T,
+  );
+
+  it(
+    "no link is written, or emailed, for a membership already signed, whatever a caller checked first",
+    async () => {
+      clock = start;
+      const { gymId, owner, typeId } = await makeBusiness("Link Signed Gym");
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", "agrlink-p-signed@example.com");
+      const yearly = await give(gymId, maya, owner.cookies, typeId);
+      const token = await linkFor(gymId, maya, yearly, owner.cookies);
+      const open = await openPage(token);
+      expect((await signLink(token, { agreementId: open.agreement.id, factsKey: open.factsKey, signer: "person", name: "Maya Patel" })).statusCode).toBe(200);
+      const [before] = await sql<{ token_hash: string; used_at: Date | null }[]>`SELECT token_hash, used_at FROM gym_agreement_sign_links WHERE gym_id = ${gymId}`;
+      // Two minutes on, past the minute's guard, as a link sent again while the page was being signed.
+      const later = new Date(start.getTime() + 2 * 60 * 1000);
+      const claimed = await agreementRepo.claimLink(sql, {
+        gymId,
+        membershipId: yearly,
+        tokenHash: sha256Hex("b".repeat(43)),
+        sentTo: "agrlink-p-signed@example.com",
+        sentBy: owner.userId,
+        at: later,
+        endsBefore: "2026-10-30",
+        timezone: "America/Chicago",
+      });
+      expect(claimed).toBeNull();
+      expect(await sql`SELECT token_hash, used_at FROM gym_agreement_sign_links WHERE gym_id = ${gymId}`).toEqual([before]);
+    },
+    T,
+  );
+
+  it(
+    "the link's limits: one link opened over and over is stopped, and a family or an office on one address is not",
+    async () => {
+      clock = start;
+      const { gymId, owner, typeId } = await makeBusiness("Link Limits Gym");
+      const fromAddress = (ip: string, path: string, payload: unknown) =>
+        api().inject({ method: "POST", url: path, remoteAddress: ip, headers: { "content-type": "application/json" }, payload: JSON.stringify(payload) });
+
+      // One link, from many addresses: its 61st read in the hour is refused.
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", "agrlink-p-limit-0@example.com");
+      const token = await linkFor(gymId, maya, await give(gymId, maya, owner.cookies, typeId), owner.cookies);
+      const reads: number[] = [];
+      for (let i = 0; i < 61; i++) reads.push((await read(token)).statusCode);
+      expect(reads.slice(0, 60).every((code) => code === 200)).toBe(true);
+      expect(reads[60]).toBe(429);
+
+      // Thirty people's links, each opened three times and signed, all from one address.
+      const office = "10.98.0.1";
+      const people: string[] = [];
+      for (let i = 1; i <= 30; i++) {
+        const entry = await addPerson(gymId, owner.cookies, `Person ${String(i)}`, `agrlink-p-limit-${String(i)}@example.com`);
+        people.push(await linkFor(gymId, entry, await give(gymId, entry, owner.cookies, typeId), owner.cookies));
+      }
+      const codes: number[] = [];
+      for (const [i, link] of people.entries()) {
+        let page: AgreementLinkResponse | null = null;
+        for (let n = 0; n < 3; n++) {
+          const res = await fromAddress(office, "/v1/agreement-link/read", { token: link });
+          codes.push(res.statusCode);
+          page = agreementLinkResponseSchema.parse(JSON.parse(res.body));
+        }
+        if (page?.state !== "open") throw new Error("the page is not open");
+        const signed = await fromAddress(office, "/v1/agreement-link/sign", { token: link, agreementId: page.agreement.id, factsKey: page.factsKey, signer: "person", name: `Person ${String(i + 1)}` });
+        codes.push(signed.statusCode);
+      }
+      expect(codes.length).toBe(120);
+      expect(codes.filter((code) => code !== 200)).toEqual([]);
     },
     T,
   );

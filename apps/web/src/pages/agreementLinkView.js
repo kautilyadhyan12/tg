@@ -11,6 +11,10 @@ export function linkTokenFromHash(hash) {
   return /^[A-Za-z0-9_-]{43}$/.test(token) ? token : null;
 }
 
+/** The page opened with no link in its address: a reload after the page took the link out of
+ *  the address bar, or an address typed by hand. */
+export const LINK_OPEN_AGAIN = 'To read and sign the agreement, open the link in your email again.';
+
 /** The page's words for the one signing: no "hand this screen over", they are the reader. */
 export function linkSignerWords(personName, signer, minor) {
   const name = personName === '' ? 'this person' : personName;

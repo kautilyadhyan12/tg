@@ -27,6 +27,7 @@ import {
   type AgreementLinkSignResponse,
   type SendAgreementLinkResponse,
   WAIVER_DESK_WORDS,
+  addDays,
   agreementFacts,
   agreementSignable,
   dayWords,
@@ -439,7 +440,37 @@ export async function emailAgreementCopy(
 
 // ── Signing from afar: the emailed link (18u-ii-b) ──
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** How long a press waits to learn what became of another press's email, a quarter second at a
+ *  time: an email is sent in well under that, or has failed. */
+const OTHER_PRESS_WAITS = 60;
+const OTHER_PRESS_STEP_MS = 250;
+const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A press that found another press's link sent less than a minute ago: "recent" once its email
+ *  went, "failed" if it did not go (its link is removed), never "sent" for an email still going. */
+async function otherPressOutcome(deps: AgreementDeps, gymId: string, membershipId: string): Promise<"recent" | "failed"> {
+  for (let i = 0; i < OTHER_PRESS_WAITS; i++) {
+    const state = await repo.linkState(deps.sql, gymId, membershipId);
+    if (state === "emailed") return "recent";
+    if (state === "none") return "failed";
+    await pause(OTHER_PRESS_STEP_MS);
+  }
+  return "failed";
+}
+
+/** What became of the copy of a signature another press made: a signature less than a minute old
+ *  may still be sending it, so this press waits to learn which, rather than saying it failed. */
+async function firstPressCopy(deps: AgreementDeps, gymId: string, membershipId: string, signed: repo.SignatureRow, email: string | null): Promise<AgreementEmailed> {
+  if (signed.emailedAt !== null) return "sent";
+  if (email === null) return "no_email";
+  if (deps.now().getTime() - signed.at.getTime() >= 60_000) return "failed";
+  for (let i = 0; i < OTHER_PRESS_WAITS; i++) {
+    await pause(OTHER_PRESS_STEP_MS);
+    if ((await repo.signatureOf(deps.sql, gymId, membershipId))?.emailedAt != null) return "sent";
+  }
+  return "failed";
+}
+
 const linkNotValid = (): OrgsError => new OrgsError(404, "link_not_valid", AGREEMENT_WORDS.link_not_valid);
 /** 32 random bytes, base64url: 43 characters (`agreementLinkTokenSchema`). */
 const newToken = (): string => randomBytes(32).toString("base64url");
@@ -471,14 +502,22 @@ export async function sendAgreementLink(
   if (suppressed) return await answer("blocked");
   const token = newToken();
   const tokenHash = sha256Hex(token);
-  const expiresAt = new Date(at.getTime() + AGREEMENT_LINK_DAYS * DAY_MS);
-  if (!(await repo.claimLink(deps.sql, { gymId, membershipId, tokenHash, sentTo: email, sentBy: userId, at, expiresAt }))) return await answer("sent");
+  // It works to the end of its last day in the business's calendar, the day the email names.
+  const today = dayInTz(at, org.timezone);
+  const lastDay = addDays(today, AGREEMENT_LINK_DAYS);
+  const claimed = await repo.claimLink(deps.sql, { gymId, membershipId, tokenHash, sentTo: email, sentBy: userId, at, endsBefore: addDays(lastDay, 1), timezone: org.timezone });
+  if (claimed === null) {
+    // Signed meanwhile, at the desk or from a link: nothing to send.
+    if ((await repo.signatureOf(deps.sql, gymId, membershipId)) !== null) throw new OrgsError(409, "already_signed", AGREEMENT_WORDS.already_signed);
+    // Another press sent one less than a minute ago: what became of its email is the answer.
+    return await answer(await otherPressOutcome(deps, gymId, membershipId));
+  }
   try {
     await deps.email.sendAgreementLink({
       to: email,
       gymName: gymNameForEmail(org.name),
       membershipName: gymNameForEmail(now.typeName),
-      worksUntil: dayWords(dayInTz(new Date(expiresAt.getTime() - 1), org.timezone)),
+      worksUntil: dayWords(lastDay),
       signLink: `${deps.webOrigin}/sign-agreement#${token}`,
     });
   } catch (err) {
@@ -486,6 +525,7 @@ export async function sendAgreementLink(
     await repo.dropLink(deps.sql, gymId, tokenHash);
     return await answer("failed");
   }
+  await repo.linkEmailed(deps.sql, gymId, tokenHash, deps.now());
   await deps.sql.begin(async (tx) => {
     await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_link_sent", targetType: "gym_held_membership", targetId: membershipId, meta: { entryId } });
   });
@@ -540,7 +580,7 @@ export async function signByAgreementLink(deps: AgreementDeps, body: AgreementLi
   const existing = await repo.signatureOf(deps.sql, gymId, link.membershipId);
   const email = (await repo.membershipRecord(deps.sql, gymId, link.entryId, link.membershipId))?.email ?? null;
   if (existing !== null) {
-    return agreementLinkSignResponseSchema.parse({ emailed: existing.emailedAt !== null ? "sent" : email === null ? "no_email" : "failed" });
+    return agreementLinkSignResponseSchema.parse({ emailed: await firstPressCopy(deps, gymId, link.membershipId, existing, email) });
   }
   if (link.spent) throw new OrgsError(410, "link_expired", AGREEMENT_WORDS.link_expired(org.name));
   const at = deps.now();
@@ -579,7 +619,7 @@ export async function signByAgreementLink(deps: AgreementDeps, body: AgreementLi
   if (written === null) {
     const signed = await repo.signatureOf(deps.sql, gymId, link.membershipId);
     // Another press of this same link signed first.
-    if (signed !== null) return agreementLinkSignResponseSchema.parse({ emailed: signed.emailedAt !== null ? "sent" : "failed" });
+    if (signed !== null) return agreementLinkSignResponseSchema.parse({ emailed: await firstPressCopy(deps, gymId, link.membershipId, signed, now.record.email) });
     const agreement = await askedOf(deps.sql, gymId, link.membershipId);
     if (agreement === null) throw new OrgsError(409, "agreement_not_in_use", AGREEMENT_WORDS.agreement_not_in_use(org.name));
     if (agreement.row.id !== body.agreementId) throw new OrgsError(409, "agreement_changed", AGREEMENT_WORDS.agreement_changed(org.name));

@@ -12,7 +12,7 @@ vi.mock('../api/agreementLinkApi', () => ({ agreementLinkService: { read: vi.fn(
 
 const { agreementLinkService } = await import('../api/agreementLinkApi');
 const AgreementSignPage = (await import('./AgreementSignPage')).default;
-const { linkTokenFromHash } = await import('./agreementLinkView');
+const { LINK_OPEN_AGAIN, linkTokenFromHash } = await import('./agreementLinkView');
 
 const TOKEN = 'A'.repeat(20) + 'b'.repeat(20) + '_-9';
 const KEY = 'a'.repeat(64);
@@ -51,10 +51,19 @@ describe('the token in the link', () => {
     expect(linkTokenFromHash('')).toBeNull();
   });
 
-  it('says the link is not valid, and asks nothing of the server, where there is no token', () => {
+  it('asks for the link from the email again, and asks nothing of the server, where there is no token', () => {
     draw('');
-    expect(screen.getByText(AGREEMENT_WORDS.link_not_valid)).toBeTruthy();
+    expect(screen.getByText(LINK_OPEN_AGAIN)).toBeTruthy();
     expect(agreementLinkService.read).not.toHaveBeenCalled();
+  });
+
+  it('takes the link out of the address bar at once, and still reads it', async () => {
+    agreementLinkService.read.mockResolvedValue(OPEN);
+    draw();
+    await screen.findByText('$50.00 every month');
+    expect(window.location.hash).toBe('');
+    expect(window.location.pathname).toBe('/sign-agreement');
+    expect(agreementLinkService.read).toHaveBeenCalledWith(TOKEN);
   });
 
   it("says the link is not valid where the server knows no such link, naming nobody", async () => {

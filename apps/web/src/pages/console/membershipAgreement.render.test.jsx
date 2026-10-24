@@ -203,6 +203,15 @@ describe('the emailed link to sign (18u-ii-b)', () => {
     expect(screen.queryByRole('button', { name: /link/ })).toBeNull();
   });
 
+  it('says a link went less than a minute ago where another press sent it, and sends nothing more', async () => {
+    orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'recent', link: LINK } });
+    const onLinkSent = vi.fn();
+    draw({ hasEmail: true, onLinkSent });
+    fireEvent.click(screen.getByRole('button', { name: 'Email a link to sign' }));
+    expect(await screen.findByText("A link to sign was emailed to them less than a minute ago. If it hasn't arrived, try again in a minute.")).toBeTruthy();
+    expect(onLinkSent).toHaveBeenCalledWith(LINK);
+  });
+
   it('says what went wrong where the link did not go, and hands nothing on', async () => {
     orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'blocked', link: null } });
     const onLinkSent = vi.fn();

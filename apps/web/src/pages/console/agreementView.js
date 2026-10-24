@@ -83,6 +83,7 @@ export function agreementLineParts(membership, inUse, signable, when) {
 /** What Email a link to sign did, said under the membership. */
 export function agreementLinkSentLine(emailed, days) {
   if (emailed === 'sent') return `A link to sign was emailed to them. It works for ${String(days)} days.`;
+  if (emailed === 'recent') return "A link to sign was emailed to them less than a minute ago. If it hasn't arrived, try again in a minute.";
   if (emailed === 'no_email') return 'There is no email address on their record. Add one to their details, then try again.';
   if (emailed === 'blocked') return "Their email address can't receive our emails. Check it in their details.";
   return "The link didn't send. Try again later.";

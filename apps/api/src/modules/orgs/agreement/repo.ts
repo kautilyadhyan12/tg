@@ -313,9 +313,10 @@ export async function gymContact(sql: SqlOrTx, gymId: string): Promise<{ postalA
 }
 
 /** A link `l` of `gym_agreement_sign_links`, on the record `e` of its membership, works at `at`:
- *  not used, not expired, and the record's address is still the one it was sent to (18u-ii-b). */
+ *  its email went, it is not used, not expired, and the record's address is still the one it was
+ *  sent to (18u-ii-b). */
 const linkWorks = (sql: SqlOrTx, at: Date) => sql`
-  l.used_at IS NULL AND l.expires_at > ${at} AND e.email IS NOT NULL AND lower(e.email::text) = lower(l.sent_to)`;
+  l.emailed_at IS NOT NULL AND l.used_at IS NULL AND l.expires_at > ${at} AND e.email IS NOT NULL AND lower(e.email::text) = lower(l.sent_to)`;
 
 /** A membership's agreement signed, at the desk or from the emailed link, in one statement:
  *  written only while the wording shown is the newest, and not stopped, of the agreement the
@@ -381,9 +382,16 @@ export async function unclaimCopy(sql: SqlOrTx, gymId: string, signatureId: stri
 }
 
 /** A record deleted for good: its memberships' signatures stay as the business's proof, with
- *  the day, and the purge removes them six years later. One record, or every record of the
- *  gym when `entryId` is null. Runs before the record goes, while its memberships name it. */
+ *  the day, and the purge removes them six years later; their links to sign go at once, with the
+ *  address they were sent to (18u-ii-b), though a paid membership outlives its record. One record,
+ *  or every record of the gym when `entryId` is null. Runs before the record goes, while its
+ *  memberships name it. */
 export async function letGoOfAgreementSignatures(tx: TransactionSql, gymId: string, entryId: string | null, at: Date): Promise<void> {
+  await tx`
+    DELETE FROM gym_agreement_sign_links l
+    USING gym_held_memberships h
+    WHERE l.gym_id = ${gymId} AND h.gym_id = l.gym_id AND h.id = l.held_membership_id
+      AND h.entry_id IS NOT NULL AND (${entryId}::uuid IS NULL OR h.entry_id = ${entryId}::uuid)`;
   await tx`
     UPDATE gym_agreement_signatures s SET record_deleted_at = ${at}
     FROM gym_held_memberships h
@@ -395,22 +403,39 @@ export async function letGoOfAgreementSignatures(tx: TransactionSql, gymId: stri
 // ── The emailed link to sign (18u-ii-b; migration 0162) ──
 
 /** Writes a membership's link, over the one it had, and claims its email, in one statement:
- *  written only where it has none, its last went more than a minute ago or was used, or the
- *  record's address has changed since; so two presses at once send one. True where written. */
+ *  never for a membership already signed; otherwise only where it has none, its last was sent
+ *  more than a minute ago, or the record's address has changed since; so two presses at once send
+ *  one. It works until the start of `endsBefore` in the business's time zone, the day after its
+ *  last. Not counted as sent until `linkEmailed`. When it ends where written; null where not. */
 export async function claimLink(
   sql: SqlOrTx,
-  input: { gymId: string; membershipId: string; tokenHash: string; sentTo: string; sentBy: string; at: Date; expiresAt: Date },
-): Promise<boolean> {
-  const rows = await sql<{ id: string }[]>`
+  input: { gymId: string; membershipId: string; tokenHash: string; sentTo: string; sentBy: string; at: Date; endsBefore: string; timezone: string },
+): Promise<Date | null> {
+  const rows = await sql<{ expires_at: Date }[]>`
     INSERT INTO gym_agreement_sign_links AS l (gym_id, held_membership_id, token_hash, sent_to, sent_by, sent_at, expires_at)
-    VALUES (${input.gymId}, ${input.membershipId}, ${input.tokenHash}, ${input.sentTo}, ${input.sentBy}, ${input.at}, ${input.expiresAt})
+    SELECT ${input.gymId}, ${input.membershipId}, ${input.tokenHash}, ${input.sentTo}, ${input.sentBy}, ${input.at},
+      (${input.endsBefore}::date)::timestamp AT TIME ZONE ${input.timezone}
+    WHERE NOT EXISTS (SELECT 1 FROM gym_agreement_signatures s WHERE s.gym_id = ${input.gymId} AND s.held_membership_id = ${input.membershipId})
     ON CONFLICT (held_membership_id) DO UPDATE SET
       token_hash = excluded.token_hash, sent_to = excluded.sent_to, sent_by = excluded.sent_by,
-      sent_at = excluded.sent_at, expires_at = excluded.expires_at, used_at = NULL
+      sent_at = excluded.sent_at, expires_at = excluded.expires_at, emailed_at = NULL, used_at = NULL
     WHERE l.gym_id = excluded.gym_id
-      AND (l.sent_at < ${input.at}::timestamptz - interval '1 minute' OR l.used_at IS NOT NULL OR lower(l.sent_to) <> lower(excluded.sent_to))
-    RETURNING l.id`;
-  return rows.length > 0;
+      AND (l.sent_at < ${input.at}::timestamptz - interval '1 minute' OR lower(l.sent_to) <> lower(excluded.sent_to))
+    RETURNING l.expires_at`;
+  return rows[0]?.expires_at ?? null;
+}
+
+/** The link's email went: from now on it opens its page and the person's page names it. */
+export async function linkEmailed(sql: SqlOrTx, gymId: string, tokenHash: string, at: Date): Promise<void> {
+  await sql`UPDATE gym_agreement_sign_links SET emailed_at = ${at} WHERE gym_id = ${gymId} AND token_hash = ${tokenHash} AND emailed_at IS NULL`;
+}
+
+/** A membership's link as it stands: none, its email still going, or emailed. */
+export async function linkState(sql: SqlOrTx, gymId: string, membershipId: string): Promise<"none" | "sending" | "emailed"> {
+  const rows = await sql<{ emailed: boolean }[]>`
+    SELECT emailed_at IS NOT NULL AS emailed FROM gym_agreement_sign_links WHERE gym_id = ${gymId} AND held_membership_id = ${membershipId}`;
+  const row = rows[0];
+  return row === undefined ? "none" : row.emailed ? "emailed" : "sending";
 }
 
 /** The link whose email did not go: it is removed, so nothing says it was sent. */
