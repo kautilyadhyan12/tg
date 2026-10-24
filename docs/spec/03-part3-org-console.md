@@ -4355,6 +4355,28 @@ Overview shows "3 card payments were declined and are still owed." with the amou
 Failed payments, only where there are some. No new table: the gym's declines are found by
 `gym_card_charges_card_idx`.
 
+*As built, 18d-iii-c (a reminder before a card expires):* the gym's own choice, off until it ticks
+"Email a reminder before a saved card expires" in Bills on Memberships (staff with `billing.members`;
+it waits for Save, and each change is a line of the gym's activity). The tick is drawn where the gym
+is connected to Square, or where it is on. From 6 in the morning, gym time, on the 1st of the month a
+card on file expires, the worker emails its holder once for that card and expiry date
+(`gym_card_expiry_notices`, migration `0162`), from the gym ("<gym> via" the app, replies to its
+contact email), where the card is in the Square account the gym is connected to now and pays for a
+membership that renews, running or frozen, of a current member: the holder's own where nobody else
+pays for them, or that of somebody they pay for (the card the app would charge). "Your Visa ending in
+1111 expires at the end of November 2026. It pays for your membership at <gym>. To keep your payments
+going, please give <gym> your new card at the front desk before then." with the gym's phone and email.
+A card Square updates with a new date, a new card, a gym switching it off, or another address on the
+record before it goes sends nothing (the statement before each email reads the rule again; another
+address is written again for the new one); a bounced or refused address is never sent to. Neither the
+daily cap nor an unsubscribe from the gym's other emails holds it. Ticked, the box lists this month's
+expiring saved cards by what happens to each: Emailed (with the day), Being sent, Will be emailed
+(today, or once you save), Not emailed: no email address on their record, Not emailed: their card
+pays for no membership that renews, Not emailed: the email could not be delivered; three names, then
+"and N more · See all". Card on file reads "Expires this month" beside the card in its last month,
+with "Expiry reminder emailed on 1 Nov." (or being sent, no email address, could not be delivered).
+The member updates the card at the desk; in the app once Stage 5 item 20 draws Card on file there.
+
 **Cancelling** (18l): every member can cancel in the app, including those who joined at the
 desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Visa's dispute
 13.2 is a charge after a cancel); an offer to stay appears only beside the cancel button
