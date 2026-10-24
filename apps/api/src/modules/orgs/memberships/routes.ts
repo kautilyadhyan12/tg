@@ -29,7 +29,7 @@
 // The word travels in the body, never the address: it is a cell of the gym's file.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   cancelHeldMembershipRequestSchema,
@@ -52,6 +52,7 @@ import {
   updateGymMembershipTypeRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
+import type { LiveNewsSender } from "../../live/news.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import {
   heldMembershipParamsSchema,
@@ -114,6 +115,8 @@ function sendHeld(reply: FastifyReply, req: FastifyRequest, answer: Awaited<Retu
 export interface MembershipRouteDeps {
   sql: Sql;
   redis: RedisLike;
+  /** Tells the console's open lines what changed (ROADMAP Stage 4 item 18). */
+  news: LiveNewsSender;
   /** Tests move the clock; production uses the real one. A cancel decides which sessions
    *  and classes are still to come by it, so it is the clock a booking reads. */
   now?: () => Date;
@@ -204,7 +207,15 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const heldGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)] };
+  // A change saved to a person's memberships tells the gym's open lines to read them again
+  // (ROADMAP Stage 4 item 18): whoever has their page open sees it without a refresh.
+  const personInAddress = z.object({ gymId: z.string().uuid(), entryId: z.string().uuid() });
+  const tellMemberships = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (req.method === "GET" || reply.statusCode >= 300) return;
+    const at = personInAddress.safeParse(req.params);
+    if (at.success) deps.news.tell(at.data.gymId, { what: "memberships", entryId: at.data.entryId });
+  };
+  const heldGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)], onResponse: tellMemberships };
   const heldUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/memberships";
 
   app.get(heldUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -307,7 +318,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const paymentGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, paymentLimit)] };
+  const paymentGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, paymentLimit)], onResponse: tellMemberships };
 
   app.post(`${heldUrl}/:membershipId/payments`, paymentGuarded, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);

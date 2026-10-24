@@ -59,6 +59,7 @@ import type { RobotCheck } from "./gymPage/robotCheck.js";
 import { registerInvitationRoutes } from "./invites/joinRoutes.js";
 import { registerWaiverRoutes } from "./waiver/routes.js";
 import { registerAgreementRoutes } from "./agreement/routes.js";
+import type { LiveNewsSender } from "../live/news.js";
 import type { AgreementEmailSender } from "./agreement/email.js";
 import { registerStaffInviteRoutes } from "./staffInvites/routes.js";
 import type { InviteSettings } from "./invites/settings.js";
@@ -149,6 +150,8 @@ export function registerOrgRoutes(
      *  where neither is set up. */
     billing?: BillingDeps | null;
     webOrigin: string;
+    /** Tells the console's open lines what changed (ROADMAP Stage 4 item 18). */
+    news: LiveNewsSender;
     joinCodes: boolean;
     memberTap: boolean;
     /** For the browser's trial mark, set as the session cookies are (2c). */
@@ -189,7 +192,7 @@ export function registerOrgRoutes(
   registerPtRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // What the gym sells: its membership types (Part 3 §13.1).
-  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
+  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, news: deps.news, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
@@ -234,6 +237,7 @@ export function registerOrgRoutes(
     email: deps.agreementEmail,
     addressKey: deps.invites?.hmacKey ?? null,
     webOrigin: deps.webOrigin,
+    news: deps.news,
   });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).

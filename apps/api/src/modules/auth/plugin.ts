@@ -23,14 +23,15 @@ declare module "fastify" {
 /** The access token's claims, checked once per request: the app-wide rate limit reads
  *  them first (`app.ts`), and `authenticate` reuses the answer. null: no token, or one
  *  that does not check out. */
-const checked = new WeakMap<FastifyRequest, { userId: string; familyId: string | null } | null>();
-export function accessClaimsOf(req: FastifyRequest, config: AppConfig): { userId: string; familyId: string | null } | null {
+type AccessClaims = { userId: string; familyId: string | null; expiresAtSeconds: number | null };
+const checked = new WeakMap<FastifyRequest, AccessClaims | null>();
+export function accessClaimsOf(req: FastifyRequest, config: AppConfig): AccessClaims | null {
   if (checked.has(req)) return checked.get(req) ?? null;
   const header = req.headers.authorization;
   const bearer =
     header !== undefined && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
   const token = bearer ?? req.cookies[ACCESS_COOKIE] ?? null;
-  let claims: { userId: string; familyId: string | null } | null = null;
+  let claims: AccessClaims | null = null;
   if (token !== null && token !== "") {
     try {
       claims = verifyAccessTokenClaims(token, config);
