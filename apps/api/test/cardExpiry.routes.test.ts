@@ -421,7 +421,7 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     clock = [10, 11].map((utc) => new Date(`${day.slice(0, 8)}01T${String(utc)}:00:00Z`)).find((at) => chicagoHour(at) === 5) ?? new Date(NaN);
     const now = chicagoMonth(clock);
     const una = await person(gym, "Una Updated");
-    const sid = await person(gym, "Sid Switched");
+    const sid = await person(gym, "Sid Steady");
     const ada = await person(gym, "Ada Address");
     for (const e of [una, sid, ada]) {
       await renewing(gym, typeId, e);
@@ -440,14 +440,27 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     const oldAda = await emailOf(ada);
     const newAda = `cexp-r-new-${uniq()}@example.com`;
     await sql`UPDATE gym_member_list_entries SET email = ${newAda} WHERE id = ${ada}`;
-    // The gym switches it off before Sid's goes, then on again the next minute.
+    const sentHere = () => mail.slice(sentBefore).filter((m) => m.text.includes(gym.name)).map((m) => m.to).sort();
+    // The next minute, the gym still sending them: Sid's goes; Una's and Ada's old one never do.
+    await remind();
+    expect(sentHere()).toEqual([await emailOf(sid)]);
+    expect(mailTo(oldAda)).toHaveLength(0);
+    // The minute after, Ada's is written again for the address on her record now.
+    await remind();
+    expect(sentHere()).toEqual([await emailOf(sid), newAda].sort());
+
+    // Sue's is written; the gym switches them off before it goes, then on again the next minute.
+    const sue = await person(gym, "Sue Switched");
+    await renewing(gym, typeId, sue);
+    await cardFor(gym, sue, "4444", now);
+    expect(await queueDueNotices(sql, { environment: "production", now: clock, gymIds: [gym.id] })).toBe(1);
     await sql`UPDATE gyms SET card_expiry_reminders = false WHERE id = ${gym.id}`;
     await remind();
-    expect(mail.slice(sentBefore).filter((m) => m.text.includes(gym.name))).toHaveLength(0);
+    expect(mailTo(await emailOf(sue))).toHaveLength(0);
     await sql`UPDATE gyms SET card_expiry_reminders = true WHERE id = ${gym.id}`;
     await remind();
-    const sent = mail.slice(sentBefore).filter((m) => m.text.includes(gym.name)).map((m) => m.to).sort();
-    expect(sent).toEqual([await emailOf(sid), newAda].sort());
+    expect(mailTo(await emailOf(sue))).toHaveLength(1);
+    expect(sentHere()).toEqual([await emailOf(sid), newAda, await emailOf(sue)].sort());
     expect(mailTo(oldAda)).toHaveLength(0);
     expect(mailTo(await emailOf(una))).toHaveLength(0);
     // Una's card's new date has no reminder until its own last month.
