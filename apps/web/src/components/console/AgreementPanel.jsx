@@ -156,7 +156,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             // Only until the business has written its agreement: after that the box holds its own words.
             <div role="note" className="rounded-xl px-4 py-3 flex flex-col gap-1.5" style={{ background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.35)' }}>
               <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-                No membership agreement yet.
+                {data.others.length > 0 ? 'No default agreement yet.' : 'No membership agreement yet.'}
               </p>
               <p className="text-sm m-0" style={labelStyle}>
                 Write or paste your terms below: cancellation, refunds, freezes, fees and house rules. When you add a membership for a member, they
@@ -175,9 +175,11 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             <label htmlFor={fieldId} className="text-base font-bold" style={{ color: '#fff' }}>
               {MAIN_AGREEMENT_NAME}
             </label>
-            <p className="text-sm m-0" style={softStyle}>
-              {mainAgreementLine(data)}
-            </p>
+            {mainAgreementLine(data) !== null ? (
+              <p className="text-sm m-0" style={softStyle}>
+                {mainAgreementLine(data)}
+              </p>
+            ) : null}
             <textarea
               id={fieldId}
               value={draft}
@@ -338,6 +340,11 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
                   membersTo={membersTo}
                   membersName={membersName}
                   onDone={otherDone}
+                  onStale={(said) => {
+                    // Its form is drawn again from what is saved now, so what was refused is said under its row.
+                    setOtherLine({ at: other.id, text: said });
+                    void fetchAgreement();
+                  }}
                   onCancel={null}
                 />
               ) : null}
@@ -349,7 +356,16 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             </div>
           ))}
           {editing === 'new' ? (
-            <OtherAgreementForm key="new" gymId={gymId} data={data} other={null} readOnly={readOnly} onDone={otherDone} onCancel={() => setEditing(null)} />
+            <OtherAgreementForm
+              key="new"
+              gymId={gymId}
+              data={data}
+              other={null}
+              readOnly={readOnly}
+              onDone={otherDone}
+              onStale={() => void fetchAgreement()}
+              onCancel={() => setEditing(null)}
+            />
           ) : (
             <div className="flex flex-col gap-1.5">
               <button

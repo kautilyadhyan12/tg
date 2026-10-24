@@ -49,8 +49,10 @@ export interface PriceListRow {
   taxIncluded: boolean;
   /** The day of the month the gym bills everyone on (18y), for Add member's total; null for none. */
   billDay: number | null;
-  /** The business's other agreements, by name (18u-ii-a). */
-  agreements: { id: string; name: string }[];
+  /** The business's other agreements, by name, and whether each is asked for (18u-ii-a). */
+  agreements: { id: string; name: string; inUse: boolean }[];
+  /** Its default agreement: never written, turned off, or in use. */
+  defaultAgreement: "none" | "off" | "in_use";
 }
 
 interface RawType {
@@ -110,10 +112,12 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
       ORDER BY lower(name), id`,
     readRates(sql, gymId, null),
     taxIncludedOf(sql, gymId),
-    sql<{ id: string; name: string }[]>`
-      SELECT id, name FROM gym_agreement_documents
-      WHERE gym_id = ${gymId} AND name IS NOT NULL
-      ORDER BY lower(name), id`,
+    sql<{ id: string; name: string | null; in_use: boolean | null }[]>`
+      SELECT d.id, d.name,
+             (SELECT a.stopped_at IS NULL FROM gym_agreements a WHERE a.gym_id = d.gym_id AND a.document_id = d.id ORDER BY a.version DESC LIMIT 1) AS in_use
+      FROM gym_agreement_documents d
+      WHERE d.gym_id = ${gymId}
+      ORDER BY d.name IS NOT NULL, lower(d.name), d.id`,
   ]);
   const gym = gymRows[0];
   if (gym === undefined || taxIncluded === null) return null;
@@ -157,7 +161,8 @@ export async function readPriceList(sql: Sql, gymId: string): Promise<PriceListR
     taxRates: rates.map((r) => ({ id: r.id, name: r.name, bp: r.bp })),
     taxIncluded,
     billDay: gym.bills_day,
-    agreements: agreements.map((a) => ({ id: a.id, name: a.name })),
+    agreements: agreements.flatMap((a) => (a.name === null ? [] : [{ id: a.id, name: a.name, inUse: a.in_use === true }])),
+    defaultAgreement: ((main) => (main === undefined || main.in_use === null ? "none" : main.in_use ? "in_use" : "off"))(agreements.find((a) => a.name === null)),
   };
 }
 

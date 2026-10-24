@@ -145,7 +145,9 @@ export const gymMembershipTypesResponseSchema = z
     billDay: z.number().int().min(1).max(28).nullable().default(null),
     /** The business's other agreements, by name (18u-ii-a): each line says which it uses. Empty
      *  where it has only its main one. */
-    agreements: z.array(z.object({ id: z.string().uuid(), name: z.string() }).strict()).default([]),
+    agreements: z.array(z.object({ id: z.string().uuid(), name: z.string(), inUse: z.boolean().default(true) }).strict()).default([]),
+    /** The business's default agreement: never written, turned off, or in use (18u-ii-a). */
+    defaultAgreement: z.enum(["none", "off", "in_use"]).default("none"),
   })
   .strict();
 export type GymMembershipTypesResponse = z.infer<typeof gymMembershipTypesResponseSchema>;

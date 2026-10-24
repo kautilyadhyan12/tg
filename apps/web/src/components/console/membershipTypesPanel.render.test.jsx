@@ -122,7 +122,7 @@ describe('which agreement each line is signed with (18u-ii-a)', () => {
 
   it("names each line's agreement once there are others, and Open agreement opens that one in Settings", async () => {
     orgService.getMembershipTypes.mockResolvedValue({
-      data: listOf({ types: [type({ name: '10-class pack', agreementId: PACK_TERMS.id }), type({ name: 'Gold Monthly' })], agreements: [PACK_TERMS] }),
+      data: listOf({ types: [type({ name: '10-class pack', agreementId: PACK_TERMS.id }), type({ name: 'Gold Monthly' })], agreements: [PACK_TERMS], defaultAgreement: 'in_use' }),
     });
     render(
       <MemoryRouter>

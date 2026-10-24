@@ -105,13 +105,23 @@ describe('another agreement for some memberships (18u-ii-a)', () => {
   it('the price list names a line\'s agreement only once the business has another', () => {
     expect(priceAgreementLine({ agreements: [] }, GOLD)).toBeNull();
     expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, PACK)).toBe('Agreement: Class pack terms');
-    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, GOLD)).toBe('Agreement: Default agreement');
+    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }], defaultAgreement: 'in_use' }, GOLD)).toBe('Agreement: Default agreement');
+  });
+
+  it.each([
+    ['the default never written', { defaultAgreement: 'none' }, GOLD, 'Agreement: none. No default agreement yet.'],
+    ['the default turned off', { defaultAgreement: 'off' }, GOLD, 'Agreement: none. The default agreement is turned off.'],
+    ['its own agreement turned off', { defaultAgreement: 'in_use', inUse: false }, PACK, 'Agreement: none. Class pack terms is turned off.'],
+  ])('the price list never names an agreement nobody is asked to sign: %s', (_, over, type, line) => {
+    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms', inUse: over.inUse ?? true }], defaultAgreement: over.defaultAgreement }, type)).toBe(line);
   });
 
   it('the main agreement names the memberships it is for', () => {
     expect(mainAgreementLine(data)).toBe('Used for all memberships except: 10-class pack, Free week.');
     expect(mainAgreementLine({ ...data, prices: [PACK] })).toBe('Not used: every membership has its own agreement.');
     expect(mainAgreementLine({ ...data, prices: [GOLD] })).toBe('Used for all memberships.');
+    expect(mainAgreementLine({ ...data, agreement: null })).toBeNull();
+    expect(mainAgreementLine({ ...data, inUse: false })).toBe('Turned off. Members are not asked to sign it.');
   });
 
   it('a price list line opens its own agreement in Settings', () => {

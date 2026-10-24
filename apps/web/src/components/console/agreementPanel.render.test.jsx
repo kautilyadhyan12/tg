@@ -120,7 +120,13 @@ describe('another agreement for some memberships', () => {
     orgService.addOtherAgreement.mockResolvedValue({ data: { ...IN_USE, others: [other({ signed: 0 })], prices: [{ ...PACK, agreementId: OTHER_ID }, TRIAL, YEARLY] } });
     fireEvent.click(save);
     expect((await screen.findByRole('status')).textContent).toBe('Class pack terms saved. Members who get 10-class pack will sign it.');
-    expect(orgService.addOtherAgreement).toHaveBeenCalledWith(ORG.id, { name: 'Class pack terms', text: PACK_TERMS, usedFor: [PACK.id] });
+    // With the price list as the screen showed it, so a line moved since is never saved over.
+    expect(orgService.addOtherAgreement).toHaveBeenCalledWith(ORG.id, {
+      name: 'Class pack terms',
+      text: PACK_TERMS,
+      usedFor: [PACK.id],
+      seen: [PACK, TRIAL, YEARLY].map((p) => ({ id: p.id, agreementId: null })),
+    });
     expect(screen.getByText('Default agreement')).toBeTruthy();
     expect(screen.getByText('Used for all memberships except: 10-class pack.')).toBeTruthy();
     // The agreement just saved is shown open, its words in their own box, no Edit to press.
@@ -170,6 +176,25 @@ describe('another agreement for some memberships', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Class pack terms turned off. Members are not asked to sign it.');
     expect(orgService.stopOtherAgreement).toHaveBeenCalledWith(ORG.id, OTHER_ID);
     expect(screen.getByText('Turned off. Members are not asked to sign it.')).toBeTruthy();
+  });
+
+  it('a line another member of staff moved since the screen loaded: nothing saved, Settings read again, and why said under its row', async () => {
+    open({ ...IN_USE, others: [other()], prices: [{ ...PACK, agreementId: OTHER_ID }, YEARLY] });
+    fireEvent.click(await screen.findByRole('button', { name: /^Class pack terms/ }));
+    const form = screen.getByRole('form', { name: 'Change Class pack terms' });
+    fireEvent.change(within(form).getByLabelText('Terms'), { target: { value: `${PACK_TERMS} More.` } });
+    const said = 'The memberships for your agreements were changed by someone else. Check them again, then save.';
+    orgService.saveOtherAgreement.mockRejectedValue(Object.assign(new Error('refused'), { response: { status: 409, data: { error: 'prices_changed', message: said } } }));
+    orgService.getGymAgreement.mockResolvedValue({ data: { ...IN_USE, others: [other()], prices: [{ ...PACK, agreementId: '44444444-4444-4444-8444-000000000009' }, YEARLY] } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    expect((await screen.findByText(said)).textContent).toBe(said);
+    expect(orgService.getGymAgreement).toHaveBeenCalledTimes(2);
+  });
+
+  it('with no default agreement yet, Settings says so and says nothing it is used for', async () => {
+    open({ ...NONE, others: [other()], prices: [{ ...PACK, agreementId: OTHER_ID }, YEARLY] });
+    expect(await screen.findByText('No default agreement yet.')).toBeTruthy();
+    expect(screen.queryByText(/^Used for all memberships/)).toBeNull();
   });
 
   it("the price list's Open agreement shows that agreement open, at its own address on the page", async () => {

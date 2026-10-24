@@ -75,9 +75,16 @@ export const gymAgreementResponseSchema = z
 export type GymAgreementResponse = z.infer<typeof gymAgreementResponseSchema>;
 
 /** Add another agreement, or change one: its name, its words and the lines of the price list it
- *  is used for. A line not ticked on any of them uses the main agreement. */
+ *  is used for. A line not ticked on any of them uses the main agreement. `seen` is the price list
+ *  as the screen showed it, each line with the agreement it used: where another member of staff
+ *  has moved a line since, nothing is saved (`prices_changed`). */
 export const saveOtherAgreementBodySchema = z
-  .object({ name: agreementNameSchema, text: waiverTextSchema, usedFor: z.array(z.string().uuid()).max(AGREEMENT_USED_FOR_MAX) })
+  .object({
+    name: agreementNameSchema,
+    text: waiverTextSchema,
+    usedFor: z.array(z.string().uuid()).max(AGREEMENT_USED_FOR_MAX),
+    seen: z.array(z.object({ id: z.string().uuid(), agreementId: z.string().uuid().nullable() }).strict()).max(AGREEMENT_USED_FOR_MAX),
+  })
   .strict();
 export type SaveOtherAgreementBody = z.infer<typeof saveOtherAgreementBodySchema>;
 
@@ -156,6 +163,8 @@ export const AGREEMENT_WORDS = {
   name_taken: (name: string): string => `You already have an agreement called ${name}. Give this one another name.`,
   /** "Used for" names a line of the price list that is not the business's, or is archived. */
   price_not_found: "One of the memberships you ticked is no longer on your price list. Check the list again, then save.",
+  /** Another member of staff changed which memberships use which agreement after the screen loaded. */
+  prices_changed: "The memberships for your agreements were changed by someone else. Check them again, then save.",
   /** Over, cancelled or frozen: nothing to sign now. */
   membership_not_signable: "This membership is over, cancelled or frozen, so it can't be signed now.",
   /** Email a copy, for a membership nobody has signed. */

@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import { AGREEMENT_NAME_MAX, WAIVER_MAX_CHARS } from '@app/shared';
-import { orgService, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorText } from '../../api/orgsApi';
 import { otherDraftFrom, otherDraftState, otherSaveChanges, otherSaveLabel, otherSavedLine, otherStopWords } from '../../pages/console/agreementView';
 
 // ANOTHER OF THE BUSINESS'S AGREEMENTS (ROADMAP 18u-ii-a), in Settings under its row or under
@@ -40,7 +40,8 @@ function Tick({ checked, onChange, disabled, children, note }) {
 
 // `other`: the agreement as saved, or null for a new one. `onDone(data, line, id)`: saved or stopped.
 // `onCancel`: Add agreement's way out; null for an agreement already saved, which stays open.
-export default function OtherAgreementForm({ gymId, data, other, readOnly, membersTo = '../members', membersName = 'Members', onDone, onCancel }) {
+// `onStale(said)`: another member of staff moved a line since this screen loaded; Settings reads again.
+export default function OtherAgreementForm({ gymId, data, other, readOnly, membersTo = '../members', membersName = 'Members', onDone, onStale = () => {}, onCancel }) {
   const nameId = useId();
   const textId = useId();
   const [draft, setDraft] = useState(() => otherDraftFrom(data, other));
@@ -64,12 +65,15 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, membe
     setBusy('save');
     setProblem(null);
     try {
-      const body = { name: draft.name.trim(), text: draft.text, usedFor: draft.usedFor };
+      // With the price list as this screen showed it: a line moved since is never saved over.
+      const body = { name: draft.name.trim(), text: draft.text, usedFor: draft.usedFor, seen: data.prices.map((p) => ({ id: p.id, agreementId: p.agreementId })) };
       const res = other === null ? await orgService.addOtherAgreement(gymId, body) : await orgService.saveOtherAgreement(gymId, other.id, body);
       const savedId = res.data.others.find((o) => o.name.toLowerCase() === body.name.toLowerCase())?.id ?? null;
       onDone(res.data, otherSavedLine(body.name, data, res.data), savedId);
     } catch (err) {
-      setProblem(errorText(err, "We couldn't save this agreement."));
+      const said = errorText(err, "We couldn't save this agreement.");
+      setProblem(said);
+      if (errorCode(err) === 'prices_changed') onStale(said);
       setBusy(null);
     }
   };

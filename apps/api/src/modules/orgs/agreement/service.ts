@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import type { FastifyBaseLogger } from "fastify";
 import {
   AGREEMENT_WORDS,
+  MAIN_AGREEMENT_NAME,
   WAIVER_DESK_WORDS,
   agreementFacts,
   agreementSignable,
@@ -116,12 +117,35 @@ export async function saveGymAgreement(deps: AgreementDeps, userId: string, gymI
 
 const priceNotFound = (): OrgsError => new OrgsError(409, "price_not_found", AGREEMENT_WORDS.price_not_found);
 
+/** No other agreement takes the default agreement's own name. */
+function refuseDefaultName(name: string): void {
+  if (name.toLowerCase() === MAIN_AGREEMENT_NAME.toLowerCase()) throw new OrgsError(409, "name_taken", AGREEMENT_WORDS.name_taken(MAIN_AGREEMENT_NAME));
+}
+
+/** THE PRICE LIST AS THE SCREEN SHOWED IT IS THE PRICE LIST NOW, for every line this save touches:
+ *  each line it saw uses the agreement it saw, and every line this agreement has or is given was
+ *  on the screen. Otherwise another member of staff moved a line since, and saving the whole set
+ *  this screen holds would silently undo it. */
+async function requireSeen(tx: repo.SqlOrTx, gymId: string, documentId: string | null, body: SaveOtherAgreementBody): Promise<void> {
+  const now = await repo.agreementPrices(tx, gymId);
+  const seen = new Map(body.seen.map((line) => [line.id, line.agreementId]));
+  const moved = now.some(
+    (line) =>
+      (seen.has(line.id) && seen.get(line.id) !== line.agreementId) ||
+      (!seen.has(line.id) && ((documentId !== null && line.agreementId === documentId) || body.usedFor.includes(line.id))),
+  );
+  if (moved) throw new OrgsError(409, "prices_changed", AGREEMENT_WORDS.prices_changed);
+}
+
+const sameLines = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id) => b.includes(id));
+
 /** Adds another agreement, with its name, its words and the lines of the price list it is used
  *  for. The same name and words again (a second press) change nothing but the ticks. */
 export async function addOtherAgreement(deps: AgreementDeps, userId: string, gymId: string, body: SaveOtherAgreementBody, limit: Limit): Promise<GymAgreementResponse | null> {
   await requireWritablePrivilege(deps, gymId, userId, TICK);
   if (!(await limit())) return null;
   const at = deps.now();
+  refuseDefaultName(body.name);
   return await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
     const named = await repo.documentNamed(tx, gymId, body.name);
@@ -129,8 +153,13 @@ export async function addOtherAgreement(deps: AgreementDeps, userId: string, gym
     if (named !== null) {
       const latest = await repo.latestOf(tx, gymId, named.id);
       if (latest === null || latest.body !== body.text) throw new OrgsError(409, "name_taken", AGREEMENT_WORDS.name_taken(named.name));
+      // A second press of the same: what the first one saved is the answer.
+      const has = (await repo.agreementPrices(tx, gymId)).filter((line) => line.agreementId === named.id).map((line) => line.id);
+      if (sameLines(has, [...new Set(body.usedFor)])) return await gymAgreement(tx, gymId);
+      await requireSeen(tx, gymId, named.id, body);
       documentId = named.id;
     } else {
+      await requireSeen(tx, gymId, null, body);
       documentId = await repo.insertDocument(tx, gymId, body.name, at);
       const wording = await repo.insertVersion(tx, { gymId, documentId, version: 1, body: body.text, savedBy: userId, at });
       await insertAudit(tx, { actorUserId: userId, gymId, action: "org.agreement_added", targetType: "gym_agreement", targetId: wording.id, meta: { agreement: body.name } });
@@ -152,11 +181,13 @@ export async function saveOtherAgreement(
 ): Promise<GymAgreementResponse | null> {
   await requireWritablePrivilege(deps, gymId, userId, TICK);
   if (!(await limit())) return null;
+  refuseDefaultName(body.name);
   const at = deps.now();
   return await deps.sql.begin(async (tx) => {
     await lockOrgRow(tx, gymId);
     const document = await repo.otherDocument(tx, gymId, documentId);
     if (document === null) throw new OrgsError(404, "not_found", AGREEMENT_WORDS.not_found);
+    await requireSeen(tx, gymId, documentId, body);
     if (document.name !== body.name) {
       const named = await repo.documentNamed(tx, gymId, body.name);
       if (named !== null && named.id !== documentId) throw new OrgsError(409, "name_taken", AGREEMENT_WORDS.name_taken(named.name));

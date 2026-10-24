@@ -153,6 +153,9 @@ export function otherAgreementLine(data, other) {
 
 /** The line under the main agreement once there are others: the memberships it is for. */
 export function mainAgreementLine(data) {
+  // Said only of a default agreement that is written and asked for.
+  if (data.agreement === null) return null;
+  if (!data.inUse) return 'Turned off. Members are not asked to sign it.';
   const elsewhere = data.prices.filter((p) => p.agreementId !== null).map((p) => p.name);
   if (elsewhere.length === 0) return 'Used for all memberships.';
   if (elsewhere.length === data.prices.length) return 'Not used: every membership has its own agreement.';
@@ -245,6 +248,10 @@ export function otherStopWords(data, other) {
 /** On the price list: which agreement a line uses; null where the business has only its main one. */
 export function priceAgreementLine(list, type) {
   if (!Array.isArray(list.agreements) || list.agreements.length === 0) return null;
-  const other = type.agreementId === null ? undefined : list.agreements.find((a) => a.id === type.agreementId);
-  return `Agreement: ${agreementTitle(other?.name ?? null)}`;
+  const other = type.agreementId == null ? undefined : list.agreements.find((a) => a.id === type.agreementId);
+  // Never an agreement nobody is asked to sign: one turned off, or a default never written.
+  if (other !== undefined) return other.inUse === false ? `Agreement: none. ${other.name} is turned off.` : `Agreement: ${other.name}`;
+  const main = MAIN_AGREEMENT_NAME.toLowerCase();
+  if (list.defaultAgreement === 'in_use') return `Agreement: ${MAIN_AGREEMENT_NAME}`;
+  return list.defaultAgreement === 'off' ? `Agreement: none. The ${main} is turned off.` : `Agreement: none. No ${main} yet.`;
 }

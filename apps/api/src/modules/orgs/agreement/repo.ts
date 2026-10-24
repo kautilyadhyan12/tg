@@ -155,9 +155,10 @@ export async function agreementPrices(sql: SqlOrTx, gymId: string): Promise<{ id
 }
 
 /** The lines of the price list this agreement is used for become exactly `typeIds`: those
- *  ticked move to it, and those it had and are not ticked go back to the main one. False, with
- *  nothing written, where a line ticked is not one of the business's lines in use. The caller
- *  holds the gym's row lock. */
+ *  ticked move to it, and those in use it had and are not ticked go back to the main one; an
+ *  archived line, never shown to tick, keeps its agreement for the members still holding it.
+ *  False, with nothing written, where a line ticked is not one of the business's lines in use.
+ *  The caller holds the gym's row lock. */
 export async function setUsedFor(tx: TransactionSql, gymId: string, documentId: string, typeIds: readonly string[]): Promise<boolean> {
   const ids = [...new Set(typeIds)];
   const found = await tx<{ n: number }[]>`
@@ -165,7 +166,8 @@ export async function setUsedFor(tx: TransactionSql, gymId: string, documentId: 
   if ((found[0]?.n ?? 0) !== ids.length) return false;
   await tx`
     UPDATE gym_membership_types SET agreement_document_id = NULL
-    WHERE gym_id = ${gymId} AND agreement_document_id = ${documentId} AND id <> ALL(${ids}::uuid[])`;
+    WHERE gym_id = ${gymId} AND agreement_document_id = ${documentId} AND id <> ALL(${ids}::uuid[])
+      AND archived_at IS NULL`;
   await tx`
     UPDATE gym_membership_types SET agreement_document_id = ${documentId}
     WHERE gym_id = ${gymId} AND archived_at IS NULL AND id = ANY(${ids}::uuid[])
