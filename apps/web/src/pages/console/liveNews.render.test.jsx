@@ -164,7 +164,7 @@ describe('the open line', () => {
 
     calls = [];
     answers = [{ status: 401 }, { status: 401 }];
-    const again = listenLive(GYM, () => {});
+    const again = listenLive(OTHER_GYM, () => {});
     await until(() => calls.length === 2);
     await pause(1_500);
     expect(calls).toHaveLength(2);
@@ -199,14 +199,20 @@ describe('the open line', () => {
     stop();
   });
 
-  it('closes when the last part stops listening, and never opens while switched off', async () => {
+  it('closes a moment after the last part stops listening, keeps it for a part that comes straight back, and never opens while switched off', async () => {
     const stopA = listenLive(GYM, () => {});
     const stopB = listenLive(GYM, () => {});
     await until(() => calls.length === 1);
     stopA();
-    expect(calls[0].aborted).toBe(false);
     stopB();
-    expect(calls[0].aborted).toBe(true);
+    // Another page of the console listening at once keeps the same line.
+    const next = listenLive(GYM, () => {});
+    await pause(2_300);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].aborted).toBe(false);
+    next();
+    expect(calls[0].aborted).toBe(false);
+    await until(() => calls[0].aborted, 3_000);
 
     configureLive({ on: false });
     calls = [];

@@ -15,6 +15,9 @@ import { refreshSession } from '../../api/authApi';
 const WAITS_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
 /** A line that ends sooner than this after opening counts as a failure, so it is not opened again at once. */
 const SHORT_LINE_MS = 2_000;
+/** How long a line stays open after the last part of the page stops listening: going to another
+ *  page of the console that listens too keeps the same line. */
+const LINGER_MS = 2_000;
 
 const settings = {
   base: import.meta.env.VITE_API_URL,
@@ -53,6 +56,8 @@ function watchScreen() {
 }
 
 function hangUp(line) {
+  clearTimeout(line.linger);
+  line.linger = null;
   clearTimeout(line.wait);
   line.wait = null;
   line.open = false;
@@ -179,19 +184,24 @@ export function listenLive(gymId, fn) {
   watchScreen();
   let line = lines.get(gymId);
   if (line === undefined) {
-    line = { gymId, listeners: new Set(), controller: null, wait: null, open: false, failures: 0, refreshed: false, stopped: false };
+    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, open: false, failures: 0, refreshed: false, stopped: false };
     lines.set(gymId, line);
   }
+  clearTimeout(line.linger);
+  line.linger = null;
   // Joining a line already open: its `ready` has gone, and the next one means it was away.
   const listener = { fn, seenReady: line.open };
   line.listeners.add(listener);
   connect(line);
   return () => {
     line.listeners.delete(listener);
-    if (line.listeners.size === 0) {
+    if (line.listeners.size > 0 || line.linger !== null) return;
+    line.linger = setTimeout(() => {
+      line.linger = null;
+      if (line.listeners.size > 0) return;
       hangUp(line);
-      lines.delete(gymId);
-    }
+      if (lines.get(gymId) === line) lines.delete(gymId);
+    }, LINGER_MS);
   };
 }
 
