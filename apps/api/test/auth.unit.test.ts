@@ -55,11 +55,16 @@ describe("access JWT (R3.7)", () => {
     const FAMILY = "44444444-4444-4444-8444-444444444444";
     const token = signAccessToken(USER, config, FAMILY);
     expect(verifyAccessToken(token, config)).toBe(USER);
-    expect(verifyAccessTokenClaims(token, config)).toEqual({ userId: USER, familyId: FAMILY });
+    const claims = verifyAccessTokenClaims(token, config);
+    expect(claims).toEqual({ userId: USER, familyId: FAMILY, expiresAtSeconds: expect.any(Number) as number });
+    // When it runs out, which a live line ends at (Stage 4 item 18): the access token's 15 minutes.
+    const ttl = (claims.expiresAtSeconds ?? 0) - Math.floor(Date.now() / 1000);
+    expect(ttl).toBeGreaterThan(config.ACCESS_TTL_MIN * 60 - 5);
+    expect(ttl).toBeLessThanOrEqual(config.ACCESS_TTL_MIN * 60);
     // A token signed before the session claim existed still signs its owner in; it
     // names no session.
     const older = jwt.sign({ sub: USER, typ: "access" }, SECRET, { algorithm: "HS256", expiresIn: 60 });
-    expect(verifyAccessTokenClaims(older, config)).toEqual({ userId: USER, familyId: null });
+    expect(verifyAccessTokenClaims(older, config)).toEqual({ userId: USER, familyId: null, expiresAtSeconds: expect.any(Number) as number });
   });
 
   it("pins algorithms to HS256: an HS512 token with the SAME secret is rejected", () => {
