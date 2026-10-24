@@ -34,7 +34,8 @@ import type { PaymentsDeps } from "./service.js";
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 
 async function allowed(deps: PaymentsDeps, gymId: string, userId: string) {
-  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
+  // The privileges Try again and the person's page need, so nobody is shown a press they are refused.
+  const { privileges } = await requirePrivilege(deps, gymId, userId, "members.confirm");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
   const gym = await repo.readGym(deps.sql, gymId);
   if (gym === null) throw orgNotFound();

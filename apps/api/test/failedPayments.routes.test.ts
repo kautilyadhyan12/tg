@@ -297,6 +297,10 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     if (ginaRow === undefined) throw new Error("no Gina row");
     expect(ginaRow.retry).toMatchObject({ kind: "charge", card: { brand: "VISA", last4: "1000" }, payerName: null, amountMinor: 2500 });
     expect(ginaRow.declined).toMatchObject({ last4: "1000", reason: "declined", stop: "bank" });
+    // Try again on this gym's row pressed by another gym's owner: refused, Square never asked.
+    const ginaAsked = askedOf(gina.card).length;
+    expect([403, 404]).toContain((await tryAgain(gym, ginaRow, other.owner.cookies)).statusCode);
+    expect(askedOf(gina.card).length).toBe(ginaAsked);
     // Each row's Try again names that row's own card, never another row's.
     expect(page.payments.find((p) => p.membershipId === nina.h.membershipId)?.retry).toMatchObject({ kind: "charge", card: { last4: "1001" } });
 
@@ -455,6 +459,12 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${trainer.userId}, 'trainer', ${[...ROLE_PRIVILEGES.trainer]})`;
     const asTrainer = await send("GET", `/v1/orgs/${gym.id}/failed-payments`, trainer.cookies);
     expect([403, 404]).toContain(asTrainer.statusCode);
+    // A desk trainer given "Record members' payments" alone: Try again and the person's page refuse
+    // them, so the list and Overview's count do too.
+    const desk = await signedIn("Dee Desk");
+    await sql`INSERT INTO gym_staff (gym_id, user_id, role, privileges) VALUES (${gym.id}, ${desk.userId}, 'trainer', ${[...ROLE_PRIVILEGES.trainer, "billing.members"]})`;
+    expect((await send("GET", `/v1/orgs/${gym.id}/failed-payments`, desk.cookies)).statusCode).toBe(403);
+    expect((await send("GET", `/v1/orgs/${gym.id}/failed-payments/summary`, desk.cookies)).statusCode).toBe(403);
     expect((await send("GET", `/v1/orgs/${gym.id}/failed-payments?from=-1`, gym.owner.cookies)).statusCode).toBe(400);
     expect((await send("GET", `/v1/orgs/${gym.id}/failed-payments?from=x`, gym.owner.cookies)).statusCode).toBe(400);
     expect((await send("GET", `/v1/orgs/${gym.id}/failed-payments`, {})).statusCode).toBe(401);

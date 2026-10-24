@@ -67,8 +67,11 @@ describe('Failed payments, in words', () => {
     expect(nextStep(row({ retry: { kind: 'no', why: 'elsewhere' } }), 'America/Chicago', 'US')).toBe('An earlier payment for this membership is due first. Take payment opens it.');
   });
 
-  it('who sees it: people and payments both', () => {
-    expect(canSeeFailedPayments(['members.read', 'billing.members'])).toBe(true);
+  it("who sees it: the list and payments both, the ticks Try again and the person's page need", () => {
+    expect(canSeeFailedPayments(['members.read', 'members.confirm', 'billing.members'])).toBe(true);
+    // Payments with only seeing people: every press on the page would be refused.
+    expect(canSeeFailedPayments(['members.read', 'billing.members'])).toBe(false);
+    expect(canSeeFailedPayments(['members.read', 'members.confirm'])).toBe(false);
     expect(canSeeFailedPayments(['members.read'])).toBe(false);
     expect(canSeeFailedPayments(['billing.members'])).toBe(false);
     expect(canSeeFailedPayments(undefined)).toBe(false);

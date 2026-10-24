@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreditCard, Loader2, RotateCw } from 'lucide-react';
 import { failedPaymentsService } from '../../api/failedPaymentsApi';
@@ -38,7 +38,7 @@ const newKey = () => globalThis.crypto.randomUUID();
 /** One failed payment: who, what for, how much, the facts of the decline, and what can be done
  *  here: Try again where the card can be charged now, Add a new card (the card box of the person's
  *  page, under the row, then the charge in the same place), Take payment, and their page. */
-function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onCardSaved }) {
+function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onStale, onCardSaved }) {
   /** What is open under the row: 'charge', 'card', or 'saved' (a card just added: the charge box
    *  opens by itself once the list says it can be charged). */
   const [opened, setOpened] = useState(null);
@@ -66,10 +66,13 @@ function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onCar
       onCharged();
     } catch (err) {
       setState((was) => ({ ...was, busy: false, error: errorText(err, "We couldn't charge the card. Try again.") }));
-      if (errorStatus(err) === 409) onCharged();
+      // The row has changed since it was read: read the list again, so the row says what is true now.
+      if (errorStatus(err) === 409) onStale();
     }
   };
   const close = () => {
+    // A press whose answer was lost is never replayed by the next one, on this card or a new one.
+    setKey(newKey());
     setOpened(null);
     setState((was) => ({ ...was, error: null }));
   };
@@ -131,6 +134,7 @@ function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onCar
             name={row.name}
             readOnly={readOnly}
             onCardSaved={() => {
+              setKey(newKey());
               setOpened('saved');
               onCardSaved();
             }}
@@ -186,15 +190,27 @@ export default function FailedPayments() {
   /** The gym's own columns, for a person's page; read when one is first opened. */
   const [columns, setColumns] = useState(null);
 
-  const load = useCallback(() => {
-    if (gymId === null || !may) return Promise.resolve();
-    return failedPaymentsService.list(gymId).then(
-      (list) => setState({ gymId, error: null, refused: false, list }),
-      (err) => setState((was) => ({ gymId, error: errorText(err, "We couldn't load this list."), refused: errorStatus(err) === 403, list: was.gymId === gymId ? was.list : null })),
-    );
+  /** The first row of the last page on screen: a read again reads every page up to it, so a row
+   *  further down, and the box open under it, stays where staff left it. */
+  const shownTo = useRef(0);
+
+  const load = useCallback(async () => {
+    if (gymId === null || !may) return;
+    try {
+      let page = await failedPaymentsService.list(gymId);
+      const payments = [...page.payments];
+      while (page.next !== null && page.next <= shownTo.current) {
+        page = await failedPaymentsService.list(gymId, page.next);
+        payments.push(...page.payments.filter((p) => !payments.some((q) => q.billId === p.billId)));
+      }
+      setState({ gymId, error: null, refused: false, list: { ...page, payments } });
+    } catch (err) {
+      setState((was) => ({ gymId, error: errorText(err, "We couldn't load this list."), refused: errorStatus(err) === 403, list: was.gymId === gymId ? was.list : null }));
+    }
   }, [gymId, may]);
 
   useEffect(() => {
+    shownTo.current = 0;
     void load();
   }, [load]);
 
@@ -211,6 +227,7 @@ export default function FailedPayments() {
     setMore({ busy: true, error: null });
     failedPaymentsService.list(gymId, from).then(
       (page) => {
+        shownTo.current = Math.max(shownTo.current, from);
         setState((was) => (was.gymId === gymId && was.list !== null ? { ...was, list: { ...page, payments: [...was.list.payments, ...page.payments.filter((p) => !was.list.payments.some((q) => q.billId === p.billId))] } } : was));
         setMore({ busy: false, error: null });
       },
@@ -274,7 +291,7 @@ export default function FailedPayments() {
 
       {refused ? (
         <section className="c-card p-5 md:p-6">
-          <p className="c-s15 c-t2">Recording payments isn&apos;t part of your role. Ask the owner to turn on &quot;Record members&apos; payments&quot; for you.</p>
+          <p className="c-s15 c-t2">{`Failed payments needs "Record members' payments" and "Keep the ${words.person} list and invite". Ask the owner to turn them on for you.`}</p>
         </section>
       ) : list === null ? (
         mine.error !== null ? (
@@ -313,7 +330,10 @@ export default function FailedPayments() {
                     readOnly={readOnly}
                     onOpenPerson={openPerson}
                     onTakePayment={(r) => openPerson(r.entryId, { membershipId: r.membershipId, feeBillId: r.fee === null ? null : r.billId })}
-                    onCharged={recount} onCardSaved={() => void load()} />
+                    onCharged={recount}
+                    onStale={() => void load()}
+                    onCardSaved={() => void load()}
+                  />
                 ))}
               </ul>
               {list.next !== null ? (

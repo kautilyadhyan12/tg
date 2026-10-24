@@ -269,6 +269,59 @@ describe('Failed payments', () => {
     expect(row('Nina Short').textContent).not.toContain('was declined. The card did not have enough funds. Nothing');
   });
 
+  it('a card saved under a row on the second page: every page shown is read again, and the charge is offered under that row', async () => {
+    const ezraNew = { ...EZRA, retry: { kind: 'charge', card: { brand: 'VISA', last4: '1111' }, payerName: null, expired: false, cardRef: 'ref-ezra-new', amountMinor: 2500 } };
+    svc.list.mockImplementation((_, from = 0) => Promise.resolve(from === 0 ? answer({ count: 4, payments: [GINA, NINA, FAY], next: 25 }) : answer({ count: 4, payments: [EZRA], next: null })));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Show more' }));
+    await screen.findByText('Ezra Expired');
+    const ezra = row('Ezra Expired');
+    fireEvent.click(within(ezra).getByRole('button', { name: 'Add a new card' }));
+    svc.list.mockImplementation((_, from = 0) => Promise.resolve(from === 0 ? answer({ count: 4, payments: [GINA, NINA, FAY], next: 25 }) : answer({ count: 4, payments: [ezraNew], next: null })));
+    fireEvent.click(within(ezra).getByRole('button', { name: 'Save the card' }));
+    const box = await within(row('Ezra Expired')).findByTestId('failed-payment-box');
+    expect(box.textContent).toContain("Card saved. Charge Ezra Expired's new card now?");
+    expect(svc.list).toHaveBeenLastCalledWith('g1', 25);
+    expect(rows().length).toBe(4);
+  });
+
+  it('a press the server refuses as changed (409) reads the list again, so the row says what is true now', async () => {
+    open();
+    const gina = await waitFor(() => row('Gina Declined'));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Try again' }));
+    const reads = svc.list.mock.calls.length;
+    svc.list.mockResolvedValue(answer({ payments: [{ ...GINA, retry: { kind: 'wait', from: '2026-10-24T19:15:00.000Z' } }, NINA, FAY, EZRA] }));
+    orgApi.chargeCardOnFile.mockRejectedValue(Object.assign(new Error('changed'), { response: { status: 409, data: { message: 'This card was declined less than a day ago.' } } }));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Charge $25.00' }));
+    await waitFor(() => expect(svc.list.mock.calls.length).toBeGreaterThan(reads));
+    await waitFor(() => expect(row('Gina Declined').textContent).toContain('This card can be tried again from'));
+    expect(within(row('Gina Declined')).queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('a press whose answer was lost is never replayed: a new card, or the box opened again, sends a new key', async () => {
+    open();
+    const gina = await waitFor(() => row('Gina Declined'));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Try again' }));
+    orgApi.chargeCardOnFile.mockRejectedValue(new Error('Network Error'));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Charge $25.00' }));
+    await waitFor(() => expect(orgApi.chargeCardOnFile).toHaveBeenCalledTimes(1));
+    await within(gina).findByRole('alert');
+    fireEvent.click(within(gina).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Try again' }));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Charge $25.00' }));
+    await waitFor(() => expect(orgApi.chargeCardOnFile).toHaveBeenCalledTimes(2));
+    const [first, second] = orgApi.chargeCardOnFile.mock.calls.map((c) => c[3].requestKey);
+    expect(second).not.toBe(first);
+    // A new card saved under the row: its charge has a key of its own.
+    await within(gina).findByRole('alert');
+    fireEvent.click(within(gina).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Add a new card' }));
+    fireEvent.click(within(gina).getByRole('button', { name: 'Save the card' }));
+    fireEvent.click(await within(row('Gina Declined')).findByRole('button', { name: 'Charge $25.00' }));
+    await waitFor(() => expect(orgApi.chargeCardOnFile).toHaveBeenCalledTimes(3));
+    expect(new Set(orgApi.chargeCardOnFile.mock.calls.map((c) => c[3].requestKey)).size).toBe(3);
+  });
+
   it('none: says so; Square not connected: the owner gets Connect Square, other staff are told who can', async () => {
     svc.list.mockResolvedValue(answer({ count: 0, totals: [], payments: [] }));
     open();
@@ -288,7 +341,13 @@ describe('Failed payments', () => {
 
   it('staff who do not record payments are told so, and the list is never asked for', async () => {
     open({ ...ORG, staffRole: 'trainer', privileges: ['members.read'] });
-    await screen.findByText(/Recording payments isn't part of your role/);
+    await screen.findByText(`Failed payments needs "Record members' payments" and "Keep the member list and invite". Ask the owner to turn them on for you.`);
+    expect(svc.list).not.toHaveBeenCalled();
+    cleanup();
+    resetConsoleOrgs();
+    // Records payments, but does not keep the list: the same, never a page of presses they are refused.
+    open({ ...ORG, staffRole: 'trainer', privileges: ['members.read', 'billing.members'] });
+    await screen.findByText(/^Failed payments needs/);
     expect(svc.list).not.toHaveBeenCalled();
   });
 

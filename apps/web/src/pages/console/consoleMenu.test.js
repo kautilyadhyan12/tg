@@ -90,9 +90,11 @@ describe('where each page sits on a phone', () => {
     expect(keys(consoleMenu('iron-house', ['attendance.read', 'reports.read'], 'gym').pages)).not.toContain('at-risk');
   });
 
-  it('Failed payments is under More, after Sell, for whoever reads people and records their payments', () => {
-    const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'billing.members'], 'gym');
-    expect(keys(menu.more)).toEqual(['sell', 'failed-payments', 'at-risk', 'training']);
+  it('Failed payments is under More, after Sell, for whoever keeps the list and records their payments', () => {
+    // Records payments without keeping the list: Try again and the person's page would refuse them.
+    expect(keys(consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'billing.members'], 'gym').more)).not.toContain('failed-payments');
+    const menu = consoleMenu('iron-house', [...ROLE_PRIVILEGES.trainer, 'members.confirm', 'billing.members'], 'gym');
+    expect(keys(menu.more).slice(0, 2)).toEqual(['sell', 'failed-payments']);
     expect(menu.more[1]).toMatchObject({ to: '/console/iron-house/failed-payments', label: 'Failed payments' });
     expect(keys(consoleMenu('iron-house', ['members.read'], 'gym').pages)).not.toContain('failed-payments');
     expect(keys(consoleMenu('iron-house', ['billing.members'], 'gym').pages)).not.toContain('failed-payments');
