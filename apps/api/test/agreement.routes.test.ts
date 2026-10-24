@@ -230,6 +230,7 @@ d("a membership agreement signed at the desk (real Postgres)", () => {
           sent.push(letter);
           return Promise.resolve();
         },
+        sendAgreementLink: () => Promise.resolve(),
       },
     });
     await api().ready();

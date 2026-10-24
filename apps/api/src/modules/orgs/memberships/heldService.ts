@@ -376,10 +376,12 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
   // ask for one, and which were signed.
   const listed = [...inUse, ...shown].map((m) => m.id);
-  const [anyAsked, asked, agreementSigned] = await Promise.all([
+  const [anyAsked, asked, agreementSigned, agreementLinks] = await Promise.all([
     agreementRepo.anyInUse(deps.sql, gymId),
     agreementRepo.askedFor(deps.sql, gymId, listed),
     agreementRepo.signedAtOf(deps.sql, gymId, listed),
+    // The emailed links to sign that work now (18u-ii-b).
+    agreementRepo.workingLinksOf(deps.sql, gymId, listed, deps.now()),
   ]);
   return heldMembershipsResponseSchema.parse({
     today,
@@ -388,6 +390,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
       ...m,
       agreement: ((at) => (at === undefined ? null : { at: at.toISOString() }))(agreementSigned.get(m.id)),
       agreementAsked: asked.has(m.id),
+      agreementLink: ((l) => (l === undefined ? null : { sentAt: l.sentAt.toISOString(), expiresAt: l.expiresAt.toISOString() }))(agreementLinks.get(m.id)),
     })),
     agreementInUse: anyAsked,
     earlierNotShown: over.length - shown.length + stored,

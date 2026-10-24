@@ -4387,7 +4387,26 @@ opened is read again, and a membership signed keeps what it signed. The price li
 "Agreement: …" on each line once there is more than one, with Change agreement opening that one in
 Settings. Members → Filter → Agreement not signed: the current members holding a membership running
 or still to start whose line asks for an agreement and nobody has signed it, the rule the person's
-page reads. 18u-ii-b adds an emailed link to sign; the phone app signs in the app (Stage 5 item 20).
+page reads. *As built, 18u-ii-b (signing from afar):* under a membership not signed, Email a link to
+sign (beside Sign agreement on the line, and beside Sign later in the box Add membership opens)
+emails the record's address a link, `/sign-agreement#<token>`: 32 random bytes, kept only as their
+SHA-256, after "#" so no server's log holds it; the page sends it in the body and takes it out of
+the address bar (opened again without it: "To read and sign the agreement, open the link in your
+email again."). One link a membership, never for one already signed: sending again replaces it and
+the old one names nothing, except within a minute of the last, when nothing more is sent and the line
+says "A link to sign was emailed to them less than a minute ago…" (a press that finds another's
+email still going waits to learn whether it went). A link works only once its email went, to the end
+of the 14th day after today in the business's calendar (the day the email names), once, and only
+while the record is on the list with the address it was sent to (any capitals); a record deleted for
+good takes its links with it. A link that names nothing says "This link isn't valid" and names nobody. The page needs no sign-in and
+reads the same details and words as the desk's box, with the same parent-or-guardian choice, and
+signs by the same one statement, which also asks that the link still works; the signature is kept
+as "from the emailed link" with nobody's screen, and the copy is emailed as at the desk. The line
+says "Link to sign emailed on {day}" while the link works, with Send link again; while a link
+waits, the person's page reads their memberships again when staff come back to the window, and
+every 30 seconds for 15 minutes after that, until live updates replace it (ROADMAP Stage 4 item 18;
+Kd, 2026-10-24). The phone app
+signs in the app (Stage 5 item 20).
 
 **Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years

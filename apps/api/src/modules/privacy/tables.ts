@@ -574,6 +574,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // gym's record; `ON DELETE set null`. Who signed is a record on the gym's list, not an account:
   // the purge deletes it six years after that record is deleted for good.
   "gym_agreement_signatures",
+  // gym_agreement_sign_links.sent_by — which member of staff emailed a link to sign a
+  // membership's agreement (`0162`; 18u-ii-b), on gym_agreement_signatures' footing: the gym's
+  // record; `ON DELETE set null`. It goes with its membership.
+  "gym_agreement_sign_links",
   // gym_referral_settings.updated_by — which member of staff last set the business's
   // Refer a friend offer (`0117`), on gym_leads' footing: the gym's record; `ON DELETE set
   // null`.
