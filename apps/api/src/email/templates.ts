@@ -279,6 +279,32 @@ export function cardDeclinedEmail(words: {
   return { to: words.to, subject: `Your payment to ${words.gymName} could not be processed`, text, html };
 }
 
+/** A card on file that expires this month (18d-iii-c): to its holder, from the gym, where the gym
+ *  switched these reminders on. Every line arrives worded and cleaned by the sender
+ *  (`cardExpiry.ts`); none carries a link. */
+export function cardExpiringEmail(words: {
+  to: string;
+  gymName: string;
+  greeting: string;
+  /** "Your Visa ending in 1111 expires at the end of November 2026." */
+  what: string;
+  /** "It pays for your membership at Iron Gym." */
+  paysFor: string;
+  /** "To keep your payments going, please give Iron Gym your new card before then at the front desk." */
+  ask: string;
+  /** "If you have any questions, you can call 555 0100 or email desk@irongym.com." or null. */
+  contact: string | null;
+}): EmailMessage {
+  const lines = [words.greeting, `${words.what} ${words.paysFor}`, words.ask, ...(words.contact === null ? [] : [words.contact]), "Thank you."];
+  const footer = `Sent by ${APP_NAME} on behalf of ${words.gymName}, about the card you saved with them.`;
+  const text = `${lines.join("\n\n")}\n\n${words.gymName}\n\n${footer}\n`;
+  const html =
+    lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("") +
+    `<p>${escapeHtml(words.gymName)}</p>` +
+    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;
+  return { to: words.to, subject: `Your card on file with ${words.gymName} expires this month`, text, html };
+}
+
 /** The copy of a membership agreement a person signed at the desk (ROADMAP 18u-i): the
  *  details the app filled in, the business's own words and the signature, as signed. Plain
  *  text in both: the business's words are never made into links here. The gym name arrives

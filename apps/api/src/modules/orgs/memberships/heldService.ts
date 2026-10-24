@@ -22,6 +22,8 @@ import {
   changeFrom,
   MEMBER_LIST_BY_HAND_WORDS,
   billSettingsResponseSchema,
+  type CardExpiryOutcome,
+  type CardExpiryPreview,
   countAfterGap,
   discountNothingOffWords,
   discountRefusalWords,
@@ -73,6 +75,7 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
+import { expiringCards, remindersOn, type ExpiringCard } from "../payments/cardExpiryRepo.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
 
 export interface HeldDeps {
@@ -898,12 +901,44 @@ export async function undoPaidMark(
   return await readOr404(deps, gymId, entryId, today, true);
 }
 
+/** What happens this month to each card that expires this month (18d-iii-c), by the worker's rule. */
+function expiryOutcome(card: ExpiringCard): CardExpiryOutcome {
+  if (card.notice !== null) {
+    if (card.notice.state === "sent") return "emailed";
+    if (card.notice.state === "queued" || card.notice.state === "sending") return "sending";
+    return "not_sent";
+  }
+  if (!card.hasEmail) return "no_email";
+  return card.renewing ? "will_email" : "not_renewing";
+}
+
+/** The saved cards that expire this month, for staff with the payments tick at a gym connected to
+ *  Square: who the reminder goes to, and who it doesn't and why. */
+async function cardExpiryPreview(deps: HeldDeps, gymId: string, privileges: readonly string[]): Promise<CardExpiryPreview | null> {
+  if (!privileges.includes(BILLING)) return null;
+  const read = await expiringCards(deps.sql, { gymId, environment: null, now: deps.now() });
+  if (read === null) return null;
+  return {
+    month: read.month,
+    people: read.cards.map((card) => ({
+      entryId: card.entryId,
+      name: card.name,
+      brand: card.brand,
+      last4: card.last4,
+      outcome: expiryOutcome(card),
+      on: card.notice?.state === "sent" ? card.notice.on : null,
+    })),
+  };
+}
+
 export async function getBillSettings(deps: HeldDeps, userId: string, gymId: string): Promise<BillSettingsResponse> {
   const { org, privileges } = await requirePrivilege(deps, gymId, userId, "members.read");
   return billSettingsResponseSchema.parse({
     overdueAfterDays: await overdueDaysOf(deps.sql, gymId),
     billDay: await billDayOf(deps.sql, gymId),
     freezeFeeMinor: await freezeFeeOf(deps.sql, gymId),
+    cardExpiryReminders: await remindersOn(deps.sql, gymId),
+    cardExpiry: await cardExpiryPreview(deps, gymId, privileges),
     currency: memberCurrencyForCountry(org.country),
     canChange: privileges.includes(BILLING),
   });
@@ -913,6 +948,19 @@ export async function saveBillSettings(deps: HeldDeps, userId: string, gymId: st
   const { org, privileges } = await requireWritablePrivilege(deps, gymId, userId, "members.read");
   if (!privileges.includes(BILLING)) throw new OrgsError(403, "forbidden", NO_BILLING);
   const days = Math.min(BILL_OVERDUE_DAYS_MAX, Math.max(0, req.overdueAfterDays));
-  const saved = await billsRepo.saveBillSettings(deps.sql, { gymId, days, billDay: req.billDay, freezeFeeMinor: req.freezeFeeMinor, actorUserId: userId });
-  return billSettingsResponseSchema.parse({ overdueAfterDays: days, ...saved, currency: memberCurrencyForCountry(org.country), canChange: true });
+  const saved = await billsRepo.saveBillSettings(deps.sql, {
+    gymId,
+    days,
+    billDay: req.billDay,
+    freezeFeeMinor: req.freezeFeeMinor,
+    cardExpiryReminders: req.cardExpiryReminders,
+    actorUserId: userId,
+  });
+  return billSettingsResponseSchema.parse({
+    overdueAfterDays: days,
+    ...saved,
+    cardExpiry: await cardExpiryPreview(deps, gymId, privileges),
+    currency: memberCurrencyForCountry(org.country),
+    canChange: true,
+  });
 }

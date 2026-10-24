@@ -542,3 +542,50 @@ export const gymCardDeclineNotices = pgTable(
     index("gym_card_decline_notices_sent_idx").on(t.finishedAt).where(sql`${t.state} = 'sent'`),
   ],
 );
+
+/** The email reminding a cardholder that their card on file expires this month (0162; 18d-iii-c):
+ *  one a card and expiry date, for a gym that switched it on. The address is kept only while it
+ *  waits to go. The record link (`entry_id`, `ON DELETE SET NULL` of that column alone) is in the
+ *  migration only. */
+export const gymCardExpiryNotices = pgTable(
+  "gym_card_expiry_notices",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    /** The cardholder's record. */
+    entryId: uuid("entry_id"),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    cardId: text("card_id").notNull(),
+    expMonth: integer("exp_month").notNull(),
+    expYear: integer("exp_year").notNull(),
+    email: citext("email"),
+    state: text("state").notNull(),
+    reason: text("reason"),
+    attempts: integer("attempts").notNull().default(0),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    maybeSentAt: timestamp("maybe_sent_at", { withTimezone: true }),
+    providerId: text("provider_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [
+    check("gym_card_expiry_notices_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_card_expiry_notices_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.cardId} ~ '^[A-Za-z0-9:_-]{1,192}$'`),
+    check("gym_card_expiry_notices_expiry_check", sql`${t.expMonth} BETWEEN 1 AND 12 AND ${t.expYear} BETWEEN 2000 AND 2200`),
+    check("gym_card_expiry_notices_state_check", sql`${t.state} IN ('queued','sending','sent','skipped','failed')`),
+    check("gym_card_expiry_notices_email_check", sql`(${t.state} IN ('queued','sending') OR ${t.email} IS NULL) AND (${t.email} IS NULL OR length(${t.email}) <= 254)`),
+    check("gym_card_expiry_notices_waiting_check", sql`${t.state} NOT IN ('queued','sending') OR ${t.email} IS NOT NULL`),
+    check("gym_card_expiry_notices_lease_check", sql`(${t.state} = 'sending') = (${t.leaseUntil} IS NOT NULL)`),
+    check("gym_card_expiry_notices_finished_check", sql`(${t.state} IN ('sent','skipped','failed')) = (${t.finishedAt} IS NOT NULL)`),
+    check("gym_card_expiry_notices_reason_check", sql`((${t.state} IN ('skipped','failed')) = (${t.reason} IS NOT NULL)) AND (${t.reason} IS NULL OR ${t.reason} ~ '^[a-z_]{1,40}$')`),
+    check("gym_card_expiry_notices_provider_check", sql`${t.providerId} IS NULL OR (${t.state} = 'sent' AND length(${t.providerId}) <= 100)`),
+    check("gym_card_expiry_notices_attempts_check", sql`${t.attempts} >= 0`),
+    uniqueIndex("gym_card_expiry_notices_card_uq").on(t.gymId, t.environment, t.accountId, t.cardId, t.expYear, t.expMonth),
+    index("gym_card_expiry_notices_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
+    index("gym_card_expiry_notices_entry_idx").on(t.gymId, t.entryId),
+  ],
+);

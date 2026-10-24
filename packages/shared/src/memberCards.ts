@@ -40,6 +40,11 @@ export function cardExpired(card: { expMonth: number; expYear: number }, today: 
   return card.expYear < year || (card.expYear === year && card.expMonth < month);
 }
 
+/** Its last month is the gym's month now (18d-iii-c): the month its holder is reminded in. */
+export function cardExpiresThisMonth(card: { expMonth: number; expYear: number }, today: string): boolean {
+  return card.expYear === Number(today.slice(0, 4)) && card.expMonth === Number(today.slice(5, 7));
+}
+
 /** "expires 12/2028", or "expired 12/2025" once that month is over. */
 export function cardExpiryWords(card: { expMonth: number; expYear: number }, today: string): string {
   const when = `${String(card.expMonth).padStart(2, "0")}/${String(card.expYear)}`;
@@ -68,6 +73,13 @@ export const memberCardSchema = z
     expYear: z.number().int().min(2000).max(2200),
     /** Past its expiry month, on the gym's day. */
     expired: z.boolean(),
+    /** In its expiry month, on the gym's day (18d-iii-c). */
+    expiresThisMonth: z.boolean(),
+    /** The reminder emailed this month to the cardholder (18d-iii-c), where the gym sends them:
+     *  `sending`, `emailed` on `expiryReminderOn`, `no_email` (none on their record) or `not_sent`.
+     *  Null where none was written. */
+    expiryReminder: z.enum(["sending", "emailed", "no_email", "not_sent"]).nullable(),
+    expiryReminderOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
     savedAt: z.string().datetime(),
     /** `desk`: on staff's screen; `app`: the member's own; `terminal`: on the gym's Square
      *  Terminal (18d-ii-b-ii). */
