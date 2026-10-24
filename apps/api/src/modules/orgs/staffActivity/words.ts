@@ -304,6 +304,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const fee = count(s, "freezeFeeMinor");
     return fee === null || fee === 0 ? "Stopped charging a freeze fee" : "Changed the freeze fee charged each month a membership is frozen";
   },
+  "org.card_expiry_reminders_changed": (s) =>
+    text(s, "cardExpiryReminders") === "on" ? "Turned on reminder emails before a saved card expires" : "Turned off reminder emails before a saved card expires",
   "org.member_fee_paid": (s) => `Recorded ${pay(s)} from ${fromWhom(s)} for a ${feeOf(s)}${methodWords(s)}`,
   "org.member_fee_waived": (s) => {
     const amount = money(s, "amountMinor");
