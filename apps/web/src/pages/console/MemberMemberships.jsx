@@ -173,6 +173,8 @@ export default function MemberMemberships({
   payNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
+  /** The record has an email address: its memberships' agreements can be signed from an emailed link (18u-ii-b). */
+  hasEmail = false,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -1822,6 +1824,10 @@ export default function MemberMemberships({
             setAgreementFor(null);
           }}
           when={(iso) => noteDay(iso, gym?.timezone ?? null)}
+          hasEmail={hasEmail}
+          onLinkSent={(link) =>
+            setHeld((h) => (h === null || h.entryId !== entryId ? h : { ...h, memberships: h.memberships.map((x) => (x.id === m.id ? { ...x, agreementLink: link } : x)) }))
+          }
         />
         {renderBills(m, payInBill)}
         {renderFees(m)}

@@ -460,8 +460,8 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
 
       // Two presses at once: one email.
       const [a, b] = await Promise.all([sendLink(gymId, maya, mayaYearly, owner.cookies), sendLink(gymId, maya, mayaYearly, owner.cookies)]);
-      expect([a?.statusCode, b?.statusCode]).toEqual([200, 200]);
-      expect([JSON.parse(a?.body ?? "{}").emailed, JSON.parse(b?.body ?? "{}").emailed]).toEqual(["sent", "sent"]);
+      expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+      expect([a, b].map((r) => sendAgreementLinkResponseSchema.parse(JSON.parse(r.body)).emailed)).toEqual(["sent", "sent"]);
       expect(links.length - before).toBe(1);
       expect(await count()).toBe(1);
     },
