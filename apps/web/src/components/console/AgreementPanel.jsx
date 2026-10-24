@@ -5,13 +5,14 @@ import { WAIVER_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
-  MAIN_AGREEMENT_NOTE,
+  AGREEMENTS_ABOUT,
   agreementAsksLine,
   agreementDraftState,
   agreementSaveLabel,
   agreementSavedLine,
   agreementStopWords,
   agreementSummary,
+  mainAgreementLine,
   otherAgreementLine,
   withLists,
 } from '../../pages/console/agreementView';
@@ -124,6 +125,9 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
 
   return (
     <ConsoleSection title="Membership agreements" summary={agreementSummary(data)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+      <p className="text-sm m-0 mb-3" style={softStyle}>
+        {AGREEMENTS_ABOUT}
+      </p>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}
@@ -161,7 +165,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             </label>
             {data.others.length > 0 ? (
               <p className="text-sm m-0" style={softStyle}>
-                {MAIN_AGREEMENT_NOTE}
+                {mainAgreementLine(data)}
               </p>
             ) : null}
             <textarea
@@ -292,15 +296,25 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             </p>
           ) : null}
           {data.others.map((other) => (
-            <div key={other.id} className="flex flex-col gap-2">
+            <div key={other.id} id={`agreement-${other.id}`} className="flex flex-col gap-2" style={{ scrollMarginTop: 16 }}>
               <div className="rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3" style={boxStyle}>
-                <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                   <span className="text-sm font-semibold break-words" style={{ color: '#fff' }}>
                     {other.name}
                   </span>
                   <span className="text-sm" style={softStyle}>
                     {otherAgreementLine(data, other)}
                   </span>
+                  {editing !== other.id ? (
+                    // The start of its words, so what it says is seen without opening it.
+                    <span
+                      data-testid="agreement-words"
+                      className="text-sm mt-1"
+                      style={{ ...labelStyle, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                    >
+                      {other.agreement.text}
+                    </span>
+                  ) : null}
                 </div>
                 {editing !== other.id ? (
                   <button

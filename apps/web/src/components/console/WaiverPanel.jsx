@@ -100,6 +100,9 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
 
   return (
     <ConsoleSection title="Waiver" summary={waiverSummary(data)} forceOpen={loadError !== null} defaultOpen={startOpen}>
+      <p className="text-sm m-0 mb-3" style={softStyle}>
+        Signed once by each person: the risks of training here.
+      </p>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
           {readOnlyNote(org.orgType)}

@@ -44,7 +44,7 @@ import MembershipDiscounts from '../../pages/console/MembershipDiscounts';
 import { NewRateInline } from '../../pages/console/TaxRates';
 import PlaceLink from './PlaceLink';
 import { GiveBox, NotSetUp, TypeTies } from './MembershipFromList';
-import { priceAgreementLine } from '../../pages/console/agreementView';
+import { otherAgreementTo, priceAgreementLine } from '../../pages/console/agreementView';
 import { useListMemberships } from './useListMemberships';
 
 // THE MEMBERSHIPS PAGE (spec Part 3 §13.1; ROADMAP 17a-i, a page of its own since 23c-i),
@@ -477,7 +477,7 @@ function RowNote({ error, done }) {
 /** `form`: this type's own form while it is being changed, or null. `box`: the box of
  *  who gets this type, while it is open. `note`: what the last press about this type did. */
 // `agreementLine`: which of the business's agreements it is signed with, once it has more than
-// one (18u-ii-a); `agreementTo`: Settings, for whoever may change it.
+// one (18u-ii-a); `agreementTo`: Settings, for whoever may open it there.
 function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreementTo = null, readOnly, busy, formOpen, ties, form, box = null, note = null, onEdit, onArchive, onGive, onUndo }) {
   const [asking, setAsking] = useState(false);
   return (
@@ -496,8 +496,8 @@ function TypeRow({ type, orgType, taxLine = null, agreementLine = null, agreemen
           {agreementLine !== null ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="c-s14 c-t2">{agreementLine}</span>
-              <PlaceLink to={agreementTo} state={{ agreementId: type.agreementId }} aria-label={`Change the agreement for ${type.name}`} className="c-btn c-btn-s c-btn-sm">
-                Change agreement
+              <PlaceLink to={otherAgreementTo(agreementTo, type.agreementId)} aria-label={`Open the agreement for ${type.name}`} className="c-btn c-btn-s c-btn-sm">
+                Open agreement
               </PlaceLink>
             </div>
           ) : null}

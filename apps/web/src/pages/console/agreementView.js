@@ -155,8 +155,21 @@ export function otherAgreementLine(data, other) {
   return `${used} · Signed for ${memberships(other.signed)}`;
 }
 
-/** The line under the main agreement once there are others. */
-export const MAIN_AGREEMENT_NOTE = 'Used for every membership not ticked on another agreement.';
+/** The line under the main agreement once there are others: the memberships it is for. */
+export function mainAgreementLine(data) {
+  const names = data.prices.filter((p) => p.agreementId === null).map((p) => p.name);
+  if (names.length === 0) return 'Not used for any membership now: each is ticked on another agreement.';
+  return `Used for ${someNames(names)}: every membership not ticked on another agreement.`;
+}
+
+/** What each of Settings' two boxes is, said at its top. */
+export const AGREEMENTS_ABOUT = 'Signed for each membership: its price, renewal and how to cancel.';
+
+/** The address of one of the business's other agreements in Settings, from the Settings address. */
+export const otherAgreementTo = (settingsTo, agreementId) => (settingsTo === null || agreementId == null ? settingsTo : settingsTo.replace(/#.*$/, `#agreement-${agreementId}`));
+
+/** The other agreement a Settings address names ("#agreement-<id>"), or null. */
+export const agreementOfSection = (section) => (typeof section === 'string' && section.startsWith('agreement-') ? section.slice('agreement-'.length) : null);
 
 /** A new form, or one for another agreement as saved. */
 export function otherDraftFrom(data, other) {

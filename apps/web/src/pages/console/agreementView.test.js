@@ -9,6 +9,9 @@ import {
   agreementSavedLine,
   agreementSignedBy,
   agreementSummary,
+  mainAgreementLine,
+  otherAgreementTo,
+  agreementOfSection,
   otherDraftState,
   otherSaveChanges,
   priceAgreementLine,
@@ -103,6 +106,18 @@ describe('another agreement for some memberships (18u-ii-a)', () => {
     expect(priceAgreementLine({ agreements: [] }, GOLD)).toBeNull();
     expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, PACK)).toBe('Agreement: Class pack terms');
     expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, GOLD)).toBe('Agreement: Main agreement');
+  });
+
+  it('the main agreement names the memberships it is for', () => {
+    expect(mainAgreementLine(data)).toBe('Used for Gold Monthly: every membership not ticked on another agreement.');
+    expect(mainAgreementLine({ ...data, prices: [PACK] })).toBe('Not used for any membership now: each is ticked on another agreement.');
+  });
+
+  it('a price list line opens its own agreement in Settings', () => {
+    expect(otherAgreementTo('/console/x/settings#membership-agreement', 'a')).toBe('/console/x/settings#agreement-a');
+    expect(otherAgreementTo('/console/x/settings#membership-agreement', null)).toBe('/console/x/settings#membership-agreement');
+    expect(agreementOfSection('agreement-a')).toBe('a');
+    expect(agreementOfSection('membership-agreement')).toBeNull();
   });
 
   it('the folded line counts the other agreements', () => {

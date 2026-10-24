@@ -120,7 +120,7 @@ describe('which agreement each line is signed with (18u-ii-a)', () => {
     expect(screen.queryByText(/^Agreement: /)).toBeNull();
   });
 
-  it("names each line's agreement once there are others, and Change agreement opens that one in Settings", async () => {
+  it("names each line's agreement once there are others, and Open agreement opens that one in Settings", async () => {
     orgService.getMembershipTypes.mockResolvedValue({
       data: listOf({ types: [type({ name: '10-class pack', agreementId: PACK_TERMS.id }), type({ name: 'Gold Monthly' })], agreements: [PACK_TERMS] }),
     });
@@ -132,8 +132,8 @@ describe('which agreement each line is signed with (18u-ii-a)', () => {
     const rows = await screen.findAllByRole('listitem');
     expect(within(rows[0]).getByText('Agreement: Class pack terms')).toBeTruthy();
     expect(within(rows[1]).getByText('Agreement: Main agreement')).toBeTruthy();
-    const link = within(rows[0]).getByRole('link', { name: 'Change the agreement for 10-class pack' });
-    expect(link.getAttribute('href')).toBe('/console/iron-house/settings#membership-agreement');
+    expect(within(rows[0]).getByRole('link', { name: 'Open the agreement for 10-class pack' }).getAttribute('href')).toBe(`/console/iron-house/settings#agreement-${PACK_TERMS.id}`);
+    expect(within(rows[1]).getByRole('link', { name: 'Open the agreement for Gold Monthly' }).getAttribute('href')).toBe('/console/iron-house/settings#membership-agreement');
   });
 
   it('staff who cannot change Settings read the line with no button', async () => {
@@ -144,7 +144,7 @@ describe('which agreement each line is signed with (18u-ii-a)', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText('Agreement: Class pack terms')).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Change the agreement/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Open the agreement/ })).toBeNull();
   });
 });
 

@@ -122,7 +122,9 @@ describe('another agreement for some memberships', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Saved Class pack terms. People who take 10-class pack sign it from now on.');
     expect(orgService.addOtherAgreement).toHaveBeenCalledWith(ORG.id, { name: 'Class pack terms', text: PACK_TERMS, usedFor: [PACK.id] });
     expect(screen.getByText('Main agreement')).toBeTruthy();
-    expect(screen.getByText('Used for every membership not ticked on another agreement.')).toBeTruthy();
+    expect(screen.getByText('Used for Free week, Yearly: every membership not ticked on another agreement.')).toBeTruthy();
+expect(screen.getByTestId('agreement-words').textContent).toBe(PACK_TERMS);
+expect(screen.getByText('Signed for each membership: its price, renewal and how to cancel.')).toBeTruthy();
     expect(screen.getByText('Used for 10-class pack · Signed for 0 memberships')).toBeTruthy();
   });
 

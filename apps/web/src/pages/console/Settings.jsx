@@ -21,6 +21,7 @@ import { canManageOrg } from './gymDetailsView';
 import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { membersPageName } from './consoleMenu';
+import { agreementOfSection } from './agreementView';
 
 // SETTINGS — Part 3 §3.1's sixth nav item: the gym's own details, when it is open, how its members reach it, its automatic messages, class
 // bookings, the front desk's devices and the follow-up emails to leads. What the gym
@@ -301,8 +302,8 @@ export default function Settings() {
             key={`agreement-${org.id}`}
             org={org}
             readOnly={readOnly}
-            startOpen={linked(section === SETTINGS_SECTION.agreement)}
-            openAgreementId={arrived !== null && typeof arrived === 'object' && typeof arrived.agreementId === 'string' ? arrived.agreementId : null}
+            startOpen={linked(section === SETTINGS_SECTION.agreement || agreementOfSection(section) !== null)}
+            openAgreementId={agreementOfSection(section)}
             membersTo={placeTo(orgSlug, 'members') ?? '../members'}
             membersName={membersPageName(privileges, org.orgType)}
           />
