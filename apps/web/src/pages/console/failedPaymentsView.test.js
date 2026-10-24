@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canSeeFailedPayments, failedHeadline, needsCard, nextStep, overviewLine, rowFacts, rowWhat } from './failedPaymentsView';
+import { canAddCard, canSeeFailedPayments, failedHeadline, needsCard, nextStep, overviewLine, rowFacts, rowWhat } from './failedPaymentsView';
 
 const declined = (over = {}) => ({ brand: 'VISA', last4: '0002', on: '2026-10-23', reason: 'declined', next: null, stop: 'bank', notice: { state: 'emailed', on: '2026-10-23' }, ...over });
 const row = (over = {}) => ({
@@ -44,11 +44,12 @@ describe('Failed payments, in words', () => {
       'Retried automatically on 26 Oct, or try again now',
       'No email address on file. Contact them directly.',
     ]);
+    expect(rowFacts(row({ declined: declined({ notice: { state: 'sending', on: null } }) }), 'America/Chicago', 'US').at(-1)).toEqual({ label: 'Cardholder email', value: 'Sending' });
   });
 
   it("the next step says when it can be retried, in the gym's own time, or what to do instead", () => {
     expect(nextStep(row({ retry: { kind: 'wait', from: '2026-10-24T19:15:00.000Z' } }), 'America/Chicago', 'US')).toBe(
-      'Can be retried from 2:15 PM on 24 Oct (Square recommends waiting 24 hours)',
+      'This card can be tried again from 2:15 PM on 24 Oct (Square recommends waiting 24 hours). Or add a new card, or take payment another way.',
     );
     expect(nextStep(row({ retry: { kind: 'no', why: 'new_card' } }), 'America/Chicago', 'US')).toMatch(/^The bank declined this card permanently\. Add a new card/);
     expect(nextStep(row({ retry: { kind: 'no', why: 'no_card' } }), 'America/Chicago', 'US')).toMatch(/^No card on file\. Add a new card/);
@@ -58,6 +59,12 @@ describe('Failed payments, in words', () => {
     expect(['no_card', 'new_card', 'tried_out'].every((why) => needsCard(row({ retry: { kind: 'no', why } })))).toBe(true);
     expect(['square', 'currency', 'elsewhere'].some((why) => needsCard(row({ retry: { kind: 'no', why } })))).toBe(false);
     expect(needsCard(row())).toBe(false);
+    // A new card is charged at once: offered wherever the card is the problem or is waiting a day.
+    expect(['no_card', 'new_card', 'tried_out'].every((why) => canAddCard(row({ retry: { kind: 'no', why } })))).toBe(true);
+    expect(canAddCard(row({ retry: { kind: 'wait', from: '2026-10-24T19:15:00.000Z' } }))).toBe(true);
+    expect(canAddCard(row())).toBe(true);
+    expect(['square', 'currency', 'elsewhere'].some((why) => canAddCard(row({ retry: { kind: 'no', why } })))).toBe(false);
+    expect(nextStep(row({ retry: { kind: 'no', why: 'elsewhere' } }), 'America/Chicago', 'US')).toBe('An earlier payment for this membership is due first. Take payment opens it.');
   });
 
   it('who sees it: people and payments both', () => {

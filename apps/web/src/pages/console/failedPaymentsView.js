@@ -50,7 +50,7 @@ function emailWords(notice) {
     case 'emailed':
       return `Emailed on ${shortDay(notice.on, false)}`;
     case 'sending':
-      return 'Being sent';
+      return 'Sending';
     case 'no_email':
       return 'No email address on file. Contact them directly.';
     default:
@@ -70,7 +70,7 @@ function whenWords(iso, timezone, country) {
 export function nextStep(row, timezone, country) {
   const retry = row.retry;
   const d = row.declined;
-  if (retry.kind === 'wait') return `Can be retried from ${whenWords(retry.from, timezone, country)} (Square recommends waiting 24 hours)`;
+  if (retry.kind === 'wait') return `This card can be tried again from ${whenWords(retry.from, timezone, country)} (Square recommends waiting 24 hours). Or add a new card, or take payment another way.`;
   if (retry.kind === 'no') {
     switch (retry.why) {
       case 'no_card':
@@ -84,7 +84,7 @@ export function nextStep(row, timezone, country) {
       case 'currency':
         return 'Priced in another currency from your Square account. Take payment another way.';
       default:
-        return 'An earlier payment for this membership is due first. Open their page to take it.';
+        return 'An earlier payment for this membership is due first. Take payment opens it.';
     }
   }
   if (d.next !== null && d.next !== undefined) return `Retried automatically on ${shortDay(d.next, false)}, or try again now`;
@@ -107,6 +107,10 @@ export function rowFacts(row, timezone, country) {
 
 /** A new card is what this row needs before the card can be charged. */
 export const needsCard = (row) => row.retry.kind === 'no' && ['no_card', 'new_card', 'tried_out'].includes(row.retry.why);
+
+/** A new card can be added and charged from the row: where it needs one, and where the card on
+ *  file can be charged or is waiting a day (a new card is charged at once). */
+export const canAddCard = (row) => needsCard(row) || row.retry.kind === 'wait' || row.retry.kind === 'charge';
 
 /** Try again's box: what pressing Charge does, said before it is pressed. */
 export function tryAgainDetail(row) {

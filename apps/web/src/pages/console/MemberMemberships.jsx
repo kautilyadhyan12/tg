@@ -168,6 +168,9 @@ export default function MemberMemberships({
   addNow = false,
   /** A membership Add member has just given (18u-i): its agreement box opens, with Sign later. */
   signNow = null,
+  /** Opened by Take payment on Failed payments (18d-iii-ii-b): { membershipId, feeBillId }, the
+   *  bill whose Record payment is open already, once, when their memberships have loaded. */
+  payNow = null,
   /** How often the Terminal's box asks the server; the box's own unless a test says. */
   checkEveryMs,
 }) {
@@ -309,6 +312,31 @@ export default function MemberMemberships({
     setForm(had === undefined || form.typeId !== '' ? form : { ...form, typeId: had.typeId });
     setOpen({ what: 'add' });
   }, [addsNow, shown]);
+  // Opened by Take payment on Failed payments: that bill's Record payment, as its own button
+  // opens it, once their memberships have loaded, then brought into view.
+  const [paidNow, setPaidNow] = useState(false);
+  if (payNow !== null && !readOnly && shown !== null && !paidNow) {
+    setPaidNow(true);
+    const m = shown.memberships.find((x) => x.id === payNow.membershipId);
+    const fee = m?.billing && payNow.feeBillId !== null ? (m.billing.fees ?? []).find((x) => x.id === payNow.feeBillId) : undefined;
+    if (fee !== undefined) {
+      setPayOpened((n) => n + 1);
+      setFeeForm({ what: 'payFee', ...feePayDraft(fee, newRequestKey), tried: false });
+      setVoidForm(null);
+      setOpen({ what: 'payFee', id: m.id });
+    } else if (m?.billing && payNow.feeBillId === null && m.billing.pay !== null) {
+      setPayOpened((n) => n + 1);
+      setPayForm({ ...paymentDraft(m, newRequestKey), tried: false });
+      setOpen({ what: 'pay', id: m.id });
+    }
+  }
+  const scrolledNow = useRef(false);
+  const payOpenNow = paidNow && (open?.what === 'pay' || open?.what === 'payFee');
+  useEffect(() => {
+    if (!payOpenNow || scrolledNow.current) return;
+    scrolledNow.current = true;
+    document.querySelector('[data-testid="held-pay"], [data-testid="held-fee-pay"]')?.scrollIntoView?.({ block: 'center' });
+  }, [payOpenNow]);
   // What their list says their membership is, where they do not hold it here.
   const listed = shown === null ? null : listedRow(shown.listed, name, managesTypes);
   // A box that sends staff to Memberships reads again when they come back to this tab, so

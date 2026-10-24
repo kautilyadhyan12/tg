@@ -18,10 +18,10 @@ import {
   FAILED_NONE,
   FAILED_NO_SQUARE,
   FAILED_NO_SQUARE_STAFF,
+  canAddCard,
   canSeeFailedPayments,
   chargeButton,
   failedHeadline,
-  needsCard,
   rowAmount,
   rowFacts,
   rowWhat,
@@ -29,16 +29,16 @@ import {
 } from './failedPaymentsView';
 
 // FAILED PAYMENTS (ROADMAP 18d-iii-ii-b; spec Part 3 §14.8): every card payment that was declined
-// and is still owed, the newest first, each with Try again where the card can be charged now and a
-// button to the person's page, where every other way to pay is. Try again is Record payment's own
+// and is still owed, the newest first, each with Try again where the card can be charged now, Add a
+// new card, Take payment (the person's page with that bill's Record payment open) and their page. Try again is Record payment's own
 // Card on file press: the server decides it again under the person's lock.
 
 const newKey = () => globalThis.crypto.randomUUID();
 
 /** One failed payment: who, what for, how much, the facts of the decline, and what can be done
- *  here: Try again where the card can be charged now, Add a new card where it needs one (the card
- *  box of the person's page, under the row, then the charge in the same place), and their page. */
-function Row({ row, org, readOnly, onOpenPerson, onCharged, onCardSaved }) {
+ *  here: Try again where the card can be charged now, Add a new card (the card box of the person's
+ *  page, under the row, then the charge in the same place), Take payment, and their page. */
+function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onCardSaved }) {
   /** What is open under the row: 'charge', 'card', or 'saved' (a card just added: the charge box
    *  opens by itself once the list says it can be charged). */
   const [opened, setOpened] = useState(null);
@@ -104,10 +104,15 @@ function Row({ row, org, readOnly, onOpenPerson, onCharged, onCardSaved }) {
               Try again
             </button>
           ) : null}
-          {needsCard(row) && opened === null && !state.done ? (
-            <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={readOnly} onClick={() => setOpened('card')}>
+          {canAddCard(row) && opened === null && !state.done ? (
+            <button type="button" className={`c-btn ${canTry ? 'c-btn-s' : 'c-btn-p'} c-btn-lg`} disabled={readOnly} onClick={() => setOpened('card')}>
               <CreditCard aria-hidden="true" className="w-4 h-4" />
               Add a new card
+            </button>
+          ) : null}
+          {!state.done ? (
+            <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={readOnly} onClick={() => onTakePayment(row)}>
+              Take payment
             </button>
           ) : null}
           <button type="button" className="c-btn c-btn-s c-btn-lg" onClick={() => onOpenPerson(row.entryId)}>
@@ -115,7 +120,7 @@ function Row({ row, org, readOnly, onOpenPerson, onCharged, onCardSaved }) {
           </button>
         </div>
       </div>
-      {(canTry || needsCard(row)) && readOnly ? <p className="c-s13 c-t3">{readOnlyNote(org.orgType)}</p> : null}
+      {readOnly ? <p className="c-s13 c-t3">{readOnlyNote(org.orgType)}</p> : null}
 
       {opened === 'card' && !readOnly ? (
         <div className="flex flex-col gap-3" data-testid="failed-payment-card-box">
@@ -175,8 +180,9 @@ export default function FailedPayments() {
   // Each answer carries the gym it was asked for, so another gym's people are never drawn.
   const [state, setState] = useState({ gymId: null, error: null, refused: false, list: null });
   const [more, setMore] = useState({ busy: false, error: null });
-  /** The record whose page is open, from a name or Open their page. */
-  const [personId, setPersonId] = useState(null);
+  /** The record whose page is open, from a name, Open their page or Take payment: { entryId,
+   *  payNow }, `payNow` the bill whose Record payment opens with it. */
+  const [person, setPerson] = useState(null);
   /** The gym's own columns, for a person's page; read when one is first opened. */
   const [columns, setColumns] = useState(null);
 
@@ -212,8 +218,8 @@ export default function FailedPayments() {
     );
   };
 
-  const openPerson = (entryId) => {
-    setPersonId(entryId);
+  const openPerson = (entryId, payNow = null) => {
+    setPerson({ entryId, payNow });
     if (columns === null && gymId !== null) {
       // Without the columns the person's page still opens, with the standard fields.
       orgService.getMemberList(gymId).then(
@@ -300,7 +306,14 @@ export default function FailedPayments() {
               </p>
               <ul className="list-none m-0 p-0">
                 {list.payments.map((row) => (
-                  <Row key={row.billId} row={row} org={org} readOnly={readOnly} onOpenPerson={openPerson} onCharged={recount} onCardSaved={() => void load()} />
+                  <Row
+                    key={row.billId}
+                    row={row}
+                    org={org}
+                    readOnly={readOnly}
+                    onOpenPerson={openPerson}
+                    onTakePayment={(r) => openPerson(r.entryId, { membershipId: r.membershipId, feeBillId: r.fee === null ? null : r.billId })}
+                    onCharged={recount} onCardSaved={() => void load()} />
                 ))}
               </ul>
               {list.next !== null ? (
@@ -317,18 +330,19 @@ export default function FailedPayments() {
         </>
       )}
 
-      {personId !== null && gymId !== null ? (
+      {person !== null && gymId !== null ? (
         <MemberListPerson
-          key={personId}
+          key={person.entryId}
           gymId={gymId}
           gym={org}
-          entryId={personId}
+          entryId={person.entryId}
+          payNow={person.payNow}
           list={columns}
           words={words}
           readOnly={readOnly}
           canRemove={canRemoveMembers(privileges)}
           onClose={() => {
-            setPersonId(null);
+            setPerson(null);
             // A payment taken on their page: the list says so once it is closed.
             void load();
           }}

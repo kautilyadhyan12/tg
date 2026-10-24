@@ -25,8 +25,8 @@ vi.mock('./MemberCard', () => ({
   ),
 }));
 vi.mock('./MemberListPerson', () => ({
-  default: ({ entryId, onClose }) => (
-    <div role="dialog" aria-label={`person ${entryId}`}>
+  default: ({ entryId, payNow = null, onClose }) => (
+    <div role="dialog" aria-label={`person ${entryId}`} data-pay-now={payNow === null ? 'none' : `${payNow.membershipId} ${String(payNow.feeBillId)}`}>
       <button type="button" onClick={onClose}>
         Close
       </button>
@@ -193,7 +193,7 @@ describe('Failed payments', () => {
     const nina = await waitFor(() => row('Nina Short'));
     expect(within(nina).queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(nina.textContent).toContain('Not enough funds');
-    expect(nina.textContent).toContain('Can be retried from 2:15 PM on 24 Oct (Square recommends waiting 24 hours)');
+    expect(nina.textContent).toContain('This card can be tried again from 2:15 PM on 24 Oct (Square recommends waiting 24 hours). Or add a new card, or take payment another way.');
     const ezra = row('Ezra Expired');
     expect(within(ezra).queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(ezra.textContent).toContain('The bank declined this card permanently. Add a new card, or take payment another way.');
@@ -221,6 +221,40 @@ describe('Failed payments', () => {
     fireEvent.click(within(box).getByRole('button', { name: 'Charge $25.00' }));
     await within(row('Ezra Expired')).findByText('Charged $25.00 to Visa ending 1111. Receipt 35.');
     expect(orgApi.chargeCardOnFile.mock.calls[0][3]).toMatchObject({ periodIndex: 1, amountMinor: 2500, cardRef: 'ref-ezra-new' });
+  });
+
+  it('a card waiting a day: Add a new card is offered there too, and the new card is charged at once', async () => {
+    const newCard = { ...NINA, retry: { kind: 'charge', card: { brand: 'MASTERCARD', last4: '4444' }, payerName: null, expired: false, cardRef: 'ref-nina-new', amountMinor: 2500 } };
+    open();
+    const nina = await waitFor(() => row('Nina Short'));
+    expect(within(nina).queryByRole('button', { name: 'Try again' })).toBeNull();
+    fireEvent.click(within(nina).getByRole('button', { name: 'Add a new card' }));
+    within(nina).getByLabelText(`card box ${NINA.entryId}`);
+    svc.list.mockResolvedValue(answer({ payments: [GINA, newCard, FAY, EZRA] }));
+    fireEvent.click(within(nina).getByRole('button', { name: 'Save the card' }));
+    const box = await within(row('Nina Short')).findByTestId('failed-payment-box');
+    expect(box.textContent).toContain("Card saved. Charge Nina Short's new card now?");
+    orgApi.chargeCardOnFile.mockResolvedValue(paid(newCard, 36));
+    fireEvent.click(within(box).getByRole('button', { name: 'Charge $25.00' }));
+    await within(row('Nina Short')).findByText('Charged $25.00 to Mastercard ending 4444. Receipt 36.');
+    expect(orgApi.chargeCardOnFile.mock.calls[0].slice(1, 3)).toEqual([NINA.entryId, NINA.membershipId]);
+    expect(orgApi.chargeCardOnFile.mock.calls[0][3]).toMatchObject({ amountMinor: 2500, cardRef: 'ref-nina-new' });
+  });
+
+  it("Take payment opens that row's person with that row's own bill: a membership's, or a fee's", async () => {
+    open();
+    const fay = await waitFor(() => row('Fay Fee'));
+    fireEvent.click(within(row('Nina Short')).getByRole('button', { name: 'Take payment' }));
+    expect(screen.getByRole('dialog', { name: `person ${NINA.entryId}` }).getAttribute('data-pay-now')).toBe(`${NINA.membershipId} null`);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(within(fay).getByRole('button', { name: 'Take payment' }));
+    expect(screen.getByRole('dialog', { name: `person ${FAY.entryId}` }).getAttribute('data-pay-now')).toBe(`${FAY.membershipId} ${FAY.billId}`);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    // Open their page opens the page alone.
+    fireEvent.click(within(fay).getByRole('button', { name: 'Open their page' }));
+    expect(screen.getByRole('dialog', { name: `person ${FAY.entryId}` }).getAttribute('data-pay-now')).toBe('none');
+    expect(orgApi.chargeCardOnFile).not.toHaveBeenCalled();
+    expect(orgApi.chargeFeeToCardOnFile).not.toHaveBeenCalled();
   });
 
   it('a decline the server answers on the press is said in that row, and nothing is marked paid', async () => {

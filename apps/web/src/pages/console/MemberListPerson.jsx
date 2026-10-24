@@ -402,7 +402,7 @@ function WaiverLine({ member, desk, timeZone }) {
   );
 }
 
-export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, onClose, onChanged }) {
+export default function MemberListPerson({ gymId, gym, entryId, list, words, readOnly, canRemove = false, pair = null, addMembership = false, payNow = null, onClose, onChanged }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const fields = list?.fields ?? [];
@@ -1487,6 +1487,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
           managesTypes={canManageMemberships(viewerPrivileges(gym))}
           membershipsTo={placeFor(gym?.slug, viewerPrivileges(gym), 'memberships')}
           addNow={addMembership}
+          payNow={payNow}
           signNow={signNow !== null && signNow.entryId === p.entryId ? signNow.membershipId : null}
         />
         <MemberPayer key={`payer-${p.entryId}`} gymId={gymId} gym={gym} entryId={p.entryId} name={p.fullName} readOnly={readOnly} onChanged={onChanged} />
