@@ -1,14 +1,39 @@
-// A business's membership agreement and its signatures (ROADMAP 18u-i). Mirrors
-// `0159_membership_agreement.sql`.
+// A business's membership agreements and their signatures (ROADMAP 18u-i, 18u-ii-a). Mirrors
+// `0159_membership_agreement.sql` and `0161_agreement_per_price.sql`.
 //
-// Every wording a business saves is a row, numbered from 1, as a waiver's is; its agreement
-// today is the highest version, unless `stoppedAt` is set. A signature is one membership's,
-// made at the desk, and keeps the membership's details as the screen showed them.
+// A business has its main agreement (`name` null) and may write others, each named; a line of
+// the price list uses the one it names, or the main one. Every wording saved is a row, numbered
+// from 1 within its agreement, as a waiver's is; an agreement today is its highest version,
+// unless `stoppedAt` is set. A signature is one membership's, made at the desk, and keeps the
+// membership's details as the screen showed them.
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./identity.js";
 import { gymHeldMemberships } from "./memberships.js";
 import { gyms } from "./tenancy.js";
+
+export const gymAgreementDocuments = pgTable(
+  "gym_agreement_documents",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    /** Null for the business's main agreement. */
+    name: text("name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("gym_agreement_documents_name_check", sql`${t.name} IS NULL OR char_length(${t.name}) BETWEEN 1 AND 60`),
+    unique("gym_agreement_documents_gym_id_uq").on(t.gymId, t.id),
+    uniqueIndex("gym_agreement_documents_main_uq")
+      .on(t.gymId)
+      .where(sql`${t.name} IS NULL`),
+    uniqueIndex("gym_agreement_documents_name_uq")
+      .on(t.gymId, sql`lower(${t.name})`)
+      .where(sql`${t.name} IS NOT NULL`),
+  ],
+);
 
 export const gymAgreements = pgTable(
   "gym_agreements",
@@ -17,6 +42,7 @@ export const gymAgreements = pgTable(
     gymId: uuid("gym_id")
       .notNull()
       .references(() => gyms.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id").notNull(),
     version: integer("version").notNull(),
     body: text("body").notNull(),
     savedBy: uuid("saved_by").references(() => users.id, { onDelete: "set null" }),
@@ -26,7 +52,10 @@ export const gymAgreements = pgTable(
   (t) => [
     check("gym_agreements_version_check", sql`${t.version} >= 1`),
     check("gym_agreements_body_check", sql`char_length(${t.body}) BETWEEN 1 AND 30000`),
-    unique("gym_agreements_gym_version_uq").on(t.gymId, t.version),
+    unique("gym_agreements_document_version_uq").on(t.documentId, t.version),
+    foreignKey({ name: "gym_agreements_document_fk", columns: [t.gymId, t.documentId], foreignColumns: [gymAgreementDocuments.gymId, gymAgreementDocuments.id] }).onDelete(
+      "cascade",
+    ),
     unique("gym_agreements_gym_id_uq").on(t.gymId, t.id),
   ],
 );

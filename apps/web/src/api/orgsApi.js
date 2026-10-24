@@ -735,6 +735,17 @@ export const orgService = {
     readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`, { text })),
   stopGymAgreement: (gymId) =>
     readThrough(gymAgreementResponseSchema, 'your membership agreement', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/agreement`)),
+  /** Another agreement (18u-ii-a): `body` is its name, words and the lines it is used for. */
+  addOtherAgreement: (gymId, body) =>
+    readThrough(gymAgreementResponseSchema, 'your agreements', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/agreements`, body)),
+  saveOtherAgreement: (gymId, agreementId, body) =>
+    readThrough(
+      gymAgreementResponseSchema,
+      'your agreements',
+      authApi.put(`/v1/orgs/${encodeURIComponent(gymId)}/agreements/${encodeURIComponent(agreementId)}`, body),
+    ),
+  stopOtherAgreement: (gymId, agreementId) =>
+    readThrough(gymAgreementResponseSchema, 'your agreements', authApi.delete(`/v1/orgs/${encodeURIComponent(gymId)}/agreements/${encodeURIComponent(agreementId)}`)),
   getMembershipAgreement: (gymId, entryId, membershipId) =>
     readThrough(
       membershipAgreementResponseSchema,

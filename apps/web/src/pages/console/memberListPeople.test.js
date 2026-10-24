@@ -875,6 +875,20 @@ describe('Add member: may already be on your list (5b-iv-b)', () => {
   });
 });
 
+describe('Agreement not signed in the Filter (18u-ii-a)', () => {
+  const on = { ...EMPTY_FILTERS, agreementNotSigned: true };
+  it('asks the server for it, shows its pill, and Select all means the same people; a page of past members does not send it', () => {
+    expect(entriesQueryString(on, null)).toBe('agreement=not_signed');
+    expect(selectionFilter(on)).toEqual({ agreement: 'not_signed' });
+    expect(filtersAreEmpty(on)).toBe(false);
+    const pills = activeFilters(on, { people: 'members' });
+    expect(pills.map((pill) => pill.text)).toEqual(['Agreement not signed']);
+    expect(pills[0].without).toEqual(EMPTY_FILTERS);
+    expect(entriesQueryString({ ...on, records: 'former' }, null)).toBe('records=former');
+    expect(entriesQueryString({ ...on, waiverNotSigned: true }, null)).toBe('waiver=not_signed&agreement=not_signed');
+  });
+});
+
 describe('Waiver not signed in the Filter (3e-ii)', () => {
   const on = { ...EMPTY_FILTERS, waiverNotSigned: true };
   const words = { people: 'members' };

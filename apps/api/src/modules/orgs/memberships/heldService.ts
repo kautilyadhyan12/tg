@@ -373,16 +373,23 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
   const over = all.filter((m) => ORDER[m.view.status] === 2);
   const shown = over.slice(0, HELD_EARLIER_PAGE);
   const stored = list.overTotal - list.over.length;
-  // The membership agreement (18u-i): whether the business asks for one, and which were signed.
-  const [agreement, agreementSigned] = await Promise.all([
-    agreementRepo.agreementInUse(deps.sql, gymId),
-    agreementRepo.signedAtOf(deps.sql, gymId, [...inUse, ...shown].map((m) => m.id)),
+  // The membership agreements (18u-i, 18u-ii-a): which memberships' lines of the price list
+  // ask for one, and which were signed.
+  const listed = [...inUse, ...shown].map((m) => m.id);
+  const [anyAsked, asked, agreementSigned] = await Promise.all([
+    agreementRepo.anyInUse(deps.sql, gymId),
+    agreementRepo.askedFor(deps.sql, gymId, listed),
+    agreementRepo.signedAtOf(deps.sql, gymId, listed),
   ]);
   return heldMembershipsResponseSchema.parse({
     today,
     past: list.past,
-    memberships: [...inUse, ...shown].map((m) => ({ ...m, agreement: ((at) => (at === undefined ? null : { at: at.toISOString() }))(agreementSigned.get(m.id)) })),
-    agreementInUse: agreement !== null,
+    memberships: [...inUse, ...shown].map((m) => ({
+      ...m,
+      agreement: ((at) => (at === undefined ? null : { at: at.toISOString() }))(agreementSigned.get(m.id)),
+      agreementAsked: asked.has(m.id),
+    })),
+    agreementInUse: anyAsked,
     earlierNotShown: over.length - shown.length + stored,
     types: list.types,
     listed: list.listed,

@@ -661,9 +661,11 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const gym = org.org.id;
       await switchOn(gym, owner.cookies);
       await addLead(gym, owner.cookies, { fullName: "Nia Night", email: "nia.night@example.com" });
-      const at = async (localHour: number) => {
+      // An hour on the gym's own calendar, `days` on: "tomorrow at 8" is 8 by the gym's clock even
+      // across the night its clocks change (25 October 2026 in London), never today's 8 plus 24 hours.
+      const at = async (localHour: number, days = 0) => {
         const [{ t } = { t: new Date() }] = await sql<{ t: Date }[]>`
-          SELECT ((${today()}::date + make_interval(hours => ${localHour})) AT TIME ZONE ${ZONE}) AS t`;
+          SELECT ((${today()}::date + ${days}::int + make_interval(hours => ${localHour})) AT TIME ZONE ${ZONE}) AS t`;
         return t;
       };
       outbox.length = 0;
@@ -684,7 +686,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const nine = await at(21);
       await runSender({ now: () => nine });
       expect(emailsTo("ned.night@example.com")).toEqual([]);
-      const tomorrow = new Date((await at(8)).getTime() + 24 * 60 * 60_000);
+      const tomorrow = await at(8, 1);
       await runSender({ now: () => tomorrow });
       expect(emailsTo("ned.night@example.com")).toHaveLength(1);
 
@@ -697,7 +699,7 @@ d("the app sends a lead's follow-ups (real Postgres)", () => {
       const late = new Date((await at(21)).getTime());
       await runSender({ now: () => late });
       expect(calls.filter((m) => m.to === "uma.night@example.com")).toHaveLength(1);
-      const morning = new Date((await at(8)).getTime() + 24 * 60 * 60_000);
+      const morning = await at(8, 1);
       await runSender({ now: () => morning });
       const tries = calls.filter((m) => m.to === "uma.night@example.com");
       expect(tries).toHaveLength(2);

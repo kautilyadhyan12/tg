@@ -4373,8 +4373,21 @@ is signed where either changed (`facts_changed`, `agreement_changed`). The signa
 details and the wording, with who opened the screen; a copy is emailed to the record's address
 (View, then Email a copy, sends it again). A wording changed later reaches memberships given after
 it. A record deleted for good lets go of its signatures with the day; the purge removes them six
-years later, as a desk waiver's. 18u-ii adds an agreement for each line of the price list, an
-emailed link to sign, and a Members filter; the phone app signs in the app (Stage 5 item 20).
+years later, as a desk waiver's. *As built, 18u-ii-a (an agreement for each line of the price
+list):* Settings → Membership agreements keeps the main agreement and Add agreement, for others
+with a name of their own (no two alike, "Main agreement" included), each with its words, numbered
+as the main one's, and "Used for", the lines of the price list ticked for it; a line not ticked on
+any uses the main one, and a line ticked on another moves there, said before Save ("Free week will
+stop using Trial terms.", "10-class pack will use the main agreement."). Stop on another agreement
+leaves its lines asking for none. A business with only its main agreement sees only Add agreement
+under it. A membership is signed with the agreement its line uses when the box opens: the box and
+the copy name another agreement above its terms; the one statement that signs refuses a wording that
+is not the newest of that line's agreement (`agreement_changed`), so a line moved after the box
+opened is read again, and a membership signed keeps what it signed. The price list says
+"Agreement: …" on each line once there is more than one, with Change agreement opening that one in
+Settings. Members → Filter → Agreement not signed: the current members holding a membership running
+or still to start whose line asks for an agreement and nobody has signed it, the rule the person's
+page reads. 18u-ii-b adds an emailed link to sign; the phone app signs in the app (Stage 5 item 20).
 
 **Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years

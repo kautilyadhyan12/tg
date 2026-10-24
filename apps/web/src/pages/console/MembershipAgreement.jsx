@@ -41,11 +41,11 @@ function Facts({ facts }) {
   );
 }
 
-function Terms({ gymName, text }) {
+function Terms({ label, text }) {
   return (
     <div
       role="region"
-      aria-label={`${gymName}'s terms`}
+      aria-label={label}
       tabIndex={0}
       className="c-area c-s14 c-t1 max-h-72 overflow-y-auto"
       style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
@@ -206,7 +206,8 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
             <>
               <p className="c-s15 c-w6 c-t1 m-0">{agreementSignedBy(signed, when)}</p>
               <Facts facts={signed.facts} />
-              <Terms gymName={box.gymName} text={signed.text} />
+              {signed.agreementName != null ? <span className="c-label">{signed.agreementName}</span> : null}
+              <Terms label={signed.agreementName ?? `${box.gymName}'s terms`} text={signed.text} />
               <p className="c-s14 c-t2 m-0">{copyLine ?? agreementCopyLine(signed, box.hasEmail, when)}</p>
               <div className="flex flex-wrap items-center gap-2">
                 {box.hasEmail ? (
@@ -274,8 +275,8 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
                   <p className="c-s15 c-w6 c-t1 m-0">{words.handOver}</p>
                   <span className="c-label">The membership</span>
                   <Facts facts={box.facts} />
-                  <span className="c-label">{box.gymName}&apos;s terms</span>
-                  <Terms gymName={box.gymName} text={box.agreement.text} />
+                  <span className="c-label">{box.agreement.name ?? `${box.gymName}'s terms`}</span>
+                  <Terms label={box.agreement.name ?? `${box.gymName}'s terms`} text={box.agreement.text} />
                   <label htmlFor={nameId} className="flex flex-col gap-1.5">
                     <span className="c-label">{words.nameLabel}</span>
                     <input

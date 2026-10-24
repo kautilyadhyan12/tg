@@ -2,18 +2,21 @@
 //   GET    /v1/orgs/:gymId/agreement        its words and how many memberships signed them (`org.manage`)
 //   PUT    /v1/orgs/:gymId/agreement        save the words
 //   DELETE /v1/orgs/:gymId/agreement        stop asking for it
+//   POST   /v1/orgs/:gymId/agreements                  add another agreement (18u-ii-a)
+//   PUT    /v1/orgs/:gymId/agreements/:agreementId     save it: its name, words and lines of the price list
+//   DELETE /v1/orgs/:gymId/agreements/:agreementId     stop asking for it
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement         the desk's box (`members.confirm`)
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement/sign    the person signs
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement/email   the copy, emailed again
 // Authenticate, then who the caller is at this gym, then the limit, then the handler: the
 // service asks the tick first and the limit after it.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { saveGymAgreementBodySchema, signMembershipAgreementBodySchema } from "@app/shared";
+import { saveGymAgreementBodySchema, saveOtherAgreementBodySchema, signMembershipAgreementBodySchema } from "@app/shared";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
-import { heldMembershipParamsSchema, orgParamsSchema } from "../schemas.js";
+import { heldMembershipParamsSchema, orgParamsSchema, otherAgreementParamsSchema } from "../schemas.js";
 import type { AgreementEmailSender } from "./email.js";
 import * as service from "./service.js";
 
@@ -90,6 +93,36 @@ export function registerAgreementRoutes(
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     const agreement = await service.stopGymAgreement(agreementDeps, requireUserId(req), params.gymId, gate(staffWriteLimit)(req, reply));
+    if (agreement === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(agreement);
+  });
+
+  const othersUrl = "/v1/orgs/:gymId/agreements";
+
+  app.post(othersUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(saveOtherAgreementBodySchema, req.body, req, reply);
+    if (body === null) return;
+    const agreement = await service.addOtherAgreement(agreementDeps, requireUserId(req), params.gymId, body, gate(staffWriteLimit)(req, reply));
+    if (agreement === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(agreement);
+  });
+
+  app.put(`${othersUrl}/:agreementId`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(otherAgreementParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(saveOtherAgreementBodySchema, req.body, req, reply);
+    if (body === null) return;
+    const agreement = await service.saveOtherAgreement(agreementDeps, requireUserId(req), params.gymId, params.agreementId, body, gate(staffWriteLimit)(req, reply));
+    if (agreement === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(agreement);
+  });
+
+  app.delete(`${othersUrl}/:agreementId`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(otherAgreementParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const agreement = await service.stopOtherAgreement(agreementDeps, requireUserId(req), params.gymId, params.agreementId, gate(staffWriteLimit)(req, reply));
     if (agreement === null) return;
     return reply.status(200).header("cache-control", "no-store").send(agreement);
   });

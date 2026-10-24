@@ -807,8 +807,8 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
         } else {
           try {
             const given = await orgService.giveHeldMembership(gymId, res.data.entry.entryId, giveBody(giving.requestKey, choice.type, giving, givenDiscount, givenSummary, null, givenFee.feeMinor));
-            // Where the business asks for its membership agreement, it is signed there and then.
-            const toSign = given.data.agreementInUse ? given.data.memberships.find((m) => m.agreement === null) : undefined;
+            // Where the business asks for the agreement its line of the price list uses, it is signed there and then.
+            const toSign = given.data.memberships.find((m) => m.agreement === null && m.agreementAsked === true);
             setSignNow(toSign === undefined ? null : { entryId: res.data.entry.entryId, membershipId: toSign.id });
             // Once it is given, and only then, the type's name becomes their Membership word,
             // so the list's Membership column and filter show it as they show a file's word.

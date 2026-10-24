@@ -47,6 +47,8 @@ function toResponse(row: repo.PriceListRow): GymMembershipTypesResponse {
     taxRates: row.taxRates,
     taxIncluded: row.taxIncluded,
     billDay: row.billDay,
+    agreements: row.agreements,
+    defaultAgreement: row.defaultAgreement,
   });
 }
 

@@ -2,6 +2,7 @@
 // ROADMAP 17a-i; a page of its own, drawn open, since 23c-i).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -108,6 +109,42 @@ describe('the list', () => {
     expect(within(rows[1]).getByText('Small groups')).toBeTruthy();
     // A type made while the gym was in another country keeps that money.
     expect(within(rows[2]).getByText('$20.00 every month')).toBeTruthy();
+  });
+});
+
+describe('which agreement each line is signed with (18u-ii-a)', () => {
+  const PACK_TERMS = { id: '55555555-5555-4555-8555-000000000001', name: 'Class pack terms' };
+  it('says nothing where the business has only its main agreement', async () => {
+    open(listOf({ types: [type({ name: 'Gold Monthly' })] }));
+    await screen.findByText('Gold Monthly', { selector: 'span.c-w6' });
+    expect(screen.queryByText(/^Agreement: /)).toBeNull();
+  });
+
+  it("names each line's agreement once there are others, and Open agreement opens that one in Settings", async () => {
+    orgService.getMembershipTypes.mockResolvedValue({
+      data: listOf({ types: [type({ name: '10-class pack', agreementId: PACK_TERMS.id }), type({ name: 'Gold Monthly' })], agreements: [PACK_TERMS], defaultAgreement: 'in_use' }),
+    });
+    render(
+      <MemoryRouter>
+        <MembershipTypesPanel org={{ ...ORG, slug: 'iron-house', staffRole: 'owner' }} readOnly={false} />
+      </MemoryRouter>,
+    );
+    const rows = await screen.findAllByRole('listitem');
+    expect(within(rows[0]).getByText('Agreement: Class pack terms')).toBeTruthy();
+    expect(within(rows[1]).getByText('Agreement: Default agreement')).toBeTruthy();
+    expect(within(rows[0]).getByRole('link', { name: 'Open the agreement for 10-class pack' }).getAttribute('href')).toBe(`/console/iron-house/settings#agreement-${PACK_TERMS.id}`);
+    expect(within(rows[1]).getByRole('link', { name: 'Open the agreement for Gold Monthly' }).getAttribute('href')).toBe('/console/iron-house/settings#membership-agreement');
+  });
+
+  it('staff who cannot change Settings read the line with no button', async () => {
+    orgService.getMembershipTypes.mockResolvedValue({ data: listOf({ types: [type({ name: '10-class pack', agreementId: PACK_TERMS.id })], agreements: [PACK_TERMS] }) });
+    render(
+      <MemoryRouter>
+        <MembershipTypesPanel org={{ ...ORG, slug: 'iron-house', privileges: ['memberships.manage'] }} readOnly={false} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Agreement: Class pack terms')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Open the agreement/ })).toBeNull();
   });
 });
 
