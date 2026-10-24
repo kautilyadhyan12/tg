@@ -1,11 +1,11 @@
-// The copy of a signed membership agreement (ROADMAP 18u-i): the same three shapes as the
-// co-owner request's seam (log-only · dev · resend). The log-only sender rejects, so the desk
-// never says "a copy was emailed" about an email that did not go.
+// The copy of a signed membership agreement (ROADMAP 18u-i) and the link to sign one from afar
+// (18u-ii-b): the same three shapes as the co-owner request's seam (log-only · dev · resend). The
+// log-only sender rejects, so the desk never says an email went that did not.
 import type { FastifyBaseLogger } from "fastify";
 import type { AgreementFact } from "@app/shared";
 import type { AppConfig } from "../../../config.js";
 import type { EmailTransport } from "../../../email/resend.js";
-import { membershipAgreementEmail } from "../../../email/templates.js";
+import { agreementLinkEmail, membershipAgreementEmail } from "../../../email/templates.js";
 
 export interface AgreementCopyLetter {
   to: string;
@@ -21,8 +21,19 @@ export interface AgreementCopyLetter {
   agreementName: string | null;
 }
 
+export interface AgreementLinkLetter {
+  to: string;
+  gymName: string;
+  membershipName: string;
+  /** "7 Nov 2026", in the business's own calendar. */
+  worksUntil: string;
+  /** The page on our website, with the token after "#". */
+  signLink: string;
+}
+
 export interface AgreementEmailSender {
   sendAgreementCopy(letter: AgreementCopyLetter): Promise<void>;
+  sendAgreementLink(letter: AgreementLinkLetter): Promise<void>;
 }
 
 export function createLogOnlyAgreementEmailSender(log: FastifyBaseLogger): AgreementEmailSender {
@@ -30,6 +41,10 @@ export function createLogOnlyAgreementEmailSender(log: FastifyBaseLogger): Agree
     sendAgreementCopy: () => {
       log.info({ event: "email.agreement_copy.not_sent" }, "log-only sender delivers nothing");
       return Promise.reject(new Error("log-only email sender: the agreement copy was NOT sent"));
+    },
+    sendAgreementLink: () => {
+      log.info({ event: "email.agreement_link.not_sent" }, "log-only sender delivers nothing");
+      return Promise.reject(new Error("log-only email sender: the agreement link was NOT sent"));
     },
   };
 }
@@ -42,6 +57,12 @@ export function createDevAgreementEmailSender(log: FastifyBaseLogger, config: Ap
       log.info({ event: "email.agreement_copy.dev" }, "DEV ONLY — agreement copy (no RESEND_API_KEY set)");
       return Promise.resolve();
     },
+    // The link is the person's to sign with, so it is written to the dev log, as a dev sign-in
+    // code is: a local walk opens it from there. Never in production (above).
+    sendAgreementLink: (letter) => {
+      log.info({ event: "email.agreement_link.dev", signLink: letter.signLink }, "DEV ONLY — agreement link (no RESEND_API_KEY set)");
+      return Promise.resolve();
+    },
   };
 }
 
@@ -50,6 +71,10 @@ export function createResendAgreementEmailSender(transport: EmailTransport, log:
     sendAgreementCopy: async (letter) => {
       await transport.send(membershipAgreementEmail(letter));
       log.info({ event: "email.agreement_copy.sent" }, "agreement copy email sent");
+    },
+    sendAgreementLink: async (letter) => {
+      await transport.send(agreementLinkEmail(letter));
+      log.info({ event: "email.agreement_link.sent" }, "agreement link email sent");
     },
   };
 }

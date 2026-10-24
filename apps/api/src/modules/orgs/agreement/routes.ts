@@ -8,10 +8,21 @@
 //   GET    /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement         the desk's box (`members.confirm`)
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement/sign    the person signs
 //   POST   /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement/email   the copy, emailed again
+//   POST   /v1/orgs/:gymId/member-list/entries/:entryId/memberships/:membershipId/agreement/link    email a link to sign (18u-ii-b)
+//   POST   /v1/agreement-link/read   the link's page: what to sign (public: the token is the whole request)
+//   POST   /v1/agreement-link/sign   the person signs from the link
 // Authenticate, then who the caller is at this gym, then the limit, then the handler: the
-// service asks the tick first and the limit after it.
+// service asks the tick first and the limit after it. The link's two routes have no sign-in:
+// the token rides in the body, which no log writes, never in an address.
+import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { saveGymAgreementBodySchema, saveOtherAgreementBodySchema, signMembershipAgreementBodySchema } from "@app/shared";
+import {
+  agreementLinkReadBodySchema,
+  agreementLinkSignBodySchema,
+  saveGymAgreementBodySchema,
+  saveOtherAgreementBodySchema,
+  signMembershipAgreementBodySchema,
+} from "@app/shared";
 import type { Sql } from "postgres";
 import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
@@ -47,9 +58,9 @@ function requireUserId(req: FastifyRequest): string {
 
 export function registerAgreementRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; now: () => Date; email: AgreementEmailSender; addressKey: Buffer | null },
+  deps: { sql: Sql; redis: RedisLike; now: () => Date; email: AgreementEmailSender; addressKey: Buffer | null; webOrigin: string },
 ): void {
-  const agreementDeps: service.AgreementDeps = { sql: deps.sql, now: deps.now, email: deps.email, addressKey: deps.addressKey, log: app.log };
+  const agreementDeps: service.AgreementDeps = { sql: deps.sql, now: deps.now, email: deps.email, addressKey: deps.addressKey, log: app.log, webOrigin: deps.webOrigin };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   const gate =
     (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
@@ -68,6 +79,16 @@ export function registerAgreementRoutes(
   const deskSignLimit = createDualRateLimit({ name: "agreement_desk_sign", max: 200, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   // Each is an email to a member: a few an hour is the desk's whole need.
   const copyLimit = createDualRateLimit({ name: "agreement_copy_email", max: 30, ipMax: 90, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // Each is an email to a member: a desk sending links to a gym moving in, on one address.
+  const linkSendLimit = createDualRateLimit({ name: "agreement_link_send", max: 200, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  // The link's page, counted by its token (as its hash): one person opening it again and again;
+  // a family or an office on one address is many links.
+  const byLink = (req: FastifyRequest): string | null => {
+    const token = (req.body as { token?: unknown } | null | undefined)?.token;
+    return typeof token === "string" ? createHash("sha256").update(token, "utf8").digest("hex") : null;
+  };
+  const linkReadLimit = createDualRateLimit({ name: "agreement_link_read", max: 60, ipMax: 600, windowMs: HOUR_MS, identifier: byLink, redis: deps.redis });
+  const linkSignLimit = createDualRateLimit({ name: "agreement_link_sign", max: 20, ipMax: 200, windowMs: HOUR_MS, identifier: byLink, redis: deps.redis });
 
   const url = "/v1/orgs/:gymId/agreement";
 
@@ -161,5 +182,30 @@ export function registerAgreementRoutes(
     const sent = await service.emailAgreementCopy(agreementDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, gate(copyLimit)(req, reply));
     if (sent === null) return;
     return reply.status(200).header("cache-control", "no-store").send(sent);
+  });
+
+  app.post(`${deskUrl}/link`, { preHandler: [app.authenticate] }, async (req, reply) => {
+    const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const sent = await service.sendAgreementLink(agreementDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, gate(linkSendLimit)(req, reply));
+    if (sent === null) return;
+    return reply.status(200).header("cache-control", "no-store").send(sent);
+  });
+
+  // The page the emailed link opens. No sign-in: the token names one membership and nothing else.
+  app.post("/v1/agreement-link/read", async (req, reply) => {
+    const body = parseOr400(agreementLinkReadBodySchema, req.body, req, reply);
+    if (body === null) return;
+    if (!(await gate(linkReadLimit)(req, reply)())) return;
+    const page = await service.readAgreementLink(agreementDeps, body.token);
+    return reply.status(200).header("cache-control", "no-store").send(page);
+  });
+
+  app.post("/v1/agreement-link/sign", async (req, reply) => {
+    const body = parseOr400(agreementLinkSignBodySchema, req.body, req, reply);
+    if (body === null) return;
+    if (!(await gate(linkSignLimit)(req, reply)())) return;
+    const signed = await service.signByAgreementLink(agreementDeps, body);
+    return reply.status(200).header("cache-control", "no-store").send(signed);
   });
 }

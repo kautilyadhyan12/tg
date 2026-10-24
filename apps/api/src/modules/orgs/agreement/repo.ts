@@ -1,5 +1,5 @@
-// A business's membership agreements and their signatures (ROADMAP 18u-i, 18u-ii-a; migrations
-// 0159, 0161). Every statement carries the gym in its WHERE.
+// A business's membership agreements and their signatures (ROADMAP 18u-i, 18u-ii-a, 18u-ii-b;
+// migrations 0159, 0161, 0162). Every statement carries the gym in its WHERE.
 //
 // A business has its main agreement (a document with no name) and may write others; a line of
 // the price list uses the one it names, or the main one. Each document's agreement today is its
@@ -240,6 +240,7 @@ export interface SignatureRow {
   emailedAt: Date | null;
   /** The other agreement's name; null for the main one. */
   agreementName: string | null;
+  via: "desk" | "link";
 }
 
 /** One membership's signature, with the words and details it was signed for. */
@@ -256,9 +257,10 @@ export async function signatureOf(sql: SqlOrTx, gymId: string, membershipId: str
       facts: unknown;
       emailed_at: Date | null;
       agreement_name: string | null;
+      signed_via: string;
     }[]
   >`
-    SELECT s.id, s.signed_name, s.signer, s.signed_at, u.display_name AS by, a.version, a.body, s.facts, s.emailed_at, d.name AS agreement_name
+    SELECT s.id, s.signed_name, s.signer, s.signed_at, u.display_name AS by, a.version, a.body, s.facts, s.emailed_at, d.name AS agreement_name, s.signed_via
     FROM gym_agreement_signatures s
     JOIN gym_agreements a ON a.gym_id = s.gym_id AND a.id = s.agreement_id
     JOIN gym_agreement_documents d ON d.gym_id = a.gym_id AND d.id = a.document_id
@@ -278,6 +280,7 @@ export async function signatureOf(sql: SqlOrTx, gymId: string, membershipId: str
     facts: agreementFactsSchema.parse(row.facts),
     emailedAt: row.emailed_at,
     agreementName: row.agreement_name,
+    via: row.signed_via === "link" ? "link" : "desk",
   };
 }
 
@@ -309,11 +312,17 @@ export async function gymContact(sql: SqlOrTx, gymId: string): Promise<{ postalA
   return { postalAddress: row?.postal_address ?? null, contactPhone: row?.contact_phone ?? null, contactEmail: row?.contact_email ?? null };
 }
 
-/** A membership's agreement signed at the desk, in one statement: written only while the
- *  wording shown is the newest, and not stopped, of the agreement the membership's line of the
- *  price list uses, the membership is this record's and in use, the record is on the list
- *  today, and its date of birth is still the one the under-18 check read. The id of the signature written; null where nothing was, a second press of
- *  the same signature included. */
+/** A link `l` of `gym_agreement_sign_links`, on the record `e` of its membership, works at `at`:
+ *  not used, not expired, and the record's address is still the one it was sent to (18u-ii-b). */
+const linkWorks = (sql: SqlOrTx, at: Date) => sql`
+  l.used_at IS NULL AND l.expires_at > ${at} AND e.email IS NOT NULL AND lower(e.email::text) = lower(l.sent_to)`;
+
+/** A membership's agreement signed, at the desk or from the emailed link, in one statement:
+ *  written only while the wording shown is the newest, and not stopped, of the agreement the
+ *  membership's line of the price list uses, the membership is this record's and in use, the
+ *  record is on the list today, and its date of birth is still the one the under-18 check read;
+ *  from a link, also while that link works (`linkWorks`). The id of the signature written; null
+ *  where nothing was, a second press of the same signature included. */
 export async function signAtDesk(
   sql: SqlOrTx,
   input: {
@@ -325,13 +334,18 @@ export async function signAtDesk(
     signer: DeskSigner;
     name: string;
     facts: readonly AgreementFact[];
-    witnessedBy: string;
+    /** The member of staff whose screen it was signed on; null from the emailed link. */
+    witnessedBy: string | null;
     at: Date;
+    /** Signed from the emailed link: the SHA-256 of its token. */
+    linkTokenHash?: string;
   },
 ): Promise<string | null> {
+  const hash = input.linkTokenHash ?? null;
   const rows = await sql<{ id: string }[]>`
-    INSERT INTO gym_agreement_signatures (gym_id, agreement_id, held_membership_id, signer, signed_name, facts, witnessed_by, signed_at)
-    SELECT a.gym_id, a.id, h.id, ${input.signer}, ${input.name}, ${sql.json(input.facts.map((fact) => ({ label: fact.label, value: fact.value })))}, ${input.witnessedBy}, ${input.at}
+    INSERT INTO gym_agreement_signatures (gym_id, agreement_id, held_membership_id, signer, signed_name, facts, witnessed_by, signed_at, signed_via)
+    SELECT a.gym_id, a.id, h.id, ${input.signer}, ${input.name}, ${sql.json(input.facts.map((fact) => ({ label: fact.label, value: fact.value })))}, ${input.witnessedBy}, ${input.at},
+      ${hash === null ? "desk" : "link"}
     FROM gym_agreements a
     JOIN gym_member_list_entries e ON e.gym_id = a.gym_id AND e.id = ${input.entryId} AND e.former_at IS NULL
     JOIN gym_held_memberships h ON h.gym_id = a.gym_id AND h.id = ${input.membershipId} AND h.entry_id = e.id AND h.status = 'active'
@@ -340,6 +354,9 @@ export async function signAtDesk(
       AND a.document_id = ${typeDocumentSql(sql)}
       AND a.version = (SELECT max(x.version) FROM gym_agreements x WHERE x.gym_id = a.gym_id AND x.document_id = a.document_id)
       AND e.date_of_birth IS NOT DISTINCT FROM ${input.dateOfBirth}::date
+      AND (${hash}::text IS NULL OR EXISTS (
+        SELECT 1 FROM gym_agreement_sign_links l
+        WHERE l.gym_id = h.gym_id AND l.held_membership_id = h.id AND l.token_hash = ${hash}::text AND ${linkWorks(sql, input.at)}))
     ON CONFLICT (held_membership_id) DO NOTHING
     RETURNING id`;
   return rows[0]?.id ?? null;
@@ -373,4 +390,77 @@ export async function letGoOfAgreementSignatures(tx: TransactionSql, gymId: stri
     WHERE s.gym_id = ${gymId} AND h.gym_id = s.gym_id AND h.id = s.held_membership_id
       AND s.record_deleted_at IS NULL AND h.entry_id IS NOT NULL
       AND (${entryId}::uuid IS NULL OR h.entry_id = ${entryId}::uuid)`;
+}
+
+// ── The emailed link to sign (18u-ii-b; migration 0162) ──
+
+/** Writes a membership's link, over the one it had, and claims its email, in one statement:
+ *  written only where it has none, its last went more than a minute ago or was used, or the
+ *  record's address has changed since; so two presses at once send one. True where written. */
+export async function claimLink(
+  sql: SqlOrTx,
+  input: { gymId: string; membershipId: string; tokenHash: string; sentTo: string; sentBy: string; at: Date; expiresAt: Date },
+): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    INSERT INTO gym_agreement_sign_links AS l (gym_id, held_membership_id, token_hash, sent_to, sent_by, sent_at, expires_at)
+    VALUES (${input.gymId}, ${input.membershipId}, ${input.tokenHash}, ${input.sentTo}, ${input.sentBy}, ${input.at}, ${input.expiresAt})
+    ON CONFLICT (held_membership_id) DO UPDATE SET
+      token_hash = excluded.token_hash, sent_to = excluded.sent_to, sent_by = excluded.sent_by,
+      sent_at = excluded.sent_at, expires_at = excluded.expires_at, used_at = NULL
+    WHERE l.gym_id = excluded.gym_id
+      AND (l.sent_at < ${input.at}::timestamptz - interval '1 minute' OR l.used_at IS NOT NULL OR lower(l.sent_to) <> lower(excluded.sent_to))
+    RETURNING l.id`;
+  return rows.length > 0;
+}
+
+/** The link whose email did not go: it is removed, so nothing says it was sent. */
+export async function dropLink(sql: SqlOrTx, gymId: string, tokenHash: string): Promise<void> {
+  await sql`DELETE FROM gym_agreement_sign_links WHERE gym_id = ${gymId} AND token_hash = ${tokenHash}`;
+}
+
+export interface LinkRow {
+  gymId: string;
+  entryId: string;
+  membershipId: string;
+  expiresAt: Date;
+  /** It was used, or it ran out. */
+  spent: boolean;
+}
+
+/** The link a token's hash names, on a record on the business's list today whose address is
+ *  still the one it was sent to; null otherwise. Used or run out, it is still found: the page
+ *  says so. */
+export async function linkByToken(sql: SqlOrTx, tokenHash: string, at: Date): Promise<LinkRow | null> {
+  const rows = await sql<{ gym_id: string; entry_id: string; held_membership_id: string; expires_at: Date; works: boolean }[]>`
+    SELECT l.gym_id, e.id AS entry_id, l.held_membership_id, l.expires_at, (${linkWorks(sql, at)}) AS works
+    FROM gym_agreement_sign_links l
+    JOIN gym_held_memberships h ON h.gym_id = l.gym_id AND h.id = l.held_membership_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id AND e.former_at IS NULL
+    WHERE l.token_hash = ${tokenHash} AND e.email IS NOT NULL AND lower(e.email::text) = lower(l.sent_to)`;
+  const row = rows[0];
+  return row === undefined
+    ? null
+    : { gymId: row.gym_id, entryId: row.entry_id, membershipId: row.held_membership_id, expiresAt: row.expires_at, spent: !row.works };
+}
+
+/** Holds the link's row until the transaction ends, so a link sent again waits for this signing. */
+export async function lockLink(tx: TransactionSql, gymId: string, tokenHash: string): Promise<boolean> {
+  const rows = await tx<{ id: string }[]>`SELECT id FROM gym_agreement_sign_links WHERE gym_id = ${gymId} AND token_hash = ${tokenHash} FOR UPDATE`;
+  return rows.length > 0;
+}
+
+export async function useLink(tx: TransactionSql, gymId: string, tokenHash: string, at: Date): Promise<void> {
+  await tx`UPDATE gym_agreement_sign_links SET used_at = ${at} WHERE gym_id = ${gymId} AND token_hash = ${tokenHash} AND used_at IS NULL`;
+}
+
+/** These memberships' links that work at `at`: when each was sent and until when it works. */
+export async function workingLinksOf(sql: SqlOrTx, gymId: string, membershipIds: readonly string[], at: Date): Promise<Map<string, { sentAt: Date; expiresAt: Date }>> {
+  if (membershipIds.length === 0) return new Map();
+  const rows = await sql<{ held_membership_id: string; sent_at: Date; expires_at: Date }[]>`
+    SELECT l.held_membership_id, l.sent_at, l.expires_at
+    FROM gym_agreement_sign_links l
+    JOIN gym_held_memberships h ON h.gym_id = l.gym_id AND h.id = l.held_membership_id
+    JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
+    WHERE l.gym_id = ${gymId} AND l.held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND ${linkWorks(sql, at)}`;
+  return new Map(rows.map((row) => [row.held_membership_id, { sentAt: row.sent_at, expiresAt: row.expires_at }]));
 }

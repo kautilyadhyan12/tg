@@ -227,7 +227,14 @@ export function registerOrgRoutes(
   registerWaiverRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // A business's membership agreement, signed at the desk for each membership (18u-i).
-  registerAgreementRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()), email: deps.agreementEmail, addressKey: deps.invites?.hmacKey ?? null });
+  registerAgreementRoutes(app, {
+    sql: deps.sql,
+    redis: deps.redis,
+    now: overrides.now ?? (() => new Date()),
+    email: deps.agreementEmail,
+    addressKey: deps.invites?.hmacKey ?? null,
+    webOrigin: deps.webOrigin,
+  });
 
   // Staff invited by email, and the invited person's Accept (Part 3 §10.3).
   registerStaffInviteRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, coOwnerEmail: deps.coOwnerEmail, webOrigin: deps.webOrigin });
