@@ -123,17 +123,20 @@ describe('another agreement for some memberships', () => {
     expect(orgService.addOtherAgreement).toHaveBeenCalledWith(ORG.id, { name: 'Class pack terms', text: PACK_TERMS, usedFor: [PACK.id] });
     expect(screen.getByText('Default agreement')).toBeTruthy();
     expect(screen.getByText('Used for all memberships except: 10-class pack.')).toBeTruthy();
-    expect(screen.getByTestId('agreement-words').textContent).toBe(PACK_TERMS);
+    // Open on the page, as the default agreement is: its words in their own box, no Edit to press.
+    expect(screen.getByRole('form', { name: 'Change Class pack terms' })).toBeTruthy();
+    expect(screen.getByDisplayValue(PACK_TERMS)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull();
     expect(screen.getByText('A membership agreement is signed each time a member gets a membership. It covers the price, renewal and cancellation. Use one agreement for all memberships, or add separate agreements for memberships with different terms.')).toBeTruthy();
     expect(screen.getByText('Used for: 10-class pack · 0 signed')).toBeTruthy();
   });
 
-  it('Edit opens the form under its row; before Save it says which memberships move and that signed ones keep theirs', async () => {
+  it('each other agreement is open on the page; before Save it says which memberships move and that signed ones keep theirs', async () => {
     const trialTerms = { ...other({ id: '44444444-4444-4444-8444-000000000002', name: 'Trial terms', signed: 0 }) };
     open({ ...IN_USE, others: [other(), trialTerms], prices: [{ ...PACK, agreementId: OTHER_ID }, { ...TRIAL, agreementId: trialTerms.id }, YEARLY] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Class pack terms' }));
-    const form = screen.getByRole('form', { name: 'Change Class pack terms' });
+    const form = await screen.findByRole('form', { name: 'Change Class pack terms' });
     expect(within(form).getByText('Currently uses Trial terms')).toBeTruthy();
+    expect(within(form).queryByRole('button', { name: 'Cancel' })).toBeNull();
     // The same signed box as under the default agreement.
     expect(within(within(form).getByRole('group', { name: 'Who has signed' })).getByText('1 signed')).toBeTruthy();
     expect(within(form).getByRole('link', { name: 'Open Members & staff' }).getAttribute('href')).toBe('/console/iron-house/members');
@@ -142,15 +145,12 @@ describe('another agreement for some memberships', () => {
     expect(within(form).getByText('Free week will move from Trial terms to this agreement.')).toBeTruthy();
     expect(within(form).getByText('10-class pack will use the default agreement.')).toBeTruthy();
     expect(within(form).getByText('Agreements already signed are not changed.')).toBeTruthy();
-    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('form', { name: 'Change Class pack terms' })).toBeNull();
     expect(orgService.saveOtherAgreement).not.toHaveBeenCalled();
   });
 
   it('Stop asks first and names the memberships that will ask for no agreement', async () => {
     open({ ...IN_USE, others: [other()], prices: [{ ...PACK, agreementId: OTHER_ID }, YEARLY] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Class pack terms' }));
-    const form = screen.getByRole('form', { name: 'Change Class pack terms' });
+    const form = await screen.findByRole('form', { name: 'Change Class pack terms' });
     fireEvent.click(within(form).getByRole('button', { name: 'Turn off' }));
     const ask = within(form).getByRole('group', { name: 'Turn off Class pack terms?' });
     expect(within(ask).getByText("Members who get 10-class pack will not be asked to sign an agreement.")).toBeTruthy();
@@ -162,13 +162,14 @@ describe('another agreement for some memberships', () => {
     expect(screen.getByText('Turned off. Members are not asked to sign it.')).toBeTruthy();
   });
 
-  it("the price list's Change agreement opens that agreement's form at once", async () => {
+  it("each other agreement has its own address on the page, for the price list's Open agreement", async () => {
     orgService.getGymAgreement.mockResolvedValue({ data: { ...IN_USE, others: [other()], prices: [{ ...PACK, agreementId: OTHER_ID }] } });
     render(
       <MemoryRouter>
-        <AgreementPanel org={ORG} readOnly={false} startOpen openAgreementId={OTHER_ID} />
+        <AgreementPanel org={ORG} readOnly={false} startOpen />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('form', { name: 'Change Class pack terms' })).toBeTruthy();
+    const form = await screen.findByRole('form', { name: 'Change Class pack terms' });
+    expect(form.closest(`#agreement-${OTHER_ID}`)).not.toBeNull();
   });
 });

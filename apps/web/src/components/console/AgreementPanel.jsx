@@ -14,6 +14,7 @@ import {
   agreementSummary,
   mainAgreementLine,
   otherAgreementLine,
+  usedForNames,
   withLists,
 } from '../../pages/console/agreementView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
@@ -34,8 +35,7 @@ const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
 // `membersName`: what this person's menu calls the Members page (`membersPageName`).
-// `openAgreementId`: another agreement whose form opens at once (the price list's Change).
-export default function AgreementPanel({ org, readOnly, startOpen = false, openAgreementId = null, membersTo = '../members', membersName = 'Members' }) {
+export default function AgreementPanel({ org, readOnly, startOpen = false, membersTo = '../members', membersName = 'Members' }) {
   const gymId = org.id;
   const fieldId = useId();
   const [data, setData] = useState(null);
@@ -46,8 +46,9 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
   // What the last save or stop said, until the words are typed in again.
   const [doneLine, setDoneLine] = useState(null);
   const [asking, setAsking] = useState(false);
-  // Which other agreement's form is open ('new' for Add agreement), and what its last save said.
-  const [editing, setEditing] = useState(openAgreementId);
+  // Whether Add agreement's form is open ('new'), and what the last save of another agreement said.
+  // The other agreements are always open; the price list's Open agreement brings one into view by its address.
+  const [editing, setEditing] = useState(null);
   const [otherLine, setOtherLine] = useState(null);
   const otherDone = (next, line, id) => {
     setData(withLists(next));
@@ -294,54 +295,25 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
           ) : null}
           {data.others.map((other) => (
             <div key={other.id} id={`agreement-${other.id}`} className="flex flex-col gap-2" style={{ scrollMarginTop: 16 }}>
-              <div className="rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3" style={boxStyle}>
-                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                  <span className="text-sm font-semibold break-words" style={{ color: '#fff' }}>
-                    {other.name}
-                  </span>
-                  <span className="text-sm" style={softStyle}>
-                    {otherAgreementLine(data, other)}
-                  </span>
-                  {editing !== other.id ? (
-                    // The start of its words, so what it says is seen without opening it.
-                    <span
-                      data-testid="agreement-words"
-                      className="text-sm mt-1"
-                      style={{ ...labelStyle, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-                    >
-                      {other.agreement.text}
-                    </span>
-                  ) : null}
-                </div>
-                {editing !== other.id ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(other.id);
-                      setOtherLine(null);
-                    }}
-                    disabled={busy !== null}
-                    aria-label={`Edit ${other.name}`}
-                    className="rounded-xl px-4 text-sm font-semibold min-h-11"
-                    style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
-                  >
-                    Edit
-                  </button>
-                ) : null}
-              </div>
-              {editing === other.id ? (
-                <OtherAgreementForm
-                  key={other.id}
-                  gymId={gymId}
-                  data={data}
-                  other={other}
-                  readOnly={readOnly}
-                  membersTo={membersTo}
-                  membersName={membersName}
-                  onDone={otherDone}
-                  onCancel={() => setEditing(null)}
-                />
-              ) : null}
+              <p className="text-base font-bold m-0 break-words" style={{ color: '#fff' }}>
+                {other.name}
+              </p>
+              <p className="text-sm m-0" style={softStyle}>
+                {otherAgreementLine(data, other)}
+              </p>
+              {/* Open on the page, as the default agreement is. Drawn again from what was saved
+                  whenever this agreement or its memberships change. */}
+              <OtherAgreementForm
+                key={`${other.id}:${String(other.agreement.version)}:${other.name}:${String(other.inUse)}:${usedForNames(data, other.id).join('|')}`}
+                gymId={gymId}
+                data={data}
+                other={other}
+                readOnly={readOnly}
+                membersTo={membersTo}
+                membersName={membersName}
+                onDone={otherDone}
+                onCancel={null}
+              />
               {otherLine !== null && otherLine.at === other.id ? (
                 <p role="status" className="text-sm m-0" style={softStyle}>
                   {otherLine.text}

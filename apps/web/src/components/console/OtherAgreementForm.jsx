@@ -39,6 +39,7 @@ function Tick({ checked, onChange, disabled, children, note }) {
 }
 
 // `other`: the agreement as saved, or null for a new one. `onDone(data, line, id)`: saved or stopped.
+// `onCancel`: Add agreement's way out; null for an agreement already saved, which stays open.
 export default function OtherAgreementForm({ gymId, data, other, readOnly, membersTo = '../members', membersName = 'Members', onDone, onCancel }) {
   const nameId = useId();
   const textId = useId();
@@ -193,15 +194,17 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, membe
           {busy === 'save' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
           {busy === 'save' ? 'Saving…' : otherSaveLabel(other)}
         </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy !== null}
-          className="rounded-xl px-4 py-3 text-sm font-semibold min-h-11"
-          style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
-        >
-          Cancel
-        </button>
+        {onCancel !== null ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy !== null}
+            className="rounded-xl px-4 py-3 text-sm font-semibold min-h-11"
+            style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
+          >
+            Cancel
+          </button>
+        ) : null}
         {other !== null && other.inUse && !asking ? (
           <button
             type="button"
