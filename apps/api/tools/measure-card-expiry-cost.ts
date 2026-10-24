@@ -179,7 +179,7 @@ const queueDone: { wall: number; js: number }[] = [];
 for (let i = 0; i < RUNS; i++) queueDone.push(await time(queue));
 many("the queue, every one already written (every other minute)", queueDone);
 
-const boxDeps = { sql, now: () => clock };
+const boxDeps = { sql, now: () => clock, emailKey: Buffer.alloc(32, 3) };
 await getBillSettings(boxDeps, big.owner, big.id);
 const boxes: { wall: number; js: number }[] = [];
 let listed = 0;
