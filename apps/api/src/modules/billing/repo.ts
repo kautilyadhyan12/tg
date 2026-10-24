@@ -2544,6 +2544,9 @@ export async function claimPlanEndReminders(
       following: r.following,
     });
   }
+  // RETURNING gives the rows in the order they were updated, not the inner ORDER BY: the plans
+  // ending first are emailed first, as the claim chose them.
+  out.sort((a, b) => a.endsAt.getTime() - b.endsAt.getTime() || (a.subscriptionRowId < b.subscriptionRowId ? -1 : 1));
   return out;
 }
 
