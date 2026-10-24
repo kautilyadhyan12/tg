@@ -303,6 +303,7 @@ export default function Settings() {
             org={org}
             readOnly={readOnly}
             startOpen={linked(section === SETTINGS_SECTION.agreement || agreementOfSection(section) !== null)}
+            openAgreementId={agreementOfSection(section)}
             membersTo={placeTo(orgSlug, 'members') ?? '../members'}
             membersName={membersPageName(privileges, org.orgType)}
           />

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Plus } from 'lucide-react';
+import { ChevronDown, Loader2, Plus } from 'lucide-react';
 import { MAIN_AGREEMENT_NAME, WAIVER_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -35,7 +35,8 @@ const hintStyle = { color: 'rgba(255,255,255,0.45)' };
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
 
 // `membersName`: what this person's menu calls the Members page (`membersPageName`).
-export default function AgreementPanel({ org, readOnly, startOpen = false, membersTo = '../members', membersName = 'Members' }) {
+// `openAgreementId`: another agreement shown open at once (the price list's Open agreement).
+export default function AgreementPanel({ org, readOnly, startOpen = false, openAgreementId = null, membersTo = '../members', membersName = 'Members' }) {
   const gymId = org.id;
   const fieldId = useId();
   const [data, setData] = useState(null);
@@ -47,13 +48,23 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
   const [doneLine, setDoneLine] = useState(null);
   const [asking, setAsking] = useState(false);
   // Whether Add agreement's form is open ('new'), and what the last save of another agreement said.
-  // The other agreements are always open; the price list's Open agreement brings one into view by its address.
   const [editing, setEditing] = useState(null);
   const [otherLine, setOtherLine] = useState(null);
+  // The other agreements shown open: each is a row that opens and closes when pressed.
+  const [openOthers, setOpenOthers] = useState(() => new Set(openAgreementId === null ? [] : [openAgreementId]));
+  const toggleOther = (id) =>
+    setOpenOthers((now) => {
+      const next = new Set(now);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const otherDone = (next, line, id) => {
     setData(withLists(next));
     setEditing(null);
     setOtherLine({ at: id, text: line });
+    // A new agreement is shown open where it was saved.
+    if (id !== null) setOpenOthers((now) => new Set(now).add(id));
   };
 
   const fetchAgreement = useCallback(
@@ -295,25 +306,41 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, membe
           ) : null}
           {data.others.map((other) => (
             <div key={other.id} id={`agreement-${other.id}`} className="flex flex-col gap-2" style={{ scrollMarginTop: 16 }}>
-              <p className="text-base font-bold m-0 break-words" style={{ color: '#fff' }}>
-                {other.name}
-              </p>
-              <p className="text-sm m-0" style={softStyle}>
-                {otherAgreementLine(data, other)}
-              </p>
-              {/* Open on the page, as the default agreement is. Drawn again from what was saved
-                  whenever this agreement or its memberships change. */}
-              <OtherAgreementForm
-                key={`${other.id}:${String(other.agreement.version)}:${other.name}:${String(other.inUse)}:${usedForNames(data, other.id).join('|')}`}
-                gymId={gymId}
-                data={data}
-                other={other}
-                readOnly={readOnly}
-                membersTo={membersTo}
-                membersName={membersName}
-                onDone={otherDone}
-                onCancel={null}
-              />
+              <button
+                type="button"
+                aria-expanded={openOthers.has(other.id)}
+                onClick={() => toggleOther(other.id)}
+                className="w-full rounded-xl px-4 py-3 flex items-center justify-between gap-3 text-left min-h-11"
+                style={boxStyle}
+              >
+                <span className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm font-semibold break-words" style={{ color: '#fff' }}>
+                    {other.name}
+                  </span>
+                  <span className="text-sm" style={softStyle}>
+                    {otherAgreementLine(data, other)}
+                  </span>
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="w-5 h-5 flex-shrink-0 transition-transform"
+                  style={{ color: 'rgba(255,255,255,0.6)', transform: openOthers.has(other.id) ? 'rotate(180deg)' : 'none' }}
+                />
+              </button>
+              {/* Drawn again from what was saved whenever this agreement or its memberships change. */}
+              {openOthers.has(other.id) ? (
+                <OtherAgreementForm
+                  key={`${other.id}:${String(other.agreement.version)}:${other.name}:${String(other.inUse)}:${usedForNames(data, other.id).join('|')}`}
+                  gymId={gymId}
+                  data={data}
+                  other={other}
+                  readOnly={readOnly}
+                  membersTo={membersTo}
+                  membersName={membersName}
+                  onDone={otherDone}
+                  onCancel={null}
+                />
+              ) : null}
               {otherLine !== null && otherLine.at === other.id ? (
                 <p role="status" className="text-sm m-0" style={softStyle}>
                   {otherLine.text}
