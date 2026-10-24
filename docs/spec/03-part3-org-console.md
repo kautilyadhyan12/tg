@@ -4331,7 +4331,7 @@ Payment method and cannot be picked. Resend's reports about these emails are kep
 not yet read back onto the bill.
 
 *As built, 18d-iii-ii-b (the Failed payments list):* a page of its own, **Failed payments**, in the
-menu after Sell, for staff with `members.read` and `billing.members` (the server refuses anyone
+menu after Sell, for staff with `members.confirm` and `billing.members` (the server refuses anyone
 else, and another gym's staff are answered 404). It lists every bill and fee still owed whose newest
 charge to a card on file was declined, the newest decline first, 25 rows a page: the person (a past
 member marked so), what is left to pay, what it is for ("Gold Weekly · 23 Oct – 29 Oct 2026", "Late

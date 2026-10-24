@@ -285,6 +285,23 @@ describe('Failed payments', () => {
     expect(rows().length).toBe(4);
   });
 
+  it('a decline that arrives while the second page is open moves its last row down: one page more is read, and the row stays', async () => {
+    const NEW = { ...NINA, billId: '15555555-1111-4111-8111-111111111111', entryId: '25555555-1111-4111-8111-111111111111', membershipId: '35555555-1111-4111-8111-111111111111', name: 'Newly Declined' };
+    // Page one, then page two with Ezra, its last row; once Newly Declined arrives at the top, Ezra is on page three.
+    const before = (from) => (from === 0 ? answer({ count: 4, payments: [GINA, NINA, FAY], next: 25 }) : answer({ count: 4, payments: [EZRA], next: null }));
+    const after = (from) => (from === 0 ? answer({ count: 5, payments: [NEW, GINA, NINA], next: 25 }) : from === 25 ? answer({ count: 5, payments: [FAY], next: 50 }) : answer({ count: 5, payments: [EZRA], next: null }));
+    svc.list.mockImplementation((_, from = 0) => Promise.resolve(before(from)));
+    open();
+    fireEvent.click(await screen.findByRole('button', { name: 'Show more' }));
+    await screen.findByText('Ezra Expired');
+    svc.list.mockImplementation((_, from = 0) => Promise.resolve(after(from)));
+    fireEvent.click(within(row('Ezra Expired')).getByRole('button', { name: 'Add a new card' }));
+    fireEvent.click(within(row('Ezra Expired')).getByRole('button', { name: 'Save the card' }));
+    await screen.findByText('Newly Declined');
+    expect(svc.list).toHaveBeenLastCalledWith('g1', 50);
+    expect(rows().map((r) => within(r).getAllByRole('button')[0].textContent)).toEqual(['Newly Declined', 'Gina Declined', 'Nina Short', 'Fay Fee', 'Ezra Expired']);
+  });
+
   it('a press the server refuses as changed (409) reads the list again, so the row says what is true now', async () => {
     open();
     const gina = await waitFor(() => row('Gina Declined'));

@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { CreditCard, Loader2, RotateCw } from 'lucide-react';
+import { FAILED_PAYMENTS_PAGE } from '@app/shared';
 import { failedPaymentsService } from '../../api/failedPaymentsApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -193,16 +194,21 @@ export default function FailedPayments() {
   /** The first row of the last page on screen: a read again reads every page up to it, so a row
    *  further down, and the box open under it, stays where staff left it. */
   const shownTo = useRef(0);
+  /** The rows on screen, by bill: a decline that arrived meanwhile moves them down, so one page
+   *  more is read while any of them is not found again (a row paid since never is). */
+  const shownIds = useRef([]);
 
   const load = useCallback(async () => {
     if (gymId === null || !may) return;
     try {
       let page = await failedPaymentsService.list(gymId);
       const payments = [...page.payments];
-      while (page.next !== null && page.next <= shownTo.current) {
+      const missing = () => shownIds.current.some((id) => !payments.some((p) => p.billId === id));
+      while (page.next !== null && (page.next <= shownTo.current || (page.next <= shownTo.current + FAILED_PAYMENTS_PAGE && missing()))) {
         page = await failedPaymentsService.list(gymId, page.next);
         payments.push(...page.payments.filter((p) => !payments.some((q) => q.billId === p.billId)));
       }
+      shownIds.current = payments.map((p) => p.billId);
       setState({ gymId, error: null, refused: false, list: { ...page, payments } });
     } catch (err) {
       setState((was) => ({ gymId, error: errorText(err, "We couldn't load this list."), refused: errorStatus(err) === 403, list: was.gymId === gymId ? was.list : null }));
@@ -211,6 +217,7 @@ export default function FailedPayments() {
 
   useEffect(() => {
     shownTo.current = 0;
+    shownIds.current = [];
     void load();
   }, [load]);
 
@@ -228,6 +235,7 @@ export default function FailedPayments() {
     failedPaymentsService.list(gymId, from).then(
       (page) => {
         shownTo.current = Math.max(shownTo.current, from);
+        shownIds.current = [...shownIds.current, ...page.payments.map((p) => p.billId).filter((id) => !shownIds.current.includes(id))];
         setState((was) => (was.gymId === gymId && was.list !== null ? { ...was, list: { ...page, payments: [...was.list.payments, ...page.payments.filter((p) => !was.list.payments.some((q) => q.billId === p.billId))] } } : was));
         setMore({ busy: false, error: null });
       },
