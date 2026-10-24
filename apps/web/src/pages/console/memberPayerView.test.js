@@ -14,8 +14,8 @@ describe("the box's line", () => {
   const person = (entryId, name) => ({ entryId, name, past: false });
   it.each([
     ['paid for', { paidBy: person('p', 'Priya Sharma'), paysFor: [] }, 'Aarav Sharma', 'Priya Sharma pays for Aarav Sharma.'],
-    ['pays for one', { paidBy: null, paysFor: [person('a', 'Aarav')] }, 'Priya Sharma', 'Priya Sharma pays for 1 person.'],
-    ['pays for three', { paidBy: null, paysFor: [person('a', 'A'), person('b', 'B'), person('c', 'C')] }, 'Priya Sharma', 'Priya Sharma pays for 3 people.'],
+    ['pays for one', { paidBy: null, paysFor: [person('a', 'Aarav')] }, 'Priya Sharma', 'Priya Sharma pays their own bills and for 1 other person.'],
+    ['pays for three', { paidBy: null, paysFor: [person('a', 'A'), person('b', 'B'), person('c', 'C')] }, 'Priya Sharma', 'Priya Sharma pays their own bills and for 3 other people.'],
     ['neither', { paidBy: null, paysFor: [] }, 'Ravi Kumar', 'Ravi Kumar pays their own bills.'],
     ['no name typed', { paidBy: person('p', ''), paysFor: [] }, '', 'No name on their record pays for No name on their record.'],
   ])('%s', (_what, answer, name, line) => expect(payerLine(answer, name)).toBe(line));

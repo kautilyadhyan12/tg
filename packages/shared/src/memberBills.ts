@@ -405,13 +405,61 @@ export const billSettingsSchema = z
     overdueAfterDays: z.number().int().min(0).max(BILL_OVERDUE_DAYS_MAX),
     billDay: billDaySchema.optional(),
     freezeFeeMinor: freezeFeeSchema.optional(),
+    /** Email cardholders in the month their card on file expires (18d-iii-c). Left out, it is as
+     *  it was. */
+    cardExpiryReminders: z.boolean().optional(),
   })
   .strict();
 export type BillSettings = z.infer<typeof billSettingsSchema>;
 
+/** The last day of its month a reminder before a card expires is written (18d-iii-c): one written
+ *  later could not reach the front desk before the card stops (review round one). */
+export const CARD_EXPIRY_LAST_DAY = 25;
+
+/** What happens this month to a card on file that expires this month (18d-iii-c), from the
+ *  cardholder's side. `will_email`: emailed this month while reminders are on (from 6 in the
+ *  morning, gym time, up to the `CARD_EXPIRY_LAST_DAY`); `sending`: on its way; `emailed` on
+ *  `on`; `maybe_emailed`: handed to the email service, which never confirmed it; `no_email`: no
+ *  email address on their record; `not_renewing`: the card pays for no membership that renews, so
+ *  nothing is due on it; `not_sent`: an address that bounced or was refused, or the email service
+ *  refused it; `too_late`: past the `CARD_EXPIRY_LAST_DAY` with none written. */
+export const cardExpiryOutcomeSchema = z.enum(["will_email", "sending", "emailed", "maybe_emailed", "no_email", "not_renewing", "not_sent", "too_late"]);
+export type CardExpiryOutcome = z.infer<typeof cardExpiryOutcomeSchema>;
+
+export const cardExpiryPersonSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    name: z.string().max(120),
+    brand: z.string().regex(/^[A-Z_]{1,40}$/),
+    last4: z.string().regex(/^[0-9]{4}$/),
+    outcome: cardExpiryOutcomeSchema,
+    /** The gym's day it was emailed, for `emailed`. */
+    on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  })
+  .strict();
+export type CardExpiryPerson = z.infer<typeof cardExpiryPersonSchema>;
+
+/** The saved cards that expire this month, for the reminders' box: only where the gym is connected
+ *  to Square and the reader holds the payments tick. `month`: "YYYY-MM", on the gym's clock. */
+export const cardExpiryPreviewSchema = z
+  .object({
+    month: z.string().regex(/^\d{4}-\d{2}$/),
+    people: z.array(cardExpiryPersonSchema).max(5000),
+  })
+  .strict();
+export type CardExpiryPreview = z.infer<typeof cardExpiryPreviewSchema>;
+
 /** The settings, and whether this reader may change them. `currency` is the gym's money, for
- *  the freeze fee's box. */
+ *  the freeze fee's box. `cardExpiry`: null where the gym has no saved cards to remind about (not
+ *  connected to Square) or the reader may not see cards. */
 export const billSettingsResponseSchema = billSettingsSchema
-  .extend({ billDay: billDaySchema, freezeFeeMinor: freezeFeeSchema, currency: z.string().regex(/^[A-Z]{3}$/).nullable(), canChange: z.boolean() })
+  .extend({
+    billDay: billDaySchema,
+    freezeFeeMinor: freezeFeeSchema,
+    cardExpiryReminders: z.boolean(),
+    cardExpiry: cardExpiryPreviewSchema.nullable(),
+    currency: z.string().regex(/^[A-Z]{3}$/).nullable(),
+    canChange: z.boolean(),
+  })
   .strict();
 export type BillSettingsResponse = z.infer<typeof billSettingsResponseSchema>;

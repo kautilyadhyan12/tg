@@ -1135,6 +1135,13 @@
       "when": 1790726400162,
       "tag": "0162_agreement_sign_links",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1790726400163,
+      "tag": "0163_card_expiry_reminders",
+      "breakpoints": true
     }
   ]
 }

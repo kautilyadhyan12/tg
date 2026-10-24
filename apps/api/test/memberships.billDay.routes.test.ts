@@ -341,7 +341,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       const gymId = org.org.id;
       const gold = await addType(gymId, owner.cookies, monthly("Gold Monthly", 5000));
       const read = async (cookies: Cookies) => billSettingsResponseSchema.parse(JSON.parse((await get(settingsUrl(gymId), cookies)).body));
-      expect(await read(owner.cookies)).toEqual({ overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, currency: "USD", canChange: true });
+      expect(await read(owner.cookies)).toEqual({ overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, cardExpiryReminders: false, cardExpiry: null, currency: "USD", canChange: true });
 
       // Somebody given a membership before the gym had a day keeps theirs, the 5th.
       const early = await addPerson(gymId, owner.cookies, "Early Member");
@@ -352,7 +352,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       await makeDeskStaff(org, owner, desk);
       const refused = await put(settingsUrl(gymId), { overdueAfterDays: 0, billDay: 1 }, desk.cookies);
       expect(refused.statusCode, refused.body).toBe(403);
-      expect(await read(desk.cookies)).toEqual({ overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, currency: "USD", canChange: false });
+      expect(await read(desk.cookies)).toEqual({ overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, cardExpiryReminders: false, cardExpiry: null, currency: "USD", canChange: false });
 
       for (const billDay of [0, 29, 31, 1.5, "1"]) expect((await put(settingsUrl(gymId), { overdueAfterDays: 0, billDay }, owner.cookies)).statusCode).toBe(400);
       await setBillDay(gymId, owner.cookies, 1);
@@ -360,7 +360,7 @@ d("billing everyone on one day of the month (real Postgres)", () => {
       await setBillDay(gymId, owner.cookies, 1);
       const graceOnly = await put(settingsUrl(gymId), { overdueAfterDays: 3 }, owner.cookies);
       expect(graceOnly.statusCode, graceOnly.body).toBe(200);
-      expect(await read(owner.cookies)).toEqual({ overdueAfterDays: 3, billDay: 1, freezeFeeMinor: 0, currency: "USD", canChange: true });
+      expect(await read(owner.cookies)).toEqual({ overdueAfterDays: 3, billDay: 1, freezeFeeMinor: 0, cardExpiryReminders: false, cardExpiry: null, currency: "USD", canChange: true });
       const lines = async () =>
         (await sql<{ meta: Record<string, string> }[]>`SELECT meta FROM audit_log WHERE gym_id = ${gymId} AND action = 'org.bill_day_changed' ORDER BY at`).map((r) => r.meta["billDay"]);
       expect(await lines()).toEqual(["1"]);

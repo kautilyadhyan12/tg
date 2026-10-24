@@ -56,6 +56,7 @@ import { paddleSettings, razorpaySettings } from "./modules/billing/settings.js"
 import { sendPlanEndReminders } from "./modules/billing/service.js";
 import { squareSettings } from "./modules/orgs/payments/settings.js";
 import { processSquareWork } from "./modules/orgs/payments/work.js";
+import { sendDueCardExpiryNotices } from "./modules/orgs/payments/cardExpiry.js";
 import { sendDueCardNotices } from "./modules/orgs/payments/cardNotices.js";
 // The worker busts no entitlement cache: a gym's members pick a change up within the cache's 60 s.
 import { createMemoryRedis } from "./redis.js";
@@ -424,6 +425,9 @@ export const INVITES_RESULTS_JOB = "invites.results";
 
 const invites = inviteSettings(config);
 const inviteSender = invites?.sender ?? null;
+/** Where Square is set up, the environment its cards on file are in: the reminders before a card
+ *  expires (18d-iii-c) are written for those cards only. */
+const cardsEnvironment = squareSettings(config) === null ? null : config.SQUARE_ENV;
 let invitesQueue: Queue | null = null;
 let invitesWorker: Worker | null = null;
 if (invites === null || inviteSender === null) {
@@ -560,6 +564,22 @@ if (invites === null || inviteSender === null) {
       });
       if (notices.sent + notices.skipped + notices.failed + notices.retried > 0) {
         log.info({ ...notices, durationMs: Date.now() - noticesStartedAt, event: "job.finished", job: "invites.card_notices" }, "job finished");
+      }
+      // A card on file that expires this month, for the gyms that switched the reminder on (18d-iii-c):
+      // the same sender and kill switch, never the daily cap.
+      const expiryStartedAt = Date.now();
+      const expiry = await sendDueCardExpiryNotices({
+        sql,
+        log,
+        settings: invites,
+        sender: inviteSender,
+        transport: inviteTransport,
+        environment: cardsEnvironment,
+        now: () => new Date(),
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      });
+      if (expiry.revived + expiry.queued + expiry.sent + expiry.skipped + expiry.dropped + expiry.failed + expiry.retried > 0) {
+        log.info({ ...expiry, durationMs: Date.now() - expiryStartedAt, event: "job.finished", job: "invites.card_expiry" }, "job finished");
       }
     },
     { connection },

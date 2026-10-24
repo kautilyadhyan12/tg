@@ -34,6 +34,7 @@ import { insertAudit } from "../repo.js";
 import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } from "../referrals/memberGiftRepo.js";
 import { lockGym } from "../memberList/repo.js";
 import { freezeFeeOf, setFreezeFee } from "./freezeFees.js";
+import { remindersOn, setReminders } from "../payments/cardExpiryRepo.js";
 import {
   billDayOf,
   billOf,
@@ -546,19 +547,32 @@ export async function voidRefund(
   });
 }
 
-/** The gym's two settings for bills, under its lock, which every membership given takes too: the
- *  days before an unpaid bill reads Overdue, and the day of the month it bills everyone on (18y).
+/** The gym's settings for bills, under its lock, which every membership given takes too: the days
+ *  before an unpaid bill reads Overdue, the day of the month it bills everyone on (18y), the freeze
+ *  fee (18z) and whether cardholders are emailed before their card expires (18d-iii-c).
  *  Each change is a line of the gym's activity; nothing written where nothing changed. A day left
  *  out stays as it is. Answers the day as it now stands. */
 export async function saveBillSettings(
   sql: Sql,
-  input: { gymId: string; days: number; billDay: number | null | undefined; freezeFeeMinor: number | undefined; actorUserId: string },
-): Promise<{ billDay: number | null; freezeFeeMinor: number }> {
+  input: { gymId: string; days: number; billDay: number | null | undefined; freezeFeeMinor: number | undefined; cardExpiryReminders: boolean | undefined; actorUserId: string },
+): Promise<{ billDay: number | null; freezeFeeMinor: number; cardExpiryReminders: boolean }> {
   return await sql.begin(async (tx) => {
     await lockGym(tx, input.gymId);
     const days = await overdueDaysOf(tx, input.gymId);
     const billDay = await billDayOf(tx, input.gymId);
     const freezeFee = await freezeFeeOf(tx, input.gymId);
+    const reminders = await remindersOn(tx, input.gymId);
+    if (input.cardExpiryReminders !== undefined && reminders !== input.cardExpiryReminders) {
+      await setReminders(tx, input.gymId, input.cardExpiryReminders);
+      await insertAudit(tx, {
+        actorUserId: input.actorUserId,
+        gymId: input.gymId,
+        action: "org.card_expiry_reminders_changed",
+        targetType: "gym",
+        targetId: input.gymId,
+        meta: { cardExpiryReminders: input.cardExpiryReminders ? "on" : "off" },
+      });
+    }
     // A new freeze fee is charged on freezes from now on; one already frozen keeps its own (18z).
     if (input.freezeFeeMinor !== undefined && freezeFee !== input.freezeFeeMinor) {
       await setFreezeFee(tx, input.gymId, input.freezeFeeMinor);
@@ -593,7 +607,11 @@ export async function saveBillSettings(
         meta: input.billDay === null ? { billDay: "off" } : { billDay: String(input.billDay) },
       });
     }
-    return { billDay: input.billDay === undefined ? billDay : input.billDay, freezeFeeMinor: input.freezeFeeMinor ?? freezeFee };
+    return {
+      billDay: input.billDay === undefined ? billDay : input.billDay,
+      freezeFeeMinor: input.freezeFeeMinor ?? freezeFee,
+      cardExpiryReminders: input.cardExpiryReminders ?? reminders,
+    };
   });
 }
 

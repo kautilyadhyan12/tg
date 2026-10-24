@@ -120,6 +120,9 @@ export interface MembershipRouteDeps {
   /** Tests move the clock; production uses the real one. A cancel decides which sessions
    *  and classes are still to come by it, so it is the clock a booking reads. */
   now?: () => Date;
+  /** The key the app's email addresses are kept by (`emailHmac`), to name the addresses that
+   *  bounced in Bills' card reminders (18d-iii-c); null where the invitations are not set up. */
+  emailKey?: Buffer | null;
 }
 
 export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipRouteDeps): void {
@@ -195,7 +198,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
 
   // ── A person's memberships ──
 
-  const heldDeps: held.HeldDeps = { sql: deps.sql, now };
+  const heldDeps: held.HeldDeps = { sql: deps.sql, now, emailKey: deps.emailKey ?? null };
   /** The changes' own allowance, so a busy desk never uses up the price list's: a gym
    *  moving in gives its 200 members a membership each. The read sits under the app-wide
    *  limit alone, as the person's page it is drawn on does. */

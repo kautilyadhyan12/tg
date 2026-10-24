@@ -58,6 +58,47 @@ describe('the billing day on the Bills box', () => {
     expect(orgService.saveBillSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('the reminder before a card expires (18d-iii-c): ticked, it lists who is emailed and who is not, and waits for Save', async () => {
+    const person = (n, outcome) => ({ entryId: `00000000-0000-4000-8000-00000000000${String(n)}`, name: `Person ${String(n)}`, brand: 'VISA', last4: '1111', outcome, on: null });
+    const preview = {
+      month: '2026-11',
+      people: [person(1, 'will_email'), person(2, 'will_email'), person(3, 'will_email'), person(4, 'will_email'), person(5, 'no_email'), person(6, 'not_renewing')],
+    };
+    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 0, billDay: null, cardExpiryReminders: false, cardExpiry: preview, canChange: true } });
+    orgService.saveBillSettings.mockResolvedValue({
+      data: { overdueAfterDays: 0, billDay: null, cardExpiryReminders: true, cardExpiry: { ...preview, people: [person(1, 'sending'), ...preview.people.slice(1)] }, canChange: true },
+    });
+    render(<BillSettingsCard gymId={GYM} readOnly={false} />);
+    const tick = await screen.findByTestId('card-expiry-reminders');
+    expect(tick.checked).toBe(false);
+    expect(screen.getByText('Email a reminder before a saved card expires')).toBeTruthy();
+    // Nothing listed until it is ticked.
+    expect(screen.queryByTestId('card-expiry-box')).toBeNull();
+
+    fireEvent.click(tick);
+    expect(screen.getByText('Saved cards that expire in November 2026')).toBeTruthy();
+    expect(screen.getByText('Will be emailed once you save (4)')).toBeTruthy();
+    expect(screen.getByText('Person 1 · Visa ending 1111')).toBeTruthy();
+    expect(screen.queryByText('Person 4 · Visa ending 1111')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'and 1 more · See all' }));
+    expect(screen.getByText('Person 4 · Visa ending 1111')).toBeTruthy();
+    expect(screen.getByText('Not emailed: no email address on their record (1)')).toBeTruthy();
+    expect(screen.getByText('Not emailed: their card pays for no membership that renews (1)')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(orgService.saveBillSettings).toHaveBeenCalledWith(GYM, { overdueAfterDays: 0, billDay: null, cardExpiryReminders: true }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    expect(screen.getByText('Being sent (1)')).toBeTruthy();
+    expect(screen.getByText('Will be emailed today (3)')).toBeTruthy();
+  });
+
+  it('a gym with no saved cards to remind about (not connected to Square) has no reminder tick', async () => {
+    orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 0, billDay: null, cardExpiryReminders: false, cardExpiry: null, canChange: true } });
+    render(<BillSettingsCard gymId={GYM} readOnly={false} />);
+    await screen.findByTestId('bill-day');
+    expect(screen.queryByTestId('card-expiry-reminders')).toBeNull();
+  });
+
   it('staff without the payments tick read the day and cannot change it', async () => {
     orgService.getBillSettings.mockResolvedValue({ data: { overdueAfterDays: 0, billDay: 15, canChange: false } });
     render(<BillSettingsCard gymId={GYM} readOnly={false} />);

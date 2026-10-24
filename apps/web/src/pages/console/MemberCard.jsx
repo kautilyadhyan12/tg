@@ -539,8 +539,10 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
           <CreditCard aria-hidden="true" className="w-4 h-4 c-t2" />
           <span className="c-num">{box.cardLine}</span>
           {box.expired ? <span className="c-tag c-tag-bad">Expired</span> : null}
+          {box.expiresThisMonth ? <span className="c-tag c-tag-warn">Expires this month</span> : null}
         </p>
       ) : null}
+      {box.reminderLine !== null ? <p className="c-s14 c-t2 m-0">{box.reminderLine}</p> : null}
       {box.noneLine !== null ? <p className="c-s15 c-t1 m-0">{box.noneLine}</p> : null}
       {box.earlierLine !== null ? <p className="c-s14 c-t2 m-0">{box.earlierLine}</p> : null}
       {box.appLine !== null ? <p className="c-s14 c-t2 m-0">{box.appLine}</p> : null}

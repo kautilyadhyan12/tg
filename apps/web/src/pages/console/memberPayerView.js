@@ -10,7 +10,8 @@ const nameOf = (name) => (typeof name === 'string' && name.trim() !== '' ? name 
 export function payerLine(answer, name) {
   const who = nameOf(name);
   if (answer.paidBy !== null) return `${nameOf(answer.paidBy.name)} pays for ${who}.`;
-  if (answer.paysFor.length > 0) return `${who} pays for ${answer.paysFor.length === 1 ? '1 person' : `${String(answer.paysFor.length)} people`}.`;
+  // A payer always pays their own bills too (Kd's click-through, 18d-iii-c): the line says both.
+  if (answer.paysFor.length > 0) return `${who} pays their own bills and for ${answer.paysFor.length === 1 ? '1 other person' : `${String(answer.paysFor.length)} other people`}.`;
   return `${who} pays their own bills.`;
 }
 
