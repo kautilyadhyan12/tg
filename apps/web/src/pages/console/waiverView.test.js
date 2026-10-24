@@ -75,7 +75,7 @@ describe('Save', () => {
   });
 
   it.each([
-    [{ ...IN_USE, people: 0, signed: 0 }, 'Waiver saved. Members sign it in the app when they join.'],
+    [{ ...IN_USE, people: 0, signed: 0 }, 'Waiver saved. Members sign it in the app when they join, or at the front desk on your screen.'],
     [{ ...IN_USE, signed: 0 }, 'Waiver saved. 12 members in the app are now asked to sign it.'],
     [{ ...IN_USE, people: 4, signed: 3 }, 'Waiver saved. 1 member in the app is now asked to sign it.'],
     [{ ...IN_USE, signed: 12 }, 'Waiver saved. All 12 members in the app have already signed it.'],

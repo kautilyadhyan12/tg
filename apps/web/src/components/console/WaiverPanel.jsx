@@ -122,7 +122,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
                 No waiver yet.
               </p>
               <p className="text-sm m-0" style={labelStyle}>
-                Write or paste your waiver below. Members sign it in the app when they join. We do not write or review your waiver.
+                Write or paste your waiver below. Members sign it in the app when they join, or at the front desk on your screen. We do not write or review your waiver.
               </p>
             </div>
           ) : null}

@@ -46,7 +46,7 @@ export function waiverAsksLine(data, draft) {
 
 /** What the save did, said beside the button. */
 export function waiverSavedLine(after) {
-  if (after.people === 0) return 'Waiver saved. Members sign it in the app when they join.';
+  if (after.people === 0) return 'Waiver saved. Members sign it in the app when they join, or at the front desk on your screen.';
   const toSign = after.people - after.signed;
   if (toSign === 0) return `Waiver saved. ${after.people === 1 ? 'The 1 member in the app has' : `All ${String(after.people)} members in the app have`} already signed it.`;
   return `Waiver saved. ${toSign === 1 ? '1 member' : `${String(toSign)} members`} in the app ${toSign === 1 ? 'is' : 'are'} now asked to sign it.`;
