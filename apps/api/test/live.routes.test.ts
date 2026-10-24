@@ -6,6 +6,7 @@
 // gym, an account that belongs nowhere, somebody signed out, somebody removed from its staff —
 // or a message that carries a person's details instead of only what to read again.
 import { randomUUID } from "node:crypto";
+import type { ReadableStreamReadResult } from "node:stream/web";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import jwt from "jsonwebtoken";
@@ -97,7 +98,7 @@ interface Line {
 async function openLine(base: string, gymId: string, cookies: Cookies | { bearer: string }): Promise<Line> {
   const controller = new AbortController();
   const headers: Record<string, string> = { accept: "text/event-stream", "x-forwarded-for": nextIp() };
-  if ("bearer" in cookies) headers["authorization"] = `Bearer ${String(cookies.bearer)}`;
+  if ("bearer" in cookies) headers["authorization"] = `Bearer ${cookies.bearer}`;
   else headers["cookie"] = cookieHeader(cookies);
   const res = await fetch(`${base}/v1/orgs/${gymId}/live`, { headers, signal: controller.signal });
   const line: Line = {
@@ -123,8 +124,9 @@ async function openLine(base: string, gymId: string, cookies: Cookies | { bearer
   void (async () => {
     try {
       for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
+        const read: ReadableStreamReadResult<Uint8Array> = await reader.read();
+        if (read.done) break;
+        const value = read.value;
         const text = decoder.decode(value, { stream: true });
         line.raw += text;
         buffer += text;

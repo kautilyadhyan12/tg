@@ -51,7 +51,8 @@ function redirectToLogin() {
 // one 401-triggered retry and never fires on 5xx / network errors.
 let refreshInFlight = null; // shared so concurrent 401s trigger a single refresh
 
-function refreshSession() {
+// Also used by the console's live line (`pages/console/liveNews.js`), which is not an axios request.
+export function refreshSession() {
   if (!refreshInFlight) {
     refreshInFlight = authApi
       .post('/v1/auth/refresh')

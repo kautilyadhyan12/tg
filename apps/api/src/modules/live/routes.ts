@@ -79,8 +79,7 @@ export function registerLiveRoutes(app: FastifyInstance, deps: LiveRouteDeps): v
 
     const stream = new PassThrough();
     let ended = false;
-    let heartbeat: ReturnType<typeof setInterval> | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timers: { heartbeat?: ReturnType<typeof setInterval>; end?: ReturnType<typeof setTimeout> } = {};
     const line: LiveLine = {
       gymId,
       userId,
@@ -94,8 +93,8 @@ export function registerLiveRoutes(app: FastifyInstance, deps: LiveRouteDeps): v
     function finish(): void {
       if (ended) return;
       ended = true;
-      clearInterval(heartbeat);
-      clearTimeout(timer);
+      clearInterval(timers.heartbeat);
+      clearTimeout(timers.end);
       deps.hub.close(line);
       stream.end();
     }
@@ -107,10 +106,10 @@ export function registerLiveRoutes(app: FastifyInstance, deps: LiveRouteDeps): v
         .header("retry-after", "30")
         .send({ error: opened, message: LIVE_WORDS[opened], requestId: req.id });
     }
-    heartbeat = setInterval(() => {
+    timers.heartbeat = setInterval(() => {
       if (!ended) stream.write(": still here\n\n");
     }, heartbeatMs);
-    timer = setTimeout(finish, endsIn);
+    timers.end = setTimeout(finish, endsIn);
     // The browser closed the tab, went off screen or lost its connection.
     reply.raw.on("close", finish);
     stream.write(frame({ what: "ready" }));
