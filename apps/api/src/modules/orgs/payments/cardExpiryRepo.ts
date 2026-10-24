@@ -12,14 +12,20 @@ type SqlOrTx = Sql | TransactionSql;
  *  for them, or that of somebody they pay for; of a current member, running or frozen. The card the
  *  app would charge for it (`payerCard` in `cardChargesRepo.ts`). */
 const paysForRenewal = (sql: SqlOrTx) => sql`
-      EXISTS (
-        SELECT 1 FROM gym_held_memberships h
-        WHERE h.gym_id = k.gym_id
-          AND (h.entry_id = k.entry_id
-               OR h.entry_id IN (SELECT p.entry_id FROM gym_member_payers p WHERE p.gym_id = k.gym_id AND p.payer_entry_id = k.entry_id))
-          AND COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id) = k.entry_id
-          AND h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen')
-          AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries m WHERE m.gym_id = h.gym_id AND m.id = h.entry_id AND m.former_at IS NOT NULL))`;
+      (EXISTS (
+         SELECT 1 FROM gym_held_memberships h
+         WHERE h.gym_id = k.gym_id AND h.entry_id = k.entry_id AND ${renewing(sql)}
+           AND NOT EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = k.gym_id AND p.entry_id = k.entry_id))
+       OR EXISTS (
+         SELECT 1 FROM gym_member_payers p
+         JOIN gym_held_memberships h ON h.gym_id = p.gym_id AND h.entry_id = p.entry_id
+         WHERE p.gym_id = k.gym_id AND p.payer_entry_id = k.entry_id AND ${renewing(sql)}))`;
+
+/** A membership (alias `h`) that renews, running or frozen, of a current member. Each half of
+ *  `paysForRenewal` finds it by its record, so neither reads the gym's other memberships. */
+const renewing = (sql: SqlOrTx) => sql`
+      h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen')
+      AND NOT EXISTS (SELECT 1 FROM gym_member_list_entries m WHERE m.gym_id = h.gym_id AND m.id = h.entry_id AND m.former_at IS NOT NULL)`;
 
 /** The card (alias `k`) is due a reminder, in the gym's month `today` (alias `d` names the gym's day,
  *  its connected Square account and its switch): the gym sends them, it is active, the card is in the
@@ -30,9 +36,14 @@ const dueCard = (sql: SqlOrTx) => sql`
       AND k.exp_year = extract(year FROM d.today) AND k.exp_month = extract(month FROM d.today)
       AND ${paysForRenewal(sql)}`;
 
-/** Each gym's own day, switch and connected Square account. */
-const gymDay = (sql: SqlOrTx, q: { environment: SquareEnvironment | null; now: Date; gymIds: readonly string[] | null; remindingOnly: boolean }) => sql`
-    gym_day AS (
+interface DayQuery {
+  environment: SquareEnvironment | null;
+  now: Date;
+  remindingOnly: boolean;
+}
+
+/** Each gym's own day, switch and connected Square account, for the connections `only` picks. */
+const gymDaySelect = (sql: SqlOrTx, q: DayQuery, only: ReturnType<typeof sql>) => sql`
       SELECT g.id AS gym_id, g.timezone, g.card_expiry_reminders AS reminders, g.status = 'active' AS active,
              c.environment, c.account_id,
              (${q.now}::timestamptz AT TIME ZONE g.timezone)::date AS today,
@@ -41,8 +52,10 @@ const gymDay = (sql: SqlOrTx, q: { environment: SquareEnvironment | null; now: D
       JOIN gyms g ON g.id = c.gym_id
       WHERE (${q.environment === null}::boolean OR c.environment = ${q.environment}) AND c.state = 'connected' AND c.location_id IS NOT NULL
         AND (NOT ${q.remindingOnly}::boolean OR g.card_expiry_reminders)
-        AND (${q.gymIds === null}::boolean OR c.gym_id = ANY(${[...(q.gymIds ?? [])]}::uuid[]))
-    )`;
+        AND ${only}`;
+
+const gymDay = (sql: SqlOrTx, q: DayQuery & { gymIds: readonly string[] | null }) => sql`
+    gym_day AS (${gymDaySelect(sql, q, q.gymIds === null ? sql`true` : sql`c.gym_id = ANY(${[...q.gymIds]}::uuid[])`)})`;
 
 /** Write the reminders that are due, from 6 in the morning on each gym's clock, for the cards whose
  *  holder has an email address; once a card and expiry date. Safe to run twice at once. Answers how
@@ -177,14 +190,14 @@ export async function claimNextNotice(sql: Sql, q: { now: Date; leaseMs: number;
 }
 
 /** The notice (alias `s`) is still due now: `dueCard` of the card it was written for, unchanged on the
- *  same record, which still has the address it was written with. */
+ *  same record, which still has the address it was written with. Read for its own gym and card only. */
 const stillDue = (sql: SqlOrTx, now: Date) => sql`
       s.entry_id IS NOT NULL
       AND EXISTS (
-        WITH ${gymDay(sql, { environment: null, now, gymIds: null, remindingOnly: true })}
-        SELECT 1 FROM gym_day d
-        JOIN gym_member_cards k ON k.gym_id = d.gym_id AND k.environment = d.environment AND k.account_id = d.account_id
-        WHERE d.gym_id = s.gym_id AND k.entry_id = s.entry_id AND k.environment = s.environment AND k.account_id = s.account_id
+        SELECT 1
+        FROM (${gymDaySelect(sql, { environment: null, now, remindingOnly: true }, sql`c.gym_id = s.gym_id AND c.environment = s.environment AND c.account_id = s.account_id`)}) d
+        JOIN gym_member_cards k ON k.gym_id = s.gym_id AND k.entry_id = s.entry_id
+        WHERE k.environment = s.environment AND k.account_id = s.account_id
           AND k.card_id = s.card_id AND k.exp_year = s.exp_year AND k.exp_month = s.exp_month
           AND ${dueCard(sql)})
       AND EXISTS (SELECT 1 FROM gym_member_list_entries e WHERE e.gym_id = s.gym_id AND e.id = s.entry_id AND e.email = s.email)`;
@@ -216,13 +229,17 @@ export async function noticeFacts(sql: SqlOrTx, n: ClaimedNotice, now: Date): Pr
       ? []
       : await sql<{ entry_id: string; full_name: string | null }[]>`
     SELECT DISTINCT e.id AS entry_id, e.full_name
-    FROM gym_held_memberships h
+    FROM (
+      SELECT h.* FROM gym_held_memberships h
+      WHERE h.gym_id = ${n.gymId} AND h.entry_id = ${n.entryId}
+        AND NOT EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id)
+      UNION ALL
+      SELECT h.* FROM gym_member_payers p
+      JOIN gym_held_memberships h ON h.gym_id = p.gym_id AND h.entry_id = p.entry_id
+      WHERE p.gym_id = ${n.gymId} AND p.payer_entry_id = ${n.entryId}
+    ) h
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
-    WHERE h.gym_id = ${n.gymId}
-      AND (h.entry_id = ${n.entryId}
-           OR h.entry_id IN (SELECT p.entry_id FROM gym_member_payers p WHERE p.gym_id = ${n.gymId} AND p.payer_entry_id = ${n.entryId}))
-      AND COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id), h.entry_id) = ${n.entryId}
-      AND h.kind = 'recurring' AND h.renews AND h.status IN ('active','frozen') AND e.former_at IS NULL
+    WHERE ${renewing(sql)}
     ORDER BY e.full_name, e.id`;
   return {
     due: due?.due === true,
