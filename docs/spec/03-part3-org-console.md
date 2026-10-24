@@ -4390,10 +4390,15 @@ or still to start whose line asks for an agreement and nobody has signed it, the
 page reads. *As built, 18u-ii-b (signing from afar):* under a membership not signed, Email a link to
 sign (beside Sign agreement on the line, and beside Sign later in the box Add membership opens)
 emails the record's address a link, `/sign-agreement#<token>`: 32 random bytes, kept only as their
-SHA-256, after "#" so no server's log holds it; the page sends it in the body. One link a
-membership: sending again replaces it, and the old one names nothing. It works for 14 days, once,
-and only while the record is on the list with the address it was sent to (any capitals); a link
-that names nothing says "This link isn't valid" and names nobody. The page needs no sign-in and
+SHA-256, after "#" so no server's log holds it; the page sends it in the body and takes it out of
+the address bar (opened again without it: "To read and sign the agreement, open the link in your
+email again."). One link a membership, never for one already signed: sending again replaces it and
+the old one names nothing, except within a minute of the last, when nothing more is sent and the line
+says "A link to sign was emailed to them less than a minute ago…" (a press that finds another's
+email still going waits to learn whether it went). A link works only once its email went, to the end
+of the 14th day after today in the business's calendar (the day the email names), once, and only
+while the record is on the list with the address it was sent to (any capitals); a record deleted for
+good takes its links with it. A link that names nothing says "This link isn't valid" and names nobody. The page needs no sign-in and
 reads the same details and words as the desk's box, with the same parent-or-guardian choice, and
 signs by the same one statement, which also asks that the link still works; the signature is kept
 as "from the emailed link" with nobody's screen, and the copy is emailed as at the desk. The line
