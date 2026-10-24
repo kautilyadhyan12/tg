@@ -403,7 +403,8 @@ export async function letGoOfAgreementSignatures(tx: TransactionSql, gymId: stri
 // ── The emailed link to sign (18u-ii-b; migration 0162) ──
 
 /** Writes a membership's link, over the one it had, and claims its email, in one statement:
- *  never for a membership already signed; otherwise only where it has none, its last was sent
+ *  never for a membership already signed (`NOT EXISTS` for a first link; `used_at`, read again after
+ *  waiting on a signing that holds the row, for one sent again); otherwise only where it has none, its last was sent
  *  more than a minute ago, or the record's address has changed since; so two presses at once send
  *  one. It works until the start of `endsBefore` in the business's time zone, the day after its
  *  last. Not counted as sent until `linkEmailed`. When it ends where written; null where not. */
@@ -419,7 +420,7 @@ export async function claimLink(
     ON CONFLICT (held_membership_id) DO UPDATE SET
       token_hash = excluded.token_hash, sent_to = excluded.sent_to, sent_by = excluded.sent_by,
       sent_at = excluded.sent_at, expires_at = excluded.expires_at, emailed_at = NULL, used_at = NULL
-    WHERE l.gym_id = excluded.gym_id
+    WHERE l.gym_id = excluded.gym_id AND l.used_at IS NULL
       AND (l.sent_at < ${input.at}::timestamptz - interval '1 minute' OR lower(l.sent_to) <> lower(excluded.sent_to))
     RETURNING l.expires_at`;
   return rows[0]?.expires_at ?? null;

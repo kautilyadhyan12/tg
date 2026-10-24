@@ -591,6 +591,51 @@ d("signing a membership agreement from an emailed link (real Postgres)", () => {
   );
 
   it(
+    "a link sent again while its page is being signed waits for the signing, then sends nothing",
+    async () => {
+      clock = start;
+      const { gymId, owner, typeId } = await makeBusiness("Link Race Gym");
+      const maya = await addPerson(gymId, owner.cookies, "Maya Patel", "agrlink-p-race@example.com");
+      const yearly = await give(gymId, maya, owner.cookies, typeId);
+      const token = await linkFor(gymId, maya, yearly, owner.cookies);
+      const open = await openPage(token);
+      const hash = sha256Hex(token);
+      const emailsBefore = links.length;
+      // Two minutes on, past the minute's guard. The page's signing holds the link's row; Send link
+      // again is pressed while it does, and the signing then commits.
+      clock = new Date(start.getTime() + 2 * 60 * 1000);
+      let again: Promise<{ statusCode: number; body: string }> | undefined;
+      await sql.begin(async (tx) => {
+        expect(await agreementRepo.lockLink(tx, gymId, hash)).toBe(true);
+        again = sendLink(gymId, maya, yearly, owner.cookies);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const signed = await agreementRepo.signAtDesk(tx, {
+          gymId,
+          agreementId: open.agreement.id,
+          entryId: maya,
+          membershipId: yearly,
+          dateOfBirth: null,
+          signer: "person",
+          name: "Maya Patel",
+          facts: open.facts,
+          witnessedBy: null,
+          at: clock,
+          linkTokenHash: hash,
+        });
+        expect(signed).not.toBeNull();
+        await agreementRepo.useLink(tx, gymId, hash, clock);
+      });
+      if (again === undefined) throw new Error("Send link again was not pressed");
+      const answer = await again;
+      expect([answer.statusCode, errorOf(answer).error]).toEqual([409, "already_signed"]);
+      expect(links.length).toBe(emailsBefore);
+      const [row] = await sql<{ token_hash: string; used_at: Date | null }[]>`SELECT token_hash, used_at FROM gym_agreement_sign_links WHERE gym_id = ${gymId}`;
+      expect([row?.token_hash, row?.used_at === null]).toEqual([hash, false]);
+    },
+    T,
+  );
+
+  it(
     "the link's limits: one link opened over and over is stopped, and a family or an office on one address is not",
     async () => {
       clock = start;
