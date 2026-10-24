@@ -11,10 +11,11 @@
 // key of the details it showed, and a signature is written only where the server works out the
 // same details again: what is kept and emailed is what the screen showed.
 import { z } from "zod";
-import { formatMinor } from "./memberships.js";
+import { MEMBERSHIP_TYPES_MAX, formatMinor } from "./memberships.js";
 import type { HeldMembershipItem } from "./heldMemberships.js";
 import type { MemberBill, MemberBilling } from "./memberBills.js";
 import { coversWords, dayWords } from "./paymentsDownload.js";
+import { VISIBLE_TEXT } from "./visibleText.js";
 import { deskSignerSchema, signedNameSchema, waiverTextSchema, waiverToReadSchema } from "./waiver.js";
 
 export const AGREEMENT_FACTS_MAX = 30;
@@ -34,17 +35,58 @@ const factsKeySchema = z.string().regex(/^[0-9a-f]{64}$/);
 export const saveGymAgreementBodySchema = z.object({ text: waiverTextSchema }).strict();
 export type SaveGymAgreementBody = z.infer<typeof saveGymAgreementBodySchema>;
 
+// Each line of the price list may have its own agreement (18u-ii-a): the business's main one is
+// the default, and its others are named, each used for the lines it is ticked for.
+export const AGREEMENT_NAME_MAX = 60;
+/** The most lines of the price list one save ticks. */
+export const AGREEMENT_USED_FOR_MAX = MEMBERSHIP_TYPES_MAX;
+/** What Settings and the price list call the business's main agreement: the one every
+ *  membership uses unless another agreement is chosen for it. */
+export const MAIN_AGREEMENT_NAME = "Default agreement";
+export const agreementNameSchema = z.string().trim().min(1).max(AGREEMENT_NAME_MAX).regex(VISIBLE_TEXT);
+
+const savedWordingSchema = waiverToReadSchema.extend({ savedAt: z.string() }).strict();
+
+/** One of the business's other agreements: its name, its newest wording, and how many
+ *  memberships were signed with any of its wordings. */
+export const otherAgreementSchema = z
+  .object({ id: z.string().uuid(), name: z.string(), agreement: savedWordingSchema, inUse: z.boolean(), signed: z.number().int().min(0) })
+  .strict();
+export type OtherAgreement = z.infer<typeof otherAgreementSchema>;
+
+/** A line of the price list in use, with the other agreement it uses; null is the main one. */
+export const agreementPriceSchema = z.object({ id: z.string().uuid(), name: z.string(), agreementId: z.string().uuid().nullable() }).strict();
+export type AgreementPrice = z.infer<typeof agreementPriceSchema>;
+
 export const gymAgreementResponseSchema = z
   .object({
-    /** The newest wording the business saved, or null where it never saved one. */
-    agreement: waiverToReadSchema.extend({ savedAt: z.string() }).strict().nullable(),
+    /** The main agreement's newest wording, or null where the business never saved one. */
+    agreement: savedWordingSchema.nullable(),
     /** Memberships are signed with it. False where there is none, or it was stopped. */
     inUse: z.boolean(),
     /** How many of its memberships were signed, with any of its wordings. */
     signed: z.number().int().min(0),
+    /** The business's other agreements, by name. */
+    others: z.array(otherAgreementSchema).default([]),
+    /** The price list, for "Used for". */
+    prices: z.array(agreementPriceSchema).default([]),
   })
   .strict();
 export type GymAgreementResponse = z.infer<typeof gymAgreementResponseSchema>;
+
+/** Add another agreement, or change one: its name, its words and the lines of the price list it
+ *  is used for. A line not ticked on any of them uses the main agreement. `seen` is the price list
+ *  as the screen showed it, each line with the agreement it used: where another member of staff
+ *  has moved a line since, nothing is saved (`prices_changed`). */
+export const saveOtherAgreementBodySchema = z
+  .object({
+    name: agreementNameSchema,
+    text: waiverTextSchema,
+    usedFor: z.array(z.string().uuid()).max(AGREEMENT_USED_FOR_MAX),
+    seen: z.array(z.object({ id: z.string().uuid(), agreementId: z.string().uuid().nullable() }).strict()).max(AGREEMENT_USED_FOR_MAX),
+  })
+  .strict();
+export type SaveOtherAgreementBody = z.infer<typeof saveOtherAgreementBodySchema>;
 
 // ── One membership, at the desk (`members.confirm`) ──
 
@@ -61,6 +103,8 @@ export const agreementSignedSchema = z
     facts: agreementFactsSchema,
     /** When the copy last went to the person's email; null where it has not. */
     emailedAt: z.string().nullable(),
+    /** The name of the other agreement it was signed with (18u-ii-a); null for the main one. */
+    agreementName: z.string().nullable().default(null),
   })
   .strict();
 export type AgreementSigned = z.infer<typeof agreementSignedSchema>;
@@ -73,8 +117,9 @@ export const membershipAgreementResponseSchema = z
     timezone: z.string(),
     /** Under 18 by the record's date of birth on the business's own day; null with none. */
     minor: z.boolean().nullable(),
-    /** The agreement the business asks for today, or null where it asks for none. */
-    agreement: waiverToReadSchema.nullable(),
+    /** The agreement the business asks for today for this membership's line of the price list,
+     *  with its name (null for the main one); null where it asks for none. */
+    agreement: waiverToReadSchema.extend({ name: z.string().nullable().default(null) }).strict().nullable(),
     /** This membership's details as they would be signed now, and their key; null where the
      *  membership is over or cancelled, or frozen, and cannot be signed. */
     facts: agreementFactsSchema.nullable(),
@@ -114,6 +159,12 @@ export const AGREEMENT_WORDS = {
   /** The membership's details are not the ones the screen showed. */
   facts_changed: "The details of this membership have changed. Read them again below, then sign.",
   membership_not_found: "We couldn't find this membership.",
+  /** Add another agreement, with a name another of the business's agreements has. */
+  name_taken: (name: string): string => `You already have an agreement called ${name}. Give this one another name.`,
+  /** "Used for" names a line of the price list that is not the business's, or is archived. */
+  price_not_found: "One of the memberships you ticked is no longer on your price list. Check the list again, then save.",
+  /** Another member of staff changed which memberships use which agreement after the screen loaded. */
+  prices_changed: "The memberships for your agreements were changed by someone else. Check them again, then save.",
   /** Over, cancelled or frozen: nothing to sign now. */
   membership_not_signable: "This membership is over, cancelled or frozen, so it can't be signed now.",
   /** Email a copy, for a membership nobody has signed. */

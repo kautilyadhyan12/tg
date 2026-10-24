@@ -309,6 +309,24 @@ describe("the gym's own list", () => {
     expect(within(screen.getByTestId('showing')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Waiver not signed', 'Clear']);
   });
 
+  it('offers Agreement not signed while the business asks for an agreement, with its count, and asks the server for it (18u-ii-a)', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ agreementNotSigned: 3 }) } });
+    draw();
+    await openFilter();
+    const group = within(filterBox().getByRole('group', { name: 'Agreement' }));
+    fireEvent.click(group.getByRole('button', { name: 'Agreement not signed 3' }));
+    await waitFor(() => expect(orgService.getMemberListEntries).toHaveBeenLastCalledWith(GYM, 'agreement=not_signed'));
+    fireEvent.click(await filterBox().findByRole('button', { name: /^Show \d+ members?$/ }));
+    expect(within(screen.getByTestId('showing')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Agreement not signed', 'Clear']);
+  });
+
+  it('offers no agreement choice at a business that asks for none', async () => {
+    orgService.getMemberList.mockResolvedValue({ data: { list: view({ agreementNotSigned: null }) } });
+    draw();
+    await openFilter();
+    expect(filterBox().queryByRole('group', { name: 'Agreement' })).toBeNull();
+  });
+
   it('offers no waiver choice at a gym that asks for none', async () => {
     orgService.getMemberList.mockResolvedValue({ data: { list: view({ waiverNotSigned: null }) } });
     draw();

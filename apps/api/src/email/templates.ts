@@ -291,19 +291,22 @@ export function membershipAgreementEmail(words: {
   signedOn: string;
   facts: readonly { label: string; value: string }[];
   text: string;
+  /** The name of the business's other agreement; null for its main one. */
+  agreementName: string | null;
 }): EmailMessage {
   const gym = words.gymName;
+  const terms = words.agreementName ?? `${gym}'s terms`;
   const lead = `Here is the membership agreement signed with ${gym} on ${words.signedOn}. Keep this email as your copy.`;
   const signed = `Signed by ${words.signedName}${words.byGuardian ? ", parent or guardian," : ""} on ${words.signedOn}.`;
   const footer = `Sent by ${APP_NAME} on behalf of ${gym}.`;
   const facts = words.facts.map((fact) => `${fact.label}: ${fact.value}`).join("\n");
-  const text = `${lead}\n\nThe membership\n${facts}\n\n${gym}'s terms\n${words.text}\n\n${signed}\n\n${footer}\n`;
+  const text = `${lead}\n\nThe membership\n${facts}\n\n${terms}\n${words.text}\n\n${signed}\n\n${footer}\n`;
   const factRows = words.facts.map((fact) => `<tr><td style="padding:2px 12px 2px 0;color:#666;vertical-align:top">${escapeHtml(fact.label)}</td><td style="padding:2px 0">${escapeHtml(fact.value)}</td></tr>`).join("");
   const html =
     `<p>${escapeHtml(lead)}</p>` +
     `<p style="font-weight:700;margin-bottom:4px">The membership</p>` +
     `<table style="border-collapse:collapse">${factRows}</table>` +
-    `<p style="font-weight:700;margin-bottom:4px">${escapeHtml(`${gym}'s terms`)}</p>` +
+    `<p style="font-weight:700;margin-bottom:4px">${escapeHtml(terms)}</p>` +
     `<div style="white-space:pre-wrap">${escapeHtml(words.text)}</div>` +
     `<p>${escapeHtml(signed)}</p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p>`;

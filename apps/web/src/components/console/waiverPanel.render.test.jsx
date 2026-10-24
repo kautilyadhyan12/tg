@@ -46,15 +46,15 @@ describe('a gym with no waiver', () => {
     const box = await field();
     expect(box.value).toBe('');
     expect(screen.getByRole('button', { name: 'Save waiver' }).disabled).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Stop using this waiver' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Turn off' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Who has signed' })).toBeNull();
   });
 
   it('tells a gym that has written none that it can write its own, and stops saying so once it has', async () => {
     open(NONE);
     const note = await screen.findByRole('note');
-    expect(within(note).getByText('You can write your own waiver here.')).toBeTruthy();
-    expect(within(note).getByText(/The words are yours: this app does not write or check them\./)).toBeTruthy();
+    expect(within(note).getByText('No waiver yet.')).toBeTruthy();
+    expect(within(note).getByText(/We do not write or review your waiver\./)).toBeTruthy();
     fireEvent.change(await field(), { target: { value: WORDS } });
     // Still there while the words are only typed.
     expect(screen.getByRole('note')).toBeTruthy();
@@ -71,11 +71,11 @@ describe('a gym with no waiver', () => {
     orgService.saveGymWaiver.mockResolvedValue({ data: { waiver: waiver(), inUse: true, people: 4, signed: 0 } });
     fireEvent.click(screen.getByRole('button', { name: 'Save waiver' }));
     await waitFor(() => expect(orgService.saveGymWaiver).toHaveBeenCalledWith(ORG.id, WORDS));
-    expect((await screen.findByRole('status')).textContent).toBe('Saved. 4 people in the app are now asked to sign it.');
+    expect((await screen.findByRole('status')).textContent).toBe('Waiver saved. 4 members in the app are now asked to sign it.');
     expect(screen.getByText('In use · signed by 0 of 4 people in the app')).toBeTruthy();
     // Saved, so there is nothing to save and the waiver can be stopped.
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
-    expect(screen.getByRole('button', { name: 'Stop using this waiver' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Turn off' })).toBeTruthy();
   });
 });
 
@@ -88,7 +88,7 @@ describe('a gym whose waiver is in use', () => {
     const signed = screen.getByRole('group', { name: 'Who has signed' });
     expect(within(signed).getByText('Signed by 3 of 12 people in the app.')).toBeTruthy();
     // The button is named as this person's menu names the page.
-    expect(within(signed).getByText('To see whether one person has signed, open them on the Members & staff page and look under App.')).toBeTruthy();
+    expect(within(signed).getByText('To see whether a member has signed, open the member on Members & staff and go to App.')).toBeTruthy();
     expect(within(signed).getByRole('link', { name: 'Open Members & staff' }).getAttribute('href')).toBe('/console/iron-house/members');
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
   });
@@ -114,27 +114,27 @@ describe('a gym whose waiver is in use', () => {
     expect((await field()).value).toBe(typed);
   });
 
-  it('Stop asks first, naming who changes and what is kept, and Keep using it changes nothing', async () => {
+  it('Stop asks first, naming who changes and what is kept, and Cancel changes nothing', async () => {
     open(IN_USE);
     await field();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop using this waiver' }));
-    const ask = screen.getByRole('group', { name: 'Stop using this waiver?' });
-    expect(within(ask).getByText('Nobody will be asked to sign it: not people who join, and not people already in the app.')).toBeTruthy();
-    expect(within(ask).getByText('Its words and the 3 signatures you have are kept, so you can start using it again.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    const ask = screen.getByRole('group', { name: 'Turn off this waiver?' });
+    expect(within(ask).getByText('Members will not be asked to sign it, including members already in the app.')).toBeTruthy();
+    expect(within(ask).getByText('Signed waivers are kept. You can turn it back on at any time.')).toBeTruthy();
     expect(orgService.stopGymWaiver).not.toHaveBeenCalled();
-    fireEvent.click(within(ask).getByRole('button', { name: 'Keep using it' }));
-    expect(screen.queryByRole('group', { name: 'Stop using this waiver?' })).toBeNull();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: 'Turn off this waiver?' })).toBeNull();
     expect(orgService.stopGymWaiver).not.toHaveBeenCalled();
   });
 
   it('stopped, it says so in the same place, keeps the words, and offers to use them again', async () => {
     open(IN_USE);
     await field();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop using this waiver' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
     orgService.stopGymWaiver.mockResolvedValue({ data: { ...IN_USE, inUse: false } });
-    fireEvent.click(screen.getByRole('button', { name: 'Stop using it' }));
-    expect((await screen.findByRole('status')).textContent).toBe('You have stopped using this waiver. Nobody is asked to sign it.');
-    expect(screen.getByText('Not in use')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    expect((await screen.findByRole('status')).textContent).toBe('Waiver turned off. Members are not asked to sign it.');
+    expect(screen.getByText('Turned off')).toBeTruthy();
     expect(screen.queryByRole('note')).toBeNull();
     expect((await field()).value).toBe(WORDS);
     expect(screen.queryByRole('group', { name: 'Who has signed' })).toBeNull();
@@ -164,7 +164,7 @@ describe('when it cannot be read or changed', () => {
     open(IN_USE, { readOnly: true });
     expect((await field()).disabled).toBe(true);
     expect(screen.getByText(readOnlyNote('gym'))).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Stop using this waiver' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Turn off' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Save changes' }).disabled).toBe(true);
   });
 });

@@ -102,12 +102,13 @@ function held(n, type, startsOn, paid, moves = []) {
     billing: billingFor(n, given, m, type.priceMinor, TODAY),
   };
 }
-/** What the server answers: the memberships, and the gym's price list beside them. */
+/** What the server answers: the memberships, and the gym's price list beside them. Where the
+ *  business asks for an agreement, each membership's line asks for it unless it says not. */
 const answer = (memberships, past = false, more = {}) => ({
   data: heldMembershipsResponseSchema.parse({
     today: TODAY,
     past,
-    memberships: past ? memberships.map((m) => ({ ...m, billing: asPast(m.billing) })) : memberships,
+    memberships: (past ? memberships.map((m) => ({ ...m, billing: asPast(m.billing) })) : memberships).map((m) => ({ agreementAsked: more.agreementInUse === true, ...m })),
     earlierNotShown: 0,
     types: [GOLD, PACK],
     listed: null,
@@ -1822,6 +1823,41 @@ describe('the membership agreement (18u-i)', () => {
     await (await boxSoon()).findByText('Gold Monthly');
     expect(screen.queryByText('Agreement not signed')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Sign agreement' })).toBeNull();
+  });
+
+  it("a membership whose line of the price list asks for no agreement opens no box and says nothing, while the business asks for one on other lines (18u-ii-a)", async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([], false, { agreementInUse: true }));
+    orgService.giveHeldMembership.mockResolvedValue(answer([{ ...held(1, GOLD, TODAY, false), agreementAsked: false }], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Add membership' }));
+    const form = within(screen.getByTestId('held-add'));
+    fireEvent.change(form.getAllByRole('combobox')[0], { target: { value: GOLD.id } });
+    fireEvent.click(form.getByRole('button', { name: 'Add membership' }));
+    expect(await (await boxSoon()).findByText('Membership added.')).toBeTruthy();
+    expect(screen.queryByText('Agreement not signed')).toBeNull();
+    expect(orgService.getMembershipAgreement).not.toHaveBeenCalled();
+  });
+
+  it("the box names another agreement the membership's line uses, above its terms (18u-ii-a)", async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, false)], false, { agreementInUse: true }));
+    orgService.getMembershipAgreement.mockResolvedValue({
+      data: {
+        gymName: 'Iron House',
+        personName: 'Ada Lovelace',
+        timezone: 'Europe/London',
+        minor: false,
+        agreement: { id: '66666666-6666-4666-8666-666666666666', version: 1, text: 'Classes expire after 60 days.', name: 'Class pack terms' },
+        facts: [{ label: 'Membership', value: 'Gold Monthly' }],
+        factsKey: 'a'.repeat(64),
+        signed: null,
+        hasEmail: true,
+      },
+    });
+    render(draw(ADA, 'Ada Lovelace'));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Sign agreement' }));
+    expect(await screen.findByText('Class pack terms')).toBeTruthy();
+    expect(screen.getByText('Classes expire after 60 days.')).toBeTruthy();
+    expect(screen.queryByText("Iron House's terms")).toBeNull();
   });
 
   it('a business that asks for no agreement gives a membership with no agreement box', async () => {

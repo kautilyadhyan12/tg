@@ -29,6 +29,11 @@ const count = (s: Said, key: string): number | null => {
   const n = typeof v === "number" ? v : typeof v === "string" && /^-?\d{1,15}$/.test(v) ? Number(v) : NaN;
   return Number.isSafeInteger(n) ? n : null;
 };
+/** "the membership agreement", or another of the business's agreements by name (18u-ii-a). */
+const agreementOf = (s: Said): string => {
+  const name = text(s, "agreement");
+  return name === null ? "the membership agreement" : `the agreement ${name}`;
+};
 /** " and 2 more products", for a sale of several (18q); nothing for a sale of one. */
 const others = (s: Said): string => {
   const n = count(s, "others");
@@ -412,9 +417,11 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     text(s, "signer") === "guardian"
       ? `Had ${whose(s, "parent or guardian")} sign the membership agreement at the desk`
       : `Had ${person(s)} sign the membership agreement at the desk`,
-  "org.agreement_saved": () => "Saved the membership agreement",
-  "org.agreement_stopped": () => "Stopped asking for the membership agreement",
-  "org.agreement_in_use_again": () => "Started asking for the membership agreement again",
+  // Another of the business's agreements (18u-ii-a) names itself.
+  "org.agreement_saved": (s) => `Saved ${agreementOf(s)}`,
+  "org.agreement_stopped": (s) => `Stopped asking for ${agreementOf(s)}`,
+  "org.agreement_in_use_again": (s) => `Started asking for ${agreementOf(s)} again`,
+  "org.agreement_added": (s) => `Added the agreement ${text(s, "agreement") ?? ""}`.trimEnd(),
 
   // Leads
   "org.lead_added": (s) => `Added ${lead(s)}`,

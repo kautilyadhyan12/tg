@@ -425,6 +425,9 @@ export const heldMembershipParamsSchema = z
   .strict();
 export type HeldMembershipParams = z.infer<typeof heldMembershipParamsSchema>;
 
+/** A gym and one of its other agreements (18u-ii-a), read together. */
+export const otherAgreementParamsSchema = z.object({ gymId: z.string().uuid(), agreementId: z.string().uuid() }).strict();
+
 /** A gym, a record, one membership it holds and one payment recorded on it (§14.2). */
 export const memberPaymentParamsSchema = z
   .object({ gymId: z.string().uuid(), entryId: z.string().uuid(), membershipId: z.string().uuid(), paymentId: z.string().uuid() })
