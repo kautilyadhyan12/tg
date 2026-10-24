@@ -134,6 +134,9 @@ describe('another agreement for some memberships', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Class pack terms' }));
     const form = screen.getByRole('form', { name: 'Change Class pack terms' });
     expect(within(form).getByText('Currently uses Trial terms')).toBeTruthy();
+    // The same signed box as under the default agreement.
+    expect(within(within(form).getByRole('group', { name: 'Who has signed' })).getByText('1 signed')).toBeTruthy();
+    expect(within(form).getByRole('link', { name: 'Open Members & staff' }).getAttribute('href')).toBe('/console/iron-house/members');
     fireEvent.click(within(form).getByRole('checkbox', { name: '10-class pack' }));
     fireEvent.click(within(form).getByRole('checkbox', { name: /^Free week/ }));
     expect(within(form).getByText('Free week will move from Trial terms to this agreement.')).toBeTruthy();

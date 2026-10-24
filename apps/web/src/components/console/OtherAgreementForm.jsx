@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Loader2 } from 'lucide-react';
 import { AGREEMENT_NAME_MAX, WAIVER_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
@@ -38,7 +39,7 @@ function Tick({ checked, onChange, disabled, children, note }) {
 }
 
 // `other`: the agreement as saved, or null for a new one. `onDone(data, line, id)`: saved or stopped.
-export default function OtherAgreementForm({ gymId, data, other, readOnly, onDone, onCancel }) {
+export default function OtherAgreementForm({ gymId, data, other, readOnly, membersTo = '../members', membersName = 'Members', onDone, onCancel }) {
   const nameId = useId();
   const textId = useId();
   const [draft, setDraft] = useState(() => otherDraftFrom(data, other));
@@ -149,6 +150,20 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
         <p role="alert" className="text-sm m-0" style={{ color: '#f87171' }}>
           {state.problem}
         </p>
+      ) : null}
+      {other !== null && other.inUse ? (
+        // The same box as under the default agreement.
+        <div role="group" aria-label="Who has signed" className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
+          <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+            {other.signed === 1 ? '1 signed' : `${String(other.signed)} signed`}
+          </p>
+          <p className="text-sm m-0" style={softStyle}>
+            To view a member&apos;s signed agreement, open the member on {membersName} and go to Memberships.
+          </p>
+          <Link to={membersTo} className="self-start rounded-xl px-3.5 text-sm font-semibold inline-flex items-center min-h-11" style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}>
+            Open {membersName}
+          </Link>
+        </div>
       ) : null}
       {changes.length > 0 ? (
         <div className="flex flex-col gap-1">

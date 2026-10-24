@@ -330,7 +330,17 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
                 ) : null}
               </div>
               {editing === other.id ? (
-                <OtherAgreementForm key={other.id} gymId={gymId} data={data} other={other} readOnly={readOnly} onDone={otherDone} onCancel={() => setEditing(null)} />
+                <OtherAgreementForm
+                  key={other.id}
+                  gymId={gymId}
+                  data={data}
+                  other={other}
+                  readOnly={readOnly}
+                  membersTo={membersTo}
+                  membersName={membersName}
+                  onDone={otherDone}
+                  onCancel={() => setEditing(null)}
+                />
               ) : null}
               {otherLine !== null && otherLine.at === other.id ? (
                 <p role="status" className="text-sm m-0" style={softStyle}>
