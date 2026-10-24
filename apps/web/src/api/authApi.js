@@ -26,7 +26,8 @@ function isAuthEndpoint(url) {
 // link (`/join/…`) is a page for the signed-out too: it says which address to
 // sign in with. So is a gym's own page (`/gyms/…`), where anybody sends the gym a message,
 // a member's invite link (`/invite/…`, 20e-ii-a), opened by a friend who has no account,
-// and the front desk (`/check-in`), which is a device, not a person.
+// the front desk (`/check-in`), which is a device, not a person, and the page an emailed link to
+// sign a membership agreement opens (`/sign-agreement`, 18u-ii-b), for a member with no account.
 function redirectToLogin() {
   if (typeof window === 'undefined') return; // SSR / node tests: no-op
   const p = window.location.pathname;
@@ -35,7 +36,7 @@ function redirectToLogin() {
     !p.startsWith('/verify-email') && !p.startsWith('/reset-password') &&
     !p.startsWith('/forgot-password') && !p.startsWith('/restore-account') &&
     !p.startsWith('/join/') && !p.startsWith('/gyms/') && !p.startsWith('/invite/') &&
-    !p.startsWith('/check-in')
+    !p.startsWith('/check-in') && !p.startsWith('/sign-agreement')
   ) {
     window.location.href = '/login';
   }
