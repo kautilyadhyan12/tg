@@ -243,3 +243,23 @@ describe('Card on file: what it says', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 });
+
+describe("Card on file in its last month (18d-iii-c)", () => {
+  it("says it expires this month, and that the reminder was emailed", async () => {
+    vi.mocked(orgService.getMemberCard).mockReturnValue(
+      answer({ card: { ...VISA, expMonth: 11, expYear: 2026, expiresThisMonth: true, expiryReminder: "emailed", expiryReminderOn: "2026-11-01" } }),
+    );
+    show();
+    expect(await screen.findByText("Expires this month")).toBeTruthy();
+    expect(screen.getByText("Expiry reminder emailed on 1 Nov.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Replace card" })).toBeTruthy();
+  });
+
+  it("says nothing of it in any other month", async () => {
+    vi.mocked(orgService.getMemberCard).mockReturnValue(answer({ card: { ...VISA, expiresThisMonth: false, expiryReminder: null, expiryReminderOn: null } }));
+    show();
+    expect(await screen.findByText(/Card on file: Visa ending 1111/)).toBeTruthy();
+    expect(screen.queryByText("Expires this month")).toBeNull();
+    expect(screen.queryByText(/Expiry reminder/)).toBeNull();
+  });
+});

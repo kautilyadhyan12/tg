@@ -825,7 +825,7 @@ d("a gym's notebook: bills and payments on a person's memberships (real Postgres
       expect((await give(gymId, second, narrowed.cookies, { typeId: gold, startsOn: today, paid: false })).statusCode).toBe(201);
       expect(await paymentsOf(gymId)).toEqual(before.payments);
       // They read the setting, and are told they cannot change it; the trainer reads it too.
-      expect(JSON.parse((await get(settingsUrl, narrowed.cookies)).body)).toEqual({ overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, currency: "GBP", canChange: false });
+      expect(JSON.parse((await get(settingsUrl, narrowed.cookies)).body)).toEqual({ overdueAfterDays: 0, billDay: null, freezeFeeMinor: 0, cardExpiryReminders: false, cardExpiry: null, currency: "GBP", canChange: false });
       expect((await get(settingsUrl, trainer.cookies)).statusCode).toBe(200);
       for (const cookies of [stranger.cookies, rival.cookies, member.cookies]) expect((await get(settingsUrl, cookies)).statusCode).toBe(404);
       expect((await get(settingsUrl, {})).statusCode).toBe(401);

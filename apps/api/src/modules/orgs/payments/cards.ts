@@ -26,6 +26,7 @@ import {
   MEMBER_LIST_BY_HAND_WORDS,
   cardAgreementWords,
   cardExpired,
+  cardExpiresThisMonth,
   cardNameParts,
   cardPaidByLine,
   gymPaymentsAvailability,
@@ -48,6 +49,7 @@ import { readerOf } from "../myMembership/repo.js";
 import { payerOf } from "../payers/repo.js";
 import { gymHasLivePlan, insertAudit, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import { cardPaysForRenewal, noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
 import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
@@ -92,12 +94,39 @@ function shownCard(card: cards.CardRow | null, square: SquareSettings | null, ro
 const earlierOf = (card: cards.CardRow | null, shown: cards.CardRow | null): { brand: string; last4: string } | null =>
   card === null || shown !== null ? null : { brand: card.brand, last4: card.last4 };
 
-const cardOf = (c: cards.CardRow, today: string): MemberCard => ({
+type Reminder = Pick<MemberCard, "expiryReminder" | "expiryReminderOn">;
+const NO_REMINDER: Reminder = { expiryReminder: null, expiryReminderOn: null };
+
+/** The reminder before the card expires (18d-iii-c), in its expiry month: the one written for this
+ *  card and date, or, where the gym sends them and the card pays for a renewal, that none can go for
+ *  want of an address. */
+async function reminderOf(deps: PaymentsDeps, card: cards.CardRow, today: string, person: cards.CardPerson): Promise<Reminder> {
+  if (!cardExpiresThisMonth(card, today)) return NO_REMINDER;
+  const notice = await noticeOfCard(deps.sql, card);
+  if (notice !== null) {
+    const state =
+      notice.state === "sent"
+        ? "emailed"
+        : notice.state === "queued" || notice.state === "sending"
+          ? "sending"
+          : // Handed to the email service, which never confirmed it: it may have gone.
+            notice.reason === "send_unknown"
+            ? "maybe_emailed"
+            : "not_sent";
+    return { expiryReminder: state, expiryReminderOn: notice.on };
+  }
+  if (person.email !== null || !(await remindersOn(deps.sql, card.gymId)) || !(await cardPaysForRenewal(deps.sql, card))) return NO_REMINDER;
+  return { expiryReminder: "no_email", expiryReminderOn: null };
+}
+
+const cardOf = (c: cards.CardRow, today: string, reminder: Reminder = NO_REMINDER): MemberCard => ({
   brand: c.brand,
   last4: c.last4,
   expMonth: c.expMonth,
   expYear: c.expYear,
   expired: cardExpired(c, today),
+  expiresThisMonth: cardExpiresThisMonth(c, today),
+  ...reminder,
   savedAt: c.savedAt.toISOString(),
   savedFrom: c.savedFrom,
 });
@@ -155,10 +184,11 @@ export async function staffView(deps: PaymentsDeps, org: OrgRow, userId: string,
   const withTerminals = here !== null;
   const paired = here === null ? [] : await terminalsOf(deps, here.environment, here.row.gymId, here.row.accountId);
   const open = deps.square === null ? null : await terminalSaves.readOpenSaveOf(deps.sql, org.id, entryId, deps.square.environment);
+  const today = dayInTz(deps.now(), gym.timezone);
   return memberCardResponseSchema.parse({
     cardOnFile: {
       state,
-      card: shown === null ? null : cardOf(shown, dayInTz(deps.now(), gym.timezone)),
+      card: shown === null ? null : cardOf(shown, today, await reminderOf(deps, shown, today, person)),
       earlierCard: earlierOf(card, shown),
       paidBy: payer === null ? null : { entryId: payer.entryId, name: payer.name },
       inApp: person.inApp,

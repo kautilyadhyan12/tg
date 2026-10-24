@@ -1,5 +1,6 @@
 import { MEMBER_CARD_WORDS, cardEarlierLine, cardName, cardOnFileLine, cardOwnerOnlyLine, cardPaidByLine } from '@app/shared';
 import { PRACTICE_TERMINAL_WORDS } from './paymentsView';
+import { cardReminderLine } from './cardExpiryView';
 
 // CARD ON FILE, ON A PERSON'S PAGE (ROADMAP 18d-ii): what the box says, from the server's
 // answer. Only staff holding the payments tick open it; a gym outside Square's countries shows
@@ -27,6 +28,9 @@ export function cardBoxView(view, name) {
   return {
     cardLine: card === null ? null : cardOnFileLine(card),
     expired: card?.expired === true,
+    // Its last month (18d-iii-c), and what became of the reminder emailed for it.
+    expiresThisMonth: card?.expiresThisMonth === true,
+    reminderLine: cardReminderLine(card),
     noneLine: card === null && paidBy === null ? MEMBER_CARD_WORDS.none : null,
     // A card saved on the Square account the gym used before (a hand-over, Kd 2026-10-20): it is
     // never charged from here, so they are asked for it again.

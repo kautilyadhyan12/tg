@@ -189,7 +189,7 @@ export function registerOrgRoutes(
   registerPtRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
 
   // What the gym sells: its membership types (Part 3 §13.1).
-  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
+  registerMembershipRoutes(app, { sql: deps.sql, redis: deps.redis, emailKey: deps.invites?.hmacKey ?? null, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // A gym's leads (Part 3 §16.3), and its own page whose form makes them (20c-iv-a).
   registerLeadRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
