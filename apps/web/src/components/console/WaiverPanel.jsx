@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { WAIVER_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
+import { waiverAbout } from '../../pages/console/agreementView';
 import { signedCount, waiverAsksLine, waiverDraftState, waiverSaveLabel, waiverSavedLine, waiverStopWords, waiverSummary } from '../../pages/console/waiverView';
 import { ConsoleFailed, ConsoleLoading, ConsoleSection } from './ConsoleStates';
 
@@ -88,7 +89,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
       setData(res.data);
       setDraft(res.data.waiver?.text ?? '');
       setAsking(false);
-      setDoneLine('You have stopped using this waiver. Nobody is asked to sign it.');
+      setDoneLine('Waiver turned off. Members are not asked to sign it.');
     } catch (err) {
       setSaveError(errorText(err, "We couldn't stop your waiver."));
     } finally {
@@ -100,8 +101,8 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
 
   return (
     <ConsoleSection title="Waiver" summary={waiverSummary(data)} forceOpen={loadError !== null} defaultOpen={startOpen}>
-      <p className="text-sm m-0 mb-3" style={softStyle}>
-        Signed once by each person: the risks of training here.
+      <p className="text-sm m-0 mb-3" style={labelStyle}>
+        {waiverAbout(org.name)}
       </p>
       {readOnly ? (
         <p className="text-xs mb-3" style={hintStyle}>
@@ -118,18 +119,17 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
             // Only until the gym has written its waiver: after that the box holds its own words.
             <div role="note" className="rounded-xl px-4 py-3 flex flex-col gap-1.5" style={{ background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.35)' }}>
               <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-                You can write your own waiver here.
+                No waiver yet.
               </p>
               <p className="text-sm m-0" style={labelStyle}>
-                Type it or paste it in the box below. The words are yours: this app does not write or check them. People read it and sign by
-                typing their full name when they join in the app. People already in the app see it on your page there, with a button to sign.
+                Write or paste your waiver below. Members sign it in the app when they join. We do not write or review your waiver.
               </p>
             </div>
           ) : null}
 
           {data.waiver !== null && !data.inUse ? (
             <p className="text-sm m-0 rounded-xl px-4 py-3" style={{ ...boxStyle, ...labelStyle }}>
-              This waiver is not in use, so nobody is asked to sign it. Press Use this waiver to start asking again.
+              This waiver is turned off. Members are not asked to sign it. To turn it back on, select Use this waiver.
             </p>
           ) : null}
 
@@ -148,7 +148,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
               disabled={off}
               rows={14}
               maxLength={WAIVER_MAX_CHARS * 2}
-              placeholder="Paste your waiver here."
+              placeholder="Write or paste your waiver."
               className="w-full rounded-xl px-4 py-3 text-sm leading-relaxed"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', resize: 'vertical' }}
             />
@@ -165,7 +165,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
                 {signedCount(data).replace(/^./, (first) => first.toUpperCase())}.
               </p>
               <p className="text-sm m-0" style={softStyle}>
-                To see whether one person has signed, open them on the {membersName} page and look under App.
+                To see whether a member has signed, open the member on {membersName} and go to App.
               </p>
               <Link
                 to={membersTo}
@@ -208,7 +208,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
                 className="rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-40 min-h-11"
                 style={{ border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.85)' }}
               >
-                Stop using this waiver
+                Turn off
               </button>
             ) : null}
             {doneLine !== null ? (
@@ -238,7 +238,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
                   style={{ background: 'rgba(239,68,68,0.18)', color: '#fca5a5' }}
                 >
                   {busy === 'stop' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  Stop using it
+                  Turn off
                 </button>
                 <button
                   type="button"
@@ -247,7 +247,7 @@ export default function WaiverPanel({ org, readOnly, startOpen = false, membersT
                   className="rounded-xl px-4 py-3 text-sm font-semibold min-h-11"
                   style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
                 >
-                  Keep using it
+                  Cancel
                 </button>
               </div>
             </div>

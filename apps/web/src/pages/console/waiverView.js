@@ -9,7 +9,7 @@ const people = (n) => (n === 1 ? '1 person' : `${String(n)} people`);
 export function waiverSummary(data) {
   if (data === null) return '';
   if (data.waiver === null) return 'Not set up';
-  if (!data.inUse) return 'Not in use';
+  if (!data.inUse) return 'Turned off';
   return `In use · ${signedCount(data)}`;
 }
 
@@ -46,18 +46,18 @@ export function waiverAsksLine(data, draft) {
 
 /** What the save did, said beside the button. */
 export function waiverSavedLine(after) {
-  if (after.people === 0) return 'Saved. People will read and sign it when they join in the app.';
+  if (after.people === 0) return 'Waiver saved. Members sign it in the app when they join.';
   const toSign = after.people - after.signed;
-  if (toSign === 0) return `Saved. ${after.people === 1 ? 'The 1 person in the app has' : `All ${String(after.people)} people in the app have`} already signed these words.`;
-  return `Saved. ${people(toSign)} in the app ${toSign === 1 ? 'is' : 'are'} now asked to sign it.`;
+  if (toSign === 0) return `Waiver saved. ${after.people === 1 ? 'The 1 member in the app has' : `All ${String(after.people)} members in the app have`} already signed it.`;
+  return `Waiver saved. ${toSign === 1 ? '1 member' : `${String(toSign)} members`} in the app ${toSign === 1 ? 'is' : 'are'} now asked to sign it.`;
 }
 
 /** The box that asks before the waiver is stopped: who changes and who does not. */
-export function waiverStopWords(data) {
+export function waiverStopWords() {
   return {
-    question: 'Stop using this waiver?',
-    changes: 'Nobody will be asked to sign it: not people who join, and not people already in the app.',
-    kept: data.signed === 0 ? 'Its words are kept here, so you can start using it again.' : `Its words and the ${data.signed === 1 ? '1 signature' : `${String(data.signed)} signatures`} you have are kept, so you can start using it again.`,
+    question: 'Turn off this waiver?',
+    changes: 'Members will not be asked to sign it, including members already in the app.',
+    kept: 'Signed waivers are kept. You can turn it back on at any time.',
   };
 }
 

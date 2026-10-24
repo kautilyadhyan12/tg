@@ -27,9 +27,9 @@ describe('Settings', () => {
   it.each([
     [null, ''],
     [NONE, 'Not set up'],
-    [STOPPED, 'Not in use'],
-    [IN_USE, 'In use · signed for 2 memberships'],
-    [{ ...IN_USE, signed: 1 }, 'In use · signed for 1 membership'],
+    [STOPPED, 'Default agreement turned off'],
+    [IN_USE, 'In use · 2 signed'],
+    [{ ...IN_USE, signed: 1 }, 'In use · 1 signed'],
   ])('the folded line', (data, line) => {
     expect(agreementSummary(data)).toBe(line);
   });
@@ -43,15 +43,15 @@ describe('Settings', () => {
   });
 
   it('says that signed memberships keep their words only where changed words would touch some', () => {
-    expect(agreementAsksLine(IN_USE, 'New words.')).toMatch(/^The memberships already signed keep the words/);
+    expect(agreementAsksLine(IN_USE, 'New words.')).toBe('Agreements already signed are not changed. New memberships are signed with the new terms.');
     expect(agreementAsksLine({ ...IN_USE, signed: 0 }, 'New words.')).toBeNull();
     expect(agreementAsksLine(IN_USE, 'Cancel at the desk.')).toBeNull();
   });
 
   it('what a save did', () => {
-    expect(agreementSavedLine(NONE, IN_USE)).toBe('Saved. Each membership you give from now on is signed with it.');
-    expect(agreementSavedLine(IN_USE, { ...IN_USE, agreement: agreement('New', 2) })).toBe('Saved. Memberships you give from now on are signed with these words.');
-    expect(agreementSavedLine(STOPPED, IN_USE)).toBe('Saved. It is in use again: each membership you give is signed with it.');
+    expect(agreementSavedLine(NONE, IN_USE)).toBe('Agreement saved. Members sign it when they get a membership.');
+    expect(agreementSavedLine(IN_USE, { ...IN_USE, agreement: agreement('New', 2) })).toBe('Changes saved. New memberships are signed with the new terms.');
+    expect(agreementSavedLine(STOPPED, IN_USE)).toBe('Agreement turned on. Members sign it when they get a membership.');
   });
 });
 
@@ -83,7 +83,7 @@ describe('another agreement for some memberships (18u-ii-a)', () => {
   it.each([
     ['nothing typed', null, { name: '', text: '', usedFor: [] }, { canSave: false, problem: null }],
     ['a new one, named and written', null, { name: 'Day pass terms', text: 'Words', usedFor: [] }, { canSave: true, problem: null }],
-    ['the main one\'s name, whatever its capitals', null, { name: 'MAIN AGREEMENT', text: 'Words', usedFor: [] }, { canSave: false, problem: 'You already have an agreement called Main agreement. Give this one another name.' }],
+    ['the main one\'s name, whatever its capitals', null, { name: 'DEFAULT AGREEMENT', text: 'Words', usedFor: [] }, { canSave: false, problem: 'You already have an agreement called Default agreement. Give this one another name.' }],
     ['another one\'s name', null, { name: ' trial terms ', text: 'Words', usedFor: [] }, { canSave: false, problem: 'You already have an agreement called Trial terms. Give this one another name.' }],
     ['its own name kept', packTerms, { name: 'Class pack terms', text: 'Pack words', usedFor: ['p'] }, { canSave: false, problem: null }],
     ['a tick changed', packTerms, { name: 'Class pack terms', text: 'Pack words', usedFor: ['p', 'g'] }, { canSave: true, problem: null }],
@@ -94,9 +94,9 @@ describe('another agreement for some memberships (18u-ii-a)', () => {
 
   it('says before Save which memberships move, which go back to the main agreement, and that signed ones keep theirs', () => {
     expect(otherSaveChanges(data, packTerms, { name: 'Class pack terms', text: 'Pack words', usedFor: ['t'] })).toEqual([
-      'Free week will stop using Trial terms.',
-      '10-class pack will use the main agreement.',
-      'The memberships already signed keep the agreement they were signed with.',
+      'Free week will move from Trial terms to this agreement.',
+      '10-class pack will use the default agreement.',
+      'Agreements already signed are not changed.',
     ]);
     expect(otherSaveChanges(data, trialTerms, { name: 'Trial terms', text: 'New words', usedFor: ['t'] })).toEqual([]);
     expect(otherSaveChanges(data, null, { name: 'New', text: 'Words', usedFor: ['g'] })).toEqual([]);
@@ -105,12 +105,13 @@ describe('another agreement for some memberships (18u-ii-a)', () => {
   it('the price list names a line\'s agreement only once the business has another', () => {
     expect(priceAgreementLine({ agreements: [] }, GOLD)).toBeNull();
     expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, PACK)).toBe('Agreement: Class pack terms');
-    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, GOLD)).toBe('Agreement: Main agreement');
+    expect(priceAgreementLine({ agreements: [{ id: 'a', name: 'Class pack terms' }] }, GOLD)).toBe('Agreement: Default agreement');
   });
 
   it('the main agreement names the memberships it is for', () => {
-    expect(mainAgreementLine(data)).toBe('Used for Gold Monthly: every membership not ticked on another agreement.');
-    expect(mainAgreementLine({ ...data, prices: [PACK] })).toBe('Not used for any membership now: each is ticked on another agreement.');
+    expect(mainAgreementLine(data)).toBe('Used for all memberships except: 10-class pack, Free week.');
+    expect(mainAgreementLine({ ...data, prices: [PACK] })).toBe('Not used: every membership has its own agreement.');
+    expect(mainAgreementLine({ ...data, prices: [GOLD] })).toBe('Used for all memberships.');
   });
 
   it('a price list line opens its own agreement in Settings', () => {
@@ -121,7 +122,7 @@ describe('another agreement for some memberships (18u-ii-a)', () => {
   });
 
   it('the folded line counts the other agreements', () => {
-    expect(agreementSummary(data)).toBe('In use · signed for 2 memberships · 2 more agreements');
-    expect(agreementSummary({ ...NONE, others: [packTerms] })).toBe('Main agreement not set up · 1 more agreement');
+    expect(agreementSummary(data)).toBe('In use · 2 signed · 2 other agreements');
+    expect(agreementSummary({ ...NONE, others: [packTerms] })).toBe('Default agreement not set up · 1 other agreement');
   });
 });

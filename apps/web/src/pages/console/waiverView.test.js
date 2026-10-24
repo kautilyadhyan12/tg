@@ -28,7 +28,7 @@ describe('the folded box', () => {
   it.each([
     [null, ''],
     [NONE, 'Not set up'],
-    [STOPPED, 'Not in use'],
+    [STOPPED, 'Turned off'],
     [IN_USE, 'In use · signed by 3 of 12 people in the app'],
     [{ ...IN_USE, people: 1, signed: 1 }, 'In use · signed by 1 of 1 person in the app'],
     [{ ...IN_USE, people: 1, signed: 0 }, 'In use · signed by 0 of 1 person in the app'],
@@ -75,11 +75,11 @@ describe('Save', () => {
   });
 
   it.each([
-    [{ ...IN_USE, people: 0, signed: 0 }, 'Saved. People will read and sign it when they join in the app.'],
-    [{ ...IN_USE, signed: 0 }, 'Saved. 12 people in the app are now asked to sign it.'],
-    [{ ...IN_USE, people: 4, signed: 3 }, 'Saved. 1 person in the app is now asked to sign it.'],
-    [{ ...IN_USE, signed: 12 }, 'Saved. All 12 people in the app have already signed these words.'],
-    [{ ...IN_USE, people: 1, signed: 1 }, 'Saved. The 1 person in the app has already signed these words.'],
+    [{ ...IN_USE, people: 0, signed: 0 }, 'Waiver saved. Members sign it in the app when they join.'],
+    [{ ...IN_USE, signed: 0 }, 'Waiver saved. 12 members in the app are now asked to sign it.'],
+    [{ ...IN_USE, people: 4, signed: 3 }, 'Waiver saved. 1 member in the app is now asked to sign it.'],
+    [{ ...IN_USE, signed: 12 }, 'Waiver saved. All 12 members in the app have already signed it.'],
+    [{ ...IN_USE, people: 1, signed: 1 }, 'Waiver saved. The 1 member in the app has already signed it.'],
   ])('says afterwards what happened %#', (after, line) => {
     expect(waiverSavedLine(after)).toBe(line);
   });
@@ -88,15 +88,14 @@ describe('Save', () => {
 describe('Stop asks first, naming who changes and what is kept', () => {
   it('with signatures', () => {
     expect(waiverStopWords(IN_USE)).toEqual({
-      question: 'Stop using this waiver?',
-      changes: 'Nobody will be asked to sign it: not people who join, and not people already in the app.',
-      kept: 'Its words and the 3 signatures you have are kept, so you can start using it again.',
+      question: 'Turn off this waiver?',
+      changes: 'Members will not be asked to sign it, including members already in the app.',
+      kept: 'Signed waivers are kept. You can turn it back on at any time.',
     });
-    expect(waiverStopWords({ ...IN_USE, signed: 1 }).kept).toContain('the 1 signature you have');
   });
 
   it('with none', () => {
-    expect(waiverStopWords({ ...IN_USE, signed: 0 }).kept).toBe('Its words are kept here, so you can start using it again.');
+    expect(waiverStopWords({ ...IN_USE, signed: 0 }).kept).toBe('Signed waivers are kept. You can turn it back on at any time.');
   });
 });
 

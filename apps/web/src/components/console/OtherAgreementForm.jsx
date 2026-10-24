@@ -77,7 +77,7 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
     setProblem(null);
     try {
       const res = await orgService.stopOtherAgreement(gymId, other.id);
-      onDone(res.data, `You have stopped using ${other.name}. Nobody is asked to sign it.`, other.id);
+      onDone(res.data, `${other.name} turned off. Members are not asked to sign it.`, other.id);
     } catch (err) {
       setProblem(errorText(err, "We couldn't stop this agreement."));
       setBusy(null);
@@ -116,7 +116,7 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
           disabled={off}
           rows={10}
           maxLength={WAIVER_MAX_CHARS * 2}
-          placeholder="Paste the terms for these memberships here."
+          placeholder="Write or paste the terms for these memberships."
           className="w-full rounded-xl px-4 py-3 text-sm leading-relaxed"
           style={{ ...fieldStyle, resize: 'vertical' }}
         />
@@ -128,20 +128,20 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
         </span>
         {data.prices.length === 0 ? (
           <p className="text-sm m-0" style={softStyle}>
-            You have nothing on your price list yet. Add your memberships on the Memberships page, then tick them here.
+            Your price list is empty. Add memberships on the Memberships page, then select them here.
           </p>
         ) : (
           data.prices.map((price) => {
             const elsewhere = price.agreementId !== null && price.agreementId !== other?.id ? data.others.find((o) => o.id === price.agreementId) : undefined;
             return (
-              <Tick key={price.id} checked={draft.usedFor.includes(price.id)} onChange={(on) => tick(price.id, on)} disabled={off} note={elsewhere === undefined ? null : `Uses ${elsewhere.name} now`}>
+              <Tick key={price.id} checked={draft.usedFor.includes(price.id)} onChange={(on) => tick(price.id, on)} disabled={off} note={elsewhere === undefined ? null : `Currently uses ${elsewhere.name}`}>
                 {price.name}
               </Tick>
             );
           })
         )}
         <p className="text-sm m-0 mt-1" style={softStyle}>
-          Memberships you don&apos;t tick use the main agreement.
+          Memberships you don&apos;t select use the default agreement.
         </p>
       </div>
 
@@ -195,7 +195,7 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
             className="rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-40 min-h-11"
             style={{ border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.85)' }}
           >
-            Stop using this agreement
+            Turn off
           </button>
         ) : null}
       </div>
@@ -220,7 +220,7 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
               style={{ background: 'rgba(239,68,68,0.18)', color: '#fca5a5' }}
             >
               {busy === 'stop' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Stop using it
+              Turn off
             </button>
             <button
               type="button"
@@ -229,7 +229,7 @@ export default function OtherAgreementForm({ gymId, data, other, readOnly, onDon
               className="rounded-xl px-4 py-3 text-sm font-semibold min-h-11"
               style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
             >
-              Keep using it
+              Cancel
             </button>
           </div>
         </div>

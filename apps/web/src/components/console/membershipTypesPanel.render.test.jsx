@@ -131,7 +131,7 @@ describe('which agreement each line is signed with (18u-ii-a)', () => {
     );
     const rows = await screen.findAllByRole('listitem');
     expect(within(rows[0]).getByText('Agreement: Class pack terms')).toBeTruthy();
-    expect(within(rows[1]).getByText('Agreement: Main agreement')).toBeTruthy();
+    expect(within(rows[1]).getByText('Agreement: Default agreement')).toBeTruthy();
     expect(within(rows[0]).getByRole('link', { name: 'Open the agreement for 10-class pack' }).getAttribute('href')).toBe(`/console/iron-house/settings#agreement-${PACK_TERMS.id}`);
     expect(within(rows[1]).getByRole('link', { name: 'Open the agreement for Gold Monthly' }).getAttribute('href')).toBe('/console/iron-house/settings#membership-agreement');
   });

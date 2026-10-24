@@ -4,7 +4,6 @@ import { AGREEMENT_AGREE_LABEL, AGREEMENT_NAME_MAX, MAIN_AGREEMENT_NAME, WAIVER_
 // server sent (`gymAgreementResponseSchema`) and what is typed, and the box under a membership on
 // a person's page (`membershipAgreementResponseSchema`). Pure.
 
-const memberships = (n) => (n === 1 ? '1 membership' : `${String(n)} memberships`);
 
 // ── Settings ──
 
@@ -12,10 +11,10 @@ const memberships = (n) => (n === 1 ? '1 membership' : `${String(n)} memberships
 export function agreementSummary(data) {
   if (data === null) return '';
   const others = data.others?.length ?? 0;
-  const more = others === 0 ? '' : ` · ${others === 1 ? '1 more agreement' : `${String(others)} more agreements`}`;
-  if (data.agreement === null) return others === 0 ? 'Not set up' : `Main agreement not set up${more}`;
-  if (!data.inUse) return `Not in use${more}`;
-  return `In use · signed for ${memberships(data.signed)}${more}`;
+  const more = others === 0 ? '' : ` · ${others === 1 ? '1 other agreement' : `${String(others)} other agreements`}`;
+  if (data.agreement === null) return others === 0 ? 'Not set up' : `Default agreement not set up${more}`;
+  if (!data.inUse) return `Default agreement turned off${more}`;
+  return `In use · ${String(data.signed)} signed${more}`;
 }
 
 /** What Save would do with the words typed: nothing to save, too long, or go. */
@@ -42,26 +41,23 @@ export function agreementAsksLine(data, draft) {
   const text = cleanWaiverText(draft);
   if (text === '' || data.agreement === null || data.signed === 0) return null;
   if (cleanWaiverText(data.agreement.text) === text) return null;
-  return 'The memberships already signed keep the words they were signed with. Memberships you give from now on are signed with the new words.';
+  return 'Agreements already signed are not changed. New memberships are signed with the new terms.';
 }
 
 /** What the save did, said beside the button. */
 export function agreementSavedLine(before, after) {
   if (before !== null && before.agreement !== null && !before.inUse && after.inUse && before.agreement.version === after.agreement?.version) {
-    return 'Saved. It is in use again: each membership you give is signed with it.';
+    return 'Agreement turned on. Members sign it when they get a membership.';
   }
-  return before?.agreement == null ? 'Saved. Each membership you give from now on is signed with it.' : 'Saved. Memberships you give from now on are signed with these words.';
+  return before?.agreement == null ? 'Agreement saved. Members sign it when they get a membership.' : 'Changes saved. New memberships are signed with the new terms.';
 }
 
 /** The box that asks before the agreement is stopped: who changes and who does not. */
-export function agreementStopWords(data) {
+export function agreementStopWords() {
   return {
-    question: 'Stop using this agreement?',
-    changes: 'Nobody will be asked to sign it when you give a membership.',
-    kept:
-      data.signed === 0
-        ? 'Its words are kept here, so you can start using it again.'
-        : `Its words and the ${data.signed === 1 ? '1 signed membership' : `${String(data.signed)} signed memberships`} are kept, so you can start using it again.`,
+    question: 'Turn off this agreement?',
+    changes: 'Members will not be asked to sign an agreement when they get a membership.',
+    kept: 'Signed agreements are kept. You can turn it back on at any time.',
   };
 }
 
@@ -149,21 +145,26 @@ export const usedForNames = (data, agreementId) => data.prices.filter((p) => p.a
 
 /** The line under another agreement in Settings' list. */
 export function otherAgreementLine(data, other) {
-  if (!other.inUse) return 'Not in use. Nobody is asked to sign it.';
+  if (!other.inUse) return 'Turned off. Members are not asked to sign it.';
   const names = usedForNames(data, other.id);
-  const used = names.length === 0 ? 'Not used for any membership yet' : `Used for ${someNames(names)}`;
-  return `${used} · Signed for ${memberships(other.signed)}`;
+  const used = names.length === 0 ? 'Not used for any membership' : `Used for: ${someNames(names)}`;
+  return `${used} · ${String(other.signed)} signed`;
 }
 
 /** The line under the main agreement once there are others: the memberships it is for. */
 export function mainAgreementLine(data) {
-  const names = data.prices.filter((p) => p.agreementId === null).map((p) => p.name);
-  if (names.length === 0) return 'Not used for any membership now: each is ticked on another agreement.';
-  return `Used for ${someNames(names)}: every membership not ticked on another agreement.`;
+  const elsewhere = data.prices.filter((p) => p.agreementId !== null).map((p) => p.name);
+  if (elsewhere.length === 0) return 'Used for all memberships.';
+  if (elsewhere.length === data.prices.length) return 'Not used: every membership has its own agreement.';
+  return `Used for all memberships except: ${someNames(elsewhere)}.`;
 }
 
 /** What each of Settings' two boxes is, said at its top. */
-export const AGREEMENTS_ABOUT = 'Signed for each membership: its price, renewal and how to cancel.';
+export const AGREEMENTS_ABOUT =
+  'A membership agreement is signed each time a member gets a membership. It covers the price, renewal and cancellation. Use one agreement for all memberships, or add separate agreements for memberships with different terms.';
+
+/** The waiver's line at the top of its box, with the business's name. */
+export const waiverAbout = (gymName) => `A waiver is signed once by each member before they train at ${gymName}. It covers health and the risk of injury.`;
 
 /** The address of one of the business's other agreements in Settings, from the Settings address. */
 export const otherAgreementTo = (settingsTo, agreementId) => (settingsTo === null || agreementId == null ? settingsTo : settingsTo.replace(/#.*$/, `#agreement-${agreementId}`));
@@ -205,12 +206,12 @@ export function otherSaveChanges(data, other, draft) {
   const moving = data.prices.filter((p) => draft.usedFor.includes(p.id) && p.agreementId !== null && p.agreementId !== id);
   for (const p of moving) {
     const from = data.others.find((o) => o.id === p.agreementId);
-    if (from !== undefined) out.push(`${p.name} will stop using ${from.name}.`);
+    if (from !== undefined) out.push(`${p.name} will move from ${from.name} to this agreement.`);
   }
   const leaving = id === null ? [] : data.prices.filter((p) => p.agreementId === id && !draft.usedFor.includes(p.id)).map((p) => p.name);
   if (leaving.length > 0) out.push(`${someNames(leaving)} will use the ${MAIN_AGREEMENT_NAME.toLowerCase()}.`);
   if (other !== null && other.signed > 0 && (cleanWaiverText(draft.text) !== cleanWaiverText(other.agreement.text) || leaving.length > 0)) {
-    out.push('The memberships already signed keep the agreement they were signed with.');
+    out.push('Agreements already signed are not changed.');
   }
   return out;
 }
@@ -227,20 +228,17 @@ export function otherSavedLine(name, data, after) {
   if (saved === undefined) return 'Saved.';
   const names = usedForNames(after, saved.id);
   return names.length === 0
-    ? `Saved ${saved.name}. Tick the memberships it is for, so people who take them sign it.`
-    : `Saved ${saved.name}. People who take ${someNames(names)} sign it from now on.`;
+    ? `${saved.name} saved. Select the memberships it is for.`
+    : `${saved.name} saved. Members who get ${someNames(names)} will sign it.`;
 }
 
 /** The box that asks before another agreement is stopped. */
 export function otherStopWords(data, other) {
   const names = usedForNames(data, other.id);
   return {
-    question: `Stop using ${other.name}?`,
-    changes: names.length === 0 ? 'Nobody will be asked to sign it.' : `People who take ${someNames(names)} won't be asked to sign an agreement.`,
-    kept:
-      other.signed === 0
-        ? 'Its words are kept here, so you can start using it again.'
-        : `Its words and the ${other.signed === 1 ? '1 signed membership' : `${String(other.signed)} signed memberships`} are kept, so you can start using it again.`,
+    question: `Turn off ${other.name}?`,
+    changes: names.length === 0 ? 'Members will not be asked to sign it.' : `Members who get ${someNames(names)} will not be asked to sign an agreement.`,
+    kept: 'Signed agreements are kept. You can turn it back on at any time.',
   };
 }
 

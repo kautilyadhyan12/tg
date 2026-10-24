@@ -40,8 +40,9 @@ export type SaveGymAgreementBody = z.infer<typeof saveGymAgreementBodySchema>;
 export const AGREEMENT_NAME_MAX = 60;
 /** The most lines of the price list one save ticks. */
 export const AGREEMENT_USED_FOR_MAX = MEMBERSHIP_TYPES_MAX;
-/** What Settings and the price list call the business's main agreement. */
-export const MAIN_AGREEMENT_NAME = "Main agreement";
+/** What Settings and the price list call the business's main agreement: the one every
+ *  membership uses unless another agreement is chosen for it. */
+export const MAIN_AGREEMENT_NAME = "Default agreement";
 export const agreementNameSchema = z.string().trim().min(1).max(AGREEMENT_NAME_MAX).regex(VISIBLE_TEXT);
 
 const savedWordingSchema = waiverToReadSchema.extend({ savedAt: z.string() }).strict();

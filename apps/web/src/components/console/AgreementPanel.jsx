@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Plus } from 'lucide-react';
-import { WAIVER_MAX_CHARS } from '@app/shared';
+import { MAIN_AGREEMENT_NAME, WAIVER_MAX_CHARS } from '@app/shared';
 import { orgService, errorText } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import {
@@ -113,7 +113,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
       setData(withLists(res.data));
       setDraft(res.data.agreement?.text ?? '');
       setAsking(false);
-      setDoneLine('You have stopped using this agreement. Nobody is asked to sign it.');
+      setDoneLine('Agreement turned off. Members are not asked to sign it.');
     } catch (err) {
       setSaveError(errorText(err, "We couldn't stop your membership agreement."));
     } finally {
@@ -125,7 +125,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
 
   return (
     <ConsoleSection title="Membership agreements" summary={agreementSummary(data)} forceOpen={loadError !== null} defaultOpen={startOpen}>
-      <p className="text-sm m-0 mb-3" style={softStyle}>
+      <p className="text-sm m-0 mb-3" style={labelStyle}>
         {AGREEMENTS_ABOUT}
       </p>
       {readOnly ? (
@@ -144,30 +144,28 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
             // Only until the business has written its agreement: after that the box holds its own words.
             <div role="note" className="rounded-xl px-4 py-3 flex flex-col gap-1.5" style={{ background: 'rgba(255,138,31,0.08)', border: '1px solid rgba(255,138,31,0.35)' }}>
               <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-                You can write your membership agreement here.
+                No membership agreement yet.
               </p>
               <p className="text-sm m-0" style={labelStyle}>
-                Write how members cancel, your refunds, freezes, fees and house rules. When you give someone a membership, they read it on your screen
-                and sign it, and get a copy by email. Press Save agreement to start.
+                Write or paste your terms below: cancellation, refunds, freezes, fees and house rules. When you add a membership for a member, they
+                sign the agreement on your screen and receive a copy by email.
               </p>
             </div>
           ) : null}
 
           {data.agreement !== null && !data.inUse ? (
             <p className="text-sm m-0 rounded-xl px-4 py-3" style={{ ...boxStyle, ...labelStyle }}>
-              This agreement is not in use, so nobody is asked to sign it. Press Use this agreement to start again.
+              This agreement is turned off. Members are not asked to sign it. To turn it back on, select Use this agreement.
             </p>
           ) : null}
 
           <div className="flex flex-col gap-2">
             <label htmlFor={fieldId} className="text-base font-bold" style={{ color: '#fff' }}>
-              {data.others.length > 0 ? 'Main agreement' : 'Your terms'}
+              {MAIN_AGREEMENT_NAME}
             </label>
-            {data.others.length > 0 ? (
-              <p className="text-sm m-0" style={softStyle}>
-                {mainAgreementLine(data)}
-              </p>
-            ) : null}
+            <p className="text-sm m-0" style={softStyle}>
+              {mainAgreementLine(data)}
+            </p>
             <textarea
               id={fieldId}
               value={draft}
@@ -179,13 +177,12 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
               disabled={off}
               rows={14}
               maxLength={WAIVER_MAX_CHARS * 2}
-              placeholder="Paste your membership terms here."
+              placeholder="Write or paste your membership terms."
               className="w-full rounded-xl px-4 py-3 text-sm leading-relaxed"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', resize: 'vertical' }}
             />
             <p className="text-sm m-0" style={softStyle}>
-              These are your own terms: this app doesn&apos;t write or check them. Members see their membership&apos;s price and dates above them, so
-              you don&apos;t need to type those.
+              We do not write or review your terms. Each member&apos;s price and dates are added above your terms automatically.
             </p>
             {state.problem !== null ? (
               <p role="alert" className="text-sm m-0" style={{ color: '#f87171' }}>
@@ -197,10 +194,10 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
           {data.inUse ? (
             <div role="group" aria-label="Who has signed" className="rounded-xl px-4 py-3 flex flex-col gap-2" style={boxStyle}>
               <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-                Signed for {data.signed === 1 ? '1 membership' : `${String(data.signed)} memberships`}.
+                {data.signed === 1 ? '1 signed' : `${String(data.signed)} signed`}
               </p>
               <p className="text-sm m-0" style={softStyle}>
-                To see one person&apos;s, open them on the {membersName} page and look under Memberships.
+                To view a member&apos;s signed agreement, open the member on {membersName} and go to Memberships.
               </p>
               <Link
                 to={membersTo}
@@ -243,7 +240,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
                 className="rounded-xl px-4 py-3 text-sm font-semibold disabled:opacity-40 min-h-11"
                 style={{ border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.85)' }}
               >
-                Stop using this agreement
+                Turn off
               </button>
             ) : null}
             {doneLine !== null ? (
@@ -273,7 +270,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
                   style={{ background: 'rgba(239,68,68,0.18)', color: '#fca5a5' }}
                 >
                   {busy === 'stop' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  Stop using it
+                  Turn off
                 </button>
                 <button
                   type="button"
@@ -282,7 +279,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
                   className="rounded-xl px-4 py-3 text-sm font-semibold min-h-11"
                   style={{ background: 'rgba(255,255,255,0.07)', color: '#fff' }}
                 >
-                  Keep using it
+                  Cancel
                 </button>
               </div>
             </div>
@@ -361,7 +358,7 @@ export default function AgreementPanel({ org, readOnly, startOpen = false, openA
               </button>
               {data.others.length === 0 ? (
                 <p className="text-sm m-0" style={softStyle}>
-                  Use different terms for some memberships, such as class packs or a free trial.
+                  Add a separate agreement for memberships with different terms, for example class packs.
                 </p>
               ) : null}
             </div>
