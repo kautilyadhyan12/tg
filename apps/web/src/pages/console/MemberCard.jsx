@@ -381,7 +381,13 @@ function RemoveAsk({ view, name, busy, refusal, onYes, onBack }) {
   );
 }
 
-export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkEveryMs = CHECK_EVERY_MS }) {
+/** `onCardSaved`: told once a card is saved here, typed or on a Terminal (Failed payments opens this
+ *  box under a row, 18d-iii-ii-b, and charges the new card from there). */
+export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkEveryMs = CHECK_EVERY_MS, onCardSaved = null }) {
+  const savedRef = useRef(onCardSaved);
+  useEffect(() => {
+    savedRef.current = onCardSaved;
+  }, [onCardSaved]);
   const privileges = viewerPrivileges(gym);
   const routed = useInRouterContext();
   const membersTo = routed ? placeFor(gym?.slug, privileges, 'members') : null;
@@ -442,6 +448,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
       if (answer.save.outcome === 'saved') {
         setOpen(null);
         setDone(terminalOutcomeLine(answer.save, answer.cardOnFile.card, name));
+        savedRef.current?.();
       } else {
         setOpen('ended');
       }
@@ -636,6 +643,7 @@ export default function MemberCard({ gymId, gym, entryId, name, readOnly, checkE
             setState({ entryId, view: after, error: null });
             setOpen(null);
             setDone(after.card === null ? null : cardSavedLine(after.card));
+            if (after.card !== null) savedRef.current?.();
           }}
         />
       ) : null}

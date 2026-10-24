@@ -6,6 +6,7 @@ import { canManageMemberships } from './membershipTypesView';
 import { canManageBilling } from './billingView';
 import { canReadAttendance } from './attendanceView';
 import { canOpenSell } from './sellView';
+import { canSeeFailedPayments } from './failedPaymentsAccess';
 
 // WHERE EACH PLACE IN THE CONSOLE IS, AND WHO MAY OPEN IT (ROADMAP 23d). A sentence that
 // sends somebody to another page carries a button that opens that exact place, with its
@@ -64,6 +65,7 @@ const PLACES = {
   // The Bills box on Memberships, where the grace period before a bill reads Overdue is set.
   membershipBills: { path: '/memberships#bills', may: canManageMemberships },
   sell: { path: '/sell', may: canOpenSell },
+  failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   members: { path: '/members', may: onStaff },
   importMembers: { path: '/members?open=import', may: onStaff },
   addMember: { path: '/members?open=add', may: onStaff },

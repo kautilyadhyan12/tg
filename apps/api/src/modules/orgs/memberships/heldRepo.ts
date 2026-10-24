@@ -1599,3 +1599,15 @@ export async function inUseByRule(
   }
   return counts;
 }
+
+/** These memberships of the gym, as the person's page reads them, each with its record (the
+ *  Failed payments list, 18d-iii-ii-b). */
+export async function heldRowsOf(sql: Sql | TransactionSql, gymId: string, ids: readonly string[]): Promise<Map<string, HeldRow>> {
+  if (ids.length === 0) return new Map();
+  const rows = await sql`
+    SELECT ${COLUMNS(sql)}
+    FROM gym_held_memberships h
+    JOIN gym_membership_types t ON t.gym_id = h.gym_id AND t.id = h.membership_type_id
+    WHERE h.gym_id = ${gymId} AND h.id = ANY(${[...ids]}::uuid[])`;
+  return new Map(rows.map((raw) => shape(raw)).map((row) => [row.id, row]));
+}

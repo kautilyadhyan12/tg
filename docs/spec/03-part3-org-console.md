@@ -4330,6 +4330,31 @@ directly."), in the words Kd gave on 2026-10-24. A card declined for good reads 
 Payment method and cannot be picked. Resend's reports about these emails are kept but
 not yet read back onto the bill.
 
+*As built, 18d-iii-ii-b (the Failed payments list):* a page of its own, **Failed payments**, in the
+menu after Sell, for staff with `members.confirm` and `billing.members` (the server refuses anyone
+else, and another gym's staff are answered 404). It lists every bill and fee still owed whose newest
+charge to a card on file was declined, the newest decline first, 25 rows a page: the person (a past
+member marked so), what is left to pay, what it is for ("Gold Weekly · 23 Oct – 29 Oct 2026", "Late
+cancel fee · Spin on …"), and short facts in a list, as payments lists show them (Kd's click-through:
+the person's page's whole sentence on every row read strangely): Declined card, Declined on, Reason
+("Not enough funds", "No reason given by the bank"), Next step ("Retried automatically on 26 Oct, or try
+again now", "Can be retried from 4:21 PM on 24 Oct (Square recommends waiting 24 hours)", "No card on
+file. Add a new card, or take payment another way.") and Cardholder email, the same facts the person's
+page says of that bill. A row whose card cannot be charged again (none on file, declined for good, tried
+3 times) has **Add a new card**: the person's own Card on file box opens under the row (Save card on
+Terminal, or type it), and once the card is saved the same place asks "Card saved. Charge … new card
+now?" with Charge, so nobody leaves the list. **Try again** opens a box under its row that names the card and the amount ("$25.00 is charged
+to Gina Declined's Visa ending 1000 as soon as you press Charge $25.00.", the payer's card where
+somebody pays), and Charge sends Record payment's own Card on file press, which the server decides
+again under the record's lock; what happened is said in that row. Try again is offered only where that
+press would be taken: Square connected, the bill the one a payment is taken for, a card on file, and the
+retry rule allowing it now; otherwise the row says why ("It can be retried from 2:15 PM on 24 Oct.",
+no card on file, Square not connected, an earlier payment due first) or the decline line already does
+(declined for good, tried 3 times). Every row has Open their page, where every other way to pay is.
+Overview shows "3 card payments were declined and are still owed." with the amount owed and Open
+Failed payments, only where there are some. No new table: the gym's declines are found by
+`gym_card_charges_card_idx`.
+
 **Cancelling** (18l): every member can cancel in the app, including those who joined at the
 desk (New York, Virginia, Connecticut, Maryland), and charging stops at once (Visa's dispute
 13.2 is a charge after a cancel); an offer to stay appears only beside the cancel button

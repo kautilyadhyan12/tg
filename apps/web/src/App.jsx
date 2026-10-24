@@ -57,6 +57,7 @@ import ConsoleEvents   from './pages/console/Events';
 import ConsoleChallenges from './pages/console/Challenges';
 import ConsoleReports  from './pages/console/Reports';
 import ConsoleAtRisk   from './pages/console/AtRisk';
+import ConsoleFailedPayments from './pages/console/FailedPayments';
 import ConsoleSell     from './pages/console/Sell';
 import ConsoleSettings from './pages/console/Settings';
 import SquareReturn from './pages/console/SquareReturn';
@@ -349,6 +350,13 @@ export default function App() {
             <Route path="/console/:orgSlug/at-risk" element={
               <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
                 <ConsoleLayout><ConsoleAtRisk /></ConsoleLayout>
+              </ProtectedRoute>
+            } />
+            {/* FAILED PAYMENTS (18d-iii-ii-b): card payments declined and still owed. The nav draws
+                it for `members.read` with `billing.members`; the server is the enforcement. */}
+            <Route path="/console/:orgSlug/failed-payments" element={
+              <ProtectedRoute requireOnboarding={false} requireSignUpNote={false} requireInvitations={false}>
+                <ConsoleLayout><ConsoleFailedPayments /></ConsoleLayout>
               </ProtectedRoute>
             } />
             {/* SELL (18b-i): the desk's register. The nav draws it for `billing.members` or

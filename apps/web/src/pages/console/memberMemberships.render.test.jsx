@@ -1873,3 +1873,57 @@ describe('the membership agreement (18u-i)', () => {
     expect(orgService.getMembershipAgreement).not.toHaveBeenCalled();
   });
 });
+
+describe('Take payment on Failed payments (18d-iii-ii-b)', () => {
+  it("opens that bill's Record payment, under its own membership, once; another membership's stays shut", async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const pack = held(2, PACK, '2026-10-10', false);
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold, pack]));
+    render(draw(ADA, 'Ada Lovelace', { payNow: { membershipId: pack.id, feeBillId: null } }));
+    const rows = await screen.findAllByTestId('held-membership');
+    const packRow = rows.find((r) => within(r).queryByText('10 classes') !== null);
+    const goldRow = rows.find((r) => within(r).queryByText('Gold Monthly') !== null);
+    const form = await within(packRow).findByTestId('held-pay');
+    expect(within(form).getByText("Record a payment for Ada Lovelace's 10 classes")).toBeTruthy();
+    expect(within(form).getByLabelText('Amount paid (GBP)').value).toBe('90.00');
+    expect(within(goldRow).queryByTestId('held-pay')).toBeNull();
+    expect(orgService.changeHeldMembership).not.toHaveBeenCalled();
+  });
+
+  it("a fee's opens that fee's own box; a membership that is not theirs, or a read-only console, opens nothing", async () => {
+    const fee = {
+      id: '66666666-6666-4666-8666-666666666666',
+      fee: 'freeze',
+      of: 'membership',
+      forName: 'Gold Monthly',
+      on: TODAY,
+      to: '2026-11-19',
+      amountMinor: 1000,
+      tax: null,
+      dueOn: TODAY,
+      state: 'due',
+      waived: null,
+      stillOwed: true,
+      payments: [],
+      voidedPayments: [],
+      can: { pay: true, waive: true, voidPaymentId: null },
+    };
+    const base = held(1, GOLD, '2026-10-04', true);
+    const gold = { ...base, billing: { ...base.billing, fees: [fee] } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([gold]));
+    render(draw(ADA, 'Ada Lovelace', { payNow: { membershipId: gold.id, feeBillId: fee.id } }));
+    expect(await screen.findByTestId('held-fee-pay')).toBeTruthy();
+    expect(screen.queryByTestId('held-pay')).toBeNull();
+    cleanup();
+
+    render(draw(ADA, 'Ada Lovelace', { payNow: { membershipId: '99999999-9999-4999-8999-999999999999', feeBillId: null } }));
+    await screen.findAllByTestId('held-membership');
+    expect(screen.queryByTestId('held-pay')).toBeNull();
+    expect(screen.queryByTestId('held-fee-pay')).toBeNull();
+    cleanup();
+
+    render(draw(ADA, 'Ada Lovelace', { payNow: { membershipId: gold.id, feeBillId: null }, readOnly: true }));
+    await screen.findAllByTestId('held-membership');
+    expect(screen.queryByTestId('held-pay')).toBeNull();
+  });
+});
