@@ -128,85 +128,98 @@ describe('connected', () => {
   });
 });
 
-describe("payments taken in Square Point of Sale (18d-iii-b-i)", () => {
-  const BOX = { name: "Payments taken in Square Point of Sale" };
+describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last week can follow", () => {
+  const BOX = { name: 'Square Point of Sale' };
   const checked = (taxes, over = {}) => ({ data: { check: { taxes, currency: 'USD', membershipTax: true, canSetTax: true, ...over } } });
-  const SALES_TAX = { state: 'adds', taxes: [{ name: 'Sales tax', percentage: '8.25' }], exampleMinor: 4500, chargedMinor: 4871 };
+  const SALES_TAX = { state: 'adds', taxes: [{ name: 'Sales Tax', percentage: '8.25' }], exampleMinor: 4500, chargedMinor: 4871 };
+  const step = (box, id) => within(box.getByTestId(id));
 
-  it("says how to set up Square Point of Sale, and that Square adds no tax of its own where it adds none", async () => {
+  it('says what it is apart from the Terminal, and ticks each line that is done', async () => {
     orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(box.getByText(/add the person as the customer, it's recorded on the person's bill here, as long as the amount is exactly what the bill says/)).toBeTruthy();
-    expect(box.getByText('Set up Square Point of Sale once:')).toBeTruthy();
-    expect(box.getByText(/^Open More → Settings → Checkout\. Turn on Customer management, then turn on Before checkout/)).toBeTruthy();
-    // Where the tax comes from, so nobody reads it as "no tax".
-    expect(await box.findByText("Square adds no tax of its own to amounts staff type in. Any tax is already in the bill here, so the member pays exactly the bill's total.")).toBeTruthy();
-    expect(box.queryByText(/None of your memberships has tax set here/)).toBeNull();
-    expect(box.getByText('Ring up shop items from your item list in Square. Item sales are never added to a bill.')).toBeTruthy();
+    expect(box.getByText("Square's own app on a phone or tablet, with a Square Reader. You charge in Square's app, and the payment comes to the member's bill here afterwards.")).toBeTruthy();
+    expect(box.getByText('To make that work:')).toBeTruthy();
+    expect(await box.findByText("Square won't add tax on top")).toBeTruthy();
+    expect(step(box, 'square-tax-step').getByText('The member pays exactly what the bill says.')).toBeTruthy();
+    expect(step(box, 'square-tax-step').getByLabelText('Done')).toBeTruthy();
+    expect(step(box, 'square-member-tax-step').getByText('Tax on memberships is set here')).toBeTruthy();
+    expect(step(box, 'square-pick-step').getByText('In Square Point of Sale, tap Add customer and choose the member before you charge.')).toBeTruthy();
+    // The setting that makes Square ask, only when asked for.
+    expect(box.queryByText(/turn on Before checkout/)).toBeNull();
+    fireEvent.click(step(box, 'square-pick-step').getByRole('button', { name: 'How' }));
+    expect(box.getByText('To make Square ask every time: More → Settings → Checkout → Customer management, then turn on Before checkout.')).toBeTruthy();
+    // Who it works for, said plainly: everybody else is charged as usual.
+    expect(box.getByText('Members whose card is saved here: their payments go on their bill by themselves.')).toBeTruthy();
+    expect(box.getByText("Anyone else: Square takes the payment as usual, but it isn't put on their bill.")).toBeTruthy();
+    expect(box.getByText('Shop items rung up from your Square item list never go on a bill.')).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
   });
 
-  it('no membership has tax here: says so, with the button to the exact place, or who can for staff who cannot', async () => {
-    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false }));
-    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
-    const box = within(await screen.findByRole('region', BOX));
-    expect(await box.findByText("None of your memberships has tax set here. If you charge tax on memberships, add it here so it's in each bill.")).toBeTruthy();
-    expect(box.getByRole('link', { name: 'Add tax to memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
-    cleanup();
-    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false, canSetTax: false }));
-    open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: false } }));
-    const theirs = within(await screen.findByRole('region', BOX));
-    expect(await theirs.findByText('The owner, or a manager who can change prices, adds tax to memberships in Memberships.')).toBeTruthy();
-    expect(theirs.queryByRole('link', { name: 'Add tax to memberships' })).toBeNull();
-  });
-
-  it('Square adds sales tax to typed amounts: names it, shows what a $45.00 bill is charged, and says the three things to do', async () => {
+  it('Square adds tax on top: says what it does to a $45.00 bill, the steps on Square\'s website and in the app when asked, and Check again', async () => {
     orgService.getSquareAppCheck.mockResolvedValue(checked(SALES_TAX, { membershipTax: false }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(await box.findByText('Square adds Sales tax (8.25%) on top of any amount staff type in.')).toBeTruthy();
+    const tax = within(await box.findByTestId('square-tax-step'));
+    expect(await tax.findByText('Square adds tax on top')).toBeTruthy();
+    expect(tax.getByLabelText('Needs fixing')).toBeTruthy();
     expect(
-      box.getByText(
-        "For example, a member's bill here is $45.00. Staff type $45.00 in Square Point of Sale, and Square charges $48.71. That isn't the bill's amount, so the payment isn't recorded on the bill. And if the bill already includes tax, the member pays tax twice.",
-      ),
+      tax.getByText("Square adds Sales Tax (8.25%) to amounts you type in. A $45.00 bill would charge the member $48.71, so it won't go on the bill. If the bill already includes tax, they'd pay tax twice."),
     ).toBeTruthy();
-    expect(box.getByText('In Square Point of Sale, open More → Settings → Checkout → Sales taxes, open the tax and turn off Custom amounts.')).toBeTruthy();
-    expect(box.getByText('Put the same tax on your memberships here, so each bill already includes it.')).toBeTruthy();
-    expect(box.getByRole('link', { name: 'Add tax to memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
-    expect(box.getByText('Ring up taxable shop items from your item list in Square, so Square still adds their tax.')).toBeTruthy();
-    // Fixed in Square, Check again reads it once more.
-    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
-    fireEvent.click(box.getByRole('button', { name: 'Check again' }));
-    expect(await box.findByText(/^Square adds no tax of its own/)).toBeTruthy();
+    expect(tax.queryByText(/On Square's website/)).toBeNull();
+    fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
+    expect(tax.getByText("On Square's website: Settings → Account & Settings → Payments → Sales taxes. Open Sales Tax and turn off Apply tax to custom amounts, then Save.")).toBeTruthy();
+    expect(tax.getByText('Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Open Sales Tax and turn off Custom amounts.')).toBeTruthy();
+    expect(tax.getByText('Your shop items keep their tax.')).toBeTruthy();
+    // Tax on memberships: not set here, with the button that opens the exact place.
+    const member = step(box, 'square-member-tax-step');
+    expect(member.getByText('Tax on memberships: not set here')).toBeTruthy();
+    expect(member.getByText('If you charge tax on memberships, set it here, not in Square.')).toBeTruthy();
+    expect(member.getByRole('link', { name: 'Set tax on memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
+    // Fixed in Square: Check again reads it once more and the line turns done.
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false }));
+    fireEvent.click(tax.getByRole('button', { name: 'Check again' }));
+    expect(await box.findByText("Square won't add tax on top")).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledTimes(2);
   });
 
-  it('two taxes: both named, and "each of these taxes"', async () => {
+  it('two taxes: both named, and "each of them" to open', async () => {
     orgService.getSquareAppCheck.mockResolvedValue(checked({ ...SALES_TAX, taxes: [{ name: 'GST', percentage: '5' }, { name: 'PST', percentage: '7' }], chargedMinor: 5040 }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    const tax = within(await within(await screen.findByRole('region', BOX)).findByTestId('square-tax-step'));
+    expect(await tax.findByText(/^Square adds GST \(5%\) and PST \(7%\) to amounts you type in\. A \$45\.00 bill would charge the member \$50\.40/)).toBeTruthy();
+    fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
+    expect(tax.getByText(/Open each of them \(GST and PST\) and turn off Apply tax to custom amounts/)).toBeTruthy();
+  });
+
+  it('staff who cannot set prices are told who can, with no button', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false, canSetTax: false }));
+    open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(await box.findByText('Square adds GST (5%) and PST (7%) on top of any amount staff type in.')).toBeTruthy();
-    expect(box.getByText(/open each of these taxes and turn off Custom amounts/)).toBeTruthy();
+    const member = within(await box.findByTestId('square-member-tax-step'));
+    expect(member.getByText('The owner, or a manager who can change prices, can set it in Memberships.')).toBeTruthy();
+    expect(member.queryByRole('link')).toBeNull();
   });
 
   it("Square can't be asked: says so, with Check again, never that it adds none", async () => {
     orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'unknown' }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(await box.findByText("We couldn't read your tax settings from Square just now.")).toBeTruthy();
+    expect(await box.findByText("Couldn't check Square's tax settings")).toBeTruthy();
+    expect(box.getByText("Square didn't answer just now.")).toBeTruthy();
     expect(box.getByRole('button', { name: 'Check again' })).toBeTruthy();
-    expect(box.queryByText(/^Square adds no tax/)).toBeNull();
+    expect(box.queryByText("Square won't add tax on top")).toBeNull();
     cleanup();
     orgService.getSquareAppCheck.mockRejectedValue(new Error('offline'));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
-    expect(await within(await screen.findByRole('region', BOX)).findByText("We couldn't read your tax settings from Square just now.")).toBeTruthy();
+    expect(await within(await screen.findByRole('region', BOX)).findByText("Couldn't check Square's tax settings")).toBeTruthy();
   });
 
   it('connected before Square let the app read what it needs: the owner reconnects, everybody else is told who can', async () => {
     open(payments({ square: CONNECTED, squareApp: { needsAllow: true } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(box.getByText('To record payments taken in Square Point of Sale, our app needs your permission in Square.')).toBeTruthy();
+    expect(box.getByText('Square needs your permission first')).toBeTruthy();
+    expect(box.getByText("Press Reconnect Square, then Allow on Square's page. Nothing else changes.")).toBeTruthy();
     expect(orgService.getSquareAppCheck).not.toHaveBeenCalled();
     orgService.connectSquare.mockResolvedValue({ data: { url: 'https://connect.squareupsandbox.com/oauth2/authorize?state=again' } });
     fireEvent.click(box.getByRole('button', { name: 'Reconnect Square' }));
@@ -214,7 +227,7 @@ describe("payments taken in Square Point of Sale (18d-iii-b-i)", () => {
     cleanup();
     open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: true } }));
     const other = within(await screen.findByRole('region', BOX));
-    expect(other.getByText('The owner of Iron House needs to reconnect Square before payments taken in Square Point of Sale can be recorded.')).toBeTruthy();
+    expect(other.getByText('The owner of Iron House needs to reconnect Square first.')).toBeTruthy();
     expect(other.queryByRole('button')).toBeNull();
   });
 });

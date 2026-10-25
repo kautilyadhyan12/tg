@@ -212,36 +212,54 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
   return all.length < 2 ? (all[0] ?? "") : `${all.slice(0, -1).join(", ")} and ${all[all.length - 1] ?? ""}`;
 }
 
-/** Settings → Payments: how the gym sets up Square's own app, Square Point of Sale (its own name for it,
- *  on a phone or tablet with a Square Reader, or on a Square Register or Terminal used on its own). The
- *  menus are Square's (help article 5061, "Add a customer at checkout", read 2026-10-25). */
+/** Settings → Payments: Square's own app, Square Point of Sale (on a phone or tablet with a Square Reader,
+ *  or a Square Register or Terminal used on its own), as a checklist a gym that opened last week can
+ *  follow (Kd's click-through, 2026-10-25): each line says whether it is done, and the steps show only
+ *  when something needs fixing. The menus are Square's own (help article 5061 and its "Add a customer at
+ *  checkout" update, read 2026-10-25; the website's tax form as Kd saw it, 2026-10-25). */
 export const SQUARE_APP_WORDS = {
-  heading: "Payments taken in Square Point of Sale",
-  intro: "When staff take a payment in Square Point of Sale and add the person as the customer, it's recorded on the person's bill here, as long as the amount is exactly what the bill says.",
-  setupLead: "Set up Square Point of Sale once:",
-  customers: "Open More → Settings → Checkout. Turn on Customer management, then turn on Before checkout under Collect customer information. Staff then add the person before taking the money.",
-  /** The tax check, read from the gym's own Square item library each time the box opens. */
-  taxChecking: "Checking your tax settings in Square…",
-  taxNone: "Square adds no tax of its own to amounts staff type in. Any tax is already in the bill here, so the member pays exactly the bill's total.",
-  taxAdds: (names: string): string => `Square adds ${names} on top of any amount staff type in.`,
-  taxExample: (bill: string, charged: string): string =>
-    `For example, a member's bill here is ${bill}. Staff type ${bill} in Square Point of Sale, and Square charges ${charged}. That isn't the bill's amount, so the payment isn't recorded on the bill. And if the bill already includes tax, the member pays tax twice.`,
-  taxFixLead: "To fix it:",
-  taxFixSquare: (several: boolean): string =>
-    `In Square Point of Sale, open More → Settings → Checkout → Sales taxes, open ${several ? "each of these taxes" : "the tax"} and turn off Custom amounts.`,
-  taxFixHere: "Put the same tax on your memberships here, so each bill already includes it.",
-  taxFixItems: "Ring up taxable shop items from your item list in Square, so Square still adds their tax.",
-  taxUnknown: "We couldn't read your tax settings from Square just now.",
+  heading: "Square Point of Sale",
+  how: "Square's own app on a phone or tablet, with a Square Reader. You charge in Square's app, and the payment comes to the member's bill here afterwards.",
+  listLead: "To make that work:",
+  taxChecking: "Checking Square's tax settings…",
+  taxNoneTitle: "Square won't add tax on top",
+  taxNoneDetail: "The member pays exactly what the bill says.",
+  taxAddsTitle: "Square adds tax on top",
+  taxAddsDetail: (names: string, bill: string, charged: string): string =>
+    `Square adds ${names} to amounts you type in. A ${bill} bill would charge the member ${charged}, so it won't go on the bill. If the bill already includes tax, they'd pay tax twice.`,
+  howToFix: "How to fix",
+  hideSteps: "Hide the steps",
+  /** `which`: the tax's name, or "each of them (A and B)". */
+  taxFixWebsite: (which: string): string => `On Square's website: Settings → Account & Settings → Payments → Sales taxes. Open ${which} and turn off Apply tax to custom amounts, then Save.`,
+  taxFixApp: (which: string): string => `Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Open ${which} and turn off Custom amounts.`,
+  taxFixKeeps: "Your shop items keep their tax.",
+  taxUnknownTitle: "Couldn't check Square's tax settings",
+  taxUnknownDetail: "Square didn't answer just now.",
   checkAgain: "Check again",
-  noMembershipTax: "None of your memberships has tax set here. If you charge tax on memberships, add it here so it's in each bill.",
-  setTaxButton: "Add tax to memberships",
-  setTaxWho: "The owner, or a manager who can change prices, adds tax to memberships in Memberships.",
-  linked: "A person's payments are recorded automatically once their card is saved here.",
-  items: "Ring up shop items from your item list in Square. Item sales are never added to a bill.",
-  needsAllow: "To record payments taken in Square Point of Sale, our app needs your permission in Square.",
-  needsAllowHint: "Press Reconnect Square, then Allow on Square's page. Nothing else changes.",
-  ownerOnly: (gym: string): string => `The owner of ${gym} needs to reconnect Square before payments taken in Square Point of Sale can be recorded.`,
+  memberTaxSetTitle: "Tax on memberships is set here",
+  memberTaxSetDetail: "Each bill already includes it.",
+  memberTaxUnsetTitle: "Tax on memberships: not set here",
+  memberTaxUnsetDetail: "If you charge tax on memberships, set it here, not in Square.",
+  setTaxButton: "Set tax on memberships",
+  setTaxWho: "The owner, or a manager who can change prices, can set it in Memberships.",
+  pickTitle: "Pick the member on each sale",
+  pickDetail: "In Square Point of Sale, tap Add customer and choose the member before you charge.",
+  pickHow: "How",
+  pickSteps: "To make Square ask every time: More → Settings → Checkout → Customer management, then turn on Before checkout.",
+  cardSaved: "Members whose card is saved here: their payments go on their bill by themselves.",
+  others: "Anyone else: Square takes the payment as usual, but it isn't put on their bill.",
+  items: "Shop items rung up from your Square item list never go on a bill.",
+  needsAllowTitle: "Square needs your permission first",
+  needsAllow: "Press Reconnect Square, then Allow on Square's page. Nothing else changes.",
+  ownerOnly: (gym: string): string => `The owner of ${gym} needs to reconnect Square first.`,
   /** The server's answers to a void. */
   void_square_app: "This was taken in Square Point of Sale. To give the money back, refund it in your Square Dashboard, then note the refund here. If it's on the wrong bill, press Not this bill.",
   not_square_app: "Only a payment taken in Square Point of Sale can be taken off with Not this bill.",
 } as const;
+
+/** The tax to open in Square's steps: its own name, or "each of them (Sales Tax and City Tax)". */
+export function squareTaxesToOpen(taxes: readonly { name: string }[]): string {
+  const names = taxes.map((t) => t.name);
+  if (names.length < 2) return names[0] ?? "the tax";
+  return `each of them (${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""})`;
+}

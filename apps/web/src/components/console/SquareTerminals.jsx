@@ -13,6 +13,7 @@ import {
   PAIR_STEPS,
   REMOVED_TERMINAL,
   TERMINAL_OWNER_ONLY,
+  TERMINALS_HOW,
   pairingActiveLine,
   pairingUntilLine,
   removeTerminalWords,
@@ -166,10 +167,16 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
     setAsking(null);
   };
 
+  // How a Terminal paired here is used, said under its name, apart from Square Point of Sale below.
   const heading = (
-    <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-      Square Terminals
-    </p>
+    <div className="flex flex-col gap-1">
+      <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+        Square Terminals
+      </p>
+      <p className="text-sm m-0" style={softStyle}>
+        {TERMINALS_HOW}
+      </p>
+    </div>
   );
   const doneAndError = (
     <>

@@ -1,31 +1,62 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
-import { SQUARE_APP_WORDS, formatMinor, squareTaxNames } from '@app/shared';
+import { AlertTriangle, CheckCircle2, Circle, HelpCircle, Loader2 } from 'lucide-react';
+import { SQUARE_APP_WORDS, formatMinor, squareTaxNames, squareTaxesToOpen } from '@app/shared';
 import { orgService } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import PlaceLink from './PlaceLink';
 
-// PAYMENTS TAKEN IN SQUARE POINT OF SALE (ROADMAP 18d-iii-b-i), in the connected Payments box: how the gym
-// sets up Square's own app so a payment staff take there, picking the person and typing the bill's total,
-// is recorded on that person's bill here. Whether Square adds its own tax on top of a typed amount is not
-// left to instructions: the box reads the gym's own Square taxes each time it opens (never changing them)
-// and says either that Square adds none, or which tax does, what that does to a $45.00 bill, and how to
-// fix it, with the button that opens tax on memberships here. A gym connected before the app could read
-// these connects Square again, once; only the owner does, as only the owner connects Square.
+// SQUARE POINT OF SALE (ROADMAP 18d-iii-b-i), in the connected Payments box: a payment staff take in Square's
+// own app, picking the member and typing the bill's total, comes to that member's bill here. The box is a
+// checklist a gym that opened last week can follow (Kd's click-through, 2026-10-25): each line says whether
+// it is done, and the steps show only where something needs fixing. Whether Square adds its own tax on top
+// of a typed amount is read from the gym's own Square taxes each time the box opens, never changed. A gym
+// connected before the app could read them connects Square again, once; only the owner does.
 
 const labelStyle = { color: 'rgba(255,255,255,0.85)' };
 const softStyle = { color: 'rgba(255,255,255,0.55)' };
 const boxStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)' };
+const lineStyle = { borderTop: '1px solid rgba(255,255,255,0.08)' };
 const mainButton = (on) => ({
   background: on ? 'linear-gradient(135deg,#FF8A1F,#FFB347)' : 'rgba(255,255,255,0.08)',
   color: on ? '#0A0908' : 'rgba(255,255,255,0.35)',
 });
 const plainButton = { background: 'rgba(255,255,255,0.07)', color: '#fff' };
+const linkButton = 'self-start text-sm font-semibold underline underline-offset-2 min-h-11';
+
+const ICONS = {
+  done: <CheckCircle2 className="w-5 h-5" style={{ color: 'var(--good)' }} aria-label="Done" />,
+  fix: <AlertTriangle className="w-5 h-5" style={{ color: 'var(--warn)' }} aria-label="Needs fixing" />,
+  todo: <Circle className="w-5 h-5" style={softStyle} aria-hidden="true" />,
+  unknown: <HelpCircle className="w-5 h-5" style={softStyle} aria-hidden="true" />,
+  checking: <Loader2 className="w-5 h-5 animate-spin" style={softStyle} aria-hidden="true" />,
+};
+
+/** One line of the checklist: whether it is done, what it is, and what to do. */
+function Step({ icon, title, detail, children, first = false, testId }) {
+  return (
+    <li className="flex gap-3 px-4 py-3" style={first ? undefined : lineStyle} data-testid={testId}>
+      <span className="shrink-0 pt-0.5">{ICONS[icon]}</span>
+      <div className="flex flex-col gap-1.5 min-w-0">
+        <span className="text-sm font-semibold" style={{ color: '#fff' }}>
+          {title}
+        </span>
+        {detail ? (
+          <span className="text-sm" style={labelStyle}>
+            {detail}
+          </span>
+        ) : null}
+        {children}
+      </div>
+    </li>
+  );
+}
 
 export default function SquareAppPayments({ org, squareApp, owner, readOnly, onConnectAgain, connecting = false }) {
   const [check, setCheck] = useState(null);
   const [failed, setFailed] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [fixOpen, setFixOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
 
   const load = useCallback(
     (isLive = () => true) =>
@@ -57,23 +88,20 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
   };
 
   const heading = (
-    <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-      {SQUARE_APP_WORDS.heading}
-    </p>
+    <div className="flex flex-col gap-1">
+      <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+        {SQUARE_APP_WORDS.heading}
+      </p>
+      <p className="text-sm m-0" style={softStyle}>
+        {SQUARE_APP_WORDS.how}
+      </p>
+    </div>
   );
 
   const reconnect = (
-    <>
+    <Step icon="fix" title={SQUARE_APP_WORDS.needsAllowTitle} detail={owner ? SQUARE_APP_WORDS.needsAllow : SQUARE_APP_WORDS.ownerOnly(org.name)} first>
       {owner ? (
         <>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm m-0" style={labelStyle}>
-              {SQUARE_APP_WORDS.needsAllow}
-            </p>
-            <p className="text-sm m-0" style={softStyle}>
-              {SQUARE_APP_WORDS.needsAllowHint}
-            </p>
-          </div>
           <button
             type="button"
             onClick={onConnectAgain}
@@ -85,24 +113,22 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
             {connecting ? 'Opening Square…' : 'Reconnect Square'}
           </button>
           {readOnly ? (
-            <p className="text-xs m-0" style={softStyle}>
+            <span className="text-xs" style={softStyle}>
               {readOnlyNote(org.orgType)}
-            </p>
+            </span>
           ) : null}
         </>
-      ) : (
-        <p className="text-sm m-0" style={softStyle}>
-          {SQUARE_APP_WORDS.ownerOnly(org.name)}
-        </p>
-      )}
-    </>
+      ) : null}
+    </Step>
   );
 
-  if (squareApp.needsAllow) {
+  if (squareApp.needsAllow || check?.taxes.state === 'needs_allow') {
     return (
       <section aria-label={SQUARE_APP_WORDS.heading} className="flex flex-col gap-3">
         {heading}
-        {reconnect}
+        <ul className="m-0 p-0 list-none rounded-xl" style={boxStyle}>
+          {reconnect}
+        </ul>
       </section>
     );
   }
@@ -131,103 +157,86 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
       </span>
     );
 
-  let taxBlock;
+  let taxStep;
   if (check === null && !failed) {
-    taxBlock = (
-      <span className="flex items-center gap-2 text-sm" style={softStyle} role="status">
-        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-        {SQUARE_APP_WORDS.taxChecking}
-      </span>
-    );
+    taxStep = <Step icon="checking" title={SQUARE_APP_WORDS.taxChecking} first testId="square-tax-step" />;
   } else if (failed || check === null || check.taxes.state === 'unknown') {
-    taxBlock = (
-      <div className="flex flex-col gap-2" data-testid="square-tax-check">
-        <span className="text-sm" style={labelStyle}>
-          {SQUARE_APP_WORDS.taxUnknown}
-        </span>
+    taxStep = (
+      <Step icon="unknown" title={SQUARE_APP_WORDS.taxUnknownTitle} detail={SQUARE_APP_WORDS.taxUnknownDetail} first testId="square-tax-step">
         {checkAgain}
-      </div>
-    );
-  } else if (check.taxes.state === 'needs_allow') {
-    taxBlock = (
-      <div className="flex flex-col gap-2" data-testid="square-tax-check">
-        {reconnect}
-      </div>
+      </Step>
     );
   } else if (check.taxes.state === 'none') {
-    taxBlock = (
-      <div className="flex flex-col gap-2" data-testid="square-tax-check">
-        <span className="flex items-start gap-2 text-sm" style={labelStyle}>
-          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--good)' }} aria-hidden="true" />
-          <span>{SQUARE_APP_WORDS.taxNone}</span>
-        </span>
-        {check.membershipTax ? null : (
-          <>
-            <span className="text-sm" style={softStyle}>
-              {SQUARE_APP_WORDS.noMembershipTax}
-            </span>
-            {setTax(check)}
-          </>
-        )}
-      </div>
-    );
+    taxStep = <Step icon="done" title={SQUARE_APP_WORDS.taxNoneTitle} detail={SQUARE_APP_WORDS.taxNoneDetail} first testId="square-tax-step" />;
   } else {
     const { taxes, exampleMinor, chargedMinor } = check.taxes;
-    const bill = formatMinor(exampleMinor, check.currency);
-    taxBlock = (
-      <div className="flex flex-col gap-2" data-testid="square-tax-check">
-        <span className="flex items-start gap-2 text-sm font-semibold" style={{ color: '#fff' }}>
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--warn)' }} aria-hidden="true" />
-          <span>{SQUARE_APP_WORDS.taxAdds(squareTaxNames(taxes))}</span>
-        </span>
-        <span className="text-sm" style={labelStyle}>
-          {SQUARE_APP_WORDS.taxExample(bill, formatMinor(chargedMinor, check.currency))}
-        </span>
-        <span className="text-sm font-semibold" style={labelStyle}>
-          {SQUARE_APP_WORDS.taxFixLead}
-        </span>
-        <ul className="m-0 pl-5 flex flex-col gap-2 list-disc">
-          <li className="text-sm" style={labelStyle}>
-            {SQUARE_APP_WORDS.taxFixSquare(taxes.length > 1)}
-          </li>
-          <li className="text-sm flex flex-col gap-2" style={labelStyle}>
-            <span>{SQUARE_APP_WORDS.taxFixHere}</span>
-            {setTax(check)}
-          </li>
-          <li className="text-sm" style={labelStyle}>
-            {SQUARE_APP_WORDS.taxFixItems}
-          </li>
-        </ul>
+    const which = squareTaxesToOpen(taxes);
+    taxStep = (
+      <Step
+        icon="fix"
+        title={SQUARE_APP_WORDS.taxAddsTitle}
+        detail={SQUARE_APP_WORDS.taxAddsDetail(squareTaxNames(taxes), formatMinor(exampleMinor, check.currency), formatMinor(chargedMinor, check.currency))}
+        first
+        testId="square-tax-step"
+      >
+        <button type="button" className={linkButton} style={{ color: '#fff' }} aria-expanded={fixOpen} onClick={() => setFixOpen((v) => !v)}>
+          {fixOpen ? SQUARE_APP_WORDS.hideSteps : SQUARE_APP_WORDS.howToFix}
+        </button>
+        {fixOpen ? (
+          <div className="flex flex-col gap-2 rounded-lg px-3 py-3" style={boxStyle}>
+            <span className="text-sm" style={labelStyle}>
+              {SQUARE_APP_WORDS.taxFixWebsite(which)}
+            </span>
+            <span className="text-sm" style={labelStyle}>
+              {SQUARE_APP_WORDS.taxFixApp(which)}
+            </span>
+            <span className="text-sm" style={softStyle}>
+              {SQUARE_APP_WORDS.taxFixKeeps}
+            </span>
+          </div>
+        ) : null}
         {checkAgain}
-      </div>
+      </Step>
     );
   }
 
   return (
     <section aria-label={SQUARE_APP_WORDS.heading} className="flex flex-col gap-3">
       {heading}
-      <p className="text-sm m-0" style={labelStyle}>
-        {SQUARE_APP_WORDS.intro}
-      </p>
       <p className="text-sm font-semibold m-0" style={labelStyle}>
-        {SQUARE_APP_WORDS.setupLead}
+        {SQUARE_APP_WORDS.listLead}
       </p>
-      <ol className="m-0 rounded-xl px-4 py-3 flex flex-col gap-3 list-decimal list-inside" style={boxStyle}>
-        <li className="text-sm" style={labelStyle}>
-          {SQUARE_APP_WORDS.customers}
-        </li>
-        <li className="text-sm" style={labelStyle}>
-          <div className="inline-flex flex-col gap-2 align-top" style={{ width: 'calc(100% - 1.5rem)' }}>
-            {taxBlock}
-          </div>
-        </li>
-      </ol>
-      <p className="text-sm m-0" style={softStyle}>
-        {SQUARE_APP_WORDS.linked}
-      </p>
-      <p className="text-sm m-0" style={softStyle}>
-        {SQUARE_APP_WORDS.items}
-      </p>
+      <ul className="m-0 p-0 list-none rounded-xl" style={boxStyle}>
+        {taxStep}
+        {check === null ? null : check.membershipTax ? (
+          <Step icon="done" title={SQUARE_APP_WORDS.memberTaxSetTitle} detail={SQUARE_APP_WORDS.memberTaxSetDetail} testId="square-member-tax-step" />
+        ) : (
+          <Step icon="todo" title={SQUARE_APP_WORDS.memberTaxUnsetTitle} detail={SQUARE_APP_WORDS.memberTaxUnsetDetail} testId="square-member-tax-step">
+            {setTax(check)}
+          </Step>
+        )}
+        <Step icon="todo" title={SQUARE_APP_WORDS.pickTitle} detail={SQUARE_APP_WORDS.pickDetail} testId="square-pick-step">
+          <button type="button" className={linkButton} style={{ color: '#fff' }} aria-expanded={pickOpen} onClick={() => setPickOpen((v) => !v)}>
+            {pickOpen ? SQUARE_APP_WORDS.hideSteps : SQUARE_APP_WORDS.pickHow}
+          </button>
+          {pickOpen ? (
+            <span className="text-sm rounded-lg px-3 py-3" style={{ ...boxStyle, ...labelStyle }}>
+              {SQUARE_APP_WORDS.pickSteps}
+            </span>
+          ) : null}
+        </Step>
+      </ul>
+      <div className="flex flex-col gap-1">
+        <p className="text-sm m-0" style={softStyle}>
+          {SQUARE_APP_WORDS.cardSaved}
+        </p>
+        <p className="text-sm m-0" style={softStyle}>
+          {SQUARE_APP_WORDS.others}
+        </p>
+        <p className="text-sm m-0" style={softStyle}>
+          {SQUARE_APP_WORDS.items}
+        </p>
+      </div>
     </section>
   );
 }

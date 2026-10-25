@@ -12,6 +12,7 @@ import {
   squareAppLinesOf,
   squareOrderAddsOnTop,
   squareTaxNames,
+  squareTaxesToOpen,
   taxesOnTypedAmounts,
   type SquareAppCandidate,
   type SquareAppDecision,
@@ -231,5 +232,12 @@ describe("the check's example and names", () => {
     expect(squareTaxNames([{ name: "Sales tax", percentage: "8.25" }])).toBe("Sales tax (8.25%)");
     expect(squareTaxNames([{ name: "Sales tax", percentage: "8.25" }, { name: "City tax", percentage: null }])).toBe("Sales tax (8.25%) and City tax");
     expect(squareTaxNames([{ name: "GST", percentage: "5" }, { name: "PST", percentage: "7" }, { name: "City", percentage: "1" }])).toBe("GST (5%), PST (7%) and City (1%)");
+  });
+
+  it("says which tax to open in Square's steps: its name, or each of them", () => {
+    expect(squareTaxesToOpen([{ name: "Sales Tax" }])).toBe("Sales Tax");
+    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }])).toBe("each of them (GST and PST)");
+    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }, { name: "City" }])).toBe("each of them (GST, PST and City)");
+    expect(squareTaxesToOpen([])).toBe("the tax");
   });
 });
