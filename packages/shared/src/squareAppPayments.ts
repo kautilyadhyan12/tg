@@ -215,8 +215,11 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
 /** Settings → Payments: Square's own app, Square Point of Sale (on a phone or tablet with a Square Reader,
  *  or a Square Register or Terminal used on its own), as a checklist a gym that opened last week can
  *  follow (Kd's click-through, 2026-10-25): each line says whether it is done, and the steps show only
- *  when something needs fixing. The menus are Square's own (help article 5061 and its "Add a customer at
- *  checkout" update, read 2026-10-25; the website's tax form as Kd saw it, 2026-10-25). */
+ *  when something needs fixing. The menus are Square's own, read 2026-10-25: help article 5061 (the
+ *  website's Sales taxes, "Apply tax to custom amounts", the app's "Custom amounts", and Actions → Disable
+ *  tax, which stops the tax on every sale), the Square Champion's answer of 2025-02-10 in Square's community
+ *  ("Click the existing sales tax to open its settings", then Save at the upper right), and Square's post
+ *  "Add a customer at checkout" of 2023-08-21. Kd's click-through found "Open" read as tick and Disable. */
 export const SQUARE_APP_WORDS = {
   heading: "Square Point of Sale",
   how: "Square's app on a phone or tablet, with a Square Reader. You start the payment in Square's app, and it comes to the member's bill here afterwards.",
@@ -230,9 +233,9 @@ export const SQUARE_APP_WORDS = {
   howToFix: "How to fix",
   hideSteps: "Hide the steps",
   /** `which`: the tax's name, or "each of them (A and B)". */
-  taxFixWebsite: (which: string): string => `On Square's website: Settings → Account & Settings → Payments → Sales taxes. Open ${which} and turn off Apply tax to custom amounts, then Save.`,
-  taxFixApp: (which: string): string => `Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Open ${which} and turn off Custom amounts.`,
-  taxFixKeeps: "Your shop items keep their tax.",
+  taxFixWebsite: (which: string): string => `On Square's website: Settings → Account & Settings → Payments → Sales taxes. Click ${which} to open it. Turn off Apply tax to custom amounts, then press Save at the top right.`,
+  taxFixApp: (which: string): string => `Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Tap ${which} and turn off Custom amounts.`,
+  taxFixKeeps: "Your shop items keep their tax. Don't use Disable tax: that takes it off them too.",
   taxUnknownTitle: "Couldn't check Square's tax settings",
   taxUnknownDetail: "Square didn't answer just now.",
   checkAgain: "Check again",
@@ -245,7 +248,7 @@ export const SQUARE_APP_WORDS = {
   pickTitle: "Pick the member on each sale",
   pickDetail: "In Square Point of Sale, tap Add customer and choose the member before you charge.",
   pickHow: "How",
-  pickSteps: "To make Square ask every time: More → Settings → Checkout → Customer management, then turn on Before checkout.",
+  pickSteps: "To make Square ask every time: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.",
   cardSaved: "Members with a card on file here: the payment goes on their bill by itself.",
   others: "Anyone else: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.",
   items: "Shop items rung up from your Square item list never go on a bill.",

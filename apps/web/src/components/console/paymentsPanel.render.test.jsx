@@ -148,7 +148,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     // The setting that makes Square ask, only when asked for.
     expect(box.queryByText(/turn on Before checkout/)).toBeNull();
     fireEvent.click(step(box, 'square-pick-step').getByRole('button', { name: 'How' }));
-    expect(box.getByText('To make Square ask every time: More → Settings → Checkout → Customer management, then turn on Before checkout.')).toBeTruthy();
+    expect(box.getByText('To make Square ask every time: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.')).toBeTruthy();
     // Who it works for, said plainly: everybody else is charged as usual.
     expect(box.getByText('Members with a card on file here: the payment goes on their bill by itself.')).toBeTruthy();
     expect(box.getByText("Anyone else: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.")).toBeTruthy();
@@ -168,9 +168,10 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     ).toBeTruthy();
     expect(tax.queryByText(/On Square's website/)).toBeNull();
     fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
-    expect(tax.getByText("On Square's website: Settings → Account & Settings → Payments → Sales taxes. Open Sales Tax and turn off Apply tax to custom amounts, then Save.")).toBeTruthy();
-    expect(tax.getByText('Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Open Sales Tax and turn off Custom amounts.')).toBeTruthy();
-    expect(tax.getByText('Your shop items keep their tax.')).toBeTruthy();
+    expect(tax.getByText("On Square's website: Settings → Account & Settings → Payments → Sales taxes. Click Sales Tax to open it. Turn off Apply tax to custom amounts, then press Save at the top right.")).toBeTruthy();
+    expect(tax.getByText('Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Tap Sales Tax and turn off Custom amounts.')).toBeTruthy();
+    // Disable tax, the button beside the tax on Square's page, would take the tax off shop items too.
+    expect(tax.getByText("Your shop items keep their tax. Don't use Disable tax: that takes it off them too.")).toBeTruthy();
     // Tax on memberships: not set here, with the button that opens the exact place.
     const member = step(box, 'square-member-tax-step');
     expect(member.getByText('Tax on memberships: not set here')).toBeTruthy();
@@ -189,7 +190,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     const tax = within(await within(await screen.findByRole('region', BOX)).findByTestId('square-tax-step'));
     expect(await tax.findByText(/^Square adds GST \(5%\) and PST \(7%\) to amounts you type in\. For a \$45\.00 bill, the member would be charged \$50\.40\./)).toBeTruthy();
     fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
-    expect(tax.getByText(/Open each of them \(GST and PST\) and turn off Apply tax to custom amounts/)).toBeTruthy();
+    expect(tax.getByText(/Click each of them \(GST and PST\) to open it\. Turn off Apply tax to custom amounts/)).toBeTruthy();
   });
 
   it('staff who cannot set prices are told who can, with no button', async () => {
