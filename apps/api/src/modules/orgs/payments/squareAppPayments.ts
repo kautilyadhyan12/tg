@@ -146,7 +146,9 @@ export async function takeIn(deps: PaymentsDeps, square: SquareSettings, account
       await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now);
       return;
     }
-    const candidates = entryId === null ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
+    // Another money than the gym's own: no bill of the gym's is that amount.
+    const sameMoney = payment.amount_money.currency === owner.currency;
+    const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
     const decision = squareAppDecision({ lines, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
     if (decision.kind === "shop_sale") {
       await taken.insertTaken(tx, kept, { state: "shop_sale" }, now);

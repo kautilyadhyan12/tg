@@ -370,6 +370,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
       { name: "a typed amount and an item", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, lines: ["CUSTOM_AMOUNT", "ITEM"] }), state: "waiting", reason: "mixed_sale" },
       { name: "no customer picked", make: () => square.appPayment(acct, { amount: 2500, customerId: null, locationId: gym.locationId }), state: "waiting", reason: "no_customer" },
       { name: "another amount than the bill", make: () => square.appPayment(acct, { amount: 2000, customerId: deeCustomer, locationId: gym.locationId }), state: "waiting", reason: "no_bill" },
+      { name: "the bill's amount in another money", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, currency: "CAD" }), state: "waiting", reason: "no_bill" },
     ];
     for (const c of cases) {
       const p = c.make();
