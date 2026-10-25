@@ -504,16 +504,17 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, b
     }
     const emails = [...new Set([person.email, ...found.map((c) => c.email)].flatMap((e) => (squareEmail(e) === null ? [] : [squareEmail(e) ?? ""])))];
     const phones = [...new Set([person.phone, ...found.map((c) => c.phone)].flatMap((p) => (p === null ? [] : [p])))];
-    const [sharing, taken, known] = await Promise.all([
+    // Only what these customers need: whose they are here already, and whose record their reference names.
+    const [sharing, taken, recordIds] = await Promise.all([
       members.recordsSharing(deps.sql, { gymId: run.gymId, environment, accountId: run.accountId, emails, phones }),
-      members.takenCustomers(deps.sql, run.gymId, environment, run.accountId),
-      members.contactsOf(deps.sql, run.gymId),
+      members.takenAmong(deps.sql, run.gymId, environment, run.accountId, found.map((c) => c.id)),
+      members.recordIdsAmong(deps.sql, run.gymId, found.flatMap((c) => (c.referenceId === null ? [] : [c.referenceId]))),
     ]);
     const people = [person, ...sharing.filter((s) => s.entryId !== person.entryId)];
     const plan = squareMembersPlan(
       people.map((p): PlanMember => ({ entryId: p.entryId, fullName: p.fullName, email: p.email, phone: p.phone })),
       found,
-      { taken, recordIds: known.recordIds },
+      { taken, recordIds },
     );
     const mine = plan.get(person.entryId) ?? { kind: "add" as const };
     let outcome: members.Outcome | null = null;

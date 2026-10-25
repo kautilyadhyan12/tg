@@ -203,6 +203,26 @@ export async function forgetListing(tx: TransactionSql, gymId: string, environme
     WHERE gym_id = ${gymId} AND environment = ${environment} AND state = 'checking'`;
 }
 
+/** Of these Square customers, those already a record's of this gym in this account. */
+export async function takenAmong(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string, customerIds: readonly string[]): Promise<Set<string>> {
+  if (customerIds.length === 0) return new Set();
+  const rows = await sql<{ customer_id: string }[]>`
+    SELECT customer_id FROM gym_square_customers
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])
+    UNION
+    SELECT customer_id FROM gym_member_cards
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])`;
+  return new Set(rows.map((x) => x.customer_id));
+}
+
+/** Of these reference ids, those that are a record of this gym, current or past. */
+export async function recordIdsAmong(sql: SqlOrTx, gymId: string, ids: readonly string[]): Promise<Set<string>> {
+  const uuids = ids.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+  if (uuids.length === 0) return new Set();
+  const rows = await sql<{ id: string }[]>`SELECT id FROM gym_member_list_entries WHERE gym_id = ${gymId} AND id = ANY(${uuids}::uuid[])`;
+  return new Set(rows.map((x) => x.id));
+}
+
 /** What tells the gym's records apart: their emails (folded), phones and every record id, current or past. */
 export async function contactsOf(sql: SqlOrTx, gymId: string): Promise<{ emails: Set<string>; phones: Set<string>; recordIds: Set<string> }> {
   const rows = await sql<{ id: string; email: string | null; phone: string | null; current: boolean }[]>`

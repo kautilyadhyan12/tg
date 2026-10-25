@@ -97,33 +97,45 @@ export function squareEmail(email: string | null | undefined): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-/** Each member's plan, by record id. */
+/** Each member's plan, by record id. Customers are found by their email, phone and reference through maps,
+ *  so a gym of 2,000 against a Square of thousands is read once each, never every member against every
+ *  customer. */
 export function squareMembersPlan(members: readonly PlanMember[], customers: readonly PlanCustomer[], around: PlanAround): Map<string, MemberPlan> {
   const plans = new Map<string, MemberPlan>();
-  const reserved = new Map<string, string>();
-  for (const c of customers) if (c.referenceId !== null && around.recordIds.has(c.referenceId)) reserved.set(c.id, c.referenceId);
-  const free = customers.filter((c) => !around.taken.has(c.id));
+  const byEmail = new Map<string, PlanCustomer[]>();
+  const byPhone = new Map<string, PlanCustomer[]>();
+  const ourFor = new Map<string, PlanCustomer[]>();
+  const add = (map: Map<string, PlanCustomer[]>, key: string, c: PlanCustomer) => {
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [c]);
+    else list.push(c);
+  };
+  for (const c of customers) {
+    if (around.taken.has(c.id)) continue;
+    // A customer the app made for a record of this gym is that record's, nobody else's.
+    if (c.referenceId !== null && around.recordIds.has(c.referenceId)) {
+      add(ourFor, c.referenceId, c);
+      continue;
+    }
+    const email = squareEmail(c.email);
+    if (email !== null) add(byEmail, email, c);
+    if (c.phone !== null) add(byPhone, c.phone, c);
+  }
 
   // The customers each member could be: the app's own for them first, else by contact and name.
   const could = new Map<string, PlanCustomer[]>();
   for (const m of members) {
-    const ours = free.filter((c) => reserved.get(c.id) === m.entryId).sort((a, b) => (a.id < b.id ? -1 : 1));
-    const first = ours[0];
+    const first = [...(ourFor.get(m.entryId) ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1))[0];
     if (first !== undefined) {
       plans.set(m.entryId, { kind: "ours", customerId: first.id });
       continue;
     }
     const email = squareEmail(m.email);
-    const phone = m.phone;
-    could.set(
-      m.entryId,
-      free.filter(
-        (c) =>
-          !reserved.has(c.id) &&
-          ((email !== null && squareEmail(c.email) === email) || (phone !== null && c.phone === phone)) &&
-          sameNameForSquare(c, m.fullName),
-      ),
-    );
+    const seen = new Map<string, PlanCustomer>();
+    for (const c of [...(email === null ? [] : (byEmail.get(email) ?? [])), ...(m.phone === null ? [] : (byPhone.get(m.phone) ?? []))]) {
+      if (!seen.has(c.id) && sameNameForSquare(c, m.fullName)) seen.set(c.id, c);
+    }
+    could.set(m.entryId, [...seen.values()]);
   }
   // Who else here each customer could be.
   const claimants = new Map<string, string[]>();
