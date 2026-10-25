@@ -4314,6 +4314,30 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   then comes to their page, bill ticked) or that it waits in Payments to match. A payment with no customer at a
   Square location two gyms here use is kept for neither;
   each is told how many while the location is shared, and how to give a gym its own location.
+  *As built, 18d-iii-b-ii-b-i (Kd, 2026-10-26: "go"; `rulings/2026-10-26-18d-iii-b-ii-b-i.md`):* **Members in
+  Square**, a line of Settings → Payments' Square Point of Sale checklist. The gym's own owner presses **Add members
+  to Square**; the press checks Square first, following Square's own rule ("Before creating a new customer, check to
+  see whether a customer already exists with that email address or phone number", Customer API Best Practices): it
+  lists the business's customers a page at a time (ListCustomers), keeps only those sharing an email or a phone
+  with a current record here or naming one of its records as their reference, and decides for each current record
+  not yet in this Square account: **linked** to a customer Square has where the email or the phone is the same and
+  the name is the same (the words of the shorter each one of the longer's, at least two, no Jr or Sr on one side
+  only), exactly one such customer and nobody else here it could be; **added** as a customer of its own (name,
+  email, phone, the record's id as Square's reference id) otherwise, even where Square has somebody with that email
+  under another name (a child on a parent's email); **left out** where Square has two or more customers who could be
+  them (merge them in Square, help article 8401, then Check again) or one customer could be two records here (join
+  them on Possible duplicates). A name alone links nobody; a customer with no name is nobody's; Square's phone is
+  read with the gym's country as the list reads its own. Square's own Subscriptions are read for the customers it
+  would link (SUBSCRIPTIONS_READ, asked for since: a gym connected before presses Reconnect Square once), ACTIVE,
+  PENDING or PAUSED named as "Square already charges … they pay twice". The box names each group (three names, "and
+  N more", See all) and waits an hour for **Add 3 and link 1**, which does what it said and nothing for anybody it
+  did not name; a record changed since is looked at again by itself. A check with nobody to add or link needs no
+  press. Customers are made two at a time, a press doing its first 20 calls itself and the worker the rest, 150
+  calls a minute for every gym together (Square's test area made 150 in 40 seconds two at a time and turned 163 of
+  400 away four at a time). Then each new member is added by itself: looked up by email and phone (SearchCustomers)
+  when the list moves on, by the same rule, and anybody left out or refused looked at again a day later. Staff read
+  the counts; the names are the owner's. Disconnect, or the app taken off in Square, lets go of the customers a
+  check was holding.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the
