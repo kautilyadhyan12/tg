@@ -12,6 +12,7 @@ import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { acceptInvitation, declineInvitation, myInvitations, notMeInvitation, type Caller, type JoinDeps } from "./join.js";
 import type { InviteSettings } from "./settings.js";
+import { tellMembersGyms, type LiveNewsSender } from "../../live/news.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -36,7 +37,7 @@ function invitationIdOf(req: FastifyRequest, reply: FastifyReply): string | null
 
 export function registerInvitationRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; now?: () => Date },
+  deps: { sql: Sql; redis: RedisLike; invites: InviteSettings | null; news: LiveNewsSender; now?: () => Date },
 ): void {
   const joinDeps: JoinDeps = {
     sql: deps.sql,
@@ -81,7 +82,10 @@ export function registerInvitationRoutes(
         requestId: req.id,
       });
     }
-    return reply.status(200).send(await acceptInvitation(joinDeps, callerOf(req), invitationId, body.data));
+    const answer = await acceptInvitation(joinDeps, callerOf(req), invitationId, body.data);
+    // Joined: the gym's people changed (its new member is among the gyms the person belongs to).
+    tellMembersGyms(deps.sql, deps.news, app.log, callerOf(req).id, { what: "people" });
+    return reply.status(200).send(answer);
   });
 
   app.post("/v1/orgs/invitations/:invitationId/decline", { preHandler: [app.authenticate, answerLimit] }, async (req, reply) => {

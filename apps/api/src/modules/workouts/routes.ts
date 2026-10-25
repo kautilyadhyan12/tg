@@ -15,6 +15,7 @@ import * as service from "./service.js";
 import { handleWorkoutSync } from "./service.js";
 import { ForeignWorkoutError } from "./repo.js";
 import type { RedisLike } from "../../redis.js";
+import { tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
 
 /** Zod-parse the querystring; 400 with issue paths/codes only (R3.10).
  *  Generic over the schema so .default() outputs stay non-optional. */
@@ -47,7 +48,7 @@ function authedUserId(req: FastifyRequest): string {
   return userId;
 }
 
-export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike }): void {
+export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql; redis: RedisLike; news: LiveNewsSender }): void {
   const readDeps: service.ReadDeps = { sql: deps.sql, redis: deps.redis };
   app.post("/v1/workouts/sync", { preHandler: [app.authenticate] }, async (req, reply) => {
     const userId = req.authUser?.id;
@@ -84,6 +85,8 @@ export function registerWorkoutRoutes(app: FastifyInstance, deps: { sql: Sql; re
           "sync: sets skipped (unknown exercise slug)",
         );
       }
+      // A new workout may be a workout day on the leaderboard of each of the person's gyms.
+      if (result.status === "created") tellMembersLeaderboards(deps.sql, deps.news, app.log, userId);
       return await reply
         .status(result.status === "created" ? 201 : 200)
         .send({ workoutId: result.workoutId, status: result.status });

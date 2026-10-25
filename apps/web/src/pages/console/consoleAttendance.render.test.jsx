@@ -414,7 +414,7 @@ describe('the rate-limit constraint', () => {
   // :28649 L-5. This read and the history read share ONE 600/hour bucket, so a
   // poll or a focus re-read here would spend an owner's allowance twice over.
   // The card's "no live-updating ticker" is therefore also a server constraint.
-  it('reads once and never again on its own — no focus re-read, no timer', async () => {
+  it('reads once and never again on its own — no focus re-read, no timer; once on coming back without a live line', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       drawScreen();
@@ -422,10 +422,15 @@ describe('the rate-limit constraint', () => {
       expect(api.getAttendanceDay).toHaveBeenCalledTimes(1);
 
       fireEvent(window, new Event('focus'));
-      document.dispatchEvent(new Event('visibilitychange'));
       await vi.advanceTimersByTimeAsync(120_000);
-
       expect(api.getAttendanceDay).toHaveBeenCalledTimes(1);
+
+      // Coming back to a window that had no live line (Stage 4 item 18) reads once, as live news
+      // would have; never again on a timer.
+      document.dispatchEvent(new Event('visibilitychange'));
+      await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(2));
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(api.getAttendanceDay).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
