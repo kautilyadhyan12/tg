@@ -185,6 +185,9 @@ export const squareTerminalCheckoutIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{
 /** A payment's id at Square. */
 export const squarePaymentIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,192}$/);
 
+/** An order's id at Square (18d-iii-b-i). */
+export const squareOrderIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,192}$/);
+
 const squareMoneySchema = z.object({ amount: z.number().int(), currency: z.string().regex(/^[A-Z]{3}$/) });
 
 /** `status` and `cancel_reason` as a Terminal action's. Measured in Square's test area
@@ -223,11 +226,40 @@ export const squarePaymentSchema = z.object({
       card: z.object({ card_brand: z.string().max(40).nullish(), last_4: z.string().regex(/^[0-9]{4}$/).nullish() }).nullish(),
     })
     .nullish(),
+  /** When Square made it (18d-iii-b-i): a payment older than `SQUARE_APP.keepDays` is never taken in. */
+  created_at: squareTimeSchema.nullish(),
+  /** The order Square made with it: Square's own app makes one with each payment ("Retrieve
+   *  Payments", read 2026-10-24), naming what was sold. */
+  order_id: squareOrderIdSchema.nullish(),
+  /** CARD, CASH, WALLET, EXTERNAL and the rest: how the money was paid. */
+  source_type: z.string().max(40).nullish(),
 });
 export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 
 /** GetPayment's answer. */
 export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema });
+
+/** ListPayments' answer (18d-iii-b-i): at most 100 a page, each read on its own, so one Square cannot
+ *  be read never hides the rest; `cursor` while there are more ("List payments", read 2026-10-24). */
+export const squarePaymentsPageSchema = z.object({
+  payments: z.array(z.unknown()).max(100).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
+
+/** An order, as far as its lines say what was sold: each line's kind, and the item in the gym's list
+ *  in Square it came from. */
+export const squareOrderSchema = z.object({
+  id: squareOrderIdSchema,
+  location_id: squareObjectIdSchema.nullish(),
+  line_items: z
+    .array(z.object({ item_type: z.string().max(40).nullish(), catalog_object_id: z.string().max(192).nullish() }))
+    .max(1000)
+    .nullish(),
+});
+export type SquareOrder = z.infer<typeof squareOrderSchema>;
+
+/** RetrieveOrder's answer. */
+export const squareOrderAnswerSchema = z.object({ order: squareOrderSchema });
 
 /** CreatePayment's refusal (18d-iii-i): a decline comes back as a 400 with Square's error and the
  *  FAILED payment it kept (measured in Square's test area, 2026-10-23). */

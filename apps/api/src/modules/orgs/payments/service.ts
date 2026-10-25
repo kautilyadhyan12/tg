@@ -91,8 +91,17 @@ export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId:
   return { org, gym };
 }
 
-/** The connection allows less than we now ask Square for: the owner connects Square again. */
-export const missingScopes = (row: repo.ConnectionRow): boolean => SQUARE_SCOPES.some((scope) => !row.scopes.includes(scope));
+/** What Square Terminals and the card on file need: every permission asked for before 18d-iii-b-i. */
+const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "ORDERS_READ");
+
+/** The connection allows less than Square Terminals need: the owner connects Square again. */
+export const missingScopes = (row: repo.ConnectionRow): boolean => TERMINAL_SCOPES.some((scope) => !row.scopes.includes(scope));
+
+/** The connection allows less than anything we now ask Square for: Connect Square is offered again. */
+export const allowsLess = (row: repo.ConnectionRow): boolean => SQUARE_SCOPES.some((scope) => !row.scopes.includes(scope));
+
+/** What was sold with a payment taken in Square's own app can be read (18d-iii-b-i). */
+export const readsOrders = (row: repo.ConnectionRow): boolean => row.scopes.includes("ORDERS_READ");
 
 /** Connected, with its location, where Square saves cards on a Terminal. */
 export const terminalsOffered = (row: repo.ConnectionRow | null): row is repo.ConnectionRow & { locationId: string } =>
@@ -143,6 +152,7 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       squareReady: deps.square !== null,
       square: connectionView(row, isOwner),
       terminals: deps.square === null ? null : await terminalsView(deps, deps.square, row, isOwner),
+      squareApp: row?.state === "connected" && row.locationId !== null ? { needsAllow: !readsOrders(row) } : null,
     },
   });
 }
@@ -155,7 +165,7 @@ export async function startSquareConnect(deps: PaymentsDeps, userId: string, gym
   if (gymPaymentsAvailability(gym.country) !== "square") throw new OrgsError(409, "square_not_offered", GYM_PAYMENTS_WORDS.not_offered);
   const existing = await repo.readConnection(deps.sql, gymId, square.environment);
   // Connected and allowing everything asked for: nothing to connect again for.
-  if (existing?.state === "connected" && !missingScopes(existing)) throw new OrgsError(409, "square_already_connected", GYM_PAYMENTS_WORDS.already_connected);
+  if (existing?.state === "connected" && !allowsLess(existing)) throw new OrgsError(409, "square_already_connected", GYM_PAYMENTS_WORDS.already_connected);
   const state = randomBytes(32).toString("base64url");
   await repo.insertStart(deps.sql, {
     stateHash: hashConnectState(state),
@@ -310,7 +320,7 @@ export async function finishSquareConnect(deps: PaymentsDeps, userId: string, bo
       return { outcome: "not_owner" as const, revokeId: await owe(tx, square, gymId, accountId, lockedAccess, now) };
     }
     const existing = await repo.readConnection(tx, gymId, square.environment, true);
-    if (existing?.state === "connected" && missingScopes(existing) && existing.accessToken !== null) {
+    if (existing?.state === "connected" && allowsLess(existing) && existing.accessToken !== null) {
       // Connect Square again, to allow what the connection did not: only on the account it is
       // connected to, where its members' cards are saved. The old token is let go; the gym
       // still holds the account, so only that token.

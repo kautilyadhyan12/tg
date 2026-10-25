@@ -35,6 +35,7 @@ import { friendPaymentGone, giftsOntoOpenBills, giftUseUndone, giveMemberGift } 
 import { lockGym } from "../memberList/repo.js";
 import { freezeFeeOf, setFreezeFee } from "./freezeFees.js";
 import { remindersOn, setReminders } from "../payments/cardExpiryRepo.js";
+import { takenOffBill } from "../payments/squareAppPaymentsRepo.js";
 import {
   billDayOf,
   billOf,
@@ -80,7 +81,11 @@ export type BillWriteOutcome =
   /** A payment taken on the Terminal: Square holds the money, so it is refunded there. */
   | { kind: "terminal_payment" }
   /** The same, charged to the card on file (18d-iii-i). */
-  | { kind: "card_payment" };
+  | { kind: "card_payment" }
+  /** Taken in Square's own app (18d-iii-b-i): refunded in Square, or taken off the bill ("Not this bill"). */
+  | { kind: "square_app_payment" }
+  /** "Not this bill" for a payment that was not taken in Square's own app. */
+  | { kind: "not_square_app" };
 
 export interface RecordPaymentInput {
   gymId: string;
@@ -128,9 +133,10 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
     return same ? { kind: "recorded", paymentId: byKey.id } : { kind: "request_reused" };
   }
   if (input.provider !== undefined) {
+    // One taken back ("Not this bill", 18d-iii-b-i) no longer holds the company's payment.
     const [byCompany] = await tx<{ id: string }[]>`
       SELECT id FROM gym_member_payments
-      WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
+      WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId} AND undone_at IS NULL`;
     if (byCompany !== undefined) return { kind: "recorded", paymentId: byCompany.id };
   }
 
@@ -223,7 +229,8 @@ export async function recordPaymentIn(tx: TransactionSql, input: RecordPaymentIn
 
 /** Voids the newest payment on a membership (18o): recorded by mistake. Its row is kept,
  *  marked with who, when and why; the bill is owed again, and where it had settled the
- *  newest paid period the count of paid periods goes back by one. */
+ *  newest paid period the count of paid periods goes back by one. A payment taken in Square's
+ *  own app is taken off this way only as "Not this bill" (18d-iii-b-i), and waits again. */
 export async function voidPayment(
   sql: Sql,
   input: { gymId: string; entryId: string; membershipId: string; paymentId: string; reason: PaymentVoidReason; today: string; actorUserId: string; now: Date },
@@ -246,6 +253,7 @@ export async function voidPayment(
     // Square holds that money: voided here, the bill would be owed again with the card charged.
     if (payment.method === "terminal") return { kind: "terminal_payment" };
     if (payment.method === "company") return { kind: "card_payment" };
+    if ((payment.method === "square_app") !== (input.reason === "not_this_bill")) return payment.method === "square_app" ? { kind: "square_app_payment" } : { kind: "not_square_app" };
     const out = await squareMoneyOut(tx, input.gymId, row.id);
     if (out !== null) return out;
 
@@ -265,6 +273,7 @@ export async function voidPayment(
     if (paidPeriods !== null) await writePaidPeriods(tx, input.gymId, input.entryId, row.id, paidPeriods, input.now);
     // Where this was a friend's payment that gave a member their Refer a friend gift.
     await friendPaymentGone(tx, { gymId: input.gymId, by: { paymentId: input.paymentId }, why: "voided", today: input.today, now: input.now });
+    if (payment.method === "square_app") await takenOffBill(tx, input.gymId, input.paymentId, input.now);
 
     await insertAudit(tx, {
       actorUserId: input.actorUserId,

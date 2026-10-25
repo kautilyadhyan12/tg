@@ -91,6 +91,8 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
   let clock = new Date();
+  // Square stamps a payment with when it took it: the test's own clock.
+  square.state.now = () => clock;
   let app: App | undefined;
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
@@ -452,6 +454,51 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect(takenFrom(card)).toHaveLength(1);
     expect((await chargesOf(lea)).map((c) => c.outcome)).toEqual(["paid"]);
     expect((await paymentsOf(lea)).filter((p) => p.method === "company").map((p) => p.provider_payment_id)).toEqual([takenFrom(card)[0]?.id]);
+  });
+
+  it("a charge left unanswered past an hour (the server down) is looked up among Square's payments, never sent again", async () => {
+    const gym = await makeGym(`Down Gym ${uniq()}`, `MDN${uniq()}`);
+    const typeId = await typeOf(gym);
+    const ida = await holding(gym, typeId, await person(gym, "Ida Down"));
+    const jon = await holding(gym, typeId, await person(gym, "Jon Down"));
+    clock = new Date(`${await todayOf(gym, ida.entryId)}T18:00:00Z`);
+    await weekOn(gym, ida);
+    await weekOn(gym, jon);
+    const idaCard = await cardFor(gym, ida.entryId);
+    // Ida's card is charged and Square's answer lost; Jon's charge never reaches Square.
+    square.state.loseAnswers = true;
+    await work();
+    square.state.loseAnswers = false;
+    const jonCard = await cardFor(gym, jon.entryId);
+    square.state.down = true;
+    try {
+      await work();
+    } finally {
+      square.state.down = false;
+    }
+    expect(takenFrom(idaCard)).toHaveLength(1);
+    expect(takenFrom(jonCard)).toHaveLength(0);
+    expect([...(await chargesOf(ida)), ...(await chargesOf(jon))].map((c) => c.state)).toEqual(["charging", "charging"]);
+
+    // Two hours on, the server is back: every charge is looked up, none is sent to Square again.
+    const send = square.api.createCardPayment;
+    let sent = 0;
+    square.api.createCardPayment = (token, p) => {
+      sent += 1;
+      return send(token, p);
+    };
+    try {
+      clock = new Date(clock.getTime() + CARD_CHARGE.resendForMs + 60 * 60_000);
+      await work();
+    } finally {
+      square.api.createCardPayment = send;
+    }
+    expect(sent, "nothing sent to Square again").toBe(0);
+    expect((await chargesOf(ida)).map((c) => c.outcome)).toEqual(["paid"]);
+    expect((await paymentsOf(ida)).filter((p) => p.method === "company").map((p) => p.provider_payment_id)).toEqual([takenFrom(idaCard)[0]?.id]);
+    // Jon's was never among the location's payments: ended as one to check in Square, never charged.
+    expect((await chargesOf(jon)).map((c) => c.outcome)).toEqual(["gone"]);
+    expect(takenFrom(jonCard)).toHaveLength(0);
   });
 
   it("money Square took for another amount is kept, never recorded, and told to Staff activity", async () => {

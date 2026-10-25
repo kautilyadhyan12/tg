@@ -39,6 +39,7 @@ import { fullName } from "../leaderboard/rank.js";
 import { insertAudit } from "../repo.js";
 import { lockedEntry } from "./heldRepo.js";
 import { billOf, insertPayment, squareMoneyOut, type BillTax, type Voided } from "./billsSql.js";
+import { takenOffBill } from "../payments/squareAppPaymentsRepo.js";
 
 const STATUS_FOR: Record<Exclude<MemberFeeKind, "freeze">, "late_cancelled" | "no_show"> = { late_cancel: "late_cancelled", no_show: "no_show" };
 /** A booking's or a session's own fee: a freeze fee is the membership's (`freezeFees.ts`). */
@@ -468,7 +469,11 @@ export type FeeWriteOutcome =
   /** Paid on the Terminal: refunded in Square, never voided here. */
   | { kind: "terminal_payment" }
   /** Charged to the card on file (18d-iii-i): refunded in Square, never voided here. */
-  | { kind: "card_payment" };
+  | { kind: "card_payment" }
+  /** Taken in Square's own app (18d-iii-b-i): refunded in Square, or taken off the fee ("Not this bill"). */
+  | { kind: "square_app_payment" }
+  /** "Not this bill" for a payment that was not taken in Square's own app. */
+  | { kind: "not_square_app" };
 
 /** One fee of one membership of one record, held to the commit; null where it is not theirs. */
 async function lockedFee(
@@ -523,7 +528,7 @@ export async function recordFeePaymentIn(tx: TransactionSql, input: FeePaymentIn
   if (input.provider !== undefined) {
     const [byCompany] = await tx<{ id: string }[]>`
       SELECT id FROM gym_member_payments
-      WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId}`;
+      WHERE gym_id = ${input.gymId} AND provider = ${input.provider.name} AND provider_payment_id = ${input.provider.paymentId} AND undone_at IS NULL`;
     if (byCompany !== undefined) return { kind: "recorded", paymentId: byCompany.id };
   }
   const fee = await lockedFee(tx, input);
@@ -625,6 +630,7 @@ export async function voidFeePayment(
     if (payment.undone) return { kind: "ok" };
     if (payment.method === "terminal") return { kind: "terminal_payment" };
     if (payment.method === "company") return { kind: "card_payment" };
+    if ((payment.method === "square_app") !== (input.reason === "not_this_bill")) return payment.method === "square_app" ? { kind: "square_app_payment" } : { kind: "not_square_app" };
     if (entry.past) return { kind: "past_member" };
     const out = await squareMoneyOut(tx, input.gymId, input.membershipId);
     if (out !== null) return out;
@@ -634,6 +640,7 @@ export async function voidFeePayment(
     await tx`
       UPDATE gym_member_bills b SET status = CASE WHEN ${stillOwedSql(tx)} THEN 'open' ELSE 'void' END, updated_at = ${input.now}
       WHERE b.gym_id = ${input.gymId} AND b.id = ${fee.id} AND b.status = 'paid'`;
+    if (payment.method === "square_app") await takenOffBill(tx, input.gymId, input.paymentId, input.now);
     await insertAudit(tx, {
       actorUserId: input.actorUserId,
       gymId: input.gymId,

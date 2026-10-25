@@ -434,7 +434,7 @@ export const gymMemberPayments = pgTable(
     index("gym_member_payments_paid_by_idx").on(t.gymId, t.paidByEntryId).where(sql`${t.paidByEntryId} IS NOT NULL`),
     check(
       "gym_member_payments_void_reason_check",
-      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','wrong_person','other'))`,
+      sql`${t.voidReason} IS NULL OR (${t.undoneAt} IS NOT NULL AND ${t.voidReason} IN ('mistake','wrong_amount','wrong_person','other','not_this_bill'))`,
     ),
     unique("gym_member_payments_receipt_uq").on(t.gymId, t.receiptNumber),
     check("gym_member_payments_receipt_check", sql`${t.receiptNumber} >= 1`),
@@ -442,17 +442,18 @@ export const gymMemberPayments = pgTable(
     unique("gym_member_payments_gym_id_uq").on(t.gymId, t.id),
     check("gym_member_payments_amount_check", sql`${t.amountMinor} BETWEEN 1 AND 99999999`),
     check("gym_member_payments_currency_check", sql`${t.currency} ~ '^[A-Z]{3}$'`),
-    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','link','company','terminal')`),
+    check("gym_member_payments_method_check", sql`${t.method} IN ('cash','upi','card_at_desk','bank_transfer','link','company','terminal','square_app')`),
     check(
       "gym_member_payments_provider_check",
-      sql`(${t.method} IN ('company','terminal')) = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
+      sql`(${t.method} IN ('company','terminal','square_app')) = (${t.provider} IS NOT NULL) AND (${t.provider} IS NULL) = (${t.providerPaymentId} IS NULL) AND (${t.provider} IS NULL OR (char_length(${t.provider}) BETWEEN 1 AND 40 AND char_length(${t.providerPaymentId}) BETWEEN 1 AND 200))`,
     ),
     foreignKey({
       name: "gym_member_payments_bill_fk",
       columns: [t.gymId, t.billId],
       foreignColumns: [gymMemberBills.gymId, gymMemberBills.id],
     }).onDelete("cascade"),
-    uniqueIndex("gym_member_payments_provider_uq").on(t.gymId, t.provider, t.providerPaymentId).where(sql`${t.provider} IS NOT NULL`),
+    // A payment taken back (`not_this_bill`, 0164) no longer holds its company's id.
+    uniqueIndex("gym_member_payments_provider_uq").on(t.gymId, t.provider, t.providerPaymentId).where(sql`${t.provider} IS NOT NULL AND ${t.undoneAt} IS NULL`),
     index("gym_member_payments_bill_idx").on(t.gymId, t.billId),
   ],
 );

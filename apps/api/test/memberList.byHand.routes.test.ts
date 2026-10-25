@@ -1200,6 +1200,11 @@ d("member list: keeping it by hand (real Postgres)", () => {
       // walk-in's when the record is deleted for good (`register.routes.test.ts`).
       "gym_sales.entry_id",
       "gym_sales.gym_id",
+      // A payment taken in Square's own app (0164; 18d-iii-b-i): not moved by the join. A record joined
+      // or deleted for good lets go of it (`entry_id` alone to null); the payment it is recorded as
+      // goes with its membership (`squareAppPayments.routes.test.ts`).
+      "gym_square_app_payments.entry_id",
+      "gym_square_app_payments.gym_id",
       // The person as a customer in the gym's Square account (0144; 18d-ii): moved by the join
       // where the kept record has none in that account, and gone with a record deleted for good.
       "gym_square_customers.entry_id",

@@ -58,6 +58,7 @@ import {
   squareFinishRequestSchema,
   squareLocationRequestSchema,
   squareObjectIdSchema,
+  squarePaymentIdSchema,
   squareWebhookBodySchema,
 } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -80,6 +81,7 @@ import * as cardCharges from "./cardCharges.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
 import * as service from "./service.js";
+import { SQUARE_PAYMENT_EVENTS } from "./squareAppPayments.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import * as terminalCards from "./terminalCards.js";
 import * as terminalPayments from "./terminalPayments.js";
@@ -417,8 +419,8 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           req.log.warn({ event: "webhook.square_unreadable" }, "a signed Square webhook body did not parse");
           return reply.status(200).send();
         }
-        // A gym taking the app off its account, and a saved card changed or stopped inside
-        // Square (18d-ii), are kept for the worker; the rest are acknowledged.
+        // A gym taking the app off its account, a saved card changed or stopped inside Square
+        // (18d-ii), and a payment (18d-iii-b-i) are kept for the worker; the rest are acknowledged.
         if (event.data.type === SQUARE_REVOKED_EVENT) {
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
@@ -447,6 +449,18 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
           await webhooks.keepSquareEvent(deps.sql, {
             eventId: event.data.event_id,
             payload: { type: event.data.type, accountId: event.data.merchant_id, cardId: cardId.data },
+          });
+        }
+        // A payment, taken in Square's own app or anywhere else in the account (18d-iii-b-i).
+        if (SQUARE_PAYMENT_EVENTS.includes(event.data.type)) {
+          const paymentId = squarePaymentIdSchema.safeParse(event.data.data?.id);
+          if (!paymentId.success) {
+            req.log.warn({ event: "webhook.square_payment_unreadable" }, "a signed Square payment message names no payment");
+            return reply.status(200).send();
+          }
+          await webhooks.keepSquareEvent(deps.sql, {
+            eventId: event.data.event_id,
+            payload: { type: event.data.type, accountId: event.data.merchant_id, paymentId: paymentId.data },
           });
         }
         return reply.status(200).send();

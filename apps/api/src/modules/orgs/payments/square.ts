@@ -15,7 +15,9 @@
 // (measured 2026-10-21). Save card on Terminal (18d-ii-b-ii) sends two Terminal actions with
 // those: CONFIRMATION, the gym's agreement, then SAVE_CARD. Take payment on Terminal (18d-vi-a)
 // sends a Terminal checkout with PAYMENTS_WRITE_IN_PERSON and reads its payment with
-// PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22).
+// PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22). A payment taken in Square's own
+// app (18d-iii-b-i) is read with PAYMENTS_READ, listed with it for the hourly look, and what was sold
+// is read from its order with ORDERS_READ ("Retrieve order", read 2026-10-24).
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
@@ -23,7 +25,10 @@ import {
   squareErrorSchema,
   squareLocationsSchema,
   squareMerchantSchema,
+  squareOrderAnswerSchema,
   squarePaymentAnswerSchema,
+  squarePaymentSchema,
+  squarePaymentsPageSchema,
   squarePaymentRefusalSchema,
   squareRevokeSchema,
   squareTerminalActionAnswerSchema,
@@ -34,6 +39,7 @@ import {
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
+  type SquareOrder,
   type SquarePayment,
   type SquareTerminalAction,
   type SquareTerminalCheckout,
@@ -98,9 +104,22 @@ export interface SquareApi {
   /** Square stops a checkout still pending or in progress; one paid already is refused (400). */
   cancelTerminalCheckout(accessToken: string, checkoutId: string): Promise<SquareResult<SquareTerminalCheckout>>;
   getPayment(accessToken: string, paymentId: string): Promise<SquareResult<SquarePayment>>;
+  /** One page of the location's payments Square made from `beginTime` to `endTime`, oldest first
+   *  (18d-iii-b-i). `unread`: how many on the page could not be read; each is skipped. */
+  listPayments(accessToken: string, q: PaymentsQuery): Promise<SquareResult<{ payments: SquarePayment[]; unread: number; cursor: string | null }>>;
+  /** What was sold with a payment (18d-iii-b-i). */
+  retrieveOrder(accessToken: string, orderId: string): Promise<SquareResult<SquareOrder>>;
   /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
    *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
   createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
+}
+
+/** ListPayments' question: one location, by when Square made the payment, oldest first. */
+export interface PaymentsQuery {
+  locationId: string;
+  beginTime: Date;
+  endTime: Date;
+  cursor: string | null;
 }
 
 /** `referenceId`: our charge, never the person. `note`: what the gym's Square Dashboard lists the
@@ -183,6 +202,7 @@ export const SQUARE_SCOPES = [
   "PAYMENTS_WRITE",
   "PAYMENTS_WRITE_IN_PERSON",
   "DEVICE_CREDENTIAL_MANAGEMENT",
+  "ORDERS_READ",
 ] as const;
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_TIMEOUT_MS = 10_000;
@@ -387,6 +407,31 @@ export function createSquareApi(opts: {
     async getPayment(accessToken, paymentId) {
       const result = await call("GET", paymentPath(paymentId), squarePaymentAnswerSchema, bearer(accessToken));
       return result.kind === "ok" ? { kind: "ok", value: result.value.payment } : result;
+    },
+    async listPayments(accessToken, q) {
+      const query = new URLSearchParams({
+        location_id: q.locationId,
+        begin_time: q.beginTime.toISOString(),
+        end_time: q.endTime.toISOString(),
+        sort_order: "ASC",
+        limit: "100",
+        ...(q.cursor === null ? {} : { cursor: q.cursor }),
+      });
+      const result = await call("GET", `/v2/payments?${query.toString()}`, squarePaymentsPageSchema, bearer(accessToken));
+      if (result.kind !== "ok") return result;
+      const payments: SquarePayment[] = [];
+      let unread = 0;
+      for (const raw of result.value.payments ?? []) {
+        const one = squarePaymentSchema.safeParse(raw);
+        if (one.success) payments.push(one.data);
+        else unread += 1;
+      }
+      return { kind: "ok", value: { payments, unread, cursor: result.value.cursor ?? null } };
+    },
+    async retrieveOrder(accessToken, orderId) {
+      if (!/^[A-Za-z0-9_-]{1,192}$/.test(orderId)) throw new Error("not a Square order id");
+      const result = await call("GET", `/v2/orders/${orderId}`, squareOrderAnswerSchema, bearer(accessToken));
+      return result.kind === "ok" ? { kind: "ok", value: result.value.order } : result;
     },
     async createCardPayment(accessToken, p) {
       const sent = await send("POST", "/v2/payments", bearer(accessToken), {
