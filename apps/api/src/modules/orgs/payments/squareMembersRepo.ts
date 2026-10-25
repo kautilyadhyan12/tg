@@ -193,6 +193,16 @@ export async function failRun(sql: SqlOrTx, r: { gymId: string; environment: Squ
   await sql`DELETE FROM gym_square_member_candidates WHERE gym_id = ${r.gymId} AND environment = ${r.environment}`;
 }
 
+/** The gym no longer connected (Disconnect, or the app taken off its account in Square): the customers a
+ *  check was holding are let go, and a check that was reading Square starts from the first page when it is
+ *  connected again. What was decided and what was added stay. */
+export async function forgetListing(tx: TransactionSql, gymId: string, environment: SquareEnvironment): Promise<void> {
+  await tx`DELETE FROM gym_square_member_candidates WHERE gym_id = ${gymId} AND environment = ${environment}`;
+  await tx`
+    UPDATE gym_square_member_runs SET cursor = NULL, looked = 0, listed_at = NULL, lease_until = NULL
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND state = 'checking'`;
+}
+
 /** What tells the gym's records apart: their emails (folded), phones and every record id, current or past. */
 export async function contactsOf(sql: SqlOrTx, gymId: string): Promise<{ emails: Set<string>; phones: Set<string>; recordIds: Set<string> }> {
   const rows = await sql<{ id: string; email: string | null; phone: string | null; current: boolean }[]>`

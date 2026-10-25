@@ -47,6 +47,7 @@ import type { SquareSettings } from "./settings.js";
 import { SQUARE_SCOPES } from "./square.js";
 import { anyWaitingIn } from "./terminalPaymentsRepo.js";
 import { anyChargingIn } from "./cardChargesRepo.js";
+import { forgetListing } from "./squareMembersRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 import type { TokenContext } from "./tokenBox.js";
 
@@ -445,6 +446,7 @@ export async function disconnectSquare(deps: PaymentsDeps, userId: string, gymId
     if (await anyWaitingIn(tx, gymId, square.environment)) throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.disconnect_waiting);
     if (await anyChargingIn(tx, gymId, square.environment)) throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.disconnect_charging);
     await repo.deleteConnection(tx, gymId, square.environment);
+    await forgetListing(tx, gymId, square.environment);
     if (row.state !== "connected" || row.accessToken === null) return null;
     await insertAudit(tx, {
       actorUserId: userId,

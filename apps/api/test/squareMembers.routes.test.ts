@@ -418,8 +418,10 @@ d("Members in Square (real Postgres)", { timeout: T }, () => {
         expect(sentFor(id)).toHaveLength(1);
         expect(square.customersOf(gym.acct).filter((c) => c.reference_id === id)).toHaveLength(1);
       }
-      // A check replaced by another, and one past its hour, are not added.
+      // A check replaced by another, and one past its hour, are not added (somebody new to add in each).
+      await person(gym, "Dee Fox", { email: `dee.${uniq()}@gmail.com` });
       const old = await check(gym);
+      expect(old.state).toBe("checked");
       await check(gym);
       const replaced = await send("POST", `${boxUrl(gym)}/add`, gym.owner.cookies, { runId: old.runId });
       expect((JSON.parse(replaced.body) as { error: string }).error).toBe("square_members_check_changed");
@@ -462,6 +464,41 @@ d("Members in Square (real Postgres)", { timeout: T }, () => {
       const jos = square.customersOf(gym.acct).filter((c) => c.reference_id === jo);
       expect(jos).toHaveLength(1);
       expect((await customerOf(gym, jo))?.customer_id).toBe(jos[0]?.id);
+    });
+  });
+
+  describe("nothing to add, and Square let go", () => {
+    it("a check with nobody to add or link switches on adding new members by itself, with no press", async () => {
+      const gym = await makeGym("All In Gym");
+      const ida = `ida.${uniq()}@gmail.com`;
+      square.customer(gym.acct, { id: "CIDA1", given_name: "Ida", family_name: "Ray", email_address: ida });
+      square.customer(gym.acct, { id: "CIDA2", given_name: "Ida", family_name: "Ray", email_address: ida });
+      await person(gym, "Ida Ray", { email: ida });
+      const checked = await check(gym);
+      expect(checked).toMatchObject({ state: "added", automatic: true });
+      expect(checked.groups.several_customers).toEqual({ count: 1, names: ["Ida Ray"] });
+      const later = await person(gym, "Jon Ray", { email: `jon.${uniq()}@gmail.com` });
+      await membersWork([gym]);
+      expect((await customerOf(gym, later))?.customer_id).toMatch(/^CUS/);
+    });
+
+    it("Disconnect drops the Square customers a check was holding, and the check starts from the first page again", async () => {
+      const gym = await makeGym("Disconnect Mid Check Gym");
+      for (let i = 0; i < 120; i++) square.customer(gym.acct, { id: `CDMC${String(i)}`, given_name: "Shop", family_name: `Buyer ${String(i)}`, email_address: `buyer${String(i)}.${uniq()}@gmail.com` });
+      const lia = `lia.${uniq()}@gmail.com`;
+      square.customer(gym.acct, { id: "CLIA", given_name: "Lia", family_name: "Moon", email_address: lia });
+      // Lia comes on Square's second page; a member here shares the first page's first customer's email.
+      const first = square.customersOf(gym.acct)[0]?.email_address ?? "";
+      await person(gym, "Shop Buyer 0", { email: first });
+      await person(gym, "Lia Moon", { email: lia });
+      square.state.customerPagesUntilDown = 1;
+      expect((await check(gym)).state).toBe("checking");
+      square.state.customerPagesUntilDown = null;
+      expect(await sql`SELECT 1 FROM gym_square_member_candidates WHERE gym_id = ${gym.id}`).toHaveLength(1);
+      expect((await send("DELETE", `/v1/orgs/${gym.id}/payments/square`, gym.owner.cookies)).statusCode).toBe(200);
+      expect(await sql`SELECT 1 FROM gym_square_member_candidates WHERE gym_id = ${gym.id}`).toHaveLength(0);
+      const [run] = await sql<{ cursor: string | null; looked: number; listed_at: Date | null }[]>`SELECT cursor, looked, listed_at FROM gym_square_member_runs WHERE gym_id = ${gym.id}`;
+      expect(run).toEqual({ cursor: null, looked: 0, listed_at: null });
     });
   });
 

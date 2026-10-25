@@ -42,16 +42,16 @@ import * as members from "./squareMembersRepo.js";
 import { squareEmail, squareMembersPlan, squarePhone, type PlanCustomer, type PlanMember } from "./squareMembersPlan.js";
 
 export const SQUARE_MEMBERS_WORK = {
-  /** Square's customers read by the press itself before it answers: a page is 100. */
-  pagesByPress: 10,
-  /** And by the worker, a gym a minute. */
-  pagesByWorker: 30,
-  /** People added or linked by the press of Add itself, and by the worker a gym a minute. */
-  addsByPress: 20,
-  addsByWorker: 150,
+  /** Calls to Square a press (Add members to Square, Check again, Add) makes itself before it answers: a
+   *  page of 100 customers, a customer made, or a member looked up is one each. */
+  callsByPress: 20,
+  /** And the worker's minute, for every gym together. Square's test area made 150 customers in 40 seconds
+   *  two at a time, and turned 163 of 400 away four at a time (measured 2026-10-26,
+   *  `.cost/18d-iii-b-ii-b-i/probe-customers.mts`): 150 calls two at a time keep the minute under one. */
+  callsByWorker: 150,
   /** Customers made at Square at the same moment, for one gym. */
-  addsAtOnce: 4,
-  /** New members looked up a gym a minute. */
+  addsAtOnce: 2,
+  /** New members looked up a gym a minute, at most. */
   looksByWorker: 15,
   /** Gyms the worker takes a minute. */
   gymsPerRun: 10,
@@ -66,6 +66,11 @@ export interface SquareMembersRun {
   linked: number;
   looked: number;
   unanswered: number;
+}
+
+/** Calls to Square still allowed: shared by every gym of one minute's work. */
+interface Budget {
+  left: number;
 }
 
 const notConnected = (): OrgsError => new OrgsError(409, "square_not_connected", SQUARE_MEMBERS_WORDS.not_connected);
@@ -187,7 +192,7 @@ export async function checkSquareMembers(deps: PaymentsDeps, userId: string, gym
   });
   if (run === null) throw new OrgsError(409, "square_members_busy", SQUARE_MEMBERS_WORDS.busy);
   try {
-    await checkSome(deps, ready, run, SQUARE_MEMBERS_WORK.pagesByPress);
+    await checkSome(deps, ready, run, { left: SQUARE_MEMBERS_WORK.callsByPress });
   } finally {
     await members.releaseRun(deps.sql, run);
   }
@@ -215,7 +220,7 @@ export async function addSquareMembers(deps: PaymentsDeps, userId: string, gymId
   }
   if (run.accountId !== ready.row.accountId) throw new OrgsError(409, "square_members_check_changed", SQUARE_MEMBERS_WORDS.check_changed);
   try {
-    await addSome(deps, ready, run, SQUARE_MEMBERS_WORK.addsByPress);
+    await addSome(deps, ready, run, { left: SQUARE_MEMBERS_WORK.callsByPress });
   } finally {
     await members.releaseRun(deps.sql, run);
   }
@@ -227,8 +232,8 @@ export async function addSquareMembers(deps: PaymentsDeps, userId: string, gymId
 
 type Step = "more" | "done" | "unanswered" | "stopped";
 
-/** Up to `pages` pages of Square's customers, then, at the end of the list, the decision. */
-async function checkSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, pages: number): Promise<Step> {
+/** Pages of Square's customers while the budget lasts, then, at the end of the list, the decision. */
+async function checkSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, budget: Budget): Promise<Step> {
   const { square, token } = ready;
   const at = { gymId: run.gymId, environment: run.environment, runId: run.runId };
   const gym = await repo.readGym(deps.sql, run.gymId);
@@ -238,7 +243,8 @@ async function checkSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, 
   let listed = run.listedAt !== null;
   if (!listed) {
     const known = await members.contactsOf(deps.sql, run.gymId);
-    for (let read = 0; read < pages; read++) {
+    while (budget.left > 0) {
+      budget.left -= 1;
       const page = await square.api.listCustomers(token, cursor);
       if (page.kind === "unavailable") {
         await members.setUnanswered(deps.sql, { ...at, now: deps.now() });
@@ -308,7 +314,15 @@ async function decide(deps: PaymentsDeps, ready: Ready, run: members.RunRow): Pr
     await lockGym(tx, run.gymId);
     return await members.finishCheck(tx, { ...at, now: deps.now() }, rows);
   });
-  return finished ? "done" : "stopped";
+  if (!finished) return "stopped";
+  // Nobody to add or link (everybody in Square already, or left out): nothing waits for a press, and new
+  // members are added by themselves from now, as the owner's press asked.
+  if (!rows.some((r) => r.plan.kind === "ours" || r.plan.kind === "link" || r.plan.kind === "add")) {
+    const now = deps.now();
+    const adding = await members.startAdding(deps.sql, { ...at, checkedSince: now, leaseUntil: new Date(now.getTime() + SQUARE_MEMBERS_WORK.leaseMs) });
+    if (adding !== null) await members.finishAdding(deps.sql, { ...at, now });
+  }
+  return "done";
 }
 
 /** The customers among these whom Square's own subscriptions still charge. */
@@ -409,16 +423,15 @@ async function applyOne(
   return outcome === "taken" ? "changed" : "done";
 }
 
-/** Up to `count` of the press's people; adding is done when nobody is left. */
-async function addSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, count: number): Promise<Step> {
+/** The press's people while the budget lasts; adding is done when nobody is left. */
+async function addSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, budget: Budget): Promise<Step> {
   const at = { gymId: run.gymId, environment: run.environment, runId: run.runId };
   let after: string | null = null;
-  let left = count;
-  while (left > 0) {
-    const batch = await members.toApply(deps.sql, { ...at, limit: Math.min(left, SQUARE_MEMBERS_WORK.addsAtOnce), after });
+  while (budget.left > 0) {
+    const batch = await members.toApply(deps.sql, { ...at, limit: Math.min(budget.left, SQUARE_MEMBERS_WORK.addsAtOnce), after });
     if (batch.length === 0) break;
     after = batch[batch.length - 1]?.entryId ?? after;
-    left -= batch.length;
+    budget.left -= batch.length;
     const outcomes = await Promise.all(
       batch.map(async (p) => {
         // Changed since the box showed them, or no longer current: left for the next look.
@@ -465,7 +478,7 @@ async function customersWith(ready: Ready, country: ReturnType<typeof readCountr
 
 /** A few current records not in Square looked up, each linked, added, or left out as the check would; the
  *  list counted as looked at once nobody is due. */
-async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, count: number): Promise<{ step: Step; looked: number; added: number; linked: number }> {
+async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, budget: Budget): Promise<{ step: Step; looked: number; added: number; linked: number }> {
   const environment = run.environment;
   const now = deps.now();
   const gym = await repo.readGym(deps.sql, run.gymId);
@@ -473,10 +486,17 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, c
   const country = readCountry(gym.country);
   const version = await members.listVersionOf(deps.sql, run.gymId);
   const lookedBefore = new Date(now.getTime() - SQUARE_MEMBERS_WORK.lookAgainMs);
-  const due = await members.recordsDue(deps.sql, { gymId: run.gymId, environment, accountId: run.accountId, lookedBefore, limit: count });
+  const limit = Math.min(SQUARE_MEMBERS_WORK.looksByWorker, budget.left);
+  const due = await members.recordsDue(deps.sql, { gymId: run.gymId, environment, accountId: run.accountId, lookedBefore, limit });
   const tally = { looked: 0, added: 0, linked: 0 };
   let busy = false;
+  let stopped = false;
   for (const person of due) {
+    if (budget.left <= 0) {
+      stopped = true;
+      break;
+    }
+    budget.left -= (person.email === null ? 0 : 1) + (person.phone === null ? 0 : 1);
     const found = await customersWith(ready, country, person);
     if (found === null) {
       await members.setUnanswered(deps.sql, { gymId: run.gymId, environment, runId: run.runId, now: deps.now() });
@@ -498,6 +518,7 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, c
     const mine = plan.get(person.entryId) ?? { kind: "add" as const };
     let outcome: members.Outcome | null = null;
     if (mine.kind === "ours" || mine.kind === "link" || mine.kind === "add") {
+      if (mine.kind === "add") budget.left -= 1;
       const made = await applyOne(deps, ready, run.gymId, {
         entryId: person.entryId,
         decision: mine.kind,
@@ -524,7 +545,7 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, c
     await members.writeLook(deps.sql, { gymId: run.gymId, environment, runId: run.runId, entryId: person.entryId, plan: mine, digest: person.digest, outcome, now: deps.now() });
     tally.looked += 1;
   }
-  if (due.length < count) {
+  if (!stopped && due.length < limit) {
     const next = busy ? 60_000 : SQUARE_MEMBERS_WORK.lookAgainMs;
     await members.caughtUp(deps.sql, { gymId: run.gymId, environment, runId: run.runId, version, lookDueAt: new Date(now.getTime() + next) });
     return { step: "done", ...tally };
@@ -538,6 +559,7 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, c
  *  or people a gym, then the lease let go. `gymIds`: only these gyms, for a test; production passes null. */
 export async function processSquareMembers(deps: PaymentsDeps, square: SquareSettings, gymIds: readonly string[] | null = null): Promise<SquareMembersRun> {
   const tally: SquareMembersRun = { pages: 0, added: 0, linked: 0, looked: 0, unanswered: 0 };
+  const budget: Budget = { left: SQUARE_MEMBERS_WORK.callsByWorker };
   const now = deps.now();
   const runs = await members.claimDueRuns(deps.sql, {
     environment: square.environment,
@@ -548,18 +570,21 @@ export async function processSquareMembers(deps: PaymentsDeps, square: SquareSet
   });
   for (const run of runs) {
     try {
+      // The minute's calls are spent: this gym's lease is let go, and it is taken on the next minute.
+      if (budget.left <= 0) continue;
       const ready = await readyFor(deps, run.gymId);
       if (ready === null || ready.row.accountId !== run.accountId || !readsSubscriptions(ready.row)) continue;
       let step: Step = "stopped";
       // Whether an open box has something new to read: a check or adding moved on, or somebody was looked at.
       let news = true;
       if (run.state === "checking") {
-        step = await checkSome(deps, ready, run, SQUARE_MEMBERS_WORK.pagesByWorker);
-        tally.pages += 1;
+        const before = budget.left;
+        step = await checkSome(deps, ready, run, budget);
+        tally.pages += before - budget.left;
       } else if (run.state === "adding") {
-        step = await addSome(deps, ready, run, SQUARE_MEMBERS_WORK.addsByWorker);
+        step = await addSome(deps, ready, run, budget);
       } else if (run.automatic) {
-        const look = await lookSome(deps, ready, run, SQUARE_MEMBERS_WORK.looksByWorker);
+        const look = await lookSome(deps, ready, run, budget);
         step = look.step;
         news = look.looked > 0;
         tally.looked += look.looked;

@@ -21,6 +21,7 @@ import { processTerminalPayments } from "./terminalPayments.js";
 import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
 import { SQUARE_PAYMENT_EVENTS, lookBeforeCharging, sweepSquarePayments, takeInSquarePayment, type SweepRun } from "./squareAppPayments.js";
 import { processSquareMembers, type SquareMembersRun } from "./squareMembers.js";
+import { forgetListing } from "./squareMembersRepo.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
 
@@ -86,6 +87,7 @@ async function checkConnection(deps: PaymentsDeps, square: SquareSettings, row: 
   }
   await deps.sql.begin(async (tx) => {
     if (!(await repo.markRemoved(tx, row.gymId, square.environment, row.connectedAt, deps.now()))) return;
+    await forgetListing(tx, row.gymId, square.environment);
     await insertAudit(tx, {
       actorUserId: null,
       gymId: row.gymId,
