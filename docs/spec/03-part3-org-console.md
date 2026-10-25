@@ -4283,6 +4283,22 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   with Set tax on memberships; and picking the member on each sale, which staff can skip. A payment Square
   charged more than staff typed waits ("square_tax"). A Terminal checkout asks for the bill's total,
   which Square takes as including tax, so Square's own taxes never change it.
+  *As built, 18d-iii-b-ii-a (Kd, 2026-10-25: "GO"; `rulings/2026-10-25-18d-iii-b-ii-a.md`):* **Payments to match**, a
+  page in the menu beside Failed payments for staff who keep the list and record payments, lists every payment
+  that waits, newest first, as short facts: when, what with, Square's own name, email and phone for a customer
+  linked to nobody here, why it waits and what to do, and whether it holds a card on file. **Match** opens a box
+  under the row: who paid (filled in where the app can tell: the record Square's customer is, or the one current
+  record with the same email, or the same phone with its country code; never by name), which bill (theirs, or of
+  anybody they pay for; the one of exactly that amount ticked), and how much where Square didn't say (items in
+  the sale, a sale paid in parts). Square is asked about the payment first: one it has refunded since, or no
+  longer shows as taken, never goes on a bill. Where Square added tax on top, the part staff entered goes on the
+  bill. It is recorded by Record payment's own step as Square Point of Sale, once (the press's key; the gym's
+  lock; never while the membership has money out on the Terminal or the card on file). **Not a bill payment**
+  (a shop sale or anything else, or already recorded on a bill by hand) takes it off the list, with Undo. **No
+  member is charged twice:** while a payment of a person's waits (or of whoever pays for them), their card on
+  file is charged by nobody, the app or staff; their page says so with Match it, and Failed payments' Try again
+  sends there. Overview has the count. A payment with no customer at a Square location two gyms here use is
+  kept for neither; each is told how many while the location is shared, with the button to choose another.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the
