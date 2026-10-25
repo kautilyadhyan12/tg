@@ -11,7 +11,7 @@ import {
   squareAppDecision,
   squareAppLinesOf,
   squareOrderAddsOnTop,
-  squareTaxAddsDetail,
+  squareTaxName,
   squareTaxNames,
   squareTaxesToOpen,
   taxesOnTypedAmounts,
@@ -235,16 +235,16 @@ describe("the check's example and names", () => {
     expect(squareTaxNames([{ name: "GST", percentage: "5" }, { name: "PST", percentage: "7" }, { name: "City", percentage: "1" }])).toBe("GST (5%), PST (7%) and City (1%)");
   });
 
-  it("says what Square's taxes do to a bill, with the example and what Square would charge", () => {
-    expect(squareTaxAddsDetail("Sales Tax (8.25%)", "$45.00", "$48.71")).toBe(
-      "Square adds Sales Tax (8.25%) to amounts you type in. For a $45.00 bill, the member would be charged $48.71. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice.",
-    );
+  it("names one tax with its rate, or by its name alone where Square gives none", () => {
+    expect(squareTaxName({ name: "SALES TAX 2", percentage: "9.0" })).toBe("SALES TAX 2 (9.0%)");
+    expect(squareTaxName({ name: "City tax", percentage: null })).toBe("City tax");
+    expect(squareTaxName({ name: "City tax", percentage: "" })).toBe("City tax");
   });
 
   it("says which tax to open in Square's steps: its name, or each of them", () => {
     expect(squareTaxesToOpen([{ name: "Sales Tax" }])).toBe("[Sales Tax]");
-    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }])).toBe("each tax, [GST] and [PST],");
-    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }, { name: "City" }])).toBe("each tax, [GST], [PST] and [City],");
+    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }])).toBe("each tax, [GST] and [PST]");
+    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }, { name: "City" }])).toBe("each tax, [GST], [PST] and [City]");
     expect(squareTaxesToOpen([])).toBe("the tax");
     // A bracket in Square's own name for a tax never closes the label early.
     expect(squareTaxesToOpen([{ name: "City [Austin] tax" }])).toBe("[City Austin tax]");
