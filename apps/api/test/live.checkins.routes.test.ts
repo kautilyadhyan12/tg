@@ -104,11 +104,14 @@ const ADDED = { what: "visits", change: "added" };
 const REMOVED = { what: "visits", change: "removed" };
 const BOARD = { what: "leaderboard", change: "counted" };
 const SWITCHED = { what: "leaderboard", change: "switched" };
+const PEOPLE = { what: "people" };
 
 d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   let app: App | undefined;
   let base = "";
+  /** The server's limits, so a test can use one up. */
+  const appRedis = createMemoryRedis();
   const api = (): App => {
     if (app === undefined) throw new Error("beforeAll did not build the app");
     return app;
@@ -119,6 +122,9 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
     await sql`DELETE FROM gym_attendance_removed WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_attendance WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_checkin_devices WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_member_list_entries WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_member_list_fields WHERE gym_id IN (${mine()})`;
+    await sql`DELETE FROM gym_member_lists WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mine()})`;
     await sql`DELETE FROM gym_join_applications WHERE gym_id IN (${mine()})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mine()})`;
@@ -131,7 +137,7 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
     await sql`DELETE FROM plans WHERE code = ${PLAN}`;
   };
 
-  const send = (method: "GET" | "POST" | "PUT" | "DELETE", path: string, cookies: Cookies, payload?: unknown, headers: Record<string, string> = {}) =>
+  const send = (method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, cookies: Cookies, payload?: unknown, headers: Record<string, string> = {}) =>
     api().inject({
       method,
       url: path,
@@ -245,7 +251,7 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
       sendPasswordResetEmail: () => Promise.resolve(),
       sendSignInCodeEmail: () => Promise.resolve(),
     };
-    app = await buildApp(loadConfig(baseEnv), { redis: createMemoryRedis(), emailSender: quietEmail, live: { heartbeatMs: 60_000 } });
+    app = await buildApp(loadConfig(baseEnv), { redis: appRedis, emailSender: quietEmail, live: { heartbeatMs: 60_000 } });
     base = await app.listen({ port: 0, host: "127.0.0.1" });
   }, T);
 
@@ -431,6 +437,87 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
       await settle();
       expect(heard(line)).toEqual([SWITCHED, SWITCHED, BOARD]);
       line.close();
+    },
+    T,
+  );
+
+  it(
+    "a visit fix the server refuses tells nothing: a member, another gym's visit, and staff over their limit",
+    async () => {
+      const gym = await makeBusiness("Live Checkins Refused");
+      const other = await makeBusiness("Live Checkins Refused B");
+      const dee = await makeUser("dee");
+      await makeMember(gym.org, gym.owner, dee);
+      expect((await checkIn(gym, dee)).statusCode).toBe(200);
+      const theirs = await makeUser("theirs");
+      await makeMember(other.org, other.owner, theirs);
+      expect((await checkIn(other, theirs)).statusCode).toBe(200);
+      const [visit] = await sql<{ id: string }[]>`SELECT id FROM gym_attendance WHERE gym_id = ${gym.gymId}`;
+      const [otherVisit] = await sql<{ id: string }[]>`SELECT id FROM gym_attendance WHERE gym_id = ${other.gymId}`;
+      const line = await openLine(base, gym.gymId, gym.owner.cookies);
+      const [yesterday] = await sql<{ day: string }[]>`SELECT ((now() AT TIME ZONE 'America/Chicago')::date - 1)::text AS day`;
+
+      // A member of the gym, without the tick.
+      expect((await post(`/v1/orgs/${gym.gymId}/attendance/visits`, { pick: { userId: dee.userId }, day: yesterday?.day }, dee.cookies)).statusCode).not.toBe(200);
+      expect((await send("DELETE", `/v1/orgs/${gym.gymId}/attendance/visits/${visit?.id ?? ""}`, dee.cookies)).statusCode).not.toBe(200);
+      // Another gym's visit, through this gym's address.
+      expect((await send("DELETE", `/v1/orgs/${gym.gymId}/attendance/visits/${otherVisit?.id ?? ""}`, gym.owner.cookies)).statusCode).toBe(404);
+      // The owner over the hour's limit of fixes.
+      for (let i = 0; i < 300; i += 1) await appRedis.incrWithTtl(`rl:checkin_visit_fix:id:${gym.owner.userId}`, 3600);
+      expect((await send("DELETE", `/v1/orgs/${gym.gymId}/attendance/visits/${visit?.id ?? ""}`, gym.owner.cookies)).statusCode).toBe(429);
+      expect((await post(`/v1/orgs/${gym.gymId}/attendance/visits`, { pick: { userId: dee.userId }, day: yesterday?.day }, gym.owner.cookies)).statusCode).toBe(429);
+      await settle();
+      expect(heard(line)).toEqual([]);
+      // The visit is still there.
+      expect((await sql`SELECT 1 FROM gym_attendance WHERE id = ${visit?.id ?? ""}`).length).toBe(1);
+      line.close();
+    },
+    T,
+  );
+
+  it(
+    "a person changed tells the gym's people news: on its list, joining, removed, and their own name; to that gym only, and never for a refused change",
+    async () => {
+      const gym = await makeBusiness("Live People A");
+      const elsewhere = await makeBusiness("Live People B");
+      const line = await openLine(base, gym.gymId, gym.owner.cookies);
+      const lineB = await openLine(base, elsewhere.gymId, elsewhere.owner.cookies);
+
+      // Added to the list, renamed, and taken off it.
+      const added = await post(`/v1/orgs/${gym.gymId}/member-list/entries`, { fullName: "Rita Record", email: "livec-p-rita@example.com" }, gym.owner.cookies);
+      expect([200, 201], added.body).toContain(added.statusCode);
+      const entryId = (JSON.parse(added.body) as { entry: { entryId: string } }).entry.entryId;
+      await until(() => heard(line).length >= 1);
+      const renamed = await send("PATCH", `/v1/orgs/${gym.gymId}/member-list/entries/${entryId}`, gym.owner.cookies, { fullName: "Rita Renamed" });
+      expect(renamed.statusCode, renamed.body).toBe(200);
+      await until(() => heard(line).length >= 2);
+      // A member of the gym cannot rename anybody: refused, nothing told.
+      const fern = await makeUser("fern");
+      await makeMember(gym.org, gym.owner, fern);
+      await until(() => heard(line).length >= 3);
+      expect((await send("PATCH", `/v1/orgs/${gym.gymId}/member-list/entries/${entryId}`, fern.cookies, { fullName: "Not Allowed" })).statusCode).not.toBe(200);
+      await settle();
+      expect(heard(line)).toEqual([PEOPLE, PEOPLE, PEOPLE]);
+      const off = await send("DELETE", `/v1/orgs/${gym.gymId}/member-list/entries/${entryId}`, gym.owner.cookies);
+      expect(off.statusCode, off.body).toBe(200);
+      await until(() => heard(line).length >= 4);
+
+      // Their own name: the gym they belong to hears it, the other does not.
+      expect((await send("PATCH", "/v1/users/me", fern.cookies, { displayName: "Fern Renamed" })).statusCode).toBe(200);
+      await until(() => heard(line).length >= 5);
+      // Removed from the gym by staff.
+      const removed = await send("DELETE", `/v1/orgs/${gym.gymId}/members/${fern.userId}`, gym.owner.cookies);
+      expect(removed.statusCode, removed.body).toBe(200);
+      await until(() => heard(line).length >= 6);
+      // A name changed after they left reaches no gym of theirs.
+      expect((await send("PATCH", "/v1/users/me", fern.cookies, { displayName: "Fern Left" })).statusCode).toBe(200);
+      await settle();
+      expect(heard(line)).toEqual([PEOPLE, PEOPLE, PEOPLE, PEOPLE, PEOPLE, PEOPLE]);
+      expect(heard(lineB)).toEqual([]);
+      expect(line.raw).not.toContain("Rita");
+      expect(line.raw).not.toContain(fern.userId);
+      line.close();
+      lineB.close();
     },
     T,
   );
