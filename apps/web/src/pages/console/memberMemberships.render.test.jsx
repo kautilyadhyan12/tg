@@ -1989,6 +1989,24 @@ describe("live updates on a person's page (Stage 4 item 18)", () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('a change made here tells the page behind once: its own news, read back, changes nothing on screen', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);
+    orgService.getHeldMemberships.mockResolvedValueOnce(answer([gold])).mockResolvedValue(answer([frozen]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([frozen]));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { onChanged }));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    expect(await (await boxSoon()).findByText('Gold Monthly is frozen.')).toBeTruthy();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    // The server tells every open line, this one too.
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
   it('tells the page behind nothing when a read after news finds the same answer', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
     const onChanged = vi.fn();

@@ -236,20 +236,18 @@ export default function MemberMemberships({
   /** Counts each opening of a Record payment box: the Terminals and the card on file are read again
    *  then, so a card saved in Card on file a moment before is offered (18d-iii-i). */
   const [payOpened, setPayOpened] = useState(0);
-  /** The server's last answer, kept as it arrives: what a read after live news is compared with
-   *  (Stage 4 item 18). Kept here, not after the page draws, so news that comes before the page has
-   *  drawn the first answer still knows what changed. */
+  /** The server's answer as the page's own reads got it, kept as it arrives: what a read after live
+   *  news is compared with (Stage 4 item 18), so news that comes before the page has drawn the
+   *  first answer still knows what changed. */
   const lastAnswer = useRef(null);
-  const keepAnswer = (next) => {
-    lastAnswer.current = JSON.stringify(next);
-    setHeld(next);
-  };
 
   useEffect(() => {
     let live = true;
     orgService.getHeldMemberships(gymId, entryId).then(
       (res) => {
-        if (live) keepAnswer({ entryId, ...res.data });
+        if (!live) return;
+        lastAnswer.current = JSON.stringify({ entryId, ...res.data });
+        setHeld({ entryId, ...res.data });
       },
       (err) => {
         if (live) setLoadError(errorText(err, "We couldn't load this person's memberships."));
@@ -267,6 +265,11 @@ export default function MemberMemberships({
   // when staff come back to a tab that had no line. An answer that changed tells the person's page
   // and the Members list behind it too, as a change made here does, so the two never disagree.
   const readSeq = useRef(0);
+  /** What is on screen: a save made here is drawn already, and its own news changes nothing. */
+  const shownNow = useRef(null);
+  useEffect(() => {
+    shownNow.current = shown;
+  });
   /** Why the server will not open the line: said under the heading until it opens. */
   const [liveRefused, setLiveRefused] = useState(null);
   useLiveNews(gymId, (message) => {
@@ -282,9 +285,12 @@ export default function MemberMemberships({
       (res) => {
         if (readSeq.current !== asked) return;
         const next = { entryId, ...res.data };
+        const now = JSON.stringify(next);
         const before = lastAnswer.current;
-        keepAnswer(next);
-        if (before !== null && before !== lastAnswer.current) onChanged?.();
+        lastAnswer.current = now;
+        setHeld(next);
+        const drawn = shownNow.current === null ? null : JSON.stringify(shownNow.current);
+        if (before !== null && before !== now && drawn !== now) onChanged?.();
       },
       () => undefined,
     );
@@ -433,7 +439,7 @@ export default function MemberMemberships({
     setRefusal(null);
     try {
       const res = await work();
-      keepAnswer({ entryId: asked, ...res.data });
+      setHeld({ entryId: asked, ...res.data });
       // A membership just given is signed there and then, where the business asks for the
       // agreement its line of the price list uses (18u-i, 18u-ii-a): its box opens under it, with Sign later.
       if (what === 'give') {
