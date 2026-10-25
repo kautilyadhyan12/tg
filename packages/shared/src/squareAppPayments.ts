@@ -214,14 +214,16 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
 
 /** Settings → Payments: Square's own app, Square Point of Sale (on a phone or tablet with a Square Reader,
  *  or a Square Register or Terminal used on its own), as a checklist a gym that opened last week can
- *  follow (Kd's click-through, 2026-10-25): each line says whether it is done, and the steps show only
- *  when something needs fixing. The menus are Square's own, read 2026-10-25: help article 5061 (the
- *  website's Sales taxes, "Apply tax to custom amounts", the app's "Custom amounts", and Actions → Disable
- *  tax, which stops the tax on every sale), the Square Champion's answer of 2025-02-10 in Square's community
- *  ("Click the existing sales tax to open its settings", then Save at the upper right), and Square's post
- *  "Add a customer at checkout" of 2023-08-21. Kd's click-through found "Open" read as tick and Disable.
- *  Before checkout gives staff the button to add a customer before the customer has paid; it does not change
- *  the checkout flow (Square's product manager, 2022-05-03), so Square is never said to ask by itself. */
+ *  follow (Kd's click-through, 2026-10-25): each line says whether it is done. A word in [brackets] is a
+ *  label as it reads on a screen, Square's or this app's, and is drawn as one (the console's ScreenWords),
+ *  so a step reads as a thing to find and press (Kd: "SHOULD BE LIKE BUTTON WITH A DIFFERENT COLOUR").
+ *  The menus are Square's own, read 2026-10-25: help article 5061 (the website's Sales taxes, "Apply tax to
+ *  custom amounts", the app's "Custom amounts", and Actions → Disable tax, which stops the tax on every
+ *  sale), the Square Champion's answer of 2025-02-10 in Square's community ("Click the existing sales tax to
+ *  open its settings", then Save at the upper right), and Square's post "Add a customer at checkout" of
+ *  2023-08-21. Before checkout gives staff the button to add a customer before the customer has paid; it
+ *  does not change the checkout flow (Square's product manager, 2022-05-03), so Square is never said to ask
+ *  by itself, and staff can skip it. */
 export const SQUARE_APP_WORDS = {
   heading: "Square Point of Sale",
   how: "Square's app on a phone or tablet, with a Square Reader. You start the payment in Square's app, and it comes to the member's bill here afterwards.",
@@ -232,10 +234,17 @@ export const SQUARE_APP_WORDS = {
   taxAddsTitle: "Square adds tax on top",
   howToFix: "How to fix",
   hideSteps: "Hide the steps",
-  /** `which`: the tax's name, or "each of them (A and B)". */
-  taxFixWebsite: (which: string): string => `On Square's website: Settings → Account & Settings → Payments → Sales taxes. Click ${which} to open it. Turn off Apply tax to custom amounts, then press Save at the top right.`,
-  taxFixApp: (which: string): string => `Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Tap ${which} and turn off Custom amounts.`,
-  taxFixKeeps: "Your shop items keep their tax. Don't use Disable tax: that takes it off them too.",
+  fixSquareTitle: "1. Turn off Square's tax on amounts you type in",
+  fixSquareWhy: "That's how a membership bill is charged in Square, and the bill already includes the tax set here.",
+  /** `which`: the tax's name in brackets, or "each tax, [A] and [B]," (`squareTaxesToOpen`). */
+  taxFixWebsite: (which: string): string =>
+    `On Square's website: [Settings] → [Account & Settings] → [Payments] → [Sales taxes]. Click ${which} to open it. Turn off [Apply tax to custom amounts], then press [Save] at the top right.`,
+  taxFixApp: (which: string): string => `Or in the Square Point of Sale app: [More] → [Settings] → [Checkout] → [Sales taxes]. Tap ${which} and turn off [Custom amounts].`,
+  taxFixKeeps: "Items you ring up from your Square item list keep their tax. Don't use [Disable tax]: that takes it off them too.",
+  fixHereTitle: "2. Set the same tax on your memberships here",
+  fixHereUnset: "Then each bill includes it, and the member pays it once.",
+  fixHereSet: "Tax on memberships is already set here. Check it's the same rate as Square's.",
+  seeTaxButton: "See tax on memberships",
   taxUnknownTitle: "Couldn't check Square's tax settings",
   taxUnknownDetail: "Square didn't answer just now.",
   checkAgain: "Check again",
@@ -246,14 +255,15 @@ export const SQUARE_APP_WORDS = {
   setTaxButton: "Set tax on memberships",
   setTaxWho: "The owner, or a manager who can change prices, can set it in Memberships.",
   pickTitle: "Pick the member on each sale",
-  pickDetail: "In Square Point of Sale, tap Add a customer and choose the member before you charge.",
+  pickDetail: "In Square Point of Sale, tap [Add a customer] and choose the member before you charge.",
+  pickSkip: "Square lets staff skip this. Then the payment won't go on the bill by itself, and you record it by hand.",
   pickHow: "Can't find Add a customer?",
-  pickSteps: "In Square Point of Sale: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.",
+  pickSteps: "In Square Point of Sale: [More] → [Settings] → [Checkout] → [Customer management]. Turn it on, then under [Collect customer information], turn on [Before checkout].",
   cardSaved: "Members with a card on file here, picked as the customer: the payment goes on their bill by itself.",
-  others: "Anyone else, or a sale with no member picked: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.",
+  others: "Anyone else, or a sale with no member picked: Square takes the payment as usual. Then, on their bill here, press [Record payment] and choose [Card at the desk].",
   items: "Shop items rung up from your Square item list never go on a bill.",
   needsAllowTitle: "Square needs your permission first",
-  needsAllow: "Press Reconnect Square, then Allow on Square's page. Nothing else changes.",
+  needsAllow: "Press [Reconnect Square], then [Allow] on Square's page. Nothing else changes.",
   ownerOnly: (gym: string): string => `The owner of ${gym} needs to reconnect Square first.`,
   /** The server's answers to a void. */
   void_square_app: "This was taken in Square Point of Sale. To give the money back, refund it in your Square Dashboard, then note the refund here. If it's on the wrong bill, press Not this bill.",
@@ -266,9 +276,11 @@ export function squareTaxAddsDetail(names: string, bill: string, charged: string
   return `Square adds ${names} to amounts you type in. For a ${bill} bill, the member would be charged ${charged}. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice.`;
 }
 
-/** The tax to open in Square's steps: its own name, or "each of them (Sales Tax and City Tax)". */
+/** The tax to open in Square's steps, as Square's own label: "[Sales Tax]", or "each tax, [Sales Tax] and
+ *  [City Tax]," (Click … to open it). A bracket in a tax's own name is left out, so it never reads as the end
+ *  of the label. */
 export function squareTaxesToOpen(taxes: readonly { name: string }[]): string {
-  const names = taxes.map((t) => t.name);
+  const names = taxes.map((t) => `[${t.name.replace(/[[\]]/g, "")}]`);
   if (names.length < 2) return names[0] ?? "the tax";
-  return `each of them (${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""})`;
+  return `each tax, ${names.slice(0, -1).join(", ")} and ${names[names.length - 1] ?? ""},`;
 }

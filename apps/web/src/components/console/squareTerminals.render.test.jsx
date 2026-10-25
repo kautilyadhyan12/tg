@@ -76,7 +76,12 @@ describe('connected in the US, Canada or Australia', () => {
   it('the owner pairs a Terminal: the code and the steps, waiting, then the Terminal by its serial number', async () => {
     render(<Holder start={payments(none())} />);
     // What a Terminal is, and that the payment starts here: never confused with Square Point of Sale.
-    expect(screen.getByText("Square's card machine. You start the payment here: on a member's bill, press Record payment and choose Card on Terminal. It charges exactly the bill's amount, and the bill is paid the moment they pay.")).toBeTruthy();
+    const how = screen.getByText(
+      (_, el) => el !== null && el.hasAttribute('data-words') && el.textContent === "Square's card machine. You start the payment here: on a member's bill, press Record payment and choose Card on Terminal. It charges exactly the bill's amount, and the bill is paid the moment they pay.",
+    );
+    // This app's own buttons, drawn as the labels they are.
+    expect(within(how).getByText('Record payment', { selector: '.c-ui' })).toBeTruthy();
+    expect(within(how).getByText('Card on Terminal', { selector: '.c-ui' })).toBeTruthy();
     expect(screen.getByText('No Terminals paired yet.')).toBeTruthy();
     orgService.pairSquareTerminal.mockResolvedValue({ data: { code: 'AFZEFB', pairBy: '2026-10-21T15:05:00.000Z', payments: payments(none({ pairing: { id: PAIRING_ID, pairBy: '2026-10-21T15:05:00.000Z' } })) } });
     orgService.checkSquarePairing

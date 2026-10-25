@@ -4275,9 +4275,10 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   more than an hour is looked up among the location's payments, never sent again.
   Settings → Payments shows it as a checklist (Kd's click-through, 2026-10-25): whether Square adds a
   tax of its own to typed amounts, read from the gym's own Square taxes each time it opens
-  (ITEMS_READ), with what that does to a $45.00 bill and Square's steps to turn off "Apply tax to
-  custom amounts" (never Disable tax, which takes the tax off items too); whether any membership has
-  tax set here, with Set tax on memberships; and picking the member on each sale. A payment Square
+  (ITEMS_READ), with what that does to a $45.00 bill and, at once, the two steps: Square's own, its
+  labels drawn as labels, to turn off "Apply tax to custom amounts" (never Disable tax, which takes the
+  tax off items too), then the same tax on memberships here; whether any membership has tax set here,
+  with Set tax on memberships; and picking the member on each sale, which staff can skip. A payment Square
   charged more than staff typed waits ("square_tax"). A Terminal checkout asks for the bill's total,
   which Square takes as including tax, so Square's own taxes never change it.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.

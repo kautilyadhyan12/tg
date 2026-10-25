@@ -133,6 +133,9 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
   const checked = (taxes, over = {}) => ({ data: { check: { taxes, currency: 'USD', membershipTax: true, canSetTax: true, ...over } } });
   const SALES_TAX = { state: 'adds', taxes: [{ name: 'Sales Tax', percentage: '8.25' }], exampleMinor: 4500, chargedMinor: 4871 };
   const step = (box, id) => within(box.getByTestId(id));
+  // A sentence whose screen labels are drawn as labels: found whole, by what it says.
+  const said = (scope, text) => scope.getByText((_, el) => el !== null && el.hasAttribute('data-words') && el.textContent === text);
+  const label = (line, text) => within(line).getByText(text, { selector: '.c-ui' });
 
   it('says what it is apart from the Terminal, and ticks each line that is done', async () => {
     orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
@@ -144,20 +147,26 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     expect(step(box, 'square-tax-step').getByText('The member pays exactly what the bill says.')).toBeTruthy();
     expect(step(box, 'square-tax-step').getByLabelText('Done')).toBeTruthy();
     expect(step(box, 'square-member-tax-step').getByText('Tax on memberships is set here')).toBeTruthy();
-    expect(step(box, 'square-pick-step').getByText('In Square Point of Sale, tap Add a customer and choose the member before you charge.')).toBeTruthy();
+    const pick = step(box, 'square-pick-step');
+    label(said(pick, 'In Square Point of Sale, tap Add a customer and choose the member before you charge.'), 'Add a customer');
+    // Picking is up to staff, and what skipping it means is said where it is asked.
+    expect(pick.getByText("Square lets staff skip this. Then the payment won't go on the bill by itself, and you record it by hand.")).toBeTruthy();
     // The setting that gives staff the button, only when asked for; Square is never said to ask by itself.
-    expect(box.queryByText(/turn on Before checkout/)).toBeNull();
+    expect(box.queryByText(/turn on/)).toBeNull();
     expect(box.queryByText(/ask every time/)).toBeNull();
-    fireEvent.click(step(box, 'square-pick-step').getByRole('button', { name: "Can't find Add a customer?" }));
-    expect(box.getByText('In Square Point of Sale: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.')).toBeTruthy();
-    // Who it works for, said plainly: everybody else is charged as usual.
+    fireEvent.click(pick.getByRole('button', { name: "Can't find Add a customer?" }));
+    const setting = said(box, 'In Square Point of Sale: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.');
+    for (const name of ['More', 'Settings', 'Checkout', 'Customer management', 'Collect customer information', 'Before checkout']) label(setting, name);
+    // Who it works for, said plainly: everybody else is charged as usual, and recorded by hand.
     expect(box.getByText('Members with a card on file here, picked as the customer: the payment goes on their bill by itself.')).toBeTruthy();
-    expect(box.getByText('Anyone else, or a sale with no member picked: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.')).toBeTruthy();
+    const others = said(box, 'Anyone else, or a sale with no member picked: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.');
+    label(others, 'Record payment');
+    label(others, 'Card at the desk');
     expect(box.getByText('Shop items rung up from your Square item list never go on a bill.')).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
   });
 
-  it('Square adds tax on top: says what it does to a $45.00 bill, the steps on Square\'s website and in the app when asked, and Check again', async () => {
+  it("Square adds tax on top: what it does to a $45.00 bill, then the two steps at once, Square's labels drawn as labels, and Check again", async () => {
     orgService.getSquareAppCheck.mockResolvedValue(checked(SALES_TAX, { membershipTax: false }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
@@ -167,31 +176,58 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     expect(
       tax.getByText("Square adds Sales Tax (8.25%) to amounts you type in. For a $45.00 bill, the member would be charged $48.71. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice."),
     ).toBeTruthy();
-    expect(tax.queryByText(/On Square's website/)).toBeNull();
+    // Something is wrong, so the steps are open, not hidden behind a press.
+    expect(tax.getByRole('button', { name: 'Hide the steps' }).getAttribute('aria-expanded')).toBe('true');
+    const inSquare = within(tax.getByTestId('square-fix-in-square'));
+    expect(inSquare.getByText("1. Turn off Square's tax on amounts you type in")).toBeTruthy();
+    expect(inSquare.getByText("That's how a membership bill is charged in Square, and the bill already includes the tax set here.")).toBeTruthy();
+    const website = said(inSquare, "On Square's website: Settings → Account & Settings → Payments → Sales taxes. Click Sales Tax to open it. Turn off Apply tax to custom amounts, then press Save at the top right.");
+    for (const name of ['Settings', 'Account & Settings', 'Payments', 'Sales taxes', 'Sales Tax', 'Apply tax to custom amounts', 'Save']) label(website, name);
+    const app = said(inSquare, 'Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Tap Sales Tax and turn off Custom amounts.');
+    for (const name of ['More', 'Settings', 'Checkout', 'Sales taxes', 'Sales Tax', 'Custom amounts']) label(app, name);
+    // Disable tax, beside the tax on Square's page, would take the tax off shop items too.
+    label(said(inSquare, "Items you ring up from your Square item list keep their tax. Don't use Disable tax: that takes it off them too."), 'Disable tax');
+    // The tax set here is the fix's second step, with the button that opens the exact place, and no line of its own too.
+    const here = within(tax.getByTestId('square-fix-here'));
+    expect(here.getByText('2. Set the same tax on your memberships here')).toBeTruthy();
+    expect(here.getByText('Then each bill includes it, and the member pays it once.')).toBeTruthy();
+    expect(here.getByRole('link', { name: 'Set tax on memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
+    // The one thing to press here is a filled button, never drawn like Square's labels.
+    expect(here.getByRole('link', { name: 'Set tax on memberships' }).className).toContain('c-btn-p');
+    expect(box.queryByTestId('square-member-tax-step')).toBeNull();
+    // Hide the steps, and they come back with How to fix.
+    fireEvent.click(tax.getByRole('button', { name: 'Hide the steps' }));
+    expect(tax.queryByTestId('square-fix-in-square')).toBeNull();
     fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
-    expect(tax.getByText("On Square's website: Settings → Account & Settings → Payments → Sales taxes. Click Sales Tax to open it. Turn off Apply tax to custom amounts, then press Save at the top right.")).toBeTruthy();
-    expect(tax.getByText('Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Tap Sales Tax and turn off Custom amounts.')).toBeTruthy();
-    // Disable tax, the button beside the tax on Square's page, would take the tax off shop items too.
-    expect(tax.getByText("Your shop items keep their tax. Don't use Disable tax: that takes it off them too.")).toBeTruthy();
-    // Tax on memberships: not set here, with the button that opens the exact place.
+    expect(tax.getByTestId('square-fix-in-square')).toBeTruthy();
+    // Fixed in Square: Check again reads it once more, the line turns done and tax on memberships is a line of its own.
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false }));
+    fireEvent.click(tax.getByRole('button', { name: 'Check again' }));
+    expect(await box.findByText("Square won't add tax on top")).toBeTruthy();
     const member = step(box, 'square-member-tax-step');
     expect(member.getByText('Tax on memberships: not set here')).toBeTruthy();
     expect(member.getByText('If you charge tax on memberships, set it here, not in Square.')).toBeTruthy();
     expect(member.getByRole('link', { name: 'Set tax on memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
-    // Fixed in Square: Check again reads it once more and the line turns done.
-    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false }));
-    fireEvent.click(tax.getByRole('button', { name: 'Check again' }));
-    expect(await box.findByText("Square won't add tax on top")).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledTimes(2);
   });
 
-  it('two taxes: both named, and "each of them" to open', async () => {
-    orgService.getSquareAppCheck.mockResolvedValue(checked({ ...SALES_TAX, taxes: [{ name: 'GST', percentage: '5' }, { name: 'PST', percentage: '7' }], chargedMinor: 5040 }));
+  it('tax already set here: the second step says to check the rate matches, with the way there', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked(SALES_TAX));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    const here = within(await within(await screen.findByRole('region', BOX)).findByTestId('square-fix-here'));
+    expect(here.getByText("Tax on memberships is already set here. Check it's the same rate as Square's.")).toBeTruthy();
+    expect(here.getByRole('link', { name: 'See tax on memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
+  });
+
+  it('two taxes: both named, both added to the example, and each tax to open', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ ...SALES_TAX, taxes: [{ name: 'Sales Tax', percentage: '8.25' }, { name: 'SALES TAX 2', percentage: '9' }], chargedMinor: 5276 }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const tax = within(await within(await screen.findByRole('region', BOX)).findByTestId('square-tax-step'));
-    expect(await tax.findByText(/^Square adds GST \(5%\) and PST \(7%\) to amounts you type in\. For a \$45\.00 bill, the member would be charged \$50\.40\./)).toBeTruthy();
-    fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
-    expect(tax.getByText(/Click each of them \(GST and PST\) to open it\. Turn off Apply tax to custom amounts/)).toBeTruthy();
+    expect(await tax.findByText(/^Square adds Sales Tax \(8\.25%\) and SALES TAX 2 \(9%\) to amounts you type in\. For a \$45\.00 bill, the member would be charged \$52\.76\./)).toBeTruthy();
+    const website = said(tax, "On Square's website: Settings → Account & Settings → Payments → Sales taxes. Click each tax, Sales Tax and SALES TAX 2, to open it. Turn off Apply tax to custom amounts, then press Save at the top right.");
+    label(website, 'Sales Tax');
+    label(website, 'SALES TAX 2');
+    label(said(tax, 'Or in the Square Point of Sale app: More → Settings → Checkout → Sales taxes. Tap each tax, Sales Tax and SALES TAX 2, and turn off Custom amounts.'), 'SALES TAX 2');
   });
 
   it('staff who cannot set prices are told who can, with no button', async () => {
@@ -201,6 +237,12 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     const member = within(await box.findByTestId('square-member-tax-step'));
     expect(member.getByText('The owner, or a manager who can change prices, can set it in Memberships.')).toBeTruthy();
     expect(member.queryByRole('link')).toBeNull();
+    cleanup();
+    orgService.getSquareAppCheck.mockResolvedValue(checked(SALES_TAX, { membershipTax: false, canSetTax: false }));
+    open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: false } }));
+    const here = within(await within(await screen.findByRole('region', BOX)).findByTestId('square-fix-here'));
+    expect(here.getByText('The owner, or a manager who can change prices, can set it in Memberships.')).toBeTruthy();
+    expect(here.queryByRole('link')).toBeNull();
   });
 
   it("Square can't be asked: says so, with Check again, never that it adds none", async () => {
@@ -221,7 +263,9 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     open(payments({ square: CONNECTED, squareApp: { needsAllow: true } }));
     const box = within(await screen.findByRole('region', BOX));
     expect(box.getByText('Square needs your permission first')).toBeTruthy();
-    expect(box.getByText("Press Reconnect Square, then Allow on Square's page. Nothing else changes.")).toBeTruthy();
+    const line = said(box, "Press Reconnect Square, then Allow on Square's page. Nothing else changes.");
+    label(line, 'Reconnect Square');
+    label(line, 'Allow');
     expect(orgService.getSquareAppCheck).not.toHaveBeenCalled();
     orgService.connectSquare.mockResolvedValue({ data: { url: 'https://connect.squareupsandbox.com/oauth2/authorize?state=again' } });
     fireEvent.click(box.getByRole('button', { name: 'Reconnect Square' }));

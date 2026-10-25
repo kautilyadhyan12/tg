@@ -242,9 +242,11 @@ describe("the check's example and names", () => {
   });
 
   it("says which tax to open in Square's steps: its name, or each of them", () => {
-    expect(squareTaxesToOpen([{ name: "Sales Tax" }])).toBe("Sales Tax");
-    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }])).toBe("each of them (GST and PST)");
-    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }, { name: "City" }])).toBe("each of them (GST, PST and City)");
+    expect(squareTaxesToOpen([{ name: "Sales Tax" }])).toBe("[Sales Tax]");
+    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }])).toBe("each tax, [GST] and [PST],");
+    expect(squareTaxesToOpen([{ name: "GST" }, { name: "PST" }, { name: "City" }])).toBe("each tax, [GST], [PST] and [City],");
     expect(squareTaxesToOpen([])).toBe("the tax");
+    // A bracket in Square's own name for a tax never closes the label early.
+    expect(squareTaxesToOpen([{ name: "City [Austin] tax" }])).toBe("[City Austin tax]");
   });
 });

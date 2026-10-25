@@ -582,6 +582,17 @@
 }
 .c-tc-warn { background: var(--warn-bg); color: var(--warn); }
 
+/* A label as it reads on a screen (a menu, a switch, a button), named in steps to find and press
+   there: Square's Settings, Apply tax to custom amounts, or Record payment here (ScreenWords). */
+.c-ui {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--soft-t);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .c-field {
   display: flex;
   flex-direction: column;
