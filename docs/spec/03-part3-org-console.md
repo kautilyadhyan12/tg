@@ -4309,7 +4309,10 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   app or staff; a sale of shop items for somebody owing at least that much this week waits too; and a gym's
   Square payments are looked at right before its cards on file are charged. Failed payments' Try again sends
   there. Overview has the count; Sell's Today's takings says shop items sold in Square Point of Sale are in
-  Square's own reports. A payment with no customer at a Square location two gyms here use is kept for neither;
+  Square's own reports. Add member, Add membership and Record payment offer **Square Point of Sale** as a way of
+  paying where the gym can take payments there: it records nothing and says whom to pick in Square (the payment
+  then comes to their page, bill ticked) or that it waits in Payments to match. A payment with no customer at a
+  Square location two gyms here use is kept for neither;
   each is told how many while the location is shared, and how to give a gym its own location.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
