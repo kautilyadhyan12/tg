@@ -20,6 +20,24 @@ vi.mock('./MemberNotes', () => ({ default: () => null }));
 // Who pays (18i) has its own tests in `memberPayer.render.test.jsx`.
 vi.mock('./MemberPayer', () => ({ default: () => null }));
 vi.mock('./MemberCard', () => ({ default: () => null }));
+// The gym's open line (Stage 4 item 18) has its own tests in `liveNews.render.test.jsx`; here the test
+// says what the server would tell the page.
+const live = vi.hoisted(() => ({ listeners: new Set() }));
+vi.mock('./liveNews', async () => {
+  const { useEffect, useRef } = await import('react');
+  return {
+    useLiveNews: (gymId, onMessage, active = true) => {
+      const latest = useRef(onMessage);
+      latest.current = onMessage;
+      useEffect(() => {
+        if (!active) return undefined;
+        const listener = { gymId, fn: (message) => latest.current(message) };
+        live.listeners.add(listener);
+        return () => live.listeners.delete(listener);
+      }, [gymId, active]);
+    },
+  };
+});
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -1928,52 +1946,116 @@ describe('Take payment on Failed payments (18d-iii-ii-b)', () => {
   });
 });
 
-describe('a link to sign waiting (18u-ii-b)', () => {
+describe("live updates on a person's page (Stage 4 item 18)", () => {
   const LINK = { sentAt: '2026-10-20T15:00:00.000Z', expiresAt: '2026-11-03T15:00:00.000Z' };
+  const tell = (gymId, message) =>
+    act(() => {
+      for (const listener of live.listeners) if (listener.gymId === gymId) listener.fn(message);
+    });
 
-  it('looks again when staff come back to the window, and says Agreement signed without a refresh', async () => {
+  it('says Agreement signed without a refresh when the server says their memberships changed', async () => {
     const gold = held(1, GOLD, TODAY, true);
     orgService.getHeldMemberships
       .mockResolvedValueOnce(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true }))
       .mockResolvedValue(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
-    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true, onChanged }));
     const b = await boxSoon();
     expect(b.getByText('Agreement not signed')).toBeTruthy();
-    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
-    fireEvent(window, new Event('focus'));
+    tell(GYM, { what: 'memberships', entryId: ADA });
     expect(await b.findByText('Agreement signed')).toBeTruthy();
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
-    // Nothing waits now: coming back again reads nothing.
-    fireEvent(window, new Event('focus'));
-    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
+    expect(orgService.getHeldMemberships).toHaveBeenLastCalledWith(GYM, ADA);
+    // The person's page and the Members list behind it read again too, as after a change made here.
+    expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('does not look again where no link is waiting', async () => {
+  it('news that comes in the same instant as the first answer, before the page has drawn it, still tells the page behind', async () => {
+    const gold = held(1, GOLD, TODAY, true);
+    const first = later();
+    orgService.getHeldMemberships
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true, onChanged }));
+    await act(async () => {
+      first.resolve(answer([{ ...gold, agreementLink: { sentAt: '2026-10-20T15:00:00.000Z', expiresAt: '2026-11-03T15:00:00.000Z' } }], false, { agreementInUse: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      for (const listener of live.listeners) if (listener.gymId === GYM) listener.fn({ what: 'memberships', entryId: ADA });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await (await boxSoon()).findByText('Agreement signed')).toBeTruthy();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('a change made here tells the page behind once: its own news, read back, changes nothing on screen', async () => {
+    const gold = held(1, GOLD, '2026-10-04', true);
+    const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);
+    orgService.getHeldMemberships.mockResolvedValueOnce(answer([gold])).mockResolvedValue(answer([frozen]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([frozen]));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { onChanged }));
+    fireEvent.click(await (await boxSoon()).findByRole('button', { name: 'Freeze' }));
+    fireEvent.click(within(screen.getByTestId('held-ask-freeze')).getByRole('button', { name: 'Freeze' }));
+    expect(await (await boxSoon()).findByText('Gold Monthly is frozen.')).toBeTruthy();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    // The server tells every open line, this one too.
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the page behind nothing when a read after news finds the same answer', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { onChanged }));
+    await boxSoon();
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('says why it has no live updates while the server refuses the line, reads when staff come back, and stops saying it once the line opens', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    tell(GYM, { what: 'refused', message: 'This account has too many console windows open. Close one and try again.' });
+    expect(b.getByTestId('held-live-refused').textContent).toBe('This account has too many console windows open. Close one and try again.');
+    tell(GYM, { what: 'cameBack' });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    tell(GYM, { what: 'ready' });
+    expect(b.queryByTestId('held-live-refused')).toBeNull();
+  });
+
+  it('reads nothing for news about somebody else, and nothing on a timer or when staff come back to the window', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...held(1, GOLD, TODAY, true), agreementLink: LINK }], false, { agreementInUse: true }));
     render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
     await boxSoon();
+    tell(GYM, { what: 'memberships', entryId: '00000000-0000-4000-8000-0000000000bb' });
+    tell('00000000-0000-4000-8000-0000000000cc', { what: 'memberships', entryId: ADA });
     fireEvent(window, new Event('focus'));
+    await new Promise((r) => setTimeout(r, 100));
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(1);
   });
-});
 
-describe('the checks while a link waits stop by themselves (18u-ii-b; Kd, 2026-10-24)', () => {
-  const LINK = { sentAt: '2026-10-20T15:00:00.000Z', expiresAt: '2026-11-03T15:00:00.000Z' };
-  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  it('checks on a timer only for a while after staff were last here, and starts again when they come back', async () => {
-    orgService.getHeldMemberships.mockResolvedValue(answer([{ ...held(1, GOLD, TODAY, true), agreementLink: LINK }], false, { agreementInUse: true }));
-    // A check every 30 ms for 150 ms stands for every 30 seconds for 15 minutes.
-    render(draw(ADA, 'Ada Lovelace', { hasEmail: true, linkCheckMs: 30, linkCheckForMs: 150 }));
-    await boxSoon();
-    const calls = () => orgService.getHeldMemberships.mock.calls.length;
-    await waitFor(() => expect(calls()).toBeGreaterThan(2));
-    await pause(300);
-    const stopped = calls();
-    await pause(300);
-    expect(calls()).toBe(stopped);
-    fireEvent(window, new Event('focus'));
-    expect(calls()).toBe(stopped + 1);
-    await waitFor(() => expect(calls()).toBeGreaterThan(stopped + 2));
+  it('reads again when its line opens after being away, and shows the newest of two reads', async () => {
+    const gold = held(1, GOLD, TODAY, true);
+    const late = later();
+    orgService.getHeldMemberships
+      .mockResolvedValueOnce(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true }))
+      .mockReturnValueOnce(late.promise)
+      .mockResolvedValueOnce(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    const b = await boxSoon();
+    tell(GYM, { what: 'ready' });
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    expect(await b.findByText('Agreement signed')).toBeTruthy();
+    // The first of the two answers arrives last, and is not drawn over the newer one.
+    await act(async () => late.resolve(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true })));
+    expect(b.getByText('Agreement signed')).toBeTruthy();
+    expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(3);
   });
 });

@@ -26,6 +26,7 @@ import { CARD_CHARGE } from "../src/modules/orgs/payments/cardCharges.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account, type CardBehaviour } from "./fakeSquareTerminal.js";
+import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -90,6 +91,8 @@ const weekly = {
 d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
+  /** What the console's open lines were told (Stage 4 item 18). */
+  const hub = recordingHub();
   let clock = new Date();
   let app: App | undefined;
   const api = (): App => {
@@ -245,6 +248,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(config(), {
       squareApi: square.api,
+      live: { hub },
       orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
@@ -513,6 +517,7 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     const body = { requestKey: randomUUID(), periodIndex: pay.periodIndex, amountMinor: pay.leftMinor, cardRef: ref };
     const chargeUrl = `${entryUrl(gym, tess.entryId)}/memberships/${tess.membershipId}/card-charge`;
 
+    const toldSetUp = await hub.toldAbout(gym.id, tess.entryId);
     // A stranger's owner, a trainer here, and a malformed body: refused, nothing at Square.
     expect((await send("POST", `${entryUrl(other, tess.entryId)}/memberships/${tess.membershipId}/card-charge`, other.owner.cookies, body)).statusCode).toBe(404);
     expect((await send("POST", chargeUrl, other.owner.cookies, body)).statusCode).toBe(404);
@@ -523,10 +528,14 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     // A card replaced since the screen read it: refused, nothing at Square.
     expect((await send("POST", chargeUrl, gym.owner.cookies, { ...body, cardRef: `${tess.entryId}:2020-01-01T00:00:00.000Z` })).statusCode).toBe(409);
     expect(square.charged.filter((p) => p.cardId === card)).toEqual([]);
+    // Refused presses tell no open line anything (Stage 4 item 18).
+    expect(await hub.toldAbout(gym.id, tess.entryId)).toBe(toldSetUp);
 
     // The press, twice: one charge, paid, with its receipt.
     const first = await send("POST", chargeUrl, gym.owner.cookies, body);
     expect(first.statusCode, first.body).toBe(200);
+    // Other screens showing Tess read her memberships again.
+    expect(await hub.toldAbout(gym.id, tess.entryId, toldSetUp + 1)).toBeGreaterThanOrEqual(toldSetUp + 1);
     const again = await send("POST", chargeUrl, gym.owner.cookies, body);
     expect(again.statusCode, again.body).toBe(200);
     const charge = cardChargeResponseSchema.parse(JSON.parse(first.body)).charge;

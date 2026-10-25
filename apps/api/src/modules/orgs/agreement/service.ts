@@ -57,6 +57,7 @@ import { suppressionsFor } from "../invites/repo.js";
 import { readOwnHeld } from "../memberships/heldService.js";
 import { getOrgById, insertAudit, lockOrgRow, type OrgRow } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
+import type { LiveNewsSender } from "../../live/news.js";
 import type { AgreementEmailSender } from "./email.js";
 import * as repo from "./repo.js";
 
@@ -69,6 +70,8 @@ export interface AgreementDeps {
   log: FastifyBaseLogger;
   /** Our website's origin, for the link to sign. */
   webOrigin: string;
+  /** Tells the console's open lines what changed (ROADMAP Stage 4 item 18). */
+  news: LiveNewsSender;
 }
 
 type Limit = () => Promise<boolean>;
@@ -626,6 +629,8 @@ export async function signByAgreementLink(deps: AgreementDeps, body: AgreementLi
     // Sent again, used, run out or its address changed between the read and the write.
     throw linkNotValid();
   }
+  // Signed and saved: the staff with this person's page open see it at once.
+  deps.news.tell(gymId, { what: "memberships", entryId: link.entryId });
   const signed = await repo.signatureOf(deps.sql, gymId, link.membershipId);
   if (signed === null) throw linkNotValid();
   return agreementLinkSignResponseSchema.parse({ emailed: await sendCopy(deps, org, now.record.email, signed) });

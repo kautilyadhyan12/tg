@@ -18,6 +18,7 @@ import { JoiningFeeTick, MembershipDiscountPicker, MembershipTotal } from './Mem
 import { NO_CODE, discountsForType, heldDiscountLine, heldTaxLine, membershipSummary, pickedDiscount } from './sellDiscountsView';
 import { FriendGiftNote, MemberGiftNote, MemberGiftWaiting } from './FriendGift';
 import { useCameBack } from './useCameBack';
+import { useLiveNews } from './liveNews';
 import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
@@ -142,11 +143,6 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
 const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
-/** While an emailed link to sign waits (18u-ii-b), how often the person's page looks again, and for
- *  how long after staff last came back to the window: never a timer that runs on and on. Live
- *  updates replace both (ROADMAP Stage 4 item 18; Kd, 2026-10-24). */
-const LINK_CHECK_MS = 30_000;
-const LINK_CHECK_FOR_MS = 15 * 60_000;
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -180,9 +176,6 @@ export default function MemberMemberships({
   checkEveryMs,
   /** The record has an email address: its memberships' agreements can be signed from an emailed link (18u-ii-b). */
   hasEmail = false,
-  /** How often, and for how long, the page looks again while a link waits; the page's own unless a test says. */
-  linkCheckMs = LINK_CHECK_MS,
-  linkCheckForMs = LINK_CHECK_FOR_MS,
 }) {
   const payMethods = paymentMethodsFor(gym?.country);
   /** The answer on screen, and the record it is about: never shown under another. */
@@ -243,12 +236,18 @@ export default function MemberMemberships({
   /** Counts each opening of a Record payment box: the Terminals and the card on file are read again
    *  then, so a card saved in Card on file a moment before is offered (18d-iii-i). */
   const [payOpened, setPayOpened] = useState(0);
+  /** The server's answer as the page's own reads got it, kept as it arrives: what a read after live
+   *  news is compared with (Stage 4 item 18), so news that comes before the page has drawn the
+   *  first answer still knows what changed. */
+  const lastAnswer = useRef(null);
 
   useEffect(() => {
     let live = true;
     orgService.getHeldMemberships(gymId, entryId).then(
       (res) => {
-        if (live) setHeld({ entryId, ...res.data });
+        if (!live) return;
+        lastAnswer.current = JSON.stringify({ entryId, ...res.data });
+        setHeld({ entryId, ...res.data });
       },
       (err) => {
         if (live) setLoadError(errorText(err, "We couldn't load this person's memberships."));
@@ -260,54 +259,42 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
-  // An emailed link to sign is waiting (18u-ii-b): the person may sign it in another window or on
-  // their phone. Their memberships are read again, quietly, when staff come back to this window,
-  // and every 30 seconds while it is on screen for 15 minutes after that, so "Agreement signed"
-  // shows without a refresh and no page keeps asking for ever.
-  const linkWaiting = shown?.memberships.some((m) => m.agreement == null && m.agreementLink != null) === true;
+  // Live updates (ROADMAP Stage 4 item 18): when the person signs from an emailed link in another
+  // window or on their phone, or another member of staff changes their memberships, the server tells
+  // this page and it reads them again, quietly; and again when its line opens after being away, or
+  // when staff come back to a tab that had no line. An answer that changed tells the person's page
+  // and the Members list behind it too, as a change made here does, so the two never disagree.
+  const readSeq = useRef(0);
+  /** What is on screen: a save made here is drawn already, and its own news changes nothing. */
+  const shownNow = useRef(null);
   useEffect(() => {
-    if (!linkWaiting || typeof window === 'undefined') return undefined;
-    let live = true;
-    let since = Date.now();
-    let every = null;
-    const readAgain = () => {
-      if (document.visibilityState !== 'visible') return;
-      orgService.getHeldMemberships(gymId, entryId).then(
-        (res) => {
-          if (live) setHeld({ entryId, ...res.data });
-        },
-        () => undefined,
-      );
-    };
-    const tick = () => {
-      if (Date.now() - since >= linkCheckForMs) {
-        window.clearInterval(every);
-        every = null;
-        return;
-      }
-      readAgain();
-    };
-    const keepChecking = () => {
-      since = Date.now();
-      if (every === null) every = window.setInterval(tick, linkCheckMs);
-    };
-    const cameBack = () => {
-      readAgain();
-      keepChecking();
-    };
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') cameBack();
-    };
-    window.addEventListener('focus', cameBack);
-    document.addEventListener('visibilitychange', onVisible);
-    keepChecking();
-    return () => {
-      live = false;
-      window.removeEventListener('focus', cameBack);
-      document.removeEventListener('visibilitychange', onVisible);
-      if (every !== null) window.clearInterval(every);
-    };
-  }, [gymId, entryId, linkWaiting, linkCheckMs, linkCheckForMs]);
+    shownNow.current = shown;
+  });
+  /** Why the server will not open the line: said under the heading until it opens. */
+  const [liveRefused, setLiveRefused] = useState(null);
+  useLiveNews(gymId, (message) => {
+    if (message.what === 'refused') {
+      setLiveRefused(message.message);
+      return;
+    }
+    if (message.what === 'ready') setLiveRefused(null);
+    const readAll = message.what === 'ready' || message.what === 'cameBack';
+    if (!readAll && !(message.what === 'memberships' && message.entryId === entryId)) return;
+    const asked = ++readSeq.current;
+    orgService.getHeldMemberships(gymId, entryId).then(
+      (res) => {
+        if (readSeq.current !== asked) return;
+        const next = { entryId, ...res.data };
+        const now = JSON.stringify(next);
+        const before = lastAnswer.current;
+        lastAnswer.current = now;
+        setHeld(next);
+        const drawn = shownNow.current === null ? null : JSON.stringify(shownNow.current);
+        if (before !== null && before !== now && drawn !== now) onChanged?.();
+      },
+      () => undefined,
+    );
+  });
   const canBillHere = shown?.canBill === true;
   useEffect(() => {
     if (!canBillHere) return undefined;
@@ -2062,6 +2049,11 @@ export default function MemberMemberships({
           </button>
         ) : null}
       </div>
+      {liveRefused !== null ? (
+        <p role="status" className="c-s14 c-t2 m-0" data-testid="held-live-refused">
+          {liveRefused}
+        </p>
+      ) : null}
       {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
       {shown.canBill && shown.memberGiftAtSell !== null && shown.memberGiftAtSell !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGiftAtSell} /> : null}
       {shown.bookingsStopped === true && open === null ? (

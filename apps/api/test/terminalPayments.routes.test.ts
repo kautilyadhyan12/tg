@@ -24,6 +24,7 @@ import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { TERMINAL_PAYMENT } from "../src/modules/orgs/payments/terminalPayments.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account, type Behaviour } from "./fakeSquareTerminal.js";
+import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -84,6 +85,8 @@ const gold = {
 d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 6 });
   const square = fakeSquare();
+  /** What the console's open lines were told (Stage 4 item 18). */
+  const hub = recordingHub();
   let clock = new Date();
   let app: App | undefined;
   const api = (): App => {
@@ -233,6 +236,7 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(config(), {
       squareApi: square.api,
+      live: { hub },
       orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: {
         sendVerificationEmail: () => Promise.resolve(),
@@ -269,6 +273,7 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     const bea = await owing(gymB, goldB, "Bea Brown");
     const deskA = await terminal(gymA, accountA);
     const deskB = await terminal(gymB, accountB);
+    const toldSetUp = await hub.toldAbout(gymA.id, tara.entryId);
 
     // Nobody who may not take a payment here reaches a Terminal: another gym's owner (A's person at
     // A's address or at B's, B's own person on A's Terminal), A's owner on B's Terminal, a trainer,
@@ -299,9 +304,14 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     const asManager = await send("GET", `${entryUrl(gymA, tara.entryId)}/terminal-payments`, manager.cookies);
     expect(terminalPaymentsResponseSchema.parse(JSON.parse(asManager.body))).toMatchObject({ square: "ready", isOwner: false });
 
+    // Refused presses and reads tell no open line anything (Stage 4 item 18).
+    expect(await hub.toldAbout(gymA.id, tara.entryId)).toBe(toldSetUp);
+
     // The manager takes Tara's month on the Terminal: Square is asked for exactly that amount on that
     // Terminal, for this press; nothing is on the bill yet.
     const started = await pay(gymA, manager, tara, deskA.id);
+    // Other screens showing Tara read her memberships again: the Terminal is waiting.
+    expect(await hub.toldAbout(gymA.id, tara.entryId, toldSetUp + 1)).toBe(toldSetUp + 1);
     expect(started.payment).toMatchObject({ step: "waiting", outcome: null, amountMinor: 4999, currency: "USD", membershipId: tara.membershipId, terminal: { id: deskA.id }, receiptNumber: null });
     const [checkout] = checkoutsOn(deskA.deviceId);
     expect(checkout).toMatchObject({ amount: 4999, currency: "USD", referenceId: started.payment.id, status: "PENDING" });
@@ -353,10 +363,14 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     // Tara taps her card: the payment Square took is on her bill, once, as Card on Terminal, with
     // Square's payment id and a receipt; Sam's bill and B's are untouched.
     square.at(deskA.deviceId).sees();
+    const toldWaiting = await hub.toldAbout(gymA.id, tara.entryId);
     expect((await check(gymA, manager, tara.entryId, started.payment.id)).payment).toMatchObject({ step: "waiting", pickedUp: true });
+    // A check that finds it still waiting tells nobody; the one that finds it paid does.
+    expect(await hub.toldAbout(gymA.id, tara.entryId)).toBe(toldWaiting);
     square.at(deskA.deviceId).taps();
     const paid = await check(gymA, manager, tara.entryId, started.payment.id);
     expect(paid.payment).toMatchObject({ step: "done", outcome: "paid" });
+    expect(await hub.toldAbout(gymA.id, tara.entryId, toldWaiting + 1)).toBe(toldWaiting + 1);
     expect(paid.payment.receiptNumber).not.toBeNull();
     const squarePaymentId = checkoutsOn(deskA.deviceId)[0]?.paymentIds[0];
     const recorded = await paymentsOf(gymA.id);
@@ -638,7 +652,10 @@ d("Take payment on Terminal: charged once, on this bill alone (real Postgres)", 
     expect(square.checkouts.size).toBe(checkoutsBefore);
 
     // The manager takes Tara's fee on the Terminal: exactly its amount, for this press.
+    const toldBefore = await hub.toldAbout(gymA.id, tara.entryId);
     const started = parsed(await feePress(gymA, manager, tara, taraFee, deskA.id));
+    // Other screens showing Tara read her memberships again (Stage 4 item 18).
+    expect(await hub.toldAbout(gymA.id, tara.entryId, toldBefore + 1)).toBe(toldBefore + 1);
     expect(started.payment).toMatchObject({ step: "waiting", amountMinor: 1000, currency: "USD", membershipId: tara.membershipId, feeBillId: taraFee, terminal: { id: deskA.id } });
     expect(checkoutsOn(deskA.deviceId)[0]).toMatchObject({ amount: 1000, currency: "USD", referenceId: started.payment.id, status: "PENDING" });
 

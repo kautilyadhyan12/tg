@@ -212,6 +212,18 @@ describe('the emailed link to sign (18u-ii-b)', () => {
     expect(onLinkSent).toHaveBeenCalledWith(LINK);
   });
 
+  it('stops saying the link was emailed once the membership reads as signed, as it does when the person signs while the page is open', async () => {
+    orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'sent', link: LINK } });
+    const { rerender } = draw({ hasEmail: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Email a link to sign' }));
+    expect(await screen.findByText('A link to sign was emailed to them. It works for 14 days.')).toBeTruthy();
+    rerender(
+      <MembershipAgreement gymId={GYM} entryId={MAYA} membership={{ ...GOLD, agreement: { at: '2026-10-15T17:05:00.000Z' } }} inUse signable readOnly={false} open={false} justGiven={false} when={when} hasEmail onOpen={vi.fn()} onClose={vi.fn()} onSigned={vi.fn()} />,
+    );
+    expect(screen.getByText('Agreement signed')).toBeTruthy();
+    expect(screen.queryByText('A link to sign was emailed to them. It works for 14 days.')).toBeNull();
+  });
+
   it('says what went wrong where the link did not go, and hands nothing on', async () => {
     orgService.sendAgreementLink.mockResolvedValue({ data: { emailed: 'blocked', link: null } });
     const onLinkSent = vi.fn();

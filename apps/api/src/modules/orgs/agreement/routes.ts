@@ -28,6 +28,7 @@ import type { z } from "zod";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { heldMembershipParamsSchema, orgParamsSchema, otherAgreementParamsSchema } from "../schemas.js";
+import type { LiveNewsSender } from "../../live/news.js";
 import type { AgreementEmailSender } from "./email.js";
 import * as service from "./service.js";
 
@@ -58,9 +59,12 @@ function requireUserId(req: FastifyRequest): string {
 
 export function registerAgreementRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; redis: RedisLike; now: () => Date; email: AgreementEmailSender; addressKey: Buffer | null; webOrigin: string },
+  deps: { sql: Sql; redis: RedisLike; now: () => Date; email: AgreementEmailSender; addressKey: Buffer | null; webOrigin: string; news: LiveNewsSender },
 ): void {
-  const agreementDeps: service.AgreementDeps = { sql: deps.sql, now: deps.now, email: deps.email, addressKey: deps.addressKey, log: app.log, webOrigin: deps.webOrigin };
+  const agreementDeps: service.AgreementDeps = { sql: deps.sql, now: deps.now, email: deps.email, addressKey: deps.addressKey, log: app.log, webOrigin: deps.webOrigin, news: deps.news };
+  const tellMemberships = (gymId: string, entryId: string): void => {
+    deps.news.tell(gymId, { what: "memberships", entryId });
+  };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   const gate =
     (limit: (req: FastifyRequest, reply: FastifyReply) => Promise<void>) =>
@@ -173,6 +177,7 @@ export function registerAgreementRoutes(
       gate(deskSignLimit)(req, reply),
     );
     if (signed === null) return;
+    tellMemberships(params.gymId, params.entryId);
     return reply.status(200).header("cache-control", "no-store").send(signed);
   });
 
@@ -189,6 +194,7 @@ export function registerAgreementRoutes(
     if (params === null) return;
     const sent = await service.sendAgreementLink(agreementDeps, requireUserId(req), params.gymId, params.entryId, params.membershipId, gate(linkSendLimit)(req, reply));
     if (sent === null) return;
+    tellMemberships(params.gymId, params.entryId);
     return reply.status(200).header("cache-control", "no-store").send(sent);
   });
 
