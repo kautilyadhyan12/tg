@@ -1159,7 +1159,7 @@
   gap: 6px 12px;
   align-items: start;
 }
-.c-feed-when { grid-area: when; }
+.c-feed-when { grid-area: when; white-space: nowrap; }
 .c-feed-who { grid-area: who; }
 .c-feed-amount { grid-area: amount; text-align: right; }
 .c-feed-for { grid-area: for; }
@@ -1167,7 +1167,7 @@
 .c-feed-head { display: none; }
 @media (min-width: 1100px) {
   .c-feed-row {
-    grid-template-columns: 112px minmax(140px, 1fr) 96px minmax(180px, 1.6fr) 300px;
+    grid-template-columns: 136px minmax(140px, 1fr) 92px minmax(180px, 1.6fr) 300px;
     grid-template-areas: "when who amount for act";
     gap: 16px;
     align-items: center;
@@ -1177,18 +1177,21 @@
   .c-feed-head { display: grid; }
 }
 
-/* A count beside a page's line in the menu, while anything waits there (Payments to match). */
+/* A count on the corner of a page's icon in the menu, while anything waits there (Payments to match), so
+   the page's name keeps its one line. */
 .c-nav-count {
-  margin-left: auto;
+  position: absolute;
+  top: -7px;
+  right: -10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   box-sizing: border-box;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   background: var(--rail-warn);
   color: var(--rail-bg);

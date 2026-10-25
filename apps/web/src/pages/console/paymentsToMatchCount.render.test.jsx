@@ -84,7 +84,9 @@ describe("Payments to match's count in the menu", () => {
     svc.summary.mockResolvedValue({ count: 3, totals: [{ currency: 'USD', minor: 7500 }], used: true });
     draw();
     const line = await menuLine();
-    await waitFor(() => expect(within(line).getByTestId('payments-to-match-count').textContent).toBe('3, 3 payments to match'));
+    await waitFor(() => expect(within(line).getByTestId('payments-to-match-count').textContent).toBe('3'));
+    // A screen reader hears it after the page's name.
+    expect(line.textContent.endsWith('Payments to match, 3 payments to match')).toBe(true);
     expect(svc.summary).toHaveBeenCalledWith(GYM.id);
     // A payment taken in at a desk: the server's news, and the count is read again.
     svc.summary.mockResolvedValue({ count: 4, totals: [{ currency: 'USD', minor: 10000 }], used: true });

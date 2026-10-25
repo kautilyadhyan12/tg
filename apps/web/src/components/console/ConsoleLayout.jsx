@@ -51,15 +51,15 @@ function GymSwitcher({ org, fallback, compact }) {
   );
 }
 
-/** How many payments wait beside Payments to match, and what it means to a screen reader. */
+/** How many payments wait, on Payments to match's icon; a screen reader hears it after the page's name. */
 function ToMatchCount({ count }) {
   return (
-    <span className="c-nav-count" data-testid="payments-to-match-count">
-      <span aria-hidden="true">{count}</span>
-      <span className="sr-only">{`, ${String(count)} ${count === 1 ? 'payment' : 'payments'} to match`}</span>
+    <span className="c-nav-count" aria-hidden="true" data-testid="payments-to-match-count">
+      {count}
     </span>
   );
 }
+const toMatchWords = (count) => `, ${String(count)} ${count === 1 ? 'payment' : 'payments'} to match`;
 
 /** The glowing dot beside Members, and what it means to a screen reader. */
 function ReviewDot({ count, words }) {
@@ -106,6 +106,8 @@ export default function ConsoleLayout({ children }) {
             <nav aria-label="Console" className="c-rail-nav">
               {menu.pages.map((page) => {
                 const Icon = PAGE_ICONS[page.key];
+                // A count sits on the icon's corner, so the page's name keeps its one line.
+                const count = toMatchCount(page);
                 return (
                   <NavLink
                     key={page.key}
@@ -113,10 +115,17 @@ export default function ConsoleLayout({ children }) {
                     end={page.end}
                     className={({ isActive }) => `c-nav${isActive ? ' c-nav-on' : ''}`}
                   >
-                    <Icon size={20} />
+                    {count === null ? (
+                      <Icon size={20} />
+                    ) : (
+                      <span className="c-tab-icon">
+                        <Icon size={20} />
+                        {count}
+                      </span>
+                    )}
                     <span>{page.label}</span>
+                    {count === null ? null : <span className="sr-only">{toMatchWords(toMatch)}</span>}
                     {reviewDot(page)}
-                    {toMatchCount(page)}
                   </NavLink>
                 );
               })}
