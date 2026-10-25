@@ -59,7 +59,7 @@ function emailWords(notice) {
 }
 
 /** "1:15 pm on 24 Oct", in the gym's own time. */
-function whenWords(iso, timezone, country) {
+export function whenWords(iso, timezone, country) {
   const at = new Date(iso);
   const time = new Intl.DateTimeFormat(`en-${country ?? 'US'}`, { timeZone: timezone, hour: 'numeric', minute: '2-digit' }).format(at);
   const day = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, day: 'numeric', month: 'short' }).format(at);
@@ -83,6 +83,8 @@ export function nextStep(row, timezone, country) {
         return 'Square is not connected. Take payment another way.';
       case 'currency':
         return 'Priced in another currency from your Square account. Take payment another way.';
+      case 'square_app':
+        return 'A payment of theirs from Square Point of Sale is waiting to be matched. Match it first, so they aren’t charged twice.';
       default:
         return 'An earlier payment for this membership is due first. Take payment opens it.';
     }

@@ -151,6 +151,8 @@ export type MatchPaid = z.infer<typeof matchPaidSchema>;
 export const matchBillsResponseSchema = z
   .object({
     person: salePersonSchema,
+    /** The gym's own day, which the bills' due days are read against. */
+    today: daySchema,
     amountMinor: minorSchema.nullable(),
     bills: z.array(matchBillSchema).max(200),
     /** The bill ticked when the box opens: the first one due of exactly `amountMinor`; null for none. */

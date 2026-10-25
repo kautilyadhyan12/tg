@@ -225,6 +225,34 @@ describe('Charge card on file: the form', () => {
     expect(screen.getAllByText(words)).toHaveLength(1);
   });
 
+  it('held for a payment from Square Point of Sale: the page says so with Match it, and Charge is refused under the button with the way to it (18d-iii-b-ii-a)', async () => {
+    const WAITING = '77777777-7777-4777-8777-000000000001';
+    const withWaiting = page([held(1, false)]);
+    orgService.getHeldMemberships.mockResolvedValue({
+      data: heldMembershipsResponseSchema.parse({ ...withWaiting.data, squareAppWaiting: [{ id: WAITING, amountMinor: 4999, currency: 'USD', takenOn: '2026-10-19', byName: null, holdsCard: true }] }),
+    });
+    orgService.getTerminalPayments.mockReturnValue(box(VISA));
+    const words = "This person has a payment from Square Point of Sale waiting in Payments to match. Match it to their bill, or mark it Not a bill payment, before charging their card, so they aren't charged twice.";
+    orgService.chargeCardOnFile.mockRejectedValue({ response: { status: 409, data: { error: 'square_app_waiting', message: words } } });
+    const gym = { id: GYM, slug: 'iron-house', staffRole: 'owner', privileges: ['members.read', 'members.confirm', 'billing.members'], country: 'US', timezone: 'America/Chicago' };
+    render(
+      <MemoryRouter>
+        <MemberMemberships gymId={GYM} gym={gym} entryId={TARA} name="Tara Singh" readOnly={false} />
+      </MemoryRouter>,
+    );
+    const note = await screen.findByTestId('square-app-waiting');
+    expect(note.textContent).toContain("A payment of $49.99 taken in Square Point of Sale on 19 Oct is waiting to be matched. While it waits, the card on file isn't charged.");
+    expect(within(note).getByRole('link', { name: 'Match it' }).getAttribute('href')).toBe(`/console/iron-house/payments-to-match?payment=${WAITING}`);
+    const form = await openPay();
+    await waitFor(() => expect(optionsOf(howPaid(form))).toContain('Card on file · Visa ending 1111'));
+    fireEvent.change(howPaid(form), { target: { value: 'card_on_file' } });
+    fireEvent.click(form.getByRole('button', { name: 'Charge $49.99' }));
+    expect((await form.findByTestId('card-charge-said')).textContent).toBe(words);
+    // The box holds a choice made: leaving asks first, then opens the payment.
+    fireEvent.click(form.getByRole('button', { name: 'Open Payments to match' }));
+    expect(form.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe(`/console/iron-house/payments-to-match?payment=${WAITING}`);
+  });
+
   it('a card its bank declined for good is named so, cannot be picked, and the form says what to do (18d-iii-ii-a)', async () => {
     orgService.getTerminalPayments.mockReturnValue(box({ ...VISA, stopped: true }));
     draw();

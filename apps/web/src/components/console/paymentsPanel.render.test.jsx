@@ -166,13 +166,23 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     // Who it works for, said plainly: everybody else is charged as usual, and recorded by hand.
     // Only an exact amount goes on by itself, and one that does not appear is recorded by hand (review round one).
     expect(box.getByText('For members who have a card on file here, the payment is usually applied to their bill automatically when they are selected as the customer and the amount is exactly what the bill says.')).toBeTruthy();
-    expect(box.getByText("If a payment does not appear on the member's bill a few minutes after it was taken, record it there the same way.")).toBeTruthy();
     expect(box.queryByText(/^Start the payment in the Square app, and it will appear/)).toBeNull();
-    const others = said(box, 'For anyone else, or for a sale where no member is selected, Square will process the payment as usual. Then open their bill here, click Record payment, and select Card at the desk.');
-    label(others, 'Record payment');
-    label(others, 'Card at the desk');
+    // Everything else waits in Payments to match (18d-iii-b-ii-a), its name a label, with the button there.
+    label(said(box, 'Any payment that is not applied to a bill automatically waits in Payments to match.'), 'Payments to match');
+    const others = said(box, 'For anyone else, or for a sale where no member is selected, Square will process the payment as usual. It then waits in Payments to match, where you match it to their bill.');
+    label(others, 'Payments to match');
+    expect(box.queryByText(/Card at the desk/)).toBeNull();
+    // Nobody is sent where their role can't open: this reader holds no permissions.
+    expect(box.queryByRole('link', { name: 'Open Payments to match' })).toBeNull();
     expect(box.getByText('Shop items sold from your Square item list are never added to a bill.')).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
+  });
+
+  it('the button to Payments to match opens it, for whoever records payments (18d-iii-b-ii-a)', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }), { org: { ...ORG, staffRole: 'owner' } });
+    const box = within(await screen.findByRole('region', BOX));
+    expect((await box.findByRole('link', { name: 'Open Payments to match' })).getAttribute('href')).toBe('/console/iron-house/payments-to-match');
   });
 
   it("Square adds tax: Needs fixing, what it does to a $45.00 bill in bold, then the two steps at once with Square's labels in their own colour, and Check again", async () => {

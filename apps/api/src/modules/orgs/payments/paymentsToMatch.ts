@@ -207,6 +207,7 @@ export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: 
     });
   return matchBillsResponseSchema.parse({
     person: { entryId: person.entryId, name: person.name, memberNumber: person.memberNumber, email: person.email, past: person.past },
+    today,
     amountMinor: forTheBill(row),
     bills: out.slice(0, 200),
     suggested: suggested < 0 ? null : suggested,

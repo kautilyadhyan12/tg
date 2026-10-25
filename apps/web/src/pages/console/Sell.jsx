@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { CheckCircle2, Loader2, Search } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { registerService } from '../../api/registerApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
-import PlaceLink from '../../components/console/PlaceLink';
+import PersonFinder from '../../components/console/PersonFinder';
 import { useConsoleOrg } from './useConsoleOrg';
 import { canRemoveMembers, orgWords, viewerPrivileges } from './consoleView';
 import { consoleIsReadOnly, readOnlyNote } from './billingView';
@@ -65,28 +65,7 @@ const TAKINGS_FOLDED = 10;
 /** Who is buying: a walk-in, or a member found by name. `mustPick`: a membership has to be
  *  somebody's. */
 function WhoPicker({ gymId, who, setWho, person, setPerson, mustPick, disabled, addMemberTo }) {
-  const [query, setQuery] = useState('');
-  const [found, setFound] = useState({ for: '', people: null, error: null });
   const group = useId();
-  const searchId = useId();
-  const asked = query.trim();
-
-  useEffect(() => {
-    if (asked.length < 2) return undefined;
-    let live = true;
-    const timer = setTimeout(() => {
-      registerService.findPeople(gymId, asked).then(
-        (people) => live && setFound({ for: asked, people, error: null }),
-        (err) => live && setFound({ for: asked, people: null, error: errorText(err, "We couldn't search your list. Try again.") }),
-      );
-    }, 250);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [gymId, asked]);
-
-  const results = asked.length >= 2 && found.for === asked ? found : null;
   const member = mustPick || who === 'member';
 
   return (
@@ -115,48 +94,13 @@ function WhoPicker({ gymId, who, setWho, person, setPerson, mustPick, disabled, 
         </div>
       ) : null}
       {member && person === null ? (
-        <div className="flex flex-col gap-2">
-          <label className="c-s14 c-t2" htmlFor={searchId}>
-            Find them by name or member number
-          </label>
-          <div className="c-search">
-            <Search aria-hidden="true" className="w-4 h-4" />
-            <input id={searchId} className="c-input" value={query} disabled={disabled} onChange={(e) => setQuery(e.target.value)} autoComplete="off" />
-          </div>
-          {results !== null && results.error !== null ? <Refusal>{results.error}</Refusal> : null}
-          {results !== null && results.people !== null && results.people.length > 0 ? (
-            <ul className="list-none m-0 p-0 flex flex-col gap-1" aria-label="People found">
-              {results.people.map((p) => (
-                <li key={p.entryId}>
-                  <button
-                    type="button"
-                    className="c-btn c-btn-s w-full justify-start text-left"
-                    style={{ height: 'auto', minHeight: 44, padding: '8px 14px' }}
-                    disabled={disabled}
-                    onClick={() => {
-                      setPerson(p);
-                      setQuery('');
-                    }}
-                  >
-                    {personOption(p)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {results !== null && results.people !== null && results.people.length === 0 ? (
-            <div className="flex flex-col gap-2">
-              <p className="c-s14 c-t2 m-0">
-                {mustPick ? 'Nobody on your list matches. Add them to your list first.' : 'Nobody on your list matches. Add them to your list first, or choose Walk-in.'}
-              </p>
-              {addMemberTo !== null ? (
-                <PlaceLink to={addMemberTo} guard>
-                  Add a member
-                </PlaceLink>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        <PersonFinder
+          gymId={gymId}
+          onPick={setPerson}
+          disabled={disabled}
+          addMemberTo={addMemberTo}
+          nobody={mustPick ? 'Nobody on your list matches. Add them to your list first.' : 'Nobody on your list matches. Add them to your list first, or choose Walk-in.'}
+        />
       ) : null}
     </fieldset>
   );

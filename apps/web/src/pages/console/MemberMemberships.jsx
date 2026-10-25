@@ -23,7 +23,8 @@ import { ENDING_NOT_TOLD, bookingsStoppedLine } from './bookingsEndView';
 import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
-import { placeFor } from './consolePlaces';
+import { paymentToMatchTo, placeFor } from './consolePlaces';
+import { waitingLine } from './paymentsToMatchView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -145,7 +146,8 @@ const VOIDED = { color: 'var(--t3)', textDecoration: 'line-through' };
 /** Refusals that mean the page is out of date: it is read again. */
 const STALE_CODES = ['held_membership_changed', 'membership_type_not_found', 'bill_has_payment', 'refund_too_much', 'refund_not_settled', 'member_fee_changed'];
 /** A card on file that may not be charged again yet, or at all (18d-iii-ii-a): said under its button. */
-const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out'];
+// `square_app_waiting`: a payment of theirs from Square Point of Sale waits to be matched (18d-iii-b-ii-a).
+const CARD_RETRY_REFUSALS = ['card_charge_wait', 'card_charge_stopped', 'card_charge_tried_out', 'square_app_waiting'];
 
 // `nothingNow`: for somebody with nothing in use, what their row on the list says of the
 // one that finished last ("Gold Monthly · Cancelled 7 Oct"). The ones that are over are
@@ -596,6 +598,7 @@ export default function MemberMemberships({
       const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
       const methods = payMethodsWithSquare;
       const said = chargeSaid !== null && chargeSaid.feeBillId === fee.id ? chargeSaid.line : null;
+      const saidTo = chargeSaid !== null && chargeSaid.feeBillId === fee.id ? (chargeSaid.matchTo ?? null) : null;
       const take = feeTakeWords(fee, m.currency);
       return (
         <form
@@ -658,6 +661,11 @@ export default function MemberMemberships({
             <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert" data-testid="card-charge-said">
               {said}
             </span>
+          ) : null}
+          {saidTo !== null ? (
+            <PlaceLink to={saidTo} guard>
+              Open Payments to match
+            </PlaceLink>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={MAIN} disabled={busy}>
@@ -1107,7 +1115,10 @@ export default function MemberMemberships({
     } catch (err) {
       // The card may not be charged again yet, or at all (18d-iii-ii-a): said under the button pressed.
       if (CARD_RETRY_REFUSALS.includes(errorCode(err))) {
-        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: errorText(err, '') });
+        // Held for a payment from Square Point of Sale: the button opens it in Payments to match.
+        const waiting = errorCode(err) === 'square_app_waiting' ? (held?.squareAppWaiting?.[0]?.id ?? null) : null;
+        const matchTo = waiting === null || !routed ? null : paymentToMatchTo(gym?.slug, viewerPrivileges(gym), waiting);
+        setChargeSaid({ membershipId: m.id, feeBillId: fee === null ? null : fee.id, line: errorText(err, ''), matchTo });
         return;
       }
       setRefusal(errorText(err, "We couldn't get an answer. Press Charge again to see whether the card was charged: it is never charged twice."));
@@ -1229,6 +1240,7 @@ export default function MemberMemberships({
     const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
     const methods = payMethodsWithSquare;
     const said = chargeSaid !== null && chargeSaid.membershipId === m.id && chargeSaid.feeBillId === null ? chargeSaid.line : null;
+    const saidTo = chargeSaid !== null && chargeSaid.membershipId === m.id && chargeSaid.feeBillId === null ? (chargeSaid.matchTo ?? null) : null;
     return (
       <form
         noValidate
@@ -1301,6 +1313,11 @@ export default function MemberMemberships({
           <span className="c-s14" style={{ color: 'var(--bad)' }} role="alert" data-testid="card-charge-said">
             {said}
           </span>
+        ) : null}
+        {saidTo !== null ? (
+          <PlaceLink to={saidTo} guard>
+            Open Payments to match
+          </PlaceLink>
         ) : null}
         <div className="flex flex-wrap gap-2">
           <button type="submit" className={MAIN} disabled={busy}>
@@ -2109,6 +2126,24 @@ export default function MemberMemberships({
           )}
         </p>
       ) : null}
+      {shown.canBill && open === null
+        ? (shown.squareAppWaiting ?? []).map((w) => {
+            // A payment from Square Point of Sale waiting to be matched holds their card on file (18d-iii-b-ii-a).
+            const matchTo = routed ? paymentToMatchTo(gym?.slug, viewerPrivileges(gym), w.id) : null;
+            return (
+              <p key={w.id} className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="square-app-waiting">
+                <span>{waitingLine(w)}</span>
+                {matchTo === null ? (
+                  <span className="c-t3">Staff who record payments can match it in Payments to match.</span>
+                ) : (
+                  <PlaceLink to={matchTo} className="c-lk c-w6">
+                    Match it
+                  </PlaceLink>
+                )}
+              </p>
+            );
+          })
+        : null}
       {shown.past && shown.memberships.length > 0 ? (
         <p className="c-s14 c-t2 m-0" data-testid="held-past-note">
           {`${name.charAt(0).toUpperCase()}${name.slice(1)} is a past member, so these are not in use. Put them back on your list to use them again.`}
