@@ -4442,12 +4442,21 @@ opens, then only what to read again, a kind of thing and a record's id (`{ what:
 entryId }`), never a name or what changed; the page reads that through its normal route. A line
 ends when the sign-in it was opened with runs out, and at most 15 minutes after it opened, and the
 browser opens a new one through the same checks, so somebody removed from the staff stops hearing
-the gym by then. Off screen the line is closed; back on screen it opens again and the page reads
-again. One account holds at most 10 lines at once and one server 20,000 (an open line was measured
-at 17–19 KB). With Redis, the lines are held by a server of their own (`src/live.ts`, LIVE_LINES=apart
-on the api), told what changed on one Redis channel; without, the api holds them itself. 18-i: a
-person's memberships (given, changed, paid, an agreement's link emailed or signed at the desk or
-from the link). 18-ii: the check-in log and the Leaderboard, whose timers go.
+the gym by then; the browser opens it again within 3 seconds, at a moment of its own, and its
+sign-in is refreshed one tab at a time (the browser's lock: one refresh cookie presented twice at
+once ends the sign-in). Off screen for a minute the line is closed; back on screen the page reads
+again at once and the line opens again. One account holds at most 10 lines at once and one server
+20,000 (an open line was measured at 17–19 KB); a line refused says why under the page's heading
+("This account has too many console windows open. Close one and try again."), and the page reads
+again when staff come back to it. A read after news that changed the answer tells the rest of the
+page and the list behind it too, as a change made there does. With Redis, the lines are held by a
+server of their own (`src/live.ts`, LIVE_LINES=apart on the api), told what changed on one Redis
+channel for each database, and nothing waits for Redis to start; without, the api holds them
+itself. 18-i: a person's memberships, from what staff do on the console: given, changed, frozen,
+cancelled, a payment recorded or voided, a Terminal payment started, taken or stopped, a card on file
+charged, an agreement's link emailed or signed at the desk or from the link. A payment Square
+settles later (its message, the worker) is read when the page next reads. 18-ii: the check-in log
+and the Leaderboard, whose timers go.
 
 **Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years

@@ -31,6 +31,16 @@ index behind it.
 > compose is actually running on a provisioned host — not when the YAML is
 > committed. A sweep scheduled nowhere still deletes nothing.
 
+## WHERE THE LIVE UPDATES RUN (ROADMAP Stage 4 item 18)
+
+The console's open lines (`GET /v1/orgs/<gym>/live`) are held by the **`live` service**: the same
+image running `src/live.ts` on port 3100. Caddy sends that one path there, uncompressed, and
+everything else to `api`, which runs with `LIVE_LINES=apart` and tells `live` what changed on a
+Redis channel named for its database. Both need `REDIS_URL`. Neither waits for Redis to start, and
+Caddy waits only for `live` to have started, so a Redis outage stops live updates, never the site:
+pages then read again when staff come back to them. Each `live` process holds at most 20,000 lines
+(17–19 KB each). Without `LIVE_LINES=apart` the api holds the lines itself, as on a laptop.
+
 ## Environment
 
 `config.ts` parses **20** variables once at boot and refuses to start on a bad one.
