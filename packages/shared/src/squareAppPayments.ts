@@ -219,14 +219,14 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
  *  checkout" update, read 2026-10-25; the website's tax form as Kd saw it, 2026-10-25). */
 export const SQUARE_APP_WORDS = {
   heading: "Square Point of Sale",
-  how: "Square's own app on a phone or tablet, with a Square Reader. You charge in Square's app, and the payment comes to the member's bill here afterwards.",
+  how: "Square's app on a phone or tablet, with a Square Reader. You start the payment in Square's app, and it comes to the member's bill here afterwards.",
   listLead: "To make that work:",
   taxChecking: "Checking Square's tax settings…",
   taxNoneTitle: "Square won't add tax on top",
   taxNoneDetail: "The member pays exactly what the bill says.",
   taxAddsTitle: "Square adds tax on top",
   taxAddsDetail: (names: string, bill: string, charged: string): string =>
-    `Square adds ${names} to amounts you type in. A ${bill} bill would charge the member ${charged}, so it won't go on the bill. If the bill already includes tax, they'd pay tax twice.`,
+    `Square adds ${names} to amounts you type in. For a ${bill} bill, the member would be charged ${charged}. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice.`,
   howToFix: "How to fix",
   hideSteps: "Hide the steps",
   /** `which`: the tax's name, or "each of them (A and B)". */
@@ -246,8 +246,8 @@ export const SQUARE_APP_WORDS = {
   pickDetail: "In Square Point of Sale, tap Add customer and choose the member before you charge.",
   pickHow: "How",
   pickSteps: "To make Square ask every time: More → Settings → Checkout → Customer management, then turn on Before checkout.",
-  cardSaved: "Members whose card is saved here: their payments go on their bill by themselves.",
-  others: "Anyone else: Square takes the payment as usual, but it isn't put on their bill.",
+  cardSaved: "Members with a card on file here: the payment goes on their bill by itself.",
+  others: "Anyone else: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.",
   items: "Shop items rung up from your Square item list never go on a bill.",
   needsAllowTitle: "Square needs your permission first",
   needsAllow: "Press Reconnect Square, then Allow on Square's page. Nothing else changes.",

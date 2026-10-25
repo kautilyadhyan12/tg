@@ -165,7 +165,7 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
 /** Square's simulated Terminals, in its sandbox only (Stripe calls its own "simulated readers"),
  *  added by a tester's tool and never from a screen. */
 /** How a Terminal paired here is used, apart from Square Point of Sale (18d-iii-b-i, Kd's click-through). */
-export const TERMINALS_HOW = 'On a member\'s bill, press Record payment and choose Card on Terminal. The amount goes to the Terminal, and the bill is paid the moment they pay.';
+export const TERMINALS_HOW = 'Square\'s card machine. You start the payment here: on a member\'s bill, press Record payment and choose Card on Terminal. The bill is paid the moment they pay.';
 
 export const PRACTICE_TERMINAL_WORDS = {
   saves: 'Card saved',

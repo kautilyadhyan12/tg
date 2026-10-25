@@ -138,7 +138,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(box.getByText("Square's own app on a phone or tablet, with a Square Reader. You charge in Square's app, and the payment comes to the member's bill here afterwards.")).toBeTruthy();
+    expect(box.getByText("Square's app on a phone or tablet, with a Square Reader. You start the payment in Square's app, and it comes to the member's bill here afterwards.")).toBeTruthy();
     expect(box.getByText('To make that work:')).toBeTruthy();
     expect(await box.findByText("Square won't add tax on top")).toBeTruthy();
     expect(step(box, 'square-tax-step').getByText('The member pays exactly what the bill says.')).toBeTruthy();
@@ -150,8 +150,8 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     fireEvent.click(step(box, 'square-pick-step').getByRole('button', { name: 'How' }));
     expect(box.getByText('To make Square ask every time: More → Settings → Checkout → Customer management, then turn on Before checkout.')).toBeTruthy();
     // Who it works for, said plainly: everybody else is charged as usual.
-    expect(box.getByText('Members whose card is saved here: their payments go on their bill by themselves.')).toBeTruthy();
-    expect(box.getByText("Anyone else: Square takes the payment as usual, but it isn't put on their bill.")).toBeTruthy();
+    expect(box.getByText('Members with a card on file here: the payment goes on their bill by itself.')).toBeTruthy();
+    expect(box.getByText("Anyone else: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.")).toBeTruthy();
     expect(box.getByText('Shop items rung up from your Square item list never go on a bill.')).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
   });
@@ -164,7 +164,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     expect(await tax.findByText('Square adds tax on top')).toBeTruthy();
     expect(tax.getByLabelText('Needs fixing')).toBeTruthy();
     expect(
-      tax.getByText("Square adds Sales Tax (8.25%) to amounts you type in. A $45.00 bill would charge the member $48.71, so it won't go on the bill. If the bill already includes tax, they'd pay tax twice."),
+      tax.getByText("Square adds Sales Tax (8.25%) to amounts you type in. For a $45.00 bill, the member would be charged $48.71. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice."),
     ).toBeTruthy();
     expect(tax.queryByText(/On Square's website/)).toBeNull();
     fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
@@ -187,7 +187,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     orgService.getSquareAppCheck.mockResolvedValue(checked({ ...SALES_TAX, taxes: [{ name: 'GST', percentage: '5' }, { name: 'PST', percentage: '7' }], chargedMinor: 5040 }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const tax = within(await within(await screen.findByRole('region', BOX)).findByTestId('square-tax-step'));
-    expect(await tax.findByText(/^Square adds GST \(5%\) and PST \(7%\) to amounts you type in\. A \$45\.00 bill would charge the member \$50\.40/)).toBeTruthy();
+    expect(await tax.findByText(/^Square adds GST \(5%\) and PST \(7%\) to amounts you type in\. For a \$45\.00 bill, the member would be charged \$50\.40\./)).toBeTruthy();
     fireEvent.click(tax.getByRole('button', { name: 'How to fix' }));
     expect(tax.getByText(/Open each of them \(GST and PST\) and turn off Apply tax to custom amounts/)).toBeTruthy();
   });

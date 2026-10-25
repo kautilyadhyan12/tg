@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, HelpCircle, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, HelpCircle, Info, Loader2 } from 'lucide-react';
 import { SQUARE_APP_WORDS, formatMinor, squareTaxNames, squareTaxesToOpen } from '@app/shared';
 import { orgService } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
@@ -27,6 +27,8 @@ const ICONS = {
   done: <CheckCircle2 className="w-5 h-5" style={{ color: 'var(--good)' }} aria-label="Done" />,
   fix: <AlertTriangle className="w-5 h-5" style={{ color: 'var(--warn)' }} aria-label="Needs fixing" />,
   todo: <Circle className="w-5 h-5" style={softStyle} aria-hidden="true" />,
+  // Done on each sale, in Square: nothing here can tick it.
+  each: <Info className="w-5 h-5" style={softStyle} aria-hidden="true" />,
   unknown: <HelpCircle className="w-5 h-5" style={softStyle} aria-hidden="true" />,
   checking: <Loader2 className="w-5 h-5 animate-spin" style={softStyle} aria-hidden="true" />,
 };
@@ -215,7 +217,7 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
             {setTax(check)}
           </Step>
         )}
-        <Step icon="todo" title={SQUARE_APP_WORDS.pickTitle} detail={SQUARE_APP_WORDS.pickDetail} testId="square-pick-step">
+        <Step icon="each" title={SQUARE_APP_WORDS.pickTitle} detail={SQUARE_APP_WORDS.pickDetail} testId="square-pick-step">
           <button type="button" className={linkButton} style={{ color: '#fff' }} aria-expanded={pickOpen} onClick={() => setPickOpen((v) => !v)}>
             {pickOpen ? SQUARE_APP_WORDS.hideSteps : SQUARE_APP_WORDS.pickHow}
           </button>
