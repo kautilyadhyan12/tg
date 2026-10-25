@@ -291,6 +291,75 @@ describe('the board for staff', () => {
     }
   });
 
+  it('news of a person changed is gathered into the minute, as a check-in is', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
+    try {
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      tell({ what: 'people' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(59_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('while the live line cannot open, the board checks for itself every minute, and stops when the line is back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
+    try {
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      tell({ what: 'refused', message: "Live updates can't connect right now. The page keeps checking for changes until they're back." });
+      expect(await screen.findByText("Live updates can't connect right now. The page keeps checking for changes until they're back.")).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(121_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(3);
+      tell({ what: 'ready' });
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(4));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(180_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a midnight read that comes back on the old day is tried again 30 seconds later", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // 23:59:30 in Kolkata; the server still says it is 23:59 when asked at midnight.
+    vi.setSystemTime(new Date('2026-10-07T18:29:30.000Z'));
+    try {
+      svc.board.mockResolvedValue(answer({ asOf: '2026-10-07T18:29:00.000Z' }));
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(32_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(2);
+      svc.board.mockResolvedValue(answer({ asOf: '2026-10-07T18:31:00.000Z' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(3);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('two reads that cross: the newer answer stays on screen', async () => {
     open();
     await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));

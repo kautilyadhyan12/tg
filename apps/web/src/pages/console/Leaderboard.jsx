@@ -7,6 +7,7 @@ import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleS
 import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekLabel, weekdayInitial } from '../../components/gym/leaderboardView';
 import LeaderboardPerson from './LeaderboardPerson';
 import { msToGymMidnight, useLiveNews } from './liveNews';
+import { gymToday } from './hoursView';
 import { canManagePosts } from '../../components/gym/postsView';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
@@ -34,6 +35,14 @@ import {
 // busy hour's news is gathered into one read. And once at the gym's midnight.
 
 const BUNDLE_MS = 60_000;
+/** While the live line cannot open, the board checks for itself this often. */
+const WITHOUT_LINE_MS = 60_000;
+/** A read at the gym's midnight that came back on the old day (the browser's clock ahead) is tried
+ *  again after this, this many times. */
+const MIDNIGHT_AGAIN_MS = 30_000;
+const MIDNIGHT_TRIES = 10;
+/** The wait for midnight is worked out again each hour, so a 23- or 25-hour day is met. */
+const HOUR_MS = 3_600_000;
 
 function Circles({ circles, days, boardId }) {
   if (circles === null || days === null) return null;
@@ -157,7 +166,7 @@ export default function Leaderboard() {
       clearTimeout(soon.current);
       soon.current = null;
       load();
-    } else if (message.what === 'visits' || message.what === 'leaderboard') {
+    } else if (message.what === 'visits' || message.what === 'leaderboard' || message.what === 'people') {
       // At once after a quiet minute; within the minute, one read when it is up.
       if (soon.current !== null) return;
       soon.current = setTimeout(
@@ -172,19 +181,42 @@ export default function Leaderboard() {
     }
   });
 
-  // The gym's day turns at its midnight: "this week", the flames and the Streak move with it.
+  // The gym's day turns at its midnight: "this week", the flames and the Streak move with it. The
+  // wait is worked out again each hour, so a clock change is met; a read that comes back still on
+  // the old day (the browser's clock ahead of the server's) is tried again shortly, a few times.
   const zone = state.board?.timezone ?? null;
+  const asOf = state.board?.asOf ?? null;
+  const boardDay = zone === null || asOf === null ? null : gymToday(zone, new Date(asOf));
   const [turn, setTurn] = useState(0);
+  const midnight = useRef({ from: null, tries: 0 });
   useEffect(() => {
     if (zone === null) return undefined;
-    const wait = msToGymMidnight(zone);
+    const atMidnight = midnight.current.from !== null && midnight.current.from === boardDay && midnight.current.tries < MIDNIGHT_TRIES;
+    if (midnight.current.from !== boardDay) midnight.current = { from: null, tries: 0 };
+    const wait = atMidnight ? MIDNIGHT_AGAIN_MS : msToGymMidnight(zone);
     if (wait === null) return undefined;
-    const timer = setTimeout(() => {
-      load();
-      setTurn((t) => t + 1);
-    }, wait + 1_000);
+    const due = atMidnight ? wait : wait + 1_000;
+    const timer = setTimeout(
+      () => {
+        if (due > HOUR_MS) {
+          setTurn((t) => t + 1);
+          return;
+        }
+        midnight.current = { from: boardDay, tries: atMidnight ? midnight.current.tries + 1 : 0 };
+        load();
+        setTurn((t) => t + 1);
+      },
+      Math.min(due, HOUR_MS),
+    );
     return () => clearTimeout(timer);
-  }, [zone, turn, load]);
+  }, [zone, boardDay, turn, load]);
+
+  // While the live line cannot open, the board checks for itself, until the line is back.
+  useEffect(() => {
+    if (liveRefused === null) return undefined;
+    const timer = setInterval(load, WITHOUT_LINE_MS);
+    return () => clearInterval(timer);
+  }, [liveRefused, load]);
 
   const pick = (nextBoard, nextPeriod) => {
     setNotice(null);

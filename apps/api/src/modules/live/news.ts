@@ -103,17 +103,37 @@ export function tellMembershipsAfter(news: LiveNewsSender) {
   };
 }
 
-/** A member's own change (a workout saved, Hide me) tells the leaderboard of every gym they belong
- *  to. Nothing waits on it and it never throws: a lost piece of news is read when the line next
- *  opens. */
-export function tellMembersLeaderboards(sql: Sql, news: LiveNewsSender, log: FastifyBaseLogger, userId: string): void {
+/** A member's own change tells every gym they belong to: a workout saved or Hide me (the
+ *  leaderboard), their name or age (`people`). Nothing waits on it and it never throws: a lost
+ *  piece of news is read when the line next opens. */
+export function tellMembersGyms(sql: Sql, news: LiveNewsSender, log: FastifyBaseLogger, userId: string, message: LiveNews): void {
   if (news === NO_NEWS) return;
   gymsOfMember(sql, userId).then(
     (gymIds) => {
-      for (const gymId of gymIds) news.tell(gymId, { what: "leaderboard", change: "counted" });
+      for (const gymId of gymIds) news.tell(gymId, message);
     },
     () => {
       log.warn("live.news_not_sent");
     },
   );
+}
+
+/** The same news to each of these gyms. */
+export function tellGyms(news: LiveNewsSender, gymIds: readonly string[], message: LiveNews): void {
+  for (const gymId of gymIds) news.tell(gymId, message);
+}
+
+export function tellMembersLeaderboards(sql: Sql, news: LiveNewsSender, log: FastifyBaseLogger, userId: string): void {
+  tellMembersGyms(sql, news, log, userId, { what: "leaderboard", change: "counted" });
+}
+
+/** A route's `onResponse`: a change saved to the gym's people (2xx, not a read) tells the gym's open
+ *  lines that names, records or members changed. */
+export function tellPeopleAfter(news: LiveNewsSender) {
+  const inGym = z.object({ gymId: z.string().uuid() });
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (req.method === "GET" || reply.statusCode >= 300) return;
+    const at = inGym.safeParse(req.params);
+    if (at.success) news.tell(at.data.gymId, { what: "people" });
+  };
 }

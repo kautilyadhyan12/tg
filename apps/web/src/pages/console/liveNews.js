@@ -15,7 +15,8 @@ import { refreshSession } from '../../api/authApi';
 // (404): no line, and nothing is retried.
 //
 // Besides the server's messages a listener hears two of this file's own: `refused` ({ message }),
-// while the server will not open the line, and `cameBack`, when the tab comes back on screen
+// whenever the line could not be opened (the server refused it, or it or the network is down), so the
+// page says so and checks for itself until `ready`; and `cameBack`, when the tab comes back on screen
 // without a line, so the page reads again as it did before live updates.
 
 const WAITS_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
@@ -158,6 +159,7 @@ async function connect(line) {
   } catch {
     if (!mine()) return;
     line.controller = null;
+    deliver(line, { what: 'refused', message: LIVE_WORDS.unreachable });
     tryLater(line);
     return;
   }
@@ -182,10 +184,10 @@ async function connect(line) {
   }
   if (!res.ok || res.body == null) {
     const refused = res.status === 429 || res.status === 503;
-    const words = refused ? await refusalWords(res) : null;
+    const words = refused ? await refusalWords(res) : LIVE_WORDS.unreachable;
     if (!mine()) return;
     line.controller = null;
-    if (words !== null) deliver(line, { what: 'refused', message: words });
+    deliver(line, { what: 'refused', message: words });
     const after = Number(res.headers?.get?.('retry-after'));
     tryLater(line, Number.isFinite(after) && after > 0 ? after * 1000 : undefined);
     return;

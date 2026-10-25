@@ -36,6 +36,7 @@ function fakeFetch(url, init) {
     }
   });
   const next = answers.shift() ?? { status: 200 };
+  if (next.throws === true) return Promise.reject(new TypeError('Failed to fetch'));
   if (next.status !== 200) {
     return Promise.resolve({
       status: next.status,
@@ -230,6 +231,23 @@ describe('the open line', () => {
     stop();
   });
 
+  it('a server error, a proxy with no server behind it, or no network at all: the page is told it has no line, each time, until the line opens', async () => {
+    answers = [{ status: 500 }, { status: 502 }, { throws: true }, { status: 200 }];
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => heard.length === 3, 12_000);
+    expect(heard).toEqual([
+      { what: 'refused', message: LIVE_WORDS.unreachable },
+      { what: 'refused', message: LIVE_WORDS.unreachable },
+      { what: 'refused', message: LIVE_WORDS.unreachable },
+    ]);
+    // The fourth try opens the line, and nothing more is said.
+    await until(() => calls.length === 4, 12_000);
+    await pause(50);
+    expect(heard).toHaveLength(3);
+    stop();
+  }, 30_000);
+
   it("a line refused in the server's own words says them, and staff coming back to the tab read again", async () => {
     answers = [{ status: 429, json: { error: 'too_many_lines', message: LIVE_WORDS.too_many_lines } }];
     const heard = [];
@@ -273,6 +291,9 @@ describe("the gym's midnight", () => {
     ['noon in Chicago', 'America/Chicago', '2026-10-07T17:00:00.000Z', 43_200_000],
     ['the last half second is still a second', 'UTC', '2026-10-07T23:59:59.500Z', 1_000],
     ['the reader in another zone does not matter', 'Pacific/Auckland', '2026-10-07T10:30:00.000Z', 1_800_000],
+    // On the evening of a clock change the wall clock is what counts: 22:00 is two hours before midnight.
+    ["the evening before London's clocks go back", 'Europe/London', '2026-10-24T21:00:00.000Z', 7_200_000],
+    ["the evening before Chicago's clocks go forward", 'America/Chicago', '2027-03-14T04:00:00.000Z', 7_200_000],
   ])('%s', (_name, zone, at, wait) => {
     expect(msToGymMidnight(zone, new Date(at))).toBe(wait);
   });

@@ -23,6 +23,8 @@ import { useLiveNews } from './liveNews';
 
 /** "Who came" reads again on live news at most this often. */
 const DAY_READ_GAP_MS = 15_000;
+/** While the live line cannot open, Who came checks for itself this often. */
+const WITHOUT_LINE_MS = 30_000;
 
 // WHO CAME IN — the console's Attendance section.
 //
@@ -364,8 +366,10 @@ function AttendanceDay({ org }) {
   const [heard, setHeard] = useState(0);
   const lastHeard = useRef(0);
   const heardSoon = useRef(null);
-  useLiveNews(gymId, (message) => {
-    if (message.what !== 'visits' && message.what !== 'ready' && message.what !== 'cameBack') return;
+  /** Whether the live line could not open: Who came then checks for itself until it is back. */
+  const [withoutLine, setWithoutLine] = useState(false);
+  /** One read again, at once after a quiet spell, else when the 15 seconds are up. */
+  const readAgain = useCallback(() => {
     if (heardSoon.current !== null) return;
     heardSoon.current = setTimeout(
       () => {
@@ -375,8 +379,18 @@ function AttendanceDay({ org }) {
       },
       Math.max(0, lastHeard.current + DAY_READ_GAP_MS - Date.now()),
     );
+  }, []);
+  useLiveNews(gymId, (message) => {
+    if (message.what === 'refused') setWithoutLine(true);
+    if (message.what === 'ready') setWithoutLine(false);
+    if (message.what === 'visits' || message.what === 'people' || message.what === 'ready' || message.what === 'cameBack') readAgain();
   });
   useEffect(() => () => clearTimeout(heardSoon.current), []);
+  useEffect(() => {
+    if (!withoutLine) return undefined;
+    const timer = setInterval(readAgain, WITHOUT_LINE_MS);
+    return () => clearInterval(timer);
+  }, [withoutLine, readAgain]);
 
   // THE ANSWER IS STAMPED WITH THE QUESTION IT WAS FETCHED FOR — the console
   // store's own rule 3, applied to a day instead of a user.
@@ -422,12 +436,14 @@ function AttendanceDay({ org }) {
           retryable: true,
           people: answer?.people ?? [],
           nextCursor: answer?.nextCursor ?? null,
+          stale: false,
         });
       })
       .catch((err) => {
         if (cancelled) return;
-        // A quiet read again that fails leaves the same day's people on screen.
-        setState((held) => (held.forKey === readKey && held.status === 'ready' ? held : {
+        // A quiet read again that fails leaves the same day's people on screen, and says it could
+        // not refresh; it is tried again shortly.
+        setState((held) => (held.forKey === readKey && held.status === 'ready' ? { ...held, stale: true } : {
           status: 'failed',
           forKey: readKey,
           day: null,
@@ -506,6 +522,13 @@ function AttendanceDay({ org }) {
   }, [gymId, day, statusesParam, readKey, nextCursor, loadingMore]);
 
   const answer = fresh ? state.day : null;
+  /** A quiet read again failed: the people shown are the last that could be read. */
+  const staleDay = fresh && state.stale === true;
+  useEffect(() => {
+    if (!staleDay) return undefined;
+    const timer = setTimeout(readAgain, DAY_READ_GAP_MS);
+    return () => clearTimeout(timer);
+  }, [staleDay, state, readAgain]);
   const clockFormat = answer?.clockFormat ?? org.clockFormat ?? '24h';
   const zone = answer?.timezone ?? timezone;
   const shown = people.filter((p) => matchesName(p, search));
@@ -700,7 +723,7 @@ function AttendanceDay({ org }) {
               the anti-silence rule and is the wrong tool for "start open".
               **`defaultOpen` seeds the state instead**, so this arrives open
               and the heading toggles like any other. */}
-          <ConsoleSection title="Who came" aside={dayTotalsLine(answer.totals)} defaultOpen>
+          <ConsoleSection title="Who came" aside={staleDay ? "Couldn't refresh — trying again" : dayTotalsLine(answer.totals)} defaultOpen>
             <div className="flex items-center justify-end gap-3 flex-wrap">
               <label className="flex items-center gap-2 rounded-xl px-3 py-1.5"
                 style={{ background: 'rgba(255,255,255,0.05)' }}>

@@ -27,6 +27,15 @@ import { msToGymMidnight, useLiveNews } from './liveNews';
 const SEARCH_WAIT_MS = 250;
 /** A read that failed and may clear is tried again after this, while the log is on screen. */
 const RETRY_MS = 15_000;
+/** While the live line cannot open, the log checks for itself this often. */
+const WITHOUT_LINE_MS = 30_000;
+/** A read at the gym's midnight that came back on the old day (the browser's clock ahead) is tried
+ *  again after this, this many times. */
+const MIDNIGHT_AGAIN_MS = 30_000;
+const MIDNIGHT_TRIES = 10;
+/** The longest one wait for midnight is set for: the wait is worked out again each hour, so a day
+ *  that is 23 or 25 hours long at a clock change is still met at its midnight. */
+const HOUR_MS = 3_600_000;
 
 const muted = { color: 'rgba(255,255,255,0.55)' };
 const ORANGE = '#FFB347';
@@ -338,6 +347,9 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
   const inFlight = useRef(false);
   /** A read asked for while one was on its way: 'since' or 'whole', made when that one ends. */
   const owed = useRef(null);
+  /** The newest visit held and its day, noted as each answer arrives: news that comes the moment
+   *  after asks from it, not from a copy the page has not drawn yet. */
+  const newest = useRef({ day: null, at: null });
   const readNext = useRef(() => undefined);
   const [attempt, setAttempt] = useState(0);
   /** Why the server will not open the live line: said beside the heading until it opens. */
@@ -350,11 +362,15 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
         return;
       }
       inFlight.current = true;
-      const since = whole ? null : newestAt(held.current.visits);
+      const since = whole ? null : newest.current.at;
       void orgService
         .getCheckinLog(gymId, since)
         .then((res) => {
           const answer = res.data.log;
+          // A whole read or a new day replaces what was held, as below; a since-read adds to it.
+          const fresh = newestAt(answer.visits);
+          const kept = whole || newest.current.day !== answer.day ? null : newest.current.at;
+          newest.current = { day: answer.day, at: kept === null || (fresh !== null && fresh > kept) ? fresh : kept };
           setLog((prev) => {
             // A new day at the gym, or a whole read: what the server says replaces what was held.
             const replace = whole || prev.day !== answer.day;
@@ -398,8 +414,9 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
   }, [read, attempt]);
 
   // Live updates (Stage 4 item 18): a visit added at the desk or by staff in another window brings
-  // only what is newer than the newest held; a visit removed, or a membership changed (its words on
-  // a row), brings the whole of today again, as does the line opening after being away.
+  // only what is newer than the newest held; a visit removed, a membership changed (its words on a
+  // row), or a person changed (a name, a record merged or deleted) brings the whole of today again,
+  // as does the line opening after being away.
   useLiveNews(gymId, (message) => {
     if (message.what === 'refused') {
       setLiveRefused(message.message);
@@ -411,19 +428,41 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
     else if (message.what !== 'leaderboard') read(true);
   });
 
-  // The gym's day turns at its midnight: the log reads once then, so "today" is the new day. A read
-  // that comes back still on the old day (a clock change) waits for the next turn.
+  // The gym's day turns at its midnight: the log reads once then, so "today" is the new day. The wait
+  // is worked out again each hour, so a clock change is met; a read that comes back still on the old
+  // day (the browser's clock ahead of the server's) is tried again shortly, a few times.
   const [turn, setTurn] = useState(0);
+  const midnight = useRef({ from: null, tries: 0 });
   useEffect(() => {
     if (log.timezone === null) return undefined;
-    const wait = msToGymMidnight(log.timezone);
+    const atMidnight = midnight.current.from !== null && midnight.current.from === log.day && midnight.current.tries < MIDNIGHT_TRIES;
+    if (midnight.current.from !== log.day) midnight.current = { from: null, tries: 0 };
+    const wait = atMidnight ? MIDNIGHT_AGAIN_MS : msToGymMidnight(log.timezone);
     if (wait === null) return undefined;
-    const timer = setTimeout(() => {
-      read(true);
-      setTurn((t) => t + 1);
-    }, wait + 1_000);
+    const due = atMidnight ? wait : wait + 1_000;
+    const timer = setTimeout(
+      () => {
+        if (due > HOUR_MS) {
+          setTurn((t) => t + 1);
+          return;
+        }
+        midnight.current = { from: log.day, tries: atMidnight ? midnight.current.tries + 1 : 0 };
+        read(true);
+        setTurn((t) => t + 1);
+      },
+      Math.min(due, HOUR_MS),
+    );
     return () => clearTimeout(timer);
   }, [log.day, log.timezone, turn, read]);
+
+  // While the live line cannot open, the log checks for itself, until the line is back.
+  useEffect(() => {
+    if (liveRefused === null) return undefined;
+    const timer = setInterval(() => {
+      if (held.current.status !== 'failed') read(true);
+    }, WITHOUT_LINE_MS);
+    return () => clearInterval(timer);
+  }, [liveRefused, read]);
 
   // A read that failed and may clear is tried again shortly, while the log is still shown.
   useEffect(() => {

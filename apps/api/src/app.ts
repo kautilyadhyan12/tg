@@ -371,7 +371,7 @@ export async function buildApp(
   });
   registerWorkoutRoutes(app, { sql, redis, news });
   // Deleting an account ends things at its gyms, so it reads the gyms' clock.
-  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender, ...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
+  registerUserRoutes(app, { sql, config, redis, emailSender: usersEmailSender, news, ...(overrides.orgs?.now === undefined ? {} : { now: overrides.orgs.now }) });
   // Part 4 §5.2's export right. Serves /v1/users/me/export but lives in the
   // privacy module, next to the Day-14 delete list it must stay in step with.
   registerPrivacyRoutes(app, { sql, redis });

@@ -541,6 +541,57 @@ describe('checked in today', () => {
     expect(await screen.findByText(/Nobody has checked in yet today/)).toBeTruthy();
   });
 
+  it('news of a person changed (a name, a record merged or deleted) reads the whole of today again', async () => {
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Rita Record')]));
+    drawScreen();
+    await screen.findByText('Rita Record');
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Rita Renamed')]));
+    tell({ what: 'people' });
+    expect(await screen.findByText('Rita Renamed')).toBeTruthy();
+    expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
+  });
+
+  it('while the live line cannot open, the log checks for itself every 30 seconds, and stops when the line is back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-03T10:00:00.000Z'));
+    drawScreen();
+    await screen.findByText(/Nobody has checked in yet today/);
+    tell({ what: 'refused', message: "Live updates can't connect right now. The page keeps checking for changes until they're back." });
+    expect(await screen.findByText("Live updates can't connect right now. The page keeps checking for changes until they're back.")).toBeTruthy();
+    const asked = api.getCheckinLog.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked + 2);
+    expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
+    tell({ what: 'ready' });
+    const back = api.getCheckinLog.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(back);
+  });
+
+  it("a midnight read that comes back on the old day (the browser's clock ahead) is tried again 30 seconds later, not tomorrow", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-03T22:59:30.000Z'));
+    api.getCheckinLog.mockResolvedValue(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Asha App')]));
+    drawScreen();
+    await screen.findByText('Asha App');
+    const asked = api.getCheckinLog.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(32_000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked + 1);
+    // Still the 3rd: tried again in 30 seconds, and the new day is drawn.
+    api.getCheckinLog.mockResolvedValue(logAnswer([], '2026-10-04'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked + 2);
+    expect(await screen.findByText(/Nobody has checked in yet today/)).toBeTruthy();
+  });
+
   it('says why live updates are off beside the heading, until the line opens and the day is read again', async () => {
     drawScreen();
     await screen.findByText(/Nobody has checked in yet today/);
@@ -607,15 +658,52 @@ describe('who came, on live news', () => {
       await vi.advanceTimersByTimeAsync(6_000);
     });
     await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(3));
-    // A read again that fails leaves the day as it was.
+    // A read again that fails leaves the day as it was, says it could not refresh, and tries again.
     expect(screen.getByText('asha@example.com')).toBeTruthy();
+    expect(await screen.findByText("Couldn't refresh — trying again")).toBeTruthy();
+    api.getAttendanceDay.mockResolvedValueOnce(dayWith([someone('Asha App', 'asha@example.com')]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(16_000);
+    });
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(screen.queryByText("Couldn't refresh — trying again")).toBeNull());
     // News of a leaderboard or a membership is not about who came.
     tell({ what: 'leaderboard', change: 'switched' });
     tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
-    expect(api.getAttendanceDay).toHaveBeenCalledTimes(3);
+    expect(api.getAttendanceDay).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('who came, without news', () => {
+  it('a person changed reads the day again; while the live line cannot open it checks every 30 seconds until the line is back', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    drawScreen();
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(1));
+    tell({ what: 'people' });
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(16_000);
+    });
+    tell({ what: 'refused', message: 'Live updates are busy right now. The page will try again shortly.' });
+    // Two checks in about a minute.
+    for (const step of [35_000, 35_000]) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(step);
+      });
+    }
+    expect(api.getAttendanceDay).toHaveBeenCalledTimes(4);
+    tell({ what: 'ready' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    const back = api.getAttendanceDay.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(api.getAttendanceDay.mock.calls.length).toBe(back);
   });
 });
 

@@ -179,7 +179,7 @@ export function registerOrgRoutes(
   // THE MEMBER LIST (Part 3 §9.9), registered here rather than in `app.ts`: it is
   // the same console behind the same two gates, on the same deps, and a second
   // registration point would be a second place to forget one of them.
-  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
+  registerMemberListRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, news: deps.news, ...(overrides.now === undefined ? {} : { now: overrides.now }) });
 
   // THE GYM'S TIMETABLE (Part 3 §13.3), registered here for the same reason the
   // member list is: the same console, the same gates, the same deps.
@@ -224,7 +224,7 @@ export function registerOrgRoutes(
 
   // A person's own invitations: what is waiting for their address, Join, No thanks
   // (Part 3 §10.2).
-  registerInvitationRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites });
+  registerInvitationRoutes(app, { sql: deps.sql, redis: deps.redis, invites: deps.invites, news: deps.news });
 
   // A gym's waiver: written in Settings, signed by its members (ROADMAP 3e-i).
   registerWaiverRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
@@ -534,6 +534,9 @@ export function registerOrgRoutes(
     ipMax: 3000,
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
+    // Each gym's own count at an address: the front desks of several gyms behind one address, each
+    // reading Who came on live news, never use up one another's.
+    ipScope: (req) => orgParamsSchema.safeParse(req.params).data?.gymId ?? null,
     redis: deps.redis,
   });
 
@@ -927,6 +930,7 @@ export function registerOrgRoutes(
         params.gymId,
         params.applicationId,
       );
+      deps.news.tell(params.gymId, { what: "people" });
       return reply.status(200).send(result);
     },
   );
@@ -1075,6 +1079,7 @@ export function registerOrgRoutes(
       if (query === null) return;
       try {
         const result = await service.removeOrgMember(orgDeps, requireUserId(req), params.gymId, params.userId, query);
+        deps.news.tell(params.gymId, { what: "people" });
         return await reply.status(200).send(result);
       } catch (err) {
         // Their personal training sessions are named first (17e-iv-a); nothing was done.
