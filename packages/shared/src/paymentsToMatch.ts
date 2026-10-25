@@ -83,6 +83,8 @@ export const paymentsToMatchSummarySchema = z
   .object({
     count: z.number().int().min(0),
     totals: z.array(z.object({ currency: currencySchema, minor: minorSchema }).strict()),
+    /** The gym has taken payments in Square Point of Sale: the menu keeps its count current (live). */
+    used: z.boolean().default(false),
   })
   .strict();
 export type PaymentsToMatchSummary = z.infer<typeof paymentsToMatchSummarySchema>;
@@ -90,6 +92,8 @@ export type PaymentsToMatchSummary = z.infer<typeof paymentsToMatchSummarySchema
 export const paymentsToMatchResponseSchema = paymentsToMatchSummarySchema
   .extend({
     payments: z.array(paymentToMatchSchema),
+    /** The gym's own day, which the bills ticked are due against. */
+    today: daySchema,
     /** Where the next page starts; null on the last. */
     next: z.number().int().min(1).nullable(),
     /** Square is connected now, so Match can ask Square about a payment before it goes on a bill. */

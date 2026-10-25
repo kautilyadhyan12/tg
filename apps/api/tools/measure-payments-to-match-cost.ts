@@ -2,7 +2,7 @@
 // launch shape, 20 gyms of 200 people, and one gym of 2,000 beside them, each on its own Square account in
 // Chicago; every person holds a weekly membership whose bill falls due today, with a card on file; and the
 // worst a list can hold: at the gym of 2,000 every person has a payment from Square Point of Sale waiting,
-// at the small gyms half of them. Square is the test fake, which answers at once, so what is measured is
+// at the small gyms half of them, each with its bill ticked for one press (the most a page reads). Square is the test fake, which answers at once, so what is measured is
 // ours. Measured, each the way staff or the worker meet it:
 //   - a page of Payments to match, the first and the last, and Overview's count, at the gym of 2,000;
 //   - Match's box for one person, and Match itself, at the gym of 2,000;
@@ -165,9 +165,11 @@ async function seedGym(people: number, n: number, waiting: number): Promise<Gym>
     last4: "4444",
     taken_at: new Date(Date.now() - i * 60_000),
     state: "waiting",
-    reason: "square_tax",
+    // One bill fits each, so every row of a page has its bill ticked: the most a page reads (one press).
+    reason: "ready",
     entry_id: c.entry_id,
     entered_minor: 2500,
+    device_name: "Front desk 1",
     created_at: new Date(),
     updated_at: new Date(),
   }));

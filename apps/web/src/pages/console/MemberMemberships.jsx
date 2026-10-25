@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { Check, CreditCard, Loader2, Plus } from 'lucide-react';
+import { AlertTriangle, Check, CreditCard, Loader2, Plus } from 'lucide-react';
 import { MEMBER_FEE_WORDS, formatMinor, memberGiftDaysLine } from '@app/shared';
-import { orgService, errorCode, errorText } from '../../api/orgsApi';
+import { orgService, errorCode, errorStatus, errorText } from '../../api/orgsApi';
+import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
 import PlaceLink from '../../components/console/PlaceLink';
 import PtSessionsEnding from '../../components/console/PtSessionsEnding';
 import ReceiptBox from '../../components/console/ReceiptBox';
@@ -24,7 +25,7 @@ import { termLine } from './membershipTypesView';
 import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndingWords, changeForm, changeLine, showsChange, squareSetUpLine } from './membershipChangeView';
 import { viewerPrivileges } from './consoleView';
 import { paymentToMatchTo, placeFor } from './consolePlaces';
-import { waitingLine } from './paymentsToMatchView';
+import { ACTION_WORDS, WAITING_HOLDS, billFor, canMatchPayments, matchedLine, pressFor, waitingLine, waitingNext, waitingNote } from './paymentsToMatchView';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -193,6 +194,10 @@ export default function MemberMemberships({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [refusal, setRefusal] = useState(null);
+  /** One press of Match on a payment from Square Point of Sale waiting here: the one being matched, and
+   *  what refused one, under it. Each payment keeps its press's key until it is answered. */
+  const [matching, setMatching] = useState({ id: null, error: null });
+  const matchKeys = useRef(new Map());
   const [showPast, setShowPast] = useState(false);
   /** The membership whose agreement box is open (18u-i): { id, justGiven }, or null. */
   const [agreementFor, setAgreementFor] = useState(() => (signNow === null ? null : { id: signNow, justGiven: true }));
@@ -1128,6 +1133,32 @@ export default function MemberMemberships({
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** One press of Match (18d-iii-b-ii-a; Kd, 2026-10-25): the payment from Square Point of Sale goes on the
+   *  bill ticked beside it, once, and what happened is said here; their memberships are read again. */
+  const matchWaiting = async (w) => {
+    if (w.bill === null) return;
+    setNotice(null);
+    setRefusal(null);
+    const key = matchKeys.current.get(w.id) ?? globalThis.crypto.randomUUID();
+    matchKeys.current.set(w.id, key);
+    setMatching({ id: w.id, error: null });
+    try {
+      const answer = await paymentsToMatchService.match(gymId, w.id, pressFor(w.bill, key));
+      matchKeys.current.delete(w.id);
+      setMatching({ id: null, error: null });
+      setNotice(matchedLine(answer.matched));
+      setAttempt((n) => n + 1);
+      onChanged?.();
+    } catch (err) {
+      setMatching({ id: null, error: { id: w.id, text: errorText(err, "We couldn't match it. Try again.") } });
+      // Matched or marked meanwhile, or the bill has changed: what is true now is read again.
+      if (errorStatus(err) === 409 || errorStatus(err) === 404) {
+        matchKeys.current.delete(w.id);
+        setAttempt((n) => n + 1);
+      }
     }
   };
 
@@ -2128,19 +2159,60 @@ export default function MemberMemberships({
       ) : null}
       {shown.canBill && open === null
         ? (shown.squareAppWaiting ?? []).map((w) => {
-            // A payment from Square Point of Sale waiting to be matched holds their card on file (18d-iii-b-ii-a).
+            // A payment from Square Point of Sale waiting to be matched holds their card on file; where the
+            // bill it fits is ticked, one press of Match here puts it there (18d-iii-b-ii-a; Kd, 2026-10-25).
             const matchTo = routed ? paymentToMatchTo(gym?.slug, viewerPrivileges(gym), w.id) : null;
+            const mayMatch = !readOnly && canMatchPayments(viewerPrivileges(gym));
+            const next = waitingNext(w);
+            const note = waitingNote(w);
+            const failed = matching.error !== null && matching.error.id === w.id ? matching.error.text : null;
             return (
-              <p key={w.id} className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="square-app-waiting">
-                <span>{waitingLine(w)}</span>
-                {matchTo === null ? (
-                  <span className="c-t3">Staff who record payments can match it in Payments to match.</span>
-                ) : (
-                  <PlaceLink to={matchTo} className="c-lk c-w6">
-                    Match it
-                  </PlaceLink>
-                )}
-              </p>
+              <div key={w.id} className="flex flex-col gap-1.5 rounded-[14px] p-3" style={{ background: 'var(--raise)' }} data-testid="square-app-waiting">
+                <p className="c-s14 c-w6 c-t1 m-0">{waitingLine(w, gym?.timezone, gym?.country)}</p>
+                {w.bill !== null ? (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="c-s14 c-t2" data-testid="square-app-waiting-bill">
+                      {billFor(w.bill, entryId, shown.today)}
+                    </span>
+                    {mayMatch ? (
+                      <button type="button" className="c-btn c-btn-p c-btn-sm" disabled={matching.id !== null} onClick={() => void matchWaiting(w)}>
+                        {matching.id === w.id ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+                        {matching.id === w.id ? 'Matching…' : ACTION_WORDS.match}
+                      </button>
+                    ) : null}
+                    {matchTo !== null ? (
+                      <PlaceLink to={matchTo} className="c-lk c-w6 c-s14">
+                        {ACTION_WORDS.other}
+                      </PlaceLink>
+                    ) : null}
+                  </div>
+                ) : null}
+                {note !== null ? (
+                  <p className={`c-s13 m-0 ${note.tone === 'warn' ? 'c-w6 flex items-start gap-1.5' : 'c-t3'}`} style={note.tone === 'warn' ? { color: 'var(--warn)' } : undefined}>
+                    {note.tone === 'warn' ? <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-none mt-0.5" /> : null}
+                    {note.text}
+                  </p>
+                ) : null}
+                {next !== null ? (
+                  <p className="c-s14 c-t2 m-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>{next}</span>
+                    {matchTo === null ? (
+                      <span className="c-t3">Staff who record payments can match it there.</span>
+                    ) : (
+                      <PlaceLink to={matchTo} className="c-lk c-w6">
+                        Match it
+                      </PlaceLink>
+                    )}
+                  </p>
+                ) : null}
+                {w.bill !== null && !mayMatch && matchTo === null ? <p className="c-s13 c-t3 m-0">Staff who record payments can match it in Payments to match.</p> : null}
+                {w.holdsCard ? <p className="c-s13 c-t3 m-0">{WAITING_HOLDS}</p> : null}
+                {failed !== null ? (
+                  <p className="c-s14 c-t1 m-0 rounded-[14px] p-3" style={{ background: 'var(--bad-bg)' }} role="alert">
+                    {failed}
+                  </p>
+                ) : null}
+              </div>
             );
           })
         : null}

@@ -452,6 +452,9 @@ export const sellPageResponseSchema = z
     totals: saleTotalsSchema,
     /** The same, for each kind (18q-ii). */
     kinds: z.object({ products: kindTotalsSchema, memberships: kindTotalsSchema, fees: kindTotalsSchema }).strict(),
+    /** The gym has taken payments in Square Point of Sale (18d-iii-b-ii-a): its shop sales there are in
+     *  Square's own reports, and the takings say so. */
+    squareApp: z.boolean().default(false),
   })
   .strict();
 export type SellPageResponse = z.infer<typeof sellPageResponseSchema>;

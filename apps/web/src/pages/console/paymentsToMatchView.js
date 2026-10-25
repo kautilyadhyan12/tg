@@ -1,16 +1,19 @@
 // PAYMENTS TO MATCH, its words (ROADMAP 18d-iii-b-ii-a). Pure, so the tests read every row without a
-// browser. A row is short facts in a list, as Failed payments shows them: when it was taken, what with,
-// who Square says it was, why it waits and what to do, and whether it holds a card on file. The words
-// are a payments list's: Match, as accounting software names putting a payment on its invoice; Square
-// Point of Sale, Square's own name for its app.
+// browser. Every payment taken in Square Point of Sale waits here for one press (Kd, 2026-10-25). A row is
+// one line, as a bank feed's "For review" list is in accounting software: when, who paid, how much, and
+// what it is for: the bill ticked, with Match, or in a few words what staff choose, with the button that
+// says so. A note is added only where something needs checking. Square Point of Sale is Square's own name
+// for its app; Match is accounting software's word for putting a payment on its bill.
 import { MEMBER_FEE_WORDS, MEMBER_PAYMENT_METHOD_WORDS, cardName, currencyDecimals, formatMinor, minorToPriceText, priceToMinor } from '@app/shared';
 import { whenWords } from './failedPaymentsView';
 import { billDays, shortDay } from './memberBillsView';
 
 export { canMatchPayments } from './paymentsToMatchAccess';
 
-export const TO_MATCH_INTRO = "Payments taken in Square Point of Sale that didn't go on a bill by themselves. Match each one to the bill it was for.";
-export const TO_MATCH_NONE = "No payments to match. A payment taken in Square Point of Sale that doesn't go on a bill by itself is listed here.";
+export const TO_MATCH_INTRO = 'Payments taken in Square Point of Sale. Match each one to the bill it pays.';
+/** Said once, under the intro: why a payment left here matters. */
+export const heldLine = (words) => `A ${words.person}'s card on file isn't charged while their payment waits here.`;
+export const TO_MATCH_NONE = 'No payments to match. Payments taken in Square Point of Sale appear here until they are matched.';
 export const TO_MATCH_NO_SQUARE = "Square isn't connected right now, so these payments can't be checked with Square before they go on a bill. Reconnect Square to match them.";
 export const TO_MATCH_NO_SQUARE_STAFF = "Square isn't connected right now, so these payments can't be checked with Square before they go on a bill. The owner can reconnect Square in Settings.";
 
@@ -42,13 +45,15 @@ export function overviewLine(summary) {
   return { value: `${count(summary.count)} from Square Point of Sale to match.`, total: `${totalWords(summary.totals)} in all` };
 }
 
-/** Who the row is: the person here, Square's name for a customer linked to nobody, or nobody picked. */
+/** Who paid: the person here, Square's name for a customer linked to nobody, or Unknown. */
 export function whoWords(row) {
   if (row.person !== null) return row.person.name;
-  if (row.customer?.name) return `${row.customer.name} (in Square)`;
-  if (row.customer !== null) return 'A customer in Square';
-  return row.reason === 'several_people' ? 'A customer in Square' : 'No customer added';
+  if (row.customer?.name) return row.customer.name;
+  return 'Unknown';
 }
+
+/** Said small under a name that is Square's, not the gym's list's. */
+export const whoNote = (row) => (row.person === null && row.customer?.name ? 'Name from Square' : null);
 
 /** "$27.06", with its tip where there was one: the tip stays with Square and is no bill's. */
 export function rowAmount(row) {
@@ -72,100 +77,90 @@ export function paidWith(row) {
   return row.source === null ? 'Not said by Square' : (SOURCES[row.source] ?? 'Another payment method');
 }
 
+/** "Front desk 1 · Visa ending 4242": the device that took it, so each desk knows its own, and how. */
+export const takenWith = (row) => (row.deviceName === null || row.deviceName === undefined ? paidWith(row) : `${row.deviceName} · ${paidWith(row)}`);
+
 /** "A and B", "A, B and C". */
 const andList = (names) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
 /** What Square added on top of what staff entered, where Square showed it. */
 const addedMinor = (row) => (row.enteredMinor === null ? null : row.amountMinor - row.enteredMinor);
 
-/** Why it is on the list, in one sentence. */
-export function reasonWords(row) {
-  const who = row.person?.name ?? 'This person';
-  const amount = money(row.amountMinor, row.currency);
+/** "Due today", "due 1 Nov", "was due 18 Oct": against the gym's own day. */
+function dueWords(dueOn, today) {
+  if (dueOn === today) return 'due today';
+  return dueOn < today ? `was due ${shortDay(dueOn, false)}` : `due ${shortDay(dueOn, false)}`;
+}
+
+/** The bill a payment is ticked for, as the row and the person's page say it: "Gold Monthly · due 1 Nov",
+ *  a fee's kind and what it was for, and whose it is where it is somebody the person pays for. */
+export function billFor(bill, personEntryId, today) {
+  const what = bill.fee !== null ? `${MEMBER_FEE_WORDS[bill.fee.kind]} · ${bill.fee.forName}` : bill.typeName;
+  const whose = bill.entryId === personEntryId ? '' : `${bill.name}: `;
+  return `${whose}${what} · ${dueWords(bill.dueOn, today)}`;
+}
+
+/** What it is for: the bill ticked, or in a few words why staff choose. */
+export function forWords(row, today) {
+  if (row.bill !== null) return billFor(row.bill, row.person?.entryId ?? null, today);
+  const who = row.person?.name ?? null;
+  const amount = money(row.enteredMinor ?? row.amountMinor, row.currency);
   switch (row.reason) {
     case 'no_customer':
-      return 'No customer was added to the sale in Square Point of Sale.';
+      return 'Nobody was picked in Square';
     case 'not_linked':
-      return "This customer in Square isn't linked to anyone on your list yet.";
+      return 'Not linked to anyone on your list';
     case 'several_people':
-      return row.linkedNames.length > 1 ? `This customer in Square is linked to ${andList(row.linkedNames)}.` : 'This customer in Square is linked to more than one person on your list.';
+      return row.linkedNames.length > 1 ? `Linked to ${andList(row.linkedNames)}` : 'Linked to more than one person on your list';
     case 'mixed_sale':
-      return 'The sale also had items from your Square item list.';
+      return 'Sold with shop items';
     case 'sale_unread':
-      return "Square didn't show what was sold.";
-    case 'square_tax': {
-      const added = addedMinor(row);
-      return added === null || added <= 0
-        ? 'Square added tax on top of the amount entered.'
-        : `Square added ${money(added, row.currency)} of tax on top of the ${money(row.enteredMinor, row.currency)} entered.`;
-    }
-    case 'no_bill':
-      return `${who} has no bill of ${amount}.`;
-    case 'too_early':
-      return `${who}'s bill of ${amount} isn't due in the next week.`;
-    case 'several_bills':
-      return `${who} has more than one bill of ${amount} due.`;
-    case 'busy':
-      return `A payment for ${who}'s bill was being taken on the Square Terminal or the card on file at the same time.`;
-    case 'maybe_twice':
-      return `${who}'s last bill was paid less than 2 days before this. They may have paid twice.`;
-    case 'other_location':
-      return 'It was taken at another location of your Square account.';
-    case 'several_gyms':
-      return 'It was taken at a location another gym here also uses, with no customer added.';
-    case 'not_this_bill':
-      return `It was taken off ${who === 'This person' ? 'a bill' : `${who}'s bill`} with Not this bill.`;
-    case 'refunded':
-      return row.refundedMinor > 0 ? `Square has refunded ${money(row.refundedMinor, row.currency)} of it.` : 'Square has refunded some or all of it.';
-    default:
-      return "It couldn't go on a bill by itself.";
-  }
-}
-
-/** What staff do about it, in one sentence. */
-export function nextStepWords(row) {
-  switch (row.reason) {
-    case 'no_customer':
-    case 'not_linked':
-      return 'Match it to the bill of the person who paid.';
-    case 'several_people':
-      return "Match it to the right person's bill.";
-    case 'mixed_sale':
-      return 'Match asks how much of it was for the bill.';
+      return "Square didn't say what was sold";
     case 'square_tax':
-      return row.enteredMinor === null ? 'Match asks how much of it was for the bill.' : `Match puts the ${money(row.enteredMinor, row.currency)} entered on the bill.`;
-    case 'no_bill':
-      return 'Match it to the bill it was for, or choose Not a bill payment for a shop sale.';
-    case 'too_early':
-      return 'Match puts it on that bill now, paid early.';
+      return 'Square added tax on top';
+    case 'several_bills':
+      return `More than one bill of ${amount} is due`;
     case 'busy':
-      return 'Match it once that payment has finished.';
-    case 'maybe_twice':
-      return 'If they paid twice, refund it in your Square Dashboard, then choose Not a bill payment. Otherwise match it to their next bill.';
+      return 'A payment for their bill is under way';
     case 'other_location':
-      return 'Match it if it was for a bill here. Otherwise choose Not a bill payment.';
+      return 'Taken at another of your Square locations';
+    case 'not_this_bill':
+      return who === null ? 'Taken off a bill' : `Taken off ${who}'s bill`;
     case 'refunded':
-      return 'Choose Not a bill payment.';
+      return row.refundedMinor > 0 ? `${money(row.refundedMinor, row.currency)} refunded in Square` : 'Refunded in Square';
+    case 'shop_items':
+      return 'Sold as shop items in Square';
     default:
-      return 'Match it to the bill it was for.';
+      // No bill of the amount, or the one it fitted was paid another way since.
+      return who === null ? `No bill of ${amount}` : `${who} has no bill of ${amount}`;
   }
 }
 
-/** The row's facts, label and value, in the order a payments list shows them. */
-export function rowFacts(row, timezone, country) {
-  const square = row.customer === null ? null : [row.customer.name, row.customer.email, row.customer.phone].filter((part) => part !== null).join(' · ');
-  return [
-    { label: 'Taken', value: whenWords(row.takenAt, timezone, country) },
-    { label: 'Paid with', value: paidWith(row) },
-    ...(square === null || square === '' ? [] : [{ label: 'In Square', value: square }]),
-    { label: 'Why it’s here', value: reasonWords(row) },
-    { label: 'Next step', value: nextStepWords(row) },
-    ...(row.holdsCard && row.person !== null ? [{ label: 'Card on file', value: `Not charged for ${row.person.name} while this waits` }] : []),
-  ];
+/** A note under the row, only where something needs checking (`warn`) or the amount needs saying (`info`). */
+export function rowNote(row) {
+  if (row.reason === 'maybe_twice' && row.bill !== null) {
+    const who = row.person?.name ?? 'They';
+    return { tone: 'warn', text: `${who}'s last bill was paid less than 2 days ago. Check they didn't pay twice.` };
+  }
+  if (row.reason === 'busy') return { tone: 'info', text: 'Try again in a minute.' };
+  if (row.reason === 'shop_items') return { tone: 'info', text: 'If it paid their membership, choose the bill. If not, choose Not for a bill.' };
+  if (row.reason === 'refunded') return { tone: 'info', text: 'Choose Not for a bill.' };
+  if (row.bill !== null) return enteredLine(row) === null ? null : { tone: 'info', text: enteredLine(row) };
+  return null;
 }
 
-/** Square added tax on top, so the gym's own Square settings are worth a look (Settings → Payments). */
-export const showsTaxFix = (row) => row.reason === 'square_tax';
+/** The row's one main button: Match where a bill is ticked; otherwise what staff choose; none where it
+ *  can't go on a bill (refunded). */
+export function rowAction(row) {
+  if (row.reason === 'refunded') return null;
+  if (row.bill !== null) return 'match';
+  return row.person === null ? 'who' : 'bill';
+}
+
+export const ACTION_WORDS = { match: 'Match', who: 'Choose who paid', bill: 'Choose the bill', other: 'Other bill', notBill: 'Not for a bill' };
+
+/** What one press puts on the ticked bill: the request Match sends. */
+export const pressFor = (bill, requestKey) => ({ requestKey, entryId: bill.entryId, membershipId: bill.membershipId, target: bill.target, amountMinor: bill.leftMinor });
 
 // ── Match's box ──
 
@@ -220,26 +215,44 @@ export const matchButton = (minor, currency) => `Match ${money(minor, currency)}
 /** Said in the row once it is matched. */
 export const matchedLine = (matched) => `Matched: ${money(matched.amountMinor, matched.currency)} on ${matched.name}'s bill. Receipt ${String(matched.receiptNumber)}.`;
 
-// ── Not a bill payment ──
+// ── Not for a bill ──
 
 export const NOT_A_BILL_CHOICES = [
   { value: 'other', label: 'A shop sale, or something else' },
   { value: 'by_hand', label: 'It’s already recorded on a bill by hand' },
 ];
 
-export const markedLine = (why) => (why === 'by_hand' ? 'Marked as already recorded on a bill by hand.' : 'Marked as not a bill payment.');
+export const markedLine = (why) => (why === 'by_hand' ? 'Marked as already recorded on a bill by hand.' : 'Marked as not for a bill.');
 
 /** Said in the box before it is pressed, where the payment holds somebody's card on file. */
 export const releasesCard = (row) => (row.holdsCard && row.person !== null ? `${row.person.name}'s card on file can then be charged for their bills again.` : null);
 
 // ── On the person's page ──
 
-/** A payment waiting that holds this person's card on file, as their page says it. */
-export function waitingLine(w, currency) {
-  const amount = money(w.amountMinor, w.currency ?? currency);
-  const day = shortDay(w.takenOn, false);
-  const lead = w.byName === null ? `A payment of ${amount} taken in Square Point of Sale on ${day} is waiting to be matched.` : `A payment of ${amount} by ${w.byName}, who pays for them, taken in Square Point of Sale on ${day}, is waiting to be matched.`;
-  return w.holdsCard ? `${lead} While it waits, the card on file isn't charged.` : lead;
+/** A payment waiting that holds this person's card on file, as their page says it: who paid, how much,
+ *  when and on which device. */
+export function waitingLine(w, timezone, country) {
+  const amount = money(w.amountMinor, w.currency);
+  const when = whenWords(w.takenAt, timezone, country);
+  const on = w.deviceName === null ? '' : ` on ${w.deviceName}`;
+  return w.byName === null
+    ? `Paid ${amount} in Square Point of Sale at ${when}${on}.`
+    : `${w.byName}, who pays for them, paid ${amount} in Square Point of Sale at ${when}${on}.`;
+}
+
+/** What follows it: the bill ticked for one press, or where it waits. */
+export const waitingNext = (w) => (w.bill === null ? 'It is waiting in Payments to match.' : null);
+
+/** Said where it holds their card. */
+export const WAITING_HOLDS = "Their card on file isn't charged until it is matched.";
+
+/** The note beside it, as the list's: Square's tax said, or that they may have paid twice. */
+export function waitingNote(w) {
+  if (w.maybeTwice && w.bill !== null) return { tone: 'warn', text: "Their last bill was paid less than 2 days ago. Check they didn't pay twice." };
+  if (w.enteredMinor !== null && w.bill !== null) {
+    return { tone: 'info', text: `${money(w.enteredMinor, w.currency)} goes on the bill. Square added ${money(w.amountMinor - w.enteredMinor, w.currency)} on top.` };
+  }
+  return null;
 }
 
 // ── The amount Match asks for, where Square didn't say ──

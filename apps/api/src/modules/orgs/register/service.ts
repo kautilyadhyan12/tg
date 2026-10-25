@@ -67,6 +67,7 @@ import { refuseMethodElsewhere } from "../paymentMethods.js";
 import * as discounts from "./discountsRepo.js";
 import { friendGiftOffer } from "../referrals/friendGift.js";
 import { waitingGiftFor } from "../referrals/memberGiftRepo.js";
+import { usesSquareApp } from "../payments/paymentsToMatchRepo.js";
 import * as repo from "./repo.js";
 import * as tax from "./taxRepo.js";
 
@@ -139,12 +140,13 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
   // may record one. Staff who only change prices are sent the products and the tax.
   // One connection and one moment: a sale or payment another desk records meanwhile is in
   // every list and count here, or in none, so the rows never outnumber their count.
-  const [row, paid, offered, types] = await deps.sql.begin("isolation level repeatable read read only", async (tx) =>
+  const [row, paid, offered, types, squareApp] = await deps.sql.begin("isolation level repeatable read read only", async (tx) =>
     Promise.all([
       repo.readRegister(tx, gymId, today, day, SALES_SHOWN, viewer.canSell),
       viewer.canSell ? paymentsOn(tx, gymId, day, SALES_SHOWN) : null,
       discounts.readDiscounts(tx, gymId),
       discounts.membershipTypeNames(tx, gymId),
+      usesSquareApp(tx, gymId),
     ]),
   );
   if (row === null) throw new OrgsError(404, "org_not_found", "Organisation not found.");
@@ -196,6 +198,7 @@ async function read(deps: RegisterDeps, gymId: string, viewer: Viewer, asked: st
     membershipTypes: types.map((t) => ({ id: t.id, name: t.name, taxRateId: t.taxRateId, free: t.free })),
     canSell: viewer.canSell,
     canManage: viewer.canManage,
+    squareApp,
     sales: shownSales(row.sales, today, viewer.canSell),
     salesNotShown,
     payments:

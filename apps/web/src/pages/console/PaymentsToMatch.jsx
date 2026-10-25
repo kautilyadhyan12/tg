@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
 import { orgService, errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
@@ -14,7 +14,9 @@ import { useLiveNews } from './liveNews';
 import MemberListPerson from './MemberListPerson';
 import { Refusal } from './MemberListTags';
 import { personOption } from './sellView';
+import { whenWords } from './failedPaymentsView';
 import {
+  ACTION_WORDS,
   NOT_A_BILL_CHOICES,
   SHARED_LOCATION_FIX,
   SHARED_LOCATION_STAFF,
@@ -30,25 +32,32 @@ import {
   billLabel,
   canMatchPayments,
   enteredLine,
+  forWords,
+  heldLine,
   keepDone,
   markedLine,
   matchButton,
   matchedLine,
   paidLine,
+  pressFor,
   releasesCard,
+  rowAction,
   rowAmount,
-  rowFacts,
+  rowNote,
   sharedLocationLine,
-  showsTaxFix,
+  takenWith,
   toMatchHeadline,
+  whoNote,
   whoWords,
 } from './paymentsToMatchView';
 
 // PAYMENTS TO MATCH (ROADMAP 18d-iii-b-ii-a; spec Part 3 §14.8): every payment taken in Square Point of
-// Sale that did not go on a bill by itself, the newest first, each with Match (who paid, which bill, then
-// it goes on that bill as Square Point of Sale) and Not a bill payment, with Undo. The server asks Square
-// about the payment and decides the bill again under the person's lock; while a payment waits, the card
-// on file of its person is not charged, and the row says so.
+// Sale, the newest first, waiting for one press (Kd, 2026-10-25). Each is one line, as a bank feed's list
+// to review is: when, who paid, how much, and what it is for. Where the app can tell the bill, it is ticked
+// and Match puts the payment there in one press; otherwise the button says what to choose (who paid, or
+// which bill) and opens Match's box. Not for a bill takes it off, with Undo. The server asks Square about
+// the payment and decides the bill again under the person's lock; while a payment waits, the card on file
+// of its person is not charged.
 
 const newKey = () => globalThis.crypto.randomUUID();
 const BOX = { border: '1px solid var(--line)', borderRadius: 12 };
@@ -271,7 +280,7 @@ function NotABillBox({ row, org, readOnly, onMarked, onStale, onClose }) {
       <div className="flex flex-wrap gap-2">
         <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={why === '' || state.busy || readOnly} onClick={() => void mark()}>
           {state.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
-          Not a bill payment
+          {ACTION_WORDS.notBill}
         </button>
         <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={state.busy} onClick={onClose}>
           Cancel
@@ -282,16 +291,49 @@ function NotABillBox({ row, org, readOnly, onMarked, onStale, onClose }) {
   );
 }
 
-/** One payment that waits: who, how much, its facts, and Match, Not a bill payment and their page. Once
- *  matched or marked it stays in place, saying so, until the page is opened again. */
-function Row({ row, org, readOnly, startOpen, done, onDone, onUndone, onStale, onOpenPerson, taxFixTo }) {
+/** The list's columns, on a wide screen. */
+function Head() {
+  return (
+    <div className="c-feed-row c-feed-head px-4 pb-2 c-s13 c-t3" aria-hidden="true">
+      <span className="c-feed-when">Taken</span>
+      <span className="c-feed-who">Paid by</span>
+      <span className="c-feed-amount">Amount</span>
+      <span className="c-feed-for">For</span>
+    </div>
+  );
+}
+
+/** One payment that waits, in one line: when, who paid, how much, what it is for, and its one main button
+ *  (Match where a bill is ticked, one press). Once matched or marked it stays in place, saying so, until
+ *  the page is opened again. */
+function Row({ row, org, today, readOnly, startOpen, done, onDone, onUndone, onStale, onOpenPerson }) {
   const [opened, setOpened] = useState(startOpen ? 'match' : null);
   const [undoing, setUndoing] = useState({ busy: false, error: null });
+  const [press, setPress] = useState({ busy: false, error: null });
+  // The press's own key: a double click, or the same press sent again, is one payment.
+  const [pressKey, setPressKey] = useState(newKey);
   const words = orgWords(org.orgType);
   const at = useRef(null);
   useEffect(() => {
     if (startOpen) at.current?.scrollIntoView?.({ block: 'center' });
   }, [startOpen]);
+
+  const matchNow = async () => {
+    if (row.bill === null) return;
+    setPress({ busy: true, error: null });
+    try {
+      const answer = await paymentsToMatchService.match(org.id, row.id, pressFor(row.bill, pressKey));
+      setPress({ busy: false, error: null });
+      onDone(row.id, { kind: 'matched', matched: answer.matched });
+    } catch (err) {
+      setPress({ busy: false, error: errorText(err, "We couldn't match it. Try again.") });
+      // Matched or marked meanwhile, or the bill has changed: the list says what is true now.
+      if (errorStatus(err) === 409 || errorStatus(err) === 404) {
+        setPressKey(newKey());
+        onStale();
+      }
+    }
+  };
 
   const undo = async () => {
     setUndoing({ busy: true, error: null });
@@ -303,57 +345,73 @@ function Row({ row, org, readOnly, startOpen, done, onDone, onUndone, onStale, o
       setUndoing({ busy: false, error: errorText(err, "We couldn't undo it. Try again.") });
     }
   };
-  const person = done?.kind === 'matched' ? { entryId: done.matched.entryId, name: done.matched.name } : row.person;
+  const action = rowAction(row);
+  const note = done === null ? rowNote(row) : null;
+  const small = [whoNote(row), takenWith(row)].filter((part) => part !== null).join(' · ');
+  const buttons = done === null && opened === null;
 
   return (
     <li ref={at} className="flex flex-col gap-3 p-4" style={{ borderTop: '1px solid var(--line)' }} data-testid="payment-to-match-row">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="flex flex-col gap-1 min-w-0">
+      <div className="c-feed-row">
+        <span className="c-feed-when c-s14 c-t2" data-testid="payment-to-match-when">
+          {whenWords(row.takenAt, org.timezone, org.country)}
+        </span>
+        <div className="c-feed-who flex flex-col min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             {row.person !== null ? (
-              <button type="button" className="c-btn-link c-s16 c-w6 text-left inline-flex items-center" style={{ minHeight: 44, height: 'auto' }} onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
+              <button type="button" className="c-btn-link c-s15 c-w6 text-left inline-flex items-center" style={{ minHeight: 44, height: 'auto' }} onClick={() => onOpenPerson(row.person.entryId)} aria-label={`Open ${row.person.name}'s page`}>
                 {row.person.name}
               </button>
             ) : (
-              <span className="c-s16 c-w6 c-t1">{whoWords(row)}</span>
+              <span className="c-s15 c-w6 c-t1" data-testid="payment-to-match-who">
+                {whoWords(row)}
+              </span>
             )}
-            {row.person?.past === true ? <span className="c-tag">{`Past ${words.person}`}</span> : null}
-            <span className="c-s16 c-w6 c-t1">{rowAmount(row)}</span>
+            {row.person?.past === true ? <span className="c-tag c-tag-plain">{`Past ${words.person}`}</span> : null}
           </div>
-          {done === null ? (
-            <dl className="grid gap-x-4 gap-y-1 m-0 mt-1" style={{ gridTemplateColumns: 'minmax(96px, max-content) 1fr' }} data-testid="payment-to-match-facts">
-              {rowFacts(row, org.timezone, org.country).map((fact) => (
-                <Fragment key={fact.label}>
-                  <dt className="c-s13 c-t3">{fact.label}</dt>
-                  <dd className="c-s14 c-t1 m-0">{fact.value}</dd>
-                </Fragment>
-              ))}
-            </dl>
+          <span className="c-s13 c-t3" data-testid="payment-to-match-with">
+            {small}
+          </span>
+        </div>
+        <span className="c-feed-amount c-s15 c-w6 c-t1" data-testid="payment-to-match-amount">
+          {rowAmount(row)}
+        </span>
+        <div className="c-feed-for flex flex-col gap-0.5 min-w-0">
+          <span className="c-s15 c-t1" data-testid="payment-to-match-for">
+            {forWords(row, today)}
+          </span>
+          {note !== null ? (
+            <span className={`c-s13 ${note.tone === 'warn' ? 'c-w6 inline-flex items-start gap-1.5' : 'c-t3'}`} style={note.tone === 'warn' ? { color: 'var(--warn)' } : undefined} data-testid="payment-to-match-note">
+              {note.tone === 'warn' ? <AlertTriangle aria-hidden="true" className="w-4 h-4 flex-none mt-0.5" /> : null}
+              {note.text}
+            </span>
           ) : null}
         </div>
-        <div className="flex flex-wrap gap-2 self-start flex-shrink-0">
-          {done === null && opened === null ? (
-            <>
-              <button type="button" className="c-btn c-btn-p c-btn-lg" disabled={readOnly} onClick={() => setOpened('match')}>
-                Match
-              </button>
-              <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={readOnly} onClick={() => setOpened('notBill')}>
-                Not a bill payment
-              </button>
-              {showsTaxFix(row) && taxFixTo !== null ? (
-                <PlaceLink to={taxFixTo} className="c-btn c-btn-s c-btn-lg">
-                  Square&apos;s tax settings
-                </PlaceLink>
-              ) : null}
-            </>
+        <div className="c-feed-act flex flex-wrap items-center gap-2">
+          {buttons && action === 'match' ? (
+            <button type="button" className="c-btn c-btn-p" disabled={readOnly || press.busy} onClick={() => void matchNow()}>
+              {press.busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+              {press.busy ? 'Matching…' : ACTION_WORDS.match}
+            </button>
           ) : null}
-          {person !== null ? (
-            <button type="button" className="c-btn c-btn-s c-btn-lg" onClick={() => onOpenPerson(person.entryId)}>
-              Open their page
+          {buttons && (action === 'who' || action === 'bill') ? (
+            <button type="button" className="c-btn c-btn-p" disabled={readOnly} onClick={() => setOpened('match')}>
+              {ACTION_WORDS[action]}
+            </button>
+          ) : null}
+          {buttons && action === 'match' ? (
+            <button type="button" className="c-btn c-btn-s c-btn-sm" disabled={readOnly || press.busy} onClick={() => setOpened('match')}>
+              {ACTION_WORDS.other}
+            </button>
+          ) : null}
+          {buttons ? (
+            <button type="button" className={action === null ? 'c-btn c-btn-p' : 'c-btn c-btn-s c-btn-sm'} disabled={readOnly || press.busy} onClick={() => setOpened('notBill')}>
+              {ACTION_WORDS.notBill}
             </button>
           ) : null}
         </div>
       </div>
+      {press.error !== null ? <Refusal>{press.error}</Refusal> : null}
       {readOnly && done === null ? <p className="c-s13 c-t3">{readOnlyNote(org.orgType)}</p> : null}
 
       {done === null && opened === 'match' ? (
@@ -529,6 +587,9 @@ export default function PaymentsToMatch() {
       <header className="flex flex-col gap-1.5 min-w-0">
         <h1 className="c-h1">Payments to match</h1>
         <p className="c-sub">{TO_MATCH_INTRO}</p>
+        <p className="c-s14 c-t3 m-0" data-testid="payments-to-match-held">
+          {heldLine(words)}
+        </p>
       </header>
 
       {refused ? (
@@ -579,16 +640,17 @@ export default function PaymentsToMatch() {
                   {headline}
                 </p>
               ) : null}
+              <Head />
               <ul className="list-none m-0 p-0">
                 {list.payments.map((row) => (
                   <Row
                     key={row.id}
                     row={row}
                     org={org}
+                    today={list.today}
                     readOnly={readOnly}
                     startOpen={opening === row.id}
                     done={done[row.id] ?? null}
-                    taxFixTo={paymentsTo}
                     onOpenPerson={openPerson}
                     onStale={() => void load()}
                     onDone={(id, what) => {

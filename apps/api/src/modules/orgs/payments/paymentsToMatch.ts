@@ -61,17 +61,23 @@ async function allowed(deps: PaymentsDeps, gymId: string, userId: string, write:
 /** How many wait, and what they come to: Overview's line. */
 export async function readToMatchSummary(deps: PaymentsDeps, userId: string, gymId: string): Promise<PaymentsToMatchSummary> {
   await allowed(deps, gymId, userId, false);
-  return paymentsToMatchSummarySchema.parse(await toMatch.waitingTotals(deps.sql, gymId));
+  const [totals, used] = await Promise.all([toMatch.waitingTotals(deps.sql, gymId), toMatch.usesSquareApp(deps.sql, gymId)]);
+  return paymentsToMatchSummarySchema.parse({ ...totals, used });
 }
 
 /** A page of the list, from the `from`th payment. */
 export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gymId: string, from: number): Promise<PaymentsToMatchResponse> {
   const gym = await allowed(deps, gymId, userId, false);
-  const [totals, page] = await Promise.all([toMatch.waitingTotals(deps.sql, gymId), toMatch.waitingPage(deps.sql, gymId, from, PAYMENTS_TO_MATCH_PAGE)]);
+  const [totals, page, used] = await Promise.all([
+    toMatch.waitingTotals(deps.sql, gymId),
+    toMatch.waitingPage(deps.sql, gymId, from, PAYMENTS_TO_MATCH_PAGE),
+    toMatch.usesSquareApp(deps.sql, gymId),
+  ]);
   const square = deps.square;
   const connection = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
   const people = [...new Set(page.flatMap((p) => (p.entryId === null ? [] : [p.entryId])))];
-  const [held, ticks] = await Promise.all([toMatch.cardHeldFor(deps.sql, gymId, people), ticksFor(deps.sql, gymId, dayInTz(deps.now(), gym.timezone), page)]);
+  const today = dayInTz(deps.now(), gym.timezone);
+  const [held, ticks] = await Promise.all([toMatch.cardHeldFor(deps.sql, gymId, people), ticksFor(deps.sql, gymId, today, page)]);
   // A customer linked to more than one record: whose, by name. Every row of one gym is of its account.
   const several = page.filter((p) => p.reason === "several_people" && p.customerId !== null);
   const names = new Map<string, string[]>();
@@ -113,7 +119,7 @@ export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gy
     square !== null && connection?.state === "connected" && connection.locationId !== null
       ? await toMatch.sharedLocationCount(deps.sql, { gymId, environment: square.environment, accountId: connection.accountId, locationId: connection.locationId })
       : 0;
-  return paymentsToMatchResponseSchema.parse({ ...totals, payments, next, square: ready, sharedLocation });
+  return paymentsToMatchResponseSchema.parse({ ...totals, used, payments, today, next, square: ready, sharedLocation });
 }
 
 /** One of the gym's payments that waits, or why it is not on the list now. */

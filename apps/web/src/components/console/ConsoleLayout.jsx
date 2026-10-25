@@ -11,6 +11,7 @@ import { useConsoleOrg } from '../../pages/console/useConsoleOrg';
 import { useConsoleSignOut } from '../../pages/console/consoleSignOut';
 import { consoleLook, consoleMenu, moreIsCurrent } from '../../pages/console/consoleMenu';
 import { orgTypeLabel, roleLabel, viewerPrivileges } from '../../pages/console/consoleView';
+import { usePaymentsToMatchCount } from '../../pages/console/usePaymentsToMatchCount';
 import './console.css';
 
 // The console's own shell (spec Part 3 §3.1, §17): the menu on the left from 768 px; below
@@ -22,7 +23,8 @@ import './console.css';
 // keeps a shared front-desk browser honest.
 //
 // The role comes from the same kept list of gyms the screen inside reads
-// (`pages/console/consoleOrgs.js`), so the shell asks the server nothing of its own.
+// (`pages/console/consoleOrgs.js`), so the shell asks the server nothing of its own but one count: the
+// payments waiting in Payments to match, for staff who match them (18d-iii-b-ii-a).
 
 /** The gym's name at the top of the menu: tapping it opens "Your organisations". With no
  *  gym to name (still loading, or an address that is not one of the person's gyms) it
@@ -46,6 +48,16 @@ function GymSwitcher({ org, fallback, compact }) {
       </span>
       <ChevronsUpDown size={16} style={{ color: 'var(--rail-t3)' }} />
     </Link>
+  );
+}
+
+/** How many payments wait beside Payments to match, and what it means to a screen reader. */
+function ToMatchCount({ count }) {
+  return (
+    <span className="c-nav-count" data-testid="payments-to-match-count">
+      <span aria-hidden="true">{count}</span>
+      <span className="sr-only">{`, ${String(count)} ${count === 1 ? 'payment' : 'payments'} to match`}</span>
+    </span>
   );
 }
 
@@ -75,6 +87,9 @@ export default function ConsoleLayout({ children }) {
   // them they will forget"). The server counts it only for staff who may see the list.
   const toReview = org?.membersNeedReview ?? 0;
   const reviewDot = (page) => (page.key === 'members' && toReview > 0 ? <ReviewDot count={toReview} words={words} /> : null);
+  // Every payment taken in Square Point of Sale waits for one press: the desk sees it come in from any page.
+  const toMatch = usePaymentsToMatchCount(org);
+  const toMatchCount = (page) => (page.key === 'payments-to-match' && toMatch > 0 ? <ToMatchCount count={toMatch} /> : null);
   const moreOn = menu ? moreIsCurrent(menu, pathname) : false;
   const name = user?.displayName || user?.email || '';
   const role = org ? roleLabel(org.staffRole, org.orgType, org.coOwner) : '';
@@ -101,6 +116,7 @@ export default function ConsoleLayout({ children }) {
                     <Icon size={20} />
                     <span>{page.label}</span>
                     {reviewDot(page)}
+                    {toMatchCount(page)}
                   </NavLink>
                 );
               })}

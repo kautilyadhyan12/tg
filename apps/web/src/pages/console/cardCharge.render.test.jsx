@@ -24,6 +24,8 @@ vi.mock('../../api/orgsApi', async (importOriginal) => {
   };
 });
 
+const toMatch = vi.hoisted(() => ({ match: vi.fn() }));
+vi.mock('../../api/paymentsToMatchApi', () => ({ paymentsToMatchService: toMatch }));
 const { billingFor } = await import('./billingFixture');
 const { orgService } = await import('../../api/orgsApi');
 const MemberMemberships = (await import('./MemberMemberships')).default;
@@ -229,10 +231,15 @@ describe('Charge card on file: the form', () => {
     const WAITING = '77777777-7777-4777-8777-000000000001';
     const withWaiting = page([held(1, false)]);
     orgService.getHeldMemberships.mockResolvedValue({
-      data: heldMembershipsResponseSchema.parse({ ...withWaiting.data, squareAppWaiting: [{ id: WAITING, amountMinor: 4999, currency: 'USD', takenOn: '2026-10-19', byName: null, holdsCard: true }] }),
+      data: heldMembershipsResponseSchema.parse({
+        ...withWaiting.data,
+        squareAppWaiting: [
+          { id: WAITING, amountMinor: 4999, currency: 'USD', takenOn: '2026-10-19', takenAt: '2026-10-19T15:14:00.000Z', deviceName: null, byName: null, holdsCard: true, enteredMinor: null, maybeTwice: false, bill: null },
+        ],
+      }),
     });
     orgService.getTerminalPayments.mockReturnValue(box(VISA));
-    const words = "This person has a payment from Square Point of Sale waiting in Payments to match. Match it to their bill, or mark it Not a bill payment, before charging their card, so they aren't charged twice.";
+    const words = "This person has a payment from Square Point of Sale waiting in Payments to match. Match it to their bill, or mark it Not for a bill, before charging their card, so they aren't charged twice.";
     orgService.chargeCardOnFile.mockRejectedValue({ response: { status: 409, data: { error: 'square_app_waiting', message: words } } });
     const gym = { id: GYM, slug: 'iron-house', staffRole: 'owner', privileges: ['members.read', 'members.confirm', 'billing.members'], country: 'US', timezone: 'America/Chicago' };
     render(
@@ -241,7 +248,11 @@ describe('Charge card on file: the form', () => {
       </MemoryRouter>,
     );
     const note = await screen.findByTestId('square-app-waiting');
-    expect(note.textContent).toContain("A payment of $49.99 taken in Square Point of Sale on 19 Oct is waiting to be matched. While it waits, the card on file isn't charged.");
+    expect(note.textContent).toContain('Paid $49.99 in Square Point of Sale at 10:14 AM on 19 Oct.');
+    expect(note.textContent).toContain('It is waiting in Payments to match.');
+    expect(note.textContent).toContain("Their card on file isn't charged until it is matched.");
+    // No bill ticked: nothing to press here, and the way to where it is chosen.
+    expect(within(note).queryByRole('button', { name: 'Match' })).toBeNull();
     expect(within(note).getByRole('link', { name: 'Match it' }).getAttribute('href')).toBe(`/console/iron-house/payments-to-match?payment=${WAITING}`);
     const form = await openPay();
     await waitFor(() => expect(optionsOf(howPaid(form))).toContain('Card on file · Visa ending 1111'));
@@ -251,6 +262,45 @@ describe('Charge card on file: the form', () => {
     // The box holds a choice made: leaving asks first, then opens the payment.
     fireEvent.click(form.getByRole('button', { name: 'Open Payments to match' }));
     expect(form.getByRole('link', { name: 'Leave this page' }).getAttribute('href')).toBe(`/console/iron-house/payments-to-match?payment=${WAITING}`);
+  });
+
+  it("one press on the person's page: Match puts the payment from Square Point of Sale on the bill ticked beside it, once, and says so (18d-iii-b-ii-a)", async () => {
+    const WAITING = '77777777-7777-4777-8777-000000000002';
+    const withWaiting = page([held(1, false)]);
+    const membershipId = withWaiting.data.memberships[0]?.id;
+    const ticked = { entryId: TARA, name: 'Tara Singh', membershipId, typeName: 'Gold Monthly', target: { kind: 'period', periodIndex: 1 }, fee: null, covers: null, dueOn: withWaiting.data.today, leftMinor: 4999, currency: 'USD', cannot: null };
+    orgService.getHeldMemberships.mockResolvedValue({
+      data: heldMembershipsResponseSchema.parse({
+        ...withWaiting.data,
+        squareAppWaiting: [
+          { id: WAITING, amountMinor: 4999, currency: 'USD', takenOn: '2026-10-19', takenAt: '2026-10-19T15:14:00.000Z', deviceName: 'Front desk 2', byName: null, holdsCard: true, enteredMinor: null, maybeTwice: false, bill: ticked },
+        ],
+      }),
+    });
+    orgService.getTerminalPayments.mockReturnValue(box(VISA));
+    let answerNow;
+    toMatch.match.mockReturnValue(new Promise((resolve) => (answerNow = resolve)));
+    const gym = { id: GYM, slug: 'iron-house', staffRole: 'owner', privileges: ['members.read', 'members.confirm', 'billing.members'], country: 'US', timezone: 'America/Chicago' };
+    render(
+      <MemoryRouter>
+        <MemberMemberships gymId={GYM} gym={gym} entryId={TARA} name="Tara Singh" readOnly={false} />
+      </MemoryRouter>,
+    );
+    const note = await screen.findByTestId('square-app-waiting');
+    expect(note.textContent).toContain('Paid $49.99 in Square Point of Sale at 10:14 AM on 19 Oct on Front desk 2.');
+    expect(within(note).getByTestId('square-app-waiting-bill').textContent).toBe('Gold Monthly · due today');
+    expect(note.textContent).not.toContain('It is waiting in Payments to match.');
+    // Pressed twice before the answer: sent once, with this payment's ticked bill.
+    fireEvent.click(within(note).getByRole('button', { name: 'Match' }));
+    fireEvent.click(within(note).getByRole('button', { name: 'Matching…' }));
+    expect(toMatch.match).toHaveBeenCalledTimes(1);
+    const [gymId, paymentId, body] = toMatch.match.mock.calls[0];
+    expect([gymId, paymentId]).toEqual([GYM, WAITING]);
+    expect(body).toMatchObject({ entryId: TARA, membershipId, target: { kind: 'period', periodIndex: 1 }, amountMinor: 4999 });
+    orgService.getHeldMemberships.mockResolvedValue(page([held(1, false)]));
+    answerNow({ matched: { entryId: TARA, name: 'Tara Singh', amountMinor: 4999, currency: 'USD', receiptNumber: 61 } });
+    expect(await screen.findByText("Matched: $49.99 on Tara Singh's bill. Receipt 61.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId('square-app-waiting')).toBeNull());
   });
 
   it('a card its bank declined for good is named so, cannot be picked, and the form says what to do (18d-iii-ii-a)', async () => {

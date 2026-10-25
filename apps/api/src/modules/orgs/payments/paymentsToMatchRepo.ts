@@ -421,3 +421,9 @@ export async function busyOf(sql: SqlOrTx, gymId: string, membershipIds: readonl
     SELECT held_membership_id AS id FROM gym_card_charges WHERE gym_id = ${gymId} AND held_membership_id = ANY(${[...membershipIds]}::uuid[]) AND state = 'charging'`;
   return new Set(rows.map((r) => r.id));
 }
+
+/** The gym has taken payments in Square Point of Sale: Today's takings says where their shop sales are. */
+export async function usesSquareApp(sql: SqlOrTx, gymId: string): Promise<boolean> {
+  const [row] = await sql<{ any: boolean }[]>`SELECT EXISTS (SELECT 1 FROM gym_square_app_payments WHERE gym_id = ${gymId}) AS any`;
+  return row?.any === true;
+}

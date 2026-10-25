@@ -1,25 +1,35 @@
-// PAYMENTS TO MATCH, its words (ROADMAP 18d-iii-b-ii-a): every reason a payment waits, as a row says it
-// and what to do next; the amount Match asks for; the rows kept in place; the person's page's line.
+// PAYMENTS TO MATCH, its words (ROADMAP 18d-iii-b-ii-a): every payment from Square Point of Sale waits for
+// one press (Kd, 2026-10-25). Each row in one line: who paid, what it is for (the bill ticked, or why staff
+// choose), its one main button and a note only where something needs checking; the amount Match asks for;
+// the rows kept in place; the person's page's line.
 import { describe, expect, it } from 'vitest';
 import { SQUARE_APP_WAIT_REASONS } from '@app/shared';
 import {
+  ACTION_WORDS,
   amountFor,
   billCannot,
   billDue,
+  billFor,
   billLabel,
   enteredLine,
+  forWords,
+  heldLine,
   keepDone,
   markedLine,
-  nextStepWords,
   overviewLine,
   paidLine,
   paidWith,
-  reasonWords,
+  pressFor,
   releasesCard,
+  rowAction,
   rowAmount,
-  rowFacts,
+  rowNote,
+  takenWith,
   toMatchHeadline,
   waitingLine,
+  waitingNext,
+  waitingNote,
+  whoNote,
   whoWords,
 } from './paymentsToMatchView';
 
@@ -40,66 +50,89 @@ const row = (over = {}) => ({
   suggested: BEN,
   reason: 'no_bill',
   holdsCard: false,
+  deviceName: null,
+  bill: null,
   ...over,
 });
+const TODAY = '2026-10-25';
+const bill = (over = {}) => ({ entryId: 'e-ben', name: 'Ben Ortiz', membershipId: 'm1', typeName: 'Gold Weekly', target: { kind: 'period', periodIndex: 1 }, fee: null, covers: { from: '2026-10-19', to: '2026-10-25' }, dueOn: '2026-10-25', leftMinor: 2500, currency: 'USD', cannot: null, ...over });
 
-describe('why it waits, and what to do, for every reason Square Point of Sale gives', () => {
-  const said = {
-    no_customer: ['No customer was added to the sale in Square Point of Sale.', 'Match it to the bill of the person who paid.'],
-    not_linked: ["This customer in Square isn't linked to anyone on your list yet.", 'Match it to the bill of the person who paid.'],
-    several_people: ['This customer in Square is linked to Ben Ortiz and Benjamin Ortiz.', "Match it to the right person's bill."],
-    mixed_sale: ['The sale also had items from your Square item list.', 'Match asks how much of it was for the bill.'],
-    sale_unread: ["Square didn't show what was sold.", 'Match it to the bill it was for.'],
-    square_tax: ['Square added $2.06 of tax on top of the $25.00 entered.', 'Match puts the $25.00 entered on the bill.'],
-    no_bill: ['Ben Ortiz has no bill of $27.06.', 'Match it to the bill it was for, or choose Not a bill payment for a shop sale.'],
-    too_early: ["Ben Ortiz's bill of $27.06 isn't due in the next week.", 'Match puts it on that bill now, paid early.'],
-    several_bills: ['Ben Ortiz has more than one bill of $27.06 due.', 'Match it to the bill it was for.'],
-    busy: ["A payment for Ben Ortiz's bill was being taken on the Square Terminal or the card on file at the same time.", 'Match it once that payment has finished.'],
-    maybe_twice: [
-      "Ben Ortiz's last bill was paid less than 2 days before this. They may have paid twice.",
-      'If they paid twice, refund it in your Square Dashboard, then choose Not a bill payment. Otherwise match it to their next bill.',
-    ],
-    other_location: ['It was taken at another location of your Square account.', 'Match it if it was for a bill here. Otherwise choose Not a bill payment.'],
-    several_gyms: ['It was taken at a location another gym here also uses, with no customer added.', 'Match it to the bill it was for.'],
-    not_this_bill: ["It was taken off Ben Ortiz's bill with Not this bill.", 'Match it to the bill it was for.'],
-    refunded: ['Square has refunded $10.00 of it.', 'Choose Not a bill payment.'],
-  };
-  it('every reason the server can send has its words', () => {
-    expect(Object.keys(said).sort()).toEqual([...SQUARE_APP_WAIT_REASONS].sort());
+describe('every reason a payment waits, unticked: what it is for in a few words, the button that says what to choose, and a note only where needed', () => {
+  const nobody = { person: null, suggested: null };
+  // [reason, the row, For, the button, the note]
+  const said = [
+    ['ready', {}, 'Ben Ortiz has no bill of $25.00', 'bill', null],
+    ['no_customer', nobody, 'Nobody was picked in Square', 'who', null],
+    ['not_linked', { ...nobody, customer: { name: 'Amy Lee', email: 'amy@gmail.com', phone: null } }, 'Not linked to anyone on your list', 'who', null],
+    ['several_people', nobody, 'Linked to Ben Ortiz and Benjamin Ortiz', 'who', null],
+    ['mixed_sale', {}, 'Sold with shop items', 'bill', null],
+    ['sale_unread', {}, "Square didn't say what was sold", 'bill', null],
+    ['square_tax', { enteredMinor: null }, 'Square added tax on top', 'bill', null],
+    ['no_bill', {}, 'Ben Ortiz has no bill of $25.00', 'bill', null],
+    ['too_early', {}, 'Ben Ortiz has no bill of $25.00', 'bill', null],
+    ['several_bills', {}, 'More than one bill of $25.00 is due', 'bill', null],
+    ['busy', {}, 'A payment for their bill is under way', 'bill', { tone: 'info', text: 'Try again in a minute.' }],
+    ['maybe_twice', {}, 'Ben Ortiz has no bill of $25.00', 'bill', null],
+    ['other_location', nobody, 'Taken at another of your Square locations', 'who', null],
+    ['several_gyms', nobody, 'No bill of $25.00', 'who', null],
+    ['not_this_bill', {}, "Taken off Ben Ortiz's bill", 'bill', null],
+    ['refunded', {}, '$10.00 refunded in Square', null, { tone: 'info', text: 'Choose Not for a bill.' }],
+    ['shop_items', { enteredMinor: null }, 'Sold as shop items in Square', 'bill', { tone: 'info', text: 'If it paid their membership, choose the bill. If not, choose Not for a bill.' }],
+  ];
+  it('every reason the server can send is here', () => {
+    expect(said.map(([reason]) => reason).sort()).toEqual([...SQUARE_APP_WAIT_REASONS].sort());
   });
-  it.each(Object.entries(said))('%s', (reason, [why, next]) => {
-    const r = row({ reason, amountMinor: 2706, enteredMinor: 2500, refundedMinor: 1000, linkedNames: ['Ben Ortiz', 'Benjamin Ortiz'] });
-    expect(reasonWords(r)).toBe(why);
-    expect(nextStepWords(r)).toBe(next);
+  it.each(said)('%s', (reason, over, words, action, note) => {
+    const r = row({ reason, amountMinor: 2706, enteredMinor: 2500, refundedMinor: 1000, linkedNames: ['Ben Ortiz', 'Benjamin Ortiz'], ...over });
+    expect(forWords(r, TODAY)).toBe(words);
+    expect(rowAction(r)).toBe(action);
+    expect(rowNote(r)).toEqual(note);
   });
-  it('where Square did not say how much was entered or refunded, nothing is made up', () => {
-    expect(reasonWords(row({ reason: 'square_tax', enteredMinor: null }))).toBe('Square added tax on top of the amount entered.');
-    expect(nextStepWords(row({ reason: 'square_tax', enteredMinor: null }))).toBe('Match asks how much of it was for the bill.');
-    expect(reasonWords(row({ reason: 'refunded', refundedMinor: 0 }))).toBe('Square has refunded some or all of it.');
-    expect(reasonWords(row({ reason: 'several_people', linkedNames: [] }))).toBe('This customer in Square is linked to more than one person on your list.');
+  it('where Square did not say how much was refunded or who it is linked to, nothing is made up', () => {
+    expect(forWords(row({ reason: 'refunded', refundedMinor: 0 }), TODAY)).toBe('Refunded in Square');
+    expect(forWords(row({ reason: 'several_people', person: null, linkedNames: [] }), TODAY)).toBe('Linked to more than one person on your list');
+    expect(forWords(row({ reason: 'not_this_bill', person: null }), TODAY)).toBe('Taken off a bill');
+  });
+  it('the buttons say what they do', () => {
+    expect(ACTION_WORDS).toEqual({ match: 'Match', who: 'Choose who paid', bill: 'Choose the bill', other: 'Other bill', notBill: 'Not for a bill' });
   });
 });
 
-describe("a row's facts", () => {
-  it('when, what with, Square’s details, why, what next, and the card on file held', () => {
-    const facts = rowFacts(row({ reason: 'not_linked', person: null, suggested: null, customer: { name: 'Amy Lee', email: 'amy@gmail.com', phone: null }, card: null, source: 'CASH' }), 'America/Chicago', 'US');
-    expect(facts.map((f) => [f.label, f.value])).toEqual([
-      ['Taken', '10:14 AM on 22 Oct'],
-      ['Paid with', 'Cash'],
-      ['In Square', 'Amy Lee · amy@gmail.com'],
-      ['Why it’s here', "This customer in Square isn't linked to anyone on your list yet."],
-      ['Next step', 'Match it to the bill of the person who paid.'],
-    ]);
-    expect(rowFacts(row({ holdsCard: true }), 'America/Chicago', 'US').at(-1)).toEqual({ label: 'Card on file', value: 'Not charged for Ben Ortiz while this waits' });
-  });
+describe('a payment whose bill is ticked: one press of Match', () => {
   it.each([
-    [row(), 'Ben Ortiz'],
-    [row({ person: null, customer: { name: 'Amy Lee', email: null, phone: null } }), 'Amy Lee (in Square)'],
-    [row({ person: null, customer: { name: null, email: 'x@y.z', phone: null } }), 'A customer in Square'],
-    [row({ person: null, customer: null, reason: 'no_customer' }), 'No customer added'],
-    [row({ person: null, customer: null, reason: 'several_people' }), 'A customer in Square'],
-  ])('who: %#', (r, who) => {
+    ['due today', row({ reason: 'ready', bill: bill() }), 'Gold Weekly · due today'],
+    ['due later in the week', row({ reason: 'ready', bill: bill({ dueOn: '2026-10-30' }) }), 'Gold Weekly · due 30 Oct'],
+    ['paid early, more than a week ahead', row({ reason: 'too_early', bill: bill({ dueOn: '2026-11-08' }) }), 'Gold Weekly · due 8 Nov'],
+    ['overdue', row({ reason: 'ready', bill: bill({ dueOn: '2026-10-18' }) }), 'Gold Weekly · was due 18 Oct'],
+    ['somebody they pay for', row({ reason: 'ready', bill: bill({ entryId: 'e-kai', name: 'Kai Ortiz' }) }), 'Kai Ortiz: Gold Weekly · due today'],
+    ['a fee', row({ reason: 'ready', bill: bill({ fee: { kind: 'late_cancel', forName: 'Spin on 3 Oct' }, covers: null }) }), 'Late cancel fee · Spin on 3 Oct · due today'],
+  ])('%s: For says the bill, and the button is Match', (_name, r, words) => {
+    expect(forWords(r, TODAY)).toBe(words);
+    expect(rowAction(r)).toBe('match');
+  });
+  it('a note only where something needs checking or saying', () => {
+    expect(rowNote(row({ reason: 'ready', bill: bill() }))).toBeNull();
+    expect(rowNote(row({ reason: 'ready', bill: bill(), amountMinor: 2706, enteredMinor: 2500 }))).toEqual({ tone: 'info', text: '$25.00 goes on the bill. Square added $2.06 on top.' });
+    expect(rowNote(row({ reason: 'maybe_twice', bill: bill() }))).toEqual({ tone: 'warn', text: "Ben Ortiz's last bill was paid less than 2 days ago. Check they didn't pay twice." });
+  });
+  it('one press sends the bill ticked, the amount it is left owing, and its own key', () => {
+    expect(pressFor(bill(), 'k1')).toEqual({ requestKey: 'k1', entryId: 'e-ben', membershipId: 'm1', target: { kind: 'period', periodIndex: 1 }, amountMinor: 2500 });
+  });
+});
+
+describe('who paid, and on which device', () => {
+  it.each([
+    [row(), 'Ben Ortiz', null],
+    [row({ person: null, customer: { name: 'Amy Lee', email: null, phone: null } }), 'Amy Lee', 'Name from Square'],
+    [row({ person: null, customer: { name: null, email: 'x@y.z', phone: null } }), 'Unknown', null],
+    [row({ person: null, customer: null, reason: 'no_customer' }), 'Unknown', null],
+  ])('who: %#', (r, who, note) => {
     expect(whoWords(r)).toBe(who);
+    expect(whoNote(r)).toBe(note);
+  });
+  it('the device the gym named in Square, then how it was paid', () => {
+    expect(takenWith(row({ deviceName: 'Front desk 1' }))).toBe('Front desk 1 · Visa ending 4242');
+    expect(takenWith(row())).toBe('Visa ending 4242');
   });
   it.each([
     [{ card: { brand: 'MASTERCARD', last4: '4444' }, source: 'CARD' }, 'Mastercard ending 4444'],
@@ -116,10 +149,16 @@ describe("a row's facts", () => {
     expect(rowAmount(row({ tipMinor: 300 }))).toBe('$25.00 + $3.00 tip');
     expect(rowAmount(row())).toBe('$25.00');
   });
+  it('the page says once why a payment left here matters', () => {
+    expect(heldLine({ person: 'member' })).toBe("A member's card on file isn't charged while their payment waits here.");
+    expect(heldLine({ person: 'client' })).toBe("A client's card on file isn't charged while their payment waits here.");
+  });
+  it('the person page names the bill as the row does', () => {
+    expect(billFor(bill(), 'e-ben', TODAY)).toBe('Gold Weekly · due today');
+  });
 });
 
 describe("Match's box", () => {
-  const bill = (over = {}) => ({ entryId: 'e-ben', name: 'Ben Ortiz', membershipId: 'm1', typeName: 'Gold Weekly', target: { kind: 'period', periodIndex: 1 }, fee: null, covers: { from: '2026-10-19', to: '2026-10-25' }, dueOn: '2026-10-25', leftMinor: 2500, currency: 'USD', cannot: null, ...over });
   it('names each bill, and whose it is where it is somebody they pay for', () => {
     expect(billLabel(bill(), 'e-ben')).toBe('Gold Weekly · 19 Oct – 25 Oct 2026');
     expect(billLabel(bill({ entryId: 'e-kai', name: 'Kai Ortiz' }), 'e-ben')).toBe('Kai Ortiz: Gold Weekly · 19 Oct – 25 Oct 2026');
@@ -170,7 +209,7 @@ describe('after a press', () => {
     expect(keepDone([], [a], new Set(['x'])).map((r) => r.id)).toEqual(['a']);
   });
   it('says what was marked, and whose card is freed by it', () => {
-    expect(markedLine('other')).toBe('Marked as not a bill payment.');
+    expect(markedLine('other')).toBe('Marked as not for a bill.');
     expect(markedLine('by_hand')).toBe('Marked as already recorded on a bill by hand.');
     expect(releasesCard(row({ holdsCard: true }))).toBe("Ben Ortiz's card on file can then be charged for their bills again.");
     expect(releasesCard(row())).toBeNull();
@@ -183,11 +222,35 @@ describe('after a press', () => {
 });
 
 describe("the person's page", () => {
+  const w = (over = {}) => ({
+    id: 'w',
+    amountMinor: 2706,
+    currency: 'USD',
+    takenOn: '2026-10-22',
+    takenAt: '2026-10-22T15:14:00.000Z',
+    deviceName: null,
+    byName: null,
+    holdsCard: true,
+    enteredMinor: null,
+    maybeTwice: false,
+    bill: null,
+    ...over,
+  });
   it.each([
-    [{ id: 'w', amountMinor: 2706, currency: 'USD', takenOn: '2026-10-22', byName: null, holdsCard: true }, "A payment of $27.06 taken in Square Point of Sale on 22 Oct is waiting to be matched. While it waits, the card on file isn't charged."],
-    [{ id: 'w', amountMinor: 2706, currency: 'USD', takenOn: '2026-10-22', byName: null, holdsCard: false }, 'A payment of $27.06 taken in Square Point of Sale on 22 Oct is waiting to be matched.'],
-    [{ id: 'w', amountMinor: 5000, currency: 'USD', takenOn: '2026-10-22', byName: 'Ann Ortiz', holdsCard: true }, "A payment of $50.00 by Ann Ortiz, who pays for them, taken in Square Point of Sale on 22 Oct, is waiting to be matched. While it waits, the card on file isn't charged."],
-  ])('%#', (waiting, words) => {
-    expect(waitingLine(waiting)).toBe(words);
+    [w(), 'Paid $27.06 in Square Point of Sale at 10:14 AM on 22 Oct.'],
+    [w({ deviceName: 'Front desk 2' }), 'Paid $27.06 in Square Point of Sale at 10:14 AM on 22 Oct on Front desk 2.'],
+    [w({ amountMinor: 5000, byName: 'Ann Ortiz' }), 'Ann Ortiz, who pays for them, paid $50.00 in Square Point of Sale at 10:14 AM on 22 Oct.'],
+  ])('who paid, how much, when and where: %#', (waiting, words) => {
+    expect(waitingLine(waiting, 'America/Chicago', 'US')).toBe(words);
+  });
+  it('a bill ticked is pressed there; otherwise it says where it waits', () => {
+    expect(waitingNext(w())).toBe('It is waiting in Payments to match.');
+    expect(waitingNext(w({ bill: bill() }))).toBeNull();
+  });
+  it('the note beside a bill ticked, as the list says it', () => {
+    expect(waitingNote(w({ bill: bill(), enteredMinor: 2500 }))).toEqual({ tone: 'info', text: '$25.00 goes on the bill. Square added $2.06 on top.' });
+    expect(waitingNote(w({ bill: bill(), maybeTwice: true }))).toEqual({ tone: 'warn', text: "Their last bill was paid less than 2 days ago. Check they didn't pay twice." });
+    expect(waitingNote(w({ enteredMinor: 2500 }))).toBeNull();
+    expect(waitingNote(w({ bill: bill() }))).toBeNull();
   });
 });

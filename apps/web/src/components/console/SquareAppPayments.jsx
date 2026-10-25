@@ -288,12 +288,16 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
             </div>
           ) : null}
         </Step>
+        <Step icon="each" title={W.deviceTitle} testId="square-device-step">
+          <Line>{W.deviceDetail}</Line>
+          <Words text={W.devicePath} />
+        </Step>
       </ul>
       <div className="flex flex-col gap-1">
         <Line soft>{W.cardSaved}</Line>
         <Words text={W.others} soft />
         <Words text={W.notShown} soft />
-        <Line soft>{W.items}</Line>
+        <Words text={W.items} soft />
         {/* Payments that wait are matched there (18d-iii-b-ii-a): the button opens it, for whoever may. */}
         {toMatchTo !== null ? (
           <PlaceLink to={toMatchTo} className="c-btn c-btn-s c-btn-sm self-start mt-1">

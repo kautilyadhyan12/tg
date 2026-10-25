@@ -142,7 +142,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(box.getByText("Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app. When the amount is exactly what the bill says, it usually appears on the member's bill here afterwards.")).toBeTruthy();
+    expect(box.getByText('Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app. It then appears here on the member\'s page and in Payments to match, with their bill ticked, and one press of Match puts it on the bill.')).toBeTruthy();
     expect(box.getByText('To make this work:')).toBeTruthy();
     expect(await box.findByText('Square does not add tax to the amount you enter')).toBeTruthy();
     const tax = step(box, 'square-tax-step');
@@ -153,7 +153,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     expect(pick.getByText('Select the member for every sale')).toBeTruthy();
     label(said(pick, 'In Square Point of Sale, tap Add a customer and select the member before taking payment.'), 'Add a customer');
     // Picking is up to staff, and what skipping it means is said where it is asked.
-    expect(pick.getByText('Square allows staff to skip this step. If no member is selected, the payment will not be applied to the bill automatically, and you will need to record it manually.')).toBeTruthy();
+    expect(pick.getByText('Square allows staff to skip this step. If no member is selected, the payment waits in Payments to match as Unknown, and you choose who paid there.')).toBeTruthy();
     // The setting that gives staff the button, only when asked for; Square is never said to ask by itself.
     expect(box.queryByText(/Before checkout/)).toBeNull();
     expect(box.queryByText(/ask every time/)).toBeNull();
@@ -163,18 +163,22 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     const setting = said(pick, 'Enable customer management. Then, under Collect customer information, turn on Before checkout.');
     label(setting, 'Collect customer information');
     label(setting, 'Before checkout');
-    // Who it works for, said plainly: everybody else is charged as usual, and recorded by hand.
-    // Only an exact amount goes on by itself, and one that does not appear is recorded by hand (review round one).
-    expect(box.getByText('For members who have a card on file here, the payment is usually applied to their bill automatically when they are selected as the customer and the amount is exactly what the bill says.')).toBeTruthy();
-    expect(box.queryByText(/^Start the payment in the Square app, and it will appear/)).toBeNull();
-    // Everything else waits in Payments to match (18d-iii-b-ii-a), its name a label, with the button there.
-    label(said(box, 'Any payment that is not applied to a bill automatically waits in Payments to match.'), 'Payments to match');
-    const others = said(box, 'For anyone else, or for a sale where no member is selected, Square will process the payment as usual. It then waits in Payments to match, where you match it to their bill.');
+    // Each desk matches its own: the device's name, set on the device in Square (Square's help article 8245).
+    const device = step(box, 'square-device-step');
+    expect(device.getByText('Give each device a name')).toBeTruthy();
+    expect(device.getByText('Payments to match shows which device took each payment, so each desk can match its own. Use names like Front desk 1.')).toBeTruthy();
+    const where = said(device, 'On each phone, tablet or Register, in Square Point of Sale: More → Settings → Hardware → General → About, then Device Name.');
+    for (const name of ['More', 'Settings', 'Hardware', 'General', 'About', 'Device Name']) label(where, name);
+    // Nothing goes on a bill by itself (Kd, 2026-10-25, "one press"): said plainly, and where it waits.
+    expect(box.getByText('For members who have a card on file here, selecting them is enough: their payment appears on their page with their bill ticked, and their card on file is not charged until it is matched.')).toBeTruthy();
+    expect(box.queryByText(/automatically/)).toBeNull();
+    label(said(box, 'Every payment taken in Square Point of Sale waits in Payments to match until it is matched.'), 'Payments to match');
+    const others = said(box, 'For anyone else, or a sale where no member is selected, Square takes the payment as usual. It waits in Payments to match, where you choose who paid.');
     label(others, 'Payments to match');
     expect(box.queryByText(/Card at the desk/)).toBeNull();
     // Nobody is sent where their role can't open: this reader holds no permissions.
     expect(box.queryByRole('link', { name: 'Open Payments to match' })).toBeNull();
-    expect(box.getByText('Shop items sold from your Square item list are never added to a bill.')).toBeTruthy();
+    label(said(box, "Shop items sold from your Square item list stay in Square's own reports. A sale of items for a member with a bill due this week also waits in Payments to match, in case it paid that bill."), 'Payments to match');
     expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
   });
 
@@ -194,7 +198,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     expect(tax.getByText('Needs fixing')).toBeTruthy();
     const what = said(tax, 'Square adds Sales Tax (8.25%) to manually entered amounts. For a $45.00 bill, the member would be charged $48.71.');
     for (const value of ['Sales Tax (8.25%)', '$45.00', '$48.71']) expect(within(what).getByText(value, { selector: 'strong' })).toBeTruthy();
-    expect(tax.getByText("This does not match the bill total, so the payment will not be applied to the member's bill. If the bill already includes tax, the member will be charged tax twice.")).toBeTruthy();
+    expect(tax.getByText('The member pays more than the bill says. If the bill already includes tax, the member is charged tax twice.')).toBeTruthy();
     // Something is wrong, so the steps are open, not hidden behind a press.
     expect(tax.getByRole('button', { name: 'Hide the steps' }).getAttribute('aria-expanded')).toBe('true');
     const inSquare = within(tax.getByTestId('square-fix-in-square'));
