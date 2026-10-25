@@ -1970,6 +1970,25 @@ describe("live updates on a person's page (Stage 4 item 18)", () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('news that comes in the same instant as the first answer, before the page has drawn it, still tells the page behind', async () => {
+    const gold = held(1, GOLD, TODAY, true);
+    const first = later();
+    orgService.getHeldMemberships
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true, onChanged }));
+    await act(async () => {
+      first.resolve(answer([{ ...gold, agreementLink: { sentAt: '2026-10-20T15:00:00.000Z', expiresAt: '2026-11-03T15:00:00.000Z' } }], false, { agreementInUse: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      for (const listener of live.listeners) if (listener.gymId === GYM) listener.fn({ what: 'memberships', entryId: ADA });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await (await boxSoon()).findByText('Agreement signed')).toBeTruthy();
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
   it('tells the page behind nothing when a read after news finds the same answer', async () => {
     orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
     const onChanged = vi.fn();
