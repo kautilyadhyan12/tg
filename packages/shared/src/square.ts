@@ -185,6 +185,9 @@ export const squareTerminalCheckoutIdSchema = z.string().regex(/^[A-Za-z0-9:_-]{
 /** A payment's id at Square. */
 export const squarePaymentIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,192}$/);
 
+/** An order's id at Square (18d-iii-b-i). */
+export const squareOrderIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,192}$/);
+
 const squareMoneySchema = z.object({ amount: z.number().int(), currency: z.string().regex(/^[A-Z]{3}$/) });
 
 /** `status` and `cancel_reason` as a Terminal action's. Measured in Square's test area
@@ -223,11 +226,75 @@ export const squarePaymentSchema = z.object({
       card: z.object({ card_brand: z.string().max(40).nullish(), last_4: z.string().regex(/^[0-9]{4}$/).nullish() }).nullish(),
     })
     .nullish(),
+  /** When Square made it (18d-iii-b-i): a payment older than `SQUARE_APP.keepDays` is never taken in. */
+  created_at: squareTimeSchema.nullish(),
+  /** The order Square made with it: Square's own app makes one with each payment ("Retrieve
+   *  Payments", read 2026-10-24), naming what was sold. */
+  order_id: squareOrderIdSchema.nullish(),
+  /** CARD, CASH, WALLET, EXTERNAL and the rest: how the money was paid. */
+  source_type: z.string().max(40).nullish(),
+  /** What Square has given back of it: a refund leaves the payment COMPLETED with this filled in ("Payment",
+   *  read 2026-10-25), so a payment refunded before it is taken in is never put on a bill (18d-iii-b-i). */
+  refunded_money: squareMoneySchema.nullish(),
 });
 export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 
 /** GetPayment's answer. */
 export const squarePaymentAnswerSchema = z.object({ payment: squarePaymentSchema });
+
+/** ListPayments' answer (18d-iii-b-i): at most 100 a page, each read on its own, so one Square cannot
+ *  be read never hides the rest; `cursor` while there are more ("List payments", read 2026-10-24). */
+export const squarePaymentsPageSchema = z.object({
+  payments: z.array(z.unknown()).max(100).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
+
+/** An order, as far as its lines say what was sold: each line's kind, and the item in the gym's list
+ *  in Square it came from. */
+export const squareOrderSchema = z.object({
+  id: squareOrderIdSchema,
+  location_id: squareObjectIdSchema.nullish(),
+  line_items: z
+    .array(z.object({ item_type: z.string().max(40).nullish(), catalog_object_id: z.string().max(192).nullish() }))
+    .max(1000)
+    .nullish(),
+  /** The taxes on the sale: ADDITIVE ones were added on top of what staff typed, INCLUSIVE ones were
+   *  inside it ("Order", OrderLineItemTax, read 2026-10-25). */
+  taxes: z.array(z.object({ type: z.string().max(40).nullish(), applied_money: squareMoneySchema.nullish() })).max(100).nullish(),
+  /** A charge Square added to the sale, such as an automatic service charge. */
+  total_service_charge_money: squareMoneySchema.nullish(),
+});
+export type SquareOrder = z.infer<typeof squareOrderSchema>;
+
+/** RetrieveOrder's answer. */
+export const squareOrderAnswerSchema = z.object({ order: squareOrderSchema });
+
+/** A tax in the business's own item library (18d-iii-b-i; "CatalogTax", read 2026-10-25): where it is
+ *  used, and whether Square adds it to "custom amounts entered into the Square Point of Sale app". */
+export const squareCatalogTaxSchema = z.object({
+  type: z.literal("TAX"),
+  id: z.string().max(192),
+  is_deleted: z.boolean().nullish(),
+  present_at_all_locations: z.boolean().nullish(),
+  present_at_location_ids: z.array(squareObjectIdSchema).max(1000).nullish(),
+  absent_at_location_ids: z.array(squareObjectIdSchema).max(1000).nullish(),
+  tax_data: z
+    .object({
+      name: z.string().max(255).nullish(),
+      percentage: z.string().max(20).nullish(),
+      inclusion_type: z.string().max(40).nullish(),
+      applies_to_custom_amounts: z.boolean().nullish(),
+      enabled: z.boolean().nullish(),
+    })
+    .nullish(),
+});
+export type SquareCatalogTax = z.infer<typeof squareCatalogTaxSchema>;
+
+/** ListCatalog's answer, each object read on its own; `cursor` while there are more. */
+export const squareCatalogPageSchema = z.object({
+  objects: z.array(z.unknown()).max(1000).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
 
 /** CreatePayment's refusal (18d-iii-i): a decline comes back as a 400 with Square's error and the
  *  FAILED payment it kept (measured in Square's test area, 2026-10-23). */

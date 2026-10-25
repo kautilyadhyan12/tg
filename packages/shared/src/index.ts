@@ -94,4 +94,5 @@ export * from "./terminalPayments.js";
 export * from "./cardCharges.js";
 export * from "./cardRetries.js";
 export * from "./failedPayments.js";
+export * from "./squareAppPayments.js";
 export * from "./liveUpdates.js";

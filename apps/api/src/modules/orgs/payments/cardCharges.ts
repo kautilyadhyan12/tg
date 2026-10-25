@@ -19,8 +19,11 @@
 // and told to the gym's Staff activity.
 //
 // No answer from Square (no connection, a 5xx) is asked again with the same key: Square gives back
-// the same payment, paid or failed. A charge is ended only on Square's own answer, the gym leaving
-// that Square account, or a day without an answer.
+// the same payment, paid or failed. How long Square keeps a key is written nowhere (read 2026-10-24),
+// so after `resendForMs` a charge still unanswered (the server stopped at that moment, and stayed
+// down) is never sent again: it is looked up among the location's payments by its own id (18d-iii-b-i).
+// A charge is ended only on Square's own answer, the gym leaving that Square account, or a day without
+// an answer.
 //
 // A DECLINE (18d-iii-ii-a, `cardRetries.ts` in @app/shared): the app tries the card again by itself
 // only after a decline a later try may cure, on the days the rule names, at most 3 charges of a bill
@@ -60,6 +63,10 @@ export const CARD_CHARGE = {
   /** Square giving no answer at all for a day: given up, and told to Staff activity. Until then
    *  money taken meanwhile is recorded when Square answers again. */
   giveUpMs: 24 * 60 * 60_000,
+  /** Sent again with its key only this long after it was first sent; later, only looked up. */
+  resendForMs: 60 * 60_000,
+  /** Pages of the location's payments looked through for it. */
+  lookPages: 20,
   /** Charges asked again, and bills charged (first tries and tries again each), in one minute of the
    *  worker. */
   perRun: 50,
@@ -163,6 +170,15 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, charge: charg
       await charges.finish(deps.sql, charge.id, { outcome: "gone", code: null, squarePaymentId: null }, deps.now());
       return { done: "gone" };
     }
+    if (deps.now().getTime() - charge.startedAt.getTime() > CARD_CHARGE.resendForMs) {
+      const found = await lookUp(deps, square, token, charge);
+      if (found.kind !== "absent") return await answered(deps, charge, found, deps.now());
+      // Not among the payments Square made while it could have been sent: Square never took it. Still
+      // ended as one to check in Square, never as nothing taken.
+      deps.log.warn({ event: "square.card_charge_absent", gymId: charge.gymId }, "an unanswered card charge was not among the location's payments");
+      await charges.finish(deps.sql, charge.id, { outcome: "gone", code: null, squarePaymentId: null }, deps.now());
+      return { done: "gone" };
+    }
     const result = await square.api.createCardPayment(token, {
       idempotencyKey: charge.paymentKey,
       cardId: charge.cardId,
@@ -179,6 +195,25 @@ async function advance(deps: PaymentsDeps, square: SquareSettings, charge: charg
   } finally {
     await charges.release(deps.sql, charge.id, until);
   }
+}
+
+/** The charge among the location's payments Square made from just before it was first sent to just
+ *  after it was last sent, by its own id: found, absent, or no clear answer. Never sends it. */
+async function lookUp(deps: PaymentsDeps, square: SquareSettings, token: string, charge: charges.ChargeRow): Promise<CardPaymentResult | { kind: "absent" }> {
+  const beginTime = new Date(charge.startedAt.getTime() - 60_000);
+  const endTime = new Date(Math.min(deps.now().getTime(), charge.startedAt.getTime() + CARD_CHARGE.resendForMs + 5 * 60_000));
+  let cursor: string | null = null;
+  for (let page = 0; page < CARD_CHARGE.lookPages; page++) {
+    const listed = await square.api.listPayments(token, { locationId: charge.locationId, beginTime, endTime, cursor });
+    if (listed.kind !== "ok") return { kind: "unavailable", status: listed.status };
+    const found = listed.value.payments.find((p) => p.reference_id === charge.id);
+    if (found !== undefined) return { kind: "ok", value: found };
+    // One Square listed that could not be read may be it.
+    if (listed.value.unread > 0) return { kind: "unavailable", status: null };
+    cursor = listed.value.cursor;
+    if (cursor === null) return { kind: "absent" };
+  }
+  return { kind: "unavailable", status: null };
 }
 
 function noteOf(charge: charges.ChargeRow): string {

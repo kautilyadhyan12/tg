@@ -13,6 +13,7 @@ import {
   PAIR_STEPS,
   REMOVED_TERMINAL,
   TERMINAL_OWNER_ONLY,
+  TERMINALS_HOW,
   pairingActiveLine,
   pairingUntilLine,
   removeTerminalWords,
@@ -20,6 +21,7 @@ import {
   terminalName,
 } from '../../pages/console/paymentsView';
 import { ConsoleFailed } from './ConsoleStates';
+import ScreenWords from './ScreenWords';
 
 // SQUARE TERMINALS (ROADMAP 18d-ii-b-i), in the connected Payments box. Square's own way, and
 // GymMaster's: the owner presses Pair a Terminal, enters the code on the Terminal's sign-in screen
@@ -166,10 +168,14 @@ export default function SquareTerminals({ org, terminals, owner, readOnly, onPay
     setAsking(null);
   };
 
+  // How a Terminal paired here is used, said under its name, apart from Square Point of Sale below.
   const heading = (
-    <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
-      Square Terminals
-    </p>
+    <div className="flex flex-col gap-1">
+      <p className="text-sm font-semibold m-0" style={{ color: '#fff' }}>
+        Square Terminals
+      </p>
+      <ScreenWords text={TERMINALS_HOW} className="block text-sm" style={softStyle} />
+    </div>
   );
   const doneAndError = (
     <>

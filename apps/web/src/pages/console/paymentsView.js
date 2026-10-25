@@ -164,6 +164,11 @@ export function squareOutcomeLine(answer, gymName, gymCountry) {
 
 /** Square's simulated Terminals, in its sandbox only (Stripe calls its own "simulated readers"),
  *  added by a tester's tool and never from a screen. */
+/** How a Terminal paired here is used, apart from Square Point of Sale (18d-iii-b-i, Kd's click-through). The
+ *  checkout asks for the bill's total, which Square's API takes as including tax, with tipping off: Square's own
+ *  taxes never change it. A word in [brackets] is a button's label, drawn as one (ScreenWords). */
+export const TERMINALS_HOW = 'Square\'s card machine. You start the payment here: on a member\'s bill, press [Record payment] and choose [Card on Terminal]. It charges exactly the bill\'s amount, and the bill is paid the moment they pay.';
+
 export const PRACTICE_TERMINAL_WORDS = {
   saves: 'Card saved',
   declines: 'Member declines',

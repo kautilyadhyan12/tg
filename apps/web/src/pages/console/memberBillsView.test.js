@@ -71,7 +71,7 @@ describe('each state the server sends has its own word, and no other', () => {
     const row = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
     expect(row).toMatchObject({ tag: 'Paid', tone: 'green', when: null, left: null });
     expect([row.days, row.amount]).toEqual(['4 Oct – 3 Nov 2026', '£49.99']);
-    expect(row.payments).toEqual([{ id: payment().id, amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, receiptNumber: 4, refunds: [], voided: null }]);
+    expect(row.payments).toEqual([{ id: payment().id, method: 'cash', amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, receiptNumber: 4, refunds: [], voided: null }]);
   });
 
   it('Due says when, and Overdue says when it was due', () => {
@@ -387,6 +387,8 @@ describe('a void (18o)', () => {
     const words = { wrong_amount: 'Wrong amount' };
     expect(voidedLine({ reason: 'wrong_amount', on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Voided 15 October 2026 by Priya Desk · Wrong amount');
     expect(voidedLine({ reason: null, on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Voided 15 October 2026 by Priya Desk');
+    // Not this bill (18d-iii-b-i) voids nothing: the payment is off the bill and its money still in Square.
+    expect(voidedLine({ reason: 'not_this_bill', on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Taken off this bill 15 October 2026 by Priya Desk. The money is still in Square.');
     expect(voidedLine({ reason: 'wrong_amount', on: '2026-10-15', by: null }, words)).toBe('Voided 15 October 2026 · Wrong amount');
   });
 

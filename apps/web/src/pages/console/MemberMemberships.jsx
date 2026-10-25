@@ -76,6 +76,9 @@ import {
   paymentBody,
   paymentDraft,
   paymentOf,
+  notThisBillWords,
+  notThisFeeWords,
+  paymentTakenOffWords,
   paymentVoidedWords,
   paymentWords,
   refundBody,
@@ -695,9 +698,17 @@ export default function MemberMemberships({
         </div>
       );
     }
+    const voidPath = `${path}/payments/${encodeURIComponent(fee.can.voidPaymentId)}/void`;
+    // Taken in Square's own app (18d-iii-b-i): taken off the fee, never voided; nothing to pick.
+    if (fee.payments.find((p) => p.id === fee.can.voidPaymentId)?.method === 'square_app') {
+      const off = notThisFeeWords(fee, m.currency, name);
+      return renderConfirm(off, 'held-fee-not-this-bill', () =>
+        run('voidFeePayment', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, voidPath, { reason: 'not_this_bill' }), off.done),
+      );
+    }
     const words = voidFeePaymentWords(fee, m.currency, name);
     return renderVoid(m, words, PAYMENT_VOID_CHOICES, 'held-fee-void', (body) =>
-      run('voidFeePayment', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, `${path}/payments/${encodeURIComponent(fee.can.voidPaymentId)}/void`, body), words.done),
+      run('voidFeePayment', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, voidPath, body), words.done),
     );
   };
 
@@ -773,7 +784,11 @@ export default function MemberMemberships({
                             label={null}
                             alignRight
                             ariaLabel={`More for the payment of ${p.amount}`}
-                            items={[{ label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) }]}
+                            items={[
+                              p.method === 'square_app'
+                                ? { label: MENU_WORDS.notThisBill.label, hint: 'It went on the wrong fee. The fee will be owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) }
+                                : { label: 'Void payment', hint: 'It was recorded by mistake. The fee is owed again.', danger: true, onPick: () => startFee(m, 'voidFeePayment', fee) },
+                            ]}
                             disabled={busy}
                           />
                         ) : null}
@@ -813,6 +828,23 @@ export default function MemberMemberships({
       </div>
     );
   };
+
+  /** A question with one button and Keep it: Not this bill, which asks no reason (18d-iii-b-i). */
+  const renderConfirm = (words, testId, onConfirm) => (
+    <div className="rounded-[14px] p-3 flex flex-col gap-3" style={{ background: 'var(--raise)' }} data-testid={testId}>
+      <p className="c-s15 c-w6 c-t1 m-0">{words.question}</p>
+      <p className="c-s14 c-t2 m-0">{words.detail}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={DANGER} disabled={busy} onClick={() => void onConfirm()}>
+          {busy ? <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" /> : null}
+          {words.button}
+        </button>
+        <button type="button" className={PLAIN} disabled={busy} onClick={close}>
+          Keep it
+        </button>
+      </div>
+    </div>
+  );
 
   /** Void payment and Void refund: what is voided, what changes, and why, picked. */
   const renderVoid = (m, words, choices, testId, send) => {
@@ -1385,7 +1417,9 @@ export default function MemberMemberships({
                         {(() => {
                           const items = [];
                           if (acts && p.voided === null && p.refundable) items.push({ ...MENU_WORDS.refund, onPick: () => startRefund(m, p.id) });
-                          if (acts && p.voided === null && p.id === voidId) items.push({ ...MENU_WORDS.voidPayment, danger: true, onPick: () => ask('undo', m) });
+                          if (acts && p.voided === null && p.id === voidId) {
+                            items.push({ ...(p.method === 'square_app' ? MENU_WORDS.notThisBill : MENU_WORDS.voidPayment), danger: true, onPick: () => ask('undo', m) });
+                          }
                           return items.length === 0 ? null : <MoreMenu label={null} alignRight ariaLabel={`More for the payment of ${p.amount}`} items={items} disabled={busy} />;
                         })()}
                       </span>
@@ -1728,6 +1762,13 @@ export default function MemberMemberships({
       if (voidForm === null) return null;
       const path = `payments/${encodeURIComponent(undo.paymentId)}/void`;
       const billId = billOfPayment(m, undo.paymentId)?.id ?? null;
+      // Taken in Square's own app (18d-iii-b-i): taken off the bill, never voided; nothing to pick.
+      if (paymentOf(m, undo.paymentId)?.method === 'square_app') {
+        const taken = (data) => paymentTakenOffWords(data?.memberships?.find((x) => x.id === m.id) ?? null, name, billId);
+        return renderConfirm(notThisBillWords(m, name, undo.paymentId), 'held-not-this-bill', () =>
+          run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, { reason: 'not_this_bill' }), taken),
+        );
+      }
       const said = (data) => paymentVoidedWords(data?.memberships?.find((x) => x.id === m.id) ?? null, name, billId);
       return renderVoid(m, words, PAYMENT_VOID_CHOICES, 'held-void-payment', (body) =>
         run('undo', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, path, body), said),

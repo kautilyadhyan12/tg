@@ -5,7 +5,9 @@
 // due; presses of Connect Square that ran out; cards being saved on a Square Terminal whose page
 // was closed (18d-ii-b-ii). Safe to run twice: events, revokes, stops, renewals and Terminal
 // saves are each leased, and every write names the connection or card it was read for. Bills that
-// have fallen due are charged to the card on file (18d-iii-i, `cardCharges.ts`).
+// have fallen due are charged to the card on file (18d-iii-i, `cardCharges.ts`). Square's messages about
+// a payment, and the hourly look at each gym's Square payments, take in payments made in Square's own
+// app (18d-iii-b-i, `squareAppPayments.ts`).
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
 import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
@@ -15,6 +17,7 @@ import type { SquareSettings } from "./settings.js";
 import { processTerminalSaves } from "./terminalCards.js";
 import { processTerminalPayments } from "./terminalPayments.js";
 import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
+import { SQUARE_PAYMENT_EVENTS, sweepSquarePayments, takeInSquarePayment, type SweepRun } from "./squareAppPayments.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
 
@@ -53,6 +56,8 @@ export interface SquareWorkRun {
   terminalPayments: { asked: number; forgotten: number };
   /** Bills charged to the card on file, and charges Square had not answered (18d-iii-i). */
   cardCharges: CardChargeRun;
+  /** Payments taken in Square's own app found by the hourly look (18d-iii-b-i). */
+  sweeps: SweepRun;
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -142,6 +147,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     terminalSaves: { asked: 0, forgotten: 0 },
     terminalPayments: { asked: 0, forgotten: 0 },
     cardCharges: { asked: 0, charged: 0, paid: 0, declined: 0 },
+    sweeps: { looked: 0, payments: 0, unanswered: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -152,7 +158,8 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     const payload = event.payload;
     const isCard = payload !== null && SQUARE_CARD_EVENTS.includes(payload.type) && payload.cardId !== undefined;
     const isCustomer = payload !== null && payload.type === SQUARE_CUSTOMER_DELETED_EVENT && payload.customerId !== undefined;
-    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer)) {
+    const isPayment = payload !== null && SQUARE_PAYMENT_EVENTS.includes(payload.type) && payload.paymentId !== undefined;
+    if (payload === null || (payload.type !== SQUARE_REVOKED_EVENT && !isCard && !isCustomer && !isPayment)) {
       await webhooks.finishEvent(deps.sql, event, "failed", deps.now());
       deps.log.warn({ event: "square.event_unreadable", webhookEventId: event.id }, "a kept Square event no longer parses");
       run.givenUp += 1;
@@ -163,6 +170,8 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
       unknown = (await checkSquareCard(deps, square, payload.accountId, payload.cardId)) === "unknown";
     } else if (isCustomer && payload.customerId !== undefined) {
       unknown = (await checkSquareCustomer(deps, square, payload.accountId, payload.customerId)) === "unknown";
+    } else if (isPayment && payload.paymentId !== undefined) {
+      unknown = (await takeInSquarePayment(deps, square, payload.accountId, payload.paymentId, event.receivedAt)) === "unknown";
     } else {
       let stillWorks = false;
       for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, payload.accountId)) {
@@ -196,6 +205,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
   run.terminalSaves = await processTerminalSaves(deps, square, gymIds);
   run.terminalPayments = await processTerminalPayments(deps, square, gymIds);
   run.cardCharges = await processCardCharges(deps, square, gymIds);
+  run.sweeps = await sweepSquarePayments(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

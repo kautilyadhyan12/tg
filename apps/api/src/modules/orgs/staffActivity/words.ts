@@ -282,7 +282,9 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
       : text(s, "why") === "not_ours"
         ? `Square answered a charge to ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${person(s)} with a payment that doesn't match it, so it isn't recorded. Check it in Square`
         : `Charged ${cardOf(s, "brand", "last4") ?? "the card on file"} for ${pay(s)} from ${person(s)}, but the bill had changed, so it isn't recorded. Check it in Square`,
-  "org.member_payment_undone": (s) => `Undid ${pay(s)} from ${person(s)}`,
+  // A payment taken in Square's own app taken off the bill it was put on (18d-iii-b-i).
+  "org.member_payment_undone": (s) =>
+    text(s, "reason") === "not_this_bill" ? `Took ${pay(s)} taken in Square Point of Sale off ${whose(s, "bill")}` : `Undid ${pay(s)} from ${person(s)}`,
   "org.member_bill_cancelled": (s) => {
     const amount = money(s, "amountMinor");
     return `Cancelled ${whose(s, "bill")}${amount === null ? "" : ` of ${amount}`}`;
@@ -311,7 +313,8 @@ export const STAFF_LINES: Readonly<Record<string, (s: Said) => string>> = {
     const amount = money(s, "amountMinor");
     return `Waived ${whose(s, feeOf(s))}${amount === null ? "" : ` of ${amount}`}`;
   },
-  "org.member_fee_payment_voided": (s) => `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
+  "org.member_fee_payment_voided": (s) =>
+    text(s, "reason") === "not_this_bill" ? `Took ${pay(s)} taken in Square Point of Sale off ${whose(s, feeOf(s))}` : `Voided ${pay(s)} from ${person(s)} for a ${feeOf(s)}`,
   "org.member_payer_set": (s) => `Set ${payerOf(s)} to pay for ${person(s)}`,
   "org.member_payer_removed": (s) => `Stopped ${payerOf(s)} paying for ${person(s)}`,
   "org.member_card_saved": (s) => {

@@ -126,6 +126,8 @@ export const gymSquareCustomers = pgTable(
     check("gym_square_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`),
     check("gym_square_customers_made_check", sql`(${t.customerId} IS NULL) = (${t.makingKey} IS NOT NULL)`),
+    // Square's customer on a payment taken in Square's own app, found (0164; 18d-iii-b-i).
+    index("gym_square_customers_customer_idx").on(t.environment, t.accountId, t.customerId).where(sql`${t.customerId} IS NOT NULL`),
     foreignKey({ name: "gym_square_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
   ],
 );
@@ -202,6 +204,7 @@ export const gymMemberCards = pgTable(
       sql`${t.brand} ~ '^[A-Z_]{1,40}$' AND ${t.last4} ~ '^[0-9]{4}$' AND ${t.expMonth} BETWEEN 1 AND 12 AND ${t.expYear} BETWEEN 2000 AND 2200`,
     ),
     check("gym_member_cards_saved_from_check", sql`${t.savedFrom} IN ('desk','app','terminal')`),
+    index("gym_member_cards_customer_idx").on(t.environment, t.accountId, t.customerId),
     foreignKey({ name: "gym_member_cards_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
   ],
 );
@@ -587,5 +590,95 @@ export const gymCardExpiryNotices = pgTable(
     uniqueIndex("gym_card_expiry_notices_card_uq").on(t.gymId, t.environment, t.accountId, t.cardId, t.expYear, t.expMonth),
     index("gym_card_expiry_notices_due_idx").on(t.notBefore, t.id).where(sql`${t.state} IN ('queued','sending')`),
     index("gym_card_expiry_notices_entry_idx").on(t.gymId, t.entryId),
+  ],
+);
+
+/** A payment Square made at a location of a Square account a gym here is connected to, not the app's
+ *  own (0164; ROADMAP 18d-iii-b-i): taken in once, by Square's message or the hourly look, and what
+ *  became of it. `recorded` on a bill, `waiting` for staff with `reason`, `shop_sale` items from the
+ *  gym's list in Square. `gym_id` is null only for a location two gyms here use where no customer says
+ *  whose. `record_key` is the request key it is recorded with, a new one each time staff take it off a
+ *  bill. Its link to a record (`ON DELETE SET NULL` of `entry_id` alone) is in the migration only;
+ *  `member_payment_id` has no link, as the Terminal's has none. */
+export const gymSquareAppPayments = pgTable(
+  "gym_square_app_payments",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    squarePaymentId: text("square_payment_id").notNull(),
+    gymId: uuid("gym_id").references(() => gyms.id, { onDelete: "cascade" }),
+    locationId: text("location_id").notNull(),
+    customerId: text("customer_id"),
+    amountMinor: integer("amount_minor").notNull(),
+    tipMinor: integer("tip_minor").notNull().default(0),
+    currency: text("currency").notNull(),
+    /** CARD, CASH, WALLET and the rest: how it was paid, as Square says. */
+    source: text("source"),
+    brand: text("brand"),
+    last4: text("last4"),
+    /** When Square made it. */
+    takenAt: timestamp("taken_at", { withTimezone: true }).notNull(),
+    state: text("state").notNull(),
+    reason: text("reason"),
+    entryId: uuid("entry_id"),
+    memberPaymentId: uuid("member_payment_id"),
+    recordKey: uuid("record_key").notNull().default(sql`gen_random_uuid()`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    check("gym_square_app_payments_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_square_app_payments_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.squarePaymentId} ~ '^[A-Za-z0-9_-]{1,192}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$' AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`,
+    ),
+    check("gym_square_app_payments_amount_check", sql`${t.amountMinor} BETWEEN 0 AND 999999999 AND ${t.tipMinor} BETWEEN 0 AND 999999999 AND ${t.currency} ~ '^[A-Z]{3}$'`),
+    check(
+      "gym_square_app_payments_card_check",
+      sql`(${t.source} IS NULL OR ${t.source} ~ '^[A-Z_]{1,40}$') AND (${t.brand} IS NULL OR ${t.brand} ~ '^[A-Z_]{1,40}$') AND (${t.last4} IS NULL OR ${t.last4} ~ '^[0-9]{4}$')`,
+    ),
+    check("gym_square_app_payments_state_check", sql`${t.state} IN ('recorded','waiting','shop_sale')`),
+    check(
+      "gym_square_app_payments_reason_check",
+      sql`(${t.state} = 'waiting') = (${t.reason} IS NOT NULL) AND (${t.reason} IS NULL OR ${t.reason} IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill','refunded'))`,
+    ),
+    check("gym_square_app_payments_recorded_check", sql`(${t.state} = 'recorded') = (${t.memberPaymentId} IS NOT NULL)`),
+    check("gym_square_app_payments_gym_check", sql`${t.gymId} IS NOT NULL OR (${t.state} = 'waiting' AND ${t.reason} = 'several_gyms')`),
+    uniqueIndex("gym_square_app_payments_square_uq").on(t.environment, t.accountId, t.squarePaymentId),
+    index("gym_square_app_payments_gym_idx").on(t.gymId, t.state, t.takenAt),
+    index("gym_square_app_payments_entry_idx").on(t.gymId, t.entryId).where(sql`${t.entryId} IS NOT NULL`),
+  ],
+);
+
+/** The hourly look at a gym's Square payments for any whose message never came (0164; 18d-iii-b-i):
+ *  from `swept_until`, at the account and location it was made for. Square payments made before
+ *  `watching_since` are never taken in. */
+export const gymSquarePaymentSweeps = pgTable(
+  "gym_square_payment_sweeps",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    locationId: text("location_id").notNull(),
+    watchingSince: timestamp("watching_since", { withTimezone: true }).notNull(),
+    sweptUntil: timestamp("swept_until", { withTimezone: true }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    /** The payment a look stopped at, Square giving no answer about its order, and when it first asked. */
+    stuckPaymentId: text("stuck_payment_id"),
+    stuckSince: timestamp("stuck_since", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_payment_sweeps_pk", columns: [t.gymId, t.environment] }),
+    check("gym_square_payment_sweeps_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_payment_sweeps_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check(
+      "gym_square_payment_sweeps_stuck_check",
+      sql`(${t.stuckPaymentId} IS NULL) = (${t.stuckSince} IS NULL) AND (${t.stuckPaymentId} IS NULL OR ${t.stuckPaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+    ),
+    index("gym_square_payment_sweeps_due_idx").on(t.dueAt),
   ],
 );

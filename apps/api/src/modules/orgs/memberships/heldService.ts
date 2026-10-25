@@ -10,6 +10,7 @@
 import type { Sql } from "postgres";
 import {
   CARD_CHARGE_WORDS,
+  SQUARE_APP_WORDS,
   paidThroughSquare,
   TERMINAL_PAYMENT_WORDS,
   DISCOUNT_WORDS,
@@ -114,8 +115,10 @@ function billingOf(
   const cancelBill = cancel === null ? undefined : bills.find((b) => b.periodIndex === cancel.periodIndex);
   const newestBack = ctx.past ? null : memberUndoTarget(row.membership, ctx.today, bills, payments);
   // A payment taken on the Terminal or charged to the card on file is refunded in Square, never
-  // voided here (18d-vi-a, 18d-iii-i).
-  const back = newestBack !== null && payments.some((p) => p.id === newestBack.paymentId && paidThroughSquare(p.method)) ? null : newestBack;
+  // voided here (18d-vi-a, 18d-iii-i); one taken in Square's own app can be taken off as "Not this
+  // bill" (18d-iii-b-i).
+  const back =
+    newestBack !== null && payments.some((p) => p.id === newestBack.paymentId && paidThroughSquare(p.method) && p.method !== "square_app") ? null : newestBack;
   // A mark with no payment behind it: taken back as it always was. A period a bill
   // settled (paid, cancelled or refunded) is not one.
   const settledAt = (index: number): boolean => bills.some((b) => b.periodIndex === index && b.status !== "open");
@@ -239,8 +242,14 @@ function feeOf(f: FeeRow, payments: readonly FeePaymentRow[], ctx: { today: stri
     cardUnchecked: owed ? (ctx.charges.unchecked.get(f.id) ?? null) : null,
     charging: ctx.charges.charging.has(f.id),
     // A payment taken on the Terminal or charged to the card on file is refunded in Square, never
-    // voided here (18d-vi-b-i, 18d-iii-i).
-    can: { pay: owed, waive: owed, voidPaymentId: f.status === "paid" && standing[0] !== undefined && !paidThroughSquare(standing[0].method) ? standing[0].id : null },
+    // voided here (18d-vi-b-i, 18d-iii-i); one taken in Square's own app is taken off as "Not this
+    // bill" (18d-iii-b-i).
+    can: {
+      pay: owed,
+      waive: owed,
+      voidPaymentId:
+        f.status === "paid" && standing[0] !== undefined && (!paidThroughSquare(standing[0].method) || standing[0].method === "square_app") ? standing[0].id : null,
+    },
   };
 }
 
@@ -715,6 +724,10 @@ function throwOnBillFailure(outcome: billsRepo.BillWriteOutcome): void {
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     case "card_payment":
       throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
+    case "square_app_payment":
+      throw new OrgsError(409, "square_app_payment_void", SQUARE_APP_WORDS.void_square_app);
+    case "not_square_app":
+      throw new OrgsError(409, "not_square_app_payment", SQUARE_APP_WORDS.not_square_app);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled bill outcome: ${JSON.stringify(never)}`);
@@ -847,6 +860,10 @@ function throwOnFeeFailure(outcome: feesRepo.FeeWriteOutcome): void {
       throw new OrgsError(409, "terminal_payment_void", TERMINAL_PAYMENT_WORDS.void_terminal);
     case "card_payment":
       throw new OrgsError(409, "card_payment_void", CARD_CHARGE_WORDS.void_card);
+    case "square_app_payment":
+      throw new OrgsError(409, "square_app_payment_void", SQUARE_APP_WORDS.void_square_app);
+    case "not_square_app":
+      throw new OrgsError(409, "not_square_app_payment", SQUARE_APP_WORDS.not_square_app);
     default: {
       const never: never = outcome;
       throw new Error(`unhandled fee outcome: ${JSON.stringify(never)}`);

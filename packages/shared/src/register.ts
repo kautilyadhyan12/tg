@@ -371,6 +371,8 @@ export const saleTotalsSchema = z
     link: z.number().int().min(0),
     company: z.number().int().min(0),
     terminal: z.number().int().min(0),
+    /** Taken in Square's own app and recorded from Square's message (18d-iii-b-i). */
+    square_app: z.number().int().min(0).default(0),
     refundedMinor: z.number().int().min(0),
     /** What discounts took off the product sales that stand. */
     discountMinor: z.number().int().min(0),
@@ -394,6 +396,8 @@ export const kindTotalsSchema = z
     link: z.number().int().min(0),
     company: z.number().int().min(0),
     terminal: z.number().int().min(0),
+    /** Taken in Square's own app and recorded from Square's message (18d-iii-b-i). */
+    square_app: z.number().int().min(0).default(0),
     refundedMinor: z.number().int().min(0),
     otherCurrency: z.number().int().min(0),
     /** Earlier ones of this kind the list leaves out. */

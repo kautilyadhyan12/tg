@@ -336,6 +336,29 @@ describe('a membership that is over', () => {
   });
 });
 
+describe('a payment taken in Square Point of Sale (18d-iii-b-i)', () => {
+  it('is taken off its bill with Not this bill, which asks no reason, and the bill is said to be owed again', async () => {
+    const paid = held(1, GOLD, '2026-10-01', true);
+    const bill = paid.billing.bills.find((b) => b.payments.length > 0);
+    const payment = { ...bill.payments[0], method: 'square_app', by: null };
+    const fromSquare = { ...paid, billing: { ...paid.billing, bills: paid.billing.bills.map((b) => (b.id === bill.id ? { ...b, payments: [payment] } : b)), undo: { kind: 'payment', paymentId: payment.id } } };
+    orgService.getHeldMemberships.mockResolvedValue(answer([fromSquare]));
+    orgService.changeHeldMembership.mockResolvedValue(answer([held(1, GOLD, '2026-10-01', false)]));
+    render(draw());
+    const [row] = await rowsSoon();
+    expect(within(row).getByText(/^Square Point of Sale ·/)).toBeTruthy();
+    expect(menuOf(row, 'More for the payment of £49.99')).toEqual([REFUND_ITEM, 'Not this billIt went on the wrong bill. The bill will be owed again.']);
+    fireEvent.click(within(row).getByRole('menuitem', { name: /^Not this bill/ }));
+    const box = within(screen.getByTestId('held-not-this-bill'));
+    expect(box.getByText(/^Take the £49.99 paid in Square Point of Sale off Ada Lovelace's bill for /)).toBeTruthy();
+    expect(box.getByText('Use this when it went on the wrong bill. The bill will be owed again. No money moves: the payment stays in Square.')).toBeTruthy();
+    expect(box.queryByRole('combobox')).toBeNull();
+    fireEvent.click(box.getByRole('button', { name: 'Take it off' }));
+    await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, fromSquare.id, `payments/${payment.id}/void`, { reason: 'not_this_bill' }));
+    expect(await screen.findByText(/^Taken off the bill. Ada Lovelace owes £49.99 for .+ again. If it was for another bill, record it there with Record payment, Card at the desk.$/)).toBeTruthy();
+  });
+});
+
 describe('one payment said back', () => {
   it('says that bill is paid, never that the membership is, while another of its bills is owed', async () => {
     // Two months owed: September's and October's.

@@ -5,9 +5,11 @@
 // (`apps/api/.cost/18d-vi-a/probe-checkout.mts`). Cards on file are charged as Square's test area
 // charged them on 2026-10-23 (18d-iii-i, `apps/api/.cost/18d-iii-i/probe-charge.mts`): the same key
 // gives back the same payment, paid or failed; the same key with another body is refused; a decline
-// is a 400 with the FAILED payment.
+// is a 400 with the FAILED payment. A payment taken in Square's own app (18d-iii-b-i, `appPayment`) has
+// the order Square makes with it, whose lines say what was sold; ListPayments lists a location's
+// payments by when Square made them, oldest first, 100 a page.
 import { randomBytes } from "node:crypto";
-import type { SquareLocation, SquarePayment, SquareTerminalCheckout } from "@app/shared";
+import type { SquareCatalogTax, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
 import type { CardPaymentResult, NewCardPayment, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
@@ -50,12 +52,18 @@ export function fakeSquare() {
   const checkouts = new Map<string, FakeCheckout>();
   const checkoutKeys = new Map<string, string>();
   const payments = new Map<string, SquarePayment & { accountId: string }>();
+  const orders = new Map<string, SquareOrder & { accountId: string }>();
+  /** Each account's own item library of taxes (18d-iii-b-i). */
+  const taxes = new Map<string, SquareCatalogTax[]>();
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
   // `chargeOther`: a card on file's charge comes back COMPLETED for another amount than asked;
   // `answerWith`: with these fields of Square's payment changed; `unauthorized`: Square refuses the
-  // gym's token (401), as for a token that expired or was taken away.
+  // gym's token (401), as for a token that expired or was taken away. `ordersRefused`: Square refuses to
+  // show an order (a connection made before ORDERS_READ); `listDown`: ListPayments gives no answer;
+  // `listRefused`: ListPayments is refused (a permission taken away); `ordersUnanswered`: these orders
+  // give no answer. `now`: the clock Square stamps payments with.
   const state: {
     down: boolean;
     refuseNew: boolean;
@@ -64,6 +72,14 @@ export function fakeSquare() {
     chargeOther: boolean;
     answerWith: Partial<SquarePayment> | null;
     unauthorized: boolean;
+    ordersRefused: boolean;
+    listDown: boolean;
+    listRefused: boolean;
+    ordersUnanswered: Set<string>;
+    /** ListCatalog gives no answer; or answers one tax it cannot read. */
+    taxesDown: boolean;
+    taxUnreadable: boolean;
+    now: () => Date;
   } = {
     down: false,
     refuseNew: false,
@@ -72,6 +88,13 @@ export function fakeSquare() {
     chargeOther: false,
     answerWith: null,
     unauthorized: false,
+    ordersRefused: false,
+    listDown: false,
+    listRefused: false,
+    ordersUnanswered: new Set<string>(),
+    taxesDown: false,
+    taxUnreadable: false,
+    now: () => new Date(),
   };
   let n = 0;
   const unavailable = { kind: "unavailable", status: 503 } as const;
@@ -99,6 +122,7 @@ export function fakeSquare() {
       total_money: { amount: c.amount, currency: c.currency },
       location_id: account?.locations[0]?.id ?? null,
       terminal_checkout_id: c.id,
+      created_at: state.now().toISOString(),
       card_details: { card: { card_brand: "VISA", last_4: "1111" } },
       ...over,
     });
@@ -229,6 +253,7 @@ export function fakeSquare() {
         reference_id: p.referenceId,
         customer_id: p.customerId,
         card_details: { card: { card_brand: "VISA", last_4: "1111" } },
+        created_at: state.now().toISOString(),
         ...(state.answerWith ?? {}),
       };
       charged.push({ ...payment, accountId: a.merchantId, cardId: p.cardId, key: p.idempotencyKey });
@@ -254,6 +279,50 @@ export function fakeSquare() {
       const payment: SquarePayment = { ...p };
       delete (payment as { accountId?: string }).accountId;
       return Promise.resolve({ kind: "ok", value: payment });
+    },
+    listPayments(token, q) {
+      if (state.down || state.listDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.listRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
+      const all: (SquarePayment & { accountId: string })[] = [...payments.values(), ...charged];
+      const mine = all
+        .filter((p) => p.accountId === a.merchantId && p.location_id === q.locationId && p.created_at != null)
+        .filter((p) => {
+          const at = new Date(p.created_at ?? 0).getTime();
+          return at >= q.beginTime.getTime() && at <= q.endTime.getTime();
+        })
+        .sort((x, y) => new Date(x.created_at ?? 0).getTime() - new Date(y.created_at ?? 0).getTime());
+      const from = q.cursor === null ? 0 : Number(q.cursor);
+      const page = mine.slice(from, from + 100).map((p) => {
+        const out: SquarePayment & { accountId?: string; cardId?: string; key?: string } = { ...p };
+        delete out.accountId;
+        delete out.cardId;
+        delete out.key;
+        return out;
+      });
+      return Promise.resolve({ kind: "ok", value: { payments: page, unread: 0, cursor: from + 100 < mine.length ? String(from + 100) : null } });
+    },
+    listTaxes(token, cursor) {
+      if (state.down || state.taxesDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const all = taxes.get(a.merchantId) ?? [];
+      const from = cursor === null ? 0 : Number(cursor);
+      return Promise.resolve({
+        kind: "ok",
+        value: { taxes: all.slice(from, from + 100), unread: state.taxUnreadable ? 1 : 0, cursor: from + 100 < all.length ? String(from + 100) : null },
+      });
+    },
+    retrieveOrder(token, id) {
+      if (state.down || state.ordersUnanswered.has(id)) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.ordersRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
+      const o = orders.get(id);
+      if (o?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      const order: SquareOrder = { id: o.id, location_id: o.location_id ?? null, line_items: o.line_items ?? [], taxes: o.taxes ?? [] };
+      return Promise.resolve({ kind: "ok", value: order });
     },
   };
   const allow = (account: Account): string => {
@@ -283,7 +352,74 @@ export function fakeSquare() {
   };
   /** Money Square took from cards on file. */
   const taken = () => charged.filter((p) => p.status === "COMPLETED");
-  return { api, allow, state, devices, checkouts, payments, at, card, cards, charged, taken };
+  /** A payment taken in Square's own app at this account's location (18d-iii-b-i): typed amounts by
+   *  default (`lines`), on the customer picked (`customerId`, none by default), completed. `refunded`:
+   *  what Square has given back on it; `referenceId`: the reference a charge of the app's own names. */
+  const appPayment = (
+    account: Account,
+    o: {
+      amount: number;
+      customerId?: string | null;
+      lines?: string[];
+      tip?: number;
+      locationId?: string;
+      status?: string;
+      at?: Date;
+      currency?: string;
+      addedTax?: number;
+      refunded?: number;
+      referenceId?: string;
+    },
+  ): SquarePayment => {
+    n += 1;
+    const id = `APP${String(n)}${randomBytes(6).toString("hex")}`;
+    const orderId = `ORD${String(n)}${randomBytes(6).toString("hex")}`;
+    const locationId = o.locationId ?? account.locations[0]?.id ?? "LNONE";
+    const currency = o.currency ?? (account.country === "US" ? "USD" : "CAD");
+    orders.set(orderId, {
+      id: orderId,
+      accountId: account.merchantId,
+      location_id: locationId,
+      line_items: (o.lines ?? ["CUSTOM_AMOUNT"]).map((kind) => ({ item_type: kind })),
+      // Square's own sales tax added on top of what staff typed: inside the payment's amount.
+      taxes: o.addedTax === undefined ? [] : [{ type: "ADDITIVE", applied_money: { amount: o.addedTax, currency } }],
+    });
+    const payment: SquarePayment & { accountId: string } = {
+      id,
+      accountId: account.merchantId,
+      status: o.status ?? "COMPLETED",
+      amount_money: { amount: o.amount, currency },
+      tip_money: { amount: o.tip ?? 0, currency },
+      total_money: { amount: o.amount + (o.tip ?? 0), currency },
+      location_id: locationId,
+      customer_id: o.customerId ?? null,
+      order_id: orderId,
+      source_type: "CARD",
+      card_details: { card: { card_brand: "MASTERCARD", last_4: "4444" } },
+      created_at: (o.at ?? state.now()).toISOString(),
+      ...(o.refunded === undefined ? {} : { refunded_money: { amount: o.refunded, currency } }),
+      ...(o.referenceId === undefined ? {} : { reference_id: o.referenceId }),
+    };
+    payments.set(id, payment);
+    const out: SquarePayment & { accountId?: string } = { ...payment };
+    delete out.accountId;
+    return out;
+  };
+  /** A tax in this account's item library, as the business set it up in Square. */
+  const addTax = (account: Account, t: { name: string; percentage: string; customAmounts?: boolean; inclusive?: boolean; enabled?: boolean; absentAt?: string[] }) => {
+    n += 1;
+    const list = taxes.get(account.merchantId) ?? [];
+    list.push({
+      type: "TAX",
+      id: `TAX${String(n)}`,
+      is_deleted: false,
+      present_at_all_locations: true,
+      absent_at_location_ids: t.absentAt ?? [],
+      tax_data: { name: t.name, percentage: t.percentage, inclusion_type: t.inclusive === true ? "INCLUSIVE" : "ADDITIVE", applies_to_custom_amounts: t.customAmounts ?? true, enabled: t.enabled ?? true },
+    });
+    taxes.set(account.merchantId, list);
+  };
+  return { api, allow, state, devices, checkouts, payments, orders, taxes, at, card, cards, charged, taken, appPayment, addTax };
 }
 
 export const account = (merchantId: string, country = "US"): Account => ({
