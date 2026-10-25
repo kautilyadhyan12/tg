@@ -284,7 +284,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
          - 18d-iii-ii-b. [x] **Failed payments list for staff** — merged 2026-10-24 (PR #352).
      - 18d-iii-c. [x] **A reminder before a card expires** — merged 2026-10-24 (PR #356).
      - 18d-iii-b. **A payment taken in Square's own app recorded on the member**, in two parts since 2026-10-25 (`handoff/2026-10-25-18d-iii-b-i.md` keeps its line as first written):
-       - 18d-iii-b-i. [ ] **Payments from Square's app land on the right bill**: recorded by themselves for a linked customer, typed amounts and exactly one fitting bill; the rest kept; Not this bill. Web folder 1.
+       - 18d-iii-b-i. [x] **Payments from Square's app land on the right bill** — merged 2026-10-25 (PR #359).
        - 18d-iii-b-ii. [ ] **Match a payment from Square's app** (Kd, 2026-10-24: match once, then automatic): the payments that wait, Match (who, which bill, linking that customer), Not a bill payment, "may have paid twice"; a card saved later uses the linked customer; the saved card waits while a member's payment from Square Point of Sale waits, "no member is charged twice" its first test (Kd, 2026-10-25: before any gym uses Square Point of Sale). Web folder 1.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
