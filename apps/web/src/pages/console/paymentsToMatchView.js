@@ -21,9 +21,12 @@ const money = (minor, currency) => formatMinor(minor, currency);
 export function sharedLocationLine(n) {
   if (n <= 0) return null;
   const many = n === 1 ? '1 payment taken at your Square location isn’t listed here' : `${String(n)} payments taken at your Square location aren’t listed here`;
-  return `${many}, because another gym in this app uses the same location and no customer was added to the sale. Give each gym its own Square location so these can be matched.`;
+  return `${many}: another gym in this app uses the same location, and no customer was added to the sale, so they can’t be told apart.`;
 }
-export const SHARED_LOCATION_STAFF = 'The owner can choose another Square location for this gym.';
+/** What fixes it: a location of its own for one of the two gyms. Square keeps a connected gym on its
+ *  location, so that gym connects Square again and chooses the new one. */
+export const SHARED_LOCATION_FIX = 'To match them, give each gym its own location in Square, then in one of the two gyms disconnect Square and connect it again, choosing the new location.';
+export const SHARED_LOCATION_STAFF = 'The owner can give each gym its own Square location.';
 const totalWords = (totals) => totals.map((t) => money(t.minor, t.currency)).join(' + ');
 const count = (n) => (n === 1 ? '1 payment' : `${String(n)} payments`);
 

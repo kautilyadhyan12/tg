@@ -269,14 +269,15 @@ describe('Payments to match', () => {
     svc.list.mockResolvedValue(answer({ sharedLocation: 2 }));
     open();
     const shared = await screen.findByTestId('payments-to-match-shared-location');
-    expect(shared.textContent).toContain('2 payments taken at your Square location aren’t listed here, because another gym in this app uses the same location and no customer was added to the sale.');
-    expect(within(shared).getByRole('link', { name: 'Choose your Square location' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
+    expect(shared.textContent).toContain('2 payments taken at your Square location aren’t listed here: another gym in this app uses the same location, and no customer was added to the sale, so they can’t be told apart.');
+    expect(shared.textContent).toContain('To match them, give each gym its own location in Square, then in one of the two gyms disconnect Square and connect it again, choosing the new location.');
+    expect(within(shared).getByRole('link', { name: 'Open Square settings' }).getAttribute('href')).toBe('/console/iron-house/settings#payments');
     cleanup();
     resetConsoleOrgs();
     open('/console/iron-house/payments-to-match', { ...ORG, staffRole: 'manager', privileges: ['members.read', 'members.confirm', 'billing.members'] });
     const told = await screen.findByTestId('payments-to-match-shared-location');
     expect(within(told).queryByRole('link')).toBeNull();
-    expect(told.textContent).toContain('The owner can choose another Square location for this gym.');
+    expect(told.textContent).toContain('The owner can give each gym its own Square location.');
   });
 
   it('says when there are none, and to whoever lacks the ticks, which ticks', async () => {

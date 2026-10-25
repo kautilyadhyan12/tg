@@ -4298,7 +4298,7 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   member is charged twice:** while a payment of a person's waits (or of whoever pays for them), their card on
   file is charged by nobody, the app or staff; their page says so with Match it, and Failed payments' Try again
   sends there. Overview has the count. A payment with no customer at a Square location two gyms here use is
-  kept for neither; each is told how many while the location is shared, with the button to choose another.
+  kept for neither; each is told how many while the location is shared, and how to give a gym its own location.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

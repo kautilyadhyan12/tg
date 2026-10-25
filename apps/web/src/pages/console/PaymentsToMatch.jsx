@@ -16,6 +16,7 @@ import { Refusal } from './MemberListTags';
 import { personOption } from './sellView';
 import {
   NOT_A_BILL_CHOICES,
+  SHARED_LOCATION_FIX,
   SHARED_LOCATION_STAFF,
   TO_MATCH_INTRO,
   TO_MATCH_NONE,
@@ -554,7 +555,14 @@ export default function PaymentsToMatch() {
           {sharedLocationLine(list.sharedLocation ?? 0) !== null ? (
             <section className="c-card p-5 md:p-6 flex flex-col gap-3" data-testid="payments-to-match-shared-location">
               <p className="c-s15 c-t2">{sharedLocationLine(list.sharedLocation)}</p>
-              {paymentsTo !== null ? <PlaceLink to={paymentsTo}>Choose your Square location</PlaceLink> : <p className="c-s14 c-t3">{SHARED_LOCATION_STAFF}</p>}
+              {paymentsTo !== null ? (
+                <>
+                  <p className="c-s14 c-t2">{SHARED_LOCATION_FIX}</p>
+                  <PlaceLink to={paymentsTo}>Open Square settings</PlaceLink>
+                </>
+              ) : (
+                <p className="c-s14 c-t3">{SHARED_LOCATION_STAFF}</p>
+              )}
             </section>
           ) : null}
 
