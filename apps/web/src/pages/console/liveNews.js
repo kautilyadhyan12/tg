@@ -1,20 +1,29 @@
 import { useEffect, useRef } from 'react';
-import { liveMessageSchema } from '@app/shared';
+import { LIVE_WORDS, liveMessageSchema } from '@app/shared';
 import { refreshSession } from '../../api/authApi';
 
 // LIVE UPDATES (ROADMAP Stage 4 item 18; Kd, 2026-10-24). While a console tab is on screen it keeps
 // ONE open line to the server for the gym it shows, shared by every part of the page that listens.
 // The server says what changed ({ what: 'memberships', entryId }) and the page reads that again
-// through its normal route. Off screen the line is closed; back on screen it opens again and says
-// `ready`, and a page that was already listening reads again whatever it may have missed.
+// through its normal route. Off screen for a minute the line is closed; back on screen it opens
+// again and says `ready`, and a page that was already listening reads again whatever it may have
+// missed.
 //
-// The server ends a line when the sign-in runs out (at most 15 minutes): it is opened again at
-// once, after a refreshed sign-in if the server asks for one. A line that cannot open waits
-// longer each time, up to a minute. Not staff here (404): no line, and nothing is retried.
+// The server ends a line when the sign-in runs out (at most 15 minutes): it is opened again within
+// a few seconds, after a refreshed sign-in if the server asks for one (one tab at a time:
+// `refreshSession`). A line that cannot open waits longer each time, up to a minute. Not staff here
+// (404): no line, and nothing is retried.
+//
+// Besides the server's messages a listener hears two of this file's own: `refused` ({ message }),
+// while the server will not open the line, and `cameBack`, when the tab comes back on screen
+// without a line, so the page reads again as it did before live updates.
 
 const WAITS_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
 /** A line that ends sooner than this after opening counts as a failure, so it is not opened again at once. */
 const SHORT_LINE_MS = 2_000;
+/** A line the server ended is opened again within this, at a moment of its own: every window of
+ *  the browser, and every browser when the server restarts, does not ask in the same instant. */
+const REOPEN_SPREAD_MS = 3_000;
 /** How long a line stays open after the last part of the page stops listening: going to another
  *  page of the console that listens too keeps the same line. */
 const LINGER_MS = 2_000;
@@ -24,9 +33,12 @@ const settings = {
   fetch: (...args) => fetch(...args),
   // Tests switch it on, with their own server, so that no other test opens a real line.
   on: import.meta.env.MODE !== 'test',
+  /** How long a tab off screen keeps its line: a window covered for a moment, or a quick switch of
+   *  tab, does not close and open it again. */
+  hiddenMs: 60_000,
 };
 
-/** Tests only: the address, the fetch and the switch. Also forgets every line. */
+/** Tests only: the address, the fetch, the switch and the wait off screen. Also forgets every line. */
 export function configureLive(next) {
   forgetAll();
   Object.assign(settings, next);
@@ -37,13 +49,32 @@ let watching = false;
 
 const onScreen = () => typeof document === 'undefined' || document.visibilityState !== 'hidden';
 
+function cameBack(line) {
+  clearTimeout(line.hidden);
+  line.hidden = null;
+  if (line.open || line.stopped) return;
+  // No line while it was away: the page reads again, and the line is asked for once more.
+  for (const listener of [...line.listeners]) {
+    listener.seenReady = true;
+    listener.fn({ what: 'cameBack' });
+  }
+  clearTimeout(line.wait);
+  line.wait = null;
+  connect(line);
+}
+
 function watchScreen() {
   if (watching || typeof document === 'undefined') return;
   watching = true;
   document.addEventListener('visibilitychange', () => {
     for (const line of lines.values()) {
-      if (onScreen()) connect(line);
-      else hangUp(line);
+      if (onScreen()) cameBack(line);
+      else if (line.hidden === null) {
+        line.hidden = setTimeout(() => {
+          line.hidden = null;
+          if (!onScreen()) hangUp(line);
+        }, settings.hiddenMs);
+      }
     }
   });
   window.addEventListener('online', () => {
@@ -60,6 +91,8 @@ function hangUp(line) {
   line.linger = null;
   clearTimeout(line.wait);
   line.wait = null;
+  clearTimeout(line.hidden);
+  line.hidden = null;
   line.open = false;
   const controller = line.controller;
   line.controller = null;
@@ -71,15 +104,18 @@ function forgetAll() {
   lines.clear();
 }
 
-function tryLater(line, ms) {
+function tryLater(line, ms, counts = true) {
   if (line.controller !== null || line.wait !== null || line.listeners.size === 0) return;
   const wait = ms ?? WAITS_MS[Math.min(line.failures, WAITS_MS.length - 1)];
-  line.failures += 1;
+  if (counts) line.failures += 1;
   // A little either way, so a server that restarts is not asked by every tab in the same instant.
-  line.wait = setTimeout(() => {
-    line.wait = null;
-    connect(line);
-  }, wait * (0.8 + Math.random() * 0.4));
+  line.wait = setTimeout(
+    () => {
+      line.wait = null;
+      connect(line);
+    },
+    counts ? wait * (0.8 + Math.random() * 0.4) : wait,
+  );
 }
 
 function deliver(line, message) {
@@ -92,6 +128,17 @@ function deliver(line, message) {
       listener.fn(message);
     }
   }
+}
+
+/** Why the server would not open the line, in its own words where it gave them. */
+async function refusalWords(res) {
+  try {
+    const body = await res.json();
+    if (typeof body?.message === 'string' && body.message !== '') return body.message;
+  } catch {
+    // No words of its own.
+  }
+  return res.status === 429 ? LIVE_WORDS.rate_limited : LIVE_WORDS.lines_full;
 }
 
 async function connect(line) {
@@ -134,7 +181,11 @@ async function connect(line) {
     return;
   }
   if (!res.ok || res.body == null) {
+    const refused = res.status === 429 || res.status === 503;
+    const words = refused ? await refusalWords(res) : null;
+    if (!mine()) return;
     line.controller = null;
+    if (words !== null) deliver(line, { what: 'refused', message: words });
     const after = Number(res.headers?.get?.('retry-after'));
     tryLater(line, Number.isFinite(after) && after > 0 ? after * 1000 : undefined);
     return;
@@ -176,7 +227,7 @@ async function connect(line) {
   line.controller = null;
   line.open = false;
   if (Date.now() - opened < SHORT_LINE_MS) tryLater(line);
-  else connect(line);
+  else tryLater(line, Math.random() * REOPEN_SPREAD_MS, false);
 }
 
 /** Listens to the gym's line; the answer stops listening. The line closes when nobody listens. */
@@ -184,7 +235,7 @@ export function listenLive(gymId, fn) {
   watchScreen();
   let line = lines.get(gymId);
   if (line === undefined) {
-    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, open: false, failures: 0, refreshed: false, stopped: false };
+    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, hidden: null, open: false, failures: 0, refreshed: false, stopped: false };
     lines.set(gymId, line);
   }
   clearTimeout(line.linger);

@@ -255,14 +255,32 @@ export default function MemberMemberships({
   const shown = held !== null && held.entryId === entryId ? held : null;
   // Live updates (ROADMAP Stage 4 item 18): when the person signs from an emailed link in another
   // window or on their phone, or another member of staff changes their memberships, the server tells
-  // this page and it reads them again, quietly; and again when its line opens after being away.
+  // this page and it reads them again, quietly; and again when its line opens after being away, or
+  // when staff come back to a tab that had no line. An answer that changed tells the person's page
+  // and the Members list behind it too, as a change made here does, so the two never disagree.
   const readSeq = useRef(0);
+  const shownNow = useRef(null);
+  useEffect(() => {
+    shownNow.current = shown;
+  });
+  /** Why the server will not open the line: said under the heading until it opens. */
+  const [liveRefused, setLiveRefused] = useState(null);
   useLiveNews(gymId, (message) => {
-    if (message.what !== 'ready' && !(message.what === 'memberships' && message.entryId === entryId)) return;
+    if (message.what === 'refused') {
+      setLiveRefused(message.message);
+      return;
+    }
+    if (message.what === 'ready') setLiveRefused(null);
+    const readAll = message.what === 'ready' || message.what === 'cameBack';
+    if (!readAll && !(message.what === 'memberships' && message.entryId === entryId)) return;
     const asked = ++readSeq.current;
     orgService.getHeldMemberships(gymId, entryId).then(
       (res) => {
-        if (readSeq.current === asked) setHeld({ entryId, ...res.data });
+        if (readSeq.current !== asked) return;
+        const next = { entryId, ...res.data };
+        const before = shownNow.current;
+        setHeld(next);
+        if (before !== null && JSON.stringify(before) !== JSON.stringify(next)) onChanged?.();
       },
       () => undefined,
     );
@@ -2021,6 +2039,11 @@ export default function MemberMemberships({
           </button>
         ) : null}
       </div>
+      {liveRefused !== null ? (
+        <p role="status" className="c-s14 c-t2 m-0" data-testid="held-live-refused">
+          {liveRefused}
+        </p>
+      ) : null}
       {shown.canBill && shown.memberGift !== null && shown.memberGift !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGift} /> : null}
       {shown.canBill && shown.memberGiftAtSell !== null && shown.memberGiftAtSell !== undefined && open === null ? <MemberGiftWaiting gift={shown.memberGiftAtSell} /> : null}
       {shown.bookingsStopped === true && open === null ? (

@@ -51,11 +51,21 @@ function redirectToLogin() {
 // one 401-triggered retry and never fires on 5xx / network errors.
 let refreshInFlight = null; // shared so concurrent 401s trigger a single refresh
 
+// ONE REFRESH AT A TIME ACROSS EVERY TAB OF THE BROWSER. Tabs share the refresh cookie, and the
+// server reads one refresh cookie presented twice at once as a stolen one and ends the sign-in
+// (auth/service.ts `refresh`). Two console windows' live lines end together when their sign-in
+// runs out (18-i's review, C1), so their refreshes would meet. Behind the browser's lock, the
+// second tab's refresh starts once the first has answered, and carries the cookie it set.
+const REFRESH_LOCK = 'aihg-session-refresh';
+function oneTabAtATime(task) {
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  return typeof locks?.request === 'function' ? locks.request(REFRESH_LOCK, task) : task();
+}
+
 // Also used by the console's live line (`pages/console/liveNews.js`), which is not an axios request.
 export function refreshSession() {
   if (!refreshInFlight) {
-    refreshInFlight = authApi
-      .post('/v1/auth/refresh')
+    refreshInFlight = oneTabAtATime(() => authApi.post('/v1/auth/refresh'))
       .finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;

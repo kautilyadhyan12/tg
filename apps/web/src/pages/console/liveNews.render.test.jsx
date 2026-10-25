@@ -6,6 +6,7 @@ vi.mock('../../api/authApi', () => ({ refreshSession: vi.fn() }));
 
 const { refreshSession } = await import('../../api/authApi');
 const { configureLive, listenLive } = await import('./liveNews');
+const { LIVE_WORDS } = await import('@app/shared');
 
 const BASE = 'http://api.test';
 const GYM = '00000000-0000-4000-8000-0000000000a1';
@@ -36,7 +37,13 @@ function fakeFetch(url, init) {
   });
   const next = answers.shift() ?? { status: 200 };
   if (next.status !== 200) {
-    return Promise.resolve({ status: next.status, ok: false, body: null, headers: new Headers(next.headers ?? {}) });
+    return Promise.resolve({
+      status: next.status,
+      ok: false,
+      body: null,
+      headers: new Headers(next.headers ?? {}),
+      json: () => (next.json === undefined ? Promise.reject(new Error('no body')) : Promise.resolve(next.json)),
+    });
   }
   const body = new ReadableStream({
     start(controller) {
@@ -63,7 +70,8 @@ beforeEach(() => {
   answers = [];
   screenState = 'visible';
   refreshSession.mockReset();
-  configureLive({ on: true, base: BASE, fetch: fakeFetch });
+  // A tab off screen keeps its line 100 ms here (a minute in the console).
+  configureLive({ on: true, base: BASE, fetch: fakeFetch, hiddenMs: 100 });
 });
 afterEach(() => {
   configureLive({ on: false });
@@ -108,21 +116,40 @@ describe('the open line', () => {
     stop();
   });
 
-  it('closes off screen, and on screen again opens a new line whose ready tells the page to read again', async () => {
+  it('closes a while after going off screen; back on screen the page reads again at once and a new line opens', async () => {
     const heard = [];
     const stop = listenLive(GYM, (m) => heard.push(m));
     await until(() => calls.length === 1);
     calls[0].write(frame({ what: 'ready' }));
     await pause(20);
     setScreen('hidden');
-    expect(calls[0].aborted).toBe(true);
+    expect(calls[0].aborted).toBe(false);
+    await until(() => calls[0].aborted, 1_000);
     await pause(50);
     expect(calls).toHaveLength(1);
     setScreen('visible');
+    expect(heard).toEqual([{ what: 'cameBack' }]);
     await until(() => calls.length === 2);
     calls[1].write(frame({ what: 'ready' }));
+    await until(() => heard.length === 2);
+    expect(heard).toEqual([{ what: 'cameBack' }, { what: 'ready' }]);
+    stop();
+  });
+
+  it('a window covered for a moment, or a quick switch of tab, keeps its line and reads nothing', async () => {
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => calls.length === 1);
+    calls[0].write(frame({ what: 'ready' }));
+    await pause(20);
+    setScreen('hidden');
+    await pause(30);
+    setScreen('visible');
+    await pause(200);
+    expect([calls.length, calls[0].aborted, heard]).toEqual([1, false, []]);
+    // News that came while it was covered is still heard.
+    calls[0].write(frame({ what: 'memberships', entryId: MAYA }));
     await until(() => heard.length === 1);
-    expect(heard).toEqual([{ what: 'ready' }]);
     stop();
   });
 
@@ -136,21 +163,23 @@ describe('the open line', () => {
     const stopLater = listenLive(GYM, (m) => later.push(m));
     expect(calls).toHaveLength(1);
     setScreen('hidden');
+    await until(() => calls[0].aborted, 1_000);
     setScreen('visible');
     await until(() => calls.length === 2);
     calls[1].write(frame({ what: 'ready' }));
-    await until(() => later.length === 1 && first.length === 1);
+    await until(() => later.length === 2 && first.length === 2);
+    expect(later).toEqual([{ what: 'cameBack' }, { what: 'ready' }]);
     stopFirst();
     stopLater();
   });
 
-  it('opens again at once when the server ends a line that lived a while', async () => {
+  it('opens again within a few seconds, at a moment of its own, when the server ends a line that lived a while', async () => {
     const stop = listenLive(GYM, () => {});
     await until(() => calls.length === 1);
     calls[0].write(frame({ what: 'ready' }));
     await pause(2_100);
     calls[0].end();
-    await until(() => calls.length === 2, 500);
+    await until(() => calls.length === 2, 3_500);
     stop();
   });
 
@@ -189,13 +218,27 @@ describe('the open line', () => {
     notStaff();
   });
 
-  it('a busy server is asked again after the wait it names', async () => {
+  it('a busy server is asked again after the wait it names, and the page is told why it has no line until then', async () => {
     answers = [{ status: 503, headers: { 'retry-after': '1' } }, { status: 200 }];
-    const stop = listenLive(GYM, () => {});
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
     await until(() => calls.length === 1);
     await pause(500);
     expect(calls).toHaveLength(1);
+    expect(heard).toEqual([{ what: 'refused', message: LIVE_WORDS.lines_full }]);
     await until(() => calls.length === 2, 2_000);
+    stop();
+  });
+
+  it("a line refused in the server's own words says them, and staff coming back to the tab read again", async () => {
+    answers = [{ status: 429, json: { error: 'too_many_lines', message: LIVE_WORDS.too_many_lines } }];
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => heard.length === 1);
+    expect(heard).toEqual([{ what: 'refused', message: LIVE_WORDS.too_many_lines }]);
+    setScreen('hidden');
+    setScreen('visible');
+    expect(heard.at(-1)).toEqual({ what: 'cameBack' });
     stop();
   });
 

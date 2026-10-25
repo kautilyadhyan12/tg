@@ -1958,13 +1958,39 @@ describe("live updates on a person's page (Stage 4 item 18)", () => {
     orgService.getHeldMemberships
       .mockResolvedValueOnce(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true }))
       .mockResolvedValue(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
-    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true, onChanged }));
     const b = await boxSoon();
     expect(b.getByText('Agreement not signed')).toBeTruthy();
     tell(GYM, { what: 'memberships', entryId: ADA });
     expect(await b.findByText('Agreement signed')).toBeTruthy();
     expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2);
     expect(orgService.getHeldMemberships).toHaveBeenLastCalledWith(GYM, ADA);
+    // The person's page and the Members list behind it read again too, as after a change made here.
+    expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the page behind nothing when a read after news finds the same answer', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
+    const onChanged = vi.fn();
+    render(draw(ADA, 'Ada Lovelace', { onChanged }));
+    await boxSoon();
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('says why it has no live updates while the server refuses the line, reads when staff come back, and stops saying it once the line opens', async () => {
+    orgService.getHeldMemberships.mockResolvedValue(answer([held(1, GOLD, TODAY, true)], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace'));
+    const b = await boxSoon();
+    tell(GYM, { what: 'refused', message: 'This account has too many console windows open. Close one and try again.' });
+    expect(b.getByTestId('held-live-refused').textContent).toBe('This account has too many console windows open. Close one and try again.');
+    tell(GYM, { what: 'cameBack' });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    tell(GYM, { what: 'ready' });
+    expect(b.queryByTestId('held-live-refused')).toBeNull();
   });
 
   it('reads nothing for news about somebody else, and nothing on a timer or when staff come back to the window', async () => {
