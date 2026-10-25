@@ -580,7 +580,8 @@ describe('who came, on live news', () => {
   });
   const dayWith = (people) => ({ data: { attendance: { ...emptyDay().data.attendance, totals: { visits: people.length, people: people.length }, people } } });
 
-  it('reads the day again when a visit changes anywhere, keeping its people on screen until the answer lands', async () => {
+  it('reads the day again when a visit changes anywhere, keeping its people on screen until the answer lands; at most once in 15 seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     api.getAttendanceDay.mockResolvedValueOnce(dayWith([someone('Ravi Noapp', 'ravi@example.com')]));
     drawScreen();
     await screen.findByText('ravi@example.com');
@@ -594,14 +595,26 @@ describe('who came, on live news', () => {
       finish(dayWith([someone('Asha App', 'asha@example.com'), someone('Ravi Noapp', 'ravi@example.com')]));
     });
     expect(await screen.findByText('asha@example.com')).toBeTruthy();
-    // A read again that fails leaves the day as it was.
+    // News within 15 seconds of that read waits for them, and two pieces are one read.
     api.getAttendanceDay.mockRejectedValueOnce({ response: { status: 500, data: {} } });
     tell({ what: 'visits', change: 'removed' });
+    tell({ what: 'visits', change: 'added' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(api.getAttendanceDay).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
     await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(3));
+    // A read again that fails leaves the day as it was.
     expect(screen.getByText('asha@example.com')).toBeTruthy();
     // News of a leaderboard or a membership is not about who came.
     tell({ what: 'leaderboard' });
     tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
     expect(api.getAttendanceDay).toHaveBeenCalledTimes(3);
   });
 });

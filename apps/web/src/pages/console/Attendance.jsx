@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { orgWords } from '@app/shared';
 import { CalendarDays, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
@@ -20,6 +20,9 @@ import { viewerPrivileges } from './consoleView';
 import { canCheckPeopleIn, personKey } from './checkinLogView';
 import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
 import { useLiveNews } from './liveNews';
+
+/** "Who came" reads again on live news at most this often. */
+const DAY_READ_GAP_MS = 15_000;
 
 // WHO CAME IN — the console's Attendance section.
 //
@@ -355,11 +358,25 @@ function AttendanceDay({ org }) {
   const readKey = `${day}|${statusesParam ?? ''}|${attempt}`;
   /** Live updates (Stage 4 item 18): a visit added or removed anywhere, at the desk or by staff in
    *  another window, reads the day on screen again, QUIETLY: the same question, so its people stay
-   *  on screen until the answer lands, and "Who came" never disagrees with "Checked in today". */
+   *  on screen until the answer lands, and "Who came" never disagrees with "Checked in today".
+   *  At most once every 15 seconds: this read and a person's history share one allowance of 600
+   *  an hour, so a busy desk never uses up the history. News after a quiet spell reads at once. */
   const [heard, setHeard] = useState(0);
+  const lastHeard = useRef(0);
+  const heardSoon = useRef(null);
   useLiveNews(gymId, (message) => {
-    if (message.what === 'visits' || message.what === 'ready' || message.what === 'cameBack') setHeard((n) => n + 1);
+    if (message.what !== 'visits' && message.what !== 'ready' && message.what !== 'cameBack') return;
+    if (heardSoon.current !== null) return;
+    heardSoon.current = setTimeout(
+      () => {
+        heardSoon.current = null;
+        lastHeard.current = Date.now();
+        setHeard((n) => n + 1);
+      },
+      Math.max(0, lastHeard.current + DAY_READ_GAP_MS - Date.now()),
+    );
   });
+  useEffect(() => () => clearTimeout(heardSoon.current), []);
 
   // THE ANSWER IS STAMPED WITH THE QUESTION IT WAS FETCHED FOR — the console
   // store's own rule 3, applied to a day instead of a user.
