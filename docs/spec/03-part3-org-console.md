@@ -4847,8 +4847,9 @@ still look.
 **Fresh, never stored.** Worked out from the rows each time it opens, one query a board;
 the page refreshes every minute while open and says when ("updated 10:42 am"), so a
 staff fix (19a-iv) shows at once. The console's page reads again when the server's live
-line says a visit, a workout or a board changed, at most once a minute, and once at the
-gym's midnight (Stage 4 item 18). Cost at full size (CLAUDE.md §4): 2,100 members with
+line says something changed: a board switched or a person taken off by staff at once, a
+visit, a workout or Hide me at most once a minute; and once at the gym's midnight (Stage 4
+item 18). Cost at full size (CLAUDE.md §4): 2,100 members with
 three years of visits and workouts — how long the server answers nobody for each board
 and period — measured before review.
 
