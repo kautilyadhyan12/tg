@@ -68,7 +68,9 @@ async function openLine(base: string, gymId: string, cookies: Cookies): Promise<
     headers: { accept: "text/event-stream", "x-forwarded-for": nextIp(), cookie: cookieHeader(cookies) },
     signal: controller.signal,
   });
-  const line: Line = { status: res.status, messages: [], raw: "", close: () => controller.abort() };
+  const line: Line = { status: res.status, messages: [], raw: "", close: () => {
+      controller.abort();
+    } };
   if (res.status !== 200 || res.body === null) return line;
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

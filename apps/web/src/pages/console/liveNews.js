@@ -267,3 +267,18 @@ export function useLiveNews(gymId, onMessage, active = true) {
     return listenLive(gymId, (message) => latest.current(message));
   }, [gymId, active]);
 }
+
+/** How long until the gym's next midnight, so a page showing "today" or "this week" reads once as
+ *  the gym's day turns, with nobody having changed anything. At least a second; null for a time
+ *  zone the browser cannot read. */
+export function msToGymMidnight(timezone, now = new Date()) {
+  let parts;
+  try {
+    parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  } catch {
+    return null;
+  }
+  const part = (type) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const into = (part('hour') * 3600 + part('minute') * 60 + part('second')) * 1000 + now.getMilliseconds();
+  return Math.max(1_000, 86_400_000 - into);
+}

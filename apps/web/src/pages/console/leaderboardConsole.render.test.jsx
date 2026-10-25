@@ -4,7 +4,7 @@
 // The worst thing the screen could do: take somebody off the board that staff did not pick,
 // or do it without the box that names them — so the press is checked against the row opened.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 const svc = {
@@ -16,6 +16,30 @@ const svc = {
 };
 const orgApi = { getMine: vi.fn(), addVisit: vi.fn(), removeVisit: vi.fn() };
 const postsSvc = { person: vi.fn(), remove: vi.fn(), setStopped: vi.fn(), reactors: vi.fn() };
+// The gym's open line (Stage 4 item 18) has its own tests in `liveNews.render.test.jsx`; here the test
+// says what the server would tell the page.
+const live = vi.hoisted(() => ({ listeners: new Set() }));
+vi.mock('./liveNews', async (importOriginal) => {
+  const actual = await importOriginal();
+  const { useEffect, useRef } = await import('react');
+  return {
+    ...actual,
+    useLiveNews: (gymId, onMessage, active = true) => {
+      const latest = useRef(onMessage);
+      latest.current = onMessage;
+      useEffect(() => {
+        if (!active) return undefined;
+        const listener = { gymId, fn: (message) => latest.current(message) };
+        live.listeners.add(listener);
+        return () => live.listeners.delete(listener);
+      }, [gymId, active]);
+    },
+  };
+});
+const tell = (message) =>
+  act(() => {
+    for (const listener of live.listeners) listener.fn(message);
+  });
 vi.mock('../../api/leaderboardApi', () => ({ staffLeaderboardService: svc }));
 vi.mock('../../api/postsApi', () => ({ staffPostsService: postsSvc, postPhotoUrl: () => 'http://api.test/photo' }));
 vi.mock('../../api/orgsApi', async (importOriginal) => {
@@ -184,12 +208,84 @@ describe('the board for staff', () => {
     expect(svc.board).toHaveBeenLastCalledWith('g1', 'gym_days', 'this_week', 2);
   });
 
-  it('asks again every minute while open', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  it('reads nothing on a timer: a minute without news asks nothing, and news of a membership asks nothing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
     try {
       open();
       await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
-      vi.advanceTimersByTime(60_000);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('news of a visit or a board reads at once after a quiet minute, and news within the minute is one read when it is up', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
+    try {
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+      tell({ what: 'visits', change: 'added' });
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(2));
+      // A busy minute at the desk, and a workout saved: one read, a minute after the last.
+      tell({ what: 'visits', change: 'added' });
+      tell({ what: 'leaderboard' });
+      tell({ what: 'visits', change: 'removed' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(59_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(3);
+      expect(svc.board).toHaveBeenLastCalledWith('g1', 'gym_days', 'this_week', 1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the line opening again, or the tab coming back without one, reads at once; a refused line says why under the heading", async () => {
+    open();
+    await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+    tell({ what: 'refused', message: 'Live updates are busy right now. The page will try again shortly.' });
+    expect(await screen.findByText('Live updates are busy right now. The page will try again shortly.')).toBeTruthy();
+    tell({ what: 'cameBack' });
+    await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(2));
+    tell({ what: 'ready' });
+    await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText('Live updates are busy right now. The page will try again shortly.')).toBeNull();
+  });
+
+  it("reads once at the gym's midnight, so this week's flames move to the new day", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // 23:59:30 in Kolkata.
+    vi.setSystemTime(new Date('2026-10-07T18:29:30.000Z'));
+    try {
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
       expect(svc.board).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();

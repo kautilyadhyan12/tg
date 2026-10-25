@@ -2488,8 +2488,9 @@ desk's scan, staff's search and the box all read:
 
 The console's Attendance page gains a search and **Check in** for signed-in staff with
 a new tick, `attendance.mark` (owner and manager by default; the owner can give it to
-a trainer) — logged with who did it. The page refreshes itself every 5 seconds
-(`GET …/attendance?since=`; plain polling, no socket): name, time, how, which device or
+a trainer) — logged with who did it. The page refreshes itself as people check in
+(`GET …/attendance/log?since=`, read when the server's live line says a visit was added;
+Stage 4 item 18): name, time, how, which device or
 which member of staff, and under the name the gym's own status and payment words in
 orange, as the desk showed them (RULINGS 2026-10-03; sent only to staff who hold
 `attendance.mark`). *(23a-ii: for somebody who holds a membership in the app the words,
@@ -2860,8 +2861,9 @@ that and the buttons).
   that is over has no payment word, and the record's is not put in its place. The visit is
   saved before the words are read, so a read that fails takes the words away and never the
   tick, the search or the log (`checkin.held_words_unread`). A past member's visit in
-  today's log has no words. The log's screen asks for new visits every 5 seconds and for
-  the whole day once a minute, so a row follows a payment marked elsewhere. The desk prints
+  today's log has no words. The log's screen reads new visits when the server says one was
+  added, and the whole day when one is removed or a membership changes, so a row follows a
+  payment marked elsewhere; and once at the gym's midnight. The desk prints
   a payment word that says "payment" itself without the label: "Status: Active · Payment
   due". Merge duplicate's side-by-side view reads the same four from what the person holds.
 
@@ -4844,7 +4846,9 @@ still look.
 
 **Fresh, never stored.** Worked out from the rows each time it opens, one query a board;
 the page refreshes every minute while open and says when ("updated 10:42 am"), so a
-staff fix (19a-iv) shows at once. Cost at full size (CLAUDE.md §4): 2,100 members with
+staff fix (19a-iv) shows at once. The console's page reads again when the server's live
+line says a visit, a workout or a board changed, at most once a minute, and once at the
+gym's midnight (Stage 4 item 18). Cost at full size (CLAUDE.md §4): 2,100 members with
 three years of visits and workouts — how long the server answers nobody for each board
 and period — measured before review.
 

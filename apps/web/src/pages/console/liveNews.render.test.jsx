@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../api/authApi', () => ({ refreshSession: vi.fn() }));
 
 const { refreshSession } = await import('../../api/authApi');
-const { configureLive, listenLive } = await import('./liveNews');
+const { configureLive, listenLive, msToGymMidnight } = await import('./liveNews');
 const { LIVE_WORDS } = await import('@app/shared');
 
 const BASE = 'http://api.test';
@@ -263,5 +263,21 @@ describe('the open line', () => {
     await pause(50);
     expect(calls).toHaveLength(0);
     off();
+  });
+});
+
+describe("the gym's midnight", () => {
+  it.each([
+    ['a minute before, in London summer time', 'Europe/London', '2026-10-03T22:59:00.000Z', 60_000],
+    ['just after, in Kolkata', 'Asia/Kolkata', '2026-10-07T18:30:01.000Z', 86_399_000],
+    ['noon in Chicago', 'America/Chicago', '2026-10-07T17:00:00.000Z', 43_200_000],
+    ['the last half second is still a second', 'UTC', '2026-10-07T23:59:59.500Z', 1_000],
+    ['the reader in another zone does not matter', 'Pacific/Auckland', '2026-10-07T10:30:00.000Z', 1_800_000],
+  ])('%s', (_name, zone, at, wait) => {
+    expect(msToGymMidnight(zone, new Date(at))).toBe(wait);
+  });
+
+  it('a zone the browser cannot read gives no wait', () => {
+    expect(msToGymMidnight('Not/AZone', new Date('2026-10-07T10:00:00.000Z'))).toBeNull();
   });
 });

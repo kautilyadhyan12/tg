@@ -6,6 +6,7 @@ import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekLabel, weekdayInitial } from '../../components/gym/leaderboardView';
 import LeaderboardPerson from './LeaderboardPerson';
+import { msToGymMidnight, useLiveNews } from './liveNews';
 import { canManagePosts } from '../../components/gym/postsView';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
@@ -27,9 +28,11 @@ import {
 // number by full name, the people members do not see marked with the reason; a person's
 // panel with what counted and Take off the board; and which boards members see, each with
 // why it is not showing. `leaderboard.manage`'s; the server refuses anyone else whatever
-// this screen shows. Asked again every minute while the page is in view.
+// this screen shows. Read again when the server says something a board counts changed (live
+// updates, Stage 4 item 18), at most once a minute: a large gym's all-time board is slow to
+// work out, so news in a busy hour is gathered into one read. And once at the gym's midnight.
 
-const REFRESH_MS = 60_000;
+const BUNDLE_MS = 60_000;
 
 function Circles({ circles, days, boardId }) {
   if (circles === null || days === null) return null;
@@ -104,9 +107,15 @@ export default function Leaderboard() {
   const [open, setOpen] = useState(null);
   /** "Chen Wu is off the board.", after the panel closes. */
   const [notice, setNotice] = useState(null);
+  /** Why the server will not open the live line: said under the heading until it opens. */
+  const [liveRefused, setLiveRefused] = useState(null);
+  /** When the board was last asked for, and a read waiting for its minute to come round. */
+  const lastRead = useRef(0);
+  const soon = useRef(null);
 
   const load = useCallback(() => {
     if (gymId === null) return Promise.resolve();
+    lastRead.current = Date.now();
     return staffLeaderboardService.board(gymId, boardId, period, pageNo).then(
       (board) => {
         if (shownKey.current !== key) return;
@@ -127,18 +136,46 @@ export default function Leaderboard() {
   useEffect(() => {
     shownKey.current = key;
     load();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) load();
-    }, REFRESH_MS);
-    const onShow = () => {
-      if (!document.hidden) load();
-    };
-    document.addEventListener('visibilitychange', onShow);
     return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onShow);
+      clearTimeout(soon.current);
+      soon.current = null;
     };
   }, [load, key]);
+
+  useLiveNews(gymId, (message) => {
+    if (message.what === 'refused') {
+      setLiveRefused(message.message);
+      return;
+    }
+    if (message.what === 'ready') setLiveRefused(null);
+    if (message.what === 'visits' || message.what === 'leaderboard') {
+      // At once after a quiet minute; within the minute, one read when it is up.
+      if (soon.current !== null) return;
+      soon.current = setTimeout(
+        () => {
+          soon.current = null;
+          load();
+        },
+        Math.max(0, lastRead.current + BUNDLE_MS - Date.now()),
+      );
+    } else if (message.what === 'ready' || message.what === 'cameBack') {
+      load();
+    }
+  });
+
+  // The gym's day turns at its midnight: "this week", the flames and the Streak move with it.
+  const zone = state.board?.timezone ?? null;
+  const [turn, setTurn] = useState(0);
+  useEffect(() => {
+    if (zone === null) return undefined;
+    const wait = msToGymMidnight(zone);
+    if (wait === null) return undefined;
+    const timer = setTimeout(() => {
+      load();
+      setTurn((t) => t + 1);
+    }, wait + 1_000);
+    return () => clearTimeout(timer);
+  }, [zone, turn, load]);
 
   const pick = (nextBoard, nextPeriod) => {
     setNotice(null);
@@ -201,6 +238,7 @@ export default function Leaderboard() {
       <header className="flex flex-col gap-1.5 min-w-0">
         <h1 className="c-h1">Leaderboard</h1>
         <p className="c-sub">{`Everyone on ${org.name}'s boards, and what your ${words.people} see`}</p>
+        {liveRefused !== null ? <p className="c-s14 c-t2">{liveRefused}</p> : null}
       </header>
 
       {readOnly && !state.refused ? (

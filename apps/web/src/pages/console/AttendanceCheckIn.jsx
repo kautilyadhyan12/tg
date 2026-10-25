@@ -3,14 +3,15 @@
 // "Check someone in": staff find a person by name, member number or email and press
 // Check in beside them; the answer is the desk's (green, or "Already checked in at …",
 // with the gym's own status and payment words in orange). "Checked in today": every visit
-// today, newest first, with those same words, asked again every 5 seconds while the page
-// is in view.
+// today, newest first, with those same words, read again when the server says a visit was
+// added or removed, or a membership changed (live updates, Stage 4 item 18), and at the
+// gym's midnight.
 //
 // Fixing a visit (ROADMAP 19a-iv): "Day they came" turns Check in into Add visit for an
 // earlier day, and each of today's visits has Remove. A box names the person, the day and
 // what it counts for before either happens.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CHECKIN_LOG_LIMIT, CHECKIN_LOG_POLL_MS, VISIT_ADD_DAYS_BACK } from '@app/shared';
+import { CHECKIN_LOG_LIMIT, VISIT_ADD_DAYS_BACK } from '@app/shared';
 import { Check, Loader2, Search } from 'lucide-react';
 import { orgService, errorText, isRetryable } from '../../api/orgsApi';
 import { ConsoleCard, ConsoleFailed, ConsoleLoading, ConsoleSection } from '../../components/console/ConsoleStates';
@@ -21,10 +22,11 @@ import { foundDetails, howLine, mergeLog, newestAt, pickKey, wordsLine } from '.
 import { stoppedLine } from './checkinRulesView';
 import { gymToday } from './hoursView';
 import { addVisitWindow } from './leaderboardStaffView';
+import { msToGymMidnight, useLiveNews } from './liveNews';
 
 const SEARCH_WAIT_MS = 250;
-/** One poll in this many reads the whole of today: about a minute apart. */
-const WHOLE_READ_EVERY = 12;
+/** A read that failed and may clear is tried again after this, while the log is on screen. */
+const RETRY_MS = 15_000;
 
 const muted = { color: 'rgba(255,255,255,0.55)' };
 const ORANGE = '#FFB347';
@@ -323,11 +325,6 @@ export function CheckSomeoneIn({ gymId, words, keepsList, timezone, clearSignal,
   );
 }
 
-/** Whether the page is in view: a hidden tab asks nothing. */
-function pageVisible() {
-  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
-}
-
 export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved }) {
   /** The visit whose Remove box is open, and how its removal is going. */
   const [removing, setRemoving] = useState(null);
@@ -339,11 +336,19 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
     held.current = log;
   }, [log]);
   const inFlight = useRef(false);
+  /** A read asked for while one was on its way: 'since' or 'whole', made when that one ends. */
+  const owed = useRef(null);
+  const readNext = useRef(() => undefined);
   const [attempt, setAttempt] = useState(0);
+  /** Why the server will not open the live line: said beside the heading until it opens. */
+  const [liveRefused, setLiveRefused] = useState(null);
 
   const read = useCallback(
     (whole) => {
-      if (inFlight.current) return false;
+      if (inFlight.current) {
+        owed.current = whole || owed.current === 'whole' ? 'whole' : 'since';
+        return;
+      }
       inFlight.current = true;
       const since = whole ? null : newestAt(held.current.visits);
       void orgService
@@ -372,40 +377,60 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
           setLog((prev) =>
             prev.status === 'ready' && retryable
               ? { ...prev, stale: true }
-              : { ...prev, status: 'failed', error: errorText(err, "We couldn't load today's check-ins."), retryable },
+              : { ...prev, status: 'failed', error: errorText(err, "We couldn't load today's check-ins."), retryable, stale: false },
           );
         })
         .finally(() => {
           inFlight.current = false;
+          const next = owed.current;
+          owed.current = null;
+          if (next !== null) readNext.current(next === 'whole');
         });
-      return true;
     },
     [gymId],
   );
+  useEffect(() => {
+    readNext.current = read;
+  }, [read]);
 
   useEffect(() => {
     read(true);
-    // Every poll asks for the visits since the newest. Once a minute the whole of today is
-    // read instead, so a row's words follow a payment marked on another screen.
-    // A whole read that meets one still on its way stays owed to the next poll.
-    let polls = 0;
-    let owed = false;
-    const timer = setInterval(() => {
-      if (!pageVisible() || held.current.status === 'failed') return;
-      polls += 1;
-      if (polls % WHOLE_READ_EVERY === 0) owed = true;
-      if (read(owed)) owed = false;
-    }, CHECKIN_LOG_POLL_MS);
-    // Back in view after a while: the whole of today again, not a gap.
-    const onVisible = () => {
-      if (pageVisible()) read(true);
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
   }, [read, attempt]);
+
+  // Live updates (Stage 4 item 18): a visit added at the desk or by staff in another window brings
+  // only what is newer than the newest held; a visit removed, or a membership changed (its words on
+  // a row), brings the whole of today again, as does the line opening after being away.
+  useLiveNews(gymId, (message) => {
+    if (message.what === 'refused') {
+      setLiveRefused(message.message);
+      return;
+    }
+    if (message.what === 'ready') setLiveRefused(null);
+    if (held.current.status === 'failed') return;
+    if (message.what === 'visits' && message.change === 'added') read(false);
+    else if (message.what !== 'leaderboard') read(true);
+  });
+
+  // The gym's day turns at its midnight: the log reads once then, so "today" is the new day. A read
+  // that comes back still on the old day (a clock change) waits for the next turn.
+  const [turn, setTurn] = useState(0);
+  useEffect(() => {
+    if (log.timezone === null) return undefined;
+    const wait = msToGymMidnight(log.timezone);
+    if (wait === null) return undefined;
+    const timer = setTimeout(() => {
+      read(true);
+      setTurn((t) => t + 1);
+    }, wait + 1_000);
+    return () => clearTimeout(timer);
+  }, [log.day, log.timezone, turn, read]);
+
+  // A read that failed and may clear is tried again shortly, while the log is still shown.
+  useEffect(() => {
+    if (log.status !== 'ready' || !log.stale) return undefined;
+    const timer = setTimeout(() => read(true), RETRY_MS);
+    return () => clearTimeout(timer);
+  }, [log, read]);
 
   useEffect(() => {
     if (refreshSignal > 0) read(false);
@@ -445,7 +470,11 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
 
   const count = log.visits.length;
   return (
-    <ConsoleSection title="Checked in today" aside={log.stale ? "Couldn't refresh — trying again" : 'Updates every few seconds'} defaultOpen>
+    <ConsoleSection
+      title="Checked in today"
+      aside={log.stale ? "Couldn't refresh — trying again" : (liveRefused ?? 'Updates as people check in')}
+      defaultOpen
+    >
       {count === 0 ? (
         <p className="text-sm mt-1" style={muted}>
           Nobody has checked in yet today. Scans at your front desk and check-ins by staff show here as they happen.
