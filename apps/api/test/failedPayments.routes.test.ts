@@ -27,6 +27,7 @@ import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
 import { account, fakeSquare, type Account, type CardBehaviour } from "./fakeSquareTerminal.js";
+import { recordingHub } from "./liveNewsRecorder.js";
 import { proveAddress } from "./proveAddress.js";
 
 const url = process.env["DATABASE_URL"];
@@ -90,6 +91,8 @@ const weekly = {
 d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
+  /** What the console's open lines were told (Stage 4 item 18). */
+  const hub = recordingHub();
   let clock = new Date();
   let app: App | undefined;
   const api = (): App => {
@@ -256,6 +259,7 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
       ON CONFLICT (code) DO UPDATE SET active = true`;
     app = await buildApp(config(), {
       squareApi: square.api,
+      live: { hub },
       orgs: { now: () => clock, gymLimits: { perAccount: 1000, perAddress: 1000, unpaid: 1000 } },
       emailSender: { sendVerificationEmail: () => Promise.resolve(), sendPasswordResetEmail: () => Promise.resolve(), sendSignInCodeEmail: () => Promise.resolve() },
     });
@@ -435,12 +439,15 @@ d("Failed payments, and Try again (real Postgres)", { timeout: T }, () => {
     if (fee === undefined) throw new Error("no fee");
     cardNowAnswers(card, "declines");
     const box = terminalPaymentsResponseSchema.parse(JSON.parse((await send("GET", `${entryUrl(gym, fay.entryId)}/terminal-payments`, gym.owner.cookies)).body));
+    const toldBefore = await hub.toldAbout(gym.id, fay.entryId);
     const press = await send("POST", `${entryUrl(gym, fay.entryId)}/memberships/${fay.membershipId}/fees/${fee.id}/card-charge`, gym.owner.cookies, {
       requestKey: randomUUID(),
       amountMinor: 1500,
       cardRef: box.cardOnFile?.ref,
     });
     expect(press.statusCode, press.body).toBe(200);
+    // Other screens showing Fay read her memberships again (Stage 4 item 18).
+    expect(await hub.toldAbout(gym.id, fay.entryId, toldBefore + 1)).toBe(toldBefore + 1);
     clock = new Date(clock.getTime() + DAY + 60_000);
     const page = await list(gym);
     expect(page.payments.map((p) => [p.name, p.periodIndex, p.fee?.kind, p.fee?.forName, p.leftMinor])).toEqual([["Fay Fee", null, "late_cancel", "Spin", 1500]]);
