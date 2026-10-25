@@ -444,7 +444,9 @@ d("A payment taken in Square's own app, kept for staff to match (real Postgres)"
       { name: "another amount than the bill", make: () => square.appPayment(acct, { amount: 2000, customerId: deeCustomer, locationId: gym.locationId }), state: "waiting", reason: "no_bill" },
       // The part typed is Dee's bill: ticked, the tax said beside it.
       { name: "Square's sales tax added on top of the typed amount", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206 }), state: "waiting", reason: "ready", ticked: true },
-      { name: "Square's sales tax on top, the sale paid in two payments", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206, split: true }), state: "waiting", reason: "square_tax" },
+      { name: "Square's sales tax on top, the sale paid in two payments", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206, split: true }), state: "waiting", reason: "paid_in_parts" },
+      // Round one, Low 4: one of two payments for one sale, exactly Dee's bill: staff say how much, nothing ticked.
+      { name: "one of two payments for one sale, exactly the bill", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, split: true }), state: "waiting", reason: "paid_in_parts" },
       { name: "the bill's amount in another money", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, currency: "CAD" }), state: "waiting", reason: "no_bill" },
       { name: "refunded in Square before it was taken in", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, refunded: 2500 }), state: "waiting", reason: "refunded" },
       { name: "partly refunded before it was taken in", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, refunded: 500 }), state: "waiting", reason: "refunded" },
@@ -455,6 +457,14 @@ d("A payment taken in Square's own app, kept for staff to match (real Postgres)"
       expect((await kept(p.id)).map((r) => [r.state, r.reason]), c.name).toEqual([[c.state, c.reason]]);
       if (c.state === "waiting") expect((await rowOf(gym, p.id))?.bill?.entryId ?? null, `${c.name}: ticked`).toBe(c.ticked === true ? dee.entryId : null);
     }
+    // Round one, High 3: a stranger in Square buys a protein bar: a shop sale, and none of their details kept.
+    const strangerId = `CSTRANGER${uniq()}`;
+    square.customer(acct, { id: strangerId, given_name: "Sue", family_name: "Stranger", email_address: "sue.stranger@gmail.com", phone_number: "+1 312-555-0199" });
+    const bar = square.appPayment(acct, { amount: 400, customerId: strangerId, locationId: gym.locationId, lines: ["ITEM"] });
+    await work([await deliver(acct, bar.id)]);
+    expect(await sql`SELECT state, customer_name, customer_email, customer_phone FROM gym_square_app_payments WHERE square_payment_id = ${bar.id}`).toEqual([
+      { state: "shop_sale", customer_name: null, customer_email: null, customer_phone: null },
+    ]);
     expect((await second(dee))?.status, "Dee's bill is still owed").toBe("open");
     expect((await paymentsOf(dee)).filter((p) => p.method === "square_app")).toEqual([]);
 

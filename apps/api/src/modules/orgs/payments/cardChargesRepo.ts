@@ -337,7 +337,8 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
 
 /** A payment from Square Point of Sale waits in Payments to match for this person, or for whoever pays
  *  for them (18d-iii-b-ii-a): their card on file waits too, so nobody is charged for a bill they may have
- *  paid there. Asked under the gym's lock, which taking a payment in holds while it keeps one. */
+ *  paid there. Asked under the record's lock, which taking a payment in holds too, for the person Square's
+ *  customer is and everybody they pay for, while it keeps one. */
 export async function squareAppWaitsFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
   const [row] = await sql<{ id: string }[]>`
     SELECT w.id FROM gym_square_app_payments w
@@ -579,7 +580,7 @@ const chargesNow = (sql: SqlOrTx) => sql`
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
       AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
       -- Nobody's card while a payment of theirs, or of whoever pays for them, from Square Point of Sale
-      -- waits to be matched (18d-iii-b-ii-a): the write asks it again under the gym's lock.
+      -- waits to be matched (18d-iii-b-ii-a): the write asks it again under the record's lock.
       AND NOT EXISTS (
         SELECT 1 FROM gym_square_app_payments w
         WHERE w.gym_id = b.gym_id AND w.state = 'waiting'

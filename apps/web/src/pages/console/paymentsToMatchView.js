@@ -130,6 +130,8 @@ export function forWords(row, today) {
       return row.refundedMinor > 0 ? `${money(row.refundedMinor, row.currency)} refunded in Square` : 'Refunded in Square';
     case 'shop_items':
       return 'Sold as shop items in Square';
+    case 'paid_in_parts':
+      return 'Paid in parts in Square';
     default:
       // No bill of the amount, or the one it fitted was paid another way since.
       return who === null ? `No bill of ${amount}` : `${who} has no bill of ${amount}`;

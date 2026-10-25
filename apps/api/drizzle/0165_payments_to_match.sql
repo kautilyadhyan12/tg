@@ -13,11 +13,11 @@
 --
 -- Nothing taken in Square Point of Sale goes on a bill by itself any more (Kd, 2026-10-25, "one press"):
 -- where one bill fits, the payment waits `ready`; a sale of shop items for somebody owing at least that
--- much this week waits `shop_items`.
+-- much this week waits `shop_items`; one payment of a sale paid in parts waits `paid_in_parts`.
 ALTER TABLE "gym_square_app_payments" DROP CONSTRAINT "gym_square_app_payments_state_check";--> statement-breakpoint
 ALTER TABLE "gym_square_app_payments" ADD CONSTRAINT "gym_square_app_payments_state_check" CHECK ("state" IN ('recorded','waiting','shop_sale','not_bill'));--> statement-breakpoint
 ALTER TABLE "gym_square_app_payments" DROP CONSTRAINT "gym_square_app_payments_reason_check";--> statement-breakpoint
-ALTER TABLE "gym_square_app_payments" ADD CONSTRAINT "gym_square_app_payments_reason_check" CHECK (("state" IN ('waiting','not_bill')) = ("reason" IS NOT NULL) AND ("reason" IS NULL OR "reason" IN ('ready','no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill','refunded','shop_items')));--> statement-breakpoint
+ALTER TABLE "gym_square_app_payments" ADD CONSTRAINT "gym_square_app_payments_reason_check" CHECK (("state" IN ('waiting','not_bill')) = ("reason" IS NOT NULL) AND ("reason" IS NULL OR "reason" IN ('ready','no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill','refunded','shop_items','paid_in_parts')));--> statement-breakpoint
 ALTER TABLE "gym_square_app_payments" ADD COLUMN "not_bill" text;--> statement-breakpoint
 ALTER TABLE "gym_square_app_payments" ADD COLUMN "entered_minor" integer;--> statement-breakpoint
 ALTER TABLE "gym_square_app_payments" ADD COLUMN "refunded_minor" integer DEFAULT 0 NOT NULL;--> statement-breakpoint

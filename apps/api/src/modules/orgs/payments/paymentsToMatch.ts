@@ -39,7 +39,7 @@ import { recordFeePaymentIn, type FeeWriteOutcome } from "../memberships/feesRep
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { BILLING, orgNotFound, readyOrThrow, stateOf } from "./cards.js";
-import { billsOfPerson, loadBills, tickOf, ticksFor } from "./paymentsToMatchBills.js";
+import { billsOfPerson, boxTick, loadBills, ticksFor } from "./paymentsToMatchBills.js";
 import * as toMatch from "./paymentsToMatchRepo.js";
 import * as repo from "./repo.js";
 import { readsOrders, type PaymentsDeps } from "./service.js";
@@ -114,10 +114,10 @@ export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gy
     person: p.person,
     linkedNames: p.customerId === null ? [] : (names.get(`${p.environment}:${p.accountId}:${p.customerId}`) ?? []),
     suggested: p.person ?? (p.customer === null ? null : (suggested.get(`${p.customer.email ?? ""}|${p.customer.phone ?? ""}`) ?? null)),
-    reason: p.reason,
+    reason: ticks.get(p.id)?.reason ?? p.reason,
     holdsCard: p.entryId !== null && held.has(p.entryId),
     deviceName: p.deviceName,
-    bill: ticks.get(p.id) ?? null,
+    bill: ticks.get(p.id)?.bill ?? null,
   }));
   const next = from + PAYMENTS_TO_MATCH_PAGE < totals.count ? from + PAYMENTS_TO_MATCH_PAGE : null;
   const ready = square !== null && connection !== null && stateOf(square, gym, connection) === "ready";
@@ -158,7 +158,8 @@ export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: 
   const amount = forTheBill(row) ?? row.amountMinor;
   const nameOf = new Map(people.map((p) => [p.entryId, p] as const));
   const out = billsOfPerson(loaded, entryId, amount, row.currency);
-  const suggested = tickOf(out, amount);
+  // Ticked only where the rule leaves no doubt which, as the list ticks it: never where staff choose.
+  const suggested = row.reason === null ? -1 : boxTick(loaded, row.reason, entryId, out, amount, today);
   const paid: MatchPaid[] = [...payments]
     .sort((a, b) => (a.paidOn < b.paidOn ? 1 : a.paidOn > b.paidOn ? -1 : b.seq - a.seq))
     .slice(0, 5)
@@ -186,15 +187,18 @@ export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: 
 /** A press of Match again, after its payment went on the bill: the same answer, where it asks for that same
  *  bill and amount; the key with anything else in it is refused, never answered as matched. */
 async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.TakenRow, body: MatchPaymentRequest | null = null): Promise<MatchPaymentResponse> {
-  const [paid] = await deps.sql<{ amount_minor: number; currency: string; receipt_number: number; entry_id: string; full_name: string; held_membership_id: string }[]>`
-    SELECT p.amount_minor, p.currency, p.receipt_number, h.entry_id, e.full_name, b.held_membership_id
+  const [paid] = await deps.sql<
+    { amount_minor: number; currency: string; receipt_number: number; entry_id: string; full_name: string; held_membership_id: string; bill_id: string; period_index: number | null; fee: string | null }[]
+  >`
+    SELECT p.amount_minor, p.currency, p.receipt_number, h.entry_id, e.full_name, b.held_membership_id, b.id AS bill_id, b.period_index, b.fee
     FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     WHERE p.gym_id = ${gymId} AND p.id = ${row.memberPaymentId}`;
   if (paid === undefined) throw gone();
-  if (body !== null && (paid.entry_id !== body.entryId || paid.held_membership_id !== body.membershipId || paid.amount_minor !== body.amountMinor)) {
+  const sameBill = body === null || (body.target.kind === "fee" ? paid.bill_id === body.target.billId : paid.fee === null && paid.period_index === body.target.periodIndex);
+  if (body !== null && (paid.entry_id !== body.entryId || paid.held_membership_id !== body.membershipId || paid.amount_minor !== body.amountMinor || !sameBill)) {
     throw new OrgsError(409, "payment_to_match_key_reused", W.key_reused);
   }
   return matchPaymentResponseSchema.parse({

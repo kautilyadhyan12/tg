@@ -1,8 +1,21 @@
 // The bills a payment from Square Point of Sale can go on (ROADMAP 18d-iii-b-ii-a): Match's box lists one
 // person's, and Payments to match and the person's page tick the one each payment fits, for one press of
 // Match (Kd, 2026-10-25, "one press"). Read once for a whole page of payments, by the rules Record payment
-// takes bills by, so the box, the list and the person's page tick the same bill.
-import { countAfterGap, memberPayTarget, type MatchBill, type SquareAppWaiting, type SquareAppWaitReason } from "@app/shared";
+// takes bills by, so the box, the list and the person's page tick the same bill. Bills change after a
+// payment is taken in (one paid by hand, a payer added), so why a payment waits is worked out again from
+// today's bills by the take-in's own rule (`squareAppDecision`), and a bill is ticked only where that rule
+// still leaves no doubt which (round one, Highs 1 and 2).
+import {
+  SQUARE_APP,
+  addDays,
+  countAfterGap,
+  memberPayTarget,
+  squareAppDecision,
+  type MatchBill,
+  type SquareAppCandidate,
+  type SquareAppWaiting,
+  type SquareAppWaitReason,
+} from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { billsFor, paymentsFor } from "../memberships/billsSql.js";
 import { heldRowsOf } from "../memberships/heldRepo.js";
@@ -109,6 +122,55 @@ export const tickOf = (bills: readonly MatchBill[], amountMinor: number): number
  *  Never where staff choose: who paid, which of several bills, how much, or a bill they took it off. */
 export const TICKED: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitReason>(["ready", "too_early", "maybe_twice"]);
 
+/** Why a payment waits where only the person's bills were in doubt: worked out again from today's bills. */
+const BILLS_ONLY: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitReason>(["ready", "too_early", "maybe_twice", "no_bill", "several_bills", "busy"]);
+
+/** Why a payment waits where Match's box may tick a bill of the person staff pick: the bills alone were in
+ *  doubt, or who paid. Never how much (items, a sale paid in parts, Square's tax), a bill staff took it
+ *  off, a refund, or a location two gyms use. */
+const BOX_TICKS: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitReason>([...BILLS_ONLY, "no_customer", "not_linked", "several_people", "other_location"]);
+
+/** The bills of this person and of anybody they pay for, as the take-in's rule reads them. */
+function candidatesOf(loaded: LoadedBills, entryId: string, today: string): SquareAppCandidate[] {
+  const theirs = new Set((loaded.people.get(entryId) ?? []).map((p) => p.entryId));
+  const since = addDays(today, -SQUARE_APP.twiceDays);
+  return loaded.open
+    .filter((b) => theirs.has(b.entryId))
+    .map((b): SquareAppCandidate => {
+      const base = { entryId: b.entryId, leftMinor: b.leftMinor, dueOn: b.dueOn, busy: b.busy };
+      if (b.target.kind === "fee") return { ...base, target: { kind: "fee", membershipId: b.membershipId, billId: b.target.billId }, paidJustBefore: false };
+      const periodIndex = b.target.periodIndex;
+      return {
+        ...base,
+        target: { kind: "period", membershipId: b.membershipId, periodIndex },
+        paidJustBefore: loaded.payments.some((p) => p.membershipId === b.membershipId && p.periodIndex === periodIndex - 1 && p.paidOn >= since),
+      };
+    });
+}
+
+/** Why a payment of this much from this person waits, read against today's bills: the take-in's rule, for a
+ *  sale whose who and what were already plain. */
+export function decideNow(loaded: LoadedBills, entryId: string, amountMinor: number, today: string): SquareAppWaitReason {
+  const d = squareAppDecision({
+    lines: "typed",
+    addedOnTop: false,
+    enteredMinor: amountMinor,
+    paidInParts: false,
+    customer: "one",
+    amountMinor,
+    today,
+    candidates: candidatesOf(loaded, entryId, today),
+  });
+  return d.kind === "wait" ? d.reason : "no_bill";
+}
+
+/** The bill Match's box ticks for the person staff picked: the one the rule leaves no doubt about, where
+ *  why the payment waits allows a tick at all; else none (-1). */
+export function boxTick(loaded: LoadedBills, reason: SquareAppWaitReason, entryId: string, bills: readonly MatchBill[], amountMinor: number, today: string): number {
+  if (!BOX_TICKS.has(reason) || !TICKED.has(decideNow(loaded, entryId, amountMinor, today))) return -1;
+  return tickOf(bills, amountMinor);
+}
+
 export interface TickAsked {
   id: string;
   entryId: string | null;
@@ -118,18 +180,20 @@ export interface TickAsked {
   currency: string;
 }
 
-/** The bill each of these waiting payments fits, by the payment's id, as Match's box would tick it now;
- *  none for a payment whose bill staff choose, or that no bill fits any more (paid by hand meanwhile). */
-export async function ticksFor(sql: SqlOrTx, gymId: string, today: string, rows: readonly TickAsked[]): Promise<Map<string, MatchBill>> {
-  const asked = rows.filter((r): r is TickAsked & { entryId: string } => r.entryId !== null && TICKED.has(r.reason));
-  const out = new Map<string, MatchBill>();
+/** Why each of these waiting payments waits now, and the bill it is ticked for, by the payment's id: for a
+ *  payment whose bills alone were in doubt, worked out again from today's bills, so a bill paid by hand
+ *  meanwhile, or a payer added, is said and never ticked past ("they may have paid twice" said beside it).
+ *  Any other payment keeps why it waited, with no bill ticked. */
+export async function ticksFor(sql: SqlOrTx, gymId: string, today: string, rows: readonly TickAsked[]): Promise<Map<string, { reason: SquareAppWaitReason; bill: MatchBill | null }>> {
+  const asked = rows.filter((r): r is TickAsked & { entryId: string } => r.entryId !== null && BILLS_ONLY.has(r.reason));
+  const out = new Map<string, { reason: SquareAppWaitReason; bill: MatchBill | null }>();
   if (asked.length === 0) return out;
   const loaded = await loadBills(sql, gymId, [...new Set(asked.map((r) => r.entryId))], today);
   for (const r of asked) {
     const amount = r.enteredMinor ?? r.amountMinor;
+    const reason = decideNow(loaded, r.entryId, amount, today);
     const bills = billsOfPerson(loaded, r.entryId, amount, r.currency);
-    const bill = bills[tickOf(bills, amount)];
-    if (bill !== undefined) out.set(r.id, bill);
+    out.set(r.id, { reason, bill: TICKED.has(reason) ? (bills[tickOf(bills, amount)] ?? null) : null });
   }
   return out;
 }
@@ -151,7 +215,7 @@ export async function squareAppWaitingFor(sql: SqlOrTx, gymId: string, entryId: 
     deviceName: r.deviceName,
     // Said only where Square added something on top of it.
     enteredMinor: r.enteredMinor !== null && r.enteredMinor < r.amountMinor ? r.enteredMinor : null,
-    maybeTwice: r.reason === "maybe_twice",
-    bill: ticks.get(r.id) ?? null,
+    maybeTwice: (ticks.get(r.id)?.reason ?? r.reason) === "maybe_twice",
+    bill: ticks.get(r.id)?.bill ?? null,
   }));
 }

@@ -13,6 +13,7 @@ import {
   squareAppDecision,
   squareAppEnteredMinor,
   squareAppLinesOf,
+  squareAppPaidInParts,
   squareOrderAddedMinor,
   squareOrderAddsOnTop,
   squareTaxName,
@@ -66,7 +67,7 @@ const fee = (entryId: string, dueOn: string, leftMinor: number): SquareAppCandid
 });
 type Case = [name: string, p: Partial<Parameters<typeof squareAppDecision>[0]>, outcome: string];
 const decide = (p: Case[1]): string => {
-  const d = squareAppDecision({ lines: "typed", addedOnTop: false, enteredMinor: null, customer: "one", amountMinor: 4500, today: TODAY, candidates: [], ...p });
+  const d = squareAppDecision({ lines: "typed", addedOnTop: false, enteredMinor: null, paidInParts: false, customer: "one", amountMinor: 4500, today: TODAY, candidates: [], ...p });
   return d.kind === "wait" ? d.reason : d.kind;
 };
 
@@ -74,7 +75,7 @@ describe("squareAppDecision: why a payment from Square's own app waits, and when
   it("never puts a payment on a bill by itself: the one bill that fits is `ready`, for one press", () => {
     for (const lines of ["typed", "items", "mixed", "unread"] as const) {
       for (const customer of ["none", "unknown", "one", "several"] as const) {
-        const d = squareAppDecision({ lines, addedOnTop: false, enteredMinor: 4500, customer, amountMinor: 4500, today: TODAY, candidates: [period("amy", TODAY, 4500)] });
+        const d = squareAppDecision({ lines, addedOnTop: false, enteredMinor: 4500, paidInParts: false, customer, amountMinor: 4500, today: TODAY, candidates: [period("amy", TODAY, 4500)] });
         expect(["wait", "shop_sale"]).toContain(d.kind);
       }
     }
@@ -109,7 +110,11 @@ describe("squareAppDecision: why a payment from Square's own app waits, and when
     ["what was sold could not be read", { lines: "unread", candidates: [period("amy", TODAY, 4500)] }, "sale_unread"],
     ["nobody picked, with Square's tax on top", { customer: "none", addedOnTop: true }, "no_customer"],
     // Square's tax added on top of what staff typed: the part typed is what a bill is matched to.
-    ["tax on top, the part typed not shown (a sale paid in two payments)", { addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4500)] }, "square_tax"],
+    ["tax on top, the part typed not shown", { addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4500)] }, "square_tax"],
+    // One payment of several for one sale (Square's split tender): staff say how much, even where it equals a bill.
+    ["a sale paid in two payments, this one exactly a bill", { paidInParts: true, candidates: [period("amy", TODAY, 4500)] }, "paid_in_parts"],
+    ["a sale paid in two payments, with tax on top", { paidInParts: true, addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] }, "paid_in_parts"],
+    ["a sale paid in two payments, nobody picked", { paidInParts: true, customer: "none" }, "no_customer"],
     ["tax on top, the total happening to equal a bill, the part typed not shown", { addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] }, "square_tax"],
     ["tax on top, the part typed exactly the bill", { addedOnTop: true, enteredMinor: 4500, amountMinor: 4871, candidates: [period("amy", TODAY, 4500)] }, "ready"],
     ["tax on top, the total equal to a bill but the part typed not", { addedOnTop: true, enteredMinor: 4500, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] }, "no_bill"],
@@ -147,6 +152,18 @@ describe("squareAppDecision: why a payment from Square's own app waits, and when
 // INCLUSIVE and UNKNOWN_TAX; "CatalogTax" inclusion_type, applies_to_custom_amounts, enabled and the
 // catalog object's present_at_all_locations, present_at_location_ids, absent_at_location_ids; read
 // 2026-10-25), and kinds Square has never sent are never taken as inside the price.
+describe("squareAppPaidInParts: was the sale paid with more than this payment", () => {
+  it.each([
+    ["one tender, this payment", { tenders: [{ payment_id: "P1" }] }, false],
+    ["two tenders", { tenders: [{ payment_id: "P1" }, { payment_id: "P2" }] }, true],
+    ["one tender, another payment", { tenders: [{ payment_id: "P2" }] }, true],
+    ["no tenders shown", {}, true],
+    ["a tender with no payment named", { tenders: [{}] }, true],
+  ] as const)("%s", (_name, order, parts) => {
+    expect(squareAppPaidInParts(order, "P1")).toBe(parts);
+  });
+});
+
 describe("squareOrderAddsOnTop: did Square charge more than staff typed", () => {
   it.each([
     ["no taxes and no charge", {}, false],

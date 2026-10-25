@@ -78,6 +78,7 @@ describe('every reason a payment waits, unticked: what it is for in a few words,
     ['not_this_bill', {}, "Taken off Ben Ortiz's bill", 'bill', null],
     ['refunded', {}, '$10.00 refunded in Square', null, { tone: 'info', text: 'Choose Not for a bill.' }],
     ['shop_items', { enteredMinor: null }, 'Sold as shop items in Square', 'bill', { tone: 'info', text: 'If it paid their membership, choose the bill. If not, choose Not for a bill.' }],
+    ['paid_in_parts', { enteredMinor: null }, 'Paid in parts in Square', 'bill', null],
   ];
   it('every reason the server can send is here', () => {
     expect(said.map(([reason]) => reason).sort()).toEqual([...SQUARE_APP_WAIT_REASONS].sort());

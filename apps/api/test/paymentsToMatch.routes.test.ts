@@ -493,6 +493,50 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     clock = new Date(clock.getTime() + 60_000);
     await work();
     expect(square.listed().length, "Square is not asked every minute").toBe(looks);
+
+    // Round one, High 4: Noa pays at the desk, picked, her message lost, and in the minute that charges cards
+    // Square gives no answer about what was sold. Her payment still waits at once, and her card with it.
+    const noa = await owing(gym, typeId, await person(gym, "Noa Late"));
+    const noaCard = await cardFor(gym, noa.entryId);
+    clock = new Date(`${today}T17:30:00Z`);
+    const unread = square.appPayment(gym.acct, { amount: 2500, customerId: noaCard.customerId, locationId: gym.locationId });
+    square.state.ordersUnanswered.add(unread.order_id ?? "");
+    clock = new Date(`${today}T17:40:00Z`);
+    await work();
+    square.state.ordersUnanswered.delete(unread.order_id ?? "");
+    expect((await rowOf(unread.id)).reason, "kept as a sale that could not be read").toBe("sale_unread");
+    expect(takenFrom(noaCard.cardId), "Noa's card is not charged while it waits").toEqual([]);
+    expect((await second(noa))?.status).toBe("open");
+  });
+
+  it("round one, High 1: the bill ticked is worked out again from today's bills: paid by hand meanwhile, 'they may have paid twice' is said beside the next; a payer added since, two bills of that amount, nothing ticked", async () => {
+    const gym = await makeGym(`Stale Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    clock = new Date(`${(await held(gym, await person(gym, "Clock Reader"))).today}T17:00:00Z`);
+    const amy = await owing(gym, typeId, await person(gym, "Amy Stale"));
+    const amyCard = await cardFor(gym, amy.entryId);
+    const paid = await takenIn(gym, { amount: 2500, customerId: amyCard.customerId });
+    const row = await rowOf(paid.id);
+    expect((await listed(gym, row.id))?.bill?.target).toEqual({ kind: "period", periodIndex: 1 });
+    // Staff also record this week's bill by hand, in cash.
+    const cash = await send("POST", `${entryUrl(gym, amy.entryId)}/memberships/${amy.membershipId}/payments`, gym.owner.cookies, { requestKey: randomUUID(), periodIndex: 1, amountMinor: 2500, method: "cash" });
+    expect(cash.statusCode, cash.body).toBe(200);
+    // Next week's bill is ticked now, with the warning, on the list and on her page.
+    expect(await listed(gym, row.id)).toMatchObject({ reason: "maybe_twice", bill: { target: { kind: "period", periodIndex: 2 } } });
+    expect((await held(gym, amy.entryId)).squareAppWaiting.map((w) => [w.maybeTwice, w.bill?.target])).toEqual([[true, { kind: "period", periodIndex: 2 }]]);
+
+    // Ben's payment waits ready; then Ben is made the payer of Cal, who owes the same today.
+    const ben = await owing(gym, typeId, await person(gym, "Ben Stale"));
+    const benCard = await cardFor(gym, ben.entryId);
+    const benPaid = await takenIn(gym, { amount: 2500, customerId: benCard.customerId });
+    const benRow = await rowOf(benPaid.id);
+    expect((await listed(gym, benRow.id))?.reason).toBe("ready");
+    const cal = await owing(gym, typeId, await person(gym, "Cal Stale"));
+    const payer = await send("PUT", `${entryUrl(gym, cal.entryId)}/payer`, gym.owner.cookies, { payerEntryId: ben.entryId });
+    expect(payer.statusCode, payer.body).toBe(200);
+    expect(await listed(gym, benRow.id), "two bills of that amount now: staff choose").toMatchObject({ reason: "several_bills", bill: null });
+    const box = matchBillsResponseSchema.parse(JSON.parse((await send("GET", `${toMatchUrl(gym)}/${benRow.id}/bills?entryId=${ben.entryId}`, gym.owner.cookies)).body));
+    expect(box.suggested, "nor does Match's box tick one").toBeNull();
   });
 
   it("Record payment offers Square Point of Sale where the gym takes payments there, naming whom to pick in Square: the member linked there, else whoever pays for them, else nobody", async () => {
@@ -578,6 +622,10 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     const elsewhere = await match(gym, row2.id, amy, { amountMinor: 2500, requestKey: key });
     expect(elsewhere.statusCode, elsewhere.body).toBe(409);
     expect((JSON.parse(elsewhere.body) as { error: string }).error).toBe("payment_to_match_key_reused");
+    // Round one, Low 2: the same person, membership and amount, but another of their bills: refused too.
+    const otherBill = await match(gym, row2.id, amy2, { amountMinor: 2500, requestKey: key, periodIndex: 2 });
+    expect(otherBill.statusCode, otherBill.body).toBe(409);
+    expect((JSON.parse(otherBill.body) as { error: string }).error).toBe("payment_to_match_key_reused");
     expect((await paymentsOf(amy2)).filter((p) => p.method === "square_app")).toHaveLength(1);
     expect(receipt).not.toBe(matchPaymentResponseSchema.parse(JSON.parse(once.body)).matched.receiptNumber);
     // Matched, it leaves the list and Overview's count.
@@ -763,7 +811,9 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
       ["Ann Payer", { kind: "period", periodIndex: 1 }, 2500, null],
       ["Kid Payer", { kind: "period", periodIndex: 1 }, 2500, null],
     ]);
-    expect(box.suggested).toBe(0);
+    // Ann's bill and the Kid's are both $25.00: which one is the desk's to say, so nothing is ticked (round
+    // one, High 2), as the list ticks nothing.
+    expect(box.suggested).toBeNull();
     // Their first weeks, paid in cash at the desk: seen, so one already recorded by hand is never matched twice.
     expect(box.paid).toHaveLength(2);
     expect(box.paid.map((p) => [p.amountMinor, p.method, p.forName])).toEqual(expect.arrayContaining([
@@ -791,8 +841,11 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     const payment = (await paymentsOf(una)).find((p) => p.method === "square_app");
     const voided = await send("POST", `${entryUrl(gym, una.entryId)}/memberships/${una.membershipId}/payments/${payment?.id ?? ""}/void`, gym.owner.cookies, { reason: "not_this_bill" });
     expect(voided.statusCode, voided.body).toBe(200);
-    expect(await listed(gym, row.id)).toMatchObject({ reason: "not_this_bill" });
+    expect(await listed(gym, row.id)).toMatchObject({ reason: "not_this_bill", bill: null });
     expect((await second(una))?.status).toBe("open");
+    // Match's box never ticks the bill staff just took it off (round one, High 2).
+    const box = matchBillsResponseSchema.parse(JSON.parse((await send("GET", `${toMatchUrl(gym)}/${row.id}/bills?entryId=${una.entryId}`, gym.owner.cookies)).body));
+    expect(box.suggested).toBeNull();
     // Matched again, to the same bill: on it once.
     expect((await match(gym, row.id, una, { amountMinor: 2500 })).statusCode).toBe(200);
     expect((await paymentsOf(una)).filter((p) => p.method === "square_app")).toHaveLength(1);
@@ -816,6 +869,21 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     expect((await list(await makeGym(`Alone ${uniq()}`))).sharedLocation).toBe(0);
     await sql`UPDATE gym_payment_connections SET state = 'removed', removed_at = now() WHERE gym_id = ${two.id}`;
     expect((await list(one)).sharedLocation).toBe(0);
+  });
+
+  it("round one, Low 3: 'their card isn't charged' is said only for a card in the Square account connected now", async () => {
+    const gym = await makeGym(`Old Card Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    clock = new Date(`${(await held(gym, await person(gym, "Clock Reader"))).today}T17:00:00Z`);
+    const ola = await owing(gym, typeId, await person(gym, "Ola Oldcard"));
+    const card = await cardFor(gym, ola.entryId);
+    const paid = await takenIn(gym, { amount: 2500, customerId: card.customerId });
+    const row = await rowOf(paid.id);
+    expect((await listed(gym, row.id))?.holdsCard).toBe(true);
+    // The card was saved in another Square account than the one connected now: the app can't charge it.
+    await sql`UPDATE gym_member_cards SET account_id = 'MOLDACCOUNT' WHERE gym_id = ${gym.id} AND entry_id = ${ola.entryId}`;
+    expect((await listed(gym, row.id))?.holdsCard).toBe(false);
+    expect((await held(gym, ola.entryId)).squareAppWaiting.map((w) => w.holdsCard)).toEqual([false]);
   });
 
   it("Failed payments says a card waits for a payment from Square Point of Sale instead of offering Try again", async () => {

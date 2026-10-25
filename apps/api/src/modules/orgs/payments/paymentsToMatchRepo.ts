@@ -216,18 +216,24 @@ export async function sharedLocationCount(sql: SqlOrTx, at: { gymId: string; env
   return row?.n ?? 0;
 }
 
+/** A card on file the app could charge: saved in a Square account the gym is connected to now (alias `k`). */
+const chargeable = (sql: SqlOrTx) => sql`
+  EXISTS (SELECT 1 FROM gym_payment_connections c
+          WHERE c.gym_id = k.gym_id AND c.provider = 'square' AND c.state = 'connected' AND c.environment = k.environment AND c.account_id = k.account_id)`;
+
 /** Of these people, those whose card on file a payment of theirs waiting holds: the card their own bills
- *  are charged to (theirs, or their payer's), or their own where they pay for somebody. */
+ *  are charged to (theirs, or their payer's), or their own where they pay for somebody; only a card the app
+ *  could charge, in the Square account connected now (round one, Low 3). */
 export async function cardHeldFor(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Set<string>> {
   if (entryIds.length === 0) return new Set();
   const rows = await sql<{ entry_id: string }[]>`
     SELECT x.entry_id FROM unnest(${[...entryIds]}::uuid[]) AS x(entry_id)
     WHERE EXISTS (
             SELECT 1 FROM gym_member_cards k
-            WHERE k.gym_id = ${gymId}
+            WHERE k.gym_id = ${gymId} AND ${chargeable(sql)}
               AND k.entry_id = COALESCE((SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.entry_id = x.entry_id), x.entry_id))
        OR (EXISTS (SELECT 1 FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.payer_entry_id = x.entry_id)
-           AND EXISTS (SELECT 1 FROM gym_member_cards k WHERE k.gym_id = ${gymId} AND k.entry_id = x.entry_id))`;
+           AND EXISTS (SELECT 1 FROM gym_member_cards k WHERE k.gym_id = ${gymId} AND k.entry_id = x.entry_id AND ${chargeable(sql)}))`;
   return new Set(rows.map((r) => r.entry_id));
 }
 

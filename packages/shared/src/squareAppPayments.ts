@@ -64,7 +64,8 @@ export interface SquareAppCandidate {
 /** Why a payment waits for staff. `ready`: one bill fits, ticked for one press. The next three are about
  *  the person, the next three about what was sold (`square_tax`: Square added tax or a charge on top of
  *  what staff typed, and did not show the part typed), the rest about the bills; `shop_items`: items from
- *  the gym's list in Square, for somebody owing at least that much this week; `other_location`,
+ *  the gym's list in Square, for somebody owing at least that much this week; `paid_in_parts`: the sale
+ *  was paid with more than one payment, so how much of this one is for a bill is the desk's to say; `other_location`,
  *  `several_gyms`, `not_this_bill` and `refunded` are set where the payment is taken in (another location
  *  of the account; a location two gyms here use; staff took it off a bill; Square had given money back on
  *  it before it was taken in). */
@@ -86,6 +87,7 @@ export const SQUARE_APP_WAIT_REASONS = [
   "not_this_bill",
   "refunded",
   "shop_items",
+  "paid_in_parts",
 ] as const;
 export type SquareAppWaitReason = (typeof SQUARE_APP_WAIT_REASONS)[number];
 
@@ -105,6 +107,8 @@ export function squareAppDecision(p: {
   /** Square added tax or a charge on top of what staff typed (`squareOrderAddsOnTop`). */
   addedOnTop: boolean;
   enteredMinor: number | null;
+  /** The sale was paid with more than one payment (`squareAppPaidInParts`). */
+  paidInParts: boolean;
   customer: SquareAppCustomer;
   amountMinor: number;
   today: string;
@@ -123,6 +127,8 @@ export function squareAppDecision(p: {
   if (p.customer === "several") return { kind: "wait", reason: "several_people" };
   if (p.lines === "mixed") return { kind: "wait", reason: "mixed_sale" };
   if (p.lines === "unread") return { kind: "wait", reason: "sale_unread" };
+  // One payment of several for one sale: never a bill's whole, whatever it comes to.
+  if (p.paidInParts) return { kind: "wait", reason: "paid_in_parts" };
   // Square added tax or a charge on top: what goes on a bill is the part staff typed, where Square shows
   // it; where it does not, staff say how much.
   if (p.addedOnTop && p.enteredMinor === null) return { kind: "wait", reason: "square_tax" };
@@ -175,6 +181,14 @@ export function squareAppEnteredMinor(
   if (tenders.length !== 1 || tenders[0]?.payment_id !== payment.id) return null;
   const entered = payment.amountMinor - squareOrderAddedMinor(order);
   return entered > 0 ? entered : null;
+}
+
+/** The sale was paid with more than this one payment (Square's split tender): the order's tenders are not
+ *  this payment alone. An order whose tenders Square did not show counts as paid in parts, so a part is
+ *  never taken for the whole. */
+export function squareAppPaidInParts(order: { tenders?: readonly { payment_id?: string | null | undefined }[] | null | undefined }, paymentId: string): boolean {
+  const tenders = order.tenders ?? [];
+  return tenders.length !== 1 || tenders[0]?.payment_id !== paymentId;
 }
 
 /** A tax in the business's own Square item library, as the check reads it. */
