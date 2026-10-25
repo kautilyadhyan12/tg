@@ -470,16 +470,18 @@ d("live updates: the console's open line (real Postgres)", () => {
       expect(line.messages).toEqual([READY, news(maya), news(maya)]);
 
       // Signed at the desk, by somebody else.
+      // Ben added to the list is news of the gym's people (18-ii), then his membership is his own.
       const ben = await addPerson(a.gymId, a.owner.cookies, "Ben Stone", "live-p-ben3@example.com");
-      expect((await give(a.gymId, ben, a.owner.cookies, a.typeId)).statusCode).toBe(201);
       await until(() => line.messages.length === 4);
+      expect((await give(a.gymId, ben, a.owner.cookies, a.typeId)).statusCode).toBe(201);
+      await until(() => line.messages.length === 5);
       const bens = await membershipOf(a.gymId, ben);
       const deskBox = membershipAgreementResponseSchema.parse(JSON.parse((await get(`${heldUrl(a.gymId, ben)}/${bens}/agreement`, a.owner.cookies)).body));
       if (deskBox.agreement === null || deskBox.factsKey === null) throw new Error("nothing to sign at the desk");
       const desk = await post(`${heldUrl(a.gymId, ben)}/${bens}/agreement/sign`, { agreementId: deskBox.agreement.id, factsKey: deskBox.factsKey, signer: "person", name: "Ben Stone" }, a.owner.cookies);
       expect(desk.statusCode, desk.body).toBe(200);
-      await until(() => line.messages.length === 5);
-      expect(line.messages.slice(3)).toEqual([news(ben), news(ben)]);
+      await until(() => line.messages.length === 6);
+      expect(line.messages.slice(3)).toEqual([{ what: "people" }, news(ben), news(ben)]);
       line.close();
     },
     T,
