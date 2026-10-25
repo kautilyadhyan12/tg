@@ -71,7 +71,7 @@ describe('each state the server sends has its own word, and no other', () => {
     const row = billRow(bill({ state: 'paid', paidMinor: 4999, payments: [payment()] }), 'GBP', TODAY);
     expect(row).toMatchObject({ tag: 'Paid', tone: 'green', when: null, left: null });
     expect([row.days, row.amount]).toEqual(['4 Oct – 3 Nov 2026', '£49.99']);
-    expect(row.payments).toEqual([{ id: payment().id, amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, receiptNumber: 4, refunds: [], voided: null }]);
+    expect(row.payments).toEqual([{ id: payment().id, method: 'cash', amount: '£49.99', detail: 'Cash · 4 Oct 2026 · by Sam Owner', refundable: true, receiptNumber: 4, refunds: [], voided: null }]);
   });
 
   it('Due says when, and Overdue says when it was due', () => {

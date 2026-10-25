@@ -4257,6 +4257,22 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   waits for staff to match, never guessed. Staff type the bill's total, so the gym keeps
   Square's "Apply tax to custom amounts" off and "Add a customer before checkout" on;
   Settings → Payments shows both. KWAZO never charges a card Square's own app saved.
+  *As built, 18d-iii-b-i (Kd, 2026-10-24: match once, then automatic, never a copy of the member
+  list in Square; `rulings/2026-10-25-18d-iii-b-i.md`):* Square's `payment.created` and
+  `payment.updated` messages are kept and the worker reads the payment and its order from Square
+  (ORDERS_READ; a gym connected before it reconnects once, said in Settings → Payments); every hour
+  it also lists each gym's location's payments since its last look. A completed payment that is not
+  the app's own (a Terminal checkout's, a card on file's charge) is taken in once
+  (`gym_square_app_payments`), never one made before the gym was first watched or more than 30 days
+  ago. It goes to the gym whose record Square's customer is (the customer the app made when a card
+  was saved), at that gym's own location; and is recorded as **Square app** (`square_app`) only where
+  every line was a typed amount, the customer is one record's, and exactly one bill of that record or
+  of somebody it pays for is exactly the amount (without a tip), due within 7 days, and not a second
+  payment straight after the bill before it (`squareAppDecision`). Items from the gym's Square list
+  are a shop sale, never a bill's; everything else waits for staff with its reason (the list is
+  18d-iii-b-ii). **Not this bill** on the person's page takes it off a bill or fee, which is owed
+  again; the money stays in Square and the payment waits again. A card on file charge unanswered for
+  more than an hour is looked up among the location's payments, never sent again.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

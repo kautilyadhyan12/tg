@@ -916,16 +916,18 @@ describe('the banner for a trial the gym has paid for', () => {
 });
 
 describe('a smaller size and the Plan card (1c-iii)', () => {
+  // The day a smaller size starts and the moment it is decided, years ahead: the screen reads the real
+  // clock, and a moment that has passed drops "by …" (these read 25 Oct 2026, and expired that morning).
   const PLANS = [
     { code: 'b1', seatCap: 200, priceLabel: '$79' },
     { code: 'b2', seatCap: 500, priceLabel: '$129' },
     { code: 'b3', seatCap: 1000, priceLabel: '$199' },
   ];
-  const END = '2026-10-25T06:00:00.000Z';
+  const END = '2030-10-25T06:00:00.000Z';
   const paying = { status: 'active', seatCap: 1000, priceLabel: '$199', currentPeriodEnd: END, cancelAtPeriodEnd: false, subscribed: true, pendingSize: null, sizeKept: null };
   const waiting = {
     ...paying,
-    pendingSize: { seatCap: 500, priceLabel: '$129', from: END, decideAt: '2026-10-25T03:00:00.000Z', ifTooMany: null },
+    pendingSize: { seatCap: 500, priceLabel: '$129', from: END, decideAt: '2030-10-25T03:00:00.000Z', ifTooMany: null },
   };
   const gym = (sub, seatsUsed) => ({ orgType: 'gym', seatsUsed, subscription: sub });
 
@@ -942,7 +944,7 @@ describe('a smaller size and the Plan card (1c-iii)', () => {
   it('says what will change and whether the members fit, with how many to remove and by when', () => {
     expect(pendingChangeText(waiting, 'gym')).toBe(`Changing to 500 members ($129 a month) on ${trialEndDateLabel(END)}`);
     expect(pendingChangeText(paying, 'gym')).toBeNull();
-    const by = new Date('2026-10-25T03:00:00.000Z').toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    const by = new Date('2030-10-25T03:00:00.000Z').toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
     expect(pendingFit(gym(waiting, 1100))).toEqual({
       tooMany: true,
       text: `You have ${(1100).toLocaleString()} members. Remove 600 by ${by} to move to 500. If not, you stay on ${(1000).toLocaleString()} members ($199 a month).`,

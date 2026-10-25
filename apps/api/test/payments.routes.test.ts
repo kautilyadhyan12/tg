@@ -432,8 +432,8 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       await sql`UPDATE gyms SET country = NULL WHERE id = ${nowhere}`;
       await staff(gb, manager, "manager");
 
-      expect(await read(gb, owner)).toEqual({ availability: "square", country: "GB", canConnect: true, squareReady: true, square: null, terminals: null });
-      expect(await read(gb, manager)).toEqual({ availability: "square", country: "GB", canConnect: false, squareReady: true, square: null, terminals: null });
+      expect(await read(gb, owner)).toEqual({ availability: "square", country: "GB", canConnect: true, squareReady: true, square: null, terminals: null, squareApp: null });
+      expect(await read(gb, manager)).toEqual({ availability: "square", country: "GB", canConnect: false, squareReady: true, square: null, terminals: null, squareApp: null });
       expect((await send("GET", `/v1/orgs/${gb}/payments`, stranger.cookies)).statusCode).toBe(404);
       expect((await send("GET", `/v1/orgs/${gb}/payments`, {})).statusCode).toBe(401);
       expect((await read(india, owner)).availability).toBe("india_soon");
@@ -633,8 +633,8 @@ d("A gym's own Square account: who connects it, to which gym, and letting it go 
       expect(await pendingHook1()).toEqual([{ status: "done" }]);
       expect((await read(gymId, owner)).square?.state).toBe("connected");
 
-      // Another kind of message is acknowledged and not kept.
-      const other = body("pay-t-hook-other", "payment.updated");
+      // Another kind of message is acknowledged and not kept (a payment's is kept since 18d-iii-b-i).
+      const other = body("pay-t-hook-other", "order.updated");
       expect((await deliver(other, sign(other))).statusCode).toBe(200);
       expect(await sql`SELECT 1 FROM webhook_events WHERE provider = 'square' AND event_id = 'pay-t-hook-other'`).toHaveLength(0);
 
