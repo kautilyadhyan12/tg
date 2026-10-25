@@ -52,8 +52,8 @@ export type TakeIn = "done" | "unknown";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** A payment whose order Square has not shown for this long after it was made is kept as one whose
- *  sale could not be read, so one payment never holds up the gym's hourly look for good. */
+/** A payment whose order Square has not shown for this long since the app first asked about it is kept
+ *  as one whose sale could not be read, so one payment never holds up the gym's hourly look for good. */
 export const ORDER_PATIENCE_MS = 60 * 60_000;
 
 /** The payment was taken in at the same moment under another gym's lock: this one's write is undone. */
@@ -64,8 +64,15 @@ function tokenOf(square: SquareSettings, row: repo.ConnectionRow): string | null
   return row.state !== "connected" || row.accessToken === null ? null : square.tokens.open(row.accessToken, accessContext(row.gymId));
 }
 
-/** Square's message about a payment of this account: asked of Square with any gym's token here. */
-export async function takeInSquarePayment(deps: PaymentsDeps, square: SquareSettings, accountId: string, paymentId: string): Promise<TakeIn> {
+/** Square's message about a payment of this account: asked of Square with any gym's token here.
+ *  `firstAskedAt`: when the message came, from which the patience with its order counts. */
+export async function takeInSquarePayment(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  accountId: string,
+  paymentId: string,
+  firstAskedAt: Date | null = null,
+): Promise<TakeIn> {
   const rows = await repo.connectionsOfAccount(deps.sql, square.environment, accountId);
   const token = rows.map((row) => tokenOf(square, row)).find((t) => t !== null) ?? null;
   if (token === null) return "done";
@@ -75,7 +82,7 @@ export async function takeInSquarePayment(deps: PaymentsDeps, square: SquareSett
     deps.log.warn({ event: "square.app_payment_unread", status: read.status, code: read.code }, "Square refused to show a payment it sent a message about");
     return "done";
   }
-  return await takeIn(deps, square, accountId, rows, read.value);
+  return await takeIn(deps, square, accountId, rows, read.value, firstAskedAt);
 }
 
 /** What Square says was sold with the payment, and whether it added tax or a charge on top of what staff
@@ -90,8 +97,16 @@ async function saleOf(square: SquareSettings, row: repo.ConnectionRow, payment: 
   return { lines: squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type)), addedOnTop: squareOrderAddsOnTop(order.value) };
 }
 
-/** One payment of the account, as Square showed it: taken in once, or passed over. */
-export async function takeIn(deps: PaymentsDeps, square: SquareSettings, accountId: string, rows: readonly repo.ConnectionRow[], payment: SquarePayment): Promise<TakeIn> {
+/** One payment of the account, as Square showed it: taken in once, or passed over. `firstAskedAt`: when
+ *  the app first asked about it, where it has before (null: now). */
+export async function takeIn(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  accountId: string,
+  rows: readonly repo.ConnectionRow[],
+  payment: SquarePayment,
+  firstAskedAt: Date | null = null,
+): Promise<TakeIn> {
   const environment = square.environment;
   const now = deps.now();
   // APPROVED or PENDING: Square's next message says when it is taken; FAILED and CANCELED never will be.
@@ -155,7 +170,7 @@ export async function takeIn(deps: PaymentsDeps, square: SquareSettings, account
   // Taken at another location of the account than the gym's own: kept for staff, as it is.
   const atHome = owner.locationId === location;
   const asked = atHome ? await saleOf(square, owner, payment) : { lines: "unread" as const, addedOnTop: false };
-  if (asked === null && madeAt.getTime() > now.getTime() - ORDER_PATIENCE_MS) return "unknown";
+  if (asked === null && (firstAskedAt ?? now).getTime() > now.getTime() - ORDER_PATIENCE_MS) return "unknown";
   const sale = asked ?? { lines: "unread" as const, addedOnTop: false };
   const gym = await repo.readGym(deps.sql, owner.gymId);
   if (gym === null) return "done";
@@ -283,21 +298,27 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
     let finished = false;
     let stopped = false;
     let refused = false;
+    // The payment this look stopped at, and since when it has been asked about; kept while the list
+    // itself gives no answer, so the hour goes on counting.
+    let stuck: taken.SweepStuck | null = null;
     for (let page = 0; page < taken.SWEEP.pagesPerLook && !stopped; page++) {
       const listed = await square.api.listPayments(token, { locationId: sweep.locationId, beginTime: from, endTime: until, cursor });
       if (listed.kind !== "ok") {
         stopped = true;
         run.unanswered += listed.kind === "unavailable" ? 1 : 0;
         refused = listed.kind === "refused";
+        stuck = sweep.stuck;
         if (listed.kind === "refused") deps.log.warn({ event: "square.app_payments_unlisted", gymId: sweep.gymId, status: listed.status, code: listed.code }, "Square refused to list a gym's payments");
         break;
       }
       if (listed.value.unread > 0) deps.log.warn({ event: "square.app_payments_unread", gymId: sweep.gymId, count: listed.value.unread }, "payments Square listed could not be read");
       for (const payment of listed.value.payments) {
         run.payments += 1;
-        if ((await takeIn(deps, square, sweep.accountId, rows, payment)) === "unknown") {
+        const askedSince = sweep.stuck?.paymentId === payment.id ? sweep.stuck.since : null;
+        if ((await takeIn(deps, square, sweep.accountId, rows, payment, askedSince)) === "unknown") {
           stopped = true;
           run.unanswered += 1;
+          stuck = { paymentId: payment.id, since: askedSince ?? now };
           break;
         }
         if (payment.created_at != null) reached = new Date(Math.max(reached.getTime(), new Date(payment.created_at).getTime()));
@@ -310,7 +331,7 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
     // next look starts there, a little before, and finds nothing twice. Soon where Square gave no
     // answer; in an hour where it refused (a permission taken away is not given back in a minute).
     const next = finished || refused ? taken.SWEEP.everyMs : taken.SWEEP.againMs;
-    await taken.finishSweep(deps.sql, sweep, finished ? until : reached, new Date(now.getTime() + next));
+    await taken.finishSweep(deps.sql, sweep, finished ? until : reached, new Date(now.getTime() + next), stuck);
   }
   return run;
 }

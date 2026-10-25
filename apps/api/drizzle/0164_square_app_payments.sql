@@ -68,7 +68,9 @@ CREATE INDEX "gym_square_app_payments_entry_idx" ON "gym_square_app_payments" US
 -- longer than Square sends them again): from `swept_until`, at the location it was made for. Square
 -- payments made before `watching_since` are never taken in, by a message or a look: an old payment's
 -- later message (a refund) is never put on a bill of today's. A connection moved to another account or
--- location starts again from the moment it moved.
+-- location starts again from the moment it moved. `stuck_payment_id`, `stuck_since`: the payment a look
+-- stopped at because Square gave no answer about its order, and when the look first asked; after an hour
+-- of asking it is kept as a sale that could not be read.
 CREATE TABLE "gym_square_payment_sweeps" (
 	"gym_id" uuid NOT NULL,
 	"environment" text NOT NULL,
@@ -78,9 +80,12 @@ CREATE TABLE "gym_square_payment_sweeps" (
 	"swept_until" timestamp with time zone NOT NULL,
 	"due_at" timestamp with time zone NOT NULL,
 	"lease_until" timestamp with time zone,
+	"stuck_payment_id" text,
+	"stuck_since" timestamp with time zone,
 	CONSTRAINT "gym_square_payment_sweeps_pk" PRIMARY KEY("gym_id","environment"),
 	CONSTRAINT "gym_square_payment_sweeps_environment_check" CHECK ("environment" IN ('sandbox','production')),
-	CONSTRAINT "gym_square_payment_sweeps_ids_check" CHECK ("account_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "location_id" ~ '^[A-Za-z0-9_-]{1,64}$')
+	CONSTRAINT "gym_square_payment_sweeps_ids_check" CHECK ("account_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "location_id" ~ '^[A-Za-z0-9_-]{1,64}$'),
+	CONSTRAINT "gym_square_payment_sweeps_stuck_check" CHECK (("stuck_payment_id" IS NULL) = ("stuck_since" IS NULL) AND ("stuck_payment_id" IS NULL OR "stuck_payment_id" ~ '^[A-Za-z0-9_-]{1,192}$'))
 );--> statement-breakpoint
 ALTER TABLE "gym_square_payment_sweeps" ADD CONSTRAINT "gym_square_payment_sweeps_gym_id_gyms_id_fk" FOREIGN KEY ("gym_id") REFERENCES "public"."gyms"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "gym_square_payment_sweeps_due_idx" ON "gym_square_payment_sweeps" USING btree ("due_at");--> statement-breakpoint

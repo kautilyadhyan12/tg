@@ -171,7 +171,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     } else if (isCustomer && payload.customerId !== undefined) {
       unknown = (await checkSquareCustomer(deps, square, payload.accountId, payload.customerId)) === "unknown";
     } else if (isPayment && payload.paymentId !== undefined) {
-      unknown = (await takeInSquarePayment(deps, square, payload.accountId, payload.paymentId)) === "unknown";
+      unknown = (await takeInSquarePayment(deps, square, payload.accountId, payload.paymentId, event.receivedAt)) === "unknown";
     } else {
       let stillWorks = false;
       for (const row of await repo.connectionsOfAccount(deps.sql, square.environment, payload.accountId)) {

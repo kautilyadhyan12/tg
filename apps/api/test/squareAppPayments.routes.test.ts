@@ -580,10 +580,15 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     expect((await paymentsOf(hal)).filter((p) => p.method === "square_app")).toHaveLength(1);
     expect((await sweepOf())?.due_at.getTime(), "finished: the next look in an hour").toBe(clock.getTime() + 60 * MINUTE);
 
-    // Jo pays and Square never shows its order: an hour on, it is kept as a sale that could not be read,
+    // Jo pays and Square never shows its order. The look finds it an hour old and asks once: not kept
+    // yet, asked again a minute later. An hour of asking on, it is kept as a sale that could not be read,
     // and the look finishes instead of stopping there every minute.
     const lost = square.appPayment(acct, { amount: 2500, customerId: joCustomer, locationId: gym.locationId });
     square.state.ordersUnanswered.add(lost.order_id ?? "");
+    clock = new Date(clock.getTime() + 61 * MINUTE);
+    await work();
+    expect(await kept(lost.id), "asked once: the hour counts from the first ask").toEqual([]);
+    expect((await sweepOf())?.due_at.getTime()).toBe(clock.getTime() + MINUTE);
     clock = new Date(clock.getTime() + 61 * MINUTE);
     await work();
     square.state.ordersUnanswered.delete(lost.order_id ?? "");

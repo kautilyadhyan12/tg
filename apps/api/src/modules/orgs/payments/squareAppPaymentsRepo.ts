@@ -198,6 +198,12 @@ export const SWEEP = {
   perRun: 20,
 } as const;
 
+/** The payment a look stopped at, Square giving no answer about its order, and when it was first asked. */
+export interface SweepStuck {
+  paymentId: string;
+  since: Date;
+}
+
 export interface SweepRow {
   gymId: string;
   environment: SquareEnvironment;
@@ -205,6 +211,7 @@ export interface SweepRow {
   locationId: string;
   watchingSince: Date;
   sweptUntil: Date;
+  stuck: SweepStuck | null;
 }
 
 /** Every connected gym with a location is watched: a row for one that has none yet. */
@@ -223,7 +230,18 @@ export async function watchConnected(sql: Sql, environment: SquareEnvironment, n
 
 /** The looks that are due, each held for `leaseMs`: a second worker skips them. */
 export async function claimDueSweeps(sql: Sql, environment: SquareEnvironment, now: Date, gymIds: readonly string[] | null): Promise<SweepRow[]> {
-  const rows = await sql<{ gym_id: string; environment: SquareEnvironment; account_id: string; location_id: string; watching_since: Date; swept_until: Date }[]>`
+  const rows = await sql<
+    {
+      gym_id: string;
+      environment: SquareEnvironment;
+      account_id: string;
+      location_id: string;
+      watching_since: Date;
+      swept_until: Date;
+      stuck_payment_id: string | null;
+      stuck_since: Date | null;
+    }[]
+  >`
     WITH due AS (
       SELECT gym_id, environment FROM gym_square_payment_sweeps
       WHERE environment = ${environment} AND due_at <= ${now} AND (lease_until IS NULL OR lease_until <= ${now})
@@ -234,15 +252,24 @@ export async function claimDueSweeps(sql: Sql, environment: SquareEnvironment, n
     )
     UPDATE gym_square_payment_sweeps s SET lease_until = ${new Date(now.getTime() + SWEEP.leaseMs)}
     FROM due WHERE s.gym_id = due.gym_id AND s.environment = due.environment
-    RETURNING s.gym_id, s.environment, s.account_id, s.location_id, s.watching_since, s.swept_until`;
-  return rows.map((r) => ({ gymId: r.gym_id, environment: r.environment, accountId: r.account_id, locationId: r.location_id, watchingSince: r.watching_since, sweptUntil: r.swept_until }));
+    RETURNING s.gym_id, s.environment, s.account_id, s.location_id, s.watching_since, s.swept_until, s.stuck_payment_id, s.stuck_since`;
+  return rows.map((r) => ({
+    gymId: r.gym_id,
+    environment: r.environment,
+    accountId: r.account_id,
+    locationId: r.location_id,
+    watchingSince: r.watching_since,
+    sweptUntil: r.swept_until,
+    stuck: r.stuck_payment_id === null || r.stuck_since === null ? null : { paymentId: r.stuck_payment_id, since: r.stuck_since },
+  }));
 }
 
-/** The look is done up to `sweptUntil`; the next is due at `dueAt`. Only for the account and location
- *  it looked at: a connection moved meanwhile starts its own. */
-export async function finishSweep(sql: SqlOrTx, s: SweepRow, sweptUntil: Date, dueAt: Date): Promise<void> {
+/** The look is done up to `sweptUntil`; the next is due at `dueAt`; `stuck`, the payment it stopped at,
+ *  if any. Only for the account and location it looked at: a connection moved meanwhile starts its own. */
+export async function finishSweep(sql: SqlOrTx, s: SweepRow, sweptUntil: Date, dueAt: Date, stuck: SweepStuck | null = null): Promise<void> {
   await sql`
     UPDATE gym_square_payment_sweeps
-    SET swept_until = GREATEST(swept_until, ${sweptUntil}), due_at = ${dueAt}, lease_until = NULL
+    SET swept_until = GREATEST(swept_until, ${sweptUntil}), due_at = ${dueAt}, lease_until = NULL,
+        stuck_payment_id = ${stuck?.paymentId ?? null}, stuck_since = ${stuck?.since ?? null}
     WHERE gym_id = ${s.gymId} AND environment = ${s.environment} AND account_id = ${s.accountId} AND location_id = ${s.locationId}`;
 }

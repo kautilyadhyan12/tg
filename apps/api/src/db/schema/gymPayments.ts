@@ -667,11 +667,18 @@ export const gymSquarePaymentSweeps = pgTable(
     sweptUntil: timestamp("swept_until", { withTimezone: true }).notNull(),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
     leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    /** The payment a look stopped at, Square giving no answer about its order, and when it first asked. */
+    stuckPaymentId: text("stuck_payment_id"),
+    stuckSince: timestamp("stuck_since", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ name: "gym_square_payment_sweeps_pk", columns: [t.gymId, t.environment] }),
     check("gym_square_payment_sweeps_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_payment_sweeps_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.locationId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check(
+      "gym_square_payment_sweeps_stuck_check",
+      sql`(${t.stuckPaymentId} IS NULL) = (${t.stuckSince} IS NULL) AND (${t.stuckPaymentId} IS NULL OR ${t.stuckPaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
+    ),
     index("gym_square_payment_sweeps_due_idx").on(t.dueAt),
   ],
 );
