@@ -4445,11 +4445,34 @@ good takes its links with it. A link that names nothing says "This link isn't va
 reads the same details and words as the desk's box, with the same parent-or-guardian choice, and
 signs by the same one statement, which also asks that the link still works; the signature is kept
 as "from the emailed link" with nobody's screen, and the copy is emailed as at the desk. The line
-says "Link to sign emailed on {day}" while the link works, with Send link again; while a link
-waits, the person's page reads their memberships again when staff come back to the window, and
-every 30 seconds for 15 minutes after that, until live updates replace it (ROADMAP Stage 4 item 18;
-Kd, 2026-10-24). The phone app
+says "Link to sign emailed on {day}" while the link works, with Send link again; once it is signed,
+the person's page says Agreement signed by itself, without a refresh, through live updates below.
+The phone app
 signs in the app (Stage 5 item 20).
+
+**Live updates** (ROADMAP Stage 4 item 18; Kd, 2026-10-24, `rulings/2026-10-24-18u-ii-b.md`). A
+console tab on screen keeps one open line to the server for the gym it shows (`GET
+/v1/orgs/:gymId/live`, server-sent events), shared by every part of the page. Only that gym's staff
+open it: anybody else gets the 404 every gym route answers. The server sends `ready` when the line
+opens, then only what to read again, a kind of thing and a record's id (`{ what: "memberships",
+entryId }`), never a name or what changed; the page reads that through its normal route. A line
+ends when the sign-in it was opened with runs out, and at most 15 minutes after it opened, and the
+browser opens a new one through the same checks, so somebody removed from the staff stops hearing
+the gym by then; the browser opens it again within 3 seconds, at a moment of its own, and its
+sign-in is refreshed one tab at a time (the browser's lock: one refresh cookie presented twice at
+once ends the sign-in). Off screen for a minute the line is closed; back on screen the page reads
+again at once and the line opens again. One account holds at most 10 lines at once and one server
+20,000 (an open line was measured at 17–19 KB); a line refused says why under the page's heading
+("This account has too many console windows open. Close one and try again."), and the page reads
+again when staff come back to it. A read after news that changed the answer tells the rest of the
+page and the list behind it too, as a change made there does. With Redis, the lines are held by a
+server of their own (`src/live.ts`, LIVE_LINES=apart on the api), told what changed on one Redis
+channel for each database, and nothing waits for Redis to start; without, the api holds them
+itself. 18-i: a person's memberships, from what staff do on the console: given, changed, frozen,
+cancelled, a payment recorded or voided, a Terminal payment started, taken or stopped, a card on file
+charged, an agreement's link emailed or signed at the desk or from the link. A payment Square
+settles later (its message, the worker) is read when the page next reads. 18-ii: the check-in log
+and the Leaderboard, whose timers go.
 
 **Each place's rules** (18u, 18v; no lawyer, Kd 2026-10-23, `rulings/2026-10-23-18u-i.md`): renewal on or off per type (Quebec: no
 paid automatic renewal); a longest term (Ontario and Quebec 1 year; British Columbia 2 years

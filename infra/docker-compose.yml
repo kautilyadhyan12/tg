@@ -46,6 +46,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      # Started, not healthy: the site's pages never wait on the live updates' server.
+      live:
+        condition: service_started
 
   api:
     <<: *api-image
@@ -53,6 +56,23 @@ services:
     # X-Forwarded-Proto the secure-cookie contract depends on cannot be bypassed.
     expose:
       - "3000"
+    environment:
+      NODE_ENV: production
+      # The console's open lines are held by the live service below (ROADMAP Stage 4 item 18).
+      LIVE_LINES: apart
+
+  # THE SAME IMAGE, HOLDING THE CONSOLE'S OPEN LINES (ROADMAP Stage 4 item 18): Caddy sends it
+  # /v1/orgs/<gym>/live and nothing else; it hears what changed from the api through Redis.
+  live:
+    <<: *api-image
+    command: ["node", "--import", "tsx", "src/live.ts"]
+    expose:
+      - "3100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # THE SAME IMAGE, THE OTHER MODE (v1 §6). This service is what makes the DPDP
   # Day-14 sweep exist operationally: worker.ts registers the `dpdp.purge`

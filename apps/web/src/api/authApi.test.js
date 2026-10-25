@@ -124,3 +124,67 @@ describe('authApi refresh-retry interceptor (v1 §6.1)', () => {
     expect(calls['/v1/auth/refresh']).toBeUndefined(); // never attempted
   });
 });
+
+// Two console windows are two copies of this file sharing one cookie jar (18-i's review, C1).
+describe('refreshes from two tabs of one browser', () => {
+  /** The server's rule: a refresh cookie presented after it was rotated ends the whole sign-in. */
+  function sessionServer() {
+    const server = { jar: 'r1', current: 'r1', seq: 1, ended: false, refreshes: 0 };
+    server.adapter = async (config) => {
+      const presented = server.jar;
+      await new Promise((r) => setTimeout(r, 20));
+      if (!(config.url || '').includes('/v1/auth/refresh')) throw new Error(`no mock handler for ${config.url}`);
+      server.refreshes += 1;
+      if (server.ended || presented !== server.current) {
+        server.ended = true;
+        const err = new Error('Request failed with status code 401');
+        err.config = config;
+        err.response = { status: 401, data: {}, headers: {}, config };
+        throw err;
+      }
+      server.seq += 1;
+      server.current = `r${server.seq}`;
+      server.jar = server.current;
+      return { data: null, status: 204, statusText: '', headers: {}, config, request: {} };
+    };
+    return server;
+  }
+  function browserLocks() {
+    let tail = Promise.resolve();
+    return {
+      request(_name, task) {
+        const run = tail.then(() => task());
+        tail = run.catch(() => undefined);
+        return run;
+      },
+    };
+  }
+  async function twoTabs(server) {
+    const tabs = [];
+    for (let i = 0; i < 2; i += 1) {
+      vi.resetModules();
+      const tab = await import('./authApi');
+      tab.default.defaults.adapter = server.adapter;
+      tabs.push(tab);
+    }
+    return tabs;
+  }
+
+  it('take turns behind the browser lock, so the sign-in survives both', async () => {
+    vi.stubGlobal('navigator', { locks: browserLocks() });
+    const server = sessionServer();
+    const [one, two] = await twoTabs(server);
+    const results = await Promise.allSettled([one.refreshSession(), two.refreshSession()]);
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+    expect([server.ended, server.refreshes]).toEqual([false, 2]);
+  });
+
+  it('without the lock, two at once end the sign-in (what the lock is for)', async () => {
+    vi.stubGlobal('navigator', {});
+    const server = sessionServer();
+    const [one, two] = await twoTabs(server);
+    const results = await Promise.allSettled([one.refreshSession(), two.refreshSession()]);
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect(server.ended).toBe(true);
+  });
+});

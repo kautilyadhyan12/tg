@@ -71,6 +71,9 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(null);
   const [done, setDone] = useState(null);
+  /** What Email a link to sign did: said until the membership reads as signed (Stage 4 item 18:
+   *  signed from the link while this page is open, it would otherwise sit under Agreement signed). */
+  const [linkLine, setLinkLine] = useState(null);
   const [copyLine, setCopyLine] = useState(null);
   const [sending, setSending] = useState(false);
 
@@ -169,13 +172,14 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
   const emailLink = async () => {
     setSending(true);
     setDone(null);
+    setLinkLine(null);
     try {
       const res = await orgService.sendAgreementLink(gymId, entryId, membership.id);
-      setDone(agreementLinkSentLine(res.data.emailed, AGREEMENT_LINK_DAYS));
+      setLinkLine(agreementLinkSentLine(res.data.emailed, AGREEMENT_LINK_DAYS));
       if (res.data.link !== null) onLinkSent?.(res.data.link);
       if (open) close();
     } catch (err) {
-      setDone(errorText(err, "The link didn't send. Try again later."));
+      setLinkLine(errorText(err, "The link didn't send. Try again later."));
     } finally {
       setSending(false);
     }
@@ -205,6 +209,7 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
               disabled={readOnly && !parts.signed}
               onClick={() => {
                 setDone(null);
+                setLinkLine(null);
                 onOpen();
               }}
             >
@@ -214,9 +219,9 @@ export default function MembershipAgreement({ gymId, entryId, membership, inUse,
           {!open && !parts.signed ? linkButton('c-btn c-btn-s') : null}
         </div>
       ) : null}
-      {done !== null ? (
+      {done !== null || (linkLine !== null && parts?.signed !== true) ? (
         <p role="status" className="c-s14 c-t2 m-0">
-          {done}
+          {done ?? linkLine}
         </p>
       ) : null}
       {open ? (

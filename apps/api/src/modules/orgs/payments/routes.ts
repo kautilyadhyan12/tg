@@ -64,6 +64,7 @@ import {
 } from "@app/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { z } from "zod";
+import { tellMembershipsAfter, type LiveNewsSender } from "../../live/news.js";
 import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import * as webhooks from "../../webhooks/repo.js";
@@ -114,7 +115,7 @@ function callerId(req: FastifyRequest): string {
   return user.id;
 }
 
-export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.PaymentsDeps, "log"> & { redis: RedisLike }): void {
+export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.PaymentsDeps, "log"> & { redis: RedisLike; news: LiveNewsSender }): void {
   const paymentsDeps: service.PaymentsDeps = { sql: deps.sql, square: deps.square, now: deps.now, log: app.log };
   const byPerson = (req: FastifyRequest): string | null => req.authUser?.id ?? null;
   // Settings asks once each time it opens; a gym's staff can share one address.
@@ -251,6 +252,9 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   const payStartLimit = createDualRateLimit({ name: "terminal_payment", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   const payCheckLimit = createDualRateLimit({ name: "terminal_payment_check", max: 4800, ipMax: 24_000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
   const entryUrl = "/v1/orgs/:gymId/member-list/entries/:entryId";
+  // A payment started, taken or stopped here tells the gym's open lines to read the person's
+  // memberships again (ROADMAP Stage 4 item 18).
+  const tellMemberships = tellMembershipsAfter(deps.news);
 
   app.get(`${entryUrl}/terminal-payments`, { preHandler: [app.authenticate, staffOnly(deps.sql, payCheckLimit)] }, async (req, reply) => {
     const params = parseOr400(memberListEntryParamsSchema, req.params, req, reply);
@@ -259,7 +263,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/memberships/:membershipId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onResponse: tellMemberships }, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(terminalPaymentRequestSchema, req.body, req, reply);
@@ -268,7 +272,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/terminal-payment`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onResponse: tellMemberships }, async (req, reply) => {
     const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(terminalFeePaymentRequestSchema, req.body, req, reply);
@@ -280,7 +284,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
   // Charge card on file: a press is one trip to Square, answered in it; a busy desk takes many.
   const chargeLimit = createDualRateLimit({ name: "card_charge", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
 
-  app.post(`${entryUrl}/memberships/:membershipId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)] }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)], onResponse: tellMemberships }, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(cardChargeRequestSchema, req.body, req, reply);
@@ -289,7 +293,7 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)] }, async (req, reply) => {
+  app.post(`${entryUrl}/memberships/:membershipId/fees/:billId/card-charge`, { preHandler: [app.authenticate, staffOnly(deps.sql, chargeLimit)], onResponse: tellMemberships }, async (req, reply) => {
     const params = parseOr400(memberBillParamsSchema, req.params, req, reply);
     if (params === null) return;
     const body = parseOr400(cardFeeChargeRequestSchema, req.body, req, reply);
@@ -302,10 +306,12 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalPayments.checkTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);
+    // The Terminal took the money: other screens showing this person read their memberships again.
+    if (answer.payment.outcome === "paid") deps.news.tell(params.gymId, { what: "memberships", entryId: params.entryId });
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
-  app.post(`${entryUrl}/terminal-payments/:paymentId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)] }, async (req, reply) => {
+  app.post(`${entryUrl}/terminal-payments/:paymentId/cancel`, { preHandler: [app.authenticate, staffOnly(deps.sql, payStartLimit)], onResponse: tellMemberships }, async (req, reply) => {
     const params = parseOr400(terminalPaymentParamsSchema, req.params, req, reply);
     if (params === null) return;
     const answer = await terminalPayments.cancelTerminalPayment(paymentsDeps, callerId(req), params.gymId, params.entryId, params.paymentId);

@@ -27,6 +27,11 @@ const envSchema = z.object({
   // P2.4: quota counters + entitlement cache (v1 §7.2). Optional in dev/test
   // (in-memory adapter); REQUIRED in production — refinement below.
   REDIS_URL: z.string().url().optional(),
+  // Live updates (ROADMAP Stage 4 item 18). "here": this api holds the console's open lines
+  // itself (this laptop, tests). "apart": the lines are held by `src/live.ts`, a server of their
+  // own, and this api only tells it what changed, through Redis. LIVE_PORT is that server's port.
+  LIVE_LINES: z.enum(["here", "apart"]).default("here"),
+  LIVE_PORT: z.coerce.number().int().min(1).max(65535).default(3100),
   // Groq: the meal scanner's spare model (below). Unset = that model 503s
   // cleanly, the rest of the app runs.
   GROQ_API_KEY: z.string().min(1).optional(),
@@ -185,6 +190,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     .refine((c) => c.NODE_ENV !== "production" || c.REDIS_URL !== undefined, {
       path: ["REDIS_URL"],
       message: "REDIS_URL is required in production (quotas/entitlement cache)",
+    })
+    .refine((c) => c.LIVE_LINES !== "apart" || c.REDIS_URL !== undefined, {
+      path: ["REDIS_URL"],
+      message: "REDIS_URL is required when LIVE_LINES is apart (the api tells the live server through Redis)",
     })
     .refine((c) => c.NODE_ENV !== "production" || c.RESEND_API_KEY !== undefined, {
       path: ["RESEND_API_KEY"],

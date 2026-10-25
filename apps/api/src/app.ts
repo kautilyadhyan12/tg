@@ -56,6 +56,9 @@ import { squareSettings } from "./modules/orgs/payments/settings.js";
 import type { SquareApi } from "./modules/orgs/payments/square.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
+import { createLiveHub, type LiveHub } from "./modules/live/hub.js";
+import { NO_NEWS, createLocalNews, createRedisNews, hearRedisNews, liveChannel, type LiveNewsSender } from "./modules/live/news.js";
+import { registerLiveRoutes } from "./modules/live/routes.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
 import { sentryOptions } from "./sentry.js";
 
@@ -100,7 +103,12 @@ export interface BuildAppOverrides {
   /** Tests hold a password check open to race it against an address's first proof;
    *  unset is argon2id. */
   passwordHasher?: PasswordHasher;
+  /** Tests shorten a live line's heartbeat and its longest life (ROADMAP Stage 4 item 18). */
+  live?: { heartbeatMs?: number; maxLineMs?: number; hub?: LiveHub };
 }
+
+/** What one process serves: everything (the api), or only the console's open lines (`live.ts`). */
+export type AppServes = "everything" | "lines";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -111,6 +119,7 @@ declare module "fastify" {
 export async function buildApp(
   config: AppConfig,
   overrides: BuildAppOverrides = {},
+  serves: AppServes = "everything",
 ): Promise<FastifyInstance> {
   if (config.SENTRY_DSN !== undefined) {
     Sentry.init(sentryOptions(config.SENTRY_DSN, config.NODE_ENV, overrides.sentryTransport));
@@ -300,6 +309,38 @@ export async function buildApp(
     return { status: "ok" };
   });
 
+  registerAuthenticate(app, { sql, config });
+
+  // Live updates (ROADMAP Stage 4 item 18): who holds the console's open lines, and how a change
+  // reaches them. With Redis every change goes on its channel and every server holding lines
+  // hears it; without, straight to this server's own lines.
+  const holdsLines = serves === "lines" || config.LIVE_LINES === "here";
+  const hub = overrides.live?.hub ?? createLiveHub();
+  const channel = liveChannel(config.DATABASE_URL);
+  let news: LiveNewsSender = NO_NEWS;
+  if (config.REDIS_URL !== undefined) news = createRedisNews(config.REDIS_URL, channel, app.log);
+  else if (holdsLines) news = createLocalNews(hub);
+  let stopHearing: (() => void) | null = null;
+  if (holdsLines) {
+    if (config.REDIS_URL !== undefined) stopHearing = hearRedisNews(config.REDIS_URL, channel, hub, app.log);
+    registerLiveRoutes(app, {
+      sql,
+      redis,
+      config,
+      hub,
+      ...(overrides.live?.heartbeatMs === undefined ? {} : { heartbeatMs: overrides.live.heartbeatMs }),
+      ...(overrides.live?.maxLineMs === undefined ? {} : { maxLineMs: overrides.live.maxLineMs }),
+    });
+  }
+  // Open lines never finish by themselves, so they are ended before the server waits for its
+  // requests to finish.
+  app.addHook("preClose", async () => {
+    hub.endAll();
+    stopHearing?.();
+    await news.close();
+  });
+  if (serves === "lines") return app;
+
   // Email (Kd 2026-09-07): Resend when a key is configured — which production
   // REQUIRES (config refinement) — otherwise the dev sender that prints the
   // code in the log, which refuses to exist in production. Tests override.
@@ -316,7 +357,6 @@ export async function buildApp(
       ? createResendUsersEmailSender(transport, app.log, config.WEB_ORIGIN)
       : createDevUsersEmailSender(app.log, config));
 
-  registerAuthenticate(app, { sql, config });
   // One robot check for the whole app: the sign-in code past an address's first 20
   // an hour, and a gym page's enquiry form.
   const robotCheck = overrides.robotCheck ?? createRobotCheck(config);
@@ -364,6 +404,7 @@ export async function buildApp(
         overrides.agreementEmailSender ??
         (transport !== null ? createResendAgreementEmailSender(transport, app.log) : createDevAgreementEmailSender(app.log, config)),
       webOrigin: config.WEB_ORIGIN,
+      news,
       joinCodes: config.JOIN_CODES,
       memberTap: config.MEMBER_TAP,
       config,
@@ -378,6 +419,7 @@ export async function buildApp(
   registerPaymentRoutes(app, {
     sql,
     redis,
+    news,
     square: squareSettings(config, overrides.squareApi),
     now: overrides.orgs?.now ?? (() => new Date()),
   });

@@ -16,6 +16,8 @@ const accessClaimsSchema = z.object({
   // The sign-in session (refresh family) the token was issued under. Absent on a
   // token signed before the claim existed.
   fid: z.string().uuid().optional(),
+  // When it runs out, in seconds; jsonwebtoken writes it on every token it signs.
+  exp: z.number().int().optional(),
 });
 
 /** GAP-2 (DECISIONS 2026-07-11, closes Part IV #6): cross-site prod (Vercel ↔
@@ -65,7 +67,10 @@ export function verifyAccessToken(token: string, config: AppConfig): string {
 }
 
 /** The userId and the sign-in session the token belongs to (null on an older token). */
-export function verifyAccessTokenClaims(token: string, config: AppConfig): { userId: string; familyId: string | null } {
+export function verifyAccessTokenClaims(
+  token: string,
+  config: AppConfig,
+): { userId: string; familyId: string | null; expiresAtSeconds: number | null } {
   let decoded: unknown;
   try {
     decoded = jwt.verify(token, config.JWT_SECRET, { algorithms: ["HS256"] });
@@ -77,7 +82,7 @@ export function verifyAccessTokenClaims(token: string, config: AppConfig): { use
     // R3.7: refresh (or any non-access) token rejected on access paths.
     throw new InvalidAccessTokenError("not an access token");
   }
-  return { userId: claims.data.sub, familyId: claims.data.fid ?? null };
+  return { userId: claims.data.sub, familyId: claims.data.fid ?? null, expiresAtSeconds: claims.data.exp ?? null };
 }
 
 /** 32 random bytes, hex — the shape the audited code mailed in links
