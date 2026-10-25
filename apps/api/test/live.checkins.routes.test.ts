@@ -102,7 +102,8 @@ async function openLine(base: string, gymId: string, cookies: Cookies): Promise<
 const READY = { what: "ready" };
 const ADDED = { what: "visits", change: "added" };
 const REMOVED = { what: "visits", change: "removed" };
-const BOARD = { what: "leaderboard" };
+const BOARD = { what: "leaderboard", change: "counted" };
+const SWITCHED = { what: "leaderboard", change: "switched" };
 
 d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
@@ -428,7 +429,7 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
       // Refused by the server: a member switching a board.
       expect((await put(`/v1/orgs/${gym.gymId}/leaderboard/staff/boards`, { board: "streak", off: false }, eli.cookies)).statusCode).toBe(404);
       await settle();
-      expect(heard(line)).toEqual([BOARD, BOARD, BOARD]);
+      expect(heard(line)).toEqual([SWITCHED, SWITCHED, BOARD]);
       line.close();
     },
     T,

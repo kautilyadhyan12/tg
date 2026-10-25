@@ -28,9 +28,10 @@ import {
 // number by full name, the people members do not see marked with the reason; a person's
 // panel with what counted and Take off the board; and which boards members see, each with
 // why it is not showing. `leaderboard.manage`'s; the server refuses anyone else whatever
-// this screen shows. Read again when the server says something a board counts changed (live
-// updates, Stage 4 item 18), at most once a minute: a large gym's all-time board is slow to
-// work out, so news in a busy hour is gathered into one read. And once at the gym's midnight.
+// this screen shows. Read again when the server says something changed (live updates, Stage 4
+// item 18): a board switched or a person taken off by staff elsewhere, at once; a visit, a workout
+// or Hide me at most once a minute, since a large gym's all-time board is slow to work out and a
+// busy hour's news is gathered into one read. And once at the gym's midnight.
 
 const BUNDLE_MS = 60_000;
 
@@ -112,17 +113,20 @@ export default function Leaderboard() {
   /** When the board was last asked for, and a read waiting for its minute to come round. */
   const lastRead = useRef(0);
   const soon = useRef(null);
+  /** Only the newest read is drawn: two reads that cross never leave the older answer showing. */
+  const readSeq = useRef(0);
 
   const load = useCallback(() => {
     if (gymId === null) return Promise.resolve();
     lastRead.current = Date.now();
+    const asked = ++readSeq.current;
     return staffLeaderboardService.board(gymId, boardId, period, pageNo).then(
       (board) => {
-        if (shownKey.current !== key) return;
+        if (shownKey.current !== key || readSeq.current !== asked) return;
         setState({ key, error: null, refused: false, board });
       },
       (err) => {
-        if (shownKey.current !== key) return;
+        if (shownKey.current !== key || readSeq.current !== asked) return;
         setState((s) => ({
           key,
           error: errorText(err, "We couldn't load the leaderboard."),
@@ -148,7 +152,12 @@ export default function Leaderboard() {
       return;
     }
     if (message.what === 'ready') setLiveRefused(null);
-    if (message.what === 'visits' || message.what === 'leaderboard') {
+    if (message.what === 'leaderboard' && message.change === 'switched') {
+      // Staff changed what the page shows: read at once, and that read covers any waiting one.
+      clearTimeout(soon.current);
+      soon.current = null;
+      load();
+    } else if (message.what === 'visits' || message.what === 'leaderboard') {
       // At once after a quiet minute; within the minute, one read when it is up.
       if (soon.current !== null) return;
       soon.current = setTimeout(

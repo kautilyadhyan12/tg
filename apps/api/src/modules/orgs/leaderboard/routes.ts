@@ -198,7 +198,7 @@ export function registerLeaderboardRoutes(
       gate(staffWriteLimit)(req, reply),
     );
     if (done === null) return;
-    deps.news.tell(params.gymId, { what: "leaderboard" });
+    deps.news.tell(params.gymId, { what: "leaderboard", change: "switched" });
     return reply.status(200).send(done);
   });
 
@@ -209,7 +209,7 @@ export function registerLeaderboardRoutes(
     if (body === null) return;
     const done = await service.setBoardOff(deps, requireUserId(req), params.gymId, body.board, body.off, gate(staffWriteLimit)(req, reply));
     if (done === null) return;
-    deps.news.tell(params.gymId, { what: "leaderboard" });
+    deps.news.tell(params.gymId, { what: "leaderboard", change: "switched" });
     return reply.status(200).send(done);
   });
 }

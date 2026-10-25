@@ -240,7 +240,7 @@ describe('the board for staff', () => {
       await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(2));
       // A busy minute at the desk, and a workout saved: one read, a minute after the last.
       tell({ what: 'visits', change: 'added' });
-      tell({ what: 'leaderboard' });
+      tell({ what: 'leaderboard', change: 'counted' });
       tell({ what: 'visits', change: 'removed' });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(59_000);
@@ -258,6 +258,53 @@ describe('the board for staff', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('a board switched or a person taken off in another window reads at once, even inside the minute, and covers news that was waiting', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-07T06:00:00.000Z'));
+    try {
+      open();
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      // A check-in waits for the minute, as the page has just read.
+      tell({ what: 'visits', change: 'added' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(1);
+      // Streak switched off in another window: read now, Streak's switch says so.
+      svc.board.mockResolvedValueOnce(answer({ boardsOff: ['streak'] }));
+      tell({ what: 'leaderboard', change: 'switched' });
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(within(screen.getByTestId('switch-streak')).getByRole('switch').getAttribute('aria-checked')).toBe('false'));
+      // And on again a few seconds later: read now again.
+      tell({ what: 'leaderboard', change: 'switched' });
+      await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(3));
+      await waitFor(() => expect(within(screen.getByTestId('switch-streak')).getByRole('switch').getAttribute('aria-checked')).toBe('true'));
+      // The check-in that was waiting was covered: nothing more at the minute.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(svc.board).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('two reads that cross: the newer answer stays on screen', async () => {
+    open();
+    await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+    let older;
+    svc.board.mockReturnValueOnce(new Promise((resolve) => (older = resolve)));
+    tell({ what: 'leaderboard', change: 'switched' });
+    await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(2));
+    svc.board.mockResolvedValueOnce(answer({ boardsOff: ['streak'] }));
+    tell({ what: 'leaderboard', change: 'switched' });
+    await waitFor(() => expect(within(screen.getByTestId('switch-streak')).getByRole('switch').getAttribute('aria-checked')).toBe('false'));
+    await act(async () => {
+      older(answer({ boardsOff: [] }));
+    });
+    expect(within(screen.getByTestId('switch-streak')).getByRole('switch').getAttribute('aria-checked')).toBe('false');
   });
 
   it("the line opening again, or the tab coming back without one, reads at once; a refused line says why under the heading", async () => {

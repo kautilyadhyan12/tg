@@ -440,7 +440,7 @@ describe('checked in today', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
-    tell({ what: 'leaderboard' });
+    tell({ what: 'leaderboard', change: 'switched' });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_000);
     });
@@ -610,7 +610,7 @@ describe('who came, on live news', () => {
     // A read again that fails leaves the day as it was.
     expect(screen.getByText('asha@example.com')).toBeTruthy();
     // News of a leaderboard or a membership is not about who came.
-    tell({ what: 'leaderboard' });
+    tell({ what: 'leaderboard', change: 'switched' });
     tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);

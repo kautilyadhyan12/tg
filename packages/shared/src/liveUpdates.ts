@@ -11,9 +11,10 @@ export const liveNewsSchema = z.discriminatedUnion("what", [
   /** A visit at the gym: added (the desk, staff, an earlier day) or removed. Removed means the
    *  check-in log reads the whole of today again; added, only what is newer than it holds. */
   z.object({ what: z.literal("visits"), change: z.enum(["added", "removed"]) }).strict(),
-  /** Something a leaderboard counts or shows, other than a visit: a member's workout saved, a
-   *  member hiding themselves, staff taking a person off or switching a board. */
-  z.object({ what: z.literal("leaderboard") }).strict(),
+  /** Something a leaderboard counts or shows, other than a visit. switched: staff switched a board
+   *  or took a person off, read at once; counted: a member's workout saved or Hide me, gathered
+   *  with the visits into one read a minute. */
+  z.object({ what: z.literal("leaderboard"), change: z.enum(["switched", "counted"]) }).strict(),
 ]);
 export type LiveNews = z.infer<typeof liveNewsSchema>;
 

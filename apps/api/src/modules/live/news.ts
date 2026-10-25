@@ -110,7 +110,7 @@ export function tellMembersLeaderboards(sql: Sql, news: LiveNewsSender, log: Fas
   if (news === NO_NEWS) return;
   gymsOfMember(sql, userId).then(
     (gymIds) => {
-      for (const gymId of gymIds) news.tell(gymId, { what: "leaderboard" });
+      for (const gymId of gymIds) news.tell(gymId, { what: "leaderboard", change: "counted" });
     },
     () => {
       log.warn("live.news_not_sent");
