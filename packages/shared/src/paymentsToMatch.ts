@@ -85,6 +85,9 @@ export const paymentsToMatchSummarySchema = z
     totals: z.array(z.object({ currency: currencySchema, minor: minorSchema }).strict()),
     /** The gym has taken payments in Square Point of Sale: the menu keeps its count current (live). */
     used: z.boolean().default(false),
+    /** Square is connected at a location and reads what was sold: Add member offers Square Point of Sale as
+     *  a way of paying, recording nothing (18d-iii-b-ii-a). */
+    pointOfSale: z.boolean().default(false),
   })
   .strict();
 export type PaymentsToMatchSummary = z.infer<typeof paymentsToMatchSummarySchema>;

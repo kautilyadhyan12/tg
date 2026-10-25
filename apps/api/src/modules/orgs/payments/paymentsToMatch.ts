@@ -42,7 +42,7 @@ import { BILLING, orgNotFound, readyOrThrow, stateOf } from "./cards.js";
 import { billsOfPerson, loadBills, tickOf, ticksFor } from "./paymentsToMatchBills.js";
 import * as toMatch from "./paymentsToMatchRepo.js";
 import * as repo from "./repo.js";
-import type { PaymentsDeps } from "./service.js";
+import { readsOrders, type PaymentsDeps } from "./service.js";
 
 const NO_BILLING = "Recording payments isn't part of your role. Ask the owner to turn on \"Record members' payments\" for you.";
 const W = PAYMENTS_TO_MATCH_WORDS;
@@ -58,11 +58,18 @@ async function allowed(deps: PaymentsDeps, gymId: string, userId: string, write:
   return gym;
 }
 
-/** How many wait, and what they come to: Overview's line. */
+/** Square is connected at a location and reads what was sold: payments can be taken in Square Point of Sale. */
+async function takesPointOfSale(deps: PaymentsDeps, gymId: string): Promise<boolean> {
+  const square = deps.square;
+  const row = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
+  return row?.state === "connected" && row.locationId !== null && readsOrders(row);
+}
+
+/** How many wait, and what they come to: Overview's line, and the menu's count. */
 export async function readToMatchSummary(deps: PaymentsDeps, userId: string, gymId: string): Promise<PaymentsToMatchSummary> {
   await allowed(deps, gymId, userId, false);
-  const [totals, used] = await Promise.all([toMatch.waitingTotals(deps.sql, gymId), toMatch.usesSquareApp(deps.sql, gymId)]);
-  return paymentsToMatchSummarySchema.parse({ ...totals, used });
+  const [totals, used, pointOfSale] = await Promise.all([toMatch.waitingTotals(deps.sql, gymId), toMatch.usesSquareApp(deps.sql, gymId), takesPointOfSale(deps, gymId)]);
+  return paymentsToMatchSummarySchema.parse({ ...totals, used, pointOfSale });
 }
 
 /** A page of the list, from the `from`th payment. */
@@ -119,7 +126,8 @@ export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gy
     square !== null && connection?.state === "connected" && connection.locationId !== null
       ? await toMatch.sharedLocationCount(deps.sql, { gymId, environment: square.environment, accountId: connection.accountId, locationId: connection.locationId })
       : 0;
-  return paymentsToMatchResponseSchema.parse({ ...totals, used, payments, today, next, square: ready, sharedLocation });
+  const pointOfSale = connection?.state === "connected" && connection.locationId !== null && readsOrders(connection);
+  return paymentsToMatchResponseSchema.parse({ ...totals, used, pointOfSale, payments, today, next, square: ready, sharedLocation });
 }
 
 /** One of the gym's payments that waits, or why it is not on the list now. */

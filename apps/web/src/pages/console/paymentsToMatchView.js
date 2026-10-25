@@ -234,10 +234,10 @@ export const releasesCard = (row) => (row.holdsCard && row.person !== null ? `${
 export function waitingLine(w, timezone, country) {
   const amount = money(w.amountMinor, w.currency);
   const when = whenWords(w.takenAt, timezone, country);
-  const on = w.deviceName === null ? '' : ` on ${w.deviceName}`;
+  const where = w.deviceName === null ? `at ${when}` : `at ${w.deviceName}, ${when}`;
   return w.byName === null
-    ? `Paid ${amount} in Square Point of Sale at ${when}${on}.`
-    : `${w.byName}, who pays for them, paid ${amount} in Square Point of Sale at ${when}${on}.`;
+    ? `Paid ${amount} in Square Point of Sale ${where}.`
+    : `${w.byName}, who pays for them, paid ${amount} in Square Point of Sale ${where}.`;
 }
 
 /** What follows it: the bill ticked for one press, or where it waits. */

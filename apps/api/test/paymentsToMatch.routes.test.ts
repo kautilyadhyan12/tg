@@ -495,6 +495,35 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     expect(square.listed().length, "Square is not asked every minute").toBe(looks);
   });
 
+  it("Record payment offers Square Point of Sale where the gym takes payments there, naming whom to pick in Square: the member linked there, else whoever pays for them, else nobody", async () => {
+    const gym = await makeGym(`Pick Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    clock = new Date(`${(await held(gym, await person(gym, "Clock Reader"))).today}T17:00:00Z`);
+    const pia = await owing(gym, typeId, await person(gym, "Pia Linked"));
+    const kid = await owing(gym, typeId, await person(gym, "Kid Paidfor"));
+    const new1 = await owing(gym, typeId, await person(gym, "Nell New"));
+    await cardFor(gym, pia.entryId);
+    const payer = await send("PUT", `${entryUrl(gym, kid.entryId)}/payer`, gym.owner.cookies, { payerEntryId: pia.entryId });
+    expect(payer.statusCode, payer.body).toBe(200);
+    const pickOf = async (g: Gym, h: Holder, cookies = g.owner.cookies) => {
+      const res = await send("GET", `${entryUrl(g, h.entryId)}/terminal-payments`, cookies);
+      expect(res.statusCode, res.body).toBe(200);
+      return terminalPaymentsResponseSchema.parse(JSON.parse(res.body)).squareApp;
+    };
+    expect(await pickOf(gym, pia)).toEqual({ pick: "Pia Linked" });
+    expect(await pickOf(gym, kid), "Kid's bills are Pia's to pay: pick Pia").toEqual({ pick: "Pia Linked" });
+    expect(await pickOf(gym, new1), "linked to nobody in Square: it will wait in Payments to match").toEqual({ pick: null });
+    const summary = paymentsToMatchSummarySchema.parse(JSON.parse((await send("GET", `${toMatchUrl(gym)}/summary`, gym.owner.cookies)).body));
+    expect(summary.pointOfSale).toBe(true);
+    // Connected before Square let the app read what was sold: not offered.
+    await sql`UPDATE gym_payment_connections SET scopes = array_remove(scopes, 'ORDERS_READ') WHERE gym_id = ${gym.id}`;
+    expect(await pickOf(gym, pia)).toBeNull();
+    expect(paymentsToMatchSummarySchema.parse(JSON.parse((await send("GET", `${toMatchUrl(gym)}/summary`, gym.owner.cookies)).body)).pointOfSale).toBe(false);
+    // Another gym's owner: as if there were no such person.
+    const other = await makeGym(`Pick Stranger ${uniq()}`);
+    expect((await send("GET", `${entryUrl(gym, pia.entryId)}/terminal-payments`.replace(gym.id, other.id), other.owner.cookies)).statusCode).toBe(404);
+  });
+
   it("Match puts it on the bill once, whatever arrives twice: the same press again is the same answer, two presses at once record it once, and a stranger's gym gets 404", async () => {
     const gym = await makeGym(`Match Gym ${uniq()}`);
     const other = await makeGym(`Stranger Gym ${uniq()}`);

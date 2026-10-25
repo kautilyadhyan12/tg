@@ -26,6 +26,7 @@ import { changeBody, changeChoice, changeCreditLine, changeDoneWords, changeEndi
 import { viewerPrivileges } from './consoleView';
 import { paymentToMatchTo, placeFor } from './consolePlaces';
 import { ACTION_WORDS, WAITING_HOLDS, billFor, canMatchPayments, matchedLine, pressFor, waitingLine, waitingNext, waitingNote } from './paymentsToMatchView';
+import { SQUARE_APP_CHOICE, SQUARE_APP_METHOD, squareAppNext } from './squareAppChoice';
 import MembershipAgreement from './MembershipAgreement';
 import { noteDay } from './memberListPeople';
 import {
@@ -234,7 +235,7 @@ export default function MemberMemberships({
   /** Take payment on Terminal (18d-vi-a): the Terminals a bill can be paid on, and the payment the
    *  open box follows, { membershipId, feeBillId, payment, terminalId }, until it ends. `feeBillId`:
    *  a late cancel or no-show fee's (18d-vi-b-i), whose box is drawn under that fee. */
-  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null });
+  const [terminals, setTerminals] = useState({ entryId: null, list: [], square: 'not_offered', isOwner: false, cardOnFile: null, squareApp: null });
   const routed = useInRouterContext();
   const paymentsTo = routed ? placeFor(gym?.slug, viewerPrivileges(gym), 'payments') : null;
   // Booking rules, where a gym stops new bookings while a payment is overdue (17i).
@@ -269,6 +270,23 @@ export default function MemberMemberships({
   }, [gymId, entryId, attempt]);
 
   const shown = held !== null && held.entryId === entryId ? held : null;
+  // Square Point of Sale picked in Record payment, then the payment taken there comes in (live): the form
+  // closes by itself, so the payment's line with Match is on screen at once (18d-iii-b-ii-a).
+  const waitingIds = (shown?.squareAppWaiting ?? []).map((w) => w.id).join(',');
+  const waitingSeen = useRef(waitingIds);
+  const pickedSquareApp = payForm?.method === SQUARE_APP_METHOD || feeForm?.method === SQUARE_APP_METHOD;
+  useEffect(() => {
+    const before = waitingSeen.current;
+    waitingSeen.current = waitingIds;
+    if (!pickedSquareApp || waitingIds === '' || waitingIds === before) return;
+    const had = new Set(before.split(','));
+    if (waitingIds.split(',').some((id) => !had.has(id))) {
+      setOpen(null);
+      setPayForm(null);
+      setFeeForm(null);
+    }
+  }, [waitingIds, pickedSquareApp]);
+
   // Live updates (ROADMAP Stage 4 item 18): when the person signs from an emailed link in another
   // window or on their phone, or another member of staff changes their memberships, the server tells
   // this page and it reads them again, quietly; and again when its line opens after being away, or
@@ -312,7 +330,7 @@ export default function MemberMemberships({
     orgService.getTerminalPayments(gymId, entryId).then(
       (res) => {
         if (!live) return;
-        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null });
+        setTerminals({ entryId, list: res.data.terminals, square: res.data.square, isOwner: res.data.isOwner, cardOnFile: res.data.cardOnFile ?? null, squareApp: res.data.squareApp ?? null });
         // One waiting for this person, pressed here before or on another screen: its box is open.
         const waiting = res.data.waiting[0];
         if (waiting !== undefined) {
@@ -330,12 +348,23 @@ export default function MemberMemberships({
   const terminalList = terminals.entryId === entryId ? terminals.list : [];
   // The card Record payment can charge, theirs or their payer's (18d-iii-i).
   const cardOnFile = terminals.entryId === entryId ? terminals.cardOnFile : null;
-  /** Record payment's ways: the gym's Terminal, then the card on file, then the ways recorded by hand. */
+  // Square Point of Sale as a way of paying, and whom to pick there (18d-iii-b-ii-a); null where it can't be used.
+  const squareApp = terminals.entryId === entryId ? terminals.squareApp : null;
+  /** Record payment's ways: the gym's Terminal, then the card on file, then Square Point of Sale (which
+   *  records nothing here), then the ways recorded by hand. */
   const payMethodsWithSquare = [
     ...(terminalList.length > 0 ? [{ value: TERMINAL_METHOD, label: 'Card on Terminal' }] : []),
     ...(cardOnFile !== null ? [{ value: CARD_ON_FILE_METHOD, label: cardOnFileLabel(cardOnFile), disabled: cardOnFile.stopped === true }] : []),
+    ...(squareApp !== null ? [SQUARE_APP_CHOICE] : []),
     ...payMethods,
   ];
+  /** Picked as the way of paying: what happens next, in place of a button that would record it. */
+  const renderSquareAppNext = () =>
+    squareApp === null ? null : (
+      <p className="c-s14 c-t1 m-0" data-testid="square-app-next">
+        {squareAppNext(squareApp.pick)}
+      </p>
+    );
   // Square not set up yet (18x, Kd 2026-10-22): the payment forms say so, with Connect Square for the owner.
   const squareLine = terminals.entryId === entryId ? squareSetUpLine(terminals.square, terminals.isOwner, gym?.name ?? 'this gym') : null;
   const renderSquareLine = () =>
@@ -598,6 +627,7 @@ export default function MemberMemberships({
     if (feeForm.what === 'payFee') {
       const onTerminal = feeForm.method === TERMINAL_METHOD;
       const onCard = feeForm.method === CARD_ON_FILE_METHOD && cardOnFile !== null;
+      const onSquareApp = feeForm.method === SQUARE_APP_METHOD && squareApp !== null;
       const { problem, body } = onTerminal || onCard ? { problem: null, body: { requestKey: feeForm.requestKey, amountMinor: fee.amountMinor } } : feePayBody(feeForm, fee);
       const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === feeForm.terminalId);
       const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
@@ -613,7 +643,7 @@ export default function MemberMemberships({
           data-testid="held-fee-pay"
           onSubmit={(e) => {
             e.preventDefault();
-            if (busy) return;
+            if (busy || onSquareApp) return;
             if (body === null || terminalProblem !== null) {
               setFeeForm((f) => ({ ...f, tried: true }));
               return;
@@ -644,6 +674,7 @@ export default function MemberMemberships({
             </select>
           </label>
           {cardOnFileStoppedLine(cardOnFile) !== null ? <p className="c-s14 c-t2 m-0">{cardOnFileStoppedLine(cardOnFile)}</p> : null}
+          {onSquareApp ? renderSquareAppNext() : null}
           {onTerminal && terminalList.length > 1 ? (
             <label className="c-field">
               <span className="c-label">Terminal</span>
@@ -673,16 +704,18 @@ export default function MemberMemberships({
             </PlaceLink>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className={MAIN} disabled={busy}>
-              {busy ? (
-                <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
-              ) : onTerminal || onCard ? (
-                <CreditCard aria-hidden="true" className="w-4 h-4" />
-              ) : null}
-              {onTerminal ? 'Take payment on Terminal' : onCard ? `Charge ${formatMinor(fee.amountMinor, m.currency)}` : 'Record payment'}
-            </button>
+            {onSquareApp ? null : (
+              <button type="submit" className={MAIN} disabled={busy}>
+                {busy ? (
+                  <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                ) : onTerminal || onCard ? (
+                  <CreditCard aria-hidden="true" className="w-4 h-4" />
+                ) : null}
+                {onTerminal ? 'Take payment on Terminal' : onCard ? `Charge ${formatMinor(fee.amountMinor, m.currency)}` : 'Record payment'}
+              </button>
+            )}
             <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-              Cancel
+              {onSquareApp ? 'Close' : 'Cancel'}
             </button>
           </div>
         </form>
@@ -1266,6 +1299,7 @@ export default function MemberMemberships({
     const words = paymentWords(m, name, today);
     const onTerminal = payForm.method === TERMINAL_METHOD;
     const onCard = payForm.method === CARD_ON_FILE_METHOD && cardOnFile !== null;
+    const onSquareApp = payForm.method === SQUARE_APP_METHOD && squareApp !== null;
     const { problem, body } = paymentBody(m, payForm);
     const pickedTerminal = terminalList.length === 1 ? terminalList[0] : terminalList.find((t) => t.id === payForm.terminalId);
     const terminalProblem = onTerminal && pickedTerminal === undefined ? 'Choose a Terminal.' : null;
@@ -1280,7 +1314,7 @@ export default function MemberMemberships({
         data-testid="held-pay"
         onSubmit={(e) => {
           e.preventDefault();
-          if (busy) return;
+          if (busy || onSquareApp) return;
           if (body === null || terminalProblem !== null) {
             setPayForm((f) => ({ ...f, tried: true }));
             return;
@@ -1296,18 +1330,20 @@ export default function MemberMemberships({
           void run('pay', m, () => orgService.changeHeldMembership(gymId, entryId, m.id, 'payments', body), paidWords(m, body.amountMinor));
         }}
       >
-        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard ? words.takeTitle : words.title}</p>
-        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : onCard ? words.left : words.detail}</p>
-        <label className="c-field">
-          <span className="c-label">{`Amount paid (${m.currency})`}</span>
-          <input
-            className="c-input"
-            type="text"
-            inputMode="decimal"
-            value={payForm.amount}
-            onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value.slice(0, 12) }))}
-          />
-        </label>
+        <p className="c-s15 c-w6 c-t1 m-0">{onTerminal || onCard || onSquareApp ? words.takeTitle : words.title}</p>
+        <p className="c-s14 c-t2 m-0">{onTerminal ? terminalPayDetail(name, words.left) : onCard || onSquareApp ? words.left : words.detail}</p>
+        {onSquareApp ? null : (
+          <label className="c-field">
+            <span className="c-label">{`Amount paid (${m.currency})`}</span>
+            <input
+              className="c-input"
+              type="text"
+              inputMode="decimal"
+              value={payForm.amount}
+              onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value.slice(0, 12) }))}
+            />
+          </label>
+        )}
         <label className="c-field">
           <span className="c-label">Payment method</span>
           <select className="c-sel" value={payForm.method} onChange={(e) => setPayForm((f) => ({ ...f, method: e.target.value }))}>
@@ -1321,6 +1357,7 @@ export default function MemberMemberships({
         </label>
         {renderSquareLine()}
         {cardOnFileStoppedLine(cardOnFile) !== null ? <p className="c-s14 c-t2 m-0">{cardOnFileStoppedLine(cardOnFile)}</p> : null}
+        {onSquareApp ? renderSquareAppNext() : null}
         {onTerminal && terminalList.length > 1 ? (
           <label className="c-field">
             <span className="c-label">Terminal</span>
@@ -1351,18 +1388,20 @@ export default function MemberMemberships({
           </PlaceLink>
         ) : null}
         <div className="flex flex-wrap gap-2">
-          <button type="submit" className={MAIN} disabled={busy}>
-            {busy ? (
-              <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
-            ) : onTerminal || onCard ? (
-              <CreditCard aria-hidden="true" className="w-4 h-4" />
-            ) : (
-              <Check aria-hidden="true" className="w-4 h-4" />
-            )}
-            {onTerminal ? 'Take payment on Terminal' : onCard ? (body === null ? 'Charge card' : `Charge ${formatMinor(body.amountMinor, m.currency)}`) : 'Record payment'}
-          </button>
+          {onSquareApp ? null : (
+            <button type="submit" className={MAIN} disabled={busy}>
+              {busy ? (
+                <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+              ) : onTerminal || onCard ? (
+                <CreditCard aria-hidden="true" className="w-4 h-4" />
+              ) : (
+                <Check aria-hidden="true" className="w-4 h-4" />
+              )}
+              {onTerminal ? 'Take payment on Terminal' : onCard ? (body === null ? 'Charge card' : `Charge ${formatMinor(body.amountMinor, m.currency)}`) : 'Record payment'}
+            </button>
+          )}
           <button type="button" className={PLAIN} disabled={busy} onClick={close}>
-            Back
+            {onSquareApp ? 'Close' : 'Back'}
           </button>
         </div>
       </form>
@@ -2067,6 +2106,7 @@ export default function MemberMemberships({
               today={today}
               value={form}
               canBill={shown.canBill}
+              squareApp={squareApp}
               paidMinor={summary === null || !summary.shows ? null : summary.totalMinor}
               onChange={(next) => setForm((f) => ({ ...f, ...next, ...(next.typeId !== undefined && next.typeId !== f.typeId ? { code: { ...f.code, note: null, appliedId: null }, joiningFee: 'auto' } : {}) }))}
             />

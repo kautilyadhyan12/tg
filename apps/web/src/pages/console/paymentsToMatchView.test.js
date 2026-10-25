@@ -238,7 +238,8 @@ describe("the person's page", () => {
   });
   it.each([
     [w(), 'Paid $27.06 in Square Point of Sale at 10:14 AM on 22 Oct.'],
-    [w({ deviceName: 'Front desk 2' }), 'Paid $27.06 in Square Point of Sale at 10:14 AM on 22 Oct on Front desk 2.'],
+    [w({ deviceName: 'Front desk 2' }), 'Paid $27.06 in Square Point of Sale at Front desk 2, 10:14 AM on 22 Oct.'],
+    [w({ deviceName: 'Front desk 2', byName: 'Ann Ortiz' }), 'Ann Ortiz, who pays for them, paid $27.06 in Square Point of Sale at Front desk 2, 10:14 AM on 22 Oct.'],
     [w({ amountMinor: 5000, byName: 'Ann Ortiz' }), 'Ann Ortiz, who pays for them, paid $50.00 in Square Point of Sale at 10:14 AM on 22 Oct.'],
   ])('who paid, how much, when and where: %#', (waiting, words) => {
     expect(waitingLine(waiting, 'America/Chicago', 'US')).toBe(words);

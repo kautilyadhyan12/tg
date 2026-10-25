@@ -427,3 +427,20 @@ export async function usesSquareApp(sql: SqlOrTx, gymId: string): Promise<boolea
   const [row] = await sql<{ any: boolean }[]>`SELECT EXISTS (SELECT 1 FROM gym_square_app_payments WHERE gym_id = ${gymId}) AS any`;
   return row?.any === true;
 }
+
+/** Whom staff pick in Square Point of Sale for this person's bill, by name, so the payment comes to their
+ *  page with the bill ticked: the person, where a Square customer of this account is linked to them (the one
+ *  the app made, or their card on file's), else whoever pays for them, so linked. Null for neither: the
+ *  payment will wait in Payments to match. */
+export async function squareAppPick(sql: SqlOrTx, q: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string }): Promise<string | null> {
+  const rows = await sql<{ full_name: string; own: boolean }[]>`
+    SELECT e.full_name, e.id = ${q.entryId} AS own
+    FROM gym_member_list_entries e
+    WHERE e.gym_id = ${q.gymId}
+      AND (e.id = ${q.entryId} OR e.id = (SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${q.gymId} AND p.entry_id = ${q.entryId}))
+      AND (EXISTS (SELECT 1 FROM gym_square_customers c WHERE c.gym_id = e.gym_id AND c.entry_id = e.id AND c.environment = ${q.environment} AND c.account_id = ${q.accountId})
+           OR EXISTS (SELECT 1 FROM gym_member_cards k WHERE k.gym_id = e.gym_id AND k.entry_id = e.id AND k.environment = ${q.environment} AND k.account_id = ${q.accountId}))
+    ORDER BY own DESC`;
+  const first = rows[0];
+  return first === undefined ? null : first.full_name.trim() === "" ? NO_NAME : first.full_name;
+}
