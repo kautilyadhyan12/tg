@@ -144,14 +144,15 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     expect(step(box, 'square-tax-step').getByText('The member pays exactly what the bill says.')).toBeTruthy();
     expect(step(box, 'square-tax-step').getByLabelText('Done')).toBeTruthy();
     expect(step(box, 'square-member-tax-step').getByText('Tax on memberships is set here')).toBeTruthy();
-    expect(step(box, 'square-pick-step').getByText('In Square Point of Sale, tap Add customer and choose the member before you charge.')).toBeTruthy();
-    // The setting that makes Square ask, only when asked for.
+    expect(step(box, 'square-pick-step').getByText('In Square Point of Sale, tap Add a customer and choose the member before you charge.')).toBeTruthy();
+    // The setting that gives staff the button, only when asked for; Square is never said to ask by itself.
     expect(box.queryByText(/turn on Before checkout/)).toBeNull();
-    fireEvent.click(step(box, 'square-pick-step').getByRole('button', { name: 'How' }));
-    expect(box.getByText('To make Square ask every time: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.')).toBeTruthy();
+    expect(box.queryByText(/ask every time/)).toBeNull();
+    fireEvent.click(step(box, 'square-pick-step').getByRole('button', { name: "Can't find Add a customer?" }));
+    expect(box.getByText('In Square Point of Sale: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.')).toBeTruthy();
     // Who it works for, said plainly: everybody else is charged as usual.
-    expect(box.getByText('Members with a card on file here: the payment goes on their bill by itself.')).toBeTruthy();
-    expect(box.getByText("Anyone else: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.")).toBeTruthy();
+    expect(box.getByText('Members with a card on file here, picked as the customer: the payment goes on their bill by itself.')).toBeTruthy();
+    expect(box.getByText('Anyone else, or a sale with no member picked: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.')).toBeTruthy();
     expect(box.getByText('Shop items rung up from your Square item list never go on a bill.')).toBeTruthy();
     expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
   });

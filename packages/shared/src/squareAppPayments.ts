@@ -219,7 +219,9 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
  *  website's Sales taxes, "Apply tax to custom amounts", the app's "Custom amounts", and Actions → Disable
  *  tax, which stops the tax on every sale), the Square Champion's answer of 2025-02-10 in Square's community
  *  ("Click the existing sales tax to open its settings", then Save at the upper right), and Square's post
- *  "Add a customer at checkout" of 2023-08-21. Kd's click-through found "Open" read as tick and Disable. */
+ *  "Add a customer at checkout" of 2023-08-21. Kd's click-through found "Open" read as tick and Disable.
+ *  Before checkout gives staff the button to add a customer before the customer has paid; it does not change
+ *  the checkout flow (Square's product manager, 2022-05-03), so Square is never said to ask by itself. */
 export const SQUARE_APP_WORDS = {
   heading: "Square Point of Sale",
   how: "Square's app on a phone or tablet, with a Square Reader. You start the payment in Square's app, and it comes to the member's bill here afterwards.",
@@ -244,11 +246,11 @@ export const SQUARE_APP_WORDS = {
   setTaxButton: "Set tax on memberships",
   setTaxWho: "The owner, or a manager who can change prices, can set it in Memberships.",
   pickTitle: "Pick the member on each sale",
-  pickDetail: "In Square Point of Sale, tap Add customer and choose the member before you charge.",
-  pickHow: "How",
-  pickSteps: "To make Square ask every time: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.",
-  cardSaved: "Members with a card on file here: the payment goes on their bill by itself.",
-  others: "Anyone else: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.",
+  pickDetail: "In Square Point of Sale, tap Add a customer and choose the member before you charge.",
+  pickHow: "Can't find Add a customer?",
+  pickSteps: "In Square Point of Sale: More → Settings → Checkout → Customer management. Turn it on, then under Collect customer information, turn on Before checkout.",
+  cardSaved: "Members with a card on file here, picked as the customer: the payment goes on their bill by itself.",
+  others: "Anyone else, or a sale with no member picked: Square takes the payment as usual. Then, on their bill here, press Record payment and choose Card at the desk.",
   items: "Shop items rung up from your Square item list never go on a bill.",
   needsAllowTitle: "Square needs your permission first",
   needsAllow: "Press Reconnect Square, then Allow on Square's page. Nothing else changes.",
