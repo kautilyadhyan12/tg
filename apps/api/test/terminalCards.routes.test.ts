@@ -269,6 +269,7 @@ function fakeSquare() {
     createCardPayment: () => Promise.resolve(unavailable),
     listPayments: () => Promise.resolve(unavailable),
     retrieveOrder: () => Promise.resolve(unavailable),
+    listTaxes: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgp-${randomBytes(8).toString("hex")}`;

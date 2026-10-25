@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   heldMembershipsResponseSchema,
+  squareAppCheckResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
   type GymMembershipTypesResponse,
@@ -131,6 +132,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     await sql`DELETE FROM gym_member_payers WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_held_memberships WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_membership_types WHERE gym_id IN (${mineSql})`;
+    await sql`DELETE FROM gym_tax_rates WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM gym_payment_revokes WHERE gym_id IN (${mineSql})`;
     await sql`DELETE FROM subscriptions WHERE owner_type = 'gym' AND owner_id IN (${mineSql})`;
     await sql`DELETE FROM gym_members WHERE gym_id IN (${mineSql})`;
@@ -370,6 +372,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
       { name: "a typed amount and an item", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, lines: ["CUSTOM_AMOUNT", "ITEM"] }), state: "waiting", reason: "mixed_sale" },
       { name: "no customer picked", make: () => square.appPayment(acct, { amount: 2500, customerId: null, locationId: gym.locationId }), state: "waiting", reason: "no_customer" },
       { name: "another amount than the bill", make: () => square.appPayment(acct, { amount: 2000, customerId: deeCustomer, locationId: gym.locationId }), state: "waiting", reason: "no_bill" },
+      { name: "Square's sales tax added on top of the typed amount", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206 }), state: "waiting", reason: "square_tax" },
       { name: "the bill's amount in another money", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, currency: "CAD" }), state: "waiting", reason: "no_bill" },
     ];
     for (const c of cases) {
@@ -498,5 +501,50 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     clock = new Date(clock.getTime() + 61 * 60_000);
     await work();
     expect((await paymentsOf(fay)).filter((p) => p.method === "square_app")).toHaveLength(1);
+  });
+
+  it("Settings' tax check reads the gym's own Square taxes, says which add themselves to typed amounts here, and answers no other gym", async () => {
+    const acct = twoPlaces(`MSAP${uniq()}`);
+    const gym = await makeGym(`Tax Gym ${uniq()}`, acct, acct.locations[0]?.id ?? "");
+    const otherAcct = twoPlaces(`MSAP${uniq()}`);
+    const other = await makeGym(`Tax Other ${uniq()}`, otherAcct, otherAcct.locations[0]?.id ?? "");
+    const check = async (by = gym.owner, gymId = gym.id) => {
+      const res = await send("GET", `/v1/orgs/${gymId}/payments/square/app-check`, by.cookies);
+      return { status: res.statusCode, body: res.statusCode === 200 ? squareAppCheckResponseSchema.parse(JSON.parse(res.body)).check : null };
+    };
+
+    // Another gym's owner: as if there were no such gym.
+    expect((await check(other.owner, gym.id)).status).toBe(404);
+    // No taxes in the gym's Square account: Square adds none.
+    expect((await check()).body).toEqual({ taxes: { state: "none" }, currency: "USD", membershipTax: false, canSetTax: true });
+    // Taxes that never add themselves to an amount staff type: inside the price, off for custom
+    // amounts, switched off, or used only at the gym's other location.
+    square.addTax(acct, { name: "VAT style", percentage: "20", inclusive: true });
+    square.addTax(acct, { name: "Items only", percentage: "6", customAmounts: false });
+    square.addTax(acct, { name: "Switched off", percentage: "3", enabled: false });
+    square.addTax(acct, { name: "Harbour only", percentage: "2", absentAt: [gym.locationId] });
+    expect((await check()).body?.taxes).toEqual({ state: "none" });
+    // US sales tax on custom amounts: named, with what a $45.00 bill would be charged.
+    square.addTax(acct, { name: "Sales tax", percentage: "8.25" });
+    expect((await check()).body?.taxes).toEqual({ state: "adds", taxes: [{ name: "Sales tax", percentage: "8.25" }], exampleMinor: 4500, chargedMinor: 4871 });
+    // The other gym's Square account has its own taxes: none here.
+    expect((await check(other.owner, other.id)).body?.taxes).toEqual({ state: "none" });
+
+    // A tax on a membership here.
+    const typeId = await typeOf(gym);
+    const [rate] = await sql<{ id: string }[]>`INSERT INTO gym_tax_rates (gym_id, name, rate_bp) VALUES (${gym.id}, 'Sales tax', 825) RETURNING id`;
+    await sql`UPDATE gym_membership_types SET tax_rate_id = ${rate?.id ?? null} WHERE gym_id = ${gym.id} AND id = ${typeId}`;
+    expect((await check()).body?.membershipTax).toBe(true);
+
+    // Square cannot be asked, or answers a tax it cannot read: no answer, never "none".
+    square.state.taxesDown = true;
+    expect((await check()).body?.taxes).toEqual({ state: "unknown" });
+    square.state.taxesDown = false;
+    square.state.taxUnreadable = true;
+    expect((await check()).body?.taxes).toEqual({ state: "unknown" });
+    square.state.taxUnreadable = false;
+    // Connected before the app could read the item library: the owner reconnects first.
+    await sql`UPDATE gym_payment_connections SET scopes = array_remove(scopes, 'ITEMS_READ') WHERE gym_id = ${gym.id}`;
+    expect((await check()).body?.taxes).toEqual({ state: "needs_allow" });
   });
 });

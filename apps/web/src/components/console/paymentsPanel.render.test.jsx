@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, orgService: { getGymPayments: vi.fn(), connectSquare: vi.fn(), chooseSquareLocation: vi.fn(), disconnectSquare: vi.fn() } };
+  return { ...actual, orgService: { getGymPayments: vi.fn(), connectSquare: vi.fn(), chooseSquareLocation: vi.fn(), disconnectSquare: vi.fn(), getSquareAppCheck: vi.fn() } };
 });
 
 const { orgService } = await import('../../api/orgsApi');
@@ -129,29 +129,91 @@ describe('connected', () => {
 });
 
 describe("payments taken in Square Point of Sale (18d-iii-b-i)", () => {
-  it("says how to set up Square's own app, in its own steps", async () => {
+  const BOX = { name: "Payments taken in Square Point of Sale" };
+  const checked = (taxes, over = {}) => ({ data: { check: { taxes, currency: 'USD', membershipTax: true, canSetTax: true, ...over } } });
+  const SALES_TAX = { state: 'adds', taxes: [{ name: 'Sales tax', percentage: '8.25' }], exampleMinor: 4500, chargedMinor: 4871 };
+
+  it("says how to set up Square Point of Sale, and that Square adds no tax of its own where it adds none", async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
-    const box = within(await screen.findByRole('region', { name: "Payments taken in Square Point of Sale" }));
+    const box = within(await screen.findByRole('region', BOX));
     expect(box.getByText(/add the person as the customer, it's recorded on the person's bill here, as long as the amount is exactly what the bill says/)).toBeTruthy();
     expect(box.getByText('Set up Square Point of Sale once:')).toBeTruthy();
-    expect(box.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Open More → Settings → Checkout. Turn on Customer management, then turn on Before checkout under Collect customer information. Staff then add the person before taking the money.',
-      'Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts: your items keep their tax, and only amounts staff type stop getting it. Set any tax on your memberships here instead, so each bill already includes it and Square charges exactly what staff enter.',
-    ]);
+    expect(box.getByText(/^Open More → Settings → Checkout\. Turn on Customer management, then turn on Before checkout/)).toBeTruthy();
+    // Where the tax comes from, so nobody reads it as "no tax".
+    expect(await box.findByText("Square adds no tax of its own to amounts staff type in. Any tax is already in the bill here, so the member pays exactly the bill's total.")).toBeTruthy();
+    expect(box.queryByText(/None of your memberships has tax set here/)).toBeNull();
     expect(box.getByText('Ring up shop items from your item list in Square. Item sales are never added to a bill.')).toBeTruthy();
-    expect(box.queryByRole('button')).toBeNull();
+    expect(orgService.getSquareAppCheck).toHaveBeenCalledWith(ORG.id);
   });
 
-  it('connected before Square let the app read what was sold: the owner reconnects, everybody else is told who can', async () => {
+  it('no membership has tax here: says so, with the button to the exact place, or who can for staff who cannot', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false }));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    const box = within(await screen.findByRole('region', BOX));
+    expect(await box.findByText("None of your memberships has tax set here. If you charge tax on memberships, add it here so it's in each bill.")).toBeTruthy();
+    expect(box.getByRole('link', { name: 'Add tax to memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
+    cleanup();
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }, { membershipTax: false, canSetTax: false }));
+    open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: false } }));
+    const theirs = within(await screen.findByRole('region', BOX));
+    expect(await theirs.findByText('The owner, or a manager who can change prices, adds tax to memberships in Memberships.')).toBeTruthy();
+    expect(theirs.queryByRole('link', { name: 'Add tax to memberships' })).toBeNull();
+  });
+
+  it('Square adds sales tax to typed amounts: names it, shows what a $45.00 bill is charged, and says the three things to do', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked(SALES_TAX, { membershipTax: false }));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    const box = within(await screen.findByRole('region', BOX));
+    expect(await box.findByText('Square adds Sales tax (8.25%) on top of any amount staff type in.')).toBeTruthy();
+    expect(
+      box.getByText(
+        "For example, a member's bill here is $45.00. Staff type $45.00 in Square Point of Sale, and Square charges $48.71. That isn't the bill's amount, so the payment isn't recorded on the bill. And if the bill already includes tax, the member pays tax twice.",
+      ),
+    ).toBeTruthy();
+    expect(box.getByText('In Square Point of Sale, open More → Settings → Checkout → Sales taxes, open the tax and turn off Custom amounts.')).toBeTruthy();
+    expect(box.getByText('Put the same tax on your memberships here, so each bill already includes it.')).toBeTruthy();
+    expect(box.getByRole('link', { name: 'Add tax to memberships' }).getAttribute('href')).toBe('/console/iron-house/memberships#tax');
+    expect(box.getByText('Ring up taxable shop items from your item list in Square, so Square still adds their tax.')).toBeTruthy();
+    // Fixed in Square, Check again reads it once more.
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
+    fireEvent.click(box.getByRole('button', { name: 'Check again' }));
+    expect(await box.findByText(/^Square adds no tax of its own/)).toBeTruthy();
+    expect(orgService.getSquareAppCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it('two taxes: both named, and "each of these taxes"', async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ ...SALES_TAX, taxes: [{ name: 'GST', percentage: '5' }, { name: 'PST', percentage: '7' }], chargedMinor: 5040 }));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    const box = within(await screen.findByRole('region', BOX));
+    expect(await box.findByText('Square adds GST (5%) and PST (7%) on top of any amount staff type in.')).toBeTruthy();
+    expect(box.getByText(/open each of these taxes and turn off Custom amounts/)).toBeTruthy();
+  });
+
+  it("Square can't be asked: says so, with Check again, never that it adds none", async () => {
+    orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'unknown' }));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    const box = within(await screen.findByRole('region', BOX));
+    expect(await box.findByText("We couldn't read your tax settings from Square just now.")).toBeTruthy();
+    expect(box.getByRole('button', { name: 'Check again' })).toBeTruthy();
+    expect(box.queryByText(/^Square adds no tax/)).toBeNull();
+    cleanup();
+    orgService.getSquareAppCheck.mockRejectedValue(new Error('offline'));
+    open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
+    expect(await within(await screen.findByRole('region', BOX)).findByText("We couldn't read your tax settings from Square just now.")).toBeTruthy();
+  });
+
+  it('connected before Square let the app read what it needs: the owner reconnects, everybody else is told who can', async () => {
     open(payments({ square: CONNECTED, squareApp: { needsAllow: true } }));
-    const box = within(await screen.findByRole('region', { name: "Payments taken in Square Point of Sale" }));
-    expect(box.getByText('To record payments taken in Square Point of Sale, Square needs one more permission.')).toBeTruthy();
+    const box = within(await screen.findByRole('region', BOX));
+    expect(box.getByText('To record payments taken in Square Point of Sale, our app needs your permission in Square.')).toBeTruthy();
+    expect(orgService.getSquareAppCheck).not.toHaveBeenCalled();
     orgService.connectSquare.mockResolvedValue({ data: { url: 'https://connect.squareupsandbox.com/oauth2/authorize?state=again' } });
     fireEvent.click(box.getByRole('button', { name: 'Reconnect Square' }));
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('https://connect.squareupsandbox.com/oauth2/authorize?state=again'));
     cleanup();
     open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: true } }));
-    const other = within(await screen.findByRole('region', { name: "Payments taken in Square Point of Sale" }));
+    const other = within(await screen.findByRole('region', BOX));
     expect(other.getByText('The owner of Iron House needs to reconnect Square before payments taken in Square Point of Sale can be recorded.')).toBeTruthy();
     expect(other.queryByRole('button')).toBeNull();
   });

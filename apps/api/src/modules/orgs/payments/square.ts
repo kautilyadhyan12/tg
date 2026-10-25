@@ -17,13 +17,16 @@
 // sends a Terminal checkout with PAYMENTS_WRITE_IN_PERSON and reads its payment with
 // PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22). A payment taken in Square's own
 // app (18d-iii-b-i) is read with PAYMENTS_READ, listed with it for the hourly look, and what was sold
-// is read from its order with ORDERS_READ ("Retrieve order", read 2026-10-24).
+// is read from its order with ORDERS_READ ("Retrieve order", read 2026-10-24); the business's own taxes
+// are read from its item library with ITEMS_READ ("List catalog", read 2026-10-25), never changed.
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
   squareDeviceCodeAnswerSchema,
   squareErrorSchema,
   squareLocationsSchema,
+  squareCatalogPageSchema,
+  squareCatalogTaxSchema,
   squareMerchantSchema,
   squareOrderAnswerSchema,
   squarePaymentAnswerSchema,
@@ -36,6 +39,7 @@ import {
   squareTokenSchema,
   squareTokenStatusSchema,
   type SquareCard,
+  type SquareCatalogTax,
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
@@ -109,6 +113,9 @@ export interface SquareApi {
   listPayments(accessToken: string, q: PaymentsQuery): Promise<SquareResult<{ payments: SquarePayment[]; unread: number; cursor: string | null }>>;
   /** What was sold with a payment (18d-iii-b-i). */
   retrieveOrder(accessToken: string, orderId: string): Promise<SquareResult<SquareOrder>>;
+  /** One page of the taxes in the business's item library (18d-iii-b-i). `unread`: how many could not
+   *  be read; each is skipped. */
+  listTaxes(accessToken: string, cursor: string | null): Promise<SquareResult<{ taxes: SquareCatalogTax[]; unread: number; cursor: string | null }>>;
   /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
    *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
   createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
@@ -203,6 +210,7 @@ export const SQUARE_SCOPES = [
   "PAYMENTS_WRITE_IN_PERSON",
   "DEVICE_CREDENTIAL_MANAGEMENT",
   "ORDERS_READ",
+  "ITEMS_READ",
 ] as const;
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_TIMEOUT_MS = 10_000;
@@ -427,6 +435,19 @@ export function createSquareApi(opts: {
         else unread += 1;
       }
       return { kind: "ok", value: { payments, unread, cursor: result.value.cursor ?? null } };
+    },
+    async listTaxes(accessToken, cursor) {
+      const query = new URLSearchParams({ types: "TAX", ...(cursor === null ? {} : { cursor }) });
+      const result = await call("GET", `/v2/catalog/list?${query.toString()}`, squareCatalogPageSchema, bearer(accessToken));
+      if (result.kind !== "ok") return result;
+      const taxes: SquareCatalogTax[] = [];
+      let unread = 0;
+      for (const raw of result.value.objects ?? []) {
+        const one = squareCatalogTaxSchema.safeParse(raw);
+        if (one.success) taxes.push(one.data);
+        else unread += 1;
+      }
+      return { kind: "ok", value: { taxes, unread, cursor: result.value.cursor ?? null } };
     },
     async retrieveOrder(accessToken, orderId) {
       if (!/^[A-Za-z0-9_-]{1,192}$/.test(orderId)) throw new Error("not a Square order id");

@@ -103,6 +103,9 @@ export const allowsLess = (row: repo.ConnectionRow): boolean => SQUARE_SCOPES.so
 /** What was sold with a payment taken in Square's own app can be read (18d-iii-b-i). */
 export const readsOrders = (row: repo.ConnectionRow): boolean => row.scopes.includes("ORDERS_READ");
 
+/** The business's own taxes can be read from its item library (18d-iii-b-i). */
+export const readsItems = (row: repo.ConnectionRow): boolean => row.scopes.includes("ITEMS_READ");
+
 /** Connected, with its location, where Square saves cards on a Terminal. */
 export const terminalsOffered = (row: repo.ConnectionRow | null): row is repo.ConnectionRow & { locationId: string } =>
   row?.state === "connected" && row.locationId !== null && SQUARE_TERMINAL_COUNTRIES.includes(row.country);
@@ -152,7 +155,7 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       squareReady: deps.square !== null,
       square: connectionView(row, isOwner),
       terminals: deps.square === null ? null : await terminalsView(deps, deps.square, row, isOwner),
-      squareApp: row?.state === "connected" && row.locationId !== null ? { needsAllow: !readsOrders(row) } : null,
+      squareApp: row?.state === "connected" && row.locationId !== null ? { needsAllow: !readsOrders(row) || !readsItems(row) } : null,
     },
   });
 }

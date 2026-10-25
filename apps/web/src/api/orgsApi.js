@@ -86,6 +86,7 @@ import {
   myInvitationsResponseSchema,
   gymWaiverResponseSchema,
   gymPaymentsResponseSchema,
+  squareAppCheckResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
   squarePairResponseSchema,
@@ -684,6 +685,9 @@ export const orgService = {
   // Payments (18d-i): the gym's own Square account. Connect returns Square's page to open;
   // the return page hands Square's answer back as it came.
   getGymPayments: (gymId) => readThrough(gymPaymentsResponseSchema, 'your payments', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments`)),
+  // Whether Square adds tax to amounts staff type in Square Point of Sale (18d-iii-b-i).
+  getSquareAppCheck: (gymId) =>
+    readThrough(squareAppCheckResponseSchema, 'your Square tax settings', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/app-check`)),
   connectSquare: (gymId) =>
     readThrough(squareConnectResponseSchema, 'Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/connect`)),
   finishSquare: (answer) => readThrough(squareFinishResponseSchema, 'Square', authApi.post('/v1/payments/square/finish', answer)),

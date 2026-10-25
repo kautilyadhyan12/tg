@@ -16,13 +16,30 @@
 // `SQUARE_APP.keepDays` ago, is never taken in: a refund's message about an old payment is never put
 // on a bill of today's.
 import { randomUUID } from "node:crypto";
-import { SQUARE_APP, squareAppDecision, squareAppLinesOf, type SquareAppCustomer, type SquareAppLines, type SquarePayment } from "@app/shared";
+import {
+  GYM_PAYMENTS_WORDS,
+  SQUARE_APP,
+  SQUARE_APP_EXAMPLE_MINOR,
+  chargedWithTaxes,
+  squareAppCheckResponseSchema,
+  squareAppDecision,
+  squareAppLinesOf,
+  squareOrderAddsOnTop,
+  taxesOnTypedAmounts,
+  type SquareAppCheck,
+  type SquareAppCheckResponse,
+  type SquareAppCustomer,
+  type SquareAppLines,
+  type SquarePayment,
+  type SquareTaxFacts,
+} from "@app/shared";
 import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
 import { recordFeePaymentIn } from "../memberships/feesRepo.js";
 import * as repo from "./repo.js";
-import { accessContext, readsOrders, type PaymentsDeps } from "./service.js";
+import { OrgsError, requireStaff } from "../service.js";
+import { accessContext, readsItems, readsOrders, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import * as taken from "./squareAppPaymentsRepo.js";
 
@@ -53,14 +70,16 @@ export async function takeInSquarePayment(deps: PaymentsDeps, square: SquareSett
   return await takeIn(deps, square, accountId, rows, read.value);
 }
 
-/** What Square says was sold with the payment; null for no answer, so it is asked again. */
-async function linesOf(square: SquareSettings, row: repo.ConnectionRow, payment: SquarePayment): Promise<SquareAppLines | null> {
+/** What Square says was sold with the payment, and whether it added tax or a charge on top of what staff
+ *  typed; null for no answer, so it is asked again. */
+async function saleOf(square: SquareSettings, row: repo.ConnectionRow, payment: SquarePayment): Promise<{ lines: SquareAppLines; addedOnTop: boolean } | null> {
+  const unread = { lines: "unread" as const, addedOnTop: false };
   const token = tokenOf(square, row);
-  if (payment.order_id == null || token === null || !readsOrders(row)) return "unread";
+  if (payment.order_id == null || token === null || !readsOrders(row)) return unread;
   const order = await square.api.retrieveOrder(token, payment.order_id);
   if (order.kind === "unavailable") return null;
-  if (order.kind === "refused") return "unread";
-  return squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type));
+  if (order.kind === "refused") return unread;
+  return { lines: squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type)), addedOnTop: squareOrderAddsOnTop(order.value) };
 }
 
 /** One payment of the account, as Square showed it: taken in once, or passed over. */
@@ -127,8 +146,8 @@ export async function takeIn(deps: PaymentsDeps, square: SquareSettings, account
 
   // Taken at another location of the account than the gym's own: kept for staff, as it is.
   const atHome = owner.locationId === location;
-  const lines = atHome ? await linesOf(square, owner, payment) : "unread";
-  if (lines === null) return "unknown";
+  const sale = atHome ? await saleOf(square, owner, payment) : { lines: "unread" as const, addedOnTop: false };
+  if (sale === null) return "unknown";
   const gym = await repo.readGym(deps.sql, owner.gymId);
   if (gym === null) return "done";
   const today = dayInTz(now, gym.timezone);
@@ -149,7 +168,7 @@ export async function takeIn(deps: PaymentsDeps, square: SquareSettings, account
     // Another money than the gym's own: no bill of the gym's is that amount.
     const sameMoney = payment.amount_money.currency === owner.currency;
     const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
-    const decision = squareAppDecision({ lines, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
+    const decision = squareAppDecision({ ...sale, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
     if (decision.kind === "shop_sale") {
       await taken.insertTaken(tx, kept, { state: "shop_sale" }, now);
       return;
@@ -246,4 +265,58 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
     await taken.finishSweep(deps.sql, sweep, finished ? until : reached, new Date(now.getTime() + (finished ? taken.SWEEP.everyMs : taken.SWEEP.againMs)));
   }
   return run;
+}
+
+// ── The tax check ────────────────────────────────────────────────────────────
+
+/** Pages of the item library's taxes read for the check: 100 taxes a page is Square's own. */
+const TAX_PAGES = 5;
+
+/** Settings → Payments: whether Square adds tax on top of an amount staff type in at the gym's location,
+ *  read from the gym's own item library (never changed), for anybody on the gym's staff. */
+export async function squareAppCheck(deps: PaymentsDeps, userId: string, gymId: string): Promise<SquareAppCheckResponse> {
+  const { privileges } = await requireStaff(deps, gymId, userId);
+  const square = deps.square;
+  const row = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
+  if (square === null || row?.state !== "connected" || row.locationId === null) throw new OrgsError(409, "square_not_connected", GYM_PAYMENTS_WORDS.not_connected);
+  const [taxed] = await deps.sql<{ any: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM gym_membership_types WHERE gym_id = ${gymId} AND archived_at IS NULL AND tax_rate_id IS NOT NULL) AS any`;
+  const answer = (taxes: SquareAppCheck["taxes"]): SquareAppCheckResponse =>
+    squareAppCheckResponseSchema.parse({
+      check: { taxes, currency: row.currency, membershipTax: taxed?.any === true, canSetTax: privileges.includes("memberships.manage") },
+    });
+  const token = tokenOf(square, row);
+  if (token === null || !readsItems(row)) return answer({ state: "needs_allow" });
+  const facts: SquareTaxFacts[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < TAX_PAGES; page++) {
+    const listed = await square.api.listTaxes(token, cursor);
+    if (listed.kind !== "ok") return answer({ state: "unknown" });
+    // A tax that could not be read may be one that adds itself: no answer, never "none".
+    if (listed.value.unread > 0) return answer({ state: "unknown" });
+    for (const t of listed.value.taxes) {
+      facts.push({
+        name: t.tax_data?.name ?? null,
+        percentage: t.tax_data?.percentage ?? null,
+        inclusionType: t.tax_data?.inclusion_type ?? null,
+        appliesToCustomAmounts: t.tax_data?.applies_to_custom_amounts ?? null,
+        enabled: t.tax_data?.enabled ?? null,
+        deleted: t.is_deleted ?? null,
+        atAllLocations: t.present_at_all_locations ?? null,
+        presentAt: t.present_at_location_ids ?? [],
+        absentAt: t.absent_at_location_ids ?? [],
+      });
+    }
+    cursor = listed.value.cursor;
+    if (cursor === null) break;
+  }
+  if (cursor !== null) return answer({ state: "unknown" });
+  const adds = taxesOnTypedAmounts(facts, row.locationId);
+  if (adds.length === 0) return answer({ state: "none" });
+  return answer({
+    state: "adds",
+    taxes: adds.slice(0, 50),
+    exampleMinor: SQUARE_APP_EXAMPLE_MINOR,
+    chargedMinor: chargedWithTaxes(SQUARE_APP_EXAMPLE_MINOR, adds.map((t) => t.percentage)),
+  });
 }

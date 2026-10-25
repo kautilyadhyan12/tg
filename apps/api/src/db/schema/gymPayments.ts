@@ -641,7 +641,7 @@ export const gymSquareAppPayments = pgTable(
     check("gym_square_app_payments_state_check", sql`${t.state} IN ('recorded','waiting','shop_sale')`),
     check(
       "gym_square_app_payments_reason_check",
-      sql`(${t.state} = 'waiting') = (${t.reason} IS NOT NULL) AND (${t.reason} IS NULL OR ${t.reason} IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill'))`,
+      sql`(${t.state} = 'waiting') = (${t.reason} IS NOT NULL) AND (${t.reason} IS NULL OR ${t.reason} IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill'))`,
     ),
     check("gym_square_app_payments_recorded_check", sql`(${t.state} = 'recorded') = (${t.memberPaymentId} IS NOT NULL)`),
     check("gym_square_app_payments_gym_check", sql`${t.gymId} IS NOT NULL OR (${t.state} = 'waiting' AND ${t.reason} = 'several_gyms')`),

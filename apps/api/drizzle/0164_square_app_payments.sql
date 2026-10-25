@@ -17,7 +17,8 @@ CREATE UNIQUE INDEX "gym_member_payments_provider_uq" ON "gym_member_payments" U
 --
 -- Every completed payment Square made at a location of a Square account a gym here is connected to,
 -- that is not the app's own (a Terminal checkout's, a card on file's charge), once: what became of it.
--- `recorded`: on a bill (`member_payment_id`); `waiting`: for staff, with why (`reason`); `shop_sale`:
+-- `recorded`: on a bill (`member_payment_id`); `waiting`: for staff, with why (`reason`; `square_tax`: Square
+-- added tax or a charge on top of what staff typed); `shop_sale`:
 -- items from the gym's list in Square, no bill's. `gym_id` is null only where two gyms here use the
 -- location and no customer says whose it is. `entry_id`: the record Square's customer is, where one
 -- is; a record joined to another or deleted for good lets go of it alone (the payment on the bill
@@ -51,7 +52,7 @@ CREATE TABLE "gym_square_app_payments" (
 	CONSTRAINT "gym_square_app_payments_amount_check" CHECK ("amount_minor" BETWEEN 0 AND 999999999 AND "tip_minor" BETWEEN 0 AND 999999999 AND "currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "gym_square_app_payments_card_check" CHECK (("source" IS NULL OR "source" ~ '^[A-Z_]{1,40}$') AND ("brand" IS NULL OR "brand" ~ '^[A-Z_]{1,40}$') AND ("last4" IS NULL OR "last4" ~ '^[0-9]{4}$')),
 	CONSTRAINT "gym_square_app_payments_state_check" CHECK ("state" IN ('recorded','waiting','shop_sale')),
-	CONSTRAINT "gym_square_app_payments_reason_check" CHECK (("state" = 'waiting') = ("reason" IS NOT NULL) AND ("reason" IS NULL OR "reason" IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill'))),
+	CONSTRAINT "gym_square_app_payments_reason_check" CHECK (("state" = 'waiting') = ("reason" IS NOT NULL) AND ("reason" IS NULL OR "reason" IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill'))),
 	CONSTRAINT "gym_square_app_payments_recorded_check" CHECK (("state" = 'recorded') = ("member_payment_id" IS NOT NULL)),
 	CONSTRAINT "gym_square_app_payments_gym_check" CHECK ("gym_id" IS NOT NULL OR ("state" = 'waiting' AND "reason" = 'several_gyms'))
 );--> statement-breakpoint

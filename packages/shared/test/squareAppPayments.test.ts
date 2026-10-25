@@ -5,7 +5,18 @@
 // kinds Square has never sent (a new one, a missing one, Square's own words for other things) are
 // never read as a typed amount. Every class of case of the rule is a row here.
 import { describe, expect, it } from "vitest";
-import { SQUARE_APP, squareAppDecision, squareAppLinesOf, type SquareAppCandidate, type SquareAppDecision } from "../src/index.js";
+import {
+  SQUARE_APP,
+  chargedWithTaxes,
+  squareAppDecision,
+  squareAppLinesOf,
+  squareOrderAddsOnTop,
+  squareTaxNames,
+  taxesOnTypedAmounts,
+  type SquareAppCandidate,
+  type SquareAppDecision,
+  type SquareTaxFacts,
+} from "../src/index.js";
 
 describe("squareAppLinesOf: what Square says was sold", () => {
   it.each([
@@ -49,7 +60,7 @@ const fee = (entryId: string, dueOn: string, leftMinor: number): SquareAppCandid
   busy: false,
 });
 const decide = (p: Partial<Parameters<typeof squareAppDecision>[0]>): SquareAppDecision =>
-  squareAppDecision({ lines: "typed", customer: "one", amountMinor: 4500, today: TODAY, candidates: [], ...p });
+  squareAppDecision({ lines: "typed", addedOnTop: false, customer: "one", amountMinor: 4500, today: TODAY, candidates: [], ...p });
 const recorded = (d: SquareAppDecision) => (d.kind === "record" ? d.candidate : null);
 
 describe("squareAppDecision: which bill a payment from Square's own app is recorded on", () => {
@@ -67,6 +78,13 @@ describe("squareAppDecision: which bill a payment from Square's own app is recor
     ["what was sold could not be read", { lines: "unread" }, "sale_unread"],
   ] as const)("waits for staff: %s", (_name, p, reason) => {
     expect(decide({ ...p, candidates: [period("amy", TODAY, 4500)] })).toEqual({ kind: "wait", reason });
+  });
+
+  it("waits where Square added tax or a charge on top of what staff typed, even where the total happens to equal a bill", () => {
+    expect(decide({ addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] })).toEqual({ kind: "wait", reason: "square_tax" });
+    // Who and what still come first: nobody picked, or items, say so before the tax does.
+    expect(decide({ addedOnTop: true, customer: "none" })).toEqual({ kind: "wait", reason: "no_customer" });
+    expect(decide({ addedOnTop: true, lines: "items" })).toEqual({ kind: "shop_sale" });
   });
 
   it("waits where no bill is exactly what was paid: none at all, another amount, more than is left", () => {
@@ -136,5 +154,82 @@ describe("squareAppDecision: which bill a payment from Square's own app is recor
     // Due today or before, it is owed now: recorded, whatever was paid before it.
     const owed = period("amy", TODAY, 4500, { paidJustBefore: true });
     expect(recorded(decide({ candidates: [owed] }))).toEqual(owed);
+  });
+});
+
+// The tax check (18d-iii-b-i). The kinds and fields are Square's own ("OrderLineItemTax" type ADDITIVE,
+// INCLUSIVE and UNKNOWN_TAX; "CatalogTax" inclusion_type, applies_to_custom_amounts, enabled and the
+// catalog object's present_at_all_locations, present_at_location_ids, absent_at_location_ids; read
+// 2026-10-25), and kinds Square has never sent are never taken as inside the price.
+describe("squareOrderAddsOnTop: did Square charge more than staff typed", () => {
+  it.each([
+    ["no taxes and no charge", {}, false],
+    ["US sales tax added to the price", { taxes: [{ type: "ADDITIVE", applied_money: { amount: 371 } }] }, true],
+    ["a tax inside the price", { taxes: [{ type: "INCLUSIVE", applied_money: { amount: 371 } }] }, false],
+    ["a tax added that came to nothing", { taxes: [{ type: "ADDITIVE", applied_money: { amount: 0 } }] }, false],
+    ["a tax of a kind Square has not said", { taxes: [{ type: "UNKNOWN_TAX", applied_money: { amount: 50 } }] }, true],
+    ["a tax with no kind at all", { taxes: [{ applied_money: { amount: 50 } }] }, true],
+    ["an automatic service charge", { total_service_charge_money: { amount: 200 } }, true],
+    ["one tax inside, one added", { taxes: [{ type: "INCLUSIVE", applied_money: { amount: 300 } }, { type: "ADDITIVE", applied_money: { amount: 45 } }] }, true],
+  ] as const)("%s", (_name, order, onTop) => {
+    expect(squareOrderAddsOnTop(order)).toBe(onTop);
+  });
+});
+
+const tax = (more: Partial<SquareTaxFacts> = {}): SquareTaxFacts => ({
+  name: "Sales tax",
+  percentage: "8.25",
+  inclusionType: "ADDITIVE",
+  appliesToCustomAmounts: true,
+  enabled: true,
+  deleted: false,
+  atAllLocations: true,
+  presentAt: [],
+  absentAt: [],
+  ...more,
+});
+const HERE = "LHERE";
+
+describe("taxesOnTypedAmounts: the taxes Square adds on top of an amount staff type in, here", () => {
+  it.each([
+    ["switched on, added to the price, on custom amounts, every location", tax(), ["Sales tax"]],
+    ["not on custom amounts", tax({ appliesToCustomAmounts: false }), []],
+    ["custom amounts not said", tax({ appliesToCustomAmounts: null }), []],
+    ["switched off", tax({ enabled: false }), []],
+    ["switched on not said", tax({ enabled: null }), ["Sales tax"]],
+    ["deleted", tax({ deleted: true }), []],
+    ["inside the price", tax({ inclusionType: "INCLUSIVE" }), []],
+    ["its kind not said (Square's default is added)", tax({ inclusionType: null }), ["Sales tax"]],
+    ["a kind Square adds later", tax({ inclusionType: "SOMETHING_NEW" }), ["Sales tax"]],
+    ["every location but this one", tax({ absentAt: [HERE] }), []],
+    ["every location but another", tax({ absentAt: ["LOTHER"] }), ["Sales tax"]],
+    ["only at another location", tax({ atAllLocations: false, presentAt: ["LOTHER"] }), []],
+    ["only at this location", tax({ atAllLocations: false, presentAt: [HERE] }), ["Sales tax"]],
+    ["all locations not said", tax({ atAllLocations: null }), ["Sales tax"]],
+    ["no name", tax({ name: "  " }), ["A tax with no name"]],
+  ] as const)("%s", (_name, t, names) => {
+    expect(taxesOnTypedAmounts([t], HERE).map((x) => x.name)).toEqual(names);
+  });
+
+  it("keeps every tax that applies, in Square's own order", () => {
+    expect(taxesOnTypedAmounts([tax(), tax({ name: "City tax", percentage: "1" }), tax({ name: "Off", enabled: false })], HERE)).toEqual([
+      { name: "Sales tax", percentage: "8.25" },
+      { name: "City tax", percentage: "1" },
+    ]);
+  });
+});
+
+describe("the check's example and names", () => {
+  it("charges what Square would: each tax on the typed amount, rounded", () => {
+    expect(chargedWithTaxes(4500, ["8.25"])).toBe(4871);
+    expect(chargedWithTaxes(4500, ["8.25", "1"])).toBe(4916);
+    expect(chargedWithTaxes(4500, ["13"])).toBe(5085);
+    expect(chargedWithTaxes(4500, [null, "x", "0", "-5"])).toBe(4500);
+  });
+
+  it("names one tax, two, and three", () => {
+    expect(squareTaxNames([{ name: "Sales tax", percentage: "8.25" }])).toBe("Sales tax (8.25%)");
+    expect(squareTaxNames([{ name: "Sales tax", percentage: "8.25" }, { name: "City tax", percentage: null }])).toBe("Sales tax (8.25%) and City tax");
+    expect(squareTaxNames([{ name: "GST", percentage: "5" }, { name: "PST", percentage: "7" }, { name: "City", percentage: "1" }])).toBe("GST (5%), PST (7%) and City (1%)");
   });
 });
