@@ -546,6 +546,15 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
       expect((await body({ age: 30 })).statusCode).toBe(200);
       await settle();
       expect(heard(line)).toEqual([PEOPLE, PEOPLE]);
+      // A save that leaves the age out takes it away: that is a change too.
+      expect((await body({ heightCm: 181 })).statusCode).toBe(200);
+      await until(() => heard(line).length >= 3);
+      // Hide me through the profile: the board is told; the same again is not.
+      expect((await me({ leaderboardOptOut: true })).statusCode).toBe(200);
+      await until(() => heard(line).length >= 4);
+      expect((await me({ leaderboardOptOut: true })).statusCode).toBe(200);
+      await settle();
+      expect(heard(line)).toEqual([PEOPLE, PEOPLE, PEOPLE, BOARD]);
       line.close();
     },
     T,
