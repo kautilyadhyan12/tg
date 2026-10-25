@@ -4283,6 +4283,37 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   with Set tax on memberships; and picking the member on each sale, which staff can skip. A payment Square
   charged more than staff typed waits ("square_tax"). A Terminal checkout asks for the bill's total,
   which Square takes as including tax, so Square's own taxes never change it.
+  *Since 18d-iii-b-ii-a (Kd, 2026-10-25, "one press"): nothing taken in Square Point of Sale is recorded by
+  itself any more. Where the rule above would have recorded it, it waits `ready`, that bill ticked for one press
+  of Match (below); a sale of shop items for somebody owing at least that much this week waits too.*
+  *As built, 18d-iii-b-ii-a (Kd, 2026-10-25: "GO", then "ONE PRESS"; `rulings/2026-10-25-18d-iii-b-ii-a.md`):*
+  **Nothing taken in Square Point of Sale goes on a bill by itself**: Square's customer says who paid, never what
+  for, so every such payment waits for one press. **Payments to match**, a page in the menu beside Failed
+  payments for staff who keep the list and record payments, with its count beside the menu line (live), lists
+  every payment that waits, newest first, one line each, as a bank feed's list to review: when; who paid (the
+  record, Square's own name marked "Name from Square", or Unknown) with the name the gym gave the Square device
+  that took it and how it was paid; how much; and what it is for. Where one bill of exactly one person fits, it is
+  ticked ("Gold Weekly · due today") and **Match** puts the payment there in one press, as Square Point of Sale;
+  **Other bill** opens Match's box. Otherwise the line says in a few words why staff choose, and the button says
+  what: **Choose who paid** or **Choose the bill**, opening the box: who paid (filled in where the app can tell:
+  the record Square's customer is, or the one current record with the same email, or the same phone with its
+  country code; never by name), which bill (theirs, or of anybody they pay for), and how much where Square didn't
+  say (items in the sale, a sale paid in parts). A note is added only where something needs checking (they may
+  have paid twice, in amber) or the amount needs saying (Square's tax on top: the part staff entered goes on the
+  bill). Square is asked about the payment first: one it has refunded since, or no longer shows as taken, never
+  goes on a bill. It is recorded by Record payment's own step, once (the press's key; the gym's lock; never while
+  the membership has money out on the Terminal or the card on file). **Not for a bill** (a shop sale or anything
+  else, or already recorded on a bill by hand) takes it off the list, with Undo. The person's page shows the same
+  payment the moment Square tells the app, with the same bill ticked and Match. **No member is charged twice:**
+  while a payment of a person's waits (or of whoever pays for them), their card on file is charged by nobody, the
+  app or staff; a sale of shop items for somebody owing at least that much this week waits too; and a gym's
+  Square payments are looked at right before its cards on file are charged. Failed payments' Try again sends
+  there. Overview has the count; Sell's Today's takings says shop items sold in Square Point of Sale are in
+  Square's own reports. Add member, Add membership and Record payment offer **Square Point of Sale** as a way of
+  paying where the gym can take payments there: it records nothing and says whom to pick in Square (the payment
+  then comes to their page, bill ticked) or that it waits in Payments to match. A payment with no customer at a
+  Square location two gyms here use is kept for neither;
+  each is told how many while the location is shared, and how to give a gym its own location.
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

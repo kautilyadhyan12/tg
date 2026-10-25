@@ -95,4 +95,6 @@ export * from "./cardCharges.js";
 export * from "./cardRetries.js";
 export * from "./failedPayments.js";
 export * from "./squareAppPayments.js";
+export * from "./matchBill.js";
+export * from "./paymentsToMatch.js";
 export * from "./liveUpdates.js";

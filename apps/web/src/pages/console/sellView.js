@@ -271,6 +271,9 @@ export function takingsWords(page, key = 'all') {
 }
 
 /** The smaller lines under it, each only where it is true. */
+/** For a gym that takes payments in Square Point of Sale: where its shop sales there are. */
+export const SQUARE_APP_SHOP_NOTE = "Shop items sold in Square Point of Sale aren't listed here. They are in your Square Dashboard's reports.";
+
 export function takingsNotes(page, key = 'all') {
   const { currency } = page;
   const all = key === 'all';
@@ -290,6 +293,8 @@ export function takingsNotes(page, key = 'all') {
   }
   const hidden = all ? page.salesNotShown + page.paymentsNotShown : kind.notShown;
   if (hidden > 0) notes.push(`The list shows the newest. ${count(hidden, 'earlier one is', 'earlier ones are')} not listed.`);
+  // Shop items sold in Square Point of Sale stay in Square (18d-iii-b-ii-a): said where products are counted.
+  if (page.squareApp === true && (all || key === 'products')) notes.push(SQUARE_APP_SHOP_NOTE);
   return notes;
 }
 

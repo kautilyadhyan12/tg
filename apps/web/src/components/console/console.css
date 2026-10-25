@@ -1148,3 +1148,51 @@
   margin-top: 4px;
   font-weight: 700;
 }
+
+/* A list of money to review, one line each (Payments to match, 18d-iii-b-ii-a), as a bank feed's list is in
+   accounting software: when, who, how much, what for, and its buttons. Stacked on a phone, name and amount
+   first; in columns on a wide screen, under a head that names them. */
+.c-feed-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "who amount" "for for" "when when" "act act";
+  gap: 6px 12px;
+  align-items: start;
+}
+.c-feed-when { grid-area: when; white-space: nowrap; }
+.c-feed-who { grid-area: who; }
+.c-feed-amount { grid-area: amount; text-align: right; }
+.c-feed-for { grid-area: for; }
+.c-feed-act { grid-area: act; }
+.c-feed-head { display: none; }
+@media (min-width: 1100px) {
+  .c-feed-row {
+    grid-template-columns: 136px minmax(140px, 1fr) 92px minmax(180px, 1.6fr) 300px;
+    grid-template-areas: "when who amount for act";
+    gap: 16px;
+    align-items: center;
+  }
+  .c-feed-amount { text-align: left; }
+  .c-feed-act { justify-content: flex-end; }
+  .c-feed-head { display: grid; }
+}
+
+/* A count on the corner of a page's icon in the menu, while anything waits there (Payments to match), so
+   the page's name keeps its one line. */
+.c-nav-count {
+  position: absolute;
+  top: -7px;
+  right: -10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--rail-warn);
+  color: var(--rail-bg);
+}

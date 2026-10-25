@@ -39,6 +39,7 @@ import {
   CARD_CHARGE_WORDS,
 } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
+import type { LiveNewsSender } from "../../live/news.js";
 import { insertAudit, lockOrgRow } from "../repo.js";
 import { OrgsError, requireStaff, requireWritableGym } from "../service.js";
 import * as repo from "./repo.js";
@@ -61,6 +62,9 @@ export interface PaymentsDeps {
   square: SquareSettings | null;
   log: PaymentsLog;
   now: () => Date;
+  /** The worker's: tells pages open on a gym that a payment from Square Point of Sale now waits. A route
+   *  tells after its own change instead. */
+  news?: LiveNewsSender;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -77,6 +77,7 @@ import * as agreementRepo from "../agreement/repo.js";
 import { recordStopped } from "../classes/bookingStops.js";
 import { freezeFeeOf } from "./freezeFees.js";
 import { chargesOfBills } from "../payments/cardChargesRepo.js";
+import { squareAppWaitingFor } from "../payments/paymentsToMatchBills.js";
 import { blockedOf, expiringCards, remindersOn, type ExpiringCard } from "../payments/cardExpiryRepo.js";
 import { emailHmac } from "../invites/address.js";
 import { type FeePaymentRow, type FeeRow } from "./feesRepo.js";
@@ -304,6 +305,8 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     // No new bookings while a payment is overdue (17i): said beside the bill, to who takes payments.
     canBill && !list.past ? recordStopped(deps.sql, gymId, entryId, deps.now()) : false,
   ]);
+  // A payment from Square Point of Sale waiting to be matched holds their card on file (18d-iii-b-ii-a).
+  const squareAppWaiting = canBill ? await squareAppWaitingFor(deps.sql, gymId, entryId, today) : [];
   // What the card on file did on each bill and fee (18d-iii-i), for staff who take payments.
   const charges: Charges = canBill
     ? await chargesOfBills(deps.sql, gymId, [...list.bills.map((b) => b.id), ...list.fees.map((f) => f.id)], [...list.payments.map((p) => p.id), ...list.feePayments.map((p) => p.id)], deps.now())
@@ -417,6 +420,7 @@ async function readOr404(deps: HeldDeps, gymId: string, entryId: string, today: 
     taxIncluded: list.taxIncluded,
     billDay: list.billDay,
     bookingsStopped,
+    squareAppWaiting,
     discounts: offered.map((d) => ({ ...d, archivedAt: d.archivedAt === null ? null : d.archivedAt.toISOString(), updatedAt: d.updatedAt.toISOString() })),
     friendGift: list.past ? null : friendGift,
     memberGift,

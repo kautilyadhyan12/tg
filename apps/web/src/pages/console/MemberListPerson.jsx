@@ -39,6 +39,8 @@ import { FriendGiftNote } from './FriendGift';
 import { JoiningFeeTick, MembershipTotal } from './MembershipDiscount';
 import { leadMatchLine } from '@app/shared';
 import { canRecordPayments } from './memberBillsView';
+import { canMatchPayments } from './paymentsToMatchAccess';
+import { paymentsToMatchService } from '../../api/paymentsToMatchApi';
 import { canManageMemberships } from './membershipTypesView';
 import { viewerPrivileges } from './consoleView';
 import { canOpenPlace, placeFor } from './consolePlaces';
@@ -565,6 +567,24 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
       live = false;
     };
   }, [gymId, adding, priceAsk]);
+  // Square Point of Sale as a way of paying the first bill (18d-iii-b-ii-a): offered where the gym can take
+  // payments there, for staff who match them. Somebody new is linked to no Square customer, so the payment
+  // waits in Payments to match.
+  const [pointOfSale, setPointOfSale] = useState(false);
+  const asksPointOfSale = adding && canRecordPayments(viewerPrivileges(gym)) && canMatchPayments(viewerPrivileges(gym));
+  useEffect(() => {
+    if (!asksPointOfSale) return undefined;
+    let live = true;
+    paymentsToMatchService.summary(gymId).then(
+      (s) => {
+        if (live) setPointOfSale(s.pointOfSale);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [gymId, asksPointOfSale]);
   // Somebody who set memberships up in another tab finds them here on coming back: a form
   // with nothing to pick from reads the price list again.
   useCameBack(adding && !sells, () => setPriceAsk((n) => n + 1));
@@ -1263,6 +1283,7 @@ export default function MemberListPerson({ gymId, gym, entryId, list, words, rea
             value={giving}
             paidMinor={total === null || !total.shows ? null : total.totalMinor}
             canBill={canRecordPayments(viewerPrivileges(gym))}
+            squareApp={pointOfSale ? { pick: null } : null}
             onChange={(next) => {
               setRefusal(null);
               setGiving(next.typeId !== giving.typeId ? { ...next, joiningFee: 'auto' } : next);

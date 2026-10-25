@@ -150,6 +150,16 @@ afterEach(() => {
 });
 
 describe('Failed payments', () => {
+  it('a card held for a payment from Square Point of Sale offers no Try again, says why, and opens Payments to match (18d-iii-b-ii-a)', async () => {
+    const HELD = { ...GINA, retry: { kind: 'no', why: 'square_app' } };
+    svc.list.mockResolvedValue(answer({ count: 1, payments: [HELD] }));
+    open();
+    const held = await screen.findByTestId('failed-payment-row');
+    expect(within(held).queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(within(held).getByTestId('failed-payment-facts').textContent).toContain('A payment of theirs from Square Point of Sale is waiting to be matched. Match it first, so they aren’t charged twice.');
+    expect(within(held).getByRole('link', { name: 'Open Payments to match' }).getAttribute('href')).toBe('/console/iron-house/payments-to-match');
+  });
+
   it("Try again asks first in a box under its row, then charges that row's own card, amount and bill", async () => {
     open();
     await screen.findByText('4 failed payments · $90.00 owed');

@@ -46,10 +46,23 @@
 // Failed payments (ROADMAP 18d-iii-ii-b), `billing.members`; Try again is Charge card on file above:
 //   GET    /v1/orgs/:gymId/failed-payments?from=0             a page of the list
 //   GET    /v1/orgs/:gymId/failed-payments/summary            how many, and what they come to (Overview)
+//
+// Payments to match (ROADMAP 18d-iii-b-ii-a), `billing.members` and `members.confirm`, as Failed payments:
+//   GET    /v1/orgs/:gymId/payments-to-match?from=0                       a page of the list
+//   GET    /v1/orgs/:gymId/payments-to-match/summary                      how many, and what they come to (Overview)
+//   GET    /v1/orgs/:gymId/payments-to-match/:paymentId/bills?entryId=    Match's box, for one person
+//   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/match             Match: on the bill picked
+//   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/not-a-bill        Not a bill payment
+//   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/undo              Undo of Not a bill payment
 import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
   failedPaymentsQuerySchema,
+  matchBillsQuerySchema,
+  matchPaymentRequestSchema,
+  notABillRequestSchema,
+  paymentToMatchParamsSchema,
+  paymentsToMatchQuerySchema,
   saveCardRequestSchema,
   squareCardIdSchema,
   terminalFeePaymentRequestSchema,
@@ -82,6 +95,7 @@ import { staffOnly } from "../staffLimit.js";
 import * as cardCharges from "./cardCharges.js";
 import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
+import * as paymentsToMatch from "./paymentsToMatch.js";
 import * as service from "./service.js";
 import { SQUARE_PAYMENT_EVENTS, squareAppCheck } from "./squareAppPayments.js";
 import { verifySquareSignature } from "./squareSignature.js";
@@ -335,6 +349,68 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     if (params === null) return;
     const answer = await failedPayments.readFailedSummary(paymentsDeps, callerId(req), params.gymId);
     return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  // Payments to match: read as Failed payments is; Match asks Square once a press, as a charge does.
+  const toMatchReadLimit = createDualRateLimit({ name: "payments_to_match", max: 600, ipMax: 3000, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const toMatchWriteLimit = createDualRateLimit({ name: "payments_to_match_write", max: 120, ipMax: 600, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  /** What a write changed: the list and Overview read again, and the people whose card or bill it was. */
+  const tellMatched = (gymId: string, entryIds: readonly string[]): void => {
+    deps.news.tell(gymId, { what: "paymentsToMatch" });
+    for (const entryId of entryIds) deps.news.tell(gymId, { what: "memberships", entryId });
+  };
+
+  app.get("/v1/orgs/:gymId/payments-to-match", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(paymentsToMatchQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await paymentsToMatch.readPaymentsToMatch(paymentsDeps, callerId(req), params.gymId, query.from);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get("/v1/orgs/:gymId/payments-to-match/summary", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const answer = await paymentsToMatch.readToMatchSummary(paymentsDeps, callerId(req), params.gymId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.get("/v1/orgs/:gymId/payments-to-match/:paymentId/bills", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchReadLimit)] }, async (req, reply) => {
+    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(matchBillsQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    const answer = await paymentsToMatch.readMatchBills(paymentsDeps, callerId(req), params.gymId, params.paymentId, query.entryId);
+    return reply.status(200).header("cache-control", "no-store").send(answer);
+  });
+
+  app.post("/v1/orgs/:gymId/payments-to-match/:paymentId/match", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(matchPaymentRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await paymentsToMatch.matchPayment(paymentsDeps, callerId(req), params.gymId, params.paymentId, body);
+    tellMatched(params.gymId, done.entryIds);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  app.post("/v1/orgs/:gymId/payments-to-match/:paymentId/not-a-bill", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(notABillRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    const done = await paymentsToMatch.markNotABill(paymentsDeps, callerId(req), params.gymId, params.paymentId, body);
+    tellMatched(params.gymId, done.entryIds);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
+  });
+
+  app.post("/v1/orgs/:gymId/payments-to-match/:paymentId/undo", { preHandler: [app.authenticate, staffOnly(deps.sql, toMatchWriteLimit)] }, async (req, reply) => {
+    const params = parseOr400(paymentToMatchParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const done = await paymentsToMatch.putBackToMatch(paymentsDeps, callerId(req), params.gymId, params.paymentId);
+    tellMatched(params.gymId, done.entryIds);
+    return reply.status(200).header("cache-control", "no-store").send(done.answer);
   });
 
   // At Sell, the same limits: a sale is one press, asked about as a bill's is.

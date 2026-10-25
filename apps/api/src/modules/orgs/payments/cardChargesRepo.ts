@@ -171,6 +171,9 @@ export type StartChargeOutcome =
   | { kind: "new" | "same_press"; charge: ChargeRow }
   | { kind: "key_reused" | "entry_not_found" | "membership_not_found" | "not_allowed" | "no_card" | "card_changed" | "currency" }
   | { kind: "terminal_waiting" | "card_charging" }
+  /** A payment from Square Point of Sale of theirs, or of whoever pays for them, waits to be matched
+   *  (18d-iii-b-ii-a): the card is not charged meanwhile. */
+  | { kind: "square_app_waiting" }
   | { kind: "fee_not_found" | "fee_changed" }
   | { kind: "too_much"; leftMinor: number; currency: string }
   /** Staff: the card was declined for this bill less than a day ago; for good; or 3 times. */
@@ -250,6 +253,8 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
     if (row === null) return { kind: "membership_not_found" };
     const out = await squareMoneyOut(tx, s.gymId, row.id);
     if (out !== null) return out;
+    // Paid in Square Point of Sale, perhaps for this very bill, and not yet matched: charged by nobody.
+    if (await squareAppWaitsFor(tx, s.gymId, s.entryId)) return { kind: "square_app_waiting" };
     if (s.bySchedule && (row.membership.kind !== "recurring" || !row.membership.renews)) return { kind: "not_allowed" };
     // The app's own charge stops the moment a membership is cancelled (Visa's dispute 13.2): a
     // period's bill only while it is in use, a freeze fee only while it is frozen (review round one).
@@ -328,6 +333,31 @@ export async function startCharge(sql: Sql, s: NewCharge): Promise<StartChargeOu
     if (written === undefined) throw new Error("a card charge just written was not read back");
     return { kind: "new", charge: toRow(written) };
   });
+}
+
+/** A payment from Square Point of Sale waits in Payments to match for this person, or for whoever pays
+ *  for them (18d-iii-b-ii-a): their card on file waits too, so nobody is charged for a bill they may have
+ *  paid there. Asked under the record's lock, which taking a payment in holds too, for the person Square's
+ *  customer is and everybody they pay for, while it keeps one. */
+export async function squareAppWaitsFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<boolean> {
+  const [row] = await sql<{ id: string }[]>`
+    SELECT w.id FROM gym_square_app_payments w
+    WHERE w.gym_id = ${gymId} AND w.state = 'waiting'
+      AND w.entry_id IN (${entryId}::uuid, (SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.entry_id = ${entryId}))
+    LIMIT 1`;
+  return row !== undefined;
+}
+
+/** Of these people, those `squareAppWaitsFor` holds: a page of Failed payments, read once. */
+export async function squareAppWaitingAmong(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Set<string>> {
+  if (entryIds.length === 0) return new Set();
+  const rows = await sql<{ entry_id: string }[]>`
+    SELECT e.entry_id FROM unnest(${[...entryIds]}::uuid[]) AS e(entry_id)
+    WHERE EXISTS (
+      SELECT 1 FROM gym_square_app_payments w
+      WHERE w.gym_id = ${gymId} AND w.state = 'waiting'
+        AND w.entry_id IN (e.entry_id, (SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.entry_id = e.entry_id)))`;
+  return new Set(rows.map((r) => r.entry_id));
 }
 
 /** One of the record's charges. */
@@ -548,7 +578,13 @@ const appCharges = (sql: SqlOrTx) => sql`
 const chargesNow = (sql: SqlOrTx) => sql`
       d.hour >= 6
       AND NOT EXISTS (SELECT 1 FROM gym_card_charges x WHERE x.gym_id = b.gym_id AND x.held_membership_id = b.held_membership_id AND x.state = 'charging')
-      AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')`;
+      AND NOT EXISTS (SELECT 1 FROM gym_terminal_payments t WHERE t.gym_id = b.gym_id AND t.held_membership_id = b.held_membership_id AND t.state = 'waiting')
+      -- Nobody's card while a payment of theirs, or of whoever pays for them, from Square Point of Sale
+      -- waits to be matched (18d-iii-b-ii-a): the write asks it again under the record's lock.
+      AND NOT EXISTS (
+        SELECT 1 FROM gym_square_app_payments w
+        WHERE w.gym_id = b.gym_id AND w.state = 'waiting'
+          AND w.entry_id IN (h.entry_id, (SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = h.gym_id AND p.entry_id = h.entry_id)))`;
 
 /** The card the app would charge for the bill's membership: its payer's, in the connected account. */
 const payerCard = (sql: SqlOrTx) => sql`

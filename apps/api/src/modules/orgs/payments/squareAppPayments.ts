@@ -1,5 +1,6 @@
-// A PAYMENT TAKEN IN SQUARE'S OWN APP, RECORDED ON THE MEMBER (ROADMAP 18d-iii-b-i; spec Part 3 §14.8;
-// rulings/2026-10-25-18d-iii-b-i.md; the rule is `squareAppDecision` in @app/shared).
+// A PAYMENT TAKEN IN SQUARE'S OWN APP, KEPT FOR STAFF TO MATCH (ROADMAP 18d-iii-b-i, 18d-iii-b-ii-a; spec
+// Part 3 §14.8; rulings/2026-10-25-18d-iii-b-i.md, rulings/2026-10-25-18d-iii-b-ii-a.md; the rule is
+// `squareAppDecision` in @app/shared).
 //
 // Staff take a payment on a Square Reader in Square's own app, pick the person there and type the
 // bill's total. Square's message about it (`payment.created`, `payment.updated`) is a doorbell: the
@@ -7,15 +8,13 @@
 // also asks Square for the gym's payments since its last look, so a payment whose messages never came
 // (our server down longer than Square sends them again) is still taken in.
 //
-// THE WORST THING here is money put on the wrong person's bill, or recorded twice. So a payment is taken
-// in once (unique on Square's own id, under the gym's lock), the app's own Terminal and card on file
-// payments never; it goes to the gym whose Square customer it names, at that gym's own location; only a
-// customer the app keeps for one record of that gym, with every line a typed amount and exactly one bill
-// of exactly one person fitting, is recorded, by the same step Record payment takes; everything else is
-// kept, waiting for staff. A payment Square made before the gym was watched, or more than
-// `SQUARE_APP.keepDays` ago, is never taken in: a refund's message about an old payment is never put
-// on a bill of today's.
-import { randomUUID } from "node:crypto";
+// THE WORST THING here is a member charged twice, or money put on the wrong person's bill. So a payment is
+// taken in once (unique on Square's own id, under the gym's lock), the app's own Terminal and card on file
+// payments never; it goes to the gym whose Square customer it names, at that gym's own location; and none
+// goes on a bill by itself (Kd, 2026-10-25, "one press"): each waits for staff, holding the card on file
+// of the person Square's customer is, and Payments to match ticks the one bill it fits. A payment Square
+// made before the gym was watched, or more than `SQUARE_APP.keepDays` ago, is never taken in. Pages open on
+// the gym are told at once (live news), so the payment is on the person's page while they are at the desk.
 import {
   GYM_PAYMENTS_WORDS,
   SQUARE_APP,
@@ -23,21 +22,22 @@ import {
   chargedWithTaxes,
   squareAppCheckResponseSchema,
   squareAppDecision,
+  squareAppEnteredMinor,
   squareAppLinesOf,
+  squareAppPaidInParts,
   squareOrderAddsOnTop,
   taxesOnTypedAmounts,
   type SquareAppCheck,
   type SquareAppCheckResponse,
   type SquareAppCustomer,
   type SquareAppLines,
+  type SquareCustomer,
   type SquarePayment,
   type SquareTaxFacts,
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
-import { lockGym } from "../memberList/repo.js";
-import { recordPaymentIn } from "../memberships/billsRepo.js";
-import { recordFeePaymentIn } from "../memberships/feesRepo.js";
+import { lockEntries, lockGym } from "../memberList/repo.js";
 import * as repo from "./repo.js";
 import { OrgsError, requireStaff } from "../service.js";
 import { accessContext, readsItems, readsOrders, type PaymentsDeps } from "./service.js";
@@ -56,9 +56,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *  as one whose sale could not be read, so one payment never holds up the gym's hourly look for good. */
 export const ORDER_PATIENCE_MS = 60 * 60_000;
 
-/** The payment was taken in at the same moment under another gym's lock: this one's write is undone. */
-class TakenTwice extends Error {}
-
 /** The token of a gym connected to the account, while it opens. */
 function tokenOf(square: SquareSettings, row: repo.ConnectionRow): string | null {
   return row.state !== "connected" || row.accessToken === null ? null : square.tokens.open(row.accessToken, accessContext(row.gymId));
@@ -73,6 +70,7 @@ export async function takeInSquarePayment(
   paymentId: string,
   firstAskedAt: Date | null = null,
 ): Promise<TakeIn> {
+  // A message about a payment is never the minute a card is charged: Square's order is waited for.
   const rows = await repo.connectionsOfAccount(deps.sql, square.environment, accountId);
   const token = rows.map((row) => tokenOf(square, row)).find((t) => t !== null) ?? null;
   if (token === null) return "done";
@@ -85,20 +83,56 @@ export async function takeInSquarePayment(
   return await takeIn(deps, square, accountId, rows, read.value, firstAskedAt);
 }
 
-/** What Square says was sold with the payment, and whether it added tax or a charge on top of what staff
- *  typed; null for no answer, so it is asked again. */
-async function saleOf(square: SquareSettings, row: repo.ConnectionRow, payment: SquarePayment): Promise<{ lines: SquareAppLines; addedOnTop: boolean } | null> {
-  const unread = { lines: "unread" as const, addedOnTop: false };
+/** What Square says was sold with the payment, whether it added tax or a charge on top of what staff
+ *  typed, and the part staff entered (18d-iii-b-ii-a); null for no answer, so it is asked again. */
+async function saleOf(square: SquareSettings, row: repo.ConnectionRow, payment: SquarePayment): Promise<Sale | null> {
   const token = tokenOf(square, row);
-  if (payment.order_id == null || token === null || !readsOrders(row)) return unread;
+  if (payment.order_id == null || token === null || !readsOrders(row)) return UNREAD;
   const order = await square.api.retrieveOrder(token, payment.order_id);
   if (order.kind === "unavailable") return null;
-  if (order.kind === "refused") return unread;
-  return { lines: squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type)), addedOnTop: squareOrderAddsOnTop(order.value) };
+  if (order.kind === "refused") return UNREAD;
+  return {
+    lines: squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type)),
+    addedOnTop: squareOrderAddsOnTop(order.value),
+    enteredMinor: squareAppEnteredMinor(order.value, { id: payment.id, amountMinor: payment.amount_money.amount }),
+    paidInParts: squareAppPaidInParts(order.value, payment.id),
+  };
+}
+
+interface Sale {
+  lines: SquareAppLines;
+  addedOnTop: boolean;
+  enteredMinor: number | null;
+  paidInParts: boolean;
+}
+
+const UNREAD: Sale = { lines: "unread", addedOnTop: false, enteredMinor: null, paidInParts: false };
+
+/** Square's details of a customer linked to nobody here, shown beside the payment so staff can tell who it
+ *  is (18d-iii-b-ii-a). Nothing where Square can't be asked now: the payment is kept all the same. */
+async function customerOf(square: SquareSettings, row: repo.ConnectionRow, customerId: string): Promise<taken.CustomerSeen | null> {
+  const token = tokenOf(square, row);
+  if (token === null) return null;
+  const read = await square.api.retrieveCustomer(token, customerId);
+  return read.kind === "ok" ? customerSeen(read.value) : null;
+}
+
+const clip = (text: string | null | undefined, max: number): string | null => {
+  const trimmed = (text ?? "").replace(/\s+/g, " ").trim();
+  return trimmed === "" ? null : trimmed.slice(0, max);
+};
+
+/** A person's name as Square has it: their own, else the company's, else a nickname. */
+export function customerSeen(c: SquareCustomer): taken.CustomerSeen | null {
+  const name = clip([c.given_name, c.family_name].filter((part) => clip(part, 200) !== null).join(" "), 200) ?? clip(c.company_name, 200) ?? clip(c.nickname, 200);
+  const seen = { name, email: clip(c.email_address, 320), phone: clip(c.phone_number, 40) };
+  return seen.name === null && seen.email === null && seen.phone === null ? null : seen;
 }
 
 /** One payment of the account, as Square showed it: taken in once, or passed over. `firstAskedAt`: when
- *  the app first asked about it, where it has before (null: now). */
+ *  the app first asked about it, where it has before (null: now). `urgent`: the look right before the gym's
+ *  cards are charged, which keeps a payment of somebody on the list waiting at once even where Square does
+ *  not show its order now, so their card waits with it (round one, High 4). */
 export async function takeIn(
   deps: PaymentsDeps,
   square: SquareSettings,
@@ -106,6 +140,7 @@ export async function takeIn(
   rows: readonly repo.ConnectionRow[],
   payment: SquarePayment,
   firstAskedAt: Date | null = null,
+  urgent = false,
 ): Promise<TakeIn> {
   const environment = square.environment;
   const now = deps.now();
@@ -151,6 +186,10 @@ export async function takeIn(
     last4: payment.card_details?.card?.last_4 ?? null,
     takenAt: madeAt,
     entryId: null,
+    enteredMinor: null,
+    refundedMinor: Math.max(0, payment.refunded_money?.amount ?? 0),
+    customer: null,
+    deviceName: clip(payment.device_details?.device_name, 100),
   };
 
   if (owner === undefined || owner.locationId === null) {
@@ -167,33 +206,43 @@ export async function takeIn(
   const since = await taken.watchingSince(deps.sql, { gymId: owner.gymId, environment, accountId, locationId: owner.locationId, now });
   if (madeAt < since) return "done";
 
-  // Taken at another location of the account than the gym's own: kept for staff, as it is.
-  const atHome = owner.locationId === location;
-  const asked = atHome ? await saleOf(square, owner, payment) : { lines: "unread" as const, addedOnTop: false };
-  if (asked === null && (firstAskedAt ?? now).getTime() > now.getTime() - ORDER_PATIENCE_MS) return "unknown";
-  const sale = asked ?? { lines: "unread" as const, addedOnTop: false };
-  const gym = await repo.readGym(deps.sql, owner.gymId);
-  if (gym === null) return "done";
-  const today = dayInTz(now, gym.timezone);
   const mine = linked.filter((l) => l.gymId === owner.gymId);
   const who: SquareAppCustomer = customer === null ? "none" : mine.length === 0 ? "unknown" : mine.length === 1 ? "one" : "several";
   const entryId = who === "one" ? (mine[0]?.entryId ?? null) : null;
+  // Taken at another location of the account than the gym's own: kept for staff, as it is.
+  const atHome = owner.locationId === location;
+  const asked = atHome ? await saleOf(square, owner, payment) : UNREAD;
+  // Square gave no answer about what was sold: asked again soon, for up to an hour; but right before the
+  // gym's cards are charged, a payment of somebody on the list waits now, as a sale that could not be read.
+  if (asked === null && !(urgent && entryId !== null) && (firstAskedAt ?? now).getTime() > now.getTime() - ORDER_PATIENCE_MS) return "unknown";
+  const sale = asked ?? UNREAD;
+  const gym = await repo.readGym(deps.sql, owner.gymId);
+  if (gym === null) return "done";
+  const today = dayInTz(now, gym.timezone);
+  // A customer linked to nobody here: what Square has of them, for staff to tell who it is (never kept on a
+  // shop sale, which no screen shows: `decideAndKeep`).
+  const customerSeenNow = customer !== null && who === "unknown" && sale.lines !== "items" ? await customerOf(square, owner, customer) : null;
+  const kept = { ...facts, enteredMinor: sale.enteredMinor, customer: customerSeenNow };
 
-  try {
-    await deps.sql.begin(async (tx) => {
-      await decideAndKeep(deps, tx, { payment, owner, facts, entryId, atHome, sale, who, today, now });
-    });
-  } catch (e) {
-    // Another look took it in at the same moment for another gym: theirs stands, this one is undone.
-    if (e instanceof TakenTwice) return "done";
-    throw e;
-  }
+  const waits = await deps.sql.begin(async (tx) => await decideAndKeep(tx, { payment, owner, facts: kept, entryId, atHome, sale, who, today, now }));
+  if (waits) await tellTaken(deps, owner.gymId, entryId);
   return "done";
 }
 
-/** Under the gym's lock: kept waiting, a shop sale, or recorded on the one bill it fits. */
+/** A payment now waits: Payments to match, Overview and the menu read again, and the page of the person it
+ *  holds the card of, and of everybody they pay for (whose page shows it too). */
+async function tellTaken(deps: PaymentsDeps, gymId: string, entryId: string | null): Promise<void> {
+  const news = deps.news;
+  if (news === undefined) return;
+  news.tell(gymId, { what: "paymentsToMatch" });
+  if (entryId === null) return;
+  const paidFor = await deps.sql<{ entry_id: string }[]>`SELECT entry_id FROM gym_member_payers WHERE gym_id = ${gymId} AND payer_entry_id = ${entryId}`;
+  for (const id of [entryId, ...paidFor.map((r) => r.entry_id)]) news.tell(gymId, { what: "memberships", entryId: id });
+}
+
+/** Under the gym's lock, and the record's of the person Square's customer is and of everybody they pay for
+ *  (the lock a card charge takes): kept waiting for staff, or a shop sale. True where it was kept waiting now. */
 async function decideAndKeep(
-  deps: PaymentsDeps,
   tx: TransactionSql,
   d: {
     payment: SquarePayment;
@@ -201,69 +250,46 @@ async function decideAndKeep(
     facts: taken.TakenPayment;
     entryId: string | null;
     atHome: boolean;
-    sale: { lines: SquareAppLines; addedOnTop: boolean };
+    sale: Sale;
     who: SquareAppCustomer;
     today: string;
     now: Date;
   },
-): Promise<void> {
+): Promise<boolean> {
   const { payment, owner, facts, entryId, atHome, sale, who, today, now } = d;
   const { environment, accountId } = facts;
   // The gym's lock first, as every payment by hand takes it: two messages about one payment, or a
   // message and the hourly look, decide one after the other, and the second finds the first's row.
   await lockGym(tx, owner.gymId);
-  if (await taken.known(tx, environment, accountId, payment.id)) return;
+  if (entryId !== null) {
+    const paidFor = await tx<{ entry_id: string }[]>`SELECT entry_id FROM gym_member_payers WHERE gym_id = ${owner.gymId} AND payer_entry_id = ${entryId}`;
+    await lockEntries(tx, owner.gymId, [entryId, ...paidFor.map((r) => r.entry_id)]);
+  }
+  if (await taken.known(tx, environment, accountId, payment.id)) return false;
   const kept = { ...facts, entryId };
   // Money Square has given back on it, in part or in whole: never on a bill (refunds are 18d-iv's).
-  if ((payment.refunded_money?.amount ?? 0) > 0) {
-    await taken.insertTaken(tx, kept, { state: "waiting", reason: "refunded" }, now);
-    return;
-  }
-  if (!atHome) {
-    await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now);
-    return;
-  }
+  if ((payment.refunded_money?.amount ?? 0) > 0) return await taken.insertTaken(tx, kept, { state: "waiting", reason: "refunded" }, now);
+  if (!atHome) return await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now);
   // Another money than the gym's own: no bill of the gym's is that amount.
   const sameMoney = payment.amount_money.currency === owner.currency;
   const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
-  const decision = squareAppDecision({ ...sale, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
-  if (decision.kind === "shop_sale") {
-    await taken.insertTaken(tx, kept, { state: "shop_sale" }, now);
-    return;
-  }
-  if (decision.kind === "wait") {
-    await taken.insertTaken(tx, kept, { state: "waiting", reason: decision.reason }, now);
-    return;
-  }
-  const { candidate } = decision;
-  const recordKey = randomUUID();
-  const paying = {
-    gymId: owner.gymId,
-    entryId: candidate.entryId,
-    membershipId: candidate.target.membershipId,
-    requestKey: recordKey,
+  const decision = squareAppDecision({
+    lines: sale.lines,
+    addedOnTop: sale.addedOnTop,
+    enteredMinor: sale.enteredMinor,
+    paidInParts: sale.paidInParts,
+    customer: who,
     amountMinor: payment.amount_money.amount,
-    method: "square_app" as const,
-    provider: { name: "square", paymentId: payment.id },
     today,
-    actorUserId: null,
-    now,
-  };
-  const done =
-    candidate.target.kind === "fee"
-      ? await recordFeePaymentIn(tx, { ...paying, billId: candidate.target.billId })
-      : await recordPaymentIn(tx, { ...paying, periodIndex: candidate.target.periodIndex });
-  if (done.kind === "recorded") {
-    // Unique on Square's own id: kept already by a look that chose another gym, under that gym's lock.
-    if (!(await taken.insertTaken(tx, { ...kept, entryId: candidate.entryId }, { state: "recorded", memberPaymentId: done.paymentId, recordKey }, now))) {
-      throw new TakenTwice();
-    }
-    return;
+    candidates,
+  });
+  if (decision.kind === "shop_sale") {
+    // Nobody's details are kept on a shop sale: no screen shows it, and it is no bill's.
+    await taken.insertTaken(tx, { ...kept, customer: null }, { state: "shop_sale" }, now);
+    return false;
   }
-  // The rule read these bills under this same lock, so a refusal here is a fault of ours: kept for
-  // staff, and said in the log.
-  deps.log.error({ event: "square.app_payment_refused", gymId: owner.gymId, why: done.kind }, "a payment taken in Square's app could not be recorded on the bill it fitted");
-  await taken.insertTaken(tx, kept, { state: "waiting", reason: "no_bill" }, now);
+  // Unique on Square's own id: false where a look that chose another gym kept it first, and theirs stands.
+  return await taken.insertTaken(tx, kept, { state: "waiting", reason: decision.reason }, now);
 }
 
 // ── The hourly look ──────────────────────────────────────────────────────────
@@ -275,8 +301,9 @@ export interface SweepRun {
   unanswered: number;
 }
 
-/** Each gym's look that is due: its Square payments since the last, at its location, oldest first. */
-export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSettings, gymIds: readonly string[] | null): Promise<SweepRun> {
+/** Each gym's look that is due: its Square payments since the last, at its location, oldest first.
+ *  `urgent`: the look right before the gym's cards are charged (`takeIn`). */
+export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSettings, gymIds: readonly string[] | null, urgent = false): Promise<SweepRun> {
   const run: SweepRun = { looked: 0, payments: 0, unanswered: 0 };
   const environment = square.environment;
   await taken.watchConnected(deps.sql, environment, deps.now(), gymIds);
@@ -315,7 +342,7 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
       for (const payment of listed.value.payments) {
         run.payments += 1;
         const askedSince = sweep.stuck?.paymentId === payment.id ? sweep.stuck.since : null;
-        if ((await takeIn(deps, square, sweep.accountId, rows, payment, askedSince)) === "unknown") {
+        if ((await takeIn(deps, square, sweep.accountId, rows, payment, askedSince, urgent)) === "unknown") {
           stopped = true;
           run.unanswered += 1;
           stuck = { paymentId: payment.id, since: askedSince ?? now };
@@ -334,6 +361,19 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
     await taken.finishSweep(deps.sql, sweep, finished ? until : reached, new Date(now.getTime() + next), stuck);
   }
   return run;
+}
+
+/** A gym's Square payments, looked at right before its cards on file are charged, are looked at again
+ *  only once the last look is this old (`lookNowIfOlder`). */
+export const LOOK_BEFORE_CHARGING_MS = 5 * 60_000;
+
+/** Right before a gym's cards on file are charged: its Square payments since the last look, now, so a
+ *  payment taken at the desk whose message from Square is late (or lost) is kept waiting first and holds
+ *  that member's card. Fewer charged twice, not none: Square's list can be a minute behind, and a payment
+ *  with nobody picked holds no card. Null where the gym was looked at less than five minutes ago. */
+export async function lookBeforeCharging(deps: PaymentsDeps, square: SquareSettings, gymId: string): Promise<SweepRun | null> {
+  if (!(await taken.lookNowIfOlder(deps.sql, square.environment, gymId, deps.now(), LOOK_BEFORE_CHARGING_MS))) return null;
+  return await sweepSquarePayments(deps, square, [gymId], true);
 }
 
 // ── The tax check ────────────────────────────────────────────────────────────

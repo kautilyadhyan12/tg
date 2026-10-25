@@ -6,14 +6,21 @@ import { useConsoleOrg } from './useConsoleOrg';
 import { useConsoleSignOut } from './consoleSignOut';
 import { consoleMenu } from './consoleMenu';
 import { roleLabel, viewerPrivileges } from './consoleView';
+import { usePaymentsToMatchCount } from './usePaymentsToMatchCount';
 
-function Row({ to, icon: Icon, label }) {
+function Row({ to, icon: Icon, label, count = 0 }) {
   return (
     <Link to={to} className="c-row">
       <Icon size={22} className="c-t2" />
       <span className="c-s16 c-w6" style={{ flexGrow: 1 }}>
         {label}
       </span>
+      {count > 0 ? (
+        <span className="c-tag c-tag-warn" data-testid="more-count">
+          {count}
+          <span className="sr-only">{count === 1 ? ' payment to match' : ' payments to match'}</span>
+        </span>
+      ) : null}
       <ChevronRight size={18} className="c-t3" />
     </Link>
   );
@@ -29,6 +36,8 @@ export default function More() {
   const { signingOut, signOut } = useConsoleSignOut();
 
   const menu = consoleMenu(orgSlug, viewerPrivileges(org), org?.orgType);
+  // Payments to match's count, as the menu on a computer shows it (18d-iii-b-ii-a).
+  const toMatch = usePaymentsToMatchCount(org);
   const name = user?.displayName || user?.email || '';
   const about = org ? [roleLabel(org.staffRole, org.orgType, org.coOwner), org.name].filter(Boolean).join(' · ') : '';
 
@@ -38,7 +47,7 @@ export default function More() {
 
       <nav aria-label="More" data-testid="console-more" className="c-card" style={{ overflow: 'hidden' }}>
         {menu.more.map((page) => (
-          <Row key={page.key} to={page.to} icon={PAGE_ICONS[page.key]} label={page.label} />
+          <Row key={page.key} to={page.to} icon={PAGE_ICONS[page.key]} label={page.label} count={page.key === 'payments-to-match' ? toMatch : 0} />
         ))}
         <Row to="/console" icon={Building2} label="Your organisations" />
       </nav>

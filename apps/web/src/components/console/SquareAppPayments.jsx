@@ -3,6 +3,8 @@ import { AlertTriangle, CheckCircle2, Circle, HelpCircle, Info, Loader2 } from '
 import { SQUARE_APP_WORDS, formatMinor, squareTaxName, squareTaxesToOpen } from '@app/shared';
 import { orgService } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
+import { viewerPrivileges } from '../../pages/console/consoleView';
+import { placeFor } from '../../pages/console/consolePlaces';
 import PlaceLink from './PlaceLink';
 import ScreenWords from './ScreenWords';
 
@@ -185,6 +187,7 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
     </PlaceLink>
   );
   const setTax = (c) => (c.canSetTax ? taxPlace(W.setTaxButton) : <Line soft>{W.setTaxWho}</Line>);
+  const toMatchTo = placeFor(org.slug, viewerPrivileges(org), 'paymentsToMatch');
 
   let taxStep;
   if (check === null && !failed) {
@@ -285,12 +288,22 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
             </div>
           ) : null}
         </Step>
+        <Step icon="each" title={W.deviceTitle} testId="square-device-step">
+          <Line>{W.deviceDetail}</Line>
+          <Words text={W.devicePath} />
+        </Step>
       </ul>
       <div className="flex flex-col gap-1">
         <Line soft>{W.cardSaved}</Line>
         <Words text={W.others} soft />
-        <Line soft>{W.notShown}</Line>
-        <Line soft>{W.items}</Line>
+        <Words text={W.notShown} soft />
+        <Words text={W.items} soft />
+        {/* Payments that wait are matched there (18d-iii-b-ii-a): the button opens it, for whoever may. */}
+        {toMatchTo !== null ? (
+          <PlaceLink to={toMatchTo} className="c-btn c-btn-s c-btn-sm self-start mt-1">
+            {W.toList}
+          </PlaceLink>
+        ) : null}
       </div>
     </section>
   );

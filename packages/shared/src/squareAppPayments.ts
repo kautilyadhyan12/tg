@@ -1,17 +1,16 @@
-// A PAYMENT TAKEN IN SQUARE'S OWN APP, RECORDED ON THE MEMBER (ROADMAP 18d-iii-b-i; spec Part 3 §14.8;
-// rulings/2026-10-25-18d-iii-b-i.md).
+// A PAYMENT TAKEN IN SQUARE'S OWN APP (ROADMAP 18d-iii-b-i, 18d-iii-b-ii-a; spec Part 3 §14.8;
+// rulings/2026-10-25-18d-iii-b-i.md, rulings/2026-10-25-18d-iii-b-ii-a.md).
 //
 // Staff take the payment on a Square Reader in Square's own app, picking the person there and typing
-// the bill's total. Square's message about it names Square's customer; where that customer is the one
-// the app keeps for a record on the gym's list, and the amount is exactly what is left on one of that
-// person's bills, the payment is recorded on it by itself.
+// the bill's total. Square's customer on it says who paid, never what for (a $50 deposit for something
+// else is not a $50 membership bill), so nothing taken there goes on a bill by itself (Kd, 2026-10-25:
+// "one press"): each payment waits in Payments to match, and where Square says every line was a typed
+// amount, its customer is one record's, and exactly one bill of exactly one person fits, due within a
+// week, it waits `ready`, that bill ticked for one press of Match.
 //
-// THE WORST THING here is money put on the wrong person's bill, or recorded twice. So the rule is built
-// the safe way round: a payment is recorded only where Square says every line was a typed amount (not
-// an item from the gym's list in Square), its customer is one record's, and exactly one bill of exactly
-// one person fits, due within a week; anything else waits for staff, never guessed and never dropped.
-// Stripe matches a bank transfer the same way: "the oldest open invoice where the amount precisely
-// matches", and what it cannot match "remains ... until you manually reconcile it" (read 2026-10-24).
+// THE WORST THING here is a member charged twice: their card on file charged for a bill they paid at the
+// desk. While a payment of theirs waits their card is not charged, and a sale of shop items for somebody
+// who owes at least that much waits too (`shop_items`): a membership can be rung up as an item.
 import { z } from "zod";
 import { addDays } from "./heldMemberships.js";
 
@@ -62,12 +61,16 @@ export interface SquareAppCandidate {
   busy: boolean;
 }
 
-/** Why a payment waits for staff. The first three are about the person, the next three about what was
- *  sold (`square_tax`: Square added tax or a charge on top of what staff typed), the rest about the bills;
- *  `other_location`, `several_gyms`, `not_this_bill` and `refunded` are set where the payment is taken in
- *  (another location of the account; a location two gyms here use; staff took it off a bill; Square had
- *  given money back on it before it was taken in). */
+/** Why a payment waits for staff. `ready`: one bill fits, ticked for one press. The next three are about
+ *  the person, the next three about what was sold (`square_tax`: Square added tax or a charge on top of
+ *  what staff typed, and did not show the part typed), the rest about the bills; `shop_items`: items from
+ *  the gym's list in Square, for somebody owing at least that much this week; `paid_in_parts`: the sale
+ *  was paid with more than one payment, so how much of this one is for a bill is the desk's to say; `other_location`,
+ *  `several_gyms`, `not_this_bill` and `refunded` are set where the payment is taken in (another location
+ *  of the account; a location two gyms here use; staff took it off a bill; Square had given money back on
+ *  it before it was taken in). */
 export const SQUARE_APP_WAIT_REASONS = [
+  "ready",
   "no_customer",
   "not_linked",
   "several_people",
@@ -83,39 +86,55 @@ export const SQUARE_APP_WAIT_REASONS = [
   "several_gyms",
   "not_this_bill",
   "refunded",
+  "shop_items",
+  "paid_in_parts",
 ] as const;
 export type SquareAppWaitReason = (typeof SQUARE_APP_WAIT_REASONS)[number];
 
 export type SquareAppDecision =
-  | { kind: "record"; candidate: SquareAppCandidate }
   | { kind: "wait"; reason: SquareAppWaitReason }
-  /** Items from the gym's list in Square: a shop sale, which stays in Square and is no bill's. */
+  /** Items from the gym's list in Square, bought by nobody owing that much: a shop sale, which stays in
+   *  Square and is no bill's. */
   | { kind: "shop_sale" };
 
 const order = (a: SquareAppCandidate, b: SquareAppCandidate): number => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : 0);
 
-/** What becomes of a payment taken in Square's own app. `amountMinor` is Square's amount without
- *  any tip. */
+/** Why a payment taken in Square's own app waits, or that it is a shop sale. `amountMinor` is Square's
+ *  amount without any tip; `enteredMinor` the part staff typed, where Square shows it
+ *  (`squareAppEnteredMinor`). */
 export function squareAppDecision(p: {
   lines: SquareAppLines;
   /** Square added tax or a charge on top of what staff typed (`squareOrderAddsOnTop`). */
   addedOnTop: boolean;
+  enteredMinor: number | null;
+  /** The sale was paid with more than one payment (`squareAppPaidInParts`). */
+  paidInParts: boolean;
   customer: SquareAppCustomer;
   amountMinor: number;
   today: string;
   candidates: readonly SquareAppCandidate[];
 }): SquareAppDecision {
-  if (p.lines === "items") return { kind: "shop_sale" };
+  const last = addDays(p.today, SQUARE_APP.aheadDays);
+  if (p.lines === "items") {
+    // A membership rung up as an item: a sale for the one person Square's customer is, of at least a bill
+    // of theirs (or of somebody they pay for) due within the week, waits, so their card is not charged for
+    // that bill as well. Anybody else's is a shop sale.
+    const owes = p.customer === "one" && p.candidates.some((c) => c.dueOn <= last && c.leftMinor > 0 && c.leftMinor <= p.amountMinor);
+    return owes ? { kind: "wait", reason: "shop_items" } : { kind: "shop_sale" };
+  }
   if (p.customer === "none") return { kind: "wait", reason: "no_customer" };
   if (p.customer === "unknown") return { kind: "wait", reason: "not_linked" };
   if (p.customer === "several") return { kind: "wait", reason: "several_people" };
   if (p.lines === "mixed") return { kind: "wait", reason: "mixed_sale" };
   if (p.lines === "unread") return { kind: "wait", reason: "sale_unread" };
-  // The money taken is not what staff typed: never matched to a bill, whatever it comes to.
-  if (p.addedOnTop) return { kind: "wait", reason: "square_tax" };
+  // One payment of several for one sale: never a bill's whole, whatever it comes to.
+  if (p.paidInParts) return { kind: "wait", reason: "paid_in_parts" };
+  // Square added tax or a charge on top: what goes on a bill is the part staff typed, where Square shows
+  // it; where it does not, staff say how much.
+  if (p.addedOnTop && p.enteredMinor === null) return { kind: "wait", reason: "square_tax" };
+  const amount = p.enteredMinor ?? p.amountMinor;
 
-  const same = p.candidates.filter((c) => c.leftMinor === p.amountMinor);
-  const last = addDays(p.today, SQUARE_APP.aheadDays);
+  const same = p.candidates.filter((c) => c.leftMinor === amount);
   const due = [...same.filter((c) => c.dueOn <= last)].sort(order);
   const first = due[0];
   if (first === undefined) return { kind: "wait", reason: same.length > 0 ? "too_early" : "no_bill" };
@@ -125,7 +144,7 @@ export function squareAppDecision(p: {
   if (due[1] !== undefined && due[1].dueOn === first.dueOn) return { kind: "wait", reason: "several_bills" };
   if (first.busy) return { kind: "wait", reason: "busy" };
   if (first.dueOn > p.today && first.paidJustBefore) return { kind: "wait", reason: "maybe_twice" };
-  return { kind: "record", candidate: first };
+  return { kind: "wait", reason: "ready" };
 }
 
 /** Square added something on top of what staff typed: a tax added to the price (ADDITIVE, as US and
@@ -137,6 +156,39 @@ export function squareOrderAddsOnTop(order: {
 }): boolean {
   const taxed = (order.taxes ?? []).some((t) => t.type !== "INCLUSIVE" && (t.applied_money?.amount ?? 0) > 0);
   return taxed || (order.total_service_charge_money?.amount ?? 0) > 0;
+}
+
+/** What Square added on top of what staff typed, in all: its taxes added to the price and its charges. */
+export function squareOrderAddedMinor(order: Parameters<typeof squareOrderAddsOnTop>[0]): number {
+  const taxes = (order.taxes ?? []).filter((t) => t.type !== "INCLUSIVE").reduce((sum, t) => sum + Math.max(0, t.applied_money?.amount ?? 0), 0);
+  return taxes + Math.max(0, order.total_service_charge_money?.amount ?? 0);
+}
+
+/** The part of a payment staff entered as an amount, without what Square added on top (18d-iii-b-ii-a):
+ *  what Match puts on a bill. Told only where every line of the sale was a typed amount and this one
+ *  payment paid the whole of it (the order's one tender names it); null where it cannot be told (items
+ *  in the sale, the sale paid in parts, the order unread), and staff then say how much is for the bill.
+ *  `amountMinor` is the payment's own, without its tip, as Square keeps the tip apart. */
+export function squareAppEnteredMinor(
+  order: Parameters<typeof squareOrderAddsOnTop>[0] & {
+    line_items?: readonly { item_type?: string | null | undefined }[] | null | undefined;
+    tenders?: readonly { payment_id?: string | null | undefined }[] | null | undefined;
+  },
+  payment: { id: string; amountMinor: number },
+): number | null {
+  if (squareAppLinesOf((order.line_items ?? []).map((line) => line.item_type)) !== "typed") return null;
+  const tenders = order.tenders ?? [];
+  if (tenders.length !== 1 || tenders[0]?.payment_id !== payment.id) return null;
+  const entered = payment.amountMinor - squareOrderAddedMinor(order);
+  return entered > 0 ? entered : null;
+}
+
+/** The sale was paid with more than this one payment (Square's split tender): the order's tenders are not
+ *  this payment alone. An order whose tenders Square did not show counts as paid in parts, so a part is
+ *  never taken for the whole. */
+export function squareAppPaidInParts(order: { tenders?: readonly { payment_id?: string | null | undefined }[] | null | undefined }, paymentId: string): boolean {
+  const tenders = order.tenders ?? [];
+  return tenders.length !== 1 || tenders[0]?.payment_id !== paymentId;
 }
 
 /** A tax in the business's own Square item library, as the check reads it. */
@@ -232,7 +284,7 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
  *  (Square's product manager, 2022-05-03), so Square is never said to ask by itself, and staff can skip it. */
 export const SQUARE_APP_WORDS = {
   heading: "Square Point of Sale",
-  how: "Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app. When the amount is exactly what the bill says, it usually appears on the member's bill here afterwards.",
+  how: "Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app. It then appears here on the member's page and in Payments to match, with their bill ticked, and one press of Match puts it on the bill.",
   listLead: "To make this work:",
   needsFixing: "Needs fixing",
   done: "Done",
@@ -241,7 +293,7 @@ export const SQUARE_APP_WORDS = {
   taxNoneDetail: "The member pays exactly what the bill says.",
   taxAddsTitle: "Square adds tax to the amount you enter",
   taxAddsDetail: "Square adds {taxes} to manually entered amounts. For a {bill} bill, the member would be charged {charged}.",
-  taxAddsWhy: "This does not match the bill total, so the payment will not be applied to the member's bill. If the bill already includes tax, the member will be charged tax twice.",
+  taxAddsWhy: "The member pays more than the bill says. If the bill already includes tax, the member is charged tax twice.",
   howToFix: "How to fix",
   hideSteps: "Hide the steps",
   fixSquareTitle: "1. Turn off Square's tax on manually entered amounts",
@@ -267,17 +319,22 @@ export const SQUARE_APP_WORDS = {
   setTaxWho: "The owner, or a manager who can change prices, can set it in Memberships.",
   pickTitle: "Select the member for every sale",
   pickDetail: "In Square Point of Sale, tap [Add a customer] and select the member before taking payment.",
-  pickSkip: "Square allows staff to skip this step. If no member is selected, the payment will not be applied to the bill automatically, and you will need to record it manually.",
+  pickSkip: "Square allows staff to skip this step. If no member is selected, the payment waits in Payments to match as Unknown, and you choose who paid there.",
   pickHow: "Can't find Add a customer?",
   pickPath: "In Square Point of Sale: [More] → [Settings] → [Checkout] → [Customer management].",
   pickDo: "Enable customer management. Then, under [Collect customer information], turn on [Before checkout].",
-  cardSaved: "For members who have a card on file here, the payment is usually applied to their bill automatically when they are selected as the customer and the amount is exactly what the bill says.",
-  others: "For anyone else, or for a sale where no member is selected, Square will process the payment as usual. Then open their bill here, click [Record payment], and select [Card at the desk].",
-  /** A payment that waits (paid early, Square's tax added, two bills that day…) is shown and matched in
-   *  18d-iii-b-ii; until then the bill is recorded by hand, and its saved card is then not charged for it
-   *  (review round one, Kd's "B"). */
-  notShown: "If a payment does not appear on the member's bill a few minutes after it was taken, record it there the same way.",
-  items: "Shop items sold from your Square item list are never added to a bill.",
+  /** Every payment from Square Point of Sale waits in Payments to match until staff match it (18d-iii-b-ii-a;
+   *  Kd, 2026-10-25, "one press"): ticked where the app can tell the bill, chosen where it cannot. */
+  cardSaved: "For members who have a card on file here, selecting them is enough: their payment appears on their page with their bill ticked, and their card on file is not charged until it is matched.",
+  others: "For anyone else, or a sale where no member is selected, Square takes the payment as usual. It waits in [Payments to match], where you choose who paid.",
+  notShown: "Every payment taken in Square Point of Sale waits in [Payments to match] until it is matched.",
+  toList: "Open Payments to match",
+  items: "Shop items sold from your Square item list stay in Square's own reports. A sale of items for a member with a bill due this week also waits in [Payments to match], in case it paid that bill.",
+  /** Which device took each payment (Square's Payment `device_details.device_name`), so each desk matches its
+   *  own; named on each device (Square's help article 8245, "Edit or rename your device", read 2026-10-25). */
+  deviceTitle: "Give each device a name",
+  deviceDetail: "Payments to match shows which device took each payment, so each desk can match its own. Use names like Front desk 1.",
+  devicePath: "On each phone, tablet or Register, in Square Point of Sale: [More] → [Settings] → [Hardware] → [General] → [About], then [Device Name].",
   needsAllowTitle: "Square needs your permission first",
   needsAllow: "Press [Reconnect Square], then [Allow] on Square's page. Nothing else changes.",
   ownerOnly: (gym: string): string => `The owner of ${gym} needs to reconnect Square first.`,

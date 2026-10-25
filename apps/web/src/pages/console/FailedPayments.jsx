@@ -39,7 +39,7 @@ const newKey = () => globalThis.crypto.randomUUID();
 /** One failed payment: who, what for, how much, the facts of the decline, and what can be done
  *  here: Try again where the card can be charged now, Add a new card (the card box of the person's
  *  page, under the row, then the charge in the same place), Take payment, and their page. */
-function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onStale, onCardSaved }) {
+function Row({ row, org, readOnly, toMatchTo, onOpenPerson, onTakePayment, onCharged, onStale, onCardSaved }) {
   /** What is open under the row: 'charge', 'card', or 'saved' (a card just added: the charge box
    *  opens by itself once the list says it can be charged). */
   const [opened, setOpened] = useState(null);
@@ -113,6 +113,11 @@ function Row({ row, org, readOnly, onOpenPerson, onTakePayment, onCharged, onSta
               <CreditCard aria-hidden="true" className="w-4 h-4" />
               Add a new card
             </button>
+          ) : null}
+          {row.retry.kind === 'no' && row.retry.why === 'square_app' && toMatchTo !== null && !state.done ? (
+            <PlaceLink to={toMatchTo} className="c-btn c-btn-p c-btn-lg">
+              Open Payments to match
+            </PlaceLink>
           ) : null}
           {!state.done ? (
             <button type="button" className="c-btn c-btn-s c-btn-lg" disabled={readOnly} onClick={() => onTakePayment(row)}>
@@ -336,6 +341,7 @@ export default function FailedPayments() {
                     row={row}
                     org={org}
                     readOnly={readOnly}
+                    toMatchTo={placeFor(orgSlug, privileges, 'paymentsToMatch')}
                     onOpenPerson={openPerson}
                     onTakePayment={(r) => openPerson(r.entryId, { membershipId: r.membershipId, feeBillId: r.fee === null ? null : r.billId })}
                     onCharged={recount}

@@ -11,6 +11,7 @@ import { canReadReports } from './reportsView';
 import { canSeeAtRisk } from './atRiskView';
 import { canOpenSell } from './sellView';
 import { canSeeFailedPayments } from './failedPaymentsAccess';
+import { canMatchPayments } from './paymentsToMatchAccess';
 
 /** Settings holds sections gated on two permissions (the gym's details: `org.manage`;
  *  Booking rules: `schedule.manage`), so its page is drawn for whoever holds either.
@@ -47,6 +48,9 @@ export function consoleMenu(orgSlug, privileges, orgType) {
     canOpenSell(privileges) && { key: 'sell', to: `${base}/sell`, end: false, label: 'Sell', phone: 'more' },
     // Card payments declined and still owed (18d-iii-ii-b): looked at every week, beside Sell.
     canSeeFailedPayments(privileges) && { key: 'failed-payments', to: `${base}/failed-payments`, end: false, label: 'Failed payments', phone: 'more' },
+    // Payments from Square Point of Sale that did not go on a bill by themselves (18d-iii-b-ii-a): matched
+    // every week by a gym that takes payments there, beside Failed payments.
+    canMatchPayments(privileges) && { key: 'payments-to-match', to: `${base}/payments-to-match`, end: false, label: 'Payments to match', phone: 'more' },
     has('members.confirm') && { key: 'leads', to: `${base}/leads`, end: false, label: 'Leads', phone: 'more' },
     canReadAttendance(privileges) && {
       key: 'attendance',

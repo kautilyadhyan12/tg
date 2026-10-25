@@ -23,6 +23,7 @@ import {
   saleSummary,
   soldWords,
   rowsOfKind,
+  SQUARE_APP_SHOP_NOTE,
   takingsNotes,
   takingsPaymentsNote,
   takingsRows,
@@ -120,6 +121,14 @@ describe("the day's takings by kind (18q-ii)", () => {
     expect(takingsNotes(moved, 'memberships')).toEqual(['1 sale or payment today was taken in another currency. It is listed below and not added to the total above.']);
     expect(takingsWords(moved)).toBe('Taken today: £0.00.');
     expect(takingsWords(moved, 'products')).toBe('No product sales yet today.');
+  });
+  it('a gym that takes payments in Square Point of Sale is told its shop sales there are in Square, where products are counted (18d-iii-b-ii-a)', () => {
+    const square = day({ squareApp: true });
+    expect(takingsNotes(square)).toContain(SQUARE_APP_SHOP_NOTE);
+    expect(takingsNotes(square, 'products')).toContain(SQUARE_APP_SHOP_NOTE);
+    expect(takingsNotes(square, 'memberships')).not.toContain(SQUARE_APP_SHOP_NOTE);
+    expect(takingsNotes(day())).not.toContain(SQUARE_APP_SHOP_NOTE);
+    expect(SQUARE_APP_SHOP_NOTE).toBe("Shop items sold in Square Point of Sale aren't listed here. They are in your Square Dashboard's reports.");
   });
   it('each tab notes only its own tax, refunds and left-out rows', () => {
     expect(takingsNotes(day(), 'products')).toEqual(['$0.16 of the product sales is tax.']);

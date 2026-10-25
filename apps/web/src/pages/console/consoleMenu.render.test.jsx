@@ -45,6 +45,8 @@ function openableToday(privileges) {
     ...(has('billing.members') || has('memberships.manage') ? [`${BASE}/sell`] : []),
     // Failed payments (18d-iii-ii-b): its own page, for whoever reads people and records payments.
     ...(has('members.read') && has('billing.members') ? [`${BASE}/failed-payments`] : []),
+    // Payments to match (18d-iii-b-ii-a): beside it, for the same people.
+    ...(has('members.read') && has('billing.members') ? [`${BASE}/payments-to-match`] : []),
     ...(has('members.confirm') ? [`${BASE}/leads`] : []),
     ...(has('attendance.read') ? [`${BASE}/attendance`] : []),
     // At risk (20d-i): its own page, for whoever may see the gym's people.
