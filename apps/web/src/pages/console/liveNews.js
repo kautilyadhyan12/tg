@@ -15,7 +15,8 @@ import { refreshSession } from '../../api/authApi';
 // (404): no line, and nothing is retried.
 //
 // Besides the server's messages a listener hears two of this file's own: `refused` ({ message }),
-// while the server will not open the line, and `cameBack`, when the tab comes back on screen
+// whenever the server refused the line, or it could not be opened twice in a row (the server or the
+// network is down), so the page says so and checks for itself until `ready`; and `cameBack`, when the tab comes back on screen
 // without a line, so the page reads again as it did before live updates.
 
 const WAITS_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
@@ -158,6 +159,8 @@ async function connect(line) {
   } catch {
     if (!mine()) return;
     line.controller = null;
+    // One failed try (a blip as the line reopens) is not said; the second in a row is.
+    if (line.failures >= 1) deliver(line, { what: 'refused', message: LIVE_WORDS.unreachable });
     tryLater(line);
     return;
   }
@@ -182,7 +185,7 @@ async function connect(line) {
   }
   if (!res.ok || res.body == null) {
     const refused = res.status === 429 || res.status === 503;
-    const words = refused ? await refusalWords(res) : null;
+    const words = refused ? await refusalWords(res) : line.failures >= 1 ? LIVE_WORDS.unreachable : null;
     if (!mine()) return;
     line.controller = null;
     if (words !== null) deliver(line, { what: 'refused', message: words });
@@ -266,4 +269,19 @@ export function useLiveNews(gymId, onMessage, active = true) {
     if (!active || !gymId) return undefined;
     return listenLive(gymId, (message) => latest.current(message));
   }, [gymId, active]);
+}
+
+/** How long until the gym's next midnight, so a page showing "today" or "this week" reads once as
+ *  the gym's day turns, with nobody having changed anything. At least a second; null for a time
+ *  zone the browser cannot read. */
+export function msToGymMidnight(timezone, now = new Date()) {
+  let parts;
+  try {
+    parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  } catch {
+    return null;
+  }
+  const part = (type) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const into = (part('hour') * 3600 + part('minute') * 60 + part('second')) * 1000 + now.getMilliseconds();
+  return Math.max(1_000, 86_400_000 - into);
 }

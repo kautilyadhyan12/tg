@@ -25,6 +25,8 @@ import {
   updateProfileRequestSchema,
 } from "./schemas.js";
 import * as service from "./service.js";
+import { tellGyms, tellMembersGyms, tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
+import { gymsOfMember } from "../live/repo.js";
 
 /** Zod-parse a body; 400 with issue paths/codes only — never echo values (R3.10). */
 function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest, reply: FastifyReply): T | null {
@@ -70,7 +72,7 @@ function parseTimeZone(req: FastifyRequest, reply: FastifyReply): string | null 
 
 export function registerUserRoutes(
   app: FastifyInstance,
-  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: UsersEmailSender; now?: () => Date },
+  deps: { sql: Sql; config: AppConfig; redis: RedisLike; emailSender?: UsersEmailSender; news: LiveNewsSender; now?: () => Date },
 ): void {
   const usersDeps: service.UsersDeps = {
     sql: deps.sql,
@@ -95,7 +97,18 @@ export function registerUserRoutes(
   app.patch("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
     const patch = parseBody(updateProfileRequestSchema, req, reply);
     if (patch === null) return;
+    // What a gym shows, before, when it is sent: only a change is news to the person's gyms.
+    const shown = patch.displayName !== undefined || patch.leaderboardOptOut !== undefined;
+    const before = shown ? await service.getProfile(usersDeps, authedUserId(req)) : null;
     const user = await service.updateProfile(usersDeps, authedUserId(req), patch);
+    // A name changed: the gyms that show it (the check-in log, Who came, the Leaderboard) read again.
+    if (before !== null && user.displayName !== before.displayName) {
+      tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+    }
+    // Hide me changed here: the leaderboards read again, as `PUT /v1/users/me/leaderboard` tells them.
+    if (before !== null && user.leaderboardOptOut !== before.leaderboardOptOut) {
+      tellMembersLeaderboards(deps.sql, deps.news, app.log, authedUserId(req));
+    }
     return reply.status(200).send({ user });
   });
 
@@ -113,7 +126,14 @@ export function registerUserRoutes(
   app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseBody(putFitnessProfileRequestSchema, req, reply);
     if (body === null) return;
+    // The whole profile is replaced, so an age left out becomes none: the age is compared every time.
+    const ageBefore = (await service.getFitnessProfile(usersDeps, authedUserId(req))).age;
     const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
+    // An age changed: whether the leaderboards may show them can change with it. Nothing else here is
+    // shown to a gym.
+    if (fitnessProfile.age !== ageBefore) {
+      tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+    }
     return reply.status(200).send({ fitnessProfile });
   });
 
@@ -232,7 +252,10 @@ export function registerUserRoutes(
   app.delete("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
     const input = parseBody(deleteAccountRequestSchema, req, reply);
     if (input === null) return;
+    // The gyms are read before the account goes: afterwards it belongs to none.
+    const gyms = await gymsOfMember(deps.sql, authedUserId(req)).catch(() => []);
     const { emailSent } = await service.deleteAccount(usersDeps, authedUserId(req), input.code);
+    tellGyms(deps.news, gyms, { what: "people" });
     // T3 2026-07-11 finding 6: don't promise an email that wasn't sent
     // (OAuth-only accounts have no address; sender may also have failed).
     // The number is interpolated from src/retention.ts, never restated: if

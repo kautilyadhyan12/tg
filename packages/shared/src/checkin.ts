@@ -210,9 +210,8 @@ export const staffCheckinResponseSchema = z.discriminatedUnion("result", [
 ]);
 export type StaffCheckinResponse = z.infer<typeof staffCheckinResponseSchema>;
 
-/** The live log: today's newest visits; asked again every few seconds with `since`. */
+/** The live log: today's newest visits; asked again with `since` when a visit is added. */
 export const CHECKIN_LOG_LIMIT = 50;
-export const CHECKIN_LOG_POLL_MS = 5000;
 
 export const checkinLogQuerySchema = z
   .object({ since: z.string().datetime().optional() })

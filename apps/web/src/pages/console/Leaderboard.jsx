@@ -6,6 +6,8 @@ import { errorStatus, errorText } from '../../api/orgsApi';
 import { ConsoleFailed, ConsoleLoading } from '../../components/console/ConsoleStates';
 import { BOARD_TABS, PERIODS, circleLabel, datesLine, ordinal, updatedText, weekLabel, weekdayInitial } from '../../components/gym/leaderboardView';
 import LeaderboardPerson from './LeaderboardPerson';
+import { msToGymMidnight, useLiveNews } from './liveNews';
+import { gymToday } from './hoursView';
 import { canManagePosts } from '../../components/gym/postsView';
 import { useConsoleOrg } from './useConsoleOrg';
 import { orgWords, viewerPrivileges } from './consoleView';
@@ -27,9 +29,20 @@ import {
 // number by full name, the people members do not see marked with the reason; a person's
 // panel with what counted and Take off the board; and which boards members see, each with
 // why it is not showing. `leaderboard.manage`'s; the server refuses anyone else whatever
-// this screen shows. Asked again every minute while the page is in view.
+// this screen shows. Read again when the server says something changed (live updates, Stage 4
+// item 18): a board switched or a person taken off by staff elsewhere, at once; a visit, a workout
+// or Hide me at most once a minute, since a large gym's all-time board is slow to work out and a
+// busy hour's news is gathered into one read. And once at the gym's midnight.
 
-const REFRESH_MS = 60_000;
+const BUNDLE_MS = 60_000;
+/** While the live line cannot open, the board checks for itself this often. */
+const WITHOUT_LINE_MS = 60_000;
+/** A read at the gym's midnight that came back on the old day (the browser's clock ahead) is tried
+ *  again after this, this many times. */
+const MIDNIGHT_AGAIN_MS = 30_000;
+const MIDNIGHT_TRIES = 10;
+/** The wait for midnight is worked out again each hour, so a 23- or 25-hour day is met. */
+const HOUR_MS = 3_600_000;
 
 function Circles({ circles, days, boardId }) {
   if (circles === null || days === null) return null;
@@ -104,16 +117,25 @@ export default function Leaderboard() {
   const [open, setOpen] = useState(null);
   /** "Chen Wu is off the board.", after the panel closes. */
   const [notice, setNotice] = useState(null);
+  /** Why the server will not open the live line: said under the heading until it opens. */
+  const [liveRefused, setLiveRefused] = useState(null);
+  /** When the board was last asked for, and a read waiting for its minute to come round. */
+  const lastRead = useRef(0);
+  const soon = useRef(null);
+  /** Only the newest read is drawn: two reads that cross never leave the older answer showing. */
+  const readSeq = useRef(0);
 
   const load = useCallback(() => {
     if (gymId === null) return Promise.resolve();
+    lastRead.current = Date.now();
+    const asked = ++readSeq.current;
     return staffLeaderboardService.board(gymId, boardId, period, pageNo).then(
       (board) => {
-        if (shownKey.current !== key) return;
+        if (shownKey.current !== key || readSeq.current !== asked) return;
         setState({ key, error: null, refused: false, board });
       },
       (err) => {
-        if (shownKey.current !== key) return;
+        if (shownKey.current !== key || readSeq.current !== asked) return;
         setState((s) => ({
           key,
           error: errorText(err, "We couldn't load the leaderboard."),
@@ -127,18 +149,74 @@ export default function Leaderboard() {
   useEffect(() => {
     shownKey.current = key;
     load();
-    const timer = window.setInterval(() => {
-      if (!document.hidden) load();
-    }, REFRESH_MS);
-    const onShow = () => {
-      if (!document.hidden) load();
-    };
-    document.addEventListener('visibilitychange', onShow);
     return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onShow);
+      clearTimeout(soon.current);
+      soon.current = null;
     };
   }, [load, key]);
+
+  useLiveNews(gymId, (message) => {
+    if (message.what === 'refused') {
+      setLiveRefused(message.message);
+      return;
+    }
+    if (message.what === 'ready') setLiveRefused(null);
+    if (message.what === 'leaderboard' && message.change === 'switched') {
+      // Staff changed what the page shows: read at once, and that read covers any waiting one.
+      clearTimeout(soon.current);
+      soon.current = null;
+      load();
+    } else if (message.what === 'visits' || message.what === 'leaderboard' || message.what === 'people') {
+      // At once after a quiet minute; within the minute, one read when it is up.
+      if (soon.current !== null) return;
+      soon.current = setTimeout(
+        () => {
+          soon.current = null;
+          load();
+        },
+        Math.max(0, lastRead.current + BUNDLE_MS - Date.now()),
+      );
+    } else if (message.what === 'ready' || message.what === 'cameBack') {
+      load();
+    }
+  });
+
+  // The gym's day turns at its midnight: "this week", the flames and the Streak move with it. The
+  // wait is worked out again each hour, so a clock change is met; a read that comes back still on
+  // the old day (the browser's clock ahead of the server's) is tried again shortly, a few times.
+  const zone = state.board?.timezone ?? null;
+  const asOf = state.board?.asOf ?? null;
+  const boardDay = zone === null || asOf === null ? null : gymToday(zone, new Date(asOf));
+  const [turn, setTurn] = useState(0);
+  const midnight = useRef({ from: null, tries: 0 });
+  useEffect(() => {
+    if (zone === null) return undefined;
+    const atMidnight = midnight.current.from !== null && midnight.current.from === boardDay && midnight.current.tries < MIDNIGHT_TRIES;
+    if (midnight.current.from !== boardDay) midnight.current = { from: null, tries: 0 };
+    const wait = atMidnight ? MIDNIGHT_AGAIN_MS : msToGymMidnight(zone);
+    if (wait === null) return undefined;
+    const due = atMidnight ? wait : wait + 1_000;
+    const timer = setTimeout(
+      () => {
+        if (due > HOUR_MS) {
+          setTurn((t) => t + 1);
+          return;
+        }
+        midnight.current = { from: boardDay, tries: atMidnight ? midnight.current.tries + 1 : 0 };
+        load();
+        setTurn((t) => t + 1);
+      },
+      Math.min(due, HOUR_MS),
+    );
+    return () => clearTimeout(timer);
+  }, [zone, boardDay, turn, load]);
+
+  // While the live line cannot open, the board checks for itself, until the line is back.
+  useEffect(() => {
+    if (liveRefused === null) return undefined;
+    const timer = setInterval(load, WITHOUT_LINE_MS);
+    return () => clearInterval(timer);
+  }, [liveRefused, load]);
 
   const pick = (nextBoard, nextPeriod) => {
     setNotice(null);
@@ -201,6 +279,7 @@ export default function Leaderboard() {
       <header className="flex flex-col gap-1.5 min-w-0">
         <h1 className="c-h1">Leaderboard</h1>
         <p className="c-sub">{`Everyone on ${org.name}'s boards, and what your ${words.people} see`}</p>
+        {liveRefused !== null ? <p className="c-s14 c-t2">{liveRefused}</p> : null}
       </header>
 
       {readOnly && !state.refused ? (

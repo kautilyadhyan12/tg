@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../api/authApi', () => ({ refreshSession: vi.fn() }));
 
 const { refreshSession } = await import('../../api/authApi');
-const { configureLive, listenLive } = await import('./liveNews');
+const { configureLive, listenLive, msToGymMidnight } = await import('./liveNews');
 const { LIVE_WORDS } = await import('@app/shared');
 
 const BASE = 'http://api.test';
@@ -36,6 +36,7 @@ function fakeFetch(url, init) {
     }
   });
   const next = answers.shift() ?? { status: 200 };
+  if (next.throws === true) return Promise.reject(new TypeError('Failed to fetch'));
   if (next.status !== 200) {
     return Promise.resolve({
       status: next.status,
@@ -230,6 +231,36 @@ describe('the open line', () => {
     stop();
   });
 
+  it('a server error, a proxy with no server behind it, or no network at all: from the second failure in a row the page is told it has no line, until the line opens', async () => {
+    answers = [{ status: 500 }, { status: 502 }, { throws: true }, { status: 200 }];
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    // The first failure (a blip) is not said.
+    await until(() => calls.length === 1, 12_000);
+    await pause(50);
+    expect(heard).toEqual([]);
+    await until(() => heard.length === 2, 12_000);
+    expect(heard).toEqual([
+      { what: 'refused', message: LIVE_WORDS.unreachable },
+      { what: 'refused', message: LIVE_WORDS.unreachable },
+    ]);
+    // The fourth try opens the line, and nothing more is said.
+    await until(() => calls.length === 4, 12_000);
+    await pause(50);
+    expect(heard).toHaveLength(2);
+    stop();
+  }, 30_000);
+
+  it('one failed reopen followed by a line that opens says nothing', async () => {
+    answers = [{ throws: true }, { status: 200 }];
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => calls.length === 2, 5_000);
+    await pause(50);
+    expect(heard).toEqual([]);
+    stop();
+  });
+
   it("a line refused in the server's own words says them, and staff coming back to the tab read again", async () => {
     answers = [{ status: 429, json: { error: 'too_many_lines', message: LIVE_WORDS.too_many_lines } }];
     const heard = [];
@@ -263,5 +294,24 @@ describe('the open line', () => {
     await pause(50);
     expect(calls).toHaveLength(0);
     off();
+  });
+});
+
+describe("the gym's midnight", () => {
+  it.each([
+    ['a minute before, in London summer time', 'Europe/London', '2026-10-03T22:59:00.000Z', 60_000],
+    ['just after, in Kolkata', 'Asia/Kolkata', '2026-10-07T18:30:01.000Z', 86_399_000],
+    ['noon in Chicago', 'America/Chicago', '2026-10-07T17:00:00.000Z', 43_200_000],
+    ['the last half second is still a second', 'UTC', '2026-10-07T23:59:59.500Z', 1_000],
+    ['the reader in another zone does not matter', 'Pacific/Auckland', '2026-10-07T10:30:00.000Z', 1_800_000],
+    // On the evening of a clock change the wall clock is what counts: 22:00 is two hours before midnight.
+    ["the evening before London's clocks go back", 'Europe/London', '2026-10-24T21:00:00.000Z', 7_200_000],
+    ["the evening before Chicago's clocks go forward", 'America/Chicago', '2027-03-14T04:00:00.000Z', 7_200_000],
+  ])('%s', (_name, zone, at, wait) => {
+    expect(msToGymMidnight(zone, new Date(at))).toBe(wait);
+  });
+
+  it('a zone the browser cannot read gives no wait', () => {
+    expect(msToGymMidnight('Not/AZone', new Date('2026-10-07T10:00:00.000Z'))).toBeNull();
   });
 });
