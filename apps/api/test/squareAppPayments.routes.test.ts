@@ -1,6 +1,7 @@
-// A payment taken in Square's own app, recorded on the member (ROADMAP 18d-iii-b-i; spec Part 3 §14.8),
-// through Square's signed message, the worker's minute and the routes, against real Postgres
-// (DATABASE_URL-gated), with Square answered by the fake in `fakeSquareTerminal.ts`.
+// A payment taken in Square's own app, kept for staff to match (ROADMAP 18d-iii-b-i, 18d-iii-b-ii-a; spec
+// Part 3 §14.8), through Square's signed message, the worker's minute and the routes, against real Postgres
+// (DATABASE_URL-gated), with Square answered by the fake in `fakeSquareTerminal.ts`. Nothing goes on a bill
+// by itself (Kd, 2026-10-25, "one press"): it waits, the bill it fits ticked, until staff press Match.
 //
 // The first block is the worst thing this job could do to a real person: money put on somebody else's
 // bill, in somebody else's gym, or recorded twice. Every claim is read from the tables, never from the
@@ -10,11 +11,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   heldMembershipsResponseSchema,
+  matchPaymentResponseSchema,
+  paymentsToMatchResponseSchema,
   squareAppCheckResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
   type GymMembershipTypesResponse,
   type HeldMembershipsResponse,
+  type LiveNews,
+  type PaymentToMatch,
   type SquareLocation,
 } from "@app/shared";
 import { buildApp } from "../src/app.js";
@@ -96,7 +101,7 @@ const twoPlaces = (merchantId: string): Account => ({
   locations: [place(`LA${merchantId}`, "Main St"), place(`LB${merchantId}`, "Harbour")],
 });
 
-d("A payment taken in Square's own app, recorded on the member (real Postgres)", { timeout: T }, () => {
+d("A payment taken in Square's own app, kept for staff to match (real Postgres)", { timeout: T }, () => {
   const sql = postgres(url ?? "", { prepare: false, max: 8 });
   const square = fakeSquare();
   let clock = new Date();
@@ -108,7 +113,10 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
   };
   const config = () => loadConfig(baseEnv);
   const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
-  const workDeps = () => ({ sql, square: squareSettings(config(), square.api), log: quiet, now: () => clock });
+  /** What the worker told the pages open on each gym. */
+  const told: { gymId: string; news: LiveNews }[] = [];
+  const news = { tell: (gymId: string, n: LiveNews) => void told.push({ gymId, news: n }), close: () => Promise.resolve() };
+  const workDeps = () => ({ sql, square: squareSettings(config(), square.api), log: quiet, now: () => clock, news });
   const gyms: Gym[] = [];
   /** The worker's minute, for these of Square's messages and these gyms alone. */
   const work = (eventIds: readonly string[] = []) =>
@@ -256,9 +264,31 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
       FROM gym_member_payments p JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
       WHERE b.held_membership_id = ${h.membershipId} AND p.undone_at IS NULL ORDER BY p.seq`;
   const kept = (squarePaymentId: string) =>
-    sql<{ gym_id: string | null; state: string; reason: string | null; entry_id: string | null; member_payment_id: string | null; record_key: string }[]>`
-      SELECT gym_id, state, reason, entry_id, member_payment_id, record_key FROM gym_square_app_payments WHERE square_payment_id = ${squarePaymentId}`;
+    sql<{ id: string; gym_id: string | null; state: string; reason: string | null; entry_id: string | null; member_payment_id: string | null; record_key: string; device_name: string | null }[]>`
+      SELECT id, gym_id, state, reason, entry_id, member_payment_id, record_key, device_name FROM gym_square_app_payments WHERE square_payment_id = ${squarePaymentId}`;
   const second = async (h: Holder) => (await billsOf(h)).find((b) => b.period_index === 1);
+  /** The payment's row in Payments to match, as the gym's owner reads it. */
+  const rowOf = async (gym: Gym, squarePaymentId: string): Promise<PaymentToMatch | undefined> => {
+    const res = await send("GET", `/v1/orgs/${gym.id}/payments-to-match`, gym.owner.cookies);
+    expect(res.statusCode, res.body).toBe(200);
+    const id = (await kept(squarePaymentId))[0]?.id;
+    return paymentsToMatchResponseSchema.parse(JSON.parse(res.body)).payments.find((p) => p.id === id);
+  };
+  /** One press of Match on the bill the row ticks. */
+  const pressMatch = async (gym: Gym, squarePaymentId: string) => {
+    const row = await rowOf(gym, squarePaymentId);
+    const bill = row?.bill;
+    if (row === undefined || bill === null || bill === undefined) throw new Error("no bill ticked");
+    const res = await send("POST", `/v1/orgs/${gym.id}/payments-to-match/${row.id}/match`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      entryId: bill.entryId,
+      membershipId: bill.membershipId,
+      target: bill.target,
+      amountMinor: bill.leftMinor,
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return matchPaymentResponseSchema.parse(JSON.parse(res.body)).matched;
+  };
 
   beforeAll(async () => {
     await cleanup();
@@ -284,7 +314,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     await sql.end();
   }, T);
 
-  it("records it only on the bill of the person Square's customer is, in their gym at its location, once; never the app's own payment", async () => {
+  it("keeps it once, waiting for the person Square's customer is, in their gym at its location, their bill ticked; nothing goes on a bill until Match; never the app's own payment", async () => {
     // Two gyms of one business on ONE Square account, each at its own location, and a stranger's gym.
     const acct = twoPlaces(`MSAP${uniq()}`);
     const main = await makeGym(`Main Gym ${uniq()}`, acct, acct.locations[0]?.id ?? "");
@@ -309,23 +339,43 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     await customerOf(main, zoe.entryId);
     const beaCustomer = await customerOf(harbour, bea.entryId);
 
-    // Amy pays $25.00 at Main St in Square's app, staff picking her: Square sends two messages
-    // about it, and the worker's minute runs twice at once, then again.
-    const paid = square.appPayment(acct, { amount: 2500, customerId: amyCustomer, locationId: main.locationId });
+    // Amy pays $25.00 at Main St in Square's app on the device named Front desk 1, staff picking her:
+    // Square sends two messages about it, and the worker's minute runs twice at once, then again.
+    const paid = square.appPayment(acct, { amount: 2500, customerId: amyCustomer, locationId: main.locationId, device: "Front desk 1" });
     const events = [await deliver(acct, paid.id), await deliver(acct, paid.id, "payment.updated")];
+    told.length = 0;
     await Promise.all([work(events), work(events)]);
     await work(events);
 
+    // Kept once, waiting, nothing on any bill: Square's customer says who paid, never what for.
+    const row = await kept(paid.id);
+    expect(row.map((r) => [r.gym_id, r.state, r.reason, r.entry_id, r.member_payment_id, r.device_name])).toEqual([[main.id, "waiting", "ready", amy.entryId, null, "Front desk 1"]]);
+    expect((await second(amy))?.status, "Amy's bill is still owed until staff press Match").toBe("open");
+    for (const h of [amy, zoe, bea]) expect((await paymentsOf(h)).filter((p) => p.method === "square_app")).toEqual([]);
+    // The pages open on Main Gym are told at once: the list, and Amy's page.
+    expect(told.filter((t) => t.gymId === main.id).map((t) => t.news)).toEqual([{ what: "paymentsToMatch" }, { what: "memberships", entryId: amy.entryId }]);
+    expect(told.filter((t) => t.gymId !== main.id)).toEqual([]);
+
+    // Payments to match ticks Amy's bill, and names the device; one press puts it there, once.
+    const listed = await rowOf(main, paid.id);
+    expect([listed?.reason, listed?.deviceName, listed?.bill?.entryId, listed?.bill?.membershipId, listed?.bill?.target, listed?.bill?.leftMinor]).toEqual([
+      "ready",
+      "Front desk 1",
+      amy.entryId,
+      amy.membershipId,
+      { kind: "period", periodIndex: 1 },
+      2500,
+    ]);
+    // Amy's page says the same, with the same bill.
+    const amyPage = (await held(main, amy.entryId)).squareAppWaiting;
+    expect(amyPage.map((w) => [w.id, w.deviceName, w.bill?.target])).toEqual([[listed?.id, "Front desk 1", { kind: "period", periodIndex: 1 }]]);
+    await pressMatch(main, paid.id);
     const amyBill = await second(amy);
-    expect(amyBill?.status, "Amy's bill is paid").toBe("paid");
+    expect(amyBill?.status, "Amy's bill is paid by the press").toBe("paid");
     expect((await paymentsOf(amy)).filter((p) => p.bill_id === amyBill?.id).map((p) => [p.amount_minor, p.method, p.provider_payment_id])).toEqual([[2500, "square_app", paid.id]]);
     expect((await second(zoe))?.status, "Zoe's bill, the same amount, is untouched").toBe("open");
     expect((await second(bea))?.status, "the other gym's bill is untouched").toBe("open");
-    expect((await paymentsOf(zoe)).filter((p) => p.method === "square_app")).toEqual([]);
-    expect((await paymentsOf(bea)).filter((p) => p.method === "square_app")).toEqual([]);
-    const row = await kept(paid.id);
-    expect(row.map((r) => [r.gym_id, r.state, r.entry_id])).toEqual([[main.id, "recorded", amy.entryId]]);
-    expect(row[0]?.member_payment_id).toBe((await paymentsOf(amy)).find((p) => p.method === "square_app")?.id);
+    expect((await kept(paid.id))[0]?.member_payment_id).toBe((await paymentsOf(amy)).find((p) => p.method === "square_app")?.id);
 
     // Bea, a member of the Harbour gym, pays at Main St: kept for her own gym, never recorded.
     const away = square.appPayment(acct, { amount: 2500, customerId: beaCustomer, locationId: main.locationId });
@@ -357,7 +407,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     expect(await sql`SELECT 1 FROM gym_square_app_payments WHERE gym_id = ${elsewhereGym.id}`).toHaveLength(0);
   });
 
-  it("records a payer's payment on the person they pay for, and keeps for staff what it cannot be sure of", async () => {
+  it("ticks the bill of the person a payer pays for, tells both pages, and keeps for staff, unticked, what it cannot be sure of", async () => {
     const acct = twoPlaces(`MSAP${uniq()}`);
     const gym = await makeGym(`Waits Gym ${uniq()}`, acct, acct.locations[0]?.id ?? "");
     const typeId = await typeOf(gym);
@@ -370,18 +420,31 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     expect(payer.statusCode, payer.body).toBe(200);
     const benCustomer = await customerOf(gym, benId);
     const forCal = square.appPayment(acct, { amount: 2500, customerId: benCustomer, locationId: gym.locationId });
+    told.length = 0;
     await work([await deliver(acct, forCal.id)]);
+    expect((await kept(forCal.id)).map((r) => [r.state, r.reason, r.entry_id])).toEqual([["waiting", "ready", benId]]);
+    expect((await second(cal))?.status, "nothing on Cal's bill yet").toBe("open");
+    expect(told.map((t) => t.news)).toEqual([{ what: "paymentsToMatch" }, { what: "memberships", entryId: benId }, { what: "memberships", entryId: cal.entryId }]);
+    expect((await rowOf(gym, forCal.id))?.bill?.entryId, "Cal's bill is ticked").toBe(cal.entryId);
+    // Cal's own page shows Ben's payment, Cal's bill ticked.
+    expect((await held(gym, cal.entryId)).squareAppWaiting.map((w) => [w.byName, w.bill?.entryId])).toEqual([["Ben Card", cal.entryId]]);
+    await pressMatch(gym, forCal.id);
     expect((await second(cal))?.status).toBe("paid");
     expect((await paymentsOf(cal)).find((p) => p.method === "square_app")?.paid_by_entry_id, "the receipt names Ben as the payer").toBe(benId);
 
     const dee = await owing(gym, typeId, await person(gym, "Dee Waits"));
     const deeCustomer = await customerOf(gym, dee.entryId);
-    const cases: { name: string; make: () => ReturnType<typeof square.appPayment>; state: string; reason: string | null }[] = [
-      { name: "items from the gym's list in Square", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, lines: ["ITEM"] }), state: "shop_sale", reason: null },
+    const cases: { name: string; make: () => ReturnType<typeof square.appPayment>; state: string; reason: string | null; ticked?: boolean }[] = [
+      // Dee owes $25.00 today: items of at least that much may be her membership rung up as an item.
+      { name: "items from the gym's list in Square, of at least what Dee owes this week", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, lines: ["ITEM"] }), state: "waiting", reason: "shop_items" },
+      { name: "items of less than Dee owes", make: () => square.appPayment(acct, { amount: 900, customerId: deeCustomer, locationId: gym.locationId, lines: ["ITEM"] }), state: "shop_sale", reason: null },
+      { name: "items with nobody picked", make: () => square.appPayment(acct, { amount: 2500, customerId: null, locationId: gym.locationId, lines: ["ITEM"] }), state: "shop_sale", reason: null },
       { name: "a typed amount and an item", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, lines: ["CUSTOM_AMOUNT", "ITEM"] }), state: "waiting", reason: "mixed_sale" },
       { name: "no customer picked", make: () => square.appPayment(acct, { amount: 2500, customerId: null, locationId: gym.locationId }), state: "waiting", reason: "no_customer" },
       { name: "another amount than the bill", make: () => square.appPayment(acct, { amount: 2000, customerId: deeCustomer, locationId: gym.locationId }), state: "waiting", reason: "no_bill" },
-      { name: "Square's sales tax added on top of the typed amount", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206 }), state: "waiting", reason: "square_tax" },
+      // The part typed is Dee's bill: ticked, the tax said beside it.
+      { name: "Square's sales tax added on top of the typed amount", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206 }), state: "waiting", reason: "ready", ticked: true },
+      { name: "Square's sales tax on top, the sale paid in two payments", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206, split: true }), state: "waiting", reason: "square_tax" },
       { name: "the bill's amount in another money", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, currency: "CAD" }), state: "waiting", reason: "no_bill" },
       { name: "refunded in Square before it was taken in", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, refunded: 2500 }), state: "waiting", reason: "refunded" },
       { name: "partly refunded before it was taken in", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, refunded: 500 }), state: "waiting", reason: "refunded" },
@@ -390,6 +453,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
       const p = c.make();
       await work([await deliver(acct, p.id)]);
       expect((await kept(p.id)).map((r) => [r.state, r.reason]), c.name).toEqual([[c.state, c.reason]]);
+      if (c.state === "waiting") expect((await rowOf(gym, p.id))?.bill?.entryId ?? null, `${c.name}: ticked`).toBe(c.ticked === true ? dee.entryId : null);
     }
     expect((await second(dee))?.status, "Dee's bill is still owed").toBe("open");
     expect((await paymentsOf(dee)).filter((p) => p.method === "square_app")).toEqual([]);
@@ -423,6 +487,7 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     const eveCustomer = await customerOf(gym, eve.entryId);
     const p = square.appPayment(acct, { amount: 2500, customerId: eveCustomer, locationId: gym.locationId });
     await work([await deliver(acct, p.id)]);
+    await pressMatch(gym, p.id);
     const recorded = (await paymentsOf(eve)).find((x) => x.method === "square_app");
     expect(recorded?.provider_payment_id).toBe(p.id);
     const before = (await kept(p.id))[0];
@@ -465,6 +530,8 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     expect(frozen.statusCode, frozen.body).toBe(200);
     const fee = square.appPayment(acct, { amount: 1000, customerId: eveCustomer, locationId: gym.locationId });
     await work([await deliver(acct, fee.id)]);
+    expect((await rowOf(gym, fee.id))?.bill?.target.kind, "the freeze fee is ticked").toBe("fee");
+    await pressMatch(gym, fee.id);
     const feeBill = (await billsOf(eve)).find((b) => b.fee === "freeze");
     expect(feeBill?.status).toBe("paid");
     const feePayment = (await paymentsOf(eve)).find((x) => x.bill_id === feeBill?.id);
@@ -502,16 +569,16 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     const missed = square.appPayment(acct, { amount: 2500, customerId: fayCustomer, locationId: gym.locationId });
     clock = new Date(clock.getTime() + 30 * 60_000);
     await work();
-    expect((await second(fay))?.status, "not yet: the look is hourly").toBe("open");
+    expect(await kept(missed.id), "not yet: the look is hourly").toEqual([]);
     clock = new Date(clock.getTime() + 31 * 60_000);
     await work();
-    expect((await second(fay))?.status, "the look found it").toBe("paid");
-    expect((await kept(missed.id)).map((r) => r.state)).toEqual(["recorded"]);
+    expect((await kept(missed.id)).map((r) => [r.state, r.reason]), "the look found it").toEqual([["waiting", "ready"]]);
+    expect((await second(fay))?.status, "waiting for Match, on no bill").toBe("open");
     expect(await kept(old.id), "the look passes over what was made before").toEqual([]);
     // The next look finds nothing twice.
     clock = new Date(clock.getTime() + 61 * 60_000);
     await work();
-    expect((await paymentsOf(fay)).filter((p) => p.method === "square_app")).toHaveLength(1);
+    expect(await sql`SELECT 1 FROM gym_square_app_payments WHERE gym_id = ${gym.id}`).toHaveLength(1);
   });
 
   it("never takes in the app's own card on file charge, whether Square's answer came back or was lost", async () => {
@@ -566,8 +633,8 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     square.state.ordersUnanswered.add(then.order_id ?? "");
     clock = new Date(clock.getTime() + 55 * MINUTE);
     await work();
-    expect((await second(hal))?.status, "the look took in Hal's").toBe("paid");
-    expect((await second(ida))?.status, "and stopped at Ida's").toBe("open");
+    expect((await kept(first.id)).map((r) => r.reason), "the look took in Hal's").toEqual(["ready"]);
+    expect(await kept(then.id), "and stopped at Ida's").toEqual([]);
     const stopped = await sweepOf();
     expect(stopped?.swept_until.toISOString(), "it goes on from the last payment taken in").toBe(first.created_at);
     expect(stopped?.due_at.getTime(), "a minute later").toBe(clock.getTime() + MINUTE);
@@ -576,8 +643,8 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     square.state.ordersUnanswered.delete(then.order_id ?? "");
     clock = new Date(clock.getTime() + MINUTE + 1000);
     await work();
-    expect((await second(ida))?.status).toBe("paid");
-    expect((await paymentsOf(hal)).filter((p) => p.method === "square_app")).toHaveLength(1);
+    expect((await kept(then.id)).map((r) => r.reason)).toEqual(["ready"]);
+    expect(await kept(first.id)).toHaveLength(1);
     expect((await sweepOf())?.due_at.getTime(), "finished: the next look in an hour").toBe(clock.getTime() + 60 * MINUTE);
 
     // Jo pays and Square never shows its order. The look finds it an hour old and asks once: not kept

@@ -248,6 +248,10 @@ export const squarePaymentSchema = z.object({
   /** What Square has given back of it: a refund leaves the payment COMPLETED with this filled in ("Payment",
    *  read 2026-10-25), so a payment refunded before it is taken in is never put on a bill (18d-iii-b-i). */
   refunded_money: squareMoneySchema.nullish(),
+  /** "Details about the device that took the payment"; its \`device_name\` is "The name of the device set by
+   *  the seller" (Square's Payment and DeviceDetails references, read 2026-10-25). Any length is read, and
+   *  the app keeps the first 100 characters. */
+  device_details: z.object({ device_name: z.string().max(1000).nullish() }).nullish(),
 });
 export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 

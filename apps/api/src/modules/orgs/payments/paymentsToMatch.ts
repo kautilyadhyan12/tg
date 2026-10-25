@@ -1,7 +1,8 @@
 // PAYMENTS TO MATCH (ROADMAP 18d-iii-b-ii-a; spec Part 3 §14.8; rulings/2026-10-25-18d-iii-b-ii-a.md).
 //
-// The gym's payments from Square Point of Sale that did not go on a bill by themselves (18d-iii-b-i), for
-// staff who take payments: the list, Match's box for one person, Match, Not a bill payment and its Undo.
+// The gym's payments from Square Point of Sale, every one waiting for staff who take payments (Kd,
+// 2026-10-25, "one press"): the list, with the bill each fits ticked where its reason leaves no doubt
+// (`paymentsToMatchBills.ts`), Match's box for one person, Match, Not for a bill and its Undo.
 //
 // THE WORST THING here is a member charged twice, or one payment counted twice. So Match first asks
 // Square for the payment (never one Square has refunded or no longer shows as taken), then puts it on the
@@ -13,14 +14,11 @@
 import {
   PAYMENTS_TO_MATCH_PAGE,
   PAYMENTS_TO_MATCH_WORDS,
-  countAfterGap,
   matchBillsResponseSchema,
   matchPaymentResponseSchema,
-  memberPayTarget,
   paymentToMatchStateResponseSchema,
   paymentsToMatchResponseSchema,
   paymentsToMatchSummarySchema,
-  type MatchBill,
   type MatchBillsResponse,
   type MatchPaid,
   type MatchPaymentRequest,
@@ -36,12 +34,12 @@ import type { TransactionSql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
 import { recordPaymentIn, type BillWriteOutcome } from "../memberships/billsRepo.js";
-import { billsFor, paymentsFor, squareMoneyOut } from "../memberships/billsSql.js";
+import { squareMoneyOut } from "../memberships/billsSql.js";
 import { recordFeePaymentIn, type FeeWriteOutcome } from "../memberships/feesRepo.js";
-import { heldRowsOf } from "../memberships/heldRepo.js";
 import { insertAudit } from "../repo.js";
 import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../service.js";
 import { BILLING, orgNotFound, readyOrThrow, stateOf } from "./cards.js";
+import { billsOfPerson, loadBills, tickOf, ticksFor } from "./paymentsToMatchBills.js";
 import * as toMatch from "./paymentsToMatchRepo.js";
 import * as repo from "./repo.js";
 import type { PaymentsDeps } from "./service.js";
@@ -73,7 +71,7 @@ export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gy
   const square = deps.square;
   const connection = square === null ? null : await repo.readConnection(deps.sql, gymId, square.environment);
   const people = [...new Set(page.flatMap((p) => (p.entryId === null ? [] : [p.entryId])))];
-  const held = await toMatch.cardHeldFor(deps.sql, gymId, people);
+  const [held, ticks] = await Promise.all([toMatch.cardHeldFor(deps.sql, gymId, people), ticksFor(deps.sql, gymId, dayInTz(deps.now(), gym.timezone), page)]);
   // A customer linked to more than one record: whose, by name. Every row of one gym is of its account.
   const several = page.filter((p) => p.reason === "several_people" && p.customerId !== null);
   const names = new Map<string, string[]>();
@@ -105,6 +103,8 @@ export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gy
     suggested: p.person ?? (p.customer === null ? null : (suggested.get(`${p.customer.email ?? ""}|${p.customer.phone ?? ""}`) ?? null)),
     reason: p.reason,
     holdsCard: p.entryId !== null && held.has(p.entryId),
+    deviceName: p.deviceName,
+    bill: ticks.get(p.id) ?? null,
   }));
   const next = from + PAYMENTS_TO_MATCH_PAGE < totals.count ? from + PAYMENTS_TO_MATCH_PAGE : null;
   const ready = square !== null && connection !== null && stateOf(square, gym, connection) === "ready";
@@ -135,67 +135,16 @@ const forTheBill = (row: toMatch.TakenRow): number | null => row.enteredMinor ??
 export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: string, paymentId: string, entryId: string): Promise<MatchBillsResponse> {
   const gym = await allowed(deps, gymId, userId, false);
   const row = await waiting(deps, gymId, paymentId);
-  const people = await toMatch.peopleOf(deps.sql, gymId, entryId);
-  const person = people?.[0];
-  if (people === null || person === undefined) throw new OrgsError(404, "entry_not_found", "That person was not found on your list.");
   const today = dayInTz(deps.now(), gym.timezone);
-  const memberships = await toMatch.membershipsOf(deps.sql, gymId, people.map((p) => p.entryId));
-  const ids = memberships.map((m) => m.id);
-  const [held, bills, payments, fees, busy] = await Promise.all([
-    heldRowsOf(deps.sql, gymId, ids),
-    billsFor(deps.sql, gymId, ids),
-    paymentsFor(deps.sql, gymId, ids),
-    toMatch.openFeesOf(deps.sql, gymId, ids),
-    toMatch.busyOf(deps.sql, gymId, ids),
-  ]);
+  const loaded = await loadBills(deps.sql, gymId, [entryId], today);
+  const people = loaded.people.get(entryId);
+  const person = people?.[0];
+  if (people === undefined || person === undefined) throw new OrgsError(404, "entry_not_found", "That person was not found on your list.");
+  const { memberships, bills, payments } = loaded;
   const amount = forTheBill(row) ?? row.amountMinor;
   const nameOf = new Map(people.map((p) => [p.entryId, p] as const));
-  const out: MatchBill[] = [];
-  for (const m of memberships) {
-    const held1 = held.get(m.id);
-    const who = nameOf.get(m.entryId);
-    if (held1 === undefined || who === undefined) continue;
-    const mine = bills.filter((b) => b.membershipId === m.id);
-    // As the person's page reads it: the count moved over periods nobody was asked for.
-    const count = who.past ? null : countAfterGap(held1.membership, today, new Set(mine.map((b) => b.periodIndex)));
-    const membership = count === null ? held1.membership : { ...held1.membership, paidPeriods: count, paidFloor: count };
-    const target = memberPayTarget(membership, held1.nextBillMinor, today, mine, who.past);
-    const cannotFor = (left: number, currency: string, fee: boolean): MatchBill["cannot"] =>
-      currency !== row.currency ? "currency" : busy.has(m.id) ? "busy" : fee && left !== amount ? "fee_whole" : left < amount ? "too_little" : null;
-    if (target !== null && target.leftMinor > 0) {
-      out.push({
-        entryId: m.entryId,
-        name: who.name,
-        membershipId: m.id,
-        typeName: held1.typeName,
-        target: { kind: "period", periodIndex: target.periodIndex },
-        fee: null,
-        covers: target.covers,
-        dueOn: target.dueOn,
-        leftMinor: target.leftMinor,
-        currency: held1.currency,
-        cannot: cannotFor(target.leftMinor, held1.currency, false),
-      });
-    }
-    for (const fee of fees.filter((f) => f.membershipId === m.id)) {
-      const left = fee.amountMinor - fee.paidMinor;
-      out.push({
-        entryId: m.entryId,
-        name: who.name,
-        membershipId: m.id,
-        typeName: held1.typeName,
-        target: { kind: "fee", billId: fee.id },
-        fee: { kind: fee.kind, forName: fee.forName },
-        covers: null,
-        dueOn: fee.dueOn,
-        leftMinor: left,
-        currency: fee.currency,
-        cannot: cannotFor(left, fee.currency, true),
-      });
-    }
-  }
-  out.sort((a, b) => (a.dueOn < b.dueOn ? -1 : a.dueOn > b.dueOn ? 1 : a.entryId === person.entryId ? -1 : 1));
-  const suggested = out.findIndex((b) => b.cannot === null && b.leftMinor === amount);
+  const out = billsOfPerson(loaded, entryId, amount, row.currency);
+  const suggested = tickOf(out, amount);
   const paid: MatchPaid[] = [...payments]
     .sort((a, b) => (a.paidOn < b.paidOn ? 1 : a.paidOn > b.paidOn ? -1 : b.seq - a.seq))
     .slice(0, 5)

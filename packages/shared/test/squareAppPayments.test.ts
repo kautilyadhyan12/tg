@@ -1,5 +1,7 @@
-// A payment taken in Square's own app (ROADMAP 18d-iii-b-i): the rule that says which bill, if any, it
-// is recorded on. The line kinds come from OUTSIDE this code: Square's OrderLineItemItemType
+// A payment taken in Square's own app (ROADMAP 18d-iii-b-i, 18d-iii-b-ii-a): the rule that says why it
+// waits for staff, and when one bill is plain enough to be ticked for one press (`ready`), or that it is a
+// shop sale. Nothing is put on a bill by itself (Kd, 2026-10-25: "one press"). The line kinds come from
+// OUTSIDE this code: Square's OrderLineItemItemType
 // (developer.squareup.com/reference/square/enums/OrderLineItemItemType, read 2026-10-24) is ITEM
 // ("an itemized sale"), CUSTOM_AMOUNT ("a non-itemized sale") and GIFT_CARD ("a gift card sale"), and
 // kinds Square has never sent (a new one, a missing one, Square's own words for other things) are
@@ -18,7 +20,6 @@ import {
   squareTaxesToOpen,
   taxesOnTypedAmounts,
   type SquareAppCandidate,
-  type SquareAppDecision,
   type SquareTaxFacts,
 } from "../src/index.js";
 
@@ -63,101 +64,82 @@ const fee = (entryId: string, dueOn: string, leftMinor: number): SquareAppCandid
   paidJustBefore: false,
   busy: false,
 });
-const decide = (p: Partial<Parameters<typeof squareAppDecision>[0]>): SquareAppDecision =>
-  squareAppDecision({ lines: "typed", addedOnTop: false, customer: "one", amountMinor: 4500, today: TODAY, candidates: [], ...p });
-const recorded = (d: SquareAppDecision) => (d.kind === "record" ? d.candidate : null);
+type Case = [name: string, p: Partial<Parameters<typeof squareAppDecision>[0]>, outcome: string];
+const decide = (p: Case[1]): string => {
+  const d = squareAppDecision({ lines: "typed", addedOnTop: false, enteredMinor: null, customer: "one", amountMinor: 4500, today: TODAY, candidates: [], ...p });
+  return d.kind === "wait" ? d.reason : d.kind;
+};
 
-describe("squareAppDecision: which bill a payment from Square's own app is recorded on", () => {
-  it("items from the gym's list in Square are a shop sale, whoever bought them and whatever they owe", () => {
-    for (const customer of ["none", "unknown", "one", "several"] as const) {
-      expect(decide({ lines: "items", customer, candidates: [period("amy", TODAY, 4500)] })).toEqual({ kind: "shop_sale" });
+describe("squareAppDecision: why a payment from Square's own app waits, and when one bill is ticked", () => {
+  it("never puts a payment on a bill by itself: the one bill that fits is `ready`, for one press", () => {
+    for (const lines of ["typed", "items", "mixed", "unread"] as const) {
+      for (const customer of ["none", "unknown", "one", "several"] as const) {
+        const d = squareAppDecision({ lines, addedOnTop: false, enteredMinor: 4500, customer, amountMinor: 4500, today: TODAY, candidates: [period("amy", TODAY, 4500)] });
+        expect(["wait", "shop_sale"]).toContain(d.kind);
+      }
     }
   });
 
-  it.each([
-    ["no customer picked", { customer: "none" }, "no_customer"],
-    ["a customer no record holds", { customer: "unknown" }, "not_linked"],
-    ["a customer two records hold", { customer: "several" }, "several_people"],
-    ["typed amounts and items together", { lines: "mixed" }, "mixed_sale"],
-    ["what was sold could not be read", { lines: "unread" }, "sale_unread"],
-  ] as const)("waits for staff: %s", (_name, p, reason) => {
-    expect(decide({ ...p, candidates: [period("amy", TODAY, 4500)] })).toEqual({ kind: "wait", reason });
+  // Items from the gym's list in Square (Square's ITEM and GIFT_CARD lines): a membership can be rung up as
+  // an item, so a sale for the one person Square's customer is, of at least a bill due within the week,
+  // waits and holds their card; anybody else's is a shop sale.
+  it.each<Case>([
+    ["items for a member owing exactly that this week", { lines: "items", candidates: [period("amy", "2026-10-28", 4500)] }, "shop_items"],
+    ["items for a member owing less than the sale (tax on the item, or other items with it)", { lines: "items", amountMinor: 4871, candidates: [period("amy", TODAY, 4500)] }, "shop_items"],
+    ["items paying an overdue bill", { lines: "items", candidates: [period("amy", "2026-10-01", 4500)] }, "shop_items"],
+    ["items for a payer whose child owes this week", { lines: "items", candidates: [period("cal", "2026-10-30", 2500)] }, "shop_items"],
+    ["items for a member owing a fee this week", { lines: "items", amountMinor: 1500, candidates: [fee("amy", TODAY, 1500)] }, "shop_items"],
+    ["items for a member owing more than the sale", { lines: "items", amountMinor: 1200, candidates: [period("amy", TODAY, 4500)] }, "shop_sale"],
+    ["items for a member whose bill is eight days off", { lines: "items", candidates: [period("amy", "2026-11-02", 4500)] }, "shop_sale"],
+    ["items for a member owing nothing", { lines: "items", candidates: [] }, "shop_sale"],
+    ["items for a member whose bill is paid (nothing left)", { lines: "items", candidates: [period("amy", TODAY, 0)] }, "shop_sale"],
+    ["items with nobody picked in Square", { lines: "items", customer: "none", candidates: [period("amy", TODAY, 4500)] }, "shop_sale"],
+    ["items for a customer no record holds", { lines: "items", customer: "unknown", candidates: [period("amy", TODAY, 4500)] }, "shop_sale"],
+    ["items for a customer two records hold", { lines: "items", customer: "several", candidates: [period("amy", TODAY, 4500)] }, "shop_sale"],
+  ])("%s: %s", (_name, p, outcome) => {
+    expect(decide(p)).toBe(outcome);
   });
 
-  it("waits where Square added tax or a charge on top of what staff typed, even where the total happens to equal a bill", () => {
-    expect(decide({ addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] })).toEqual({ kind: "wait", reason: "square_tax" });
-    // Who and what still come first: nobody picked, or items, say so before the tax does.
-    expect(decide({ addedOnTop: true, customer: "none" })).toEqual({ kind: "wait", reason: "no_customer" });
-    expect(decide({ addedOnTop: true, lines: "items" })).toEqual({ kind: "shop_sale" });
+  it.each<Case>([
+    // Who paid, then what was sold, come before any bill.
+    ["no customer picked", { customer: "none", candidates: [period("amy", TODAY, 4500)] }, "no_customer"],
+    ["a customer no record holds", { customer: "unknown", candidates: [period("amy", TODAY, 4500)] }, "not_linked"],
+    ["a customer two records hold", { customer: "several", candidates: [period("amy", TODAY, 4500)] }, "several_people"],
+    ["typed amounts and items together", { lines: "mixed", candidates: [period("amy", TODAY, 4500)] }, "mixed_sale"],
+    ["what was sold could not be read", { lines: "unread", candidates: [period("amy", TODAY, 4500)] }, "sale_unread"],
+    ["nobody picked, with Square's tax on top", { customer: "none", addedOnTop: true }, "no_customer"],
+    // Square's tax added on top of what staff typed: the part typed is what a bill is matched to.
+    ["tax on top, the part typed not shown (a sale paid in two payments)", { addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4500)] }, "square_tax"],
+    ["tax on top, the total happening to equal a bill, the part typed not shown", { addedOnTop: true, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] }, "square_tax"],
+    ["tax on top, the part typed exactly the bill", { addedOnTop: true, enteredMinor: 4500, amountMinor: 4871, candidates: [period("amy", TODAY, 4500)] }, "ready"],
+    ["tax on top, the total equal to a bill but the part typed not", { addedOnTop: true, enteredMinor: 4500, amountMinor: 4871, candidates: [period("amy", TODAY, 4871)] }, "no_bill"],
+    // The bills.
+    ["no bill at all", { candidates: [] }, "no_bill"],
+    ["a bill of another amount", { candidates: [period("amy", TODAY, 4000)] }, "no_bill"],
+    ["more than is left on the bill", { amountMinor: 4500, candidates: [period("amy", TODAY, 2500)] }, "no_bill"],
+    ["less than is left on the bill", { amountMinor: 2500, candidates: [period("amy", TODAY, 4500)] }, "no_bill"],
+    ["what is left of a bill part-paid, exactly", { amountMinor: 2500, candidates: [period("amy", TODAY, 2500)] }, "ready"],
+    ["a bill due today", { candidates: [period("amy", TODAY, 4500)] }, "ready"],
+    ["an overdue bill", { candidates: [period("amy", "2026-10-01", 4500)] }, "ready"],
+    ["a bill due within the week", { candidates: [period("amy", "2026-11-01", 4500)] }, "ready"],
+    ["a bill due in eight days", { candidates: [period("amy", "2026-11-02", 4500)] }, "too_early"],
+    ["a fee of exactly that amount", { amountMinor: 1500, candidates: [period("amy", TODAY, 4500), fee("amy", "2026-10-24", 1500)] }, "ready"],
+    ["bills of that amount owed by a payer and the person they pay for", { candidates: [period("ben", TODAY, 4500), period("cal", TODAY, 4500)] }, "several_bills"],
+    ["the payer's older and the child's newer bill of that amount", { candidates: [period("ben", "2026-10-20", 4500), period("cal", TODAY, 4500)] }, "several_bills"],
+    ["one person's bill of that amount, the other's of another", { candidates: [period("ben", TODAY, 4500), period("cal", TODAY, 3000)] }, "ready"],
+    ["one person's older and newer bill of that amount", { candidates: [period("amy", TODAY, 4500), period("amy", "2026-10-18", 4500)] }, "ready"],
+    ["two of one person's bills of that amount due the same day", { candidates: [period("amy", TODAY, 4500), fee("amy", TODAY, 4500)] }, "several_bills"],
+    ["a bill too far ahead beside one due now", { candidates: [period("amy", "2026-12-01", 4500), period("amy", TODAY, 4500)] }, "ready"],
+    ["somebody else's bill too far ahead beside one due now", { candidates: [period("cal", "2026-12-01", 4500), period("amy", TODAY, 4500)] }, "ready"],
+    ["money for that membership out on the Terminal or the card on file", { candidates: [period("amy", TODAY, 4500, { busy: true })] }, "busy"],
+    ["a bill not yet due, the one before it paid just now", { candidates: [period("amy", "2026-11-01", 4500, { paidJustBefore: true })] }, "maybe_twice"],
+    ["a bill owed now, the one before it paid just now", { candidates: [period("amy", TODAY, 4500, { paidJustBefore: true })] }, "ready"],
+  ])("%s: %s", (_name, p, outcome) => {
+    expect(decide(p)).toBe(outcome);
   });
 
-  it("waits where no bill is exactly what was paid: none at all, another amount, more than is left", () => {
-    expect(decide({ candidates: [] })).toEqual({ kind: "wait", reason: "no_bill" });
-    expect(decide({ candidates: [period("amy", TODAY, 4000)] })).toEqual({ kind: "wait", reason: "no_bill" });
-    expect(decide({ amountMinor: 4500, candidates: [period("amy", TODAY, 2500)] })).toEqual({ kind: "wait", reason: "no_bill" });
-    expect(decide({ amountMinor: 2500, candidates: [period("amy", TODAY, 4500)] })).toEqual({ kind: "wait", reason: "no_bill" });
-  });
-
-  it("records what is left of a bill part-paid, exactly", () => {
-    const left = period("amy", TODAY, 2500);
-    expect(recorded(decide({ amountMinor: 2500, candidates: [left] }))).toEqual(left);
-  });
-
-  it("pays a bill early by itself only within a week of its day", () => {
-    const week = period("amy", "2026-11-01", 4500);
-    const eight = period("amy", "2026-11-02", 4500);
+  it("a week is seven days", () => {
     expect(SQUARE_APP.aheadDays).toBe(7);
-    expect(recorded(decide({ candidates: [week] }))).toEqual(week);
-    expect(decide({ candidates: [eight] })).toEqual({ kind: "wait", reason: "too_early" });
-  });
-
-  it("records a bill due today or overdue", () => {
-    const overdue = period("amy", "2026-10-01", 4500);
-    expect(recorded(decide({ candidates: [overdue] }))).toEqual(overdue);
-    const today = period("amy", TODAY, 4500);
-    expect(recorded(decide({ candidates: [today] }))).toEqual(today);
-  });
-
-  it("waits where bills of that amount are owed by two people, a payer's and the person they pay for", () => {
-    expect(decide({ candidates: [period("ben", TODAY, 4500), period("cal", TODAY, 4500)] })).toEqual({ kind: "wait", reason: "several_bills" });
-    expect(decide({ candidates: [period("ben", "2026-10-20", 4500), period("cal", TODAY, 4500)] })).toEqual({ kind: "wait", reason: "several_bills" });
-  });
-
-  it("records the one person's bill of that amount where the other person's differs", () => {
-    const ben = period("ben", TODAY, 4500);
-    expect(recorded(decide({ candidates: [ben, period("cal", TODAY, 3000)] }))).toEqual(ben);
-    const cal = period("cal", TODAY, 4500);
-    expect(recorded(decide({ candidates: [period("ben", TODAY, 3000), cal] }))).toEqual(cal);
-  });
-
-  it("records one person's older bill of that amount, and waits where two of theirs fall due the same day", () => {
-    const older = period("amy", "2026-10-18", 4500);
-    const newer = period("amy", TODAY, 4500);
-    expect(recorded(decide({ candidates: [newer, older] }))).toEqual(older);
-    expect(decide({ candidates: [period("amy", TODAY, 4500), fee("amy", TODAY, 4500)] })).toEqual({ kind: "wait", reason: "several_bills" });
-  });
-
-  it("records a fee of exactly that amount", () => {
-    const late = fee("amy", "2026-10-24", 1500);
-    expect(recorded(decide({ amountMinor: 1500, candidates: [period("amy", TODAY, 4500), late] }))).toEqual(late);
-  });
-
-  it("a bill too far ahead never stands in the way of one due now", () => {
-    const now = period("amy", TODAY, 4500);
-    expect(recorded(decide({ candidates: [period("amy", "2026-12-01", 4500), now] }))).toEqual(now);
-    // Somebody else's bill too far ahead is not "two people" either.
-    expect(recorded(decide({ candidates: [period("cal", "2026-12-01", 4500), now] }))).toEqual(now);
-  });
-
-  it("waits while a payment for that membership is on the Terminal or its card is being charged", () => {
-    expect(decide({ candidates: [period("amy", TODAY, 4500, { busy: true })] })).toEqual({ kind: "wait", reason: "busy" });
-  });
-
-  it("waits where a bill not yet due would be paid straight after the one before it: the person may have paid twice", () => {
-    expect(decide({ candidates: [period("amy", "2026-11-01", 4500, { paidJustBefore: true })] })).toEqual({ kind: "wait", reason: "maybe_twice" });
-    // Due today or before, it is owed now: recorded, whatever was paid before it.
-    const owed = period("amy", TODAY, 4500, { paidJustBefore: true });
-    expect(recorded(decide({ candidates: [owed] }))).toEqual(owed);
   });
 });
 

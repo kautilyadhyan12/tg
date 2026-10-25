@@ -1,5 +1,6 @@
 // Payments to match (ROADMAP 18d-iii-b-ii-a; spec Part 3 §14.8): the list of payments from Square Point
-// of Sale that wait, Match, Not a bill payment and its Undo, and the card on file waiting meanwhile,
+// of Sale, every one waiting for one press of Match (Kd, 2026-10-25), the bill it fits ticked where that is
+// plain, Not for a bill and its Undo, and the card on file waiting meanwhile,
 // through Square's signed messages, the worker's minute and the routes, against real Postgres
 // (DATABASE_URL-gated), with Square answered by the fake in `fakeSquareTerminal.ts`.
 //
@@ -344,10 +345,11 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     const zoeCard = await cardFor(gym, zoe.entryId);
 
     // Ben pays at the desk in Square Point of Sale, staff picking him; Square adds its own tax on top of the
-    // $25.00 typed, so the payment can't go on a bill by itself and waits.
+    // $25.00 typed. Nothing goes on a bill by itself, and his bill and Kai's are both $25.00: it waits for
+    // staff to say which.
     const paid = await takenIn(gym, { amount: 2706, addedTax: 206, customerId: benCard.customerId });
     const row = await rowOf(paid.id);
-    expect([row.state, row.reason, row.entry_id, row.entered_minor]).toEqual(["waiting", "square_tax", ben.entryId, 2500]);
+    expect([row.state, row.reason, row.entry_id, row.entered_minor]).toEqual(["waiting", "several_bills", ben.entryId, 2500]);
 
     // Noon: the worker's minute charges the cards on file of the bills due today.
     clock = new Date(`${today}T17:00:00Z`);
@@ -369,11 +371,18 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     expect(takenFrom(benCard.cardId)).toEqual([]);
 
     // Their pages say so: Ben's own payment, and on Kai's the payment of Ben, who pays for him.
-    expect((await held(gym, ben.entryId)).squareAppWaiting.map((w) => [w.id, w.amountMinor, w.byName, w.holdsCard])).toEqual([[row.id, 2706, null, true]]);
+    expect((await held(gym, ben.entryId)).squareAppWaiting.map((w) => [w.id, w.amountMinor, w.enteredMinor, w.byName, w.holdsCard, w.bill?.entryId])).toEqual([[row.id, 2706, 2500, null, true, undefined]]);
     expect((await held(gym, kai.entryId)).squareAppWaiting.map((w) => [w.amountMinor, w.byName, w.holdsCard])).toEqual([[2706, "Ben Ortiz", true]]);
     expect((await held(gym, zoe.entryId)).squareAppWaiting).toEqual([]);
-    // And Payments to match: why it waits, and that it holds his card.
-    expect(await listed(gym, row.id)).toMatchObject({ reason: "square_tax", amountMinor: 2706, enteredMinor: 2500, holdsCard: true, person: { entryId: ben.entryId, name: "Ben Ortiz" } });
+    // And Payments to match: no bill ticked while two fit, and that it holds his card.
+    expect(await listed(gym, row.id)).toMatchObject({
+      reason: "several_bills",
+      amountMinor: 2706,
+      enteredMinor: 2500,
+      holdsCard: true,
+      person: { entryId: ben.entryId, name: "Ben Ortiz" },
+      bill: null,
+    });
 
     // Staff match it to Ben's bill: the $25.00 entered goes on it once, as Square Point of Sale.
     const matched = await match(gym, row.id, ben, { amountMinor: 2500 });
@@ -393,6 +402,97 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     expect((await paymentsOf(ben)).filter((p) => p.bill_id === benBill?.id)).toHaveLength(1);
     expect(takenFrom(zoeCard.cardId)).toHaveLength(1);
     expect((await held(gym, ben.entryId)).squareAppWaiting).toEqual([]);
+  });
+
+  it("one press: a payment of exactly what Amy owes goes on no bill by itself; it waits with her bill ticked, her card held, until Match", async () => {
+    const gym = await makeGym(`Press Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const today = (await held(gym, await person(gym, "Clock Reader"))).today;
+    clock = new Date(`${today}T10:00:00Z`);
+    const amy = await owing(gym, typeId, await person(gym, "Amy Press"));
+    const amyCard = await cardFor(gym, amy.entryId);
+    // Exactly her $25.00 bill, typed, Amy picked: Square says who paid, never what for.
+    const paid = await takenIn(gym, { amount: 2500, customerId: amyCard.customerId, device: "Front desk 2" });
+    const row = await rowOf(paid.id);
+    expect([row.state, row.reason, row.member_payment_id]).toEqual(["waiting", "ready", null]);
+    expect((await second(amy))?.status).toBe("open");
+    expect(await listed(gym, row.id)).toMatchObject({ deviceName: "Front desk 2", bill: { entryId: amy.entryId, target: { kind: "period", periodIndex: 1 }, leftMinor: 2500 } });
+
+    // Noon: her card is not charged while it waits.
+    clock = new Date(`${today}T17:00:00Z`);
+    await work();
+    expect(takenFrom(amyCard.cardId)).toEqual([]);
+    expect((await second(amy))?.status).toBe("open");
+
+    // One press, from her page's ticked bill: on the bill once, and her card is never charged for it.
+    const bill = (await held(gym, amy.entryId)).squareAppWaiting[0]?.bill;
+    if (bill === undefined || bill === null) throw new Error("no bill ticked on her page");
+    const pressed = await send("POST", `${toMatchUrl(gym)}/${row.id}/match`, gym.owner.cookies, {
+      requestKey: randomUUID(),
+      entryId: bill.entryId,
+      membershipId: bill.membershipId,
+      target: bill.target,
+      amountMinor: bill.leftMinor,
+    });
+    expect(pressed.statusCode, pressed.body).toBe(200);
+    expect((await second(amy))?.status).toBe("paid");
+    await work();
+    expect(takenFrom(amyCard.cardId)).toEqual([]);
+    expect((await paymentsOf(amy)).filter((p) => p.method === "square_app").map((p) => p.provider_payment_id)).toEqual([paid.id]);
+  });
+
+  it("a membership rung up as a shop item: a sale of items for Leo, of at least what he owes this week, waits and holds his card; a smaller one is a shop sale", async () => {
+    const gym = await makeGym(`Items Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const today = (await held(gym, await person(gym, "Clock Reader"))).today;
+    clock = new Date(`${today}T10:00:00Z`);
+    const leo = await owing(gym, typeId, await person(gym, "Leo Items"));
+    const leoCard = await cardFor(gym, leo.entryId);
+    // A protein bar for $4.00: a shop sale, kept off the list.
+    const bar = await takenIn(gym, { amount: 400, customerId: leoCard.customerId, lines: ["ITEM"] });
+    expect([(await rowOf(bar.id)).state, (await rowOf(bar.id)).reason]).toEqual(["shop_sale", null]);
+    // "Gold Weekly" sold as an item in Square, $25.00 plus Square's $2.06 tax: it may be his bill.
+    const item = await takenIn(gym, { amount: 2706, addedTax: 206, customerId: leoCard.customerId, lines: ["ITEM"] });
+    const row = await rowOf(item.id);
+    expect([row.state, row.reason, row.entry_id]).toEqual(["waiting", "shop_items", leo.entryId]);
+    expect(await listed(gym, row.id), "nothing ticked: staff say what it was").toMatchObject({ reason: "shop_items", bill: null, holdsCard: true });
+
+    // Noon: his card is not charged while it waits.
+    clock = new Date(`${today}T17:00:00Z`);
+    await work();
+    expect(takenFrom(leoCard.cardId), "Leo's card is not charged for a bill he may have paid as an item").toEqual([]);
+    // It was his membership: Match asks how much was for the bill, and the card stays free of it.
+    const box = matchBillsResponseSchema.parse(JSON.parse((await send("GET", `${toMatchUrl(gym)}/${row.id}/bills?entryId=${leo.entryId}`, gym.owner.cookies)).body));
+    expect([box.amountMinor, box.suggested]).toEqual([null, null]);
+    expect((await match(gym, row.id, leo, { amountMinor: 2500 })).statusCode).toBe(200);
+    await work();
+    expect(takenFrom(leoCard.cardId)).toEqual([]);
+    expect((await second(leo))?.status).toBe("paid");
+  });
+
+  it("the look before charging: a desk payment whose message from Square never came is found before Mia's card is charged, not after", async () => {
+    const gym = await makeGym(`Late Gym ${uniq()}`);
+    const typeId = await typeOf(gym);
+    const today = (await held(gym, await person(gym, "Clock Reader"))).today;
+    clock = new Date(`${today}T10:00:00Z`);
+    const mia = await owing(gym, typeId, await person(gym, "Mia Late"));
+    const miaCard = await cardFor(gym, mia.entryId);
+    // The first minute begins watching the gym's Square payments.
+    await work();
+    // Mia pays at the desk, picked; Square's message about it is lost.
+    clock = new Date(`${today}T16:50:00Z`);
+    const paid = square.appPayment(gym.acct, { amount: 2500, customerId: miaCard.customerId, locationId: gym.locationId });
+    // Noon: before her card is charged, the gym's payments are looked at, and hers holds the card.
+    clock = new Date(`${today}T17:00:00Z`);
+    await work();
+    expect((await rowOf(paid.id)).reason).toBe("ready");
+    expect(takenFrom(miaCard.cardId), "Mia's card is not charged for the bill she paid at the desk").toEqual([]);
+    expect((await second(mia))?.status).toBe("open");
+    // A minute on, nothing is asked of Square again for her held bill.
+    const looks = square.listed().length;
+    clock = new Date(clock.getTime() + 60_000);
+    await work();
+    expect(square.listed().length, "Square is not asked every minute").toBe(looks);
   });
 
   it("Match puts it on the bill once, whatever arrives twice: the same press again is the same answer, two presses at once record it once, and a stranger's gym gets 404", async () => {

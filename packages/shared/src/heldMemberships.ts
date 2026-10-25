@@ -43,6 +43,7 @@ import { MEMBERSHIP_PAYMENTS, gymDiscountSchema } from "./discounts.js";
 import { friendGiftSchema } from "./friendGift.js";
 import { GIFT_DAYS_MAX, memberGiftSchema } from "./memberGift.js";
 import { memberBillingSchema, memberPaymentByHandSchema } from "./memberBills.js";
+import { matchBillSchema } from "./matchBill.js";
 
 export const HELD_MEMBERSHIP_STATUSES = ["active", "frozen", "ended", "cancelled"] as const;
 export const heldMembershipStatusSchema = z.enum(HELD_MEMBERSHIP_STATUSES);
@@ -912,6 +913,16 @@ export const squareAppWaitingSchema = z
     byName: z.string().nullable(),
     /** While it waits, the card on file is not charged for them. */
     holdsCard: z.boolean(),
+    /** When Square took it, and on which of the gym's devices, as Payments to match says it. */
+    takenAt: z.string().datetime(),
+    deviceName: z.string().min(1).max(100).nullable(),
+    /** The part staff typed, where Square added tax on top and showed it. */
+    enteredMinor: z.number().int().min(1).max(999_999_999).nullable(),
+    /** The bill before the one ticked was paid less than two days before: they may have paid twice. */
+    maybeTwice: z.boolean(),
+    /** The bill it fits, ticked for one press of Match here (Kd, 2026-10-25); null where staff choose in
+     *  Payments to match. */
+    bill: matchBillSchema.nullable(),
   })
   .strict();
 export type SquareAppWaiting = z.infer<typeof squareAppWaitingSchema>;

@@ -3,7 +3,7 @@
 // The payments are `gym_square_app_payments` rows that wait (18d-iii-b-i). Every statement names the
 // gym, and every write is asked under the gym's lock with the row as it stands then: a payment is put on
 // a bill, marked or put back once, whichever press reaches it first.
-import { memberFeeKindSchema, SQUARE_APP_WAIT_REASONS, type MemberFeeKind, type SalePerson, type SquareAppWaiting, type SquareAppWaitReason } from "@app/shared";
+import { memberFeeKindSchema, SQUARE_APP_WAIT_REASONS, type MemberFeeKind, type SalePerson, type SquareAppWaitReason } from "@app/shared";
 import type { Sql, TransactionSql } from "postgres";
 import { z } from "zod";
 import { NO_NAME } from "../register/repo.js";
@@ -31,6 +31,8 @@ export interface WaitingRow {
   source: string | null;
   customerId: string | null;
   customer: CustomerSeen | null;
+  /** The name the gym gave the Square device that took it. */
+  deviceName: string | null;
   reason: SquareAppWaitReason;
   /** The record Square's customer is, where it is one's. */
   entryId: string | null;
@@ -56,6 +58,7 @@ interface RawWaiting {
   customer_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
+  device_name: string | null;
   reason: string | null;
   entry_id: string | null;
   full_name: string | null;
@@ -67,7 +70,7 @@ interface RawWaiting {
 const COLUMNS = (sql: SqlOrTx) => sql`
   w.id, w.environment, w.account_id, w.square_payment_id, w.location_id, w.taken_at, w.amount_minor, w.tip_minor, w.currency,
   w.entered_minor, w.refunded_minor, w.brand, w.last4, w.source, w.customer_id, w.customer_name, w.customer_email, w.customer_phone,
-  w.reason, w.entry_id, e.full_name, e.member_number, e.email::text AS email, e.former_at IS NOT NULL AS past`;
+  w.device_name, w.reason, w.entry_id, e.full_name, e.member_number, e.email::text AS email, e.former_at IS NOT NULL AS past`;
 
 function toWaiting(r: RawWaiting): WaitingRow {
   const shaped = toTaken(r);
@@ -94,6 +97,7 @@ function toTaken(r: RawWaiting): Omit<WaitingRow, "reason"> & { reason: SquareAp
     source: r.source,
     customerId: r.customer_id,
     customer,
+    deviceName: r.device_name,
     reason: r.reason === null ? null : reasonSchema.parse(r.reason),
     entryId: r.entry_id,
     person:
@@ -281,11 +285,39 @@ export async function linkedNames(
   return out;
 }
 
+export interface WaitingForRow {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  takenOn: string;
+  takenAt: Date;
+  deviceName: string | null;
+  enteredMinor: number | null;
+  reason: SquareAppWaitReason;
+  /** Whose payment: the person's own, or their payer's. */
+  entryId: string;
+  byName: string | null;
+}
+
 /** The payments waiting that hold this person's card on file: theirs, and those of whoever pays for them,
  *  newest first, with the payer's name where it is theirs, and the gym's own day each was taken. */
-export async function waitingFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<{ id: string; amountMinor: number; currency: string; takenOn: string; byName: string | null }[]> {
-  const rows = await sql<{ id: string; amount_minor: number; currency: string; taken_on: string; entry_id: string; full_name: string }[]>`
-    SELECT w.id, w.amount_minor, w.currency, (w.taken_at AT TIME ZONE g.timezone)::date::text AS taken_on, w.entry_id, e.full_name
+export async function waitingFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<WaitingForRow[]> {
+  const rows = await sql<
+    {
+      id: string;
+      amount_minor: number;
+      currency: string;
+      taken_on: string;
+      taken_at: Date;
+      device_name: string | null;
+      entered_minor: number | null;
+      reason: string | null;
+      entry_id: string;
+      full_name: string;
+    }[]
+  >`
+    SELECT w.id, w.amount_minor, w.currency, (w.taken_at AT TIME ZONE g.timezone)::date::text AS taken_on, w.taken_at, w.device_name,
+           w.entered_minor, w.reason, w.entry_id, e.full_name
     FROM gym_square_app_payments w
     JOIN gyms g ON g.id = w.gym_id
     JOIN gym_member_list_entries e ON e.gym_id = w.gym_id AND e.id = w.entry_id
@@ -298,15 +330,13 @@ export async function waitingFor(sql: SqlOrTx, gymId: string, entryId: string): 
     amountMinor: r.amount_minor,
     currency: r.currency,
     takenOn: r.taken_on,
+    takenAt: r.taken_at,
+    deviceName: r.device_name,
+    enteredMinor: r.entered_minor,
+    reason: reasonSchema.parse(r.reason),
+    entryId: r.entry_id,
     byName: r.entry_id === entryId ? null : r.full_name.trim() === "" ? NO_NAME : r.full_name,
   }));
-}
-
-/** The person's page (heldService): the payments from Square Point of Sale waiting that hold their card on
- *  file, theirs or their payer's, and whether a card of theirs is held by them. */
-export async function squareAppWaitingFor(sql: SqlOrTx, gymId: string, entryId: string): Promise<SquareAppWaiting[]> {
-  const [rows, held] = await Promise.all([waitingFor(sql, gymId, entryId), cardHeldFor(sql, gymId, [entryId])]);
-  return rows.map((r) => ({ ...r, holdsCard: held.has(entryId) }));
 }
 
 // ── Match's box ──────────────────────────────────────────────────────────────
@@ -319,17 +349,23 @@ export interface PersonRow {
   past: boolean;
 }
 
-/** The person picked, and the people they pay for (18i), in that order; null where the person is not
- *  the gym's. */
-export async function peopleOf(sql: SqlOrTx, gymId: string, entryId: string): Promise<PersonRow[] | null> {
-  const rows = await sql<{ id: string; full_name: string; member_number: string | null; email: string | null; past: boolean; mine: boolean }[]>`
-    SELECT e.id, e.full_name, e.member_number, e.email::text AS email, e.former_at IS NOT NULL AS past, e.id = ${entryId} AS mine
-    FROM gym_member_list_entries e
-    WHERE e.gym_id = ${gymId}
-      AND (e.id = ${entryId} OR e.id IN (SELECT p.entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.payer_entry_id = ${entryId}))
-    ORDER BY (e.id = ${entryId}) DESC, lower(e.full_name), e.id`;
-  if (!rows.some((r) => r.mine)) return null;
-  return rows.map((r) => ({ entryId: r.id, name: r.full_name.trim() === "" ? NO_NAME : r.full_name, memberNumber: r.member_number, email: r.email, past: r.past }));
+/** Each person asked for, then the people they pay for (18i), in that order, by the person asked for; a
+ *  person who is not the gym's is missing. */
+export async function peopleOfMany(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Map<string, PersonRow[]>> {
+  const out = new Map<string, PersonRow[]>();
+  if (entryIds.length === 0) return out;
+  const rows = await sql<{ root: string; id: string; full_name: string; member_number: string | null; email: string | null; past: boolean }[]>`
+    SELECT x.root, e.id, e.full_name, e.member_number, e.email::text AS email, e.former_at IS NOT NULL AS past
+    FROM unnest(${[...entryIds]}::uuid[]) AS x(root)
+    JOIN gym_member_list_entries e ON e.gym_id = ${gymId}
+      AND (e.id = x.root OR e.id IN (SELECT p.entry_id FROM gym_member_payers p WHERE p.gym_id = ${gymId} AND p.payer_entry_id = x.root))
+    ORDER BY x.root, (e.id = x.root) DESC, lower(e.full_name), e.id`;
+  for (const r of rows) {
+    const person = { entryId: r.id, name: r.full_name.trim() === "" ? NO_NAME : r.full_name, memberNumber: r.member_number, email: r.email, past: r.past };
+    out.set(r.root, [...(out.get(r.root) ?? []), person]);
+  }
+  for (const [root, people] of out) if (people[0]?.entryId !== root) out.delete(root);
+  return out;
 }
 
 /** The memberships of these people a bill could be paid on: in use, or with a bill still owed. */

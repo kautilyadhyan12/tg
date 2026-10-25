@@ -23,7 +23,8 @@ import postgres from "postgres";
 import { openDueBills } from "../src/modules/orgs/memberships/billsRepo.js";
 import { dueBills } from "../src/modules/orgs/payments/cardChargesRepo.js";
 import { matchPayment, markNotABill, putBackToMatch, readMatchBills, readPaymentsToMatch, readToMatchSummary } from "../src/modules/orgs/payments/paymentsToMatch.js";
-import { squareAppWaitingFor } from "../src/modules/orgs/payments/paymentsToMatchRepo.js";
+import { dayInTz } from "../src/modules/gamification/streak.js";
+import { squareAppWaitingFor } from "../src/modules/orgs/payments/paymentsToMatchBills.js";
 import { accessContext } from "../src/modules/orgs/payments/service.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { account, fakeSquare, type Account } from "../test/fakeSquareTerminal.js";
@@ -258,7 +259,7 @@ many(
 );
 console.log(`${"  bills it would charge in one minute (it looks at 500 at most)".padEnd(70)} ${String(found)}`);
 console.log(`${"  bills it would charge in all, the rest held".padEnd(70)} ${String((await look(100_000)).length)}`);
-many(`the person's page, what waits for them, at the gym of ${String(BIG)}`, await runs((i) => squareAppWaitingFor(sql, big.id, big.people[RUNS * 2 + i]?.entryId ?? "")));
+many(`the person's page, what waits for them, at the gym of ${String(BIG)}`, await runs((i) => squareAppWaitingFor(sql, big.id, big.people[RUNS * 2 + i]?.entryId ?? "", dayInTz(new Date(), "America/Chicago"))));
 
 // And once nothing waits: the same look, for comparison.
 await sql`UPDATE gym_square_app_payments SET state = 'not_bill', not_bill = 'other' WHERE gym_id = ANY(${all}::uuid[]) AND state = 'waiting'`;

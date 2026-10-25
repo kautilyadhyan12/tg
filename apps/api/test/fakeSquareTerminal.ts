@@ -51,6 +51,7 @@ export function fakeSquare() {
   const devices = new Map<string, { accountId: string; behaviour: Behaviour }>();
   const checkouts = new Map<string, FakeCheckout>();
   const checkoutKeys = new Map<string, string>();
+  const listings: { locationId: string }[] = [];
   const payments = new Map<string, SquarePayment & { accountId: string }>();
   const orders = new Map<string, SquareOrder & { accountId: string }>();
   /** Each account's own item library of taxes (18d-iii-b-i). */
@@ -294,6 +295,7 @@ export function fakeSquare() {
       return Promise.resolve({ kind: "ok", value: payment });
     },
     listPayments(token, q) {
+      listings.push({ locationId: q.locationId });
       if (state.down || state.listDown) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
@@ -384,6 +386,8 @@ export function fakeSquare() {
       referenceId?: string;
       /** The sale paid with this and another payment (Square's split tender). */
       split?: boolean;
+      /** The name the gym gave the device that took it (Square's `device_details.device_name`). */
+      device?: string;
     },
   ): SquarePayment => {
     n += 1;
@@ -416,6 +420,7 @@ export function fakeSquare() {
       created_at: (o.at ?? state.now()).toISOString(),
       ...(o.refunded === undefined ? {} : { refunded_money: { amount: o.refunded, currency } }),
       ...(o.referenceId === undefined ? {} : { reference_id: o.referenceId }),
+      ...(o.device === undefined ? {} : { device_details: { device_name: o.device } }),
     };
     payments.set(id, payment);
     const out: SquarePayment & { accountId?: string } = { ...payment };
@@ -446,7 +451,9 @@ export function fakeSquare() {
     if (p === undefined) throw new Error("no such payment");
     p.refunded_money = { amount, currency: p.amount_money.currency };
   };
-  return { api, allow, state, devices, checkouts, payments, orders, taxes, at, card, cards, charged, taken, appPayment, addTax, customer, refund };
+  /** Every ListPayments asked, oldest first: the hourly look and the look before charging. */
+  const listed = () => [...listings];
+  return { api, allow, state, devices, checkouts, payments, orders, taxes, at, card, cards, charged, taken, appPayment, addTax, customer, refund, listed };
 }
 
 export const account = (merchantId: string, country = "US"): Account => ({

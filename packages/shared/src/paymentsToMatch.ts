@@ -1,10 +1,10 @@
 // PAYMENTS TO MATCH (ROADMAP 18d-iii-b-ii-a; spec Part 3 §14.8; rulings/2026-10-25-18d-iii-b-ii-a.md).
 //
-// A payment taken in Square Point of Sale that did not go on a bill by itself waits for staff
-// (18d-iii-b-i, `squareAppDecision`). This page lists them, newest first, for staff who take payments.
-// Match puts one on the bill staff pick, as Square Point of Sale, by the same step Record payment takes;
-// Not a bill payment takes one off the list (a shop sale typed in as an amount, or a payment already
-// recorded on a bill by hand), with Undo.
+// Every payment taken in Square Point of Sale waits here for staff (Kd, 2026-10-25: "one press"; why each
+// waits is `squareAppDecision`), newest first, for staff who take payments. Where one bill fits, it is
+// ticked and one press of Match puts the payment there, as Square Point of Sale, by the same step Record
+// payment takes; otherwise staff choose who paid or which bill. Not for a bill takes one off the list (a
+// shop sale typed in as an amount, or a payment already recorded on a bill by hand), with Undo.
 //
 // THE WORST THING here is a member charged twice: their card on file charged for a bill they already paid
 // in Square Point of Sale, while that payment waits. So while a payment of theirs waits (or of whoever pays
@@ -12,7 +12,8 @@
 // Failed payments and this list say why.
 import { z } from "zod";
 import { cardSeenSchema } from "./cardCharges.js";
-import { memberFeeKindSchema, memberPaymentMethodSchema } from "./memberBills.js";
+import { matchBillSchema, matchTargetSchema } from "./matchBill.js";
+import { memberPaymentMethodSchema } from "./memberBills.js";
 import { salePersonSchema } from "./register.js";
 import { SQUARE_APP_WAIT_REASONS } from "./squareAppPayments.js";
 
@@ -67,6 +68,12 @@ export const paymentToMatchSchema = z
     reason: z.enum(SQUARE_APP_WAIT_REASONS),
     /** While it waits, a card on file is not charged for `person`, or for somebody they pay for. */
     holdsCard: z.boolean(),
+    /** The name the gym gave the Square device that took it ("the name of the device set by the seller",
+     *  Square's Payment reference, read 2026-10-25), so each desk knows its own; null where Square gave none. */
+    deviceName: z.string().min(1).max(100).nullable(),
+    /** The one bill it fits, as Match's box ticks it, where why it waits leaves no doubt which (one press);
+     *  null where staff choose who paid or which bill. Match puts `leftMinor` of it there. */
+    bill: matchBillSchema.nullable(),
   })
   .strict();
 export type PaymentToMatch = z.infer<typeof paymentToMatchSchema>;
@@ -102,39 +109,6 @@ export const paymentsToMatchQuerySchema = z
 
 /** One payment's address: its gym, and its own id here (never Square's). */
 export const paymentToMatchParamsSchema = z.object({ gymId: z.string().uuid(), paymentId: z.string().uuid() }).strict();
-
-/** A bill a payment can go on: the next one of a membership (the one Record payment takes), or a fee
- *  that is owed. */
-export const matchTargetSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("period"), periodIndex: z.number().int().min(0).max(100_000) }).strict(),
-  z.object({ kind: z.literal("fee"), billId: z.string().uuid() }).strict(),
-]);
-export type MatchTarget = z.infer<typeof matchTargetSchema>;
-
-/** Why a bill can't take the payment now. `too_little`: less is left on it than the payment;
- *  `fee_whole`: a fee is paid all at once, and this payment is another amount; `busy`: a payment for it
- *  is out on the Square Terminal or the card on file; `currency`: it is in another currency. */
-export const MATCH_BILL_CANNOT = ["too_little", "fee_whole", "busy", "currency"] as const;
-
-export const matchBillSchema = z
-  .object({
-    /** Whose bill: the person picked, or somebody they pay for. */
-    entryId: z.string().uuid(),
-    name: z.string(),
-    membershipId: z.string().uuid(),
-    typeName: z.string(),
-    target: matchTargetSchema,
-    /** A fee's kind and what it was for; null for a membership's bill. */
-    fee: z.object({ kind: memberFeeKindSchema, forName: z.string().min(1) }).strict().nullable(),
-    /** The days a membership's bill covers; null for a membership of one period, and for a fee. */
-    covers: z.object({ from: daySchema, to: daySchema }).strict().nullable(),
-    dueOn: daySchema,
-    leftMinor: minorSchema,
-    currency: currencySchema,
-    cannot: z.enum(MATCH_BILL_CANNOT).nullable(),
-  })
-  .strict();
-export type MatchBill = z.infer<typeof matchBillSchema>;
 
 /** A payment already on one of their bills, shown in the Match box so one recorded by hand is seen. */
 export const matchPaidSchema = z
@@ -195,8 +169,8 @@ export const matchPaymentResponseSchema = z
   .strict();
 export type MatchPaymentResponse = z.infer<typeof matchPaymentResponseSchema>;
 
-/** Not a bill payment: a shop sale or anything else (`other`), or a payment already recorded on a bill
- *  by hand (`by_hand`). */
+/** Not for a bill: a shop sale or anything else (`other`), or a payment already recorded on a bill by
+ *  hand (`by_hand`). */
 export const NOT_A_BILL_REASONS = ["other", "by_hand"] as const;
 export const notABillRequestSchema = z.object({ why: z.enum(NOT_A_BILL_REASONS) }).strict();
 export type NotABillRequest = z.infer<typeof notABillRequestSchema>;
@@ -219,10 +193,10 @@ export const PAYMENTS_TO_MATCH_WORDS = {
   square_unavailable: "Square didn't answer just now. Nothing was changed. Try again in a minute.",
   not_connected: "Square isn't connected right now, so this payment can't be checked with Square. Reconnect Square in Settings, then try again.",
   other_account: "This payment was taken in another Square account than the one connected now, so it can't go on a bill here.",
-  too_much: "This is more than is left on that bill. Choose another bill, or choose Not a bill payment.",
+  too_much: "This is more than is left on that bill. Choose another bill, or choose Not for a bill.",
   busy: "A payment for that membership is being taken on the Square Terminal or charged to the card on file. Wait a minute, then try again.",
   bill_changed: "That bill has changed since you opened this. Open Match again.",
   past_member: "A past member's membership can't be paid here. Choose another bill.",
   /** The card on file is not charged while a payment of the person's from Square Point of Sale waits. */
-  card_held: "This person has a payment from Square Point of Sale waiting in Payments to match. Match it to their bill, or mark it Not a bill payment, before charging their card, so they aren't charged twice.",
+  card_held: "This person has a payment from Square Point of Sale waiting in Payments to match. Match it to their bill, or mark it Not for a bill, before charging their card, so they aren't charged twice.",
 } as const;

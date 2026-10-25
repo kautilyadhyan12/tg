@@ -595,8 +595,8 @@ export const gymCardExpiryNotices = pgTable(
 
 /** A payment Square made at a location of a Square account a gym here is connected to, not the app's
  *  own (0164; ROADMAP 18d-iii-b-i): taken in once, by Square's message or the hourly look, and what
- *  became of it. `recorded` on a bill, `waiting` for staff with `reason`, `shop_sale` items from the
- *  gym's list in Square. `gym_id` is null only for a location two gyms here use where no customer says
+ *  became of it. `waiting` for staff with `reason` (every one, since 0165: Kd's "one press"), `recorded`
+ *  on a bill once staff matched it, `shop_sale` items from the gym's list in Square. `gym_id` is null only for a location two gyms here use where no customer says
  *  whose. `record_key` is the request key it is recorded with, a new one each time staff take it off a
  *  bill. Its link to a record (`ON DELETE SET NULL` of `entry_id` alone) is in the migration only;
  *  `member_payment_id` has no link, as the Terminal's has none. */
@@ -635,6 +635,8 @@ export const gymSquareAppPayments = pgTable(
     customerName: text("customer_name"),
     customerEmail: text("customer_email"),
     customerPhone: text("customer_phone"),
+    /** The name the gym gave the Square device that took it (0165). */
+    deviceName: text("device_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   },
@@ -652,7 +654,7 @@ export const gymSquareAppPayments = pgTable(
     check("gym_square_app_payments_state_check", sql`${t.state} IN ('recorded','waiting','shop_sale','not_bill')`),
     check(
       "gym_square_app_payments_reason_check",
-      sql`(${t.state} IN ('waiting','not_bill')) = (${t.reason} IS NOT NULL) AND (${t.reason} IS NULL OR ${t.reason} IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill','refunded'))`,
+      sql`(${t.state} IN ('waiting','not_bill')) = (${t.reason} IS NOT NULL) AND (${t.reason} IS NULL OR ${t.reason} IN ('ready','no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill','refunded','shop_items'))`,
     ),
     check("gym_square_app_payments_recorded_check", sql`(${t.state} = 'recorded') = (${t.memberPaymentId} IS NOT NULL)`),
     check("gym_square_app_payments_gym_check", sql`${t.gymId} IS NOT NULL OR (${t.state} = 'waiting' AND ${t.reason} = 'several_gyms')`),
@@ -665,6 +667,7 @@ export const gymSquareAppPayments = pgTable(
       "gym_square_app_payments_customer_check",
       sql`(${t.customerName} IS NULL OR char_length(${t.customerName}) BETWEEN 1 AND 200) AND (${t.customerEmail} IS NULL OR char_length(${t.customerEmail}) BETWEEN 1 AND 320) AND (${t.customerPhone} IS NULL OR char_length(${t.customerPhone}) BETWEEN 1 AND 40)`,
     ),
+    check("gym_square_app_payments_device_check", sql`${t.deviceName} IS NULL OR char_length(${t.deviceName}) BETWEEN 1 AND 100`),
     uniqueIndex("gym_square_app_payments_square_uq").on(t.environment, t.accountId, t.squarePaymentId),
     index("gym_square_app_payments_gym_idx").on(t.gymId, t.state, t.takenAt),
     index("gym_square_app_payments_entry_idx").on(t.gymId, t.entryId).where(sql`${t.entryId} IS NOT NULL`),

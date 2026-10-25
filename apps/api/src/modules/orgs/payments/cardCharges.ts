@@ -402,8 +402,14 @@ export interface CardChargeRun {
 
 /** The worker's minute: charges Square has not answered are asked again, then the bills that have
  *  fallen due are charged. `gymIds`: only these gyms, for a test sharing its database; production
- *  passes null. */
-export async function processCardCharges(deps: PaymentsDeps, square: SquareSettings, gymIds: readonly string[] | null = null): Promise<CardChargeRun> {
+ *  passes null. `beforeGym`: run once for each gym before its first bill here is charged (the look at its
+ *  Square payments, 18d-iii-b-ii-a); the charge's own write still checks what it found. */
+export async function processCardCharges(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  gymIds: readonly string[] | null = null,
+  beforeGym: ((gymId: string) => Promise<void>) | null = null,
+): Promise<CardChargeRun> {
   const run: CardChargeRun = { asked: 0, charged: 0, paid: 0, declined: 0 };
   while (run.asked < CARD_CHARGE.perRun) {
     const at = deps.now();
@@ -415,6 +421,7 @@ export async function processCardCharges(deps: PaymentsDeps, square: SquareSetti
 
   // Tries again first: they are fewer, and each has waited days already.
   let looked = 0;
+  const gymsLooked = new Set<string>();
   const looks: { find: typeof charges.dueBills; again: boolean }[] = [
     { find: charges.retryBills, again: true },
     { find: charges.dueBills, again: false },
@@ -428,6 +435,10 @@ export async function processCardCharges(deps: PaymentsDeps, square: SquareSetti
         looked += 1;
         after = { gymId: bill.gymId, billId: bill.billId };
         if (run.charged >= CARD_CHARGE.perRun) break;
+        if (beforeGym !== null && !gymsLooked.has(bill.gymId)) {
+          gymsLooked.add(bill.gymId);
+          await beforeGym(bill.gymId);
+        }
         const step = await chargeDueBill(deps, square, bill, again);
         if (step === undefined) continue;
         run.charged += 1;
