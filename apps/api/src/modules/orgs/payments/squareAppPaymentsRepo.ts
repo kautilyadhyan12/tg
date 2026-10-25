@@ -148,6 +148,18 @@ export interface TakenPayment {
   last4: string | null;
   takenAt: Date;
   entryId: string | null;
+  /** The part staff entered as an amount, where it can be told (18d-iii-b-ii-a). */
+  enteredMinor: number | null;
+  refundedMinor: number;
+  /** What Square has of a customer linked to nobody here. */
+  customer: CustomerSeen | null;
+}
+
+/** What Square has of the customer on a payment, as the row keeps it. */
+export interface CustomerSeen {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
 }
 
 export type TakenState =
@@ -162,11 +174,13 @@ export async function insertTaken(tx: TransactionSql, p: TakenPayment, s: TakenS
   const rows = await tx<{ id: string }[]>`
     INSERT INTO gym_square_app_payments
       (environment, account_id, square_payment_id, gym_id, location_id, customer_id, amount_minor, tip_minor, currency,
-       source, brand, last4, taken_at, state, reason, entry_id, member_payment_id, record_key, created_at, updated_at)
+       source, brand, last4, taken_at, state, reason, entry_id, member_payment_id, record_key, entered_minor, refunded_minor,
+       customer_name, customer_email, customer_phone, created_at, updated_at)
     VALUES (${p.environment}, ${p.accountId}, ${p.squarePaymentId}, ${p.gymId}, ${p.locationId}, ${p.customerId}, ${p.amountMinor}, ${p.tipMinor},
             ${p.currency}, ${tag(p.source, /^[A-Z_]{1,40}$/)}, ${tag(p.brand, /^[A-Z_]{1,40}$/)}, ${tag(p.last4, /^[0-9]{4}$/)}, ${p.takenAt},
             ${s.state}, ${s.state === "waiting" ? s.reason : null}, ${p.entryId}, ${s.state === "recorded" ? s.memberPaymentId : null},
-            ${s.state === "recorded" ? s.recordKey : randomUUID()}, ${now}, ${now})
+            ${s.state === "recorded" ? s.recordKey : randomUUID()}, ${p.enteredMinor}, ${p.refundedMinor},
+            ${p.customer?.name ?? null}, ${p.customer?.email ?? null}, ${p.customer?.phone ?? null}, ${now}, ${now})
     ON CONFLICT (environment, account_id, square_payment_id) DO NOTHING
     RETURNING id`;
   return rows.length === 1;

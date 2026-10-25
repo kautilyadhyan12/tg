@@ -139,6 +139,31 @@ export function squareOrderAddsOnTop(order: {
   return taxed || (order.total_service_charge_money?.amount ?? 0) > 0;
 }
 
+/** What Square added on top of what staff typed, in all: its taxes added to the price and its charges. */
+export function squareOrderAddedMinor(order: Parameters<typeof squareOrderAddsOnTop>[0]): number {
+  const taxes = (order.taxes ?? []).filter((t) => t.type !== "INCLUSIVE").reduce((sum, t) => sum + Math.max(0, t.applied_money?.amount ?? 0), 0);
+  return taxes + Math.max(0, order.total_service_charge_money?.amount ?? 0);
+}
+
+/** The part of a payment staff entered as an amount, without what Square added on top (18d-iii-b-ii-a):
+ *  what Match puts on a bill. Told only where every line of the sale was a typed amount and this one
+ *  payment paid the whole of it (the order's one tender names it); null where it cannot be told (items
+ *  in the sale, the sale paid in parts, the order unread), and staff then say how much is for the bill.
+ *  `amountMinor` is the payment's own, without its tip, as Square keeps the tip apart. */
+export function squareAppEnteredMinor(
+  order: Parameters<typeof squareOrderAddsOnTop>[0] & {
+    line_items?: readonly { item_type?: string | null | undefined }[] | null | undefined;
+    tenders?: readonly { payment_id?: string | null | undefined }[] | null | undefined;
+  },
+  payment: { id: string; amountMinor: number },
+): number | null {
+  if (squareAppLinesOf((order.line_items ?? []).map((line) => line.item_type)) !== "typed") return null;
+  const tenders = order.tenders ?? [];
+  if (tenders.length !== 1 || tenders[0]?.payment_id !== payment.id) return null;
+  const entered = payment.amountMinor - squareOrderAddedMinor(order);
+  return entered > 0 ? entered : null;
+}
+
 /** A tax in the business's own Square item library, as the check reads it. */
 export interface SquareTaxFacts {
   name: string | null;
@@ -272,11 +297,11 @@ export const SQUARE_APP_WORDS = {
   pickPath: "In Square Point of Sale: [More] → [Settings] → [Checkout] → [Customer management].",
   pickDo: "Enable customer management. Then, under [Collect customer information], turn on [Before checkout].",
   cardSaved: "For members who have a card on file here, the payment is usually applied to their bill automatically when they are selected as the customer and the amount is exactly what the bill says.",
-  others: "For anyone else, or for a sale where no member is selected, Square will process the payment as usual. Then open their bill here, click [Record payment], and select [Card at the desk].",
-  /** A payment that waits (paid early, Square's tax added, two bills that day…) is shown and matched in
-   *  18d-iii-b-ii; until then the bill is recorded by hand, and its saved card is then not charged for it
-   *  (review round one, Kd's "B"). */
-  notShown: "If a payment does not appear on the member's bill a few minutes after it was taken, record it there the same way.",
+  /** A payment that does not go on a bill by itself (paid early, Square's tax added, nobody picked…) waits in
+   *  Payments to match (18d-iii-b-ii-a), where staff match it to the bill. */
+  others: "For anyone else, or for a sale where no member is selected, Square will process the payment as usual. It then waits in [Payments to match], where you match it to their bill.",
+  notShown: "Any payment that is not applied to a bill automatically waits in [Payments to match].",
+  toList: "Open Payments to match",
   items: "Shop items sold from your Square item list are never added to a bill.",
   needsAllowTitle: "Square needs your permission first",
   needsAllow: "Press [Reconnect Square], then [Allow] on Square's page. Nothing else changes.",

@@ -38,6 +38,7 @@ import {
   cardName,
   formatMinor,
   MEMBER_FEE_WORDS,
+  PAYMENTS_TO_MATCH_WORDS,
   memberFeeKindSchema,
   type CardCharge,
   type CardChargeRequest,
@@ -355,6 +356,8 @@ async function chargeByStaff(
       throw new OrgsError(409, "terminal_payment_waiting", "A payment for this membership is waiting on the Terminal. Wait for it to finish, or cancel it first.");
     case "card_charging":
       throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.charging);
+    case "square_app_waiting":
+      throw new OrgsError(409, "square_app_waiting", PAYMENTS_TO_MATCH_WORDS.card_held);
     case "fee_not_found":
       throw new OrgsError(404, "member_fee_not_found", "That fee was not found.");
     case "fee_changed":
@@ -463,6 +466,9 @@ async function chargeDueBill(deps: PaymentsDeps, square: SquareSettings, bill: c
     checkingUntil: leaseFrom(now),
   });
   if (written.kind !== "new") {
+    // Held while a payment from Square Point of Sale waits (18d-iii-b-ii-a): charged once it is matched or
+    // marked, while its day lasts; a try again keeps its day.
+    if (written.kind === "square_app_waiting") return undefined;
     if (written.kind !== "not_allowed" && written.kind !== "no_card") deps.log.warn({ event: "square.card_charge_skipped", gymId: bill.gymId, why: written.kind }, "a bill due was not charged");
     // A try again the write's own checks refuse is staff's from now: the bill stops showing its day.
     if (again && (written.kind === "not_allowed" || written.kind === "no_card" || written.kind === "currency")) await charges.clearRetry(deps.sql, bill.gymId, bill.billId);

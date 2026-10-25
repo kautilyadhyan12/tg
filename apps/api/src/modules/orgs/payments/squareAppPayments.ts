@@ -23,6 +23,7 @@ import {
   chargedWithTaxes,
   squareAppCheckResponseSchema,
   squareAppDecision,
+  squareAppEnteredMinor,
   squareAppLinesOf,
   squareOrderAddsOnTop,
   taxesOnTypedAmounts,
@@ -30,6 +31,7 @@ import {
   type SquareAppCheckResponse,
   type SquareAppCustomer,
   type SquareAppLines,
+  type SquareCustomer,
   type SquarePayment,
   type SquareTaxFacts,
 } from "@app/shared";
@@ -85,16 +87,48 @@ export async function takeInSquarePayment(
   return await takeIn(deps, square, accountId, rows, read.value, firstAskedAt);
 }
 
-/** What Square says was sold with the payment, and whether it added tax or a charge on top of what staff
- *  typed; null for no answer, so it is asked again. */
-async function saleOf(square: SquareSettings, row: repo.ConnectionRow, payment: SquarePayment): Promise<{ lines: SquareAppLines; addedOnTop: boolean } | null> {
-  const unread = { lines: "unread" as const, addedOnTop: false };
+/** What Square says was sold with the payment, whether it added tax or a charge on top of what staff
+ *  typed, and the part staff entered (18d-iii-b-ii-a); null for no answer, so it is asked again. */
+async function saleOf(square: SquareSettings, row: repo.ConnectionRow, payment: SquarePayment): Promise<Sale | null> {
   const token = tokenOf(square, row);
-  if (payment.order_id == null || token === null || !readsOrders(row)) return unread;
+  if (payment.order_id == null || token === null || !readsOrders(row)) return UNREAD;
   const order = await square.api.retrieveOrder(token, payment.order_id);
   if (order.kind === "unavailable") return null;
-  if (order.kind === "refused") return unread;
-  return { lines: squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type)), addedOnTop: squareOrderAddsOnTop(order.value) };
+  if (order.kind === "refused") return UNREAD;
+  return {
+    lines: squareAppLinesOf((order.value.line_items ?? []).map((line) => line.item_type)),
+    addedOnTop: squareOrderAddsOnTop(order.value),
+    enteredMinor: squareAppEnteredMinor(order.value, { id: payment.id, amountMinor: payment.amount_money.amount }),
+  };
+}
+
+interface Sale {
+  lines: SquareAppLines;
+  addedOnTop: boolean;
+  enteredMinor: number | null;
+}
+
+const UNREAD: Sale = { lines: "unread", addedOnTop: false, enteredMinor: null };
+
+/** Square's details of a customer linked to nobody here, shown beside the payment so staff can tell who it
+ *  is (18d-iii-b-ii-a). Nothing where Square can't be asked now: the payment is kept all the same. */
+async function customerOf(square: SquareSettings, row: repo.ConnectionRow, customerId: string): Promise<taken.CustomerSeen | null> {
+  const token = tokenOf(square, row);
+  if (token === null) return null;
+  const read = await square.api.retrieveCustomer(token, customerId);
+  return read.kind === "ok" ? customerSeen(read.value) : null;
+}
+
+const clip = (text: string | null | undefined, max: number): string | null => {
+  const trimmed = (text ?? "").replace(/\s+/g, " ").trim();
+  return trimmed === "" ? null : trimmed.slice(0, max);
+};
+
+/** A person's name as Square has it: their own, else the company's, else a nickname. */
+export function customerSeen(c: SquareCustomer): taken.CustomerSeen | null {
+  const name = clip([c.given_name, c.family_name].filter((part) => clip(part, 200) !== null).join(" "), 200) ?? clip(c.company_name, 200) ?? clip(c.nickname, 200);
+  const seen = { name, email: clip(c.email_address, 320), phone: clip(c.phone_number, 40) };
+  return seen.name === null && seen.email === null && seen.phone === null ? null : seen;
 }
 
 /** One payment of the account, as Square showed it: taken in once, or passed over. `firstAskedAt`: when
@@ -151,6 +185,9 @@ export async function takeIn(
     last4: payment.card_details?.card?.last_4 ?? null,
     takenAt: madeAt,
     entryId: null,
+    enteredMinor: null,
+    refundedMinor: Math.max(0, payment.refunded_money?.amount ?? 0),
+    customer: null,
   };
 
   if (owner === undefined || owner.locationId === null) {
@@ -169,19 +206,22 @@ export async function takeIn(
 
   // Taken at another location of the account than the gym's own: kept for staff, as it is.
   const atHome = owner.locationId === location;
-  const asked = atHome ? await saleOf(square, owner, payment) : { lines: "unread" as const, addedOnTop: false };
+  const asked = atHome ? await saleOf(square, owner, payment) : UNREAD;
   if (asked === null && (firstAskedAt ?? now).getTime() > now.getTime() - ORDER_PATIENCE_MS) return "unknown";
-  const sale = asked ?? { lines: "unread" as const, addedOnTop: false };
+  const sale = asked ?? UNREAD;
   const gym = await repo.readGym(deps.sql, owner.gymId);
   if (gym === null) return "done";
   const today = dayInTz(now, gym.timezone);
   const mine = linked.filter((l) => l.gymId === owner.gymId);
   const who: SquareAppCustomer = customer === null ? "none" : mine.length === 0 ? "unknown" : mine.length === 1 ? "one" : "several";
   const entryId = who === "one" ? (mine[0]?.entryId ?? null) : null;
+  // A customer linked to nobody here: what Square has of them, for staff to tell who it is.
+  const customerSeenNow = customer !== null && who === "unknown" ? await customerOf(square, owner, customer) : null;
+  const kept = { ...facts, enteredMinor: sale.enteredMinor, customer: customerSeenNow };
 
   try {
     await deps.sql.begin(async (tx) => {
-      await decideAndKeep(deps, tx, { payment, owner, facts, entryId, atHome, sale, who, today, now });
+      await decideAndKeep(deps, tx, { payment, owner, facts: kept, entryId, atHome, sale, who, today, now });
     });
   } catch (e) {
     // Another look took it in at the same moment for another gym: theirs stands, this one is undone.
@@ -201,7 +241,7 @@ async function decideAndKeep(
     facts: taken.TakenPayment;
     entryId: string | null;
     atHome: boolean;
-    sale: { lines: SquareAppLines; addedOnTop: boolean };
+    sale: Sale;
     who: SquareAppCustomer;
     today: string;
     now: Date;
@@ -226,7 +266,7 @@ async function decideAndKeep(
   // Another money than the gym's own: no bill of the gym's is that amount.
   const sameMoney = payment.amount_money.currency === owner.currency;
   const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
-  const decision = squareAppDecision({ ...sale, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
+  const decision = squareAppDecision({ lines: sale.lines, addedOnTop: sale.addedOnTop, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
   if (decision.kind === "shop_sale") {
     await taken.insertTaken(tx, kept, { state: "shop_sale" }, now);
     return;

@@ -102,8 +102,20 @@ export type SquareCard = z.infer<typeof squareCardSchema>;
 /** CreateCard's, RetrieveCard's and DisableCard's answer. */
 export const squareCardAnswerSchema = z.object({ card: squareCardSchema });
 
-/** CreateCustomer's answer: only the new customer's id is read. */
-export const squareCustomerAnswerSchema = z.object({ customer: z.object({ id: squareObjectIdSchema }) });
+/** CreateCustomer's and RetrieveCustomer's answer: the customer's id, and what Square has of them, shown
+ *  beside a payment from Square Point of Sale that is linked to nobody here (18d-iii-b-ii-a). */
+export const squareCustomerAnswerSchema = z.object({
+  customer: z.object({
+    id: squareObjectIdSchema,
+    given_name: z.string().max(300).nullish(),
+    family_name: z.string().max(300).nullish(),
+    company_name: z.string().max(300).nullish(),
+    nickname: z.string().max(300).nullish(),
+    email_address: z.string().max(320).nullish(),
+    phone_number: z.string().max(40).nullish(),
+  }),
+});
+export type SquareCustomer = z.infer<typeof squareCustomerAnswerSchema>["customer"];
 
 // A gym's Square Terminal (ROADMAP 18d-ii-b-i; developer.squareup.com, read 2026-10-21:
 // "Connect a Square Terminal to a POS Application", CreateDeviceCode, GetDeviceCode). The app
@@ -263,6 +275,13 @@ export const squareOrderSchema = z.object({
   taxes: z.array(z.object({ type: z.string().max(40).nullish(), applied_money: squareMoneySchema.nullish() })).max(100).nullish(),
   /** A charge Square added to the sale, such as an automatic service charge. */
   total_service_charge_money: squareMoneySchema.nullish(),
+  /** The payments the sale was paid with (18d-iii-b-ii-a): one, naming this payment, where it paid the
+   *  whole sale (measured in Square's test area, 2026-10-25: a payment of 137 with a tip of 25 made an
+   *  order of one CUSTOM_AMOUNT line of 137, and one tender of 162 naming the payment). */
+  tenders: z
+    .array(z.object({ payment_id: squarePaymentIdSchema.nullish() }))
+    .max(100)
+    .nullish(),
 });
 export type SquareOrder = z.infer<typeof squareOrderSchema>;
 

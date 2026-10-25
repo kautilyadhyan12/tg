@@ -19,6 +19,9 @@ export const liveNewsSchema = z.discriminatedUnion("what", [
    *  the list or the app, joined, left, their age, or their account deleted. Pages that show people's
    *  names and words (the check-in log, Who came, the Leaderboard) read again. */
   z.object({ what: z.literal("people") }).strict(),
+  /** A payment from Square Point of Sale was matched, marked or put back on Payments to match, or taken
+   *  off a bill with Not this bill (18d-iii-b-ii-a): that list, and Overview's line, read again. */
+  z.object({ what: z.literal("paymentsToMatch") }).strict(),
 ]);
 export type LiveNews = z.infer<typeof liveNewsSchema>;
 

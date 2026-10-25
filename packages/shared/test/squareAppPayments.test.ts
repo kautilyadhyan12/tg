@@ -9,7 +9,9 @@ import {
   SQUARE_APP,
   chargedWithTaxes,
   squareAppDecision,
+  squareAppEnteredMinor,
   squareAppLinesOf,
+  squareOrderAddedMinor,
   squareOrderAddsOnTop,
   squareTaxName,
   squareTaxNames,
@@ -175,6 +177,47 @@ describe("squareOrderAddsOnTop: did Square charge more than staff typed", () => 
     ["one tax inside, one added", { taxes: [{ type: "INCLUSIVE", applied_money: { amount: 300 } }, { type: "ADDITIVE", applied_money: { amount: 45 } }] }, true],
   ] as const)("%s", (_name, order, onTop) => {
     expect(squareOrderAddsOnTop(order)).toBe(onTop);
+  });
+});
+
+// What Match puts on a bill (18d-iii-b-ii-a): the part of the payment staff entered, without what Square
+// added on top. The order's shape is Square's own, measured in its test area on 2026-10-25: a payment of
+// 137 with a tip of 25 made one CUSTOM_AMOUNT line of 137 and ONE tender of 162 naming the payment, and
+// the payment's own amount leaves the tip out. A sale paid with two payments (Square's split tender) has
+// two tenders, and how much of each is a bill's can't be told from Square: the desk says.
+describe("squareOrderAddedMinor: what Square added on top, in all", () => {
+  it.each([
+    ["nothing", {}, 0],
+    ["a sales tax added", { taxes: [{ type: "ADDITIVE", applied_money: { amount: 371 } }] }, 371],
+    ["two taxes added", { taxes: [{ type: "ADDITIVE", applied_money: { amount: 371 } }, { type: "ADDITIVE", applied_money: { amount: 405 } }] }, 776],
+    ["a tax inside the price adds nothing", { taxes: [{ type: "INCLUSIVE", applied_money: { amount: 300 } }] }, 0],
+    ["a tax of no kind is taken as added", { taxes: [{ applied_money: { amount: 50 } }] }, 50],
+    ["a service charge", { total_service_charge_money: { amount: 200 } }, 200],
+    ["a tax and a charge", { taxes: [{ type: "ADDITIVE", applied_money: { amount: 100 } }], total_service_charge_money: { amount: 200 } }, 300],
+    ["a negative amount from Square counts as none", { taxes: [{ type: "ADDITIVE", applied_money: { amount: -100 } }] }, 0],
+  ] as const)("%s", (_name, order, added) => {
+    expect(squareOrderAddedMinor(order)).toBe(added);
+  });
+});
+
+describe("squareAppEnteredMinor: the part staff entered, where Square shows it", () => {
+  const one = (paymentId: string) => [{ payment_id: paymentId }];
+  const typed = [{ item_type: "CUSTOM_AMOUNT" }];
+  it.each([
+    ["one typed amount, paid in one payment", { line_items: typed, tenders: one("P1") }, 2500, 2500],
+    ["Square's sales tax on top: the amount before it", { line_items: typed, tenders: one("P1"), taxes: [{ type: "ADDITIVE", applied_money: { amount: 206 } }] }, 2706, 2500],
+    ["a tax inside the price: all of it", { line_items: typed, tenders: one("P1"), taxes: [{ type: "INCLUSIVE", applied_money: { amount: 206 } }] }, 2500, 2500],
+    ["two typed amounts: both", { line_items: [...typed, ...typed], tenders: one("P1") }, 5000, 5000],
+    ["an item from Square's list too: not told", { line_items: [...typed, { item_type: "ITEM" }], tenders: one("P1") }, 7500, null],
+    ["items alone: not told", { line_items: [{ item_type: "ITEM" }], tenders: one("P1") }, 3000, null],
+    ["a line of a kind Square has not said: not told", { line_items: [{ item_type: "NEW_KIND" }], tenders: one("P1") }, 2500, null],
+    ["no lines at all: not told", { line_items: [], tenders: one("P1") }, 2500, null],
+    ["paid in two payments: not told", { line_items: typed, tenders: [{ payment_id: "P1" }, { payment_id: "P2" }] }, 1500, null],
+    ["its one tender is another payment's: not told", { line_items: typed, tenders: one("P2") }, 2500, null],
+    ["no tenders said: not told", { line_items: typed }, 2500, null],
+    ["Square added as much as was taken: not told", { line_items: typed, tenders: one("P1"), taxes: [{ type: "ADDITIVE", applied_money: { amount: 2500 } }] }, 2500, null],
+  ] as const)("%s", (_name, order, amountMinor, entered) => {
+    expect(squareAppEnteredMinor(order, { id: "P1", amountMinor })).toBe(entered);
   });
 });
 
