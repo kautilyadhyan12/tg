@@ -18,6 +18,7 @@ import type { RedisLike } from "../../../redis.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import { orgParamsSchema } from "../schemas.js";
 import * as service from "./service.js";
+import { tellMembersLeaderboards, type LiveNewsSender } from "../../live/news.js";
 
 function parseOr400<S extends z.ZodTypeAny>(
   schema: S,
@@ -46,7 +47,7 @@ function requireUserId(req: FastifyRequest): string {
 
 export function registerLeaderboardRoutes(
   app: FastifyInstance,
-  deps: service.LeaderboardDeps & { redis: RedisLike },
+  deps: service.LeaderboardDeps & { redis: RedisLike; news: LiveNewsSender },
 ): void {
   const readLimit = createDualRateLimit({
     name: "orgs_leaderboard_read",
@@ -102,7 +103,10 @@ export function registerLeaderboardRoutes(
   app.put("/v1/users/me/leaderboard", { preHandler: [app.authenticate, writeLimit] }, async (req, reply) => {
     const body = parseOr400(setLeaderboardVisibilityRequestSchema, req.body, req, reply);
     if (body === null) return;
-    return reply.status(200).send(await service.setVisibility(deps, requireUserId(req), body.hidden));
+    const userId = requireUserId(req);
+    const answer = await service.setVisibility(deps, userId, body.hidden);
+    tellMembersLeaderboards(deps.sql, deps.news, app.log, userId);
+    return reply.status(200).send(answer);
   });
 
   // ── THE BOARD IN THE CONSOLE (19a-iii). The service asks the `leaderboard.manage` tick
@@ -194,6 +198,7 @@ export function registerLeaderboardRoutes(
       gate(staffWriteLimit)(req, reply),
     );
     if (done === null) return;
+    deps.news.tell(params.gymId, { what: "leaderboard" });
     return reply.status(200).send(done);
   });
 
@@ -204,6 +209,7 @@ export function registerLeaderboardRoutes(
     if (body === null) return;
     const done = await service.setBoardOff(deps, requireUserId(req), params.gymId, body.board, body.off, gate(staffWriteLimit)(req, reply));
     if (done === null) return;
+    deps.news.tell(params.gymId, { what: "leaderboard" });
     return reply.status(200).send(done);
   });
 }

@@ -8,9 +8,11 @@
 import { createHash } from "node:crypto";
 import { Redis } from "ioredis";
 import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from "fastify";
+import type { Sql } from "postgres";
 import { z } from "zod";
 import { liveNewsForGymSchema, type LiveNews } from "@app/shared";
 import type { LiveHub } from "./hub.js";
+import { gymsOfMember } from "./repo.js";
 
 /** One channel for each database: gym ids belong to one database, and Redis's channels are shared
  *  by every database number on it, so another environment or another folder's servers on the same
@@ -99,4 +101,19 @@ export function tellMembershipsAfter(news: LiveNewsSender) {
     const at = personInAddress.safeParse(req.params);
     if (at.success) news.tell(at.data.gymId, { what: "memberships", entryId: at.data.entryId });
   };
+}
+
+/** A member's own change (a workout saved, Hide me) tells the leaderboard of every gym they belong
+ *  to. Nothing waits on it and it never throws: a lost piece of news is read when the line next
+ *  opens. */
+export function tellMembersLeaderboards(sql: Sql, news: LiveNewsSender, log: FastifyBaseLogger, userId: string): void {
+  if (news === NO_NEWS) return;
+  gymsOfMember(sql, userId).then(
+    (gymIds) => {
+      for (const gymId of gymIds) news.tell(gymId, { what: "leaderboard" });
+    },
+    () => {
+      log.warn("live.news_not_sent");
+    },
+  );
 }

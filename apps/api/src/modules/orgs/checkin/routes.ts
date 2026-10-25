@@ -43,6 +43,7 @@ import { orgParamsSchema } from "../schemas.js";
 import { OrgsError } from "../service.js";
 import { deviceCookieValue, deviceLimitId, readDeviceCookie } from "./deviceKey.js";
 import * as service from "./service.js";
+import type { LiveNewsSender } from "../../live/news.js";
 
 export const CHECKIN_DEVICE_COOKIE = "checkinDevice";
 const CHECKIN_PATH = "/v1/checkin";
@@ -103,6 +104,8 @@ export interface CheckinRouteDeps {
   config: Pick<AppConfig, "NODE_ENV" | "JWT_SECRET" | "CHECKIN_PASS_SECRET" | "WEB_ORIGIN">;
   /** The clock a booking reads, so a check-in and a class agree about now. */
   now?: () => Date;
+  /** Tells the gym's open console windows that a visit was added or removed (Stage 4 item 18). */
+  news: LiveNewsSender;
 }
 
 export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDeps): void {
@@ -316,6 +319,7 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     if (body === null) return;
     const answer = await service.staffCheckIn(checkinDeps, requireUserId(req), params.gymId, body, gate(staffCheckinLimit)(req, reply));
     if (answer === null) return;
+    if (answer.result === "checked_in") deps.news.tell(params.gymId, { what: "visits", change: "added" });
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
@@ -328,6 +332,7 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     if (body === null) return;
     const answer = await service.addVisit(checkinDeps, requireUserId(req), params.gymId, body, gate(visitFixLimit)(req, reply));
     if (answer === null) return;
+    if (answer.result === "added") deps.news.tell(params.gymId, { what: "visits", change: "added" });
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
@@ -336,6 +341,7 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     if (params === null) return;
     const answer = await service.removeVisit(checkinDeps, requireUserId(req), params.gymId, params.visitId, gate(visitFixLimit)(req, reply));
     if (answer === null) return;
+    deps.news.tell(params.gymId, { what: "visits", change: "removed" });
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 
@@ -403,6 +409,7 @@ export function registerCheckinRoutes(app: FastifyInstance, deps: CheckinRouteDe
     const body = parseOr400(checkinScanRequestSchema, req.body, req, reply);
     if (body === null) return;
     const answer = await service.scan(checkinDeps, device, body.code);
+    if (answer.result === "checked_in") deps.news.tell(device.gymId, { what: "visits", change: "added" });
     return reply.status(200).header("cache-control", "no-store").send(answer);
   });
 }

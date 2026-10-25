@@ -205,7 +205,7 @@ export function registerOrgRoutes(
   });
 
   // The members' leaderboard and Hide me (Part 3 §15.5).
-  registerLeaderboardRoutes(app, { sql: deps.sql, redis: deps.redis, now: overrides.now ?? (() => new Date()) });
+  registerLeaderboardRoutes(app, { sql: deps.sql, redis: deps.redis, news: deps.news, now: overrides.now ?? (() => new Date()) });
 
   // The gym's Updates: posts by staff, read by its members (Part 3 §15.2).
   registerPostRoutes(app, { sql: deps.sql, redis: deps.redis, photos: deps.photos, supportEmail: deps.supportEmail, now: overrides.now ?? (() => new Date()) });
@@ -582,6 +582,7 @@ export function registerOrgRoutes(
       // the normal case and must stay a 200.
       if (parseOr400(markGymAttendanceRequestSchema, req.body ?? {}, req, reply) === null) return;
       const marked = await service.markOrgAttendance(orgDeps, requireUserId(req), params.gymId);
+      if (!marked.alreadyMarked) deps.news.tell(params.gymId, { what: "visits", change: "added" });
       return reply.status(200).send(marked);
     },
   );

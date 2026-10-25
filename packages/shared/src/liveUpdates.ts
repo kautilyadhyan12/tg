@@ -8,6 +8,12 @@ import { z } from "zod";
 export const liveNewsSchema = z.discriminatedUnion("what", [
   /** A person's memberships on the gym's list: given, changed, paid, or an agreement signed. */
   z.object({ what: z.literal("memberships"), entryId: z.string().uuid() }).strict(),
+  /** A visit at the gym: added (the desk, staff, an earlier day) or removed. Removed means the
+   *  check-in log reads the whole of today again; added, only what is newer than it holds. */
+  z.object({ what: z.literal("visits"), change: z.enum(["added", "removed"]) }).strict(),
+  /** Something a leaderboard counts or shows, other than a visit: a member's workout saved, a
+   *  member hiding themselves, staff taking a person off or switching a board. */
+  z.object({ what: z.literal("leaderboard") }).strict(),
 ]);
 export type LiveNews = z.infer<typeof liveNewsSchema>;
 
