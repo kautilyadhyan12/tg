@@ -16,6 +16,7 @@ import {
   memberListWarningWords,
   orgTypeSchema,
   ptNotOnListWords,
+  squareTaxAddsDetail,
   type LeadFileWarning,
   type MemberListWarning,
 } from "../src/index.js";
@@ -60,6 +61,7 @@ for (const [name, value] of Object.entries(shared)) {
   if (name.endsWith("_WORDS") && !A_GYMS_OWN.has(name)) sentencesOf(value, name, sentences);
 }
 sentences.push(["safe mode", CHECK_FIRST_OPTIONS.not_yet.detail]);
+sentences.push(["Square's tax on a bill", squareTaxAddsDetail("Sales Tax (8.25%)", "$45.00", "$48.71")]);
 for (const kind of orgTypeSchema.options) sentences.push([`personal training, ${kind}`, ptNotOnListWords(kind)]);
 for (const p of memberListReviewProblemSchema.options) {
   sentences.push([`review ${p}`, memberListReviewWords(p, "email")], [`review ${p}`, memberListReviewWords(p, "phone")], [`review ${p}`, memberListReviewShortWords(p)]);

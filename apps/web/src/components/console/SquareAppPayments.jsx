@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Circle, HelpCircle, Info, Loader2 } from 'lucide-react';
-import { SQUARE_APP_WORDS, formatMinor, squareTaxNames, squareTaxesToOpen } from '@app/shared';
+import { SQUARE_APP_WORDS, formatMinor, squareTaxAddsDetail, squareTaxNames, squareTaxesToOpen } from '@app/shared';
 import { orgService } from '../../api/orgsApi';
 import { readOnlyNote } from '../../pages/console/billingView';
 import PlaceLink from './PlaceLink';
@@ -177,7 +177,7 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
       <Step
         icon="fix"
         title={SQUARE_APP_WORDS.taxAddsTitle}
-        detail={SQUARE_APP_WORDS.taxAddsDetail(squareTaxNames(taxes), formatMinor(exampleMinor, check.currency), formatMinor(chargedMinor, check.currency))}
+        detail={squareTaxAddsDetail(squareTaxNames(taxes), formatMinor(exampleMinor, check.currency), formatMinor(chargedMinor, check.currency))}
         first
         testId="square-tax-step"
       >

@@ -11,6 +11,7 @@ import {
   squareAppDecision,
   squareAppLinesOf,
   squareOrderAddsOnTop,
+  squareTaxAddsDetail,
   squareTaxNames,
   squareTaxesToOpen,
   taxesOnTypedAmounts,
@@ -232,6 +233,12 @@ describe("the check's example and names", () => {
     expect(squareTaxNames([{ name: "Sales tax", percentage: "8.25" }])).toBe("Sales tax (8.25%)");
     expect(squareTaxNames([{ name: "Sales tax", percentage: "8.25" }, { name: "City tax", percentage: null }])).toBe("Sales tax (8.25%) and City tax");
     expect(squareTaxNames([{ name: "GST", percentage: "5" }, { name: "PST", percentage: "7" }, { name: "City", percentage: "1" }])).toBe("GST (5%), PST (7%) and City (1%)");
+  });
+
+  it("says what Square's taxes do to a bill, with the example and what Square would charge", () => {
+    expect(squareTaxAddsDetail("Sales Tax (8.25%)", "$45.00", "$48.71")).toBe(
+      "Square adds Sales Tax (8.25%) to amounts you type in. For a $45.00 bill, the member would be charged $48.71. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice.",
+    );
   });
 
   it("says which tax to open in Square's steps: its name, or each of them", () => {

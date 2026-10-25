@@ -228,8 +228,6 @@ export const SQUARE_APP_WORDS = {
   taxNoneTitle: "Square won't add tax on top",
   taxNoneDetail: "The member pays exactly what the bill says.",
   taxAddsTitle: "Square adds tax on top",
-  taxAddsDetail: (names: string, bill: string, charged: string): string =>
-    `Square adds ${names} to amounts you type in. For a ${bill} bill, the member would be charged ${charged}. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice.`,
   howToFix: "How to fix",
   hideSteps: "Hide the steps",
   /** `which`: the tax's name, or "each of them (A and B)". */
@@ -259,6 +257,12 @@ export const SQUARE_APP_WORDS = {
   void_square_app: "This was taken in Square Point of Sale. To give the money back, refund it in your Square Dashboard, then note the refund here. If it's on the wrong bill, press Not this bill.",
   not_square_app: "Only a payment taken in Square Point of Sale can be taken off with Not this bill.",
 } as const;
+
+/** What Square's taxes do to a bill: `names` from `squareTaxNames`, `bill` the example, `charged` what Square
+ *  would charge for it. Apart from SQUARE_APP_WORDS, whose sentences take a name and a kind at most. */
+export function squareTaxAddsDetail(names: string, bill: string, charged: string): string {
+  return `Square adds ${names} to amounts you type in. For a ${bill} bill, the member would be charged ${charged}. That isn't the bill's amount, so the payment won't go on their bill. If the bill already includes tax, they'd pay tax twice.`;
+}
 
 /** The tax to open in Square's steps: its own name, or "each of them (Sales Tax and City Tax)". */
 export function squareTaxesToOpen(taxes: readonly { name: string }[]): string {
