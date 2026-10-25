@@ -481,17 +481,17 @@ d("Card on file charged on the bill's date (real Postgres)", { timeout: T }, () 
     expect([...(await chargesOf(ida)), ...(await chargesOf(jon))].map((c) => c.state)).toEqual(["charging", "charging"]);
 
     // Two hours on, the server is back: every charge is looked up, none is sent to Square again.
-    const send = square.api.createCardPayment;
+    const realCharge = square.api.createCardPayment.bind(square.api);
     let sent = 0;
     square.api.createCardPayment = (token, p) => {
       sent += 1;
-      return send(token, p);
+      return realCharge(token, p);
     };
     try {
       clock = new Date(clock.getTime() + CARD_CHARGE.resendForMs + 60 * 60_000);
       await work();
     } finally {
-      square.api.createCardPayment = send;
+      square.api.createCardPayment = realCharge;
     }
     expect(sent, "nothing sent to Square again").toBe(0);
     expect((await chargesOf(ida)).map((c) => c.outcome)).toEqual(["paid"]);

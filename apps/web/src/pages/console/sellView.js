@@ -215,6 +215,7 @@ const howWords = (t, money) => {
   if (t.link > 0) how.push(`${methodWords('link')} ${money(t.link)}`);
   if (t.company > 0) how.push(`${methodWords('company')} ${money(t.company)}`);
   if (t.terminal > 0) how.push(`${methodWords('terminal')} ${money(t.terminal)}`);
+  if ((t.square_app ?? 0) > 0) how.push(`${methodWords('square_app')} ${money(t.square_app)}`);
   return how.join(' · ');
 };
 
@@ -235,7 +236,7 @@ const KIND_WORDS = {
   fees: { one: 'fee', many: 'fees', title: 'Fees', none: 'No fees taken' },
 };
 
-const NO_KIND = { count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0 };
+const NO_KIND = { count: 0, totalMinor: 0, cash: 0, upi: 0, card_at_desk: 0, bank_transfer: 0, link: 0, company: 0, terminal: 0, square_app: 0, refundedMinor: 0, otherCurrency: 0, notShown: 0 };
 /** One kind's share of the day, as the server added it up. */
 export const kindTotals = (page, key) => page.kinds?.[key] ?? NO_KIND;
 
