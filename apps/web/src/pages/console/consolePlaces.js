@@ -69,6 +69,8 @@ const PLACES = {
   failedPayments: { path: '/failed-payments', may: canSeeFailedPayments },
   paymentsToMatch: { path: '/payments-to-match', may: canMatchPayments },
   members: { path: '/members', may: onStaff },
+  // Possible duplicates (5b-iv-a): two records of one person, joined there.
+  duplicates: { path: '/members/duplicates', may: onStaff },
   importMembers: { path: '/members?open=import', may: onStaff },
   addMember: { path: '/members?open=add', may: onStaff },
   staff: { path: '/members?view=staff', may: canManageStaff },
