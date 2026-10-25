@@ -142,7 +142,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     orgService.getSquareAppCheck.mockResolvedValue(checked({ state: 'none' }));
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
     const box = within(await screen.findByRole('region', BOX));
-    expect(box.getByText("Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app, and it will appear on the member's bill here afterwards.")).toBeTruthy();
+    expect(box.getByText("Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app. When the amount is exactly what the bill says, it will appear on the member's bill here afterwards.")).toBeTruthy();
     expect(box.getByText('To make this work:')).toBeTruthy();
     expect(await box.findByText('Square does not add tax to the amount you enter')).toBeTruthy();
     const tax = step(box, 'square-tax-step');
@@ -164,7 +164,11 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     label(setting, 'Collect customer information');
     label(setting, 'Before checkout');
     // Who it works for, said plainly: everybody else is charged as usual, and recorded by hand.
-    expect(box.getByText('For members who have a card on file here, the payment will be applied to their bill automatically when they are selected as the customer.')).toBeTruthy();
+    // Only an exact amount goes on by itself, and one that does not appear is recorded by hand (review round one).
+    expect(box.getByText('For members who have a card on file here, the payment will be applied to their bill automatically when they are selected as the customer and the amount is exactly what the bill says.')).toBeTruthy();
+    expect(box.getByText("If a payment does not appear on the member's bill a few minutes after it was taken, record it there the same way.")).toBeTruthy();
+    expect(box.queryByText(/will appear on the member's bill here afterwards\.$/)).toBeTruthy();
+    expect(box.queryByText(/^Start the payment in the Square app, and it will appear/)).toBeNull();
     const others = said(box, 'For anyone else, or for a sale where no member is selected, Square will process the payment as usual. Then open their bill here, click Record payment, and select Card at the desk.');
     label(others, 'Record payment');
     label(others, 'Card at the desk');

@@ -232,7 +232,7 @@ export function squareTaxNames(taxes: readonly { name: string; percentage: strin
  *  (Square's product manager, 2022-05-03), so Square is never said to ask by itself, and staff can skip it. */
 export const SQUARE_APP_WORDS = {
   heading: "Square Point of Sale",
-  how: "Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app, and it will appear on the member's bill here afterwards.",
+  how: "Use the Square Point of Sale app on a phone or tablet with a Square Reader. Start the payment in the Square app. When the amount is exactly what the bill says, it will appear on the member's bill here afterwards.",
   listLead: "To make this work:",
   needsFixing: "Needs fixing",
   done: "Done",
@@ -271,8 +271,12 @@ export const SQUARE_APP_WORDS = {
   pickHow: "Can't find Add a customer?",
   pickPath: "In Square Point of Sale: [More] → [Settings] → [Checkout] → [Customer management].",
   pickDo: "Enable customer management. Then, under [Collect customer information], turn on [Before checkout].",
-  cardSaved: "For members who have a card on file here, the payment will be applied to their bill automatically when they are selected as the customer.",
+  cardSaved: "For members who have a card on file here, the payment will be applied to their bill automatically when they are selected as the customer and the amount is exactly what the bill says.",
   others: "For anyone else, or for a sale where no member is selected, Square will process the payment as usual. Then open their bill here, click [Record payment], and select [Card at the desk].",
+  /** A payment that waits (paid early, Square's tax added, two bills that day…) is shown and matched in
+   *  18d-iii-b-ii; until then the bill is recorded by hand, and its saved card is then not charged for it
+   *  (review round one, Kd's "B"). */
+  notShown: "If a payment does not appear on the member's bill a few minutes after it was taken, record it there the same way.",
   items: "Shop items sold from your Square item list are never added to a bill.",
   needsAllowTitle: "Square needs your permission first",
   needsAllow: "Press [Reconnect Square], then [Allow] on Square's page. Nothing else changes.",

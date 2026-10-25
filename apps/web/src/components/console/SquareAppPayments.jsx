@@ -289,6 +289,7 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
       <div className="flex flex-col gap-1">
         <Line soft>{W.cardSaved}</Line>
         <Words text={W.others} soft />
+        <Line soft>{W.notShown}</Line>
         <Line soft>{W.items}</Line>
       </div>
     </section>
