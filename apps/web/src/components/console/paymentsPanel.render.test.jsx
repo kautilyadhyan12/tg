@@ -136,7 +136,7 @@ describe("payments taken in Square Point of Sale (18d-iii-b-i)", () => {
     expect(box.getByText('Set up Square Point of Sale once:')).toBeTruthy();
     expect(box.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Open More → Settings → Checkout. Turn on Customer management, then turn on Before checkout under Collect customer information. Staff then add the person before taking the money.',
-      'Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts. Bills here already include tax, so Square then charges exactly what staff enter.',
+      'Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts. Set any tax on your memberships here instead, so each bill already includes it and Square charges exactly what staff enter.',
     ]);
     expect(box.getByText('Ring up shop items from your item list in Square. Item sales are never added to a bill.')).toBeTruthy();
     expect(box.queryByRole('button')).toBeNull();

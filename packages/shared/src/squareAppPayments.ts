@@ -128,7 +128,7 @@ export const SQUARE_APP_WORDS = {
   intro: "When staff take a payment in Square Point of Sale and add the person as the customer, it's recorded on the person's bill here, as long as the amount is exactly what the bill says.",
   setupLead: "Set up Square Point of Sale once:",
   customers: "Open More → Settings → Checkout. Turn on Customer management, then turn on Before checkout under Collect customer information. Staff then add the person before taking the money.",
-  tax: "Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts. Bills here already include tax, so Square then charges exactly what staff enter.",
+  tax: "Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts. Set any tax on your memberships here instead, so each bill already includes it and Square charges exactly what staff enter.",
   linked: "A person's payments are recorded automatically once their card is saved here.",
   items: "Ring up shop items from your item list in Square. Item sales are never added to a bill.",
   needsAllow: "To record payments taken in Square Point of Sale, Square needs one more permission.",
