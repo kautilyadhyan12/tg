@@ -479,9 +479,9 @@ describe('checked in today', () => {
     api.getCheckinLog.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
     tell({ what: 'visits', change: 'added' });
     await waitFor(() => expect(api.getCheckinLog).toHaveBeenCalledTimes(2));
-    // Three more while it is on its way, one of them a payment.
+    // Three more while it is on its way, one of them a visit removed elsewhere.
     tell({ what: 'visits', change: 'added' });
-    tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
+    tell({ what: 'visits', change: 'removed' });
     tell({ what: 'visits', change: 'added' });
     expect(api.getCheckinLog).toHaveBeenCalledTimes(2);
     api.getCheckinLog.mockResolvedValueOnce(logAnswer([lv('v1', '2026-10-03T06:02:00.000Z', 'Maya Patel', { status: 'Active', payment: 'Paid' })]));
@@ -590,6 +590,35 @@ describe('checked in today', () => {
     });
     expect(api.getCheckinLog.mock.calls.length).toBe(asked + 2);
     expect(await screen.findByText(/Nobody has checked in yet today/)).toBeTruthy();
+  });
+
+  it('news of people or memberships in a stream (a member saving their profile over and over) is one whole read in 15 seconds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-03T10:00:00.000Z'));
+    drawScreen();
+    await screen.findByText(/Nobody has checked in yet today/);
+    const asked = api.getCheckinLog.mock.calls.length;
+    // The first after a quiet spell reads at once.
+    tell({ what: 'people' });
+    await waitFor(() => expect(api.getCheckinLog.mock.calls.length).toBe(asked + 1));
+    for (let n = 0; n < 50; n++) {
+      tell({ what: n % 2 === 0 ? 'people' : 'memberships', ...(n % 2 === 0 ? {} : { entryId: '00000000-0000-4000-8000-000000000001' }) });
+    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked + 1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked + 2);
+    expect(api.getCheckinLog).toHaveBeenLastCalledWith('g1', null);
+    // A check-in in the meantime is never held back.
+    api.getCheckinLog.mockResolvedValueOnce(logAnswer([lv('v9', '2026-10-03T09:59:00.000Z', 'Desk Arrival')]));
+    tell({ what: 'people' });
+    tell({ what: 'visits', change: 'added' });
+    expect(await screen.findByText('Desk Arrival')).toBeTruthy();
+    expect(api.getCheckinLog.mock.calls.length).toBe(asked + 3);
   });
 
   it('says why live updates are off beside the heading, until the line opens and the day is read again', async () => {

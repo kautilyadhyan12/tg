@@ -29,6 +29,10 @@ const SEARCH_WAIT_MS = 250;
 const RETRY_MS = 15_000;
 /** While the live line cannot open, the log checks for itself this often. */
 const WITHOUT_LINE_MS = 30_000;
+/** News of a person or a membership changed reads the whole day again at most this often: such news
+ *  can come quickly (an import, or a member saving their profile over and over), and a busy desk's
+ *  reads must not use up the allowance its check-ins need. */
+const GATHER_MS = 15_000;
 /** A read at the gym's midnight that came back on the old day (the browser's clock ahead) is tried
  *  again after this, this many times. */
 const MIDNIGHT_AGAIN_MS = 30_000;
@@ -409,6 +413,23 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
     readNext.current = read;
   }, [read]);
 
+  /** One whole read for news of people or memberships: at once after a quiet spell, else when the
+   *  15 seconds are up. */
+  const lastGathered = useRef(0);
+  const gatherSoon = useRef(null);
+  const gatherWhole = useCallback(() => {
+    if (gatherSoon.current !== null) return;
+    gatherSoon.current = setTimeout(
+      () => {
+        gatherSoon.current = null;
+        lastGathered.current = Date.now();
+        readNext.current(true);
+      },
+      Math.max(0, lastGathered.current + GATHER_MS - Date.now()),
+    );
+  }, []);
+  useEffect(() => () => clearTimeout(gatherSoon.current), []);
+
   useEffect(() => {
     read(true);
   }, [read, attempt]);
@@ -425,6 +446,7 @@ export function CheckedInToday({ gymId, words, refreshSignal, canFix, onRemoved 
     if (message.what === 'ready') setLiveRefused(null);
     if (held.current.status === 'failed') return;
     if (message.what === 'visits' && message.change === 'added') read(false);
+    else if (message.what === 'people' || message.what === 'memberships') gatherWhole();
     else if (message.what !== 'leaderboard') read(true);
   });
 

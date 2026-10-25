@@ -231,22 +231,35 @@ describe('the open line', () => {
     stop();
   });
 
-  it('a server error, a proxy with no server behind it, or no network at all: the page is told it has no line, each time, until the line opens', async () => {
+  it('a server error, a proxy with no server behind it, or no network at all: from the second failure in a row the page is told it has no line, until the line opens', async () => {
     answers = [{ status: 500 }, { status: 502 }, { throws: true }, { status: 200 }];
     const heard = [];
     const stop = listenLive(GYM, (m) => heard.push(m));
-    await until(() => heard.length === 3, 12_000);
+    // The first failure (a blip) is not said.
+    await until(() => calls.length === 1, 12_000);
+    await pause(50);
+    expect(heard).toEqual([]);
+    await until(() => heard.length === 2, 12_000);
     expect(heard).toEqual([
-      { what: 'refused', message: LIVE_WORDS.unreachable },
       { what: 'refused', message: LIVE_WORDS.unreachable },
       { what: 'refused', message: LIVE_WORDS.unreachable },
     ]);
     // The fourth try opens the line, and nothing more is said.
     await until(() => calls.length === 4, 12_000);
     await pause(50);
-    expect(heard).toHaveLength(3);
+    expect(heard).toHaveLength(2);
     stop();
   }, 30_000);
+
+  it('one failed reopen followed by a line that opens says nothing', async () => {
+    answers = [{ throws: true }, { status: 200 }];
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => calls.length === 2, 5_000);
+    await pause(50);
+    expect(heard).toEqual([]);
+    stop();
+  });
 
   it("a line refused in the server's own words says them, and staff coming back to the tab read again", async () => {
     answers = [{ status: 429, json: { error: 'too_many_lines', message: LIVE_WORDS.too_many_lines } }];

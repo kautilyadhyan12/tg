@@ -521,4 +521,33 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
     },
     T,
   );
+
+  it(
+    "a member saving their profile is news only when what a gym shows changed: a new name or a new age, never the same again or their units",
+    async () => {
+      const gym = await makeBusiness("Live People Saves");
+      const gus = await makeUser("gus");
+      await makeMember(gym.org, gym.owner, gus);
+      const line = await openLine(base, gym.gymId, gym.owner.cookies);
+      const me = (payload: unknown) => send("PATCH", "/v1/users/me", gus.cookies, payload);
+      const body = (payload: unknown) => send("PUT", "/v1/users/me/fitness-profile", gus.cookies, payload);
+
+      // Saved over and over with nothing a gym shows changed: nothing told.
+      for (let i = 0; i < 20; i += 1) expect((await me({ displayName: "Live gus" })).statusCode).toBe(200);
+      expect((await me({ units: "imperial" })).statusCode).toBe(200);
+      expect((await body({ heightCm: 180 })).statusCode).toBe(200);
+      await settle();
+      expect(heard(line)).toEqual([]);
+      // A new name, then a new age: each told once; the same age again is not.
+      expect((await me({ displayName: "Gus Renamed" })).statusCode).toBe(200);
+      await until(() => heard(line).length >= 1);
+      expect((await body({ age: 30 })).statusCode).toBe(200);
+      await until(() => heard(line).length >= 2);
+      expect((await body({ age: 30 })).statusCode).toBe(200);
+      await settle();
+      expect(heard(line)).toEqual([PEOPLE, PEOPLE]);
+      line.close();
+    },
+    T,
+  );
 });

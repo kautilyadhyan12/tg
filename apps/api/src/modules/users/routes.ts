@@ -97,9 +97,13 @@ export function registerUserRoutes(
   app.patch("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
     const patch = parseBody(updateProfileRequestSchema, req, reply);
     if (patch === null) return;
+    // The name before, when one is sent: only a name that changed is news to the person's gyms.
+    const nameBefore = patch.displayName === undefined ? null : (await service.getProfile(usersDeps, authedUserId(req))).displayName;
     const user = await service.updateProfile(usersDeps, authedUserId(req), patch);
     // A name changed: the gyms that show it (the check-in log, Who came, the Leaderboard) read again.
-    tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+    if (patch.displayName !== undefined && user.displayName !== nameBefore) {
+      tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+    }
     return reply.status(200).send({ user });
   });
 
@@ -117,9 +121,13 @@ export function registerUserRoutes(
   app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = parseBody(putFitnessProfileRequestSchema, req, reply);
     if (body === null) return;
+    const ageBefore = body.age === undefined ? undefined : (await service.getFitnessProfile(usersDeps, authedUserId(req))).age;
     const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
-    // An age changed: whether the leaderboards may show them can change with it.
-    tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+    // An age changed: whether the leaderboards may show them can change with it. Nothing else here is
+    // shown to a gym.
+    if (body.age !== undefined && fitnessProfile.age !== ageBefore) {
+      tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+    }
     return reply.status(200).send({ fitnessProfile });
   });
 
