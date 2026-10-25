@@ -66,6 +66,7 @@ export function registerLiveRoutes(app: FastifyInstance, deps: LiveRouteDeps): v
     windowMs: 60 * 60 * 1000,
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
+    message: LIVE_WORDS.rate_limited,
   });
 
   app.get("/v1/orgs/:gymId/live", { preHandler: [app.authenticate, staffHere, limit] }, async (req, reply) => {

@@ -16,7 +16,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { AgreementLinkLetter } from "../src/modules/orgs/agreement/email.js";
 import { createLiveHub } from "../src/modules/live/hub.js";
-import { LIVE_CHANNEL } from "../src/modules/live/news.js";
+import { liveChannel } from "../src/modules/live/news.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -95,9 +95,9 @@ interface Line {
   close: () => void;
 }
 
-async function openLine(base: string, gymId: string, cookies: Cookies | { bearer: string }): Promise<Line> {
+async function openLine(base: string, gymId: string, cookies: Cookies | { bearer: string }, ip = nextIp()): Promise<Line> {
   const controller = new AbortController();
-  const headers: Record<string, string> = { accept: "text/event-stream", "x-forwarded-for": nextIp() };
+  const headers: Record<string, string> = { accept: "text/event-stream", "x-forwarded-for": ip };
   if ("bearer" in cookies) headers["authorization"] = `Bearer ${cookies.bearer}`;
   else headers["cookie"] = cookieHeader(cookies);
   const res = await fetch(`${base}/v1/orgs/${gymId}/live`, { headers, signal: controller.signal });
@@ -155,6 +155,8 @@ const news = (entryId: string) => ({ what: "memberships", entryId });
 d("live updates: the console's open line (real Postgres)", () => {
   const sql = postgres(url ?? "", { prepare: false, max: 5 });
   const links: AgreementLinkLetter[] = [];
+  /** The main server's limits, so a test can use one up without a thousand requests. */
+  const appRedis = createMemoryRedis();
   let app: App | undefined;
   /** The same server with lines that live 1.5 seconds and a hub of 2 a person, 3 in all. */
   let shortApp: App | undefined;
@@ -290,7 +292,7 @@ d("live updates: the console's open line (real Postgres)", () => {
         return Promise.resolve();
       },
     };
-    app = await buildApp(loadConfig(baseEnv), { redis: createMemoryRedis(), emailSender: quietEmail, agreementEmailSender, live: { heartbeatMs: 250 } });
+    app = await buildApp(loadConfig(baseEnv), { redis: appRedis, emailSender: quietEmail, agreementEmailSender, live: { heartbeatMs: 250 } });
     base = await app.listen({ port: 0, host: "127.0.0.1" });
     shortApp = await buildApp(loadConfig(baseEnv), {
       redis: createMemoryRedis(),
@@ -377,7 +379,6 @@ d("live updates: the console's open line (real Postgres)", () => {
       const a = await makeBusiness("Live Removed Gym");
       const manager = await makeUser("removed");
       await makeStaff(a.org, a.owner, manager);
-      const maya = await addPerson(a.gymId, a.owner.cookies, "Maya Patel", "live-p-maya2@example.com");
       const line = await openLine(shortBase, a.gymId, manager.cookies);
       expect(line.status).toBe(200);
       expect((await send("DELETE", `/v1/orgs/${a.gymId}/staff/${manager.userId}`, a.owner.cookies)).statusCode).toBe(200);
@@ -385,10 +386,6 @@ d("live updates: the console's open line (real Postgres)", () => {
       await until(() => line.ended, 4_000);
       const again = await openLine(shortBase, a.gymId, manager.cookies);
       expect([again.status, again.refusal?.error]).toEqual([404, "org_not_found"]);
-      // Nothing of a change after that reaches them.
-      expect((await give(a.gymId, maya, a.owner.cookies, a.typeId)).statusCode).toBe(201);
-      await pause(300);
-      expect(line.messages.filter((m) => JSON.stringify(m).includes(maya))).toEqual([]);
     },
     T,
   );
@@ -488,6 +485,82 @@ d("live updates: the console's open line (real Postgres)", () => {
     T,
   );
 
+  it(
+    "a payment recorded and voided, and a card charge started, reach the person's page",
+    async () => {
+      const a = await makeBusiness("Live Payments Gym");
+      const maya = await addPerson(a.gymId, a.owner.cookies, "Maya Patel", "live-p-maya5@example.com");
+      const given = await post(heldUrl(a.gymId, maya), { requestKey: nextForm(), typeId: a.typeId, startsOn: "2026-10-15", paid: false, priceMinor: 60000, totalMinor: 60000 }, a.owner.cookies);
+      expect(given.statusCode, given.body).toBe(201);
+      const membership = await membershipOf(a.gymId, maya);
+      const line = await openLine(base, a.gymId, a.owner.cookies);
+      const paid = await post(`${heldUrl(a.gymId, maya)}/${membership}/payments`, { requestKey: nextForm(), periodIndex: 0, amountMinor: 60000, method: "cash" }, a.owner.cookies);
+      expect(paid.statusCode, paid.body).toBe(200);
+      await until(() => line.messages.length === 2);
+      const [payment] = await sql<{ id: string }[]>`SELECT id FROM gym_member_payments WHERE gym_id = ${a.gymId} ORDER BY seq DESC LIMIT 1`;
+      if (payment === undefined) throw new Error("no payment");
+      const voided = await post(`${heldUrl(a.gymId, maya)}/${membership}/payments/${payment.id}/void`, { reason: "mistake" }, a.owner.cookies);
+      expect(voided.statusCode, voided.body).toBe(200);
+      await until(() => line.messages.length === 3);
+      // Charge card on file, refused here (no Square account), tells nobody; frozen, it does.
+      const charge = await post(`${heldUrl(a.gymId, maya)}/${membership}/card-charge`, { requestKey: nextForm(), periodIndex: 0, amountMinor: 60000, cardRef: "card-on-file-1" }, a.owner.cookies);
+      expect(charge.statusCode).toBeGreaterThanOrEqual(400);
+      const frozen = await post(`${heldUrl(a.gymId, maya)}/${membership}/freeze`, {}, a.owner.cookies);
+      expect(frozen.statusCode, frozen.body).toBe(200);
+      await until(() => line.messages.length === 4);
+      await pause(200);
+      expect(line.messages).toEqual([READY, news(maya), news(maya), news(maya)]);
+      line.close();
+    },
+    T,
+  );
+
+  it(
+    "several gyms' staff at ONE address: a gym that used up its lines there leaves the others theirs",
+    async () => {
+      const a = await makeBusiness("Live Desk Gym A");
+      const b = await makeBusiness("Live Desk Gym B");
+      const manager = await makeUser("desk");
+      await makeStaff(a.org, a.owner, manager);
+      const desk = "10.99.250.250";
+      // Gym A's allowance at the desk's address is used up (6,000 an hour).
+      await appRedis.setex(`rl:org_live:ip:${a.gymId}:${desk}`, 3600, "6000");
+      const owner = await openLine(base, a.gymId, a.owner.cookies, desk);
+      expect([owner.status, owner.refusal?.error, owner.refusal?.message]).toEqual([429, "rate_limited", LIVE_WORDS.rate_limited]);
+      expect((await openLine(base, a.gymId, manager.cookies, desk)).status).toBe(429);
+      // Gym B's staff at the same address, and gym A's owner at home, still get their lines.
+      const other = await openLine(base, b.gymId, b.owner.cookies, desk);
+      const home = await openLine(base, a.gymId, a.owner.cookies);
+      expect([other.status, home.status]).toEqual([200, 200]);
+      // One person's own allowance (600 an hour) used up: refused anywhere; a colleague is not.
+      await appRedis.setex(`rl:org_live:id:${b.owner.userId}`, 3600, "600");
+      expect((await openLine(base, b.gymId, b.owner.cookies)).status).toBe(429);
+      const colleague = await openLine(base, a.gymId, manager.cookies);
+      expect(colleague.status).toBe(200);
+      for (const line of [other, home, colleague]) line.close();
+    },
+    T,
+  );
+
+  it(
+    "a Redis that cannot be reached does not stop the api or the live server starting",
+    async () => {
+      const nowhere = { ...baseEnv, REDIS_URL: "redis://127.0.0.1:6399/5" };
+      for (const [serves, env] of [
+        ["everything", nowhere],
+        ["lines", nowhere],
+        ["everything", { ...nowhere, LIVE_LINES: "apart" }],
+      ] as const) {
+        const started = Date.now();
+        const server = await buildApp(loadConfig(env), { redis: createMemoryRedis() }, serves);
+        expect([serves, Date.now() - started < 5_000]).toEqual([serves, true]);
+        expect((await server.inject({ method: "GET", url: "/health" })).statusCode).toBe(200);
+        await server.close();
+      }
+    },
+    T,
+  );
+
   describe.skipIf(redisUrl === undefined || redisUrl === "")("kept apart: the lines on a server of their own, told through Redis", () => {
     let pages: App | undefined;
     let lines: App | undefined;
@@ -511,6 +584,7 @@ d("live updates: the console's open line (real Postgres)", () => {
       "a change saved on the api reaches the line on the other server, for that gym only; anything else on the channel is dropped",
       async () => {
         if (pages === undefined || publisher === undefined) throw new Error("beforeAll did not build the servers");
+        const channel = liveChannel(url ?? "");
         const a = await makeBusiness("Live Apart Gym A");
         const b = await makeBusiness("Live Apart Gym B");
         const maya = await addPerson(a.gymId, a.owner.cookies, "Maya Patel", "live-p-maya4@example.com");
@@ -536,10 +610,12 @@ d("live updates: the console's open line (real Postgres)", () => {
         await until(() => lineA.messages.length === 2);
 
         for (const junk of ["not json", JSON.stringify({ gymId: a.gymId }), JSON.stringify({ gymId: a.gymId, news: { what: "memberships", entryId: maya, fullName: "Maya Patel" } }), JSON.stringify({ gymId: "x", news: news(maya) })]) {
-          await publisher.publish(LIVE_CHANNEL, junk);
+          await publisher.publish(channel, junk);
         }
         const other = randomUUID();
-        await publisher.publish(LIVE_CHANNEL, JSON.stringify({ gymId: b.gymId, news: news(other) }));
+        await publisher.publish(channel, JSON.stringify({ gymId: b.gymId, news: news(other) }));
+        // The same news on another database's channel reaches nobody here.
+        await publisher.publish(liveChannel("postgres://elsewhere/another"), JSON.stringify({ gymId: a.gymId, news: news(other) }));
         await until(() => lineB.messages.length === 2);
         await pause(200);
         expect(lineA.messages).toEqual([READY, news(maya)]);

@@ -46,8 +46,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      # Started, not healthy: the site's pages never wait on the live updates' server.
       live:
-        condition: service_healthy
+        condition: service_started
 
   api:
     <<: *api-image

@@ -24,4 +24,5 @@ export type LiveNewsForGym = z.infer<typeof liveNewsForGymSchema>;
 export const LIVE_WORDS = {
   too_many_lines: "This account has too many console windows open. Close one and try again.",
   lines_full: "Live updates are busy right now. The page will try again shortly.",
+  rate_limited: "Live updates are paused on this account for a while. The page still updates when you come back to it.",
 } as const;

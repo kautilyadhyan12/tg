@@ -57,7 +57,7 @@ import type { SquareApi } from "./modules/orgs/payments/square.js";
 import { OrgsError } from "./modules/orgs/service.js";
 import { ExportError } from "./modules/privacy/export.js";
 import { createLiveHub, type LiveHub } from "./modules/live/hub.js";
-import { NO_NEWS, createLocalNews, createRedisNews, hearRedisNews, type LiveNewsSender } from "./modules/live/news.js";
+import { NO_NEWS, createLocalNews, createRedisNews, hearRedisNews, liveChannel, type LiveNewsSender } from "./modules/live/news.js";
 import { registerLiveRoutes } from "./modules/live/routes.js";
 import { safeErrorSerializer, safeRequestSerializer, scrubbedForSentry } from "./logSafety.js";
 import { sentryOptions } from "./sentry.js";
@@ -316,12 +316,13 @@ export async function buildApp(
   // hears it; without, straight to this server's own lines.
   const holdsLines = serves === "lines" || config.LIVE_LINES === "here";
   const hub = overrides.live?.hub ?? createLiveHub();
+  const channel = liveChannel(config.DATABASE_URL);
   let news: LiveNewsSender = NO_NEWS;
-  if (config.REDIS_URL !== undefined) news = createRedisNews(config.REDIS_URL, app.log);
+  if (config.REDIS_URL !== undefined) news = createRedisNews(config.REDIS_URL, channel, app.log);
   else if (holdsLines) news = createLocalNews(hub);
-  let stopHearing: (() => Promise<void>) | null = null;
+  let stopHearing: (() => void) | null = null;
   if (holdsLines) {
-    if (config.REDIS_URL !== undefined) stopHearing = await hearRedisNews(config.REDIS_URL, hub, app.log);
+    if (config.REDIS_URL !== undefined) stopHearing = hearRedisNews(config.REDIS_URL, channel, hub, app.log);
     registerLiveRoutes(app, {
       sql,
       redis,
@@ -335,7 +336,7 @@ export async function buildApp(
   // requests to finish.
   app.addHook("preClose", async () => {
     hub.endAll();
-    await stopHearing?.();
+    stopHearing?.();
     await news.close();
   });
   if (serves === "lines") return app;
@@ -418,6 +419,7 @@ export async function buildApp(
   registerPaymentRoutes(app, {
     sql,
     redis,
+    news,
     square: squareSettings(config, overrides.squareApi),
     now: overrides.orgs?.now ?? (() => new Date()),
   });

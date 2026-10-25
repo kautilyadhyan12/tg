@@ -29,7 +29,7 @@
 // The word travels in the body, never the address: it is a cell of the gym's file.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
-import { z } from "zod";
+import type { z } from "zod";
 import {
   MEMBERSHIP_HAS_BOOKINGS_ERROR,
   cancelHeldMembershipRequestSchema,
@@ -52,7 +52,7 @@ import {
   updateGymMembershipTypeRequestSchema,
 } from "@app/shared";
 import type { RedisLike } from "../../../redis.js";
-import type { LiveNewsSender } from "../../live/news.js";
+import { tellMembershipsAfter, type LiveNewsSender } from "../../live/news.js";
 import { createDualRateLimit } from "../../auth/rateLimit.js";
 import {
   heldMembershipParamsSchema,
@@ -212,12 +212,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
   });
   // A change saved to a person's memberships tells the gym's open lines to read them again
   // (ROADMAP Stage 4 item 18): whoever has their page open sees it without a refresh.
-  const personInAddress = z.object({ gymId: z.string().uuid(), entryId: z.string().uuid() });
-  const tellMemberships = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (req.method === "GET" || reply.statusCode >= 300) return;
-    const at = personInAddress.safeParse(req.params);
-    if (at.success) deps.news.tell(at.data.gymId, { what: "memberships", entryId: at.data.entryId });
-  };
+  const tellMemberships = tellMembershipsAfter(deps.news);
   const heldGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)], onResponse: tellMemberships };
   const heldUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/memberships";
 
