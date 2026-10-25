@@ -57,7 +57,7 @@ export const MEMBER_PAYMENT_METHOD_WORDS: Readonly<Record<MemberPaymentMethod, s
   link: "Payment link",
   company: "Card on file",
   terminal: "Card on Terminal",
-  square_app: "Square app",
+  square_app: "Square Point of Sale",
 };
 
 /** Taken through Square, on the Terminal, from the card on file (18d-iii-i) or in Square's own app

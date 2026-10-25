@@ -387,6 +387,8 @@ describe('a void (18o)', () => {
     const words = { wrong_amount: 'Wrong amount' };
     expect(voidedLine({ reason: 'wrong_amount', on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Voided 15 October 2026 by Priya Desk · Wrong amount');
     expect(voidedLine({ reason: null, on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Voided 15 October 2026 by Priya Desk');
+    // Not this bill (18d-iii-b-i) voids nothing: the payment is off the bill and its money still in Square.
+    expect(voidedLine({ reason: 'not_this_bill', on: '2026-10-15', by: 'Priya Desk' }, words)).toBe('Taken off this bill 15 October 2026 by Priya Desk. The money is still in Square.');
     expect(voidedLine({ reason: 'wrong_amount', on: '2026-10-15', by: null }, words)).toBe('Voided 15 October 2026 · Wrong amount');
   });
 

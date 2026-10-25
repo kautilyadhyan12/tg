@@ -4265,7 +4265,7 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   the app's own (a Terminal checkout's, a card on file's charge) is taken in once
   (`gym_square_app_payments`), never one made before the gym was first watched or more than 30 days
   ago. It goes to the gym whose record Square's customer is (the customer the app made when a card
-  was saved), at that gym's own location; and is recorded as **Square app** (`square_app`) only where
+  was saved), at that gym's own location; and is recorded as **Square Point of Sale** (`square_app`; Square's own name for its app) only where
   every line was a typed amount, the customer is one record's, and exactly one bill of that record or
   of somebody it pays for is exactly the amount (without a tip), due within 7 days, and not a second
   payment straight after the bill before it (`squareAppDecision`). Items from the gym's Square list

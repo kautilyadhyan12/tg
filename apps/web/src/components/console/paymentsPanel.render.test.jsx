@@ -128,30 +128,31 @@ describe('connected', () => {
   });
 });
 
-describe("payments taken in Square's app (18d-iii-b-i)", () => {
+describe("payments taken in Square Point of Sale (18d-iii-b-i)", () => {
   it("says how to set up Square's own app, in its own steps", async () => {
     open(payments({ square: CONNECTED, squareApp: { needsAllow: false } }));
-    const box = within(await screen.findByRole('region', { name: "Payments taken in Square's app" }));
-    expect(box.getByText(/it's recorded on the person's bill here if they picked the person and typed the exact amount of the bill/)).toBeTruthy();
+    const box = within(await screen.findByRole('region', { name: "Payments taken in Square Point of Sale" }));
+    expect(box.getByText(/add the person as the customer, it's recorded on the person's bill here, as long as the amount is exactly what the bill says/)).toBeTruthy();
+    expect(box.getByText('Set up Square Point of Sale once:')).toBeTruthy();
     expect(box.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      "In Square's app, go to More, Settings, Checkout, Customer management, and turn on Before checkout. Staff then pick the person before taking the money.",
-      "In Square's app, go to More, Settings, Checkout, Sales taxes, and turn off Custom amounts for each tax. The amount staff type is then the amount paid.",
+      'Open More → Settings → Checkout. Turn on Customer management, then turn on Before checkout under Collect customer information. Staff then add the person before taking the money.',
+      'Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts. Bills here already include tax, so Square then charges exactly what staff enter.',
     ]);
-    expect(box.getByText('Sell shop items from your item list in Square. A sale of items is never put on a bill.')).toBeTruthy();
+    expect(box.getByText('Ring up shop items from your item list in Square. Item sales are never added to a bill.')).toBeTruthy();
     expect(box.queryByRole('button')).toBeNull();
   });
 
   it('connected before Square let the app read what was sold: the owner reconnects, everybody else is told who can', async () => {
     open(payments({ square: CONNECTED, squareApp: { needsAllow: true } }));
-    const box = within(await screen.findByRole('region', { name: "Payments taken in Square's app" }));
-    expect(box.getByText("To record payments taken in Square's app, Square needs one more permission.")).toBeTruthy();
+    const box = within(await screen.findByRole('region', { name: "Payments taken in Square Point of Sale" }));
+    expect(box.getByText('To record payments taken in Square Point of Sale, Square needs one more permission.')).toBeTruthy();
     orgService.connectSquare.mockResolvedValue({ data: { url: 'https://connect.squareupsandbox.com/oauth2/authorize?state=again' } });
     fireEvent.click(box.getByRole('button', { name: 'Reconnect Square' }));
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('https://connect.squareupsandbox.com/oauth2/authorize?state=again'));
     cleanup();
     open(payments({ canConnect: false, square: CONNECTED, squareApp: { needsAllow: true } }));
-    const other = within(await screen.findByRole('region', { name: "Payments taken in Square's app" }));
-    expect(other.getByText("The owner of Iron House needs to reconnect Square before payments taken in Square's app can be recorded.")).toBeTruthy();
+    const other = within(await screen.findByRole('region', { name: "Payments taken in Square Point of Sale" }));
+    expect(other.getByText('The owner of Iron House needs to reconnect Square before payments taken in Square Point of Sale can be recorded.')).toBeTruthy();
     expect(other.queryByRole('button')).toBeNull();
   });
 });

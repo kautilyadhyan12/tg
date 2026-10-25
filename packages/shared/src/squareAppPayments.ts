@@ -120,18 +120,21 @@ export function squareAppDecision(p: {
   return { kind: "record", candidate: first };
 }
 
-/** Settings → Payments: how the gym sets up Square's own app, read aloud as a gym that opened last week. */
+/** Settings → Payments: how the gym sets up Square's own app, Square Point of Sale (its own name for it,
+ *  on a phone or tablet with a Square Reader, or on a Square Register or Terminal used on its own). The
+ *  menus are Square's (help article 5061, "Add a customer at checkout", read 2026-10-25). */
 export const SQUARE_APP_WORDS = {
-  heading: "Payments taken in Square's app",
-  intro: "When staff take a payment in Square's own app, it's recorded on the person's bill here if they picked the person and typed the exact amount of the bill.",
-  customers: "In Square's app, go to More, Settings, Checkout, Customer management, and turn on Before checkout. Staff then pick the person before taking the money.",
-  tax: "In Square's app, go to More, Settings, Checkout, Sales taxes, and turn off Custom amounts for each tax. The amount staff type is then the amount paid.",
-  linked: "A person's payments are recorded by themselves once their card is saved here.",
-  items: "Sell shop items from your item list in Square. A sale of items is never put on a bill.",
-  needsAllow: "To record payments taken in Square's app, Square needs one more permission.",
-  needsAllowHint: "Reconnect Square and press Allow on Square's page. Nothing else changes.",
-  ownerOnly: (gym: string): string => `The owner of ${gym} needs to reconnect Square before payments taken in Square's app can be recorded.`,
+  heading: "Payments taken in Square Point of Sale",
+  intro: "When staff take a payment in Square Point of Sale and add the person as the customer, it's recorded on the person's bill here, as long as the amount is exactly what the bill says.",
+  setupLead: "Set up Square Point of Sale once:",
+  customers: "Open More → Settings → Checkout. Turn on Customer management, then turn on Before checkout under Collect customer information. Staff then add the person before taking the money.",
+  tax: "Open More → Settings → Checkout → Sales taxes (VAT in some countries). Open each tax and turn off Custom amounts. Bills here already include tax, so Square then charges exactly what staff enter.",
+  linked: "A person's payments are recorded automatically once their card is saved here.",
+  items: "Ring up shop items from your item list in Square. Item sales are never added to a bill.",
+  needsAllow: "To record payments taken in Square Point of Sale, Square needs one more permission.",
+  needsAllowHint: "Press Reconnect Square, then Allow on Square's page. Nothing else changes.",
+  ownerOnly: (gym: string): string => `The owner of ${gym} needs to reconnect Square before payments taken in Square Point of Sale can be recorded.`,
   /** The server's answers to a void. */
-  void_square_app: "This was taken in Square's app. To give the money back, refund it in your Square Dashboard, then note the refund here. If it's on the wrong bill, press Not this bill.",
-  not_square_app: "Only a payment taken in Square's app can be taken off with Not this bill.",
+  void_square_app: "This was taken in Square Point of Sale. To give the money back, refund it in your Square Dashboard, then note the refund here. If it's on the wrong bill, press Not this bill.",
+  not_square_app: "Only a payment taken in Square Point of Sale can be taken off with Not this bill.",
 } as const;

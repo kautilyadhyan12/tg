@@ -60,8 +60,8 @@ describe('receiptLines', () => {
     ]);
   });
 
-  it('a payment taken in Square\'s app keeps its name\'s capital; UPI keeps its own; the rest read as words (18d-iii-b-i)', () => {
-    expect(drawn(payment({ method: 'square_app' })).at(-1)).toBe('Paid by Square app | $54.13');
+  it('a payment taken in Square Point of Sale keeps its capitals; UPI keeps its own; the rest read as words (18d-iii-b-i)', () => {
+    expect(drawn(payment({ method: 'square_app' })).at(-1)).toBe('Paid by Square Point of Sale | $54.13');
     expect(drawn(payment({ method: 'upi' })).at(-1)).toBe('Paid by UPI | $54.13');
     expect(drawn(payment({ method: 'terminal' })).at(-1)).toBe('Paid by card on Terminal | $54.13');
   });

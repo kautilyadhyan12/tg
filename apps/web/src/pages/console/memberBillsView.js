@@ -161,6 +161,8 @@ export function billTaxLine(bill, currency) {
  *  sale, and why. One voided before reasons were kept has none. */
 export function voidedLine(voided, reasonWords) {
   const who = voided.by === null ? '' : ` by ${voided.by}`;
+  // Taken off with Not this bill (18d-iii-b-i): nothing was voided, the money is still in Square.
+  if (voided.reason === 'not_this_bill') return `Taken off this bill ${dayWords(voided.on)}${who}. The money is still in Square.`;
   const why = voided.reason === null ? null : (reasonWords[voided.reason] ?? null);
   return joined([`Voided ${dayWords(voided.on)}${who}`, why]);
 }
@@ -418,7 +420,7 @@ export function notThisBillWords(m, name, paymentId) {
   const amount = payment === null ? 'payment' : formatMinor(payment.amountMinor, m.currency);
   const what = bill === null || bill.covers === null ? `${m.typeName} bill` : `bill for ${billDays(bill.covers)}`;
   return {
-    question: `Take the ${amount} paid in Square's app off ${name}'s ${what}?`,
+    question: `Take the ${amount} paid in Square Point of Sale off ${name}'s ${what}?`,
     detail: 'Use this when it went on the wrong bill. The bill will be owed again. No money moves: the payment stays in Square.',
     button: 'Take it off',
   };
@@ -439,14 +441,14 @@ export function notThisFeeWords(fee, currency, name) {
   const stays = 'No money moves: the payment stays in Square.';
   if (fee.stillOwed === false) {
     return {
-      question: `Take the ${amount} paid in Square's app off ${name}'s ${feeName(fee)}?`,
+      question: `Take the ${amount} paid in Square Point of Sale off ${name}'s ${feeName(fee)}?`,
       detail: `${capital(name)} no longer owes this fee: ${whyNotOwed(fee)}. Taking the payment off takes the fee off too, so nothing is owed. ${stays}`,
       button: 'Take it off',
       done: `Taken off. ${capital(name)} owes nothing for this fee.`,
     };
   }
   return {
-    question: `Take the ${amount} paid in Square's app off ${name}'s ${feeName(fee)}?`,
+    question: `Take the ${amount} paid in Square Point of Sale off ${name}'s ${feeName(fee)}?`,
     detail: `Use this when it went on the wrong fee. The fee will be owed again. ${stays}`,
     button: 'Take it off',
     done: `Taken off. ${capital(name)} owes the ${amount} ${feeName(fee)} again.`,

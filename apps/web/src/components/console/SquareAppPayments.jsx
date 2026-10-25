@@ -2,8 +2,8 @@ import { Loader2 } from 'lucide-react';
 import { SQUARE_APP_WORDS } from '@app/shared';
 import { readOnlyNote } from '../../pages/console/billingView';
 
-// PAYMENTS TAKEN IN SQUARE'S APP (ROADMAP 18d-iii-b-i), in the connected Payments box: how the gym sets
-// up Square's own app so a payment staff take there, picking the person and typing the bill's total,
+// PAYMENTS TAKEN IN SQUARE POINT OF SALE (ROADMAP 18d-iii-b-i), in the connected Payments box: how the gym
+// sets up Square's own app so a payment staff take there, picking the person and typing the bill's total,
 // is recorded on that person's bill here. A gym connected before the app could read what was sold
 // connects Square again, once; only the owner does, as only the owner connects Square.
 
@@ -66,6 +66,9 @@ export default function SquareAppPayments({ org, squareApp, owner, readOnly, onC
       {heading}
       <p className="text-sm m-0" style={labelStyle}>
         {SQUARE_APP_WORDS.intro}
+      </p>
+      <p className="text-sm font-semibold m-0" style={labelStyle}>
+        {SQUARE_APP_WORDS.setupLead}
       </p>
       <ol className="m-0 rounded-xl px-4 py-3 flex flex-col gap-2 list-decimal list-inside" style={boxStyle}>
         <li className="text-sm" style={labelStyle}>
