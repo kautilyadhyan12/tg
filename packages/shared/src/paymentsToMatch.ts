@@ -87,6 +87,9 @@ export const paymentsToMatchResponseSchema = paymentsToMatchSummarySchema
     next: z.number().int().min(1).nullable(),
     /** Square is connected now, so Match can ask Square about a payment before it goes on a bill. */
     square: z.boolean(),
+    /** Payments taken at this gym's Square location with no customer added, which another gym here uses
+     *  too: kept for neither, so not listed; giving each gym its own location ends it. */
+    sharedLocation: z.number().int().min(0),
   })
   .strict();
 export type PaymentsToMatchResponse = z.infer<typeof paymentsToMatchResponseSchema>;

@@ -108,7 +108,12 @@ export async function readPaymentsToMatch(deps: PaymentsDeps, userId: string, gy
   }));
   const next = from + PAYMENTS_TO_MATCH_PAGE < totals.count ? from + PAYMENTS_TO_MATCH_PAGE : null;
   const ready = square !== null && connection !== null && stateOf(square, gym, connection) === "ready";
-  return paymentsToMatchResponseSchema.parse({ ...totals, payments, next, square: ready });
+  // Another gym here at the same Square location: what nobody picked there is neither's, said with its count.
+  const sharedLocation =
+    square !== null && connection?.state === "connected" && connection.locationId !== null
+      ? await toMatch.sharedLocationCount(deps.sql, { gymId, environment: square.environment, accountId: connection.accountId, locationId: connection.locationId })
+      : 0;
+  return paymentsToMatchResponseSchema.parse({ ...totals, payments, next, square: ready, sharedLocation });
 }
 
 /** One of the gym's payments that waits, or why it is not on the list now. */

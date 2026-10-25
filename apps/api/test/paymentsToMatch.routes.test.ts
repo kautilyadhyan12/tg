@@ -168,8 +168,7 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     return { userId, cookies: cookieMap(login) };
   };
   /** A gym in Chicago's time, connected to a Square account of its own. */
-  const makeGym = async (name: string): Promise<Gym> => {
-    const acct = account(`MPTM${uniq()}`);
+  const makeGym = async (name: string, acct: Account = account(`MPTM${uniq()}`)): Promise<Gym> => {
     const owner = await signedIn(`${name} Owner`);
     const res = await send("POST", "/v1/orgs", owner.cookies, { trainsHere: false, name, city: "Chicago", country: "US", timezone: "America/Chicago" });
     expect(res.statusCode, res.body).toBe(201);
@@ -653,6 +652,26 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     // Matched again, to the same bill: on it once.
     expect((await match(gym, row.id, una, { amountMinor: 2500 })).statusCode).toBe(200);
     expect((await paymentsOf(una)).filter((p) => p.method === "square_app")).toHaveLength(1);
+  });
+
+  it("two gyms here at one Square location: a payment with nobody picked is listed for neither, and each is told how many, so it gives each gym its own location", async () => {
+    const shared = account(`MPTM${uniq()}`);
+    const one = await makeGym(`Shared One ${uniq()}`, shared);
+    const two = await makeGym(`Shared Two ${uniq()}`, shared);
+    clock = new Date(`${(await held(one, await person(one, "Clock Reader"))).today}T17:00:00Z`);
+    const paid = square.appPayment(shared, { amount: 2500, locationId: one.locationId });
+    await work([await deliver(shared, paid.id)]);
+    const [row] = await sql<{ gym_id: string | null; reason: string | null }[]>`SELECT gym_id, reason FROM gym_square_app_payments WHERE square_payment_id = ${paid.id}`;
+    expect(row).toEqual({ gym_id: null, reason: "several_gyms" });
+    for (const gym of [one, two]) {
+      const seen = await list(gym);
+      expect(seen.payments, "nobody's to match").toEqual([]);
+      expect(seen.sharedLocation, "each told").toBe(1);
+    }
+    // A gym of its own location is told nothing; nor is one once the other gym has left that location.
+    expect((await list(await makeGym(`Alone ${uniq()}`))).sharedLocation).toBe(0);
+    await sql`UPDATE gym_payment_connections SET state = 'removed', removed_at = now() WHERE gym_id = ${two.id}`;
+    expect((await list(one)).sharedLocation).toBe(0);
   });
 
   it("Failed payments says a card waits for a payment from Square Point of Sale instead of offering Try again", async () => {

@@ -15,6 +15,15 @@ export const TO_MATCH_NO_SQUARE = "Square isn't connected right now, so these pa
 export const TO_MATCH_NO_SQUARE_STAFF = "Square isn't connected right now, so these payments can't be checked with Square before they go on a bill. The owner can reconnect Square in Settings.";
 
 const money = (minor, currency) => formatMinor(minor, currency);
+
+/** Payments at this gym's Square location that another gym here uses too, with no customer added: listed
+ *  for neither. Null for none. */
+export function sharedLocationLine(n) {
+  if (n <= 0) return null;
+  const many = n === 1 ? '1 payment taken at your Square location isn’t listed here' : `${String(n)} payments taken at your Square location aren’t listed here`;
+  return `${many}, because another gym in this app uses the same location and no customer was added to the sale. Give each gym its own Square location so these can be matched.`;
+}
+export const SHARED_LOCATION_STAFF = 'The owner can choose another Square location for this gym.';
 const totalWords = (totals) => totals.map((t) => money(t.minor, t.currency)).join(' + ');
 const count = (n) => (n === 1 ? '1 payment' : `${String(n)} payments`);
 

@@ -195,6 +195,21 @@ export async function markRefunded(tx: TransactionSql, gymId: string, id: string
     WHERE gym_id = ${gymId} AND id = ${id} AND state = 'waiting'`;
 }
 
+/** Payments waiting at this Square location that two gyms here use, with no customer to say whose: kept for
+ *  neither gym (`several_gyms`), so counted for each, never shown; and only while another gym here is still
+ *  connected at that location, which is what the screen says. */
+export async function sharedLocationCount(sql: SqlOrTx, at: { gymId: string; environment: SquareEnvironment; accountId: string; locationId: string }): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM gym_square_app_payments
+    WHERE gym_id IS NULL AND state = 'waiting' AND reason = 'several_gyms'
+      AND environment = ${at.environment} AND account_id = ${at.accountId} AND location_id = ${at.locationId}
+      AND EXISTS (
+        SELECT 1 FROM gym_payment_connections c
+        WHERE c.provider = 'square' AND c.environment = ${at.environment} AND c.state = 'connected'
+          AND c.account_id = ${at.accountId} AND c.location_id = ${at.locationId} AND c.gym_id <> ${at.gymId})`;
+  return row?.n ?? 0;
+}
+
 /** Of these people, those whose card on file a payment of theirs waiting holds: the card their own bills
  *  are charged to (theirs, or their payer's), or their own where they pay for somebody. */
 export async function cardHeldFor(sql: SqlOrTx, gymId: string, entryIds: readonly string[]): Promise<Set<string>> {
