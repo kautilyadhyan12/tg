@@ -445,6 +445,10 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     const twice = await match(gym, row2.id, amy2, { amountMinor: 2500, requestKey: key });
     expect([once.statusCode, twice.statusCode]).toEqual([200, 200]);
     expect(JSON.parse(twice.body)).toEqual(JSON.parse(once.body));
+    // The same key asking for another bill is refused, never answered as matched there.
+    const elsewhere = await match(gym, row2.id, amy, { amountMinor: 2500, requestKey: key });
+    expect(elsewhere.statusCode, elsewhere.body).toBe(409);
+    expect((JSON.parse(elsewhere.body) as { error: string }).error).toBe("payment_to_match_key_reused");
     expect((await paymentsOf(amy2)).filter((p) => p.method === "square_app")).toHaveLength(1);
     expect(receipt).not.toBe(matchPaymentResponseSchema.parse(JSON.parse(once.body)).matched.receiptNumber);
     // Matched, it leaves the list and Overview's count.
@@ -580,6 +584,8 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
 
     const rows = (await list(gym)).payments;
     const of = (id: string) => rows.find((r) => r.id === id);
+    const kept = async (id: string) =>
+      (await sql<{ customer_name: string | null; customer_email: string | null }[]>`SELECT customer_name, customer_email FROM gym_square_app_payments WHERE square_payment_id = ${id}`)[0];
     const amyRow = of((await rowOf(byEmail.id)).id);
     expect(amyRow).toMatchObject({ reason: "not_linked", person: null, customer: { name: "Amy Lee", email: email.toUpperCase(), phone: "+1 312-555-0100" } });
     expect(amyRow?.suggested?.entryId, "the one record with that email, whatever its case").toBe(amy.entryId);
@@ -597,6 +603,15 @@ d("Payments to match (real Postgres)", { timeout: T }, () => {
     expect(part.statusCode, part.body).toBe(200);
     const bill = await second(amy);
     expect([bill?.status, (await paymentsOf(amy)).filter((p) => p.bill_id === bill?.id).map((p) => p.amount_minor)]).toEqual(["open", [1500]]);
+
+    // Matched, it is the record's: Square's details of the customer are no longer kept on it.
+    expect(await kept(byEmail.id)).toEqual({ customer_name: "Amy Lee", customer_email: email.toUpperCase() });
+    const rest = await match(gym, (await rowOf(byEmail.id)).id, amy, { amountMinor: 1000 });
+    expect(rest.statusCode, "the entered $25.00 is all of it").toBe(409);
+    const ann = await owing(gym, typeId, await person(gym, "Ann Lee"));
+    expect((await match(gym, (await rowOf(byEmail.id)).id, ann, { amountMinor: 2500 })).statusCode).toBe(200);
+    expect(await kept(byEmail.id)).toEqual({ customer_name: null, customer_email: null });
+    expect(await kept(byName.id), "one not matched keeps them").toEqual({ customer_name: "Amy Lee", customer_email: null });
   });
 
   it("Match's box lists the person's bills and those of whoever they pay for, ticks the one of exactly that amount, shows their newest payments, and pays a fee only whole", async () => {

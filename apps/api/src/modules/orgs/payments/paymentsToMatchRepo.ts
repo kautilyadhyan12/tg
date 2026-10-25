@@ -160,11 +160,13 @@ export type TakenRow = Omit<WaitingRow, "reason"> & {
   recordKey: string;
 };
 
-/** Matched by staff: on the bill now, as `recorded`, under the request's key. */
+/** Matched by staff: on the bill now, as `recorded`, under the request's key. Square's details of its
+ *  customer go: the payment is the record's now, and they were kept only to tell who it was. */
 export async function markMatched(tx: TransactionSql, gymId: string, id: string, m: { memberPaymentId: string; entryId: string; recordKey: string }, now: Date): Promise<boolean> {
   const rows = await tx<{ id: string }[]>`
     UPDATE gym_square_app_payments
-    SET state = 'recorded', reason = NULL, member_payment_id = ${m.memberPaymentId}, entry_id = ${m.entryId}, record_key = ${m.recordKey}, updated_at = ${now}
+    SET state = 'recorded', reason = NULL, member_payment_id = ${m.memberPaymentId}, entry_id = ${m.entryId}, record_key = ${m.recordKey},
+        customer_name = NULL, customer_email = NULL, customer_phone = NULL, updated_at = ${now}
     WHERE gym_id = ${gymId} AND id = ${id} AND state = 'waiting'
     RETURNING id`;
   return rows.length === 1;

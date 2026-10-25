@@ -220,16 +220,20 @@ export async function readMatchBills(deps: PaymentsDeps, userId: string, gymId: 
   });
 }
 
-/** A press of Match again, after its payment went on the bill: the same answer. */
-async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.TakenRow): Promise<MatchPaymentResponse> {
-  const [paid] = await deps.sql<{ amount_minor: number; currency: string; receipt_number: number; entry_id: string; full_name: string }[]>`
-    SELECT p.amount_minor, p.currency, p.receipt_number, h.entry_id, e.full_name
+/** A press of Match again, after its payment went on the bill: the same answer, where it asks for that same
+ *  bill and amount; the key with anything else in it is refused, never answered as matched. */
+async function matchedAnswer(deps: PaymentsDeps, gymId: string, row: toMatch.TakenRow, body: MatchPaymentRequest | null = null): Promise<MatchPaymentResponse> {
+  const [paid] = await deps.sql<{ amount_minor: number; currency: string; receipt_number: number; entry_id: string; full_name: string; held_membership_id: string }[]>`
+    SELECT p.amount_minor, p.currency, p.receipt_number, h.entry_id, e.full_name, b.held_membership_id
     FROM gym_member_payments p
     JOIN gym_member_bills b ON b.gym_id = p.gym_id AND b.id = p.bill_id
     JOIN gym_held_memberships h ON h.gym_id = b.gym_id AND h.id = b.held_membership_id
     JOIN gym_member_list_entries e ON e.gym_id = h.gym_id AND e.id = h.entry_id
     WHERE p.gym_id = ${gymId} AND p.id = ${row.memberPaymentId}`;
   if (paid === undefined) throw gone();
+  if (body !== null && (paid.entry_id !== body.entryId || paid.held_membership_id !== body.membershipId || paid.amount_minor !== body.amountMinor)) {
+    throw new OrgsError(409, "payment_to_match_key_reused", W.key_reused);
+  }
   return matchPaymentResponseSchema.parse({
     matched: { entryId: paid.entry_id, name: paid.full_name, amountMinor: paid.amount_minor, currency: paid.currency, receiptNumber: paid.receipt_number },
   });
@@ -250,7 +254,7 @@ export async function matchPayment(deps: PaymentsDeps, userId: string, gymId: st
   if (first === null || first.state === "shop_sale") throw gone();
   // The same press again, after it went on the bill: the same answer.
   if (first.state === "recorded" && first.recordKey === body.requestKey && first.memberPaymentId !== null) {
-    return { answer: await matchedAnswer(deps, gymId, first), entryIds: [] };
+    return { answer: await matchedAnswer(deps, gymId, first, body), entryIds: [] };
   }
   const row = await waiting(deps, gymId, paymentId);
   const entered = forTheBill(row);
