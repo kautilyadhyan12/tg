@@ -388,6 +388,9 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
     referenceId: person.entryId,
   });
   if (result.kind !== "ok") {
+    // The key asked with another body: Members in Square is making this customer with the person's phone as
+    // well (18d-iii-b-ii-b-i). Its key is kept, so it finishes; this save is tried again.
+    if (result.kind === "refused" && result.code === "IDEMPOTENCY_KEY_REUSED") throw unavailable();
     if (result.kind === "refused") {
       deps.log.warn({ event: "square.customer_refused", gymId, status: result.status, code: result.code }, "Square refused a customer");
       await cards.abandonCustomer(deps.sql, key, claimed.makingKey);

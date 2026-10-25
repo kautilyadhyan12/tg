@@ -18,10 +18,16 @@
 // PAYMENTS_READ ("Terminal API", "Payments API", read 2026-10-22). A payment taken in Square's own
 // app (18d-iii-b-i) is read with PAYMENTS_READ, listed with it for the hourly look, and what was sold
 // is read from its order with ORDERS_READ ("Retrieve order", read 2026-10-24); the business's own taxes
-// are read from its item library with ITEMS_READ ("List catalog", read 2026-10-25), never changed.
+// are read from its item library with ITEMS_READ ("List catalog", read 2026-10-25), never changed. The
+// gym's members are put into its customer list (18d-iii-b-ii-b-i): its customers are listed and searched
+// with CUSTOMERS_READ ("List customers", "Search customers", read 2026-10-26) and added with
+// CUSTOMERS_WRITE; whether Square's own subscriptions already charge them is read with SUBSCRIPTIONS_READ
+// ("Search subscriptions", read 2026-10-26), never changed.
 import {
   squareCardAnswerSchema,
   squareCustomerAnswerSchema,
+  squareCustomerSchema,
+  squareCustomersPageSchema,
   squareDeviceCodeAnswerSchema,
   squareErrorSchema,
   squareLocationsSchema,
@@ -34,6 +40,8 @@ import {
   squarePaymentsPageSchema,
   squarePaymentRefusalSchema,
   squareRevokeSchema,
+  squareSubscriptionSchema,
+  squareSubscriptionsPageSchema,
   squareTerminalActionAnswerSchema,
   squareTerminalCheckoutAnswerSchema,
   squareTokenSchema,
@@ -41,6 +49,7 @@ import {
   type SquareCard,
   type SquareCatalogTax,
   type SquareCustomer,
+  type SquareCustomerFound,
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
@@ -118,6 +127,18 @@ export interface SquareApi {
   /** One page of the taxes in the business's item library (18d-iii-b-i). `unread`: how many could not
    *  be read; each is skipped. */
   listTaxes(accessToken: string, cursor: string | null): Promise<SquareResult<{ taxes: SquareCatalogTax[]; unread: number; cursor: string | null }>>;
+  /** One page of the business's customers, 100 at most, in Square's own order (18d-iii-b-ii-b-i). `unread`:
+   *  how many on the page could not be read; each is skipped. */
+  listCustomers(accessToken: string, cursor: string | null): Promise<SquareResult<{ customers: SquareCustomerFound[]; unread: number; cursor: string | null }>>;
+  /** The business's customers with exactly this email, this phone (E.164), or this reference id (the
+   *  record's, on a customer the app made), up to 100: Square folds both sides of a phone to its digits
+   *  ("Search customers", read 2026-10-26). */
+  searchCustomers(accessToken: string, by: { email: string } | { phone: string } | { referenceId: string }): Promise<SquareResult<{ customers: SquareCustomerFound[]; unread: number }>>;
+  /** One page of Square's own subscriptions of these customers (at most 100 ids). */
+  searchSubscriptions(
+    accessToken: string,
+    q: { customerIds: readonly string[]; cursor: string | null },
+  ): Promise<SquareResult<{ subscriptions: { customerId: string | null; status: string | null }[]; cursor: string | null }>>;
   /** Charge a card on file (18d-iii-i). `idempotencyKey`: asked again, Square gives back the same
    *  payment, paid or failed, and never takes the money twice (measured 2026-10-23). */
   createCardPayment(accessToken: string, payment: NewCardPayment): Promise<CardPaymentResult>;
@@ -181,6 +202,18 @@ export interface NewSquareCustomer {
   referenceId: string;
 }
 
+/** Each customer on a page read on its own, so one that cannot be read never hides the rest. */
+function readCustomers(raw: readonly unknown[] | null | undefined): { customers: SquareCustomerFound[]; unread: number } {
+  const customers: SquareCustomerFound[] = [];
+  let unread = 0;
+  for (const one of raw ?? []) {
+    const parsed = squareCustomerSchema.safeParse(one);
+    if (parsed.success) customers.push(parsed.data);
+    else unread += 1;
+  }
+  return { customers, unread };
+}
+
 /** The path's own characters are the card id's (`squareCardIdSchema`), as Square writes them. */
 const cardPath = (cardId: string): string => {
   if (!/^[A-Za-z0-9:_-]{1,192}$/.test(cardId)) throw new Error("not a Square card id");
@@ -213,6 +246,7 @@ export const SQUARE_SCOPES = [
   "DEVICE_CREDENTIAL_MANAGEMENT",
   "ORDERS_READ",
   "ITEMS_READ",
+  "SUBSCRIPTIONS_READ",
 ] as const;
 export const SQUARE_VERSION = "2026-09-16";
 export const SQUARE_TIMEOUT_MS = 10_000;
@@ -337,6 +371,37 @@ export function createSquareApi(opts: {
       });
       // Only the new customer's id is read back: what the gym sent is already the record's.
       return result.kind === "ok" ? { kind: "ok", value: { id: result.value.customer.id } } : result;
+    },
+    async listCustomers(accessToken, cursor) {
+      const query = new URLSearchParams({ limit: "100", ...(cursor === null ? {} : { cursor }) });
+      const result = await call("GET", `/v2/customers?${query.toString()}`, squareCustomersPageSchema, bearer(accessToken));
+      if (result.kind !== "ok") return result;
+      const { customers, unread } = readCustomers(result.value.customers);
+      return { kind: "ok", value: { customers, unread, cursor: result.value.cursor ?? null } };
+    },
+    async searchCustomers(accessToken, by) {
+      const filter =
+        "email" in by ? { email_address: { exact: by.email } } : "phone" in by ? { phone_number: { exact: by.phone } } : { reference_id: { exact: by.referenceId } };
+      const result = await call("POST", "/v2/customers/search", squareCustomersPageSchema, bearer(accessToken), { limit: 100, query: { filter } });
+      if (result.kind !== "ok") return result;
+      return { kind: "ok", value: readCustomers(result.value.customers) };
+    },
+    async searchSubscriptions(accessToken, q) {
+      if (q.customerIds.length === 0 || q.customerIds.length > 100) throw new Error("between 1 and 100 customers a search");
+      const result = await call("POST", "/v2/subscriptions/search", squareSubscriptionsPageSchema, bearer(accessToken), {
+        limit: 100,
+        query: { filter: { customer_ids: [...q.customerIds] } },
+        ...(q.cursor === null ? {} : { cursor: q.cursor }),
+      });
+      if (result.kind !== "ok") return result;
+      const subscriptions: { customerId: string | null; status: string | null }[] = [];
+      for (const raw of result.value.subscriptions ?? []) {
+        const one = squareSubscriptionSchema.safeParse(raw);
+        // One that cannot be read says nothing about anybody: Square still charges whoever it is, so it is
+        // counted as a subscription of none of these customers rather than guessed.
+        if (one.success) subscriptions.push({ customerId: one.data.customer_id ?? null, status: one.data.status ?? null });
+      }
+      return { kind: "ok", value: { subscriptions, cursor: result.value.cursor ?? null } };
     },
     async createCard(accessToken, c) {
       const result = await call("POST", "/v2/cards", squareCardAnswerSchema, bearer(accessToken), {

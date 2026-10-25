@@ -54,6 +54,12 @@
 //   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/match             Match: on the bill picked
 //   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/not-a-bill        Not a bill payment
 //   POST   /v1/orgs/:gymId/payments-to-match/:paymentId/undo              Undo of Not a bill payment
+//
+// Members in Square (ROADMAP 18d-iii-b-ii-b-i): any staff read the box, the owner checks and adds:
+//   GET    /v1/orgs/:gymId/payments/square/members                       the box
+//   POST   /v1/orgs/:gymId/payments/square/members/check                 Add members to Square, Check again
+//   POST   /v1/orgs/:gymId/payments/square/members/add                   Add, on the check the box showed
+//   GET    /v1/orgs/:gymId/payments/square/members/names?group=&from=0   See all
 import {
   cardChargeRequestSchema,
   cardFeeChargeRequestSchema,
@@ -70,6 +76,8 @@ import {
   terminalSaleRequestSchema,
   terminalSaveRequestSchema,
   squareFinishRequestSchema,
+  squareMembersAddRequestSchema,
+  squareMembersNamesQuerySchema,
   squareLocationRequestSchema,
   squareObjectIdSchema,
   squarePaymentIdSchema,
@@ -97,6 +105,7 @@ import * as cards from "./cards.js";
 import * as failedPayments from "./failedPayments.js";
 import * as paymentsToMatch from "./paymentsToMatch.js";
 import * as service from "./service.js";
+import * as squareMembers from "./squareMembers.js";
 import { SQUARE_PAYMENT_EVENTS, squareAppCheck } from "./squareAppPayments.js";
 import { verifySquareSignature } from "./squareSignature.js";
 import * as terminalCards from "./terminalCards.js";
@@ -150,6 +159,40 @@ export function registerPaymentRoutes(app: FastifyInstance, deps: Omit<service.P
     const params = parseOr400(orgParamsSchema, req.params, req, reply);
     if (params === null) return;
     return reply.status(200).send(await squareAppCheck(paymentsDeps, callerId(req), params.gymId));
+  });
+
+  // Members in Square (18d-iii-b-ii-b-i): the box is read when Settings opens and when live news says so; a
+  // check and an add are a handful of presses, each a few pages of Square's customers.
+  const membersDeps: service.PaymentsDeps = { ...paymentsDeps, news: deps.news };
+  const membersPressLimit = createDualRateLimit({ name: "square_members_press", max: 30, ipMax: 300, windowMs: HOUR_MS, identifier: byPerson, redis: deps.redis });
+  const membersUrl = "/v1/orgs/:gymId/payments/square/members";
+
+  app.get(membersUrl, { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await squareMembers.readSquareMembers(membersDeps, callerId(req), params.gymId));
+  });
+
+  app.post(`${membersUrl}/check`, { preHandler: [app.authenticate, membersPressLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    return reply.status(200).send(await squareMembers.checkSquareMembers(membersDeps, callerId(req), params.gymId));
+  });
+
+  app.post(`${membersUrl}/add`, { preHandler: [app.authenticate, membersPressLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const body = parseOr400(squareMembersAddRequestSchema, req.body, req, reply);
+    if (body === null) return;
+    return reply.status(200).send(await squareMembers.addSquareMembers(membersDeps, callerId(req), params.gymId, body.runId));
+  });
+
+  app.get(`${membersUrl}/names`, { preHandler: [app.authenticate, readLimit] }, async (req, reply) => {
+    const params = parseOr400(orgParamsSchema, req.params, req, reply);
+    if (params === null) return;
+    const query = parseOr400(squareMembersNamesQuerySchema, req.query, req, reply);
+    if (query === null) return;
+    return reply.status(200).send(await squareMembers.readSquareMembersNames(membersDeps, callerId(req), params.gymId, query));
   });
 
   app.post("/v1/orgs/:gymId/payments/square/connect", { preHandler: [app.authenticate, connectLimit] }, async (req, reply) => {

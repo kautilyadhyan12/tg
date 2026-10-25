@@ -325,3 +325,41 @@ export const squarePaymentRefusalSchema = z.object({
   errors: z.array(z.object({ code: z.string().max(100), category: z.string().max(100).optional() })).max(20).optional(),
   payment: squarePaymentSchema.optional(),
 });
+
+// The gym's members put into its customers in Square (ROADMAP 18d-iii-b-ii-b-i; developer.squareup.com,
+// read 2026-10-26: "List customers", "Search customers", "Create customer", "Search subscriptions",
+// "Customer API Best Practices": "Before creating a new customer, check to see whether a customer already
+// exists with that email address or phone number").
+
+/** A customer as ListCustomers and SearchCustomers show it, read on its own: what tells who they are, and
+ *  `reference_id`, which the app sets to the record's id on every customer it makes. */
+export const squareCustomerSchema = z.object({
+  id: squareObjectIdSchema,
+  given_name: z.string().max(300).nullish(),
+  family_name: z.string().max(300).nullish(),
+  email_address: z.string().max(320).nullish(),
+  phone_number: z.string().max(40).nullish(),
+  reference_id: z.string().max(255).nullish(),
+});
+export type SquareCustomerFound = z.infer<typeof squareCustomerSchema>;
+
+/** ListCustomers' and SearchCustomers' answer: at most 100 a page ("advisory" for a search, so a few
+ *  more are allowed), each read on its own; `cursor` while there are more. */
+export const squareCustomersPageSchema = z.object({
+  customers: z.array(z.unknown()).max(200).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
+
+/** A subscription of Square's own (Square's Subscriptions), as far as whose it is and whether it still
+ *  charges: ACTIVE, PENDING (starts later) or PAUSED; CANCELED and DEACTIVATED do not. */
+export const squareSubscriptionSchema = z.object({
+  id: z.string().max(192),
+  customer_id: squareObjectIdSchema.nullish(),
+  status: z.string().max(40).nullish(),
+});
+
+/** SearchSubscriptions' answer, each read on its own; `cursor` while there are more. */
+export const squareSubscriptionsPageSchema = z.object({
+  subscriptions: z.array(z.unknown()).max(1000).nullish(),
+  cursor: z.string().max(2048).nullish(),
+});
