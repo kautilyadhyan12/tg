@@ -40,6 +40,7 @@ import {
   squareTokenStatusSchema,
   type SquareCard,
   type SquareCatalogTax,
+  type SquareCustomer,
   type SquareDeviceCode,
   type SquareLocation,
   type SquareMerchant,
@@ -79,8 +80,9 @@ export interface SquareApi {
    *  the same press sent twice gives back the same card. */
   createCard(accessToken: string, card: { idempotencyKey: string; sourceId: string; customerId: string; cardholderName: string | null }): Promise<SquareResult<SquareCard>>;
   retrieveCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
-  /** 404 is a customer the gym deleted inside Square. */
-  retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<{ id: string }>>;
+  /** 404 is a customer the gym deleted inside Square. What Square has of them (their name, email and
+   *  phone) is shown beside a payment from Square Point of Sale linked to nobody here (18d-iii-b-ii-a). */
+  retrieveCustomer(accessToken: string, customerId: string): Promise<SquareResult<SquareCustomer>>;
   /** No charge or update can reach the card after this; disabling one already disabled is
    *  allowed and changes nothing. */
   disableCard(accessToken: string, cardId: string): Promise<SquareResult<SquareCard>>;
@@ -333,7 +335,8 @@ export function createSquareApi(opts: {
         ...(c.phone === null ? {} : { phone_number: c.phone }),
         reference_id: c.referenceId,
       });
-      return result.kind === "ok" ? { kind: "ok", value: result.value.customer } : result;
+      // Only the new customer's id is read back: what the gym sent is already the record's.
+      return result.kind === "ok" ? { kind: "ok", value: { id: result.value.customer.id } } : result;
     },
     async createCard(accessToken, c) {
       const result = await call("POST", "/v2/cards", squareCardAnswerSchema, bearer(accessToken), {
