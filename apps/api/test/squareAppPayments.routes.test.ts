@@ -298,7 +298,14 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     const zoe = await owing(main, mainType, await person(main, "Zoe Lee"));
     // Somebody in the other gym of the same Square account, owing the same.
     const bea = await owing(harbour, harbourType, await person(harbour, "Bea Lee"));
+    // A gym of ANOTHER Square account, whose own customer happens to carry the same id as Amy's.
+    const otherAcct = twoPlaces(`MSAP${uniq()}`);
+    const elsewhereGym = await makeGym(`Other Account Gym ${uniq()}`, otherAcct, otherAcct.locations[0]?.id ?? "");
+    const zed = await owing(elsewhereGym, await typeOf(elsewhereGym), await person(elsewhereGym, "Zed Lee"));
     const amyCustomer = await customerOf(main, amy.entryId);
+    await sql`
+      INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id)
+      VALUES (${elsewhereGym.id}, ${zed.entryId}, 'production', ${otherAcct.merchantId}, ${amyCustomer})`;
     await customerOf(main, zoe.entryId);
     const beaCustomer = await customerOf(harbour, bea.entryId);
 
@@ -344,8 +351,10 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     await work([await deliver(acct, elsewhere.id)]);
     expect(await kept(elsewhere.id)).toEqual([]);
 
-    // Square's message about one account never reaches another account's gym.
-    expect(await sql`SELECT 1 FROM gym_square_app_payments WHERE gym_id = ${harbour.id} AND state = 'recorded'`).toHaveLength(0);
+    // Square's message about one account never reaches another account's gym, even through a customer of
+    // the same id there.
+    expect((await second(zed))?.status, "the other account's bill is untouched").toBe("open");
+    expect(await sql`SELECT 1 FROM gym_square_app_payments WHERE gym_id = ${elsewhereGym.id}`).toHaveLength(0);
   });
 
   it("records a payer's payment on the person they pay for, and keeps for staff what it cannot be sure of", async () => {
@@ -374,6 +383,8 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
       { name: "another amount than the bill", make: () => square.appPayment(acct, { amount: 2000, customerId: deeCustomer, locationId: gym.locationId }), state: "waiting", reason: "no_bill" },
       { name: "Square's sales tax added on top of the typed amount", make: () => square.appPayment(acct, { amount: 2706, customerId: deeCustomer, locationId: gym.locationId, addedTax: 206 }), state: "waiting", reason: "square_tax" },
       { name: "the bill's amount in another money", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, currency: "CAD" }), state: "waiting", reason: "no_bill" },
+      { name: "refunded in Square before it was taken in", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, refunded: 2500 }), state: "waiting", reason: "refunded" },
+      { name: "partly refunded before it was taken in", make: () => square.appPayment(acct, { amount: 2500, customerId: deeCustomer, locationId: gym.locationId, refunded: 500 }), state: "waiting", reason: "refunded" },
     ];
     for (const c of cases) {
       const p = c.make();
@@ -501,6 +512,109 @@ d("A payment taken in Square's own app, recorded on the member (real Postgres)",
     clock = new Date(clock.getTime() + 61 * 60_000);
     await work();
     expect((await paymentsOf(fay)).filter((p) => p.method === "square_app")).toHaveLength(1);
+  });
+
+  it("never takes in the app's own card on file charge, whether Square's answer came back or was lost", async () => {
+    const acct = twoPlaces(`MSAP${uniq()}`);
+    const gym = await makeGym(`Card Gym ${uniq()}`, acct, acct.locations[0]?.id ?? "");
+    const typeId = await typeOf(gym);
+    clock = new Date(`${(await held(gym, await person(gym, "Clock Reader"))).today}T18:00:00Z`);
+    const gus = await owing(gym, typeId, await person(gym, "Gus Card"));
+    const gusCustomer = await customerOf(gym, gus.entryId);
+    /** A charge of Gus's card on file, as 18d-iii-i writes it before Square is asked. */
+    const charge = (id: string, squarePaymentId: string | null) => sql`
+      INSERT INTO gym_card_charges (id, gym_id, entry_id, held_membership_id, period_index, environment, account_id, location_id,
+                                    customer_id, card_id, brand, last4, amount_minor, currency, by_schedule, request_key, payment_key,
+                                    state, outcome, square_payment_id, started_at, checked_at, finished_at)
+      VALUES (${id}, ${gym.id}, ${gus.entryId}, ${gus.membershipId}, 1, 'production', ${acct.merchantId}, ${gym.locationId},
+              ${gusCustomer}, ${`ccof:${uniq()}`}, 'VISA', '1111', 2500, 'USD', false, ${randomUUID()}, ${`key${uniq()}`},
+              ${squarePaymentId === null ? "charging" : "done"}, ${squarePaymentId === null ? null : "not_recorded"}, ${squarePaymentId},
+              ${clock}, ${clock}, ${squarePaymentId === null ? null : clock})`;
+    // Square's answer came back: the charge names Square's payment.
+    const answered = square.appPayment(acct, { amount: 2500, customerId: gusCustomer, locationId: gym.locationId });
+    await charge(randomUUID(), answered.id);
+    // Square's answer was lost on the way: Square's payment names the charge.
+    const lostId = randomUUID();
+    await charge(lostId, null);
+    const lostAnswer = square.appPayment(acct, { amount: 2500, customerId: gusCustomer, locationId: gym.locationId, referenceId: lostId });
+    await work([await deliver(acct, answered.id), await deliver(acct, lostAnswer.id)]);
+    expect(await kept(answered.id)).toEqual([]);
+    expect(await kept(lostAnswer.id)).toEqual([]);
+    expect((await paymentsOf(gus)).filter((p) => p.method === "square_app"), "nothing put on Gus's bill").toEqual([]);
+  });
+
+  it("a look stopped part-way goes on a minute later from where it stopped; an order never shown is kept after an hour; a refused list waits an hour", async () => {
+    const acct = twoPlaces(`MSAP${uniq()}`);
+    const gym = await makeGym(`Resume Gym ${uniq()}`, acct, acct.locations[0]?.id ?? "");
+    const typeId = await typeOf(gym);
+    clock = new Date(`${(await held(gym, await person(gym, "Clock Reader"))).today}T18:00:00Z`);
+    const hal = await owing(gym, typeId, await person(gym, "Hal Look"));
+    const ida = await owing(gym, typeId, await person(gym, "Ida Look"));
+    const jo = await owing(gym, typeId, await person(gym, "Jo Look"));
+    const halCustomer = await customerOf(gym, hal.entryId);
+    const idaCustomer = await customerOf(gym, ida.entryId);
+    const joCustomer = await customerOf(gym, jo.entryId);
+    await work();
+    const sweepOf = async () => (await sql<{ swept_until: Date; due_at: Date }[]>`SELECT swept_until, due_at FROM gym_square_payment_sweeps WHERE gym_id = ${gym.id}`)[0];
+    const MINUTE = 60_000;
+
+    // Hal pays, then Ida; neither message arrives, and Square gives no answer about Ida's order.
+    clock = new Date(clock.getTime() + 5 * MINUTE);
+    const first = square.appPayment(acct, { amount: 2500, customerId: halCustomer, locationId: gym.locationId });
+    clock = new Date(clock.getTime() + MINUTE);
+    const then = square.appPayment(acct, { amount: 2500, customerId: idaCustomer, locationId: gym.locationId });
+    square.state.ordersUnanswered.add(then.order_id ?? "");
+    clock = new Date(clock.getTime() + 55 * MINUTE);
+    await work();
+    expect((await second(hal))?.status, "the look took in Hal's").toBe("paid");
+    expect((await second(ida))?.status, "and stopped at Ida's").toBe("open");
+    const stopped = await sweepOf();
+    expect(stopped?.swept_until.toISOString(), "it goes on from the last payment taken in").toBe(first.created_at);
+    expect(stopped?.due_at.getTime(), "a minute later").toBe(clock.getTime() + MINUTE);
+
+    // Square answers again: the next look takes in Ida's, and Hal's is not taken twice.
+    square.state.ordersUnanswered.delete(then.order_id ?? "");
+    clock = new Date(clock.getTime() + MINUTE + 1000);
+    await work();
+    expect((await second(ida))?.status).toBe("paid");
+    expect((await paymentsOf(hal)).filter((p) => p.method === "square_app")).toHaveLength(1);
+    expect((await sweepOf())?.due_at.getTime(), "finished: the next look in an hour").toBe(clock.getTime() + 60 * MINUTE);
+
+    // Jo pays and Square never shows its order: an hour on, it is kept as a sale that could not be read,
+    // and the look finishes instead of stopping there every minute.
+    const lost = square.appPayment(acct, { amount: 2500, customerId: joCustomer, locationId: gym.locationId });
+    square.state.ordersUnanswered.add(lost.order_id ?? "");
+    clock = new Date(clock.getTime() + 61 * MINUTE);
+    await work();
+    square.state.ordersUnanswered.delete(lost.order_id ?? "");
+    expect((await kept(lost.id)).map((r) => [r.state, r.reason])).toEqual([["waiting", "sale_unread"]]);
+    expect((await second(jo))?.status).toBe("open");
+    expect((await sweepOf())?.due_at.getTime(), "the look finished").toBe(clock.getTime() + 60 * MINUTE);
+
+    // Square refuses the list (a permission taken away): asked again in an hour, not every minute.
+    square.state.listRefused = true;
+    clock = new Date(clock.getTime() + 61 * MINUTE);
+    await work();
+    square.state.listRefused = false;
+    expect((await sweepOf())?.due_at.getTime()).toBe(clock.getTime() + 60 * MINUTE);
+  });
+
+  it("two gyms at one location and no customer picked: kept for neither gym to record", async () => {
+    const acct = twoPlaces(`MSAP${uniq()}`);
+    const one = await makeGym(`Shared One ${uniq()}`, acct, acct.locations[0]?.id ?? "");
+    const two = await makeGym(`Shared Two ${uniq()}`, acct, acct.locations[0]?.id ?? "");
+    const typeOne = await typeOf(one);
+    const typeTwo = await typeOf(two);
+    clock = new Date(`${(await held(one, await person(one, "Clock Reader"))).today}T18:00:00Z`);
+    const kim = await owing(one, typeOne, await person(one, "Kim Shared"));
+    const lou = await owing(two, typeTwo, await person(two, "Lou Shared"));
+    await work();
+    clock = new Date(clock.getTime() + 60_000);
+    const p = square.appPayment(acct, { amount: 2500, customerId: null, locationId: one.locationId });
+    await work([await deliver(acct, p.id)]);
+    expect((await kept(p.id)).map((r) => [r.gym_id, r.state, r.reason])).toEqual([[null, "waiting", "several_gyms"]]);
+    expect((await second(kim))?.status).toBe("open");
+    expect((await second(lou))?.status).toBe("open");
   });
 
   it("Settings' tax check reads the gym's own Square taxes, says which add themselves to typed amounts here, and answers no other gym", async () => {

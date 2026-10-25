@@ -196,7 +196,7 @@ describe("taxesOnTypedAmounts: the taxes Square adds on top of an amount staff t
   it.each([
     ["switched on, added to the price, on custom amounts, every location", tax(), ["Sales tax"]],
     ["not on custom amounts", tax({ appliesToCustomAmounts: false }), []],
-    ["custom amounts not said", tax({ appliesToCustomAmounts: null }), []],
+    ["custom amounts not said (never the all-clear)", tax({ appliesToCustomAmounts: null }), ["Sales tax"]],
     ["switched off", tax({ enabled: false }), []],
     ["switched on not said", tax({ enabled: null }), ["Sales tax"]],
     ["deleted", tax({ deleted: true }), []],

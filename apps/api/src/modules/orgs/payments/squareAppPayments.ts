@@ -33,6 +33,7 @@ import {
   type SquarePayment,
   type SquareTaxFacts,
 } from "@app/shared";
+import type { TransactionSql } from "postgres";
 import { dayInTz } from "../../gamification/streak.js";
 import { lockGym } from "../memberList/repo.js";
 import { recordPaymentIn } from "../memberships/billsRepo.js";
@@ -50,6 +51,13 @@ export const SQUARE_PAYMENT_EVENTS: readonly string[] = ["payment.created", "pay
 export type TakeIn = "done" | "unknown";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A payment whose order Square has not shown for this long after it was made is kept as one whose
+ *  sale could not be read, so one payment never holds up the gym's hourly look for good. */
+export const ORDER_PATIENCE_MS = 60 * 60_000;
+
+/** The payment was taken in at the same moment under another gym's lock: this one's write is undone. */
+class TakenTwice extends Error {}
 
 /** The token of a gym connected to the account, while it opens. */
 function tokenOf(square: SquareSettings, row: repo.ConnectionRow): string | null {
@@ -146,8 +154,9 @@ export async function takeIn(deps: PaymentsDeps, square: SquareSettings, account
 
   // Taken at another location of the account than the gym's own: kept for staff, as it is.
   const atHome = owner.locationId === location;
-  const sale = atHome ? await saleOf(square, owner, payment) : { lines: "unread" as const, addedOnTop: false };
-  if (sale === null) return "unknown";
+  const asked = atHome ? await saleOf(square, owner, payment) : { lines: "unread" as const, addedOnTop: false };
+  if (asked === null && madeAt.getTime() > now.getTime() - ORDER_PATIENCE_MS) return "unknown";
+  const sale = asked ?? { lines: "unread" as const, addedOnTop: false };
   const gym = await repo.readGym(deps.sql, owner.gymId);
   if (gym === null) return "done";
   const today = dayInTz(now, gym.timezone);
@@ -155,56 +164,91 @@ export async function takeIn(deps: PaymentsDeps, square: SquareSettings, account
   const who: SquareAppCustomer = customer === null ? "none" : mine.length === 0 ? "unknown" : mine.length === 1 ? "one" : "several";
   const entryId = who === "one" ? (mine[0]?.entryId ?? null) : null;
 
-  await deps.sql.begin(async (tx) => {
-    // The gym's lock first, as every payment by hand takes it: two messages about one payment, or a
-    // message and the hourly look, decide one after the other, and the second finds the first's row.
-    await lockGym(tx, owner.gymId);
-    if (await taken.known(tx, environment, accountId, payment.id)) return;
-    const kept = { ...facts, entryId };
-    if (!atHome) {
-      await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now);
-      return;
-    }
-    // Another money than the gym's own: no bill of the gym's is that amount.
-    const sameMoney = payment.amount_money.currency === owner.currency;
-    const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
-    const decision = squareAppDecision({ ...sale, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
-    if (decision.kind === "shop_sale") {
-      await taken.insertTaken(tx, kept, { state: "shop_sale" }, now);
-      return;
-    }
-    if (decision.kind === "wait") {
-      await taken.insertTaken(tx, kept, { state: "waiting", reason: decision.reason }, now);
-      return;
-    }
-    const { candidate } = decision;
-    const recordKey = randomUUID();
-    const paying = {
-      gymId: owner.gymId,
-      entryId: candidate.entryId,
-      membershipId: candidate.target.membershipId,
-      requestKey: recordKey,
-      amountMinor: payment.amount_money.amount,
-      method: "square_app" as const,
-      provider: { name: "square", paymentId: payment.id },
-      today,
-      actorUserId: null,
-      now,
-    };
-    const done =
-      candidate.target.kind === "fee"
-        ? await recordFeePaymentIn(tx, { ...paying, billId: candidate.target.billId })
-        : await recordPaymentIn(tx, { ...paying, periodIndex: candidate.target.periodIndex });
-    if (done.kind === "recorded") {
-      await taken.insertTaken(tx, { ...kept, entryId: candidate.entryId }, { state: "recorded", memberPaymentId: done.paymentId, recordKey }, now);
-      return;
-    }
-    // The rule read these bills under this same lock, so a refusal here is a fault of ours: kept for
-    // staff, and said in the log.
-    deps.log.error({ event: "square.app_payment_refused", gymId: owner.gymId, why: done.kind }, "a payment taken in Square's app could not be recorded on the bill it fitted");
-    await taken.insertTaken(tx, kept, { state: "waiting", reason: "no_bill" }, now);
-  });
+  try {
+    await deps.sql.begin(async (tx) => {
+      await decideAndKeep(deps, tx, { payment, owner, facts, entryId, atHome, sale, who, today, now });
+    });
+  } catch (e) {
+    // Another look took it in at the same moment for another gym: theirs stands, this one is undone.
+    if (e instanceof TakenTwice) return "done";
+    throw e;
+  }
   return "done";
+}
+
+/** Under the gym's lock: kept waiting, a shop sale, or recorded on the one bill it fits. */
+async function decideAndKeep(
+  deps: PaymentsDeps,
+  tx: TransactionSql,
+  d: {
+    payment: SquarePayment;
+    owner: repo.ConnectionRow;
+    facts: taken.TakenPayment;
+    entryId: string | null;
+    atHome: boolean;
+    sale: { lines: SquareAppLines; addedOnTop: boolean };
+    who: SquareAppCustomer;
+    today: string;
+    now: Date;
+  },
+): Promise<void> {
+  const { payment, owner, facts, entryId, atHome, sale, who, today, now } = d;
+  const { environment, accountId } = facts;
+  // The gym's lock first, as every payment by hand takes it: two messages about one payment, or a
+  // message and the hourly look, decide one after the other, and the second finds the first's row.
+  await lockGym(tx, owner.gymId);
+  if (await taken.known(tx, environment, accountId, payment.id)) return;
+  const kept = { ...facts, entryId };
+  // Money Square has given back on it, in part or in whole: never on a bill (refunds are 18d-iv's).
+  if ((payment.refunded_money?.amount ?? 0) > 0) {
+    await taken.insertTaken(tx, kept, { state: "waiting", reason: "refunded" }, now);
+    return;
+  }
+  if (!atHome) {
+    await taken.insertTaken(tx, kept, { state: "waiting", reason: "other_location" }, now);
+    return;
+  }
+  // Another money than the gym's own: no bill of the gym's is that amount.
+  const sameMoney = payment.amount_money.currency === owner.currency;
+  const candidates = entryId === null || !sameMoney ? [] : await taken.candidatesFor(tx, owner.gymId, entryId, today, now);
+  const decision = squareAppDecision({ ...sale, customer: who, amountMinor: payment.amount_money.amount, today, candidates });
+  if (decision.kind === "shop_sale") {
+    await taken.insertTaken(tx, kept, { state: "shop_sale" }, now);
+    return;
+  }
+  if (decision.kind === "wait") {
+    await taken.insertTaken(tx, kept, { state: "waiting", reason: decision.reason }, now);
+    return;
+  }
+  const { candidate } = decision;
+  const recordKey = randomUUID();
+  const paying = {
+    gymId: owner.gymId,
+    entryId: candidate.entryId,
+    membershipId: candidate.target.membershipId,
+    requestKey: recordKey,
+    amountMinor: payment.amount_money.amount,
+    method: "square_app" as const,
+    provider: { name: "square", paymentId: payment.id },
+    today,
+    actorUserId: null,
+    now,
+  };
+  const done =
+    candidate.target.kind === "fee"
+      ? await recordFeePaymentIn(tx, { ...paying, billId: candidate.target.billId })
+      : await recordPaymentIn(tx, { ...paying, periodIndex: candidate.target.periodIndex });
+  if (done.kind === "recorded") {
+    // Unique on Square's own id: kept already by a look that chose another gym, under that gym's lock.
+    if (!(await taken.insertTaken(tx, { ...kept, entryId: candidate.entryId }, { state: "recorded", memberPaymentId: done.paymentId, recordKey }, now))) {
+      throw new TakenTwice();
+    }
+    return;
+  }
+  // The rule read these bills under this same lock, so a refusal here is a fault of ours: kept for
+  // staff, and said in the log.
+  deps.log.error({ event: "square.app_payment_refused", gymId: owner.gymId, why: done.kind }, "a payment taken in Square's app could not be recorded on the bill it fitted");
+  await taken.insertTaken(tx, kept, { state: "waiting", reason: "no_bill" }, now);
 }
 
 // ── The hourly look ──────────────────────────────────────────────────────────
@@ -238,11 +282,13 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
     let reached = from;
     let finished = false;
     let stopped = false;
+    let refused = false;
     for (let page = 0; page < taken.SWEEP.pagesPerLook && !stopped; page++) {
       const listed = await square.api.listPayments(token, { locationId: sweep.locationId, beginTime: from, endTime: until, cursor });
       if (listed.kind !== "ok") {
         stopped = true;
         run.unanswered += listed.kind === "unavailable" ? 1 : 0;
+        refused = listed.kind === "refused";
         if (listed.kind === "refused") deps.log.warn({ event: "square.app_payments_unlisted", gymId: sweep.gymId, status: listed.status, code: listed.code }, "Square refused to list a gym's payments");
         break;
       }
@@ -261,8 +307,10 @@ export async function sweepSquarePayments(deps: PaymentsDeps, square: SquareSett
       if (cursor === null) break;
     }
     // Done up to the end of the look, or, stopped part-way, up to the last payment taken in: the
-    // next look starts there, a little before, and finds nothing twice.
-    await taken.finishSweep(deps.sql, sweep, finished ? until : reached, new Date(now.getTime() + (finished ? taken.SWEEP.everyMs : taken.SWEEP.againMs)));
+    // next look starts there, a little before, and finds nothing twice. Soon where Square gave no
+    // answer; in an hour where it refused (a permission taken away is not given back in a minute).
+    const next = finished || refused ? taken.SWEEP.everyMs : taken.SWEEP.againMs;
+    await taken.finishSweep(deps.sql, sweep, finished ? until : reached, new Date(now.getTime() + next));
   }
   return run;
 }

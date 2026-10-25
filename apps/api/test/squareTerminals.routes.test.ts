@@ -25,7 +25,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { endConnectionsForHandOver } from "../src/modules/orgs/payments/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
-import type { SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
+import { SQUARE_SCOPES, type SquareApi, type SquareResult } from "../src/modules/orgs/payments/square.js";
 import { addSimulatedTerminal } from "../src/modules/orgs/payments/terminals.js";
 
 const url = process.env["DATABASE_URL"];
@@ -688,6 +688,24 @@ d("A gym's Square Terminals: whose they are, pairing with Square's code, and rem
       // Everything allowed: nothing to connect again for.
       const twice = await send("POST", `/v1/orgs/${gymId}/payments/square/connect`, owner.cookies);
       expect(twice.statusCode).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "connected before Square Point of Sale's own permissions (18d-iii-b-i): Terminals work as they did; only Square Point of Sale asks to reconnect",
+    async () => {
+      clock = new Date();
+      const owner = await person("before-pos-owner");
+      const gymId = await gym(owner, "Before Point of Sale Gym");
+      await connect(gymId, owner, account("MLTBEFOREPOS"));
+      // As a connection made between 0147 and 18d-iii-b-i reads: everything but what was sold and the taxes.
+      const before = SQUARE_SCOPES.filter((scope) => scope !== "ORDERS_READ" && scope !== "ITEMS_READ");
+      await sql`UPDATE gym_payment_connections SET scopes = ${before} WHERE gym_id = ${gymId}`;
+      const answer = await read(gymId, owner);
+      expect(answer.terminals?.needsAllow, "the Terminals need nothing more").toBe(false);
+      expect(answer.squareApp?.needsAllow, "Square Point of Sale asks for its own").toBe(true);
+      await pairTerminal(gymId, owner);
     },
     TEST_TIMEOUT_MS,
   );

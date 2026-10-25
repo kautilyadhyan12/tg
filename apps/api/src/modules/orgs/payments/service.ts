@@ -91,8 +91,10 @@ export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId:
   return { org, gym };
 }
 
-/** What Square Terminals and the card on file need: every permission asked for before 18d-iii-b-i. */
-const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "ORDERS_READ");
+/** What Square Terminals and the card on file need: every permission asked for before 18d-iii-b-i, whose
+ *  Square Point of Sale asks for two of its own (what was sold, ORDERS_READ; the business's taxes,
+ *  ITEMS_READ). A gym connected before then reconnects for Square Point of Sale alone. */
+const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "ORDERS_READ" && scope !== "ITEMS_READ");
 
 /** The connection allows less than Square Terminals need: the owner connects Square again. */
 export const missingScopes = (row: repo.ConnectionRow): boolean => TERMINAL_SCOPES.some((scope) => !row.scopes.includes(scope));

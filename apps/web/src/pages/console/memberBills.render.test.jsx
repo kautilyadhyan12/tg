@@ -355,7 +355,7 @@ describe('a payment taken in Square Point of Sale (18d-iii-b-i)', () => {
     expect(box.queryByRole('combobox')).toBeNull();
     fireEvent.click(box.getByRole('button', { name: 'Take it off' }));
     await waitFor(() => expect(orgService.changeHeldMembership).toHaveBeenCalledWith(GYM, ADA, fromSquare.id, `payments/${payment.id}/void`, { reason: 'not_this_bill' }));
-    expect(await screen.findByText(/^Taken off the bill. Ada Lovelace owes £49.99 for .+ again.$/)).toBeTruthy();
+    expect(await screen.findByText(/^Taken off the bill. Ada Lovelace owes £49.99 for .+ again. If it was for another bill, record it there with Record payment, Card at the desk.$/)).toBeTruthy();
   });
 });
 

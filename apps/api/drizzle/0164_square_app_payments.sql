@@ -52,7 +52,7 @@ CREATE TABLE "gym_square_app_payments" (
 	CONSTRAINT "gym_square_app_payments_amount_check" CHECK ("amount_minor" BETWEEN 0 AND 999999999 AND "tip_minor" BETWEEN 0 AND 999999999 AND "currency" ~ '^[A-Z]{3}$'),
 	CONSTRAINT "gym_square_app_payments_card_check" CHECK (("source" IS NULL OR "source" ~ '^[A-Z_]{1,40}$') AND ("brand" IS NULL OR "brand" ~ '^[A-Z_]{1,40}$') AND ("last4" IS NULL OR "last4" ~ '^[0-9]{4}$')),
 	CONSTRAINT "gym_square_app_payments_state_check" CHECK ("state" IN ('recorded','waiting','shop_sale')),
-	CONSTRAINT "gym_square_app_payments_reason_check" CHECK (("state" = 'waiting') = ("reason" IS NOT NULL) AND ("reason" IS NULL OR "reason" IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill'))),
+	CONSTRAINT "gym_square_app_payments_reason_check" CHECK (("state" = 'waiting') = ("reason" IS NOT NULL) AND ("reason" IS NULL OR "reason" IN ('no_customer','not_linked','several_people','mixed_sale','sale_unread','square_tax','no_bill','too_early','several_bills','busy','maybe_twice','other_location','several_gyms','not_this_bill','refunded'))),
 	CONSTRAINT "gym_square_app_payments_recorded_check" CHECK (("state" = 'recorded') = ("member_payment_id" IS NOT NULL)),
 	CONSTRAINT "gym_square_app_payments_gym_check" CHECK ("gym_id" IS NOT NULL OR ("state" = 'waiting' AND "reason" = 'several_gyms'))
 );--> statement-breakpoint

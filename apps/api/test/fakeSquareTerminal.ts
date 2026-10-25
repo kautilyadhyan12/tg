@@ -61,8 +61,9 @@ export function fakeSquare() {
   // `chargeOther`: a card on file's charge comes back COMPLETED for another amount than asked;
   // `answerWith`: with these fields of Square's payment changed; `unauthorized`: Square refuses the
   // gym's token (401), as for a token that expired or was taken away. `ordersRefused`: Square refuses to
-  // show an order (a connection made before ORDERS_READ); `listDown`: ListPayments gives no answer.
-  // `now`: the clock Square stamps payments with.
+  // show an order (a connection made before ORDERS_READ); `listDown`: ListPayments gives no answer;
+  // `listRefused`: ListPayments is refused (a permission taken away); `ordersUnanswered`: these orders
+  // give no answer. `now`: the clock Square stamps payments with.
   const state: {
     down: boolean;
     refuseNew: boolean;
@@ -73,6 +74,8 @@ export function fakeSquare() {
     unauthorized: boolean;
     ordersRefused: boolean;
     listDown: boolean;
+    listRefused: boolean;
+    ordersUnanswered: Set<string>;
     /** ListCatalog gives no answer; or answers one tax it cannot read. */
     taxesDown: boolean;
     taxUnreadable: boolean;
@@ -87,6 +90,8 @@ export function fakeSquare() {
     unauthorized: false,
     ordersRefused: false,
     listDown: false,
+    listRefused: false,
+    ordersUnanswered: new Set<string>(),
     taxesDown: false,
     taxUnreadable: false,
     now: () => new Date(),
@@ -279,6 +284,7 @@ export function fakeSquare() {
       if (state.down || state.listDown) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.listRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
       const all: (SquarePayment & { accountId: string })[] = [...payments.values(), ...charged];
       const mine = all
         .filter((p) => p.accountId === a.merchantId && p.location_id === q.locationId && p.created_at != null)
@@ -309,7 +315,7 @@ export function fakeSquare() {
       });
     },
     retrieveOrder(token, id) {
-      if (state.down) return Promise.resolve(unavailable);
+      if (state.down || state.ordersUnanswered.has(id)) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
       if (state.ordersRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
@@ -347,10 +353,23 @@ export function fakeSquare() {
   /** Money Square took from cards on file. */
   const taken = () => charged.filter((p) => p.status === "COMPLETED");
   /** A payment taken in Square's own app at this account's location (18d-iii-b-i): typed amounts by
-   *  default (`lines`), on the customer picked (`customerId`, none by default), completed. */
+   *  default (`lines`), on the customer picked (`customerId`, none by default), completed. `refunded`:
+   *  what Square has given back on it; `referenceId`: the reference a charge of the app's own names. */
   const appPayment = (
     account: Account,
-    o: { amount: number; customerId?: string | null; lines?: string[]; tip?: number; locationId?: string; status?: string; at?: Date; currency?: string; addedTax?: number },
+    o: {
+      amount: number;
+      customerId?: string | null;
+      lines?: string[];
+      tip?: number;
+      locationId?: string;
+      status?: string;
+      at?: Date;
+      currency?: string;
+      addedTax?: number;
+      refunded?: number;
+      referenceId?: string;
+    },
   ): SquarePayment => {
     n += 1;
     const id = `APP${String(n)}${randomBytes(6).toString("hex")}`;
@@ -378,6 +397,8 @@ export function fakeSquare() {
       source_type: "CARD",
       card_details: { card: { card_brand: "MASTERCARD", last_4: "4444" } },
       created_at: (o.at ?? state.now()).toISOString(),
+      ...(o.refunded === undefined ? {} : { refunded_money: { amount: o.refunded, currency } }),
+      ...(o.referenceId === undefined ? {} : { reference_id: o.referenceId }),
     };
     payments.set(id, payment);
     const out: SquarePayment & { accountId?: string } = { ...payment };

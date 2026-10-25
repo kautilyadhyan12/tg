@@ -63,9 +63,10 @@ export interface SquareAppCandidate {
 }
 
 /** Why a payment waits for staff. The first three are about the person, the next three about what was
- *  sold (`square_tax`: Square added tax or a charge on top of what staff typed), the rest about the bills; `other_location`, `several_gyms` and `not_this_bill` are set where
- *  the payment is taken in (another location of the account; a location two gyms here use; staff took
- *  it off a bill). */
+ *  sold (`square_tax`: Square added tax or a charge on top of what staff typed), the rest about the bills;
+ *  `other_location`, `several_gyms`, `not_this_bill` and `refunded` are set where the payment is taken in
+ *  (another location of the account; a location two gyms here use; staff took it off a bill; Square had
+ *  given money back on it before it was taken in). */
 export const SQUARE_APP_WAIT_REASONS = [
   "no_customer",
   "not_linked",
@@ -81,6 +82,7 @@ export const SQUARE_APP_WAIT_REASONS = [
   "other_location",
   "several_gyms",
   "not_this_bill",
+  "refunded",
 ] as const;
 export type SquareAppWaitReason = (typeof SQUARE_APP_WAIT_REASONS)[number];
 
@@ -153,10 +155,11 @@ export interface SquareTaxFacts {
 /** The taxes Square adds on top of an amount staff type in at this location: switched on, not deleted,
  *  used here (Square's own default is every location), added to the price rather than inside it, and
  *  applied to custom amounts. Square's own default for a tax's kind is ADDITIVE ("CatalogTax", read
- *  2026-10-25), so a tax that does not say is taken as added. */
+ *  2026-10-25), so a tax that does not say is taken as added; one that does not say whether it applies
+ *  to custom amounts is taken as applying, so a missing flag never gives the all-clear. */
 export function taxesOnTypedAmounts(taxes: readonly SquareTaxFacts[], locationId: string): { name: string; percentage: string | null }[] {
   return taxes
-    .filter((t) => t.deleted !== true && t.enabled !== false && t.appliesToCustomAmounts === true && t.inclusionType !== "INCLUSIVE")
+    .filter((t) => t.deleted !== true && t.enabled !== false && t.appliesToCustomAmounts !== false && t.inclusionType !== "INCLUSIVE")
     .filter((t) => (t.atAllLocations === false ? t.presentAt.includes(locationId) : !t.absentAt.includes(locationId)))
     .map((t) => ({ name: t.name === null || t.name.trim() === "" ? "A tax with no name" : t.name.trim(), percentage: t.percentage }));
 }
@@ -257,7 +260,7 @@ export const SQUARE_APP_WORDS = {
   taxUnknownDetail: "Square didn't answer just now.",
   checkAgain: "Check again",
   memberTaxSetTitle: "Tax on memberships is set here",
-  memberTaxSetDetail: "Each bill already includes it.",
+  memberTaxSetDetail: "Bills of the memberships it is set on already include it.",
   memberTaxUnsetTitle: "Tax on memberships: not set here",
   memberTaxUnsetDetail: "If you charge tax on memberships, set it here, not in Square.",
   setTaxButton: "Set tax on memberships",

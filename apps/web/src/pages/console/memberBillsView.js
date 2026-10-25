@@ -426,13 +426,15 @@ export function notThisBillWords(m, name, paymentId) {
   };
 }
 
-/** Said where the payment was, once Not this bill took it off: who owes what again. */
+/** Said where the payment was, once Not this bill took it off: who owes what again, and where the money
+ *  goes now, so the task ends on this screen (review round one). */
 export function paymentTakenOffWords(after, name, billId) {
+  const elsewhere = 'If it was for another bill, record it there with Record payment, Card at the desk.';
   const bill = after?.billing?.bills.find((b) => b.id === billId) ?? null;
-  if (bill === null || bill.amountMinor - bill.paidMinor <= 0) return 'Taken off the bill.';
+  if (bill === null || bill.amountMinor - bill.paidMinor <= 0) return `Taken off the bill. ${elsewhere}`;
   const left = formatMinor(bill.amountMinor - bill.paidMinor, after.currency);
   const what = bill.covers === null ? after.typeName : billDays(bill.covers);
-  return `Taken off the bill. ${capital(name)} owes ${left} for ${what} again.`;
+  return `Taken off the bill. ${capital(name)} owes ${left} for ${what} again. ${elsewhere}`;
 }
 
 /** The same on a fee. Where the fee no longer counts, taking the payment off takes the fee off too. */

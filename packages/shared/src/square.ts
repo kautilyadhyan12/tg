@@ -233,6 +233,9 @@ export const squarePaymentSchema = z.object({
   order_id: squareOrderIdSchema.nullish(),
   /** CARD, CASH, WALLET, EXTERNAL and the rest: how the money was paid. */
   source_type: z.string().max(40).nullish(),
+  /** What Square has given back of it: a refund leaves the payment COMPLETED with this filled in ("Payment",
+   *  read 2026-10-25), so a payment refunded before it is taken in is never put on a bill (18d-iii-b-i). */
+  refunded_money: squareMoneySchema.nullish(),
 });
 export type SquarePayment = z.infer<typeof squarePaymentSchema>;
 
