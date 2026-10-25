@@ -126,9 +126,10 @@ export const TICKED: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitRea
 const BILLS_ONLY: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitReason>(["ready", "too_early", "maybe_twice", "no_bill", "several_bills", "busy"]);
 
 /** Why a payment waits where Match's box may tick a bill of the person staff pick: the bills alone were in
- *  doubt, or who paid. Never how much (items, a sale paid in parts, Square's tax), a bill staff took it
- *  off, a refund, or a location two gyms use. */
-const BOX_TICKS: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitReason>([...BILLS_ONLY, "no_customer", "not_linked", "several_people", "other_location"]);
+ *  doubt, or who paid. Never how much (items, a sale paid in parts, Square's tax, or another location of
+ *  the account, where what was sold is never read), a bill staff took it off, a refund, or a location two
+ *  gyms use. */
+const BOX_TICKS: ReadonlySet<SquareAppWaitReason> = new Set<SquareAppWaitReason>([...BILLS_ONLY, "no_customer", "not_linked", "several_people"]);
 
 /** The bills of this person and of anybody they pay for, as the take-in's rule reads them. */
 function candidatesOf(loaded: LoadedBills, entryId: string, today: string): SquareAppCandidate[] {

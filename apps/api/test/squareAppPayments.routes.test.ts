@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
   heldMembershipsResponseSchema,
+  matchBillsResponseSchema,
   matchPaymentResponseSchema,
   paymentsToMatchResponseSchema,
   squareAppCheckResponseSchema,
@@ -381,6 +382,10 @@ d("A payment taken in Square's own app, kept for staff to match (real Postgres)"
     const away = square.appPayment(acct, { amount: 2500, customerId: beaCustomer, locationId: main.locationId });
     await work([await deliver(acct, away.id)]);
     expect((await kept(away.id)).map((r) => [r.gym_id, r.state, r.reason, r.entry_id])).toEqual([[harbour.id, "waiting", "other_location", bea.entryId]]);
+    // Taken at another location, what was sold there is never read: Match's box ticks none of her bills (re-check, Low).
+    const awayBox = await send("GET", `/v1/orgs/${harbour.id}/payments-to-match/${(await kept(away.id))[0]?.id ?? ""}/bills?entryId=${bea.entryId}`, harbour.owner.cookies);
+    expect(awayBox.statusCode, awayBox.body).toBe(200);
+    expect(matchBillsResponseSchema.parse(JSON.parse(awayBox.body)).suggested).toBeNull();
     expect((await second(bea))?.status).toBe("open");
 
     // A customer no record holds (Square made one from the card): waits at Main St.
