@@ -570,6 +570,42 @@ describe('checked in today', () => {
   });
 });
 
+describe('who came, on live news', () => {
+  const someone = (name, email) => ({
+    userId: null,
+    entryId: `e-${name}`,
+    displayName: name,
+    email,
+    visits: [{ day: '2026-10-03', markedAt: '2026-10-03T06:05:00.000Z', method: 'staff', hoursStatus: 'hours_unset', session: null }],
+  });
+  const dayWith = (people) => ({ data: { attendance: { ...emptyDay().data.attendance, totals: { visits: people.length, people: people.length }, people } } });
+
+  it('reads the day again when a visit changes anywhere, keeping its people on screen until the answer lands', async () => {
+    api.getAttendanceDay.mockResolvedValueOnce(dayWith([someone('Ravi Noapp', 'ravi@example.com')]));
+    drawScreen();
+    await screen.findByText('ravi@example.com');
+    let finish;
+    api.getAttendanceDay.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    tell({ what: 'visits', change: 'added' });
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(2));
+    // Still Ravi, never a blank or a spinner, while the read is on its way.
+    expect(screen.getByText('ravi@example.com')).toBeTruthy();
+    await act(async () => {
+      finish(dayWith([someone('Asha App', 'asha@example.com'), someone('Ravi Noapp', 'ravi@example.com')]));
+    });
+    expect(await screen.findByText('asha@example.com')).toBeTruthy();
+    // A read again that fails leaves the day as it was.
+    api.getAttendanceDay.mockRejectedValueOnce({ response: { status: 500, data: {} } });
+    tell({ what: 'visits', change: 'removed' });
+    await waitFor(() => expect(api.getAttendanceDay).toHaveBeenCalledTimes(3));
+    expect(screen.getByText('asha@example.com')).toBeTruthy();
+    // News of a leaderboard or a membership is not about who came.
+    tell({ what: 'leaderboard' });
+    tell({ what: 'memberships', entryId: '00000000-0000-4000-8000-000000000001' });
+    expect(api.getAttendanceDay).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('the day list counts somebody without the app', () => {
   it('draws them by their record and reads their visits by it', async () => {
     api.getAttendanceDay.mockResolvedValue({

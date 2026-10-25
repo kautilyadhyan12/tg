@@ -19,6 +19,7 @@ import { consoleIsReadOnly } from './billingView';
 import { viewerPrivileges } from './consoleView';
 import { canCheckPeopleIn, personKey } from './checkinLogView';
 import { CheckedInToday, CheckSomeoneIn } from './AttendanceCheckIn';
+import { useLiveNews } from './liveNews';
 
 // WHO CAME IN — the console's Attendance section.
 //
@@ -352,6 +353,13 @@ function AttendanceDay({ org }) {
   /** WHAT THE ANSWER ON SCREEN IS AN ANSWER TO. A day, a filter and an attempt
    *  together are one question, and this names it. */
   const readKey = `${day}|${statusesParam ?? ''}|${attempt}`;
+  /** Live updates (Stage 4 item 18): a visit added or removed anywhere, at the desk or by staff in
+   *  another window, reads the day on screen again, QUIETLY: the same question, so its people stay
+   *  on screen until the answer lands, and "Who came" never disagrees with "Checked in today". */
+  const [heard, setHeard] = useState(0);
+  useLiveNews(gymId, (message) => {
+    if (message.what === 'visits' || message.what === 'ready' || message.what === 'cameBack') setHeard((n) => n + 1);
+  });
 
   // THE ANSWER IS STAMPED WITH THE QUESTION IT WAS FETCHED FOR — the console
   // store's own rule 3, applied to a day instead of a user.
@@ -379,8 +387,8 @@ function AttendanceDay({ org }) {
   });
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // ONE READ ON MOUNT, ONE WHEN THE DAY CHANGES, ONE WHEN THE FILTER CHANGES —
-  // and nothing else. No focus listener, no interval: see the header.
+  // ONE READ ON MOUNT, ONE WHEN THE DAY CHANGES, ONE WHEN THE FILTER CHANGES,
+  // and one when the server says a visit changed. No focus listener, no interval.
   useEffect(() => {
     let cancelled = false;
     const params = statusesParam === undefined ? { day } : { day, statuses: statusesParam };
@@ -401,7 +409,8 @@ function AttendanceDay({ org }) {
       })
       .catch((err) => {
         if (cancelled) return;
-        setState({
+        // A quiet read again that fails leaves the same day's people on screen.
+        setState((held) => (held.forKey === readKey && held.status === 'ready' ? held : {
           status: 'failed',
           forKey: readKey,
           day: null,
@@ -416,7 +425,7 @@ function AttendanceDay({ org }) {
           retryable: isRetryable(err),
           people: [],
           nextCursor: null,
-        });
+        }));
       });
     return () => {
       cancelled = true;
@@ -427,7 +436,7 @@ function AttendanceDay({ org }) {
     // `react-hooks/exhaustive-deps` requires every value it reads — not because
     // either is load-bearing on its own (T3 round 1, L-4). Removing one would
     // change nothing about when this runs and would fail lint.
-  }, [gymId, readKey, day, statusesParam]);
+  }, [gymId, readKey, day, statusesParam, heard]);
 
   // AN ANSWER TO A DIFFERENT QUESTION IS NOT AN ANSWER. Until the read for the
   // current day and filter lands, this screen is loading — it never draws the
