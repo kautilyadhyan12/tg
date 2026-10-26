@@ -728,6 +728,7 @@ export const gymSquareMemberRuns = pgTable(
     cursor: text("cursor"),
     looked: integer("looked").notNull().default(0),
     listedAt: timestamp("listed_at", { withTimezone: true }),
+    listedUpto: bigint("listed_upto", { mode: "number" }),
     checkedAt: timestamp("checked_at", { withTimezone: true }),
     addedAt: timestamp("added_at", { withTimezone: true }),
     failure: text("failure"),

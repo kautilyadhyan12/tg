@@ -120,7 +120,7 @@ export async function readSquareMembers(deps: PaymentsDeps, userId: string, gymI
   const now = deps.now();
   const groups =
     mine !== null && (state === "checked" || state === "adding")
-      ? await members.checkedGroups(deps.sql, gymId, square.environment, mine.runId, isOwner)
+      ? await members.checkedGroups(deps.sql, gymId, square.environment, mine.runId, row.accountId, isOwner)
       : await members.notInGroups(deps.sql, gymId, square.environment, row.accountId, isOwner);
   return squareMembersResponseSchema.parse({
     members: {
@@ -287,7 +287,7 @@ async function decide(deps: PaymentsDeps, ready: Ready, run: members.RunRow): Pr
   const at = { gymId: run.gymId, environment: run.environment, runId: run.runId };
   const environment = run.environment;
   const [people, candidates, taken, known] = await Promise.all([
-    members.recordsToPlace(deps.sql, run.gymId, environment, run.accountId),
+    members.recordsToPlace(deps.sql, run.gymId, environment, run.accountId, run.listedUpto),
     members.readCandidates(deps.sql, at),
     members.takenCustomers(deps.sql, run.gymId, environment, run.accountId),
     members.contactsOf(deps.sql, run.gymId),
@@ -496,6 +496,24 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, b
       stopped = true;
       break;
     }
+    // Their customer being made with no answer yet: asked again with its own key, so Square gives back the
+    // one it may have made (round one, High 2).
+    if (person.making) {
+      budget.left -= 1;
+      const made = await makeCustomer(deps, ready, run.gymId, person);
+      if (made === "unanswered") {
+        await members.setUnanswered(deps.sql, { gymId: run.gymId, environment, runId: run.runId, now: deps.now() });
+        return { step: "unanswered", ...tally };
+      }
+      if (made === "busy") {
+        busy = true;
+        continue;
+      }
+      if (made === "done") tally.added += 1;
+      await members.writeLook(deps.sql, { gymId: run.gymId, environment, runId: run.runId, entryId: person.entryId, plan: { kind: "add" }, digest: person.digest, billed: false, outcome: made, now: deps.now() });
+      tally.looked += 1;
+      continue;
+    }
     budget.left -= (person.email === null ? 0 : 1) + (person.phone === null ? 0 : 1);
     const found = await customersWith(ready, country, person);
     if (found === null) {
@@ -518,6 +536,7 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, b
     );
     const mine = plan.get(person.entryId) ?? { kind: "add" as const };
     let outcome: members.Outcome | null = null;
+    let billed = false;
     if (mine.kind === "ours" || mine.kind === "link" || mine.kind === "add") {
       if (mine.kind === "add") budget.left -= 1;
       const made = await applyOne(deps, ready, run.gymId, {
@@ -542,8 +561,15 @@ async function lookSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, b
         if (mine.kind === "add") tally.added += 1;
         else tally.linked += 1;
       }
+      // Linked by itself to a customer Square's own subscriptions may charge: read, as the check reads them, so
+      // the box names them (round one, Low 5). Square not answering says nothing, and the look goes on.
+      if (made === "done" && mine.kind !== "add") {
+        budget.left -= 1;
+        const charged = await chargedBySquare(deps, ready, [mine.customerId]);
+        billed = charged !== "unanswered" && charged !== "refused" && charged.has(mine.customerId);
+      }
     }
-    await members.writeLook(deps.sql, { gymId: run.gymId, environment, runId: run.runId, entryId: person.entryId, plan: mine, digest: person.digest, outcome, now: deps.now() });
+    await members.writeLook(deps.sql, { gymId: run.gymId, environment, runId: run.runId, entryId: person.entryId, plan: mine, digest: person.digest, billed, outcome, now: deps.now() });
     tally.looked += 1;
   }
   if (!stopped && due.length < limit) {

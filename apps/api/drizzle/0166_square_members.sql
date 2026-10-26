@@ -3,7 +3,8 @@
 --
 -- The owner puts the gym's current members into its Square customer list. One row a gym and Square
 -- environment (`gym_square_member_runs`): the check the owner's press started (`run_id`), where it stands
--- (`checking` reads Square's customers a page at a time from `cursor`, to the end at `listed_at`; `checked` waits for the press of
+-- (`checking` reads Square's customers a page at a time from `cursor`, to the end at `listed_at`, and decides
+-- for the records on the list when it began, up to `listed_upto`; `checked` waits for the press of
 -- Add for an hour; `adding`; `added`; `failed` with why), and, once members were added, `automatic`: each
 -- new member is added by itself, looked for again when the gym's list moves past `list_version` or at
 -- `look_due_at`. `lease_until`: whoever is working on it now, the page's own press or the worker.
@@ -33,6 +34,7 @@ CREATE TABLE "gym_square_member_runs" (
 	"cursor" text,
 	"looked" integer DEFAULT 0 NOT NULL,
 	"listed_at" timestamp with time zone,
+	"listed_upto" bigint,
 	"checked_at" timestamp with time zone,
 	"added_at" timestamp with time zone,
 	"failure" text,

@@ -14,7 +14,9 @@ import postgres from "postgres";
 import { gymPaymentsResponseSchema, squareConnectResponseSchema, squareFinishResponseSchema, squareMembersNamesResponseSchema, squareMembersResponseSchema, type SquareMembers } from "@app/shared";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
-import { claimCustomer } from "../src/modules/orgs/payments/cardsRepo.js";
+import { customerFor, readyOrThrow } from "../src/modules/orgs/payments/cards.js";
+import { claimCustomer, readPerson } from "../src/modules/orgs/payments/cardsRepo.js";
+import { readGym } from "../src/modules/orgs/payments/repo.js";
 import { squareSettings } from "../src/modules/orgs/payments/settings.js";
 import { SQUARE_MEMBERS_WORK, processSquareMembers } from "../src/modules/orgs/payments/squareMembers.js";
 import { processSquareWork } from "../src/modules/orgs/payments/work.js";
@@ -432,19 +434,44 @@ d("Members in Square (real Postgres)", { timeout: T }, () => {
       clock = new Date();
     });
 
-    it("a member whose details changed after the check is not added on the old reading", async () => {
+    it("a member whose email changed after the check is never linked on the old reading", async () => {
       const gym = await makeGym("Changed Gym");
-      const ivy = await person(gym, "Ivy Chen", { email: `ivy.${uniq()}@gmail.com` });
+      const old = `ivy.${uniq()}@gmail.com`;
+      square.customer(gym.acct, { id: "CIVYOLD", given_name: "Ivy", family_name: "Chen", email_address: old });
+      const ivy = await person(gym, "Ivy Chen", { email: old });
       const checked = await check(gym);
+      expect(checked.groups.link.names).toEqual(["Ivy Chen"]);
+      // Staff correct her email: the old one was somebody else's address.
       const newer = `ivy.new.${uniq()}@gmail.com`;
       await sql`UPDATE gym_member_list_entries SET email = ${newer} WHERE gym_id = ${gym.id} AND id = ${ivy}`;
       await add(gym, checked.runId ?? "");
       const [plan] = await sql<{ outcome: string | null }[]>`SELECT outcome FROM gym_square_member_plan WHERE gym_id = ${gym.id} AND entry_id = ${ivy}`;
-      // Looked at again by herself, with the email she has now, on the worker's minute.
-      expect(plan?.outcome === "changed" || sentFor(ivy).every((c) => c.email === newer)).toBe(true);
-      await membersWork();
+      expect(plan?.outcome).toBe("changed");
+      expect(await customerOf(gym, ivy)).toBeNull();
+      // Looked at again by herself, with the email she has now, on the worker's minute: a customer of her own.
+      await membersWork([gym]);
+      const linked = await customerOf(gym, ivy);
+      expect(linked?.customer_id).not.toBe("CIVYOLD");
       expect(sentFor(ivy).map((c) => c.email)).toEqual([newer]);
-      expect((await customerOf(gym, ivy))?.customer_id).toMatch(/^CUS/);
+    });
+
+    it("a card saved while Members in Square holds the record's key: the card save finds Square's customer and uses it", async () => {
+      const gym = await makeGym("Card Meets Members Gym");
+      const lena = await person(gym, "Lena Fox", { email: `lena.${uniq()}@gmail.com`, phone: "312-555-0123" });
+      // Members in Square asked Square with the record's key and its own body (with the phone); its answer was lost.
+      const key = { gymId: gym.id, entryId: lena, environment: "production" as const, accountId: gym.acct.merchantId };
+      const claimed = await claimCustomer(sql, key, randomUUID());
+      if (!("makingKey" in claimed)) throw new Error("not being made");
+      const made = square.madeWithKey(gym.acct, claimed.makingKey, { idempotencyKey: claimed.makingKey, givenName: "Lena", familyName: "Fox", email: "lena@x", phone: "+13125550123", referenceId: lena });
+      // Now the desk saves her card: Square refuses the key with the card save's own body, and the customer is found.
+      const d = { ...deps(), log: quiet };
+      const gymRow = await readGym(sql, gym.id);
+      const who = await readPerson(sql, gym.id, lena);
+      if (gymRow === null || who === null) throw new Error("no gym or person");
+      const ready = await readyOrThrow(d, gym.id, gymRow);
+      expect(await customerFor(d, ready, gym.id, who)).toBe(made);
+      expect((await customerOf(gym, lena))?.customer_id).toBe(made);
+      expect(square.customersOf(gym.acct).filter((c) => c.reference_id === lena)).toHaveLength(1);
     });
 
     it("a card being saved for the same member at that moment: one customer, whoever asks first", async () => {
@@ -502,6 +529,70 @@ d("Members in Square (real Postgres)", { timeout: T }, () => {
     });
   });
 
+  describe("round one's findings", () => {
+    it("a new member whose customer Square made, its answer lost, is asked about again and linked to that one customer", async () => {
+      const gym = await makeGym("Lost Answer Gym");
+      await person(gym, "Opening One", { email: `open1.${uniq()}@gmail.com` });
+      await add(gym, (await check(gym)).runId ?? "");
+      const nia = await person(gym, "Nia Lost", { email: `nia.${uniq()}@gmail.com` });
+      square.state.loseCustomers = true;
+      expect((await membersWork([gym])).unanswered).toBe(1);
+      square.state.loseCustomers = false;
+      expect((await customerOf(gym, nia))?.customer_id ?? null).toBeNull();
+      await membersWork([gym]);
+      const nias = square.customersOf(gym.acct).filter((c) => c.reference_id === nia);
+      expect(nias).toHaveLength(1);
+      expect((await customerOf(gym, nia))?.customer_id).toBe(nias[0]?.id);
+      expect((await box(gym)).groups.waiting.count).toBe(0);
+    });
+
+    it("Check again waiting for its press never names somebody the worker has added since", async () => {
+      const gym = await makeGym("Check Again Gym");
+      await person(gym, "Opening Two", { email: `open2.${uniq()}@gmail.com` });
+      await add(gym, (await check(gym)).runId ?? "");
+      await person(gym, "Pia Waits", { email: `pia.${uniq()}@gmail.com` });
+      expect((await check(gym)).groups.add.names).toEqual(["Pia Waits"]);
+      await person(gym, "Rex New", { email: `rex.${uniq()}@gmail.com` });
+      await membersWork([gym]);
+      const after = await box(gym);
+      expect(after.state).toBe("checked");
+      // Pia is the check's and waits for the press; Rex, looked at by himself, is in Square and not named.
+      expect(after.groups.add).toEqual({ count: 1, names: ["Pia Waits"] });
+    });
+
+    it("a member added while a long check reads Square is left to the look after, and linked there, never added twice", async () => {
+      const gym = await makeGym("Long Check Gym");
+      for (let i = 0; i < 120; i++) square.customer(gym.acct, { id: `CLCG${String(i)}`, given_name: "Shop", family_name: `Buyer ${String(i)}`, email_address: `lcg${String(i)}.${uniq()}@gmail.com` });
+      const late = square.customersOf(gym.acct)[5];
+      await person(gym, "Early Member", { email: `early.${uniq()}@gmail.com` });
+      square.state.customerPagesUntilDown = 1;
+      expect((await check(gym)).state).toBe("checking");
+      square.state.customerPagesUntilDown = null;
+      // Added on Members after the first page was read: that page held her customer, kept for nobody then.
+      const lateId = await person(gym, `${late?.given_name ?? ""} ${late?.family_name ?? ""}`, { email: late?.email_address ?? "" });
+      await membersWork([gym]);
+      const checked = await box(gym);
+      expect(checked.state).toBe("checked");
+      expect(checked.groups.add.names).toEqual(["Early Member"]);
+      await add(gym, checked.runId ?? "");
+      await membersWork([gym]);
+      expect((await customerOf(gym, lateId))?.customer_id).toBe(late?.id);
+      expect(sentFor(lateId)).toHaveLength(0);
+    });
+
+    it("a member linked by themselves to a customer Square's own subscriptions charge is named in the box", async () => {
+      const gym = await makeGym("Billed Later Gym");
+      await person(gym, "Opening Three", { email: `open3.${uniq()}@gmail.com` });
+      await add(gym, (await check(gym)).runId ?? "");
+      const ana = `ana.${uniq()}@gmail.com`;
+      square.customer(gym.acct, { id: "CANA", given_name: "Ana", family_name: "Ruiz", email_address: ana });
+      square.subscription(gym.acct, "CANA", "ACTIVE");
+      await person(gym, "Ana Ruiz", { email: ana });
+      await membersWork([gym]);
+      expect((await box(gym)).groups.billed).toEqual({ count: 1, names: ["Ana Ruiz"] });
+    });
+  });
+
   describe("new members, added by themselves", () => {
     it("a member added after: added on the worker's minute, or linked where Square has them; a refused one is said", async () => {
       const gym = await makeGym("Later Gym");
@@ -542,7 +633,7 @@ d("Members in Square (real Postgres)", { timeout: T }, () => {
       await membersWork();
       const linked = await customerOf(gym, junior);
       expect(linked?.customer_id).not.toBe("CDAD");
-      expect(sentFor(junior)).toEqual([expect.objectContaining({ givenName: "John Smith", familyName: "Jr", email: dad })]);
+      expect(sentFor(junior)).toEqual([expect.objectContaining({ givenName: "John", familyName: "Smith Jr", email: dad })]);
     });
   });
 });

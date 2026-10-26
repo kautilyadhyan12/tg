@@ -20,6 +20,9 @@ export interface RunRow {
   runId: string;
   state: RunState;
   automatic: boolean;
+  startedAt: Date;
+  /** The list's last record when the check began (`listed_seq`): the check decides for those. */
+  listedUpto: number | null;
   cursor: string | null;
   looked: number;
   listedAt: Date | null;
@@ -38,6 +41,8 @@ interface RawRun {
   run_id: string;
   state: RunState;
   automatic: boolean;
+  started_at: Date;
+  listed_upto: string | number | null;
   cursor: string | null;
   looked: number;
   listed_at: Date | null;
@@ -56,6 +61,8 @@ const toRun = (r: RawRun): RunRow => ({
   runId: r.run_id,
   state: r.state,
   automatic: r.automatic,
+  startedAt: r.started_at,
+  listedUpto: r.listed_upto === null ? null : Number(r.listed_upto),
   cursor: r.cursor,
   looked: r.looked,
   listedAt: r.listed_at,
@@ -68,7 +75,7 @@ const toRun = (r: RawRun): RunRow => ({
 });
 
 const RUN_COLUMNS = (sql: SqlOrTx) =>
-  sql`gym_id, environment, account_id, run_id, state, automatic, cursor, looked, listed_at, checked_at, added_at, failure, unanswered_at, list_version, look_due_at`;
+  sql`gym_id, environment, account_id, run_id, state, automatic, started_at, listed_upto, cursor, looked, listed_at, checked_at, added_at, failure, unanswered_at, list_version, look_due_at`;
 
 /** A record's name, email and phone as one value: a check read them so, and adding asks again. */
 const DIGEST = (sql: SqlOrTx) => sql`md5(e.full_name || chr(10) || coalesce(e.email::text, '') || chr(10) || coalesce(e.phone_e164, ''))`;
@@ -77,6 +84,12 @@ const DIGEST = (sql: SqlOrTx) => sql`md5(e.full_name || chr(10) || coalesce(e.em
 const LINKED = (sql: SqlOrTx, environment: SquareEnvironment, accountId: string) => sql`
   EXISTS (SELECT 1 FROM gym_square_customers c
           WHERE c.gym_id = e.gym_id AND c.entry_id = e.id AND c.environment = ${environment} AND c.account_id = ${accountId})`;
+
+/** In Square in this account: the customer's id is known. */
+const MADE = (sql: SqlOrTx, environment: SquareEnvironment, accountId: string) => sql`
+  EXISTS (SELECT 1 FROM gym_square_customers c
+          WHERE c.gym_id = e.gym_id AND c.entry_id = e.id AND c.environment = ${environment} AND c.account_id = ${accountId}
+            AND c.customer_id IS NOT NULL)`;
 
 export async function readRun(sql: SqlOrTx, gymId: string, environment: SquareEnvironment): Promise<RunRow | null> {
   const [row] = await sql<RawRun[]>`SELECT ${RUN_COLUMNS(sql)} FROM gym_square_member_runs WHERE gym_id = ${gymId} AND environment = ${environment}`;
@@ -90,11 +103,12 @@ export async function startRun(
   r: { gymId: string; environment: SquareEnvironment; accountId: string; runId: string; userId: string; now: Date; leaseUntil: Date },
 ): Promise<RunRow | null> {
   const [row] = await tx<RawRun[]>`
-    INSERT INTO gym_square_member_runs (gym_id, environment, account_id, run_id, state, started_by, started_at, lease_until)
-    VALUES (${r.gymId}, ${r.environment}, ${r.accountId}, ${r.runId}, 'checking', ${r.userId}, ${r.now}, ${r.leaseUntil})
+    INSERT INTO gym_square_member_runs (gym_id, environment, account_id, run_id, state, started_by, started_at, listed_upto, lease_until)
+    VALUES (${r.gymId}, ${r.environment}, ${r.accountId}, ${r.runId}, 'checking', ${r.userId}, ${r.now},
+            (SELECT max(listed_seq) FROM gym_member_list_entries WHERE gym_id = ${r.gymId}), ${r.leaseUntil})
     ON CONFLICT (gym_id, environment) DO UPDATE SET
       account_id = EXCLUDED.account_id, run_id = EXCLUDED.run_id, state = 'checking', started_by = EXCLUDED.started_by,
-      started_at = EXCLUDED.started_at, cursor = NULL, looked = 0, listed_at = NULL, checked_at = NULL, failure = NULL,
+      started_at = EXCLUDED.started_at, listed_upto = EXCLUDED.listed_upto, cursor = NULL, looked = 0, listed_at = NULL, checked_at = NULL, failure = NULL,
       unanswered_at = NULL, lease_until = EXCLUDED.lease_until,
       automatic = gym_square_member_runs.automatic AND gym_square_member_runs.account_id = EXCLUDED.account_id,
       added_at = CASE WHEN gym_square_member_runs.account_id = EXCLUDED.account_id THEN gym_square_member_runs.added_at END,
@@ -273,12 +287,15 @@ export interface PlaceRow {
   digest: string;
 }
 
-/** The gym's current records not yet in this Square account. */
-export async function recordsToPlace(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string): Promise<PlaceRow[]> {
+/** The gym's current records not yet in this Square account. `upTo`: only those on the list when the check
+ *  began (its `listed_seq`), as Square's pages it read were kept by the contacts the list had then (round one,
+ *  Low 4); anybody added since is looked up by themselves once members are added. */
+export async function recordsToPlace(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string, upTo: number | null = null): Promise<PlaceRow[]> {
   const rows = await sql<{ id: string; full_name: string; email: string | null; phone_e164: string | null; digest: string }[]>`
     SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, ${DIGEST(sql)} AS digest
     FROM gym_member_list_entries e
     WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND NOT ${LINKED(sql, environment, accountId)}
+      AND (${upTo}::bigint IS NULL OR e.listed_seq <= ${upTo}::bigint)
     ORDER BY e.listed_seq`;
   return rows.map((r) => ({ entryId: r.id, fullName: r.full_name, email: r.email, phone: r.phone_e164, digest: r.digest }));
 }
@@ -406,21 +423,22 @@ export async function listVersionOf(sql: SqlOrTx, gymId: string): Promise<number
 }
 
 /** Current records not in Square that are due a look: never looked at, changed since (their name, email or
- *  phone), or left out, refused or not added at a look older than `lookedBefore`. Those of a check that waits
- *  for the owner's press are theirs to add, until it is a day old. */
+ *  phone), or left out, refused or not added at a look older than `lookedBefore`; and anybody whose customer is
+ *  being made with no answer yet (`making`), asked about again with its key (round one, High 2). Those of a
+ *  check that waits for the owner's press are theirs to add, until it is a day old. */
 export async function recordsDue(
   sql: SqlOrTx,
   r: { gymId: string; environment: SquareEnvironment; accountId: string; lookedBefore: Date; limit: number },
-): Promise<PlaceRow[]> {
-  const rows = await sql<{ id: string; full_name: string; email: string | null; phone_e164: string | null; digest: string }[]>`
-    SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, ${DIGEST(sql)} AS digest
+): Promise<(PlaceRow & { making: boolean })[]> {
+  const rows = await sql<{ id: string; full_name: string; email: string | null; phone_e164: string | null; digest: string; making: boolean }[]>`
+    SELECT e.id, e.full_name, e.email::text AS email, e.phone_e164, ${DIGEST(sql)} AS digest, ${LINKED(sql, r.environment, r.accountId)} AS making
     FROM gym_member_list_entries e
     LEFT JOIN gym_square_member_plan p ON p.gym_id = e.gym_id AND p.environment = ${r.environment} AND p.entry_id = e.id
-    WHERE e.gym_id = ${r.gymId} AND e.former_at IS NULL AND NOT ${LINKED(sql, r.environment, r.accountId)}
-      AND (p.entry_id IS NULL OR p.digest <> ${DIGEST(sql)} OR p.looked_at < ${r.lookedBefore})
+    WHERE e.gym_id = ${r.gymId} AND e.former_at IS NULL AND NOT ${MADE(sql, r.environment, r.accountId)}
+      AND (${LINKED(sql, r.environment, r.accountId)} OR p.entry_id IS NULL OR p.digest <> ${DIGEST(sql)} OR p.looked_at < ${r.lookedBefore})
     ORDER BY e.listed_seq
     LIMIT ${r.limit}`;
-  return rows.map((x) => ({ entryId: x.id, fullName: x.full_name, email: x.email, phone: x.phone_e164, digest: x.digest }));
+  return rows.map((x) => ({ entryId: x.id, fullName: x.full_name, email: x.email, phone: x.phone_e164, digest: x.digest, making: x.making }));
 }
 
 /** The current records not in Square that share an email or a phone with these, for the rule to tell whether a
@@ -442,15 +460,15 @@ export async function recordsSharing(
 /** One record's look, as its own plan row: what was decided and, where it was done, what happened. */
 export async function writeLook(
   sql: SqlOrTx,
-  r: { gymId: string; environment: SquareEnvironment; runId: string; entryId: string; plan: MemberPlan; digest: string; outcome: Outcome | null; now: Date },
+  r: { gymId: string; environment: SquareEnvironment; runId: string; entryId: string; plan: MemberPlan; digest: string; billed: boolean; outcome: Outcome | null; now: Date },
 ): Promise<void> {
   await sql`
-    INSERT INTO gym_square_member_plan (gym_id, environment, entry_id, run_id, decision, customer_id, digest, looked_at, outcome, done_at)
-    SELECT ${r.gymId}, ${r.environment}, e.id, ${r.runId}, ${decisionOf(r.plan)}, ${customerOf(r.plan)}, ${r.digest}, ${r.now}, ${r.outcome}, ${r.outcome === null ? null : r.now}
+    INSERT INTO gym_square_member_plan (gym_id, environment, entry_id, run_id, decision, customer_id, digest, billed, looked_at, outcome, done_at)
+    SELECT ${r.gymId}, ${r.environment}, e.id, ${r.runId}, ${decisionOf(r.plan)}, ${customerOf(r.plan)}, ${r.digest}, ${r.billed}, ${r.now}, ${r.outcome}, ${r.outcome === null ? null : r.now}
     FROM gym_member_list_entries e WHERE e.gym_id = ${r.gymId} AND e.id = ${r.entryId}
     ON CONFLICT (gym_id, environment, entry_id) DO UPDATE SET
       run_id = EXCLUDED.run_id, decision = EXCLUDED.decision, customer_id = EXCLUDED.customer_id, digest = EXCLUDED.digest,
-      billed = false, looked_at = EXCLUDED.looked_at, outcome = EXCLUDED.outcome, done_at = EXCLUDED.done_at`;
+      billed = EXCLUDED.billed, looked_at = EXCLUDED.looked_at, outcome = EXCLUDED.outcome, done_at = EXCLUDED.done_at`;
 }
 
 /** The list looked at up to `version`; the next look a day on where somebody is still not in Square. */
@@ -477,15 +495,18 @@ export type Groups = Record<SquareMembersGroup, SquareMembersNamed>;
 const none = (): SquareMembersNamed => ({ count: 0, names: [] });
 const emptyGroups = (): Groups => ({ add: none(), link: none(), several_customers: none(), several_people: none(), billed: none(), refused: none(), waiting: none() });
 
-/** The groups of a check waiting for the press: what the press would do, by the plan. */
-const CHECKED_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment, runId: string) => sql`
+/** The groups of a check waiting for the press: what the press would still do, by the plan; nobody the
+ *  worker has added or linked meanwhile, as new members are once members were added (round one, High 3). */
+const CHECKED_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment, runId: string, accountId: string) => sql`
   SELECT CASE p.decision WHEN 'ours' THEN 'link' ELSE p.decision END AS grp, e.id, e.full_name, e.listed_seq
   FROM gym_square_member_plan p JOIN gym_member_list_entries e ON e.gym_id = p.gym_id AND e.id = p.entry_id
   WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.run_id = ${runId} AND e.former_at IS NULL
+    AND p.outcome IS NULL AND NOT ${MADE(sql, environment, accountId)}
   UNION ALL
   SELECT 'billed', e.id, e.full_name, e.listed_seq
   FROM gym_square_member_plan p JOIN gym_member_list_entries e ON e.gym_id = p.gym_id AND e.id = p.entry_id
-  WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.run_id = ${runId} AND p.billed AND e.former_at IS NULL`;
+  WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.run_id = ${runId} AND p.billed AND e.former_at IS NULL
+    AND p.outcome IS NULL AND NOT ${MADE(sql, environment, accountId)}`;
 
 /** The groups once members were added: the current members not in Square, and why. */
 const NOT_IN_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string) => sql`
@@ -496,9 +517,12 @@ const NOT_IN_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironme
          e.id, e.full_name, e.listed_seq
   FROM gym_member_list_entries e
   LEFT JOIN gym_square_member_plan p ON p.gym_id = e.gym_id AND p.environment = ${environment} AND p.entry_id = e.id
-  WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND NOT EXISTS (
-    SELECT 1 FROM gym_square_customers c
-    WHERE c.gym_id = e.gym_id AND c.entry_id = e.id AND c.environment = ${environment} AND c.account_id = ${accountId} AND c.customer_id IS NOT NULL)`;
+  WHERE e.gym_id = ${gymId} AND e.former_at IS NULL AND NOT ${MADE(sql, environment, accountId)}
+  UNION ALL
+  -- In Square, and charged by Square's own subscriptions, as the last look read them (round one, Low 5).
+  SELECT 'billed', e.id, e.full_name, e.listed_seq
+  FROM gym_square_member_plan p JOIN gym_member_list_entries e ON e.gym_id = p.gym_id AND e.id = p.entry_id
+  WHERE p.gym_id = ${gymId} AND p.environment = ${environment} AND p.billed AND e.former_at IS NULL AND ${MADE(sql, environment, accountId)}`;
 
 const nameOf = (fullName: string): string => (fullName.trim() === "" ? NO_NAME : fullName.trim().slice(0, 200));
 
@@ -519,8 +543,8 @@ async function groupsFrom(sql: SqlOrTx, source: ReturnType<typeof CHECKED_GROUPS
   return groups;
 }
 
-export async function checkedGroups(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, runId: string, withNames: boolean): Promise<Groups> {
-  return await groupsFrom(sql, CHECKED_GROUPS(sql, gymId, environment, runId), withNames);
+export async function checkedGroups(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, runId: string, accountId: string, withNames: boolean): Promise<Groups> {
+  return await groupsFrom(sql, CHECKED_GROUPS(sql, gymId, environment, runId, accountId), withNames);
 }
 
 export async function notInGroups(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string, withNames: boolean): Promise<Groups> {
@@ -541,7 +565,7 @@ export async function groupNames(
   sql: SqlOrTx,
   r: { gymId: string; environment: SquareEnvironment; accountId: string; runId: string | null; checked: boolean; group: SquareMembersGroup; from: number; limit: number },
 ): Promise<string[]> {
-  const source = r.checked && r.runId !== null ? CHECKED_GROUPS(sql, r.gymId, r.environment, r.runId) : NOT_IN_GROUPS(sql, r.gymId, r.environment, r.accountId);
+  const source = r.checked && r.runId !== null ? CHECKED_GROUPS(sql, r.gymId, r.environment, r.runId, r.accountId) : NOT_IN_GROUPS(sql, r.gymId, r.environment, r.accountId);
   const rows = await sql<{ full_name: string }[]>`
     SELECT full_name FROM (${source}) g WHERE grp = ${r.group}
     ORDER BY lower(full_name), listed_seq OFFSET ${r.from} LIMIT ${r.limit}`;

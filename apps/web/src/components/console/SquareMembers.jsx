@@ -52,7 +52,7 @@ function Names({ org, group, data, testId }) {
         <button
           type="button"
           className={linkButton}
-          style={{ color: '#fff' }}
+          style={{ color: 'var(--t1)' }}
           aria-expanded={all !== null}
           onClick={() => {
             if (all !== null) setAll(null);
@@ -70,7 +70,7 @@ function Names({ org, group, data, testId }) {
         </ul>
       ) : null}
       {all !== null && next !== null ? (
-        <button type="button" className={linkButton} style={{ color: '#fff' }} disabled={loading} onClick={() => load(next)}>
+        <button type="button" className={linkButton} style={{ color: 'var(--t1)' }} disabled={loading} onClick={() => load(next)}>
           {W.showMore}
         </button>
       ) : null}
@@ -254,7 +254,7 @@ export default function SquareMembers({ org, owner, readOnly }) {
         ) : adds + links > 0 ? (
           <div className="flex flex-wrap items-center gap-3">
             {pressButton(W.confirmButton(adds, links), add, 'add')}
-            <button type="button" className={linkButton} style={{ color: '#fff' }} disabled={pressing !== null} onClick={() => setDismissed(data.runId)}>
+            <button type="button" className={linkButton} style={{ color: 'var(--t1)' }} disabled={pressing !== null} onClick={() => setDismissed(data.runId)}>
               {W.cancel}
             </button>
           </div>
@@ -286,6 +286,8 @@ export default function SquareMembers({ org, owner, readOnly }) {
   return (
     <Step icon="done" title={W.addedTitle} testId="square-members-step">
       <Line>{W.addedDetail(data.inSquare, data.members)}</Line>
+      {/* Square's own subscriptions charge some of them, as the last look read them (round one, Low 5). */}
+      <Group org={org} data={data} group="billed" lead={W.billedLead} fix={W.billedFix} />
       {notIn > 0 ? (
         <div className="flex flex-col gap-2" data-testid="square-members-not-in">
           <Line>{W.notInLead}</Line>

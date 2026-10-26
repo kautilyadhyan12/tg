@@ -18,10 +18,14 @@
 // - Otherwise a customer of their own is added, even where Square has somebody with the same email under
 //   another name (Sam on his mum Pat's email): never linked to them.
 //
-// "The same name": the words of the shorter name each one of the longer's, in any order, at least two of
-// them (or both one word, the same), and no generation word (Jr, Sr, III) on one side only. "LEE/AMY L" and
-// "Amy L. Lee" are Amy Lee; "Amy" alone, "A Lee", "Bob" for Robert and "Pat Smith" for Sam Smith are not;
-// "John Smith" is not "John Smith Jr". A customer with no given or family name has no name.
+// "The same name": the same first given name on both sides (after a comma or a slash where the family name
+// comes first, "Shah, Priya", a card's "LEE/AMY L"; a title such as Dr or Mrs before it passed over), then
+// the words of the shorter name each one of the longer's, at least two of them (or both one word, the same),
+// and no generation word (Jr, Sr, III) on one side only. "LEE/AMY L" and "Amy L. Lee" are Amy Lee; "Amy"
+// alone, "A Lee", "Bob" for Robert and "Pat Smith" for Sam Smith are not; "John Smith" is not "John Smith
+// Jr"; and "Jane Smith" is not "Emma Jane Smith", a daughter given her mother's name as a middle name (round
+// one, Critical 1). A customer with no given name has no name. A phone alone links nobody whose email, on
+// both sides, says somebody else (round one, Low 6).
 //
 // Pure: the same members and customers in give the same plan out.
 import type { CountryCode } from "libphonenumber-js/max";
@@ -64,12 +68,25 @@ export interface PlanAround {
 
 /** Generation words: "John Smith" and "John Smith Jr" are two people, father and son. */
 const GENERATIONS = new Set(["jr", "sr", "ii", "iii", "iv", "junior", "senior"]);
+/** Titles before a name, passed over: "Dr Amy Lee" is Amy Lee. */
+const TITLES = new Set(["mr", "mrs", "ms", "miss", "mx", "dr", "prof"]);
+
+/** A name's words, its first given name first: what follows a comma or a slash comes first ("Shah, Priya",
+ *  "LEE/AMY L"), and a title before it is passed over. */
+function givenFirst(text: string): string[] {
+  const at = text.search(/[,/]/);
+  const words = at < 0 ? nameParts(text) : [...nameParts(text.slice(at + 1)), ...nameParts(text.slice(0, at))];
+  while (words.length > 0 && TITLES.has(words[0] ?? "")) words.shift();
+  return words;
+}
 
 /** The same name, as above. */
 export function sameNameForSquare(squareName: { givenName: string | null; familyName: string | null }, recordName: string): boolean {
-  const square = [...nameParts(squareName.givenName ?? ""), ...nameParts(squareName.familyName ?? "")];
-  const record = nameParts(recordName);
-  if (square.length === 0 || record.length === 0) return false;
+  const given = givenFirst(squareName.givenName ?? "");
+  if (given.length === 0) return false;
+  const square = [...given, ...nameParts(squareName.familyName ?? "")];
+  const record = givenFirst(recordName);
+  if (record.length === 0 || square[0] !== record[0]) return false;
   const generation = (words: readonly string[]) => words.filter((w) => GENERATIONS.has(w)).sort().join(" ");
   if (generation(square) !== generation(record)) return false;
   const [shorter, longer] = square.length <= record.length ? [square, record] : [record, square];
@@ -132,7 +149,12 @@ export function squareMembersPlan(members: readonly PlanMember[], customers: rea
     }
     const email = squareEmail(m.email);
     const seen = new Map<string, PlanCustomer>();
-    for (const c of [...(email === null ? [] : (byEmail.get(email) ?? [])), ...(m.phone === null ? [] : (byPhone.get(m.phone) ?? []))]) {
+    // By phone only where the emails do not say two people: a family landline, a father and son of one name.
+    const byPhoneHere = (m.phone === null ? [] : (byPhone.get(m.phone) ?? [])).filter((c) => {
+      const theirs = squareEmail(c.email);
+      return email === null || theirs === null || theirs === email;
+    });
+    for (const c of [...(email === null ? [] : (byEmail.get(email) ?? [])), ...byPhoneHere]) {
       if (!seen.has(c.id) && sameNameForSquare(c, m.fullName)) seen.set(c.id, c);
     }
     could.set(m.entryId, [...seen.values()]);

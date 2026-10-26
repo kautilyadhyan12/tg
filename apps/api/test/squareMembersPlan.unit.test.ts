@@ -52,6 +52,15 @@ describe("sameNameForSquare: the name guard on top of a shared email or phone", 
     ["John", "Smith III", "John Smith", false],
     ["Cher", null, "Madonna", false],
     ["VISA", "CARDHOLDER", "Amy Lee", false],
+    // A child given a parent's first name as a middle name, either way round (round one, Critical 1), and a
+    // double family name with the same first name.
+    ["Jane", "Smith", "Emma Jane Smith", false],
+    ["Michael", "Smith", "John Michael Smith", false],
+    ["Emma Jane", "Smith", "Jane Smith", false],
+    ["Jane", "Smith", "Smith, Emma Jane", false],
+    ["LEE/JANE", null, "Emma Jane Lee", false],
+    ["Maria", "Garcia", "Maria Garcia Lopez", true],
+    ["Mrs Jane", "Smith", "Jane Smith", true],
   ])("%s %s vs %s → %s", (given, family, record, agree) => {
     expect(sameNameForSquare({ givenName: given, familyName: family }, record)).toBe(agree);
   });
@@ -98,6 +107,23 @@ describe("squareMembersPlan: linked, added, or left out", () => {
   it("THE WORST THING: Sam on his mum Pat's email is added as his own customer, never linked to Pat", () => {
     const plan = squareMembersPlan([member("sam", "Sam Smith", "pat@example.com")], [customer("PAT", "Pat", "Smith", "pat@example.com")], around(["sam"]));
     expect(plan.get("sam")).toEqual({ kind: "add" });
+  });
+
+  it("a phone links nobody whose email says somebody else: a father and son of one name on the family landline", () => {
+    const plan = squareMembersPlan(
+      [member("son", "John Smith", "john.jr@example.com", "+12125554240")],
+      [customer("DAD", "John", "Smith", "john.sr@example.com", "+12125554240")],
+      around(["son"]),
+    );
+    expect(plan.get("son")).toEqual({ kind: "add" });
+    // With no email on one side, the phone and the name still link.
+    const noEmail = squareMembersPlan([member("dad", "John Smith", null, "+12125554240")], [customer("DAD", "John", "Smith", "john.sr@example.com", "+12125554240")], around(["dad"]));
+    expect(noEmail.get("dad")).toEqual({ kind: "link", customerId: "DAD", by: "phone" });
+  });
+
+  it("THE WORST THING again: Emma Jane Smith on her mum Jane's email is never linked to Jane", () => {
+    const plan = squareMembersPlan([member("emma", "Emma Jane Smith", "jane@example.com")], [customer("JANE", "Jane", "Smith", "Jane@example.com")], around(["emma"]));
+    expect(plan.get("emma")).toEqual({ kind: "add" });
   });
 
   it("a family landline joins no two names", () => {

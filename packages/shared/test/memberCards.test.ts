@@ -52,6 +52,10 @@ describe("a card's words", () => {
     expect(cardNameParts("Mary Ann Smith")).toEqual({ givenName: "Mary Ann", familyName: "Smith" });
     expect(cardNameParts("  José   García  ")).toEqual({ givenName: "José", familyName: "García" });
     expect(cardNameParts("Cher")).toEqual({ givenName: "Cher", familyName: "" });
+    expect(cardNameParts("John Smith Jr")).toEqual({ givenName: "John", familyName: "Smith Jr" });
+    expect(cardNameParts("Martin Luther King Jr.")).toEqual({ givenName: "Martin Luther", familyName: "King Jr." });
+    expect(cardNameParts("Henry Ford II")).toEqual({ givenName: "Henry", familyName: "Ford II" });
+    expect(cardNameParts("Smith Jr")).toEqual({ givenName: "Smith", familyName: "Jr" });
     expect(cardNameParts("")).toEqual({ givenName: "", familyName: "" });
   });
 

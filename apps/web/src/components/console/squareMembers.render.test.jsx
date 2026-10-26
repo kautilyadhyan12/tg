@@ -202,4 +202,12 @@ describe('who may, and while Square is read', () => {
     expect(step.getByText('Being added (1):')).toBeTruthy();
     expect(step.getByText('Theo Park')).toBeTruthy();
   });
+
+  it('once added, members Square charges with its own subscriptions are named, with what to do', async () => {
+    open(members({ state: 'added', runId: RUN, automatic: true, inSquare: 5, groups: { billed: group(1, ['Rose Kim']) } }));
+    const billed = within(await screen.findByTestId('square-members-billed'));
+    expect(billed.getByText('Square already charges this member with its own subscriptions (1):')).toBeTruthy();
+    expect(billed.getByText('Rose Kim')).toBeTruthy();
+    expect(billed.getByText('If you also charge their card here, they pay twice. Cancel those subscriptions in Square first.')).toBeTruthy();
+  });
 });

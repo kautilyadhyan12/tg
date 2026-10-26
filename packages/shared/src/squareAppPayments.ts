@@ -326,7 +326,7 @@ export const SQUARE_APP_WORDS = {
   /** Every payment from Square Point of Sale waits in Payments to match until staff match it (18d-iii-b-ii-a;
    *  Kd, 2026-10-25, "one press"): ticked where the app can tell the bill, chosen where it cannot. */
   /** Since 18d-iii-b-ii-b-i every member can be in the gym's Square customer list, not only those with a card. */
-  cardSaved: "For members in your Square customer list, selecting them is enough: their payment appears on their page with their bill ticked, and their card on file is not charged until it is matched.",
+  cardSaved: "For members the app has added to or linked in your Square customer list, selecting them is enough: their payment appears on their page with their bill ticked, and their card on file is not charged until it is matched.",
   others: "For anyone else, or a sale where no member is selected, Square takes the payment as usual. It waits in [Payments to match], where you choose who paid.",
   notShown: "Every payment taken in Square Point of Sale waits in [Payments to match] until it is matched.",
   toList: "Open Payments to match",
