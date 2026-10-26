@@ -458,7 +458,9 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   const card = created.value;
   const environment = ready.square.environment;
   const accountId = ready.row.accountId;
-  const usable = usableCard(card, customerId, accountId);
+  // Saved on another customer: Square merged the one asked into it since the app last heard (18d-iii-b-ii-b-ii-a).
+  const merged = await onMergedCustomer(deps, ready.square, ready.token, accountId, card, customerId);
+  const usable = merged?.usable ?? usableCard(card, customerId, accountId);
   if (usable === null) {
     deps.log.error({ event: "square.card_unexpected", gymId: s.gymId }, "Square saved a card that is not the one asked for");
     await letGoOfCard(deps, ready.square, { gymId: s.gymId, environment, accountId, cardId: card.id });
@@ -473,7 +475,8 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
       environment,
       accountId,
       connectedAt: ready.row.connectedAt,
-      customerId,
+      customerId: merged?.customerId ?? customerId,
+      afterMerge: merged !== null,
       card: usable,
       words,
       screen: s.screen,
@@ -515,6 +518,27 @@ export function usableCard(card: SquareCard, customerId: string, accountId: stri
   return { cardId: card.id, brand: card.card_brand ?? "OTHER_BRAND", last4, expMonth, expYear };
 }
 
+/** A card Square saved on another customer than the one asked: where Square has merged the one asked into that
+ *  one since the app last heard, the merge is followed (`squareMerges.ts`) and the card is kept on the customer
+ *  Square put it on. Square's test area saved a card asked for on an old id onto the merged customer, and named
+ *  that customer in its answer (measured 2026-10-26, `.cost/18d-iii-b-ii-b-ii-a/probe-merge.mts`). Null otherwise. */
+export async function onMergedCustomer(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  token: string,
+  accountId: string,
+  card: SquareCard,
+  asked: string,
+): Promise<{ customerId: string; usable: UsableCard } | null> {
+  const got = card.customer_id;
+  if (got === undefined || got === asked) return null;
+  const read = await square.api.retrieveCustomer(token, asked);
+  if (read.kind !== "ok" || read.value.id !== got) return null;
+  await followMerge(deps, square, accountId, asked, read.value);
+  const usable = usableCard(card, got, accountId);
+  return usable === null ? null : { customerId: got, usable };
+}
+
 /** A card Square made that is not kept: Square is told to stop it, now and by the worker. */
 export async function letGoOfCard(deps: PaymentsDeps, square: SquareSettings, c: { gymId: string; environment: SquareEnvironment; accountId: string; cardId: string }): Promise<void> {
   const id = await deps.sql.begin((tx) => cards.oweDisable(tx, { ...c, notBefore: deps.now() }));
@@ -529,6 +553,9 @@ export interface KeepCard {
   /** The connection the save began with. */
   connectedAt: Date;
   customerId: string;
+  /** The card went on a customer Square merged the record's into: it says whose that customer is only where the
+   *  record kept it (18d-iii-b-ii-b-ii-a). */
+  afterMerge?: boolean;
   card: UsableCard;
   /** What the person agreed to, word for word. */
   words: string;
@@ -586,6 +613,7 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
     agreementId,
     at: k.at,
   });
+  if (k.afterMerge === true) await cards.markMergedAwayUnlessLinked(tx, { gymId, entryId, environment, accountId, customerId: k.customerId, at: k.at });
   const owed = before === null ? [] : [await cards.oweDisable(tx, { gymId, environment: before.environment, accountId: before.accountId, cardId: before.cardId, notBefore: k.at })];
   await insertAudit(tx, {
     actorUserId: k.userId,

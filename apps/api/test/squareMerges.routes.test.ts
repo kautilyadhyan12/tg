@@ -11,6 +11,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
+  cardAgreementWords,
   heldMembershipsResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
@@ -513,6 +514,51 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       const asked = square.customerReads.length;
       await work([await deleted(shared, "CNOBODY")]);
       expect(square.customerReads.length).toBe(asked);
+    });
+
+    it("a card saved at the desk after a merge the app has not heard of yet is kept on the merged customer, never thrown away", async () => {
+      const gym = await makeGym("Desk Save Gym");
+      square.customer(gym.acct, { id: "CMIATILL", given_name: "Mia", family_name: "Hart", phone_number: "(312) 555-0144" });
+      const mia = await person(gym, "Mia Hart", { email: `mia.hart.${uniq()}@gmail.com`, phone: "312-555-0144" });
+      expect((await addMembers(gym)).state).toBe("added");
+      expect((await customerOf(gym, mia))?.customer_id).toBe("CMIATILL");
+      // Square merges Mia's two customers; its message has not reached the app yet.
+      square.customer(gym.acct, { id: "CMIACAFE", given_name: "Mia", family_name: "Hart", email_address: `mia.cafe.${uniq()}@gmail.com` });
+      const merged = square.merge(gym.acct, ["CMIATILL", "CMIACAFE"]);
+      // Staff save her card: Square puts it on the merged customer, as its test area did.
+      const res = await send("POST", `${entryUrl(gym, mia)}/card`, gym.owner.cookies, {
+        sourceId: `cnon:ok-VISA-4242-${uniq()}`,
+        agreed: true,
+        agreement: cardAgreementWords(gym.name),
+        requestKey: randomUUID(),
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await cardRow(gym, mia)).toMatchObject({ customer_id: merged, merged_away_at: null });
+      // The merge is followed then and there: she is the merged customer's.
+      expect(await customerOf(gym, mia)).toMatchObject({ customer_id: merged, joined_at: expect.any(Date) as Date });
+      // And her card is charged through it.
+      const card = (await cardRow(gym, mia))?.card_id ?? "";
+      expect(square.cards.get(card)?.customerId).toBe(merged);
+    });
+
+    it("a card saved for Sam after Square merged him into Pat's customer is kept, and never says that customer is his", async () => {
+      const gym = await makeGym("Desk Save Two Gym");
+      const pat = `pat.desk.${uniq()}@gmail.com`;
+      square.customer(gym.acct, { id: "CPATDESK", given_name: "Pat", family_name: "Smith", email_address: pat });
+      const sam = await person(gym, "Sam Smith", { email: pat });
+      expect((await addMembers(gym)).state).toBe("added");
+      const first = (await customerOf(gym, sam))?.customer_id ?? "";
+      const merged = square.merge(gym.acct, ["CPATDESK", first]);
+      const res = await send("POST", `${entryUrl(gym, sam)}/card`, gym.owner.cookies, {
+        sourceId: `cnon:ok-VISA-5151-${uniq()}`,
+        agreed: true,
+        agreement: cardAgreementWords(gym.name),
+        requestKey: randomUUID(),
+      });
+      expect(res.statusCode, res.body).toBe(200);
+      expect(await cardRow(gym, sam)).toMatchObject({ customer_id: merged, merged_away_at: expect.any(Date) as Date });
+      expect((await customerOf(gym, sam))?.customer_id ?? null).not.toBe(merged);
+      expect(await takenIn(gym, { amount: 1100, customerId: merged })).toMatchObject({ state: "waiting", reason: "not_linked", entry_id: null });
     });
 
     it("Square not answering: nothing changes, and the message is tried again until it does", async () => {

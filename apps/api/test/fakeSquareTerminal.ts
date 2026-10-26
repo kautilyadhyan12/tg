@@ -269,8 +269,35 @@ export function fakeSquare() {
       const hits = subscriptions.filter((x) => x.accountId === a.merchantId && q.customerIds.includes(x.customerId));
       return Promise.resolve({ kind: "ok", value: { subscriptions: hits.map((x) => ({ customerId: x.customerId, status: x.status })), cursor: null } });
     },
-    createCard: () => Promise.resolve(unavailable),
-    retrieveCard: () => Promise.resolve(unavailable),
+    // A card saved from Square's form (`cnon:ok-VISA-1111-…`), on the customer asked or, for an old id of a merged
+    // one, on the customer it is now (18d-iii-b-ii-b-ii-a).
+    createCard(token, c) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const customerId = mergedInto.get(c.customerId) ?? c.customerId;
+      if (customers.get(customerId)?.accountId !== a.merchantId) return Promise.resolve({ kind: "refused", status: 400, code: "CUSTOMER_NOT_FOUND" });
+      const m = /^cnon:ok-([A-Z_]+)-([0-9]{4})/.exec(c.sourceId);
+      if (m === null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CARD_DATA" });
+      n += 1;
+      const id = `ccof:fake${String(n)}${randomBytes(4).toString("hex")}`;
+      cards.set(id, { accountId: a.merchantId, customerId, behaviour: "pays" });
+      return Promise.resolve({
+        kind: "ok",
+        value: { id, card_brand: m[1] ?? "VISA", last_4: m[2] ?? "1111", exp_month: 12, exp_year: 2031, customer_id: customerId, merchant_id: a.merchantId, enabled: true },
+      });
+    },
+    retrieveCard(token, cardId) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const card = cards.get(cardId);
+      if (card?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      return Promise.resolve({
+        kind: "ok",
+        value: { id: cardId, card_brand: "VISA", last_4: "1111", exp_month: 12, exp_year: 2031, customer_id: card.customerId, merchant_id: a.merchantId, enabled: true },
+      });
+    },
     // A customer a test made (`customer`) is shown; any other gives no answer, as before 18d-iii-b-ii-a.
     retrieveCustomer(token, id) {
       customerReads.push(id);
@@ -354,7 +381,8 @@ export function fakeSquare() {
       }
       const card = cards.get(p.cardId);
       if (card?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      if (card.customerId !== p.customerId) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      const now = (customerId: string) => mergedInto.get(customerId) ?? customerId;
+      if (now(card.customerId) !== now(p.customerId)) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
       n += 1;
       const id = `CPAY${String(n)}${randomBytes(6).toString("hex")}`;
       const amount = state.chargeOther ? p.amountMinor + 100 : p.amountMinor;
@@ -560,8 +588,10 @@ export function fakeSquare() {
   };
   /** The business merges these customers in its Square Dashboard, or Square does by itself (18d-iii-b-ii-b-ii-a):
    *  a new customer with a new id made from the first's details ("The merge operation prioritizes older data"),
-   *  `over` changed on it, marked `MERGE`; the old ones deleted, each old id answering as the new one; their cards
-   *  on the new one. Answers the new id. */
+   *  `over` changed on it, marked `MERGE`; the old ones deleted, each old id answering as the new one. As Square's
+   *  test area did on 2026-10-26 (`.cost/18d-iii-b-ii-b-ii-a/probe-merge.mts`): a saved card still names the old
+   *  customer, and is charged through the old id or the new; a card saved on an old id goes on the new customer.
+   *  Answers the new id. */
   const merge = (account: Account, fromIds: readonly string[], over: Partial<SquareCustomer> = {}): string => {
     const first = customers.get(fromIds[0] ?? "");
     if (first === undefined) throw new Error("no such customer to merge");
@@ -572,7 +602,6 @@ export function fakeSquare() {
       customers.delete(from);
       for (const [old, now] of mergedInto) if (now === from) mergedInto.set(old, id);
       mergedInto.set(from, id);
-      for (const c of cards.values()) if (c.customerId === from) c.customerId = id;
     }
     return id;
   };

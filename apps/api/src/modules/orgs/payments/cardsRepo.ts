@@ -188,6 +188,20 @@ export async function writeCard(tx: TransactionSql, c: NewCard): Promise<void> {
       agreement_id = EXCLUDED.agreement_id, saved_at = EXCLUDED.saved_at, updated_at = EXCLUDED.updated_at, merged_away_at = NULL`;
 }
 
+/** A card kept on a customer Square merged the record's into (18d-iii-b-ii-b-ii-a): it is charged through that
+ *  customer, but says whose the customer is only where the record kept it. */
+export async function markMergedAwayUnlessLinked(
+  tx: TransactionSql,
+  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string; at: Date },
+): Promise<void> {
+  await tx`
+    UPDATE gym_member_cards k SET merged_away_at = ${c.at}
+    WHERE k.gym_id = ${c.gymId} AND k.entry_id = ${c.entryId} AND k.customer_id = ${c.customerId}
+      AND NOT EXISTS (SELECT 1 FROM gym_square_customers s
+                      WHERE s.gym_id = k.gym_id AND s.entry_id = k.entry_id AND s.environment = ${c.environment}
+                        AND s.account_id = ${c.accountId} AND s.customer_id = ${c.customerId})`;
+}
+
 /** The record's card goes, only if it is still this Square card. */
 export async function deleteCard(tx: TransactionSql, gymId: string, entryId: string, cardId: string): Promise<boolean> {
   const rows = await tx<{ entry_id: string }[]>`
