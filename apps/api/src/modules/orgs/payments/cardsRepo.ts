@@ -337,8 +337,13 @@ export async function letGoOfCards(tx: TransactionSql, gymId: string, entryId: s
  *  lock, as every card write is. */
 export async function moveCards(tx: TransactionSql, gymId: string, goneId: string, keepId: string, at: Date): Promise<void> {
   await tx`UPDATE gym_card_agreements SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
-  // The old customers it was at a merge in Square are the kept record's (18d-iii-b-ii-b-ii-a).
-  await tx`UPDATE gym_square_old_customers SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
+  // The old customers it was at a merge in Square are the kept record's (18d-iii-b-ii-b-ii-a); the record not kept
+  // lets go of its own with itself.
+  await tx`
+    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, merged_at)
+    SELECT gym_id, ${keepId}, environment, account_id, customer_id, merged_at FROM gym_square_old_customers
+    WHERE gym_id = ${gymId} AND entry_id = ${goneId}
+    ON CONFLICT DO NOTHING`;
   await tx`
     UPDATE gym_square_customers g SET entry_id = ${keepId}
     WHERE g.gym_id = ${gymId} AND g.entry_id = ${goneId}

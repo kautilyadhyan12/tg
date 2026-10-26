@@ -443,6 +443,25 @@ d("Square's merges followed (real Postgres)", { timeout: T }, () => {
       expect([names.get(samOld), names.get("CPATBOTH"), names.get(merged)]).toEqual([["Sam Smith"], ["Pat Smith"], ["Pat Smith"]]);
     });
 
+    it("an old customer two records here both were stays both's: a payment under it waits as several people's, never one by chance (re-check, Low A)", async () => {
+      const gym = await makeGym("Shared Customer Gym");
+      const ann = await person(gym, "Ann Cole", { email: `ann.cole.${uniq()}@gmail.com` });
+      const bob = await person(gym, "Bob Cole", { email: `bob.cole.${uniq()}@gmail.com` });
+      square.customer(gym.acct, { id: "CCOLEHOME", given_name: "Ann", family_name: "Cole", phone_number: "(312) 555-0122" });
+      // Ann linked to the family's customer, and Bob's card saved on it (as a join of records can leave it).
+      await sql`INSERT INTO gym_square_customers (gym_id, entry_id, environment, account_id, customer_id) VALUES (${gym.id}, ${ann}, 'production', ${gym.acct.merchantId}, 'CCOLEHOME')`;
+      await cardOn(gym, bob, "CCOLEHOME");
+      square.customer(gym.acct, { id: "CCOLETWO", given_name: "Ann", family_name: "Cole", email_address: `ann.two.${uniq()}@gmail.com` });
+      const before = square.appPayment(gym.acct, { amount: 1500, customerId: "CCOLEHOME", locationId: gym.locationId });
+      square.merge(gym.acct, ["CCOLEHOME", "CCOLETWO"]);
+      await work([await deleted(gym.acct, "CCOLEHOME")]);
+      await work([await signed(gym.acct, "payment.created", { type: "payment", id: before.id })]);
+      const [row] = await sql<{ entry_id: string | null; reason: string | null }[]>`SELECT entry_id, reason FROM gym_square_app_payments WHERE square_payment_id = ${before.id}`;
+      expect(row).toMatchObject({ entry_id: null, reason: "several_people" });
+      const names = await linkedNames(sql, { gymId: gym.id, environment: "production", accountId: gym.acct.merchantId, customerIds: ["CCOLEHOME"] });
+      expect(names.get("CCOLEHOME")).toEqual(["Ann Cole", "Bob Cole"]);
+    });
+
     it("Payments to match names an old id by the record it was; one this gym never had is the merged customer's only where Square's merge was followed, and otherwise nobody's (round one, test gap)", async () => {
       const gym = await makeGym("Cafe Leo Gym");
       const leoEmail = `leo.cafe.${uniq()}@gmail.com`;

@@ -161,6 +161,7 @@ describe('Save card on Terminal: the box', () => {
     ['timed_out', 'Not saved. Time ran out on the Terminal.'],
     ['no_answer', "Not saved. The Terminal didn't respond. Check it's on and connected, then try again."],
     ['refused', "Not saved. Square couldn't save the card. Try again, or type the card instead."],
+    ['merged_away', 'Not saved. In Square, Tara had been merged with another customer. Save the card again.'],
     ['gone', 'Not saved. Try again.'],
   ])('ended %s: says why, with Try again on the same Terminal and Type card instead', async (outcome, line) => {
     orgService.getMemberCard.mockReturnValue(cardAnswer());

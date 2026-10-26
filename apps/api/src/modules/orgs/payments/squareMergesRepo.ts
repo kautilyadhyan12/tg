@@ -44,7 +44,7 @@ export async function rememberMerge(sql: SqlOrTx, m: At & { fromId: string; toId
 
 /** The records of this gym the old customer was (its link, or a card saved on it that says whose it is), kept
  *  with them before anything moves: a payment under the old id is theirs, whoever keeps the merged customer
- *  (round one, Critical 1). The first record kept stays. */
+ *  (round one, Critical 1); where it was two records', it stays both's, and waits as several people's. */
 export async function rememberOldCustomer(tx: TransactionSql, m: At & { gymId: string; fromId: string; at: Date }): Promise<void> {
   await tx`
     INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, merged_at)
@@ -54,9 +54,7 @@ export async function rememberOldCustomer(tx: TransactionSql, m: At & { gymId: s
       UNION
       SELECT gym_id, entry_id FROM gym_member_cards
       WHERE gym_id = ${m.gymId} AND environment = ${m.environment} AND account_id = ${m.accountId} AND customer_id = ${m.fromId}
-        AND merged_away_at IS NULL
-      ORDER BY entry_id
-      LIMIT 1) held
+        AND merged_away_at IS NULL) held
     ON CONFLICT DO NOTHING`;
 }
 

@@ -115,6 +115,8 @@ export function terminalOutcomeLine(save, card, name) {
       return 'Cancelled. Nothing was saved.';
     case 'refused':
       return "Not saved. Square couldn't save the card. Try again, or type the card instead.";
+    case 'merged_away':
+      return `Not saved. In Square, ${who.first} had been merged with another customer. Save the card again.`;
     default:
       return 'Not saved. Try again.';
   }

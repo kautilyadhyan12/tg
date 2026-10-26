@@ -145,7 +145,9 @@ export type CardTerminal = z.infer<typeof cardTerminalSchema>;
  *  out; `no_answer`: the Terminal never showed it (off, or offline); `cancelled`: staff pressed
  *  Cancel; `refused`: Square refused; `gone`: the record, its payer or the gym's Square
  *  connection changed meanwhile, so nothing was kept. */
-export const terminalSaveOutcomeSchema = z.enum(["saved", "not_agreed", "cancelled_on_terminal", "timed_out", "no_answer", "cancelled", "refused", "gone"]);
+/** `merged_away`: Square saved the card on a customer it had merged the person into, another person's, so it was let
+ *  go (18d-iii-b-ii-b-ii-a). */
+export const terminalSaveOutcomeSchema = z.enum(["saved", "not_agreed", "cancelled_on_terminal", "timed_out", "no_answer", "cancelled", "refused", "gone", "merged_away"]);
 export type TerminalSaveOutcome = z.infer<typeof terminalSaveOutcomeSchema>;
 
 export const terminalSaveSchema = z

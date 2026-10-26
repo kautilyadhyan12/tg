@@ -281,8 +281,8 @@ async function saving(a: Asking, action: SquareTerminalAction): Promise<Step> {
       agreedAt: still.agreedAt,
       at,
     });
-    // On another person's merged customer: let go, as a refused save (round one, High 2).
-    const outcome = done.kind === "saved" ? ("saved" as const) : done.kind === "merged_away" ? ("refused" as const) : ("gone" as const);
+    // On another person's merged customer: let go (round one, High 2), and said so (its re-check, Low B).
+    const outcome = done.kind === "saved" ? ("saved" as const) : done.kind === "merged_away" ? ("merged_away" as const) : ("gone" as const);
     await saves.finish(tx, save.id, "saving", outcome, at, outcome === "saved" ? cardId : null);
     return { outcome, owed: done.owed };
   });

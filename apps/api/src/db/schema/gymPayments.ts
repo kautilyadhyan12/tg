@@ -329,7 +329,7 @@ export const gymTerminalCardSaves = pgTable(
     check("gym_terminal_card_saves_state_check", sql`${t.state} IN ('agreeing','saving','saved','not_saved')`),
     check(
       "gym_terminal_card_saves_outcome_check",
-      sql`(${t.state} IN ('agreeing','saving')) = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('saved','not_agreed','cancelled_on_terminal','timed_out','no_answer','cancelled','refused','gone'))`,
+      sql`(${t.state} IN ('agreeing','saving')) = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('saved','not_agreed','cancelled_on_terminal','timed_out','no_answer','cancelled','refused','gone','merged_away'))`,
     ),
     check(
       "gym_terminal_card_saves_saved_check",
@@ -830,7 +830,7 @@ export const gymSquareOldCustomers = pgTable(
     mergedAt: timestamp("merged_at", { withTimezone: true }).notNull(),
   },
   (t) => [
-    primaryKey({ name: "gym_square_old_customers_pk", columns: [t.gymId, t.environment, t.accountId, t.customerId] }),
+    primaryKey({ name: "gym_square_old_customers_pk", columns: [t.gymId, t.environment, t.accountId, t.customerId, t.entryId] }),
     foreignKey({ name: "gym_square_old_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
     check("gym_square_old_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check("gym_square_old_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
