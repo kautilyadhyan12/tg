@@ -185,7 +185,7 @@ export async function writeCard(tx: TransactionSql, c: NewCard): Promise<void> {
       environment = EXCLUDED.environment, account_id = EXCLUDED.account_id, customer_id = EXCLUDED.customer_id,
       card_id = EXCLUDED.card_id, brand = EXCLUDED.brand, last4 = EXCLUDED.last4, exp_month = EXCLUDED.exp_month,
       exp_year = EXCLUDED.exp_year, saved_from = EXCLUDED.saved_from, saved_by = EXCLUDED.saved_by,
-      agreement_id = EXCLUDED.agreement_id, saved_at = EXCLUDED.saved_at, updated_at = EXCLUDED.updated_at`;
+      agreement_id = EXCLUDED.agreement_id, saved_at = EXCLUDED.saved_at, updated_at = EXCLUDED.updated_at, merged_away_at = NULL`;
 }
 
 /** The record's card goes, only if it is still this Square card. */

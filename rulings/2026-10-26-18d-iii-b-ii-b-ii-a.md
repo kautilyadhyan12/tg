@@ -1,0 +1,7 @@
+# Rulings · 2026-10-26 · 18d-iii-b-ii-b-ii-a, Square's merges followed (web folder 1)
+
+What was built and checked: `handoff/2026-10-26-18d-iii-b-ii-b-ii-a.md`.
+
+## Pricing, trials and money
+
+- 2026-10-26 · **Kd said "go" to the plan, built as the first of two parts of 18d-iii-b-ii-b-ii, Kept up to date** (part 2, next: a change of name, email or phone copied to Square, and Delete permanently taking out of Square the customer the app added): when Square merges two customers into one with a new number (staff merging duplicates, or Square by itself, which Square says cannot be switched off), the app follows: Leo is moved onto his merged customer, his card charges and his payments at the till come to his page, with nothing for staff to do. A merge of two different people follows the first part's rule (the same email or phone and the same name): Sam, added on his mum Pat's email and merged by Square into "Pat Smith", is not moved onto Pat; he is added to Square again by himself and his card still charges. The Members in Square box says Square may list people who share an email or phone as possible duplicates, and to merge only the same person. The worst thing: a merge putting Sam onto his mum's customer, so her payments at the till land on his page. Before building, Kd merges two test customers in Square's test Dashboard, so what Square does with the card is measured, not taken from a forum post.

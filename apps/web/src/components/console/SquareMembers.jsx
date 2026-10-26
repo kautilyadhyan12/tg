@@ -294,8 +294,11 @@ export default function SquareMembers({ org, owner, readOnly }) {
           {leftOut}
           <Group org={org} data={data} group="refused" lead={W.refusedLead} fix={W.refusedFix} />
           <Group org={org} data={data} group="waiting" lead={W.waitingLead} />
+          <Group org={org} data={data} group="merged_away" lead={W.mergedAwayLead} fix={W.mergedAwayFix} />
         </div>
       ) : null}
+      {/* Square's Dashboard lists customers who share an email or phone as duplicates (18d-iii-b-ii-b-ii-a). */}
+      <Line soft>{W.duplicatesNote}</Line>
       {owner ? pressButton(W.checkAgain, check, 'check', false) : null}
       {problem}
     </Step>

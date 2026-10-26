@@ -24,6 +24,7 @@ import {
   SQUARE_MEMBERS,
   SQUARE_MEMBERS_WORDS,
   cardNameParts,
+  squareMadeByMerge,
   squareMembersNamesResponseSchema,
   squareMembersResponseSchema,
   type SquareMembersNamesQuery,
@@ -264,7 +265,8 @@ async function checkSome(deps: PaymentsDeps, ready: Ready, run: members.RunRow, 
       for (const c of page.value.customers) {
         const email = squareEmail(c.email_address);
         const phone = squarePhone(c.phone_number, country);
-        const ref = c.reference_id ?? null;
+        // A customer Square made by merging others keeps one of their reference ids: it is nobody's by it.
+        const ref = squareMadeByMerge(c) ? null : (c.reference_id ?? null);
         if ((email !== null && known.emails.has(email)) || (phone !== null && known.phones.has(phone)) || (ref !== null && known.recordIds.has(ref))) {
           kept.push({ customerId: c.id, givenName: c.given_name ?? null, familyName: c.family_name ?? null, email: c.email_address ?? null, phone, referenceId: ref });
         }
@@ -382,7 +384,8 @@ async function makeCustomer(deps: PaymentsDeps, ready: Ready, gymId: string, per
     return "unanswered";
   } else if (result.code === "IDEMPOTENCY_KEY_REUSED") {
     const found = await ready.square.api.searchCustomers(ready.token, { referenceId: person.entryId });
-    const made = found.kind === "ok" ? found.value.customers.filter((c) => c.reference_id === person.entryId).sort((a, b) => (a.id < b.id ? -1 : 1))[0] : undefined;
+    const made =
+      found.kind === "ok" ? found.value.customers.filter((c) => c.reference_id === person.entryId && !squareMadeByMerge(c)).sort((a, b) => (a.id < b.id ? -1 : 1))[0] : undefined;
     if (made === undefined) return "busy";
     customerId = made.id;
   } else {
@@ -469,7 +472,7 @@ async function customersWith(ready: Ready, country: ReturnType<typeof readCountr
         familyName: c.family_name ?? null,
         email: c.email_address ?? null,
         phone: squarePhone(c.phone_number, country),
-        referenceId: c.reference_id ?? null,
+        referenceId: squareMadeByMerge(c) ? null : (c.reference_id ?? null),
       });
     }
   }

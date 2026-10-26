@@ -225,7 +225,8 @@ export async function takenAmong(sql: SqlOrTx, gymId: string, environment: Squar
     WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])
     UNION
     SELECT customer_id FROM gym_member_cards
-    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])`;
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id = ANY(${[...customerIds]}::text[])
+      AND merged_away_at IS NULL`;
   return new Set(rows.map((x) => x.customer_id));
 }
 
@@ -306,7 +307,8 @@ export async function takenCustomers(sql: SqlOrTx, gymId: string, environment: S
     SELECT customer_id FROM gym_square_customers
     WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND customer_id IS NOT NULL
     UNION
-    SELECT customer_id FROM gym_member_cards WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId}`;
+    SELECT customer_id FROM gym_member_cards
+    WHERE gym_id = ${gymId} AND environment = ${environment} AND account_id = ${accountId} AND merged_away_at IS NULL`;
   return new Set(rows.map((r) => r.customer_id));
 }
 
@@ -394,6 +396,7 @@ export async function linkCustomer(
     UNION ALL
     SELECT entry_id FROM gym_member_cards
     WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND account_id = ${r.accountId} AND customer_id = ${r.customerId} AND entry_id <> ${r.entryId}
+      AND merged_away_at IS NULL
     LIMIT 1`;
   if (other !== undefined) return "taken";
   const rows = await tx<{ entry_id: string }[]>`
@@ -425,7 +428,8 @@ export async function listVersionOf(sql: SqlOrTx, gymId: string): Promise<number
 /** Current records not in Square that are due a look: never looked at, changed since (their name, email or
  *  phone), or left out, refused or not added at a look older than `lookedBefore`; and anybody whose customer is
  *  being made with no answer yet (`making`), asked about again with its key (round one, High 2). Those of a
- *  check that waits for the owner's press are theirs to add, until it is a day old. */
+ *  check that waits for the owner's press are theirs to add, until it is a day old. Separated from a customer
+ *  by a merge in Square: at once; left out as `merged_away`: only once their details change (18d-iii-b-ii-b-ii-a). */
 export async function recordsDue(
   sql: SqlOrTx,
   r: { gymId: string; environment: SquareEnvironment; accountId: string; lookedBefore: Date; limit: number },
@@ -435,7 +439,10 @@ export async function recordsDue(
     FROM gym_member_list_entries e
     LEFT JOIN gym_square_member_plan p ON p.gym_id = e.gym_id AND p.environment = ${r.environment} AND p.entry_id = e.id
     WHERE e.gym_id = ${r.gymId} AND e.former_at IS NULL AND NOT ${MADE(sql, r.environment, r.accountId)}
-      AND (${LINKED(sql, r.environment, r.accountId)} OR p.entry_id IS NULL OR p.digest <> ${DIGEST(sql)} OR p.looked_at < ${r.lookedBefore})
+      AND (${LINKED(sql, r.environment, r.accountId)} OR p.entry_id IS NULL OR p.digest <> ${DIGEST(sql)}
+           OR (p.decision <> 'merged_away' AND p.looked_at < ${r.lookedBefore})
+           -- Separated by a merge in Square: added again at once (18d-iii-b-ii-b-ii-a).
+           OR (p.separated_at IS NOT NULL AND p.decision = 'add' AND p.outcome IS NULL))
     ORDER BY e.listed_seq
     LIMIT ${r.limit}`;
   return rows.map((x) => ({ entryId: x.id, fullName: x.full_name, email: x.email, phone: x.phone_e164, digest: x.digest, making: x.making }));
@@ -478,6 +485,52 @@ export async function caughtUp(sql: SqlOrTx, r: { gymId: string; environment: Sq
     WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND run_id = ${r.runId}`;
 }
 
+// ── Square's merges (18d-iii-b-ii-b-ii-a) ─────────────────────────────────────
+
+/** Square merged `fromId` into `to`: a plan not yet done that names the old customer is dropped (the record is
+ *  looked at again, never linked to a customer Square no longer has), a plan done names the new one, and a check
+ *  that read the old customer reads the new one in its place. */
+export async function forgetMergedCustomer(tx: TransactionSql, r: { gymId: string; environment: SquareEnvironment; fromId: string; to: CandidateRow }): Promise<void> {
+  await tx`
+    DELETE FROM gym_square_member_plan
+    WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND customer_id = ${r.fromId} AND outcome IS NULL`;
+  await tx`
+    UPDATE gym_square_member_plan SET customer_id = ${r.to.customerId}
+    WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND customer_id = ${r.fromId}`;
+  const read = await tx<{ run_id: string }[]>`
+    DELETE FROM gym_square_member_candidates
+    WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND customer_id = ${r.fromId}
+    RETURNING run_id`;
+  for (const runId of new Set(read.map((x) => x.run_id))) await insertCandidates(tx, { gymId: r.gymId, environment: r.environment, runId }, [r.to]);
+}
+
+/** Current records a merge in Square separated from the customer they were linked to: looked at again at once,
+ *  and so added again by themselves; separated a second time since `againSince`, left out (`merged_away`) until
+ *  their name, email or phone changes, so the app and Square never take turns. Only at a gym that uses Members
+ *  in Square (it has a check's row). Answers those left out. */
+export async function separateFromMerged(
+  tx: TransactionSql,
+  r: { gymId: string; environment: SquareEnvironment; entryIds: readonly string[]; now: Date; againSince: Date },
+): Promise<string[]> {
+  if (r.entryIds.length === 0) return [];
+  const rows = await tx<{ entry_id: string; away: boolean }[]>`
+    INSERT INTO gym_square_member_plan (gym_id, environment, entry_id, run_id, decision, customer_id, digest, billed, looked_at, outcome, done_at, separated_at)
+    SELECT e.gym_id, x.environment, e.id, x.run_id, 'add', NULL, ${DIGEST(tx)}, false, ${r.now}, NULL, NULL, ${r.now}
+    FROM gym_member_list_entries e
+    JOIN gym_square_member_runs x ON x.gym_id = e.gym_id AND x.environment = ${r.environment}
+    WHERE e.gym_id = ${r.gymId} AND e.id = ANY(${[...r.entryIds]}::uuid[]) AND e.former_at IS NULL
+    ON CONFLICT (gym_id, environment, entry_id) DO UPDATE SET
+      decision = CASE WHEN gym_square_member_plan.separated_at >= ${r.againSince} THEN 'merged_away' ELSE 'add' END,
+      run_id = EXCLUDED.run_id, customer_id = NULL, digest = EXCLUDED.digest, billed = false, looked_at = EXCLUDED.looked_at,
+      outcome = NULL, done_at = NULL, separated_at = EXCLUDED.separated_at
+    RETURNING entry_id, decision = 'merged_away' AS away`;
+  // Members added by themselves: the next minute's look takes them.
+  await tx`
+    UPDATE gym_square_member_runs SET look_due_at = ${r.now}
+    WHERE gym_id = ${r.gymId} AND environment = ${r.environment} AND automatic`;
+  return rows.filter((x) => x.away).map((x) => x.entry_id);
+}
+
 // ── What the box shows ────────────────────────────────────────────────────────
 
 export async function countMembers(sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string): Promise<{ members: number; inSquare: number }> {
@@ -493,7 +546,16 @@ export async function countMembers(sql: SqlOrTx, gymId: string, environment: Squ
 export type Groups = Record<SquareMembersGroup, SquareMembersNamed>;
 
 const none = (): SquareMembersNamed => ({ count: 0, names: [] });
-const emptyGroups = (): Groups => ({ add: none(), link: none(), several_customers: none(), several_people: none(), billed: none(), refused: none(), waiting: none() });
+const emptyGroups = (): Groups => ({
+  add: none(),
+  link: none(),
+  several_customers: none(),
+  several_people: none(),
+  billed: none(),
+  refused: none(),
+  waiting: none(),
+  merged_away: none(),
+});
 
 /** The groups of a check waiting for the press: what the press would still do, by the plan; nobody the
  *  worker has added or linked meanwhile, as new members are once members were added (round one, High 3). */
@@ -512,7 +574,7 @@ const CHECKED_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironm
 const NOT_IN_GROUPS = (sql: SqlOrTx, gymId: string, environment: SquareEnvironment, accountId: string) => sql`
   SELECT CASE WHEN p.entry_id IS NULL OR p.digest <> ${DIGEST(sql)} THEN 'waiting'
               WHEN p.outcome = 'refused' THEN 'refused'
-              WHEN p.outcome IS NULL AND p.decision IN ('several_customers','several_people') THEN p.decision
+              WHEN p.outcome IS NULL AND p.decision IN ('several_customers','several_people','merged_away') THEN p.decision
               ELSE 'waiting' END AS grp,
          e.id, e.full_name, e.listed_seq
   FROM gym_member_list_entries e

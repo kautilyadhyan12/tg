@@ -269,7 +269,8 @@ export function phoneE164Like(phone: string): string | null {
 }
 
 /** The records each Square customer is linked to in this gym, by name: the customer the app made for them,
- *  or the one their card on file is saved on. */
+ *  or the one their card on file is saved on. A customer Square has merged into another since is that other one
+ *  (18d-iii-b-ii-b-ii-a); the names are keyed by the id asked about. */
 export async function linkedNames(
   sql: SqlOrTx,
   q: { gymId: string; environment: SquareEnvironment; accountId: string; customerIds: readonly string[] },
@@ -277,16 +278,25 @@ export async function linkedNames(
   const out = new Map<string, string[]>();
   if (q.customerIds.length === 0) return out;
   const rows = await sql<{ customer_id: string; full_name: string }[]>`
-    SELECT l.customer_id, e.full_name
-    FROM (
-      SELECT customer_id, entry_id FROM gym_square_customers
-      WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id = ANY(${[...q.customerIds]}::text[])
+    WITH asked AS (
+      SELECT a.id AS asked, a.id AS id FROM unnest(${[...q.customerIds]}::text[]) AS a(id)
       UNION
-      SELECT customer_id, entry_id FROM gym_member_cards
-      WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id = ANY(${[...q.customerIds]}::text[])
-    ) l
-    JOIN gym_member_list_entries e ON e.gym_id = ${q.gymId} AND e.id = l.entry_id
-    ORDER BY l.customer_id, lower(e.full_name), e.id`;
+      SELECT m.from_customer_id, m.to_customer_id FROM gym_square_customer_merges m
+      WHERE m.environment = ${q.environment} AND m.account_id = ${q.accountId} AND m.from_customer_id = ANY(${[...q.customerIds]}::text[])
+    )
+    SELECT customer_id, full_name FROM (
+      SELECT DISTINCT a.asked AS customer_id, e.id, e.full_name
+      FROM asked a
+      JOIN (
+        SELECT customer_id, entry_id FROM gym_square_customers
+        WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId}
+        UNION
+        SELECT customer_id, entry_id FROM gym_member_cards
+        WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId} AND merged_away_at IS NULL
+      ) l ON l.customer_id = a.id
+      JOIN gym_member_list_entries e ON e.gym_id = ${q.gymId} AND e.id = l.entry_id
+    ) x
+    ORDER BY customer_id, lower(full_name), id`;
   for (const r of rows) out.set(r.customer_id, [...(out.get(r.customer_id) ?? []), r.full_name.trim() === "" ? NO_NAME : r.full_name]);
   return out;
 }
@@ -445,7 +455,8 @@ export async function squareAppPick(sql: SqlOrTx, q: { gymId: string; entryId: s
     WHERE e.gym_id = ${q.gymId}
       AND (e.id = ${q.entryId} OR e.id = (SELECT p.payer_entry_id FROM gym_member_payers p WHERE p.gym_id = ${q.gymId} AND p.entry_id = ${q.entryId}))
       AND (EXISTS (SELECT 1 FROM gym_square_customers c WHERE c.gym_id = e.gym_id AND c.entry_id = e.id AND c.environment = ${q.environment} AND c.account_id = ${q.accountId})
-           OR EXISTS (SELECT 1 FROM gym_member_cards k WHERE k.gym_id = e.gym_id AND k.entry_id = e.id AND k.environment = ${q.environment} AND k.account_id = ${q.accountId}))
+           OR EXISTS (SELECT 1 FROM gym_member_cards k WHERE k.gym_id = e.gym_id AND k.entry_id = e.id AND k.environment = ${q.environment} AND k.account_id = ${q.accountId}
+                      AND k.merged_away_at IS NULL))
     ORDER BY own DESC`;
   const first = rows[0];
   return first === undefined ? null : first.full_name.trim() === "" ? NO_NAME : first.full_name;

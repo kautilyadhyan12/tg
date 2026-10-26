@@ -33,9 +33,10 @@ export type SquareMembersState = z.infer<typeof squareMembersStateSchema>;
  *  `link` (Square already has them, with the same email or phone and the same name), `several_customers`
  *  (Square has more than one customer who could be them), `several_people` (one Square customer could be
  *  more than one of them), `billed` (Square's own subscriptions charge them). After it, the people not in
- *  Square: `several_customers`, `several_people`, `refused` (Square would not take them) and `waiting`
- *  (being added). */
-export const SQUARE_MEMBERS_GROUPS = ["add", "link", "several_customers", "several_people", "billed", "refused", "waiting"] as const;
+ *  Square: `several_customers`, `several_people`, `refused` (Square would not take them), `waiting`
+ *  (being added) and `merged_away` (Square merged their customer into one with another name twice within 30
+ *  days: 18d-iii-b-ii-b-ii-a). */
+export const SQUARE_MEMBERS_GROUPS = ["add", "link", "several_customers", "several_people", "billed", "refused", "waiting", "merged_away"] as const;
 export const squareMembersGroupSchema = z.enum(SQUARE_MEMBERS_GROUPS);
 export type SquareMembersGroup = z.infer<typeof squareMembersGroupSchema>;
 
@@ -83,6 +84,7 @@ export const squareMembersSchema = z
         billed: squareMembersNamedSchema,
         refused: squareMembersNamedSchema,
         waiting: squareMembersNamedSchema,
+        merged_away: squareMembersNamedSchema,
       })
       .strict(),
   })
@@ -174,6 +176,12 @@ export const SQUARE_MEMBERS_WORDS = {
   refusedLead: (n: number): string => `Square didn't accept their details (${n.toLocaleString("en-US")}):`,
   refusedFix: "Check their email address and phone number on their page. The app tries again tomorrow, or when their details change.",
   waitingLead: (n: number): string => `Being added (${n.toLocaleString("en-US")}):`,
+  /** Square merged their customer into one with another name, twice (18d-iii-b-ii-b-ii-a). */
+  mergedAwayLead: (n: number): string =>
+    `Left out, as Square merged them into another customer with a different name, twice (${n.toLocaleString("en-US")}):`,
+  mergedAwayFix: "Square merges customers who share an email or phone. Give each of them an email or phone of their own on their page, and the app adds them again.",
+  /** Under the added box: Square's Dashboard lists customers who share an email or phone as duplicates. */
+  duplicatesNote: "Square may list members who share an email or phone, such as a child on a parent's email, as duplicates. Merge customers in Square only if they are the same person.",
   failedTitle: "Couldn't finish checking Square",
   failedRefused: "Square refused the request. Try again. If it happens again, reconnect Square.",
   failedUnauthorized: "Square no longer accepts this connection. Reconnect Square, then try again.",

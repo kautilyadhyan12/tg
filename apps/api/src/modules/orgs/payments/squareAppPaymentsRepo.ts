@@ -59,18 +59,26 @@ export async function watchingSince(sql: SqlOrTx, w: { gymId: string; environmen
 }
 
 /** The records whose Square customer this is: the one the app made for them (18d-ii), and the one
- *  their card on file is saved on. In the gyms named. */
+ *  their card on file is saved on. In the gyms named. A customer Square has merged into another since is
+ *  that other one (18d-iii-b-ii-b-ii-a): a payment taken before the merge keeps the old id. */
 export async function linkedRecords(
   sql: SqlOrTx,
   q: { environment: SquareEnvironment; accountId: string; customerId: string; gymIds: readonly string[] },
 ): Promise<{ gymId: string; entryId: string }[]> {
   if (q.gymIds.length === 0) return [];
   const rows = await sql<{ gym_id: string; entry_id: string }[]>`
+    WITH now_is AS (
+      SELECT coalesce((SELECT to_customer_id FROM gym_square_customer_merges
+                       WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND from_customer_id = ${q.customerId}),
+                      ${q.customerId}) AS id
+    )
     SELECT gym_id, entry_id FROM gym_square_customers
-    WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id = ${q.customerId} AND gym_id = ANY(${[...q.gymIds]}::uuid[])
+    WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id IN (${q.customerId}, (SELECT id FROM now_is))
+      AND gym_id = ANY(${[...q.gymIds]}::uuid[])
     UNION
     SELECT gym_id, entry_id FROM gym_member_cards
-    WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id = ${q.customerId} AND gym_id = ANY(${[...q.gymIds]}::uuid[])
+    WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id IN (${q.customerId}, (SELECT id FROM now_is))
+      AND gym_id = ANY(${[...q.gymIds]}::uuid[]) AND merged_away_at IS NULL
     ORDER BY gym_id, entry_id`;
   return rows.map((r) => ({ gymId: r.gym_id, entryId: r.entry_id }));
 }

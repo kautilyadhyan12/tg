@@ -9,6 +9,7 @@
 // and names the rule has never been told about (a prepaid card's "VISA CARDHOLDER", one-word names).
 import { describe, expect, it } from "vitest";
 import {
+  followMerged,
   sameNameForSquare,
   squareEmail,
   squareMembersPlan,
@@ -260,5 +261,39 @@ describe("squareMembersPlan: linked, added, or left out", () => {
 
   it("no members: an empty plan", () => {
     expect(squareMembersPlan([], [customer("X", "Amy", "Lee", "amy@example.com")], nobody).size).toBe(0);
+  });
+});
+
+// After Square merged customers (18d-iii-b-ii-b-ii-a): who keeps the merged customer, by its name alone. The
+// merged customer's names are Square's, kept from the oldest customer of the merge ("The merge operation
+// prioritizes older data", Square's forum, 2025): the till's capitals, a card's own field, a parent's name.
+describe("followMerged: the one record whose name is the merged customer's keeps it", () => {
+  const rec = (entryId: string, fullName: string) => ({ entryId, fullName });
+  it.each<[string, { givenName: string | null; familyName: string | null }, { entryId: string; fullName: string }[], string | null, string[]]>([
+    ["his own two customers, the till's kept", { givenName: "LEO", familyName: "GRANT" }, [rec("leo", "Leo Grant")], "leo", []],
+    ["a card's own name field", { givenName: "LEE/AMY L", familyName: null }, [rec("amy", "Amy Lee")], "amy", []],
+    ["the export's family name first", { givenName: "Priya", familyName: "Shah" }, [rec("priya", "Shah, Priya")], "priya", []],
+    ["a child merged into the parent's customer", { givenName: "Pat", familyName: "Smith" }, [rec("sam", "Sam Smith")], null, ["sam"]],
+    ["the parent and the child both here: the parent keeps it", { givenName: "Pat", familyName: "Smith" }, [rec("sam", "Sam Smith"), rec("pat", "Pat Smith")], "pat", ["sam"]],
+    ["a daughter given her mother's name as a middle name", { givenName: "Jane", familyName: "Smith" }, [rec("emma", "Emma Jane Smith")], null, ["emma"]],
+    ["a father and son of one name", { givenName: "John", familyName: "Smith" }, [rec("son", "John Smith Jr"), rec("dad", "John Smith")], "dad", ["son"]],
+    ["two records of one person: neither", { givenName: "Nora", familyName: "Price" }, [rec("n1", "Nora Price"), rec("n2", "Nora Price")], null, ["n1", "n2"]],
+    ["a merged customer with no given name: nobody's", { givenName: null, familyName: "Grant" }, [rec("leo", "Leo Grant")], null, ["leo"]],
+    ["a company's name only: nobody's", { givenName: null, familyName: null }, [rec("leo", "Leo Grant")], null, ["leo"]],
+    ["a first name alone: not enough", { givenName: "Leo", familyName: null }, [rec("leo", "Leo Grant")], null, ["leo"]],
+    ["a nickname for the name: not the same name", { givenName: "Bob", familyName: "Ortiz" }, [rec("rob", "Robert Ortiz")], null, ["rob"]],
+    ["a record with no name", { givenName: "Leo", familyName: "Grant" }, [rec("blank", "")], null, ["blank"]],
+    ["nobody here", { givenName: "Leo", familyName: "Grant" }, [], null, []],
+  ])("%s", (_case, merged, records, keep, separate) => {
+    expect(followMerged(records, merged)).toEqual({ keep, separate });
+  });
+
+  it("the same answer whatever order the records come in", () => {
+    const records = [rec("sam", "Sam Smith"), rec("pat", "Pat Smith"), rec("kai", "Kai Smith")];
+    const merged = { givenName: "Pat", familyName: "Smith" };
+    const forward = followMerged(records, merged);
+    const back = followMerged([...records].reverse(), merged);
+    expect(back.keep).toBe(forward.keep);
+    expect([...back.separate].sort()).toEqual([...forward.separate].sort());
   });
 });
