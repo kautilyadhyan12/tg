@@ -21,7 +21,7 @@ const { readOnlyNote } = await import('../../pages/console/billingView');
 const ORG = { id: '11111111-1111-4111-8111-111111111111', slug: 'iron-house', name: 'Iron House', orgType: 'gym', staffRole: 'owner' };
 const RUN = '22222222-2222-4222-8222-222222222222';
 const group = (count = 0, names = []) => ({ count, names });
-const GROUPS = { add: group(), link: group(), several_customers: group(), several_people: group(), billed: group(), refused: group(), waiting: group() };
+const GROUPS = { add: group(), link: group(), several_customers: group(), several_people: group(), billed: group(), refused: group(), waiting: group(), merged_away: group() };
 const members = (over = {}) => ({
   state: 'none',
   runId: null,
@@ -89,7 +89,7 @@ describe('before anything is added', () => {
     const several = within(box.getByTestId('square-members-several_customers'));
     expect(several.getByText('Left out, as Square has more than one customer who could be each of them (1):')).toBeTruthy();
     // Square's own menu words, each drawn as a label.
-    for (const name of ['Customer directory', '•••', 'Merge with another customer']) expect(several.getByText(name, { selector: '.c-ui' })).toBeTruthy();
+    for (const name of ['Customer directory', '•••', 'Merge customer']) expect(several.getByText(name, { selector: '.c-ui' })).toBeTruthy();
     const people = within(box.getByTestId('square-members-several_people'));
     expect(people.getByText('If they are the same person, join their records here, then check again.')).toBeTruthy();
     expect(people.getByRole('link', { name: 'Open Possible duplicates' }).getAttribute('href')).toBe('/console/iron-house/members/duplicates');
@@ -209,5 +209,24 @@ describe('who may, and while Square is read', () => {
     expect(billed.getByText('Square already charges this member with its own subscriptions (1):')).toBeTruthy();
     expect(billed.getByText('Rose Kim')).toBeTruthy();
     expect(billed.getByText('If you also charge their card here, they pay twice. Cancel those subscriptions in Square first.')).toBeTruthy();
+  });
+
+  it('once added, the line says not to merge two people in Square, and names members Square merged into another customer twice', async () => {
+    open(members({ state: 'added', runId: RUN, automatic: true, inSquare: 4, groups: { merged_away: group(1, ['Sam Smith']) } }));
+    const step = await line();
+    expect(
+      await step.findByText((_, el) => el?.textContent === "In Square, Duplicate Suggestion lists customers who share an email or phone, such as a child on a parent's email. Merge them only if they are the same person." && el.hasAttribute('data-words')),
+    ).toBeTruthy();
+    const away = within(step.getByTestId('square-members-merged_away'));
+    expect(away.getByText('Left out, as Square merged them into another customer with a different name, twice (1):')).toBeTruthy();
+    expect(away.getByText('Sam Smith')).toBeTruthy();
+    expect(away.getByText('Give each of them an email or phone of their own on their page, and the app adds them again. In Square, merge only customers who are the same person.')).toBeTruthy();
+  });
+
+  it('before anything is added, the duplicates line is not shown', async () => {
+    open(CHECKED);
+    const step = await line();
+    expect(await step.findByText('Check who changes, then press Add')).toBeTruthy();
+    expect(step.queryByText(/Duplicate Suggestion/)).toBeNull();
   });
 });

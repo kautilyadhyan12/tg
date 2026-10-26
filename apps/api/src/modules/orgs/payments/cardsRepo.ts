@@ -185,7 +185,19 @@ export async function writeCard(tx: TransactionSql, c: NewCard): Promise<void> {
       environment = EXCLUDED.environment, account_id = EXCLUDED.account_id, customer_id = EXCLUDED.customer_id,
       card_id = EXCLUDED.card_id, brand = EXCLUDED.brand, last4 = EXCLUDED.last4, exp_month = EXCLUDED.exp_month,
       exp_year = EXCLUDED.exp_year, saved_from = EXCLUDED.saved_from, saved_by = EXCLUDED.saved_by,
-      agreement_id = EXCLUDED.agreement_id, saved_at = EXCLUDED.saved_at, updated_at = EXCLUDED.updated_at`;
+      agreement_id = EXCLUDED.agreement_id, saved_at = EXCLUDED.saved_at, updated_at = EXCLUDED.updated_at, merged_away_at = NULL`;
+}
+
+/** The record's customer in that Square account is this one (18d-iii-b-ii-b-ii-a). */
+export async function isLinkedTo(
+  sql: SqlOrTx,
+  c: { gymId: string; entryId: string; environment: SquareEnvironment; accountId: string; customerId: string },
+): Promise<boolean> {
+  const [row] = await sql<{ entry_id: string }[]>`
+    SELECT entry_id FROM gym_square_customers
+    WHERE gym_id = ${c.gymId} AND entry_id = ${c.entryId} AND environment = ${c.environment} AND account_id = ${c.accountId}
+      AND customer_id = ${c.customerId}`;
+  return row !== undefined;
 }
 
 /** The record's card goes, only if it is still this Square card. */
@@ -325,6 +337,13 @@ export async function letGoOfCards(tx: TransactionSql, gymId: string, entryId: s
  *  lock, as every card write is. */
 export async function moveCards(tx: TransactionSql, gymId: string, goneId: string, keepId: string, at: Date): Promise<void> {
   await tx`UPDATE gym_card_agreements SET entry_id = ${keepId} WHERE gym_id = ${gymId} AND entry_id = ${goneId}`;
+  // The old customers it was at a merge in Square are the kept record's (18d-iii-b-ii-b-ii-a); the record not kept
+  // lets go of its own with itself.
+  await tx`
+    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, merged_at)
+    SELECT gym_id, ${keepId}, environment, account_id, customer_id, merged_at FROM gym_square_old_customers
+    WHERE gym_id = ${gymId} AND entry_id = ${goneId}
+    ON CONFLICT DO NOTHING`;
   await tx`
     UPDATE gym_square_customers g SET entry_id = ${keepId}
     WHERE g.gym_id = ${gymId} AND g.entry_id = ${goneId}

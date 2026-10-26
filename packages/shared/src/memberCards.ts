@@ -145,7 +145,9 @@ export type CardTerminal = z.infer<typeof cardTerminalSchema>;
  *  out; `no_answer`: the Terminal never showed it (off, or offline); `cancelled`: staff pressed
  *  Cancel; `refused`: Square refused; `gone`: the record, its payer or the gym's Square
  *  connection changed meanwhile, so nothing was kept. */
-export const terminalSaveOutcomeSchema = z.enum(["saved", "not_agreed", "cancelled_on_terminal", "timed_out", "no_answer", "cancelled", "refused", "gone"]);
+/** `merged_away`: Square saved the card on a customer it had merged the person into, another person's, so it was let
+ *  go (18d-iii-b-ii-b-ii-a). */
+export const terminalSaveOutcomeSchema = z.enum(["saved", "not_agreed", "cancelled_on_terminal", "timed_out", "no_answer", "cancelled", "refused", "gone", "merged_away"]);
 export type TerminalSaveOutcome = z.infer<typeof terminalSaveOutcomeSchema>;
 
 export const terminalSaveSchema = z
@@ -260,6 +262,8 @@ export const MEMBER_CARD_WORDS = {
   connection_refused: "Square didn't accept the connection to your Square account. The owner can connect Square again in Settings.",
   square_unavailable: "Square didn't answer. Nothing was changed. Try again in a minute.",
   customer_gone: "Square no longer has this person in your customers. Type the card again to save it.",
+  /** Square had merged the person into another customer (18d-iii-b-ii-b-ii-a, round one, High 2). */
+  merged_away: "In Square, this person had been merged with another customer, so the card wasn't saved. Type the card again to save it.",
   contact_refused: "Square didn't accept this person's email address or phone number. Check them with Edit, then try again.",
   expired: "This card has expired. Try another card.",
   not_supported: "This kind of card can't be saved here. Try another card.",

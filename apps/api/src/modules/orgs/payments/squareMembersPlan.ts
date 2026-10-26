@@ -184,3 +184,19 @@ export function squareMembersPlan(members: readonly PlanMember[], customers: rea
   }
   return plans;
 }
+
+/** After Square merged customers into `merged` (ROADMAP 18d-iii-b-ii-b-ii-a): of the records here linked to any of
+ *  them, the one that keeps the merged customer, and the rest, separated from it. Only a record whose name is the
+ *  merged customer's keeps it, and only where it is the one such record: a merge of two people (Sam, added on his
+ *  mum's email, merged into "Pat Smith") is never followed, and two records of one person both lose it, as a
+ *  customer two records could be is left out above. Square keeps the older customer's details in a merge ("The
+ *  merge operation prioritizes older data", Square's forum, 2025), so the name says whose it now is; its reference
+ *  id is one of the old customers' and says nothing. */
+export function followMerged(
+  records: readonly { entryId: string; fullName: string }[],
+  merged: { givenName: string | null; familyName: string | null },
+): { keep: string | null; separate: string[] } {
+  const same = records.filter((r) => sameNameForSquare(merged, r.fullName));
+  const keep = same.length === 1 ? (same[0]?.entryId ?? null) : null;
+  return { keep, separate: records.filter((r) => r.entryId !== keep).map((r) => r.entryId) };
+}

@@ -192,6 +192,9 @@ export const gymMemberCards = pgTable(
       .references(() => gymCardAgreements.id),
     savedAt: timestamp("saved_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    /** Square merged the card's customer into somebody of another name (0167; ROADMAP 18d-iii-b-ii-b-ii-a): the
+     *  card is charged through that customer, which never links to this record. */
+    mergedAwayAt: timestamp("merged_away_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ name: "gym_member_cards_pk", columns: [t.gymId, t.entryId] }),
@@ -326,7 +329,7 @@ export const gymTerminalCardSaves = pgTable(
     check("gym_terminal_card_saves_state_check", sql`${t.state} IN ('agreeing','saving','saved','not_saved')`),
     check(
       "gym_terminal_card_saves_outcome_check",
-      sql`(${t.state} IN ('agreeing','saving')) = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('saved','not_agreed','cancelled_on_terminal','timed_out','no_answer','cancelled','refused','gone'))`,
+      sql`(${t.state} IN ('agreeing','saving')) = (${t.outcome} IS NULL AND ${t.finishedAt} IS NULL) AND (${t.outcome} IS NULL OR ${t.outcome} IN ('saved','not_agreed','cancelled_on_terminal','timed_out','no_answer','cancelled','refused','gone','merged_away'))`,
     ),
     check(
       "gym_terminal_card_saves_saved_check",
@@ -794,6 +797,8 @@ export const gymSquareMemberPlan = pgTable(
     lookedAt: timestamp("looked_at", { withTimezone: true }).notNull(),
     outcome: text("outcome"),
     doneAt: timestamp("done_at", { withTimezone: true }),
+    /** Square merged the record's customer into somebody of another name (0167; ROADMAP 18d-iii-b-ii-b-ii-a). */
+    separatedAt: timestamp("separated_at", { withTimezone: true }),
   },
   (t) => [
     primaryKey({ name: "gym_square_member_plan_pk", columns: [t.gymId, t.environment, t.entryId] }),
@@ -801,7 +806,7 @@ export const gymSquareMemberPlan = pgTable(
     check("gym_square_member_plan_environment_check", sql`${t.environment} IN ('sandbox','production')`),
     check(
       "gym_square_member_plan_decision_check",
-      sql`${t.decision} IN ('ours','link','add','several_customers','several_people') AND (${t.decision} IN ('ours','link')) = (${t.customerId} IS NOT NULL) AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`,
+      sql`${t.decision} IN ('ours','link','add','several_customers','several_people','merged_away') AND (${t.decision} IN ('ours','link')) = (${t.customerId} IS NOT NULL) AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`,
     ),
     check("gym_square_member_plan_digest_check", sql`${t.digest} ~ '^[0-9a-f]{32}$'`),
     check(
@@ -809,5 +814,48 @@ export const gymSquareMemberPlan = pgTable(
       sql`(${t.outcome} IS NULL) = (${t.doneAt} IS NULL) AND (${t.outcome} IS NULL OR (${t.outcome} IN ('done','changed','refused') AND ${t.decision} IN ('ours','link','add')))`,
     ),
     index("gym_square_member_plan_run_idx").on(t.gymId, t.environment, t.runId),
+  ],
+);
+
+/** The old customer each record of a gym was, at a merge in Square (0167; ROADMAP 18d-iii-b-ii-b-ii-a, round one): a
+ *  payment under it is that record's; only an old id no record here was is read as the customer it is now. */
+export const gymSquareOldCustomers = pgTable(
+  "gym_square_old_customers",
+  {
+    gymId: uuid("gym_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_old_customers_pk", columns: [t.gymId, t.environment, t.accountId, t.customerId, t.entryId] }),
+    foreignKey({ name: "gym_square_old_customers_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+    check("gym_square_old_customers_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_old_customers_ids_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+  ],
+);
+
+/** Each old id of a Square account's customer and the customer Square merged it into (0167; ROADMAP
+ *  18d-iii-b-ii-b-ii-a): a payment taken under an old id still finds its member. One step always reaches the
+ *  newest: a merge of a merged customer rewrites the older rows. */
+export const gymSquareCustomerMerges = pgTable(
+  "gym_square_customer_merges",
+  {
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    fromCustomerId: text("from_customer_id").notNull(),
+    toCustomerId: text("to_customer_id").notNull(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_customer_merges_pk", columns: [t.environment, t.accountId, t.fromCustomerId] }),
+    check("gym_square_customer_merges_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_square_customer_merges_ids_check",
+      sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.fromCustomerId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.toCustomerId} ~ '^[A-Za-z0-9_-]{1,64}$' AND ${t.fromCustomerId} <> ${t.toCustomerId}`,
+    ),
+    index("gym_square_customer_merges_to_idx").on(t.environment, t.accountId, t.toCustomerId),
   ],
 );

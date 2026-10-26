@@ -113,6 +113,9 @@ export const squareCustomerAnswerSchema = z.object({
     nickname: z.string().max(300).nullish(),
     email_address: z.string().max(320).nullish(),
     phone_number: z.string().max(40).nullish(),
+    reference_id: z.string().max(255).nullish(),
+    /** `MERGE`: a customer Square made by merging others (18d-iii-b-ii-b-ii-a). */
+    creation_source: z.string().max(60).nullish(),
   }),
 });
 export type SquareCustomer = z.infer<typeof squareCustomerAnswerSchema>["customer"];
@@ -340,8 +343,14 @@ export const squareCustomerSchema = z.object({
   email_address: z.string().max(320).nullish(),
   phone_number: z.string().max(40).nullish(),
   reference_id: z.string().max(255).nullish(),
+  creation_source: z.string().max(60).nullish(),
 });
 export type SquareCustomerFound = z.infer<typeof squareCustomerSchema>;
+
+/** A customer Square made by merging others (the business, or Square by itself): its reference id is one of
+ *  theirs and says nothing of whose it now is (18d-iii-b-ii-b-ii-a). Square's pages name it `MERGE` and
+ *  `MERGED`; both are read. */
+export const squareMadeByMerge = (c: { creation_source?: string | null | undefined }): boolean => c.creation_source === "MERGE" || c.creation_source === "MERGED";
 
 /** ListCustomers' and SearchCustomers' answer: at most 100 a page ("advisory" for a search, so a few
  *  more are allowed), each read on its own; `cursor` while there are more. */
