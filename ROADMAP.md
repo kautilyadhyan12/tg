@@ -511,6 +511,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
 18. **Live updates** (Kd, 2026-10-24, `rulings/2026-10-24-18u-ii-b.md`): one open line from each console tab on screen, kept apart from the servers that load pages; when something changes, the server tells that gym's open tabs what to read again, through the normal checked route; the 30-second checks go. Web folder 2, straight after 18u-ii-b (split 2026-10-24: two terminals).
     - 18-i. [x] **The open line, and a person's page** · merged 2026-10-25 · PR #358
     - 18-ii. [x] **The check-in log and the Leaderboard on the open line** · merged 2026-10-25 · PR #360
+    - 18-iii. [ ] **The two extra passes' fixes** (security and data integrity over 18-i and 18-ii; Risky).
 
 19. [ ] **The real site under heavy load, before launch** (Kd, 2026-10-24): the live server tested with thousands of pretend staff and members at once, at launch size, then 10 and 100 times it; more than one api server; alarms when answers slow down. After item 1.
 

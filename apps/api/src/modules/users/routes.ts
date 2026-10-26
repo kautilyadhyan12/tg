@@ -131,7 +131,7 @@ export function registerUserRoutes(
       if (nameChanged) tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
       // Hide me changed here: the leaderboards read again, as `PUT /v1/users/me/leaderboard` tells them.
       if (optOutChanged) tellMembersLeaderboards(deps.sql, deps.news, app.log, authedUserId(req));
-      return reply.status(200).send({ user });
+      return await reply.status(200).send({ user });
     } finally {
       if (!counted.changed && sendsShown(req.body)) await giveBackRateLimit(shownChangesOpts, req);
     }
@@ -163,7 +163,7 @@ export function registerUserRoutes(
       // is shown to a gym.
       counted.changed = fitnessProfile.age !== seen.ageBefore;
       if (counted.changed) tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
-      return reply.status(200).send({ fitnessProfile });
+      return await reply.status(200).send({ fitnessProfile });
     } finally {
       if (!counted.changed) await giveBackRateLimit(shownChangesOpts, req);
     }

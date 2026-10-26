@@ -644,7 +644,9 @@ d("live updates: the console's open line (real Postgres)", () => {
       for (const [i, entryId] of people.entries()) {
         const body = JSON.stringify({ requestKey: nextForm(), typeId: a.typeId, startsOn: "2026-10-15", paid: true, method: "cash", priceMinor: 60000, totalMinor: 60000 });
         const socket = rawRequest(base, "POST", heldUrl(a.gymId, entryId), { ...lineHeaders(a.owner.cookies), "content-type": "application/json" }, body);
-        await new Promise<void>((resolve) => socket.once("ready", resolve).once("error", () => resolve()));
+        await new Promise<void>((resolve) => socket.once("ready", resolve).once("error", () => {
+          resolve();
+        }));
         await pause([5, 20, 40][i] ?? 5);
         socket.destroy();
         await until(() => line.messages.length === i + 2, 5_000);
