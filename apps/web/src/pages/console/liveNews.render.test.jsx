@@ -78,8 +78,73 @@ afterEach(() => {
   configureLive({ on: false });
 });
 
+/** A refresh refused by the server: the sign-in is really gone. */
+const signInGone = () => Object.assign(new Error('Request failed with status code 401'), { response: { status: 401 } });
+/** A refresh that never reached the server: the desk's wi-fi dropped for a moment. */
+const blip = () => Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK' });
+
+describe('the front desk is never left on a log that has stopped', () => {
+  it('a sign-in refresh lost to a blip as the line reopens is tried again, the line opens and the next check-in is heard', async () => {
+    // The line ends when the sign-in runs out (401); the refresh fails once (no network); the next
+    // try refreshes and opens.
+    answers = [{ status: 200 }, { status: 401 }, { status: 401 }, { status: 200 }];
+    refreshSession.mockRejectedValueOnce(blip()).mockResolvedValue({});
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => calls.length === 1);
+    calls[0].write(frame({ what: 'ready' }));
+    await pause(2_100);
+    calls[0].end();
+    await until(() => calls.length === 4, 8_000);
+    calls[3].write(frame({ what: 'ready' }));
+    calls[3].write(frame({ what: 'visits', change: 'added' }));
+    await until(() => heard.some((m) => m.what === 'visits'));
+    expect(refreshSession).toHaveBeenCalledTimes(2);
+    // One blip is not said; the page read again when the new line opened.
+    expect(heard).toEqual([{ what: 'ready' }, { what: 'ready' }, { what: 'visits', change: 'added' }]);
+    stop();
+  }, 15_000);
+
+  it('a refresh that fails twice in a row is said, so the page checks for itself until the line is back', async () => {
+    answers = [{ status: 401 }, { status: 401 }, { status: 401 }, { status: 200 }];
+    refreshSession.mockRejectedValueOnce(blip()).mockRejectedValueOnce(blip()).mockResolvedValue({});
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => heard.length === 1, 5_000);
+    expect(heard).toEqual([{ what: 'refused', message: LIVE_WORDS.unreachable }]);
+    await until(() => calls.length === 4, 8_000);
+    calls[3].write(frame({ what: 'ready' }));
+    await until(() => heard.length === 2);
+    expect(heard.at(-1)).toEqual({ what: 'ready' });
+    stop();
+  }, 15_000);
+
+  it('a sign-in that is really gone is said, so the page checks and its own read takes them to sign in; no more lines are asked for', async () => {
+    answers = [{ status: 401 }];
+    refreshSession.mockRejectedValue(signInGone());
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => heard.length === 1);
+    expect(heard).toEqual([{ what: 'refused', message: LIVE_WORDS.unreachable }]);
+    await pause(1_500);
+    expect(calls).toHaveLength(1);
+    stop();
+  });
+
+  it('a 401 again just after a refresh that worked is said too, never a silent stop', async () => {
+    answers = [{ status: 401 }, { status: 401 }];
+    refreshSession.mockResolvedValue({});
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => heard.length === 1);
+    expect(heard).toEqual([{ what: 'refused', message: LIVE_WORDS.unreachable }]);
+    expect(calls).toHaveLength(2);
+    stop();
+  });
+});
+
 describe('the open line', () => {
-  it('is one line a gym, with the sign-in cookie; each part hears its own gym only, and the first ready is not news', async () => {
+  it("is one line a gym, with the sign-in cookie; each part hears its own gym only, and the line's first ready too", async () => {
     const first = [];
     const second = [];
     const other = [];
@@ -90,8 +155,10 @@ describe('the open line', () => {
     const line = open(GYM)[0];
     line.write(frame({ what: 'ready' }));
     line.write(frame({ what: 'memberships', entryId: MAYA }));
-    await until(() => first.length === 1 && second.length === 1);
-    expect(first).toEqual([{ what: 'memberships', entryId: MAYA }]);
+    await until(() => first.length === 2 && second.length === 2);
+    // The page's own first read was answered before the line opened: what changed in between is
+    // read on this first ready.
+    expect(first).toEqual([{ what: 'ready' }, { what: 'memberships', entryId: MAYA }]);
     expect(second).toEqual(first);
     expect(other).toEqual([]);
     stops.forEach((stop) => stop());
@@ -111,9 +178,9 @@ describe('the open line', () => {
     const whole = frame({ what: 'memberships', entryId: MAYA });
     line.write(whole.slice(0, 12));
     line.write(whole.slice(12));
-    await until(() => heard.length === 1);
+    await until(() => heard.length === 2);
     await pause(50);
-    expect(heard).toEqual([{ what: 'memberships', entryId: MAYA }]);
+    expect(heard).toEqual([{ what: 'ready' }, { what: 'memberships', entryId: MAYA }]);
     stop();
   });
 
@@ -129,11 +196,11 @@ describe('the open line', () => {
     await pause(50);
     expect(calls).toHaveLength(1);
     setScreen('visible');
-    expect(heard).toEqual([{ what: 'cameBack' }]);
+    expect(heard).toEqual([{ what: 'ready' }, { what: 'cameBack' }]);
     await until(() => calls.length === 2);
     calls[1].write(frame({ what: 'ready' }));
-    await until(() => heard.length === 2);
-    expect(heard).toEqual([{ what: 'cameBack' }, { what: 'ready' }]);
+    await until(() => heard.length === 3);
+    expect(heard).toEqual([{ what: 'ready' }, { what: 'cameBack' }, { what: 'ready' }]);
     stop();
   });
 
@@ -147,10 +214,10 @@ describe('the open line', () => {
     await pause(30);
     setScreen('visible');
     await pause(200);
-    expect([calls.length, calls[0].aborted, heard]).toEqual([1, false, []]);
+    expect([calls.length, calls[0].aborted, heard]).toEqual([1, false, [{ what: 'ready' }]]);
     // News that came while it was covered is still heard.
     calls[0].write(frame({ what: 'memberships', entryId: MAYA }));
-    await until(() => heard.length === 1);
+    await until(() => heard.length === 2);
     stop();
   });
 
@@ -168,8 +235,9 @@ describe('the open line', () => {
     setScreen('visible');
     await until(() => calls.length === 2);
     calls[1].write(frame({ what: 'ready' }));
-    await until(() => later.length === 2 && first.length === 2);
+    await until(() => later.length === 2 && first.length === 3);
     expect(later).toEqual([{ what: 'cameBack' }, { what: 'ready' }]);
+    expect(first).toEqual([{ what: 'ready' }, { what: 'cameBack' }, { what: 'ready' }]);
     stopFirst();
     stopLater();
   });
@@ -201,16 +269,7 @@ describe('the open line', () => {
     again();
   });
 
-  it('a sign-in that cannot be refreshed, or a gym where they are not staff, is not asked again', async () => {
-    answers = [{ status: 401 }];
-    refreshSession.mockRejectedValue(new Error('gone'));
-    const stop = listenLive(GYM, () => {});
-    await until(() => calls.length === 1);
-    await pause(1_500);
-    expect(calls).toHaveLength(1);
-    stop();
-
-    calls = [];
+  it('a gym where they are not staff is not asked again', async () => {
     answers = [{ status: 404 }];
     const notStaff = listenLive(OTHER_GYM, () => {});
     await until(() => calls.length === 1);
@@ -228,6 +287,10 @@ describe('the open line', () => {
     expect(calls).toHaveLength(1);
     expect(heard).toEqual([{ what: 'refused', message: LIVE_WORDS.lines_full }]);
     await until(() => calls.length === 2, 2_000);
+    // The line it was refused opens: the page hears ready, clears its words and stops checking.
+    calls[1].write(frame({ what: 'ready' }));
+    await until(() => heard.length === 2);
+    expect(heard.at(-1)).toEqual({ what: 'ready' });
     stop();
   });
 
@@ -261,8 +324,8 @@ describe('the open line', () => {
     stop();
   });
 
-  it("a line refused in the server's own words says them, and staff coming back to the tab read again", async () => {
-    answers = [{ status: 429, json: { error: 'too_many_lines', message: LIVE_WORDS.too_many_lines } }];
+  it("a line refused in the server's own words says them, and staff coming back to the tab read again; once another window is closed the line opens and the page hears it", async () => {
+    answers = [{ status: 429, json: { error: 'too_many_lines', message: LIVE_WORDS.too_many_lines } }, { status: 200 }];
     const heard = [];
     const stop = listenLive(GYM, (m) => heard.push(m));
     await until(() => heard.length === 1);
@@ -270,6 +333,10 @@ describe('the open line', () => {
     setScreen('hidden');
     setScreen('visible');
     expect(heard.at(-1)).toEqual({ what: 'cameBack' });
+    await until(() => calls.length === 2, 3_000);
+    calls[1].write(frame({ what: 'ready' }));
+    await until(() => heard.length === 3);
+    expect(heard.at(-1)).toEqual({ what: 'ready' });
     stop();
   });
 

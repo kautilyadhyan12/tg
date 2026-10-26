@@ -93,17 +93,26 @@ export async function getProfile(sql: Sql, userId: string): Promise<ProfileRow |
  *  of the history (`recordTypedWeight`). NO KEY UPDATE for the reason
  *  `patchOnboarding` records: plain FOR UPDATE would make every foreign-key
  *  check on this person (a meal, a workout, a weigh-in) wait behind the save. */
+/** What a gym shows of a person, as it was before a save: read under the save's own lock, so two
+ *  saves at once each compare with what the other left. */
+export interface ShownBefore {
+  displayName: string;
+  leaderboardOptOut: boolean;
+}
+
 export async function updateProfile(
   sql: Sql,
   userId: string,
   patch: UpdateProfileRequest,
+  onBefore?: (before: ShownBefore) => void,
 ): Promise<ProfileRow | null> {
   return await sql.begin(async (tx) => {
-    const prevRows = await tx<{ id: string }[]>`
-      SELECT id FROM users
+    const prevRows = await tx<{ id: string; display_name: string; leaderboard_opt_out: boolean }[]>`
+      SELECT id, display_name, leaderboard_opt_out FROM users
       WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     const prev = prevRows[0];
     if (prev === undefined) return null;
+    onBefore?.({ displayName: prev.display_name, leaderboardOptOut: prev.leaderboard_opt_out });
 
     // Fixed field→column map; only keys PRESENT in the parsed patch are set.
     const cols: Record<string, string | number | boolean | null> = {};
@@ -263,13 +272,16 @@ export async function upsertFitnessProfile(
   userId: string,
   input: FitnessProfileWrite,
   verify?: (saved: OnboardingRow, tx: SqlOrTx, wasCompleted: boolean) => Promise<void> | void,
+  /** The age before this save, read under its lock (see `ShownBefore`). */
+  onAgeBefore?: (age: number | null) => void,
 ): Promise<FitnessProfileRow | null> {
   return await sql.begin(async (tx) => {
     const active = await tx<{ id: string }[]>`
       SELECT id FROM users WHERE id = ${userId} AND status = 'active' FOR NO KEY UPDATE`;
     if (active[0] === undefined) return null;
-    const before = await tx<{ onboarding_completed: boolean }[]>`
-      SELECT onboarding_completed FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    const before = await tx<{ onboarding_completed: boolean; age: number | null }[]>`
+      SELECT onboarding_completed, age FROM user_fitness_profiles WHERE user_id = ${userId}`;
+    onAgeBefore?.(before[0]?.age ?? null);
 
     const rows = await tx<FitnessProfileDbRow[]>`
       INSERT INTO user_fitness_profiles
@@ -625,6 +637,8 @@ export async function getSyncContext(sql: Sql, userId: string): Promise<UserSync
 export interface DeletedUserRow {
   email: string | null;
   displayName: string;
+  /** The gyms whose membership this deletion ended. */
+  leftGymIds: string[];
 }
 
 /** Part 4 §5.2 Day 0, users-owned part, one transaction: soft-delete the row,
@@ -739,7 +753,7 @@ export async function softDeleteUser(
                 ${tx.json({ role: ended.role, removedWith: "account_deleted", ...sessions })})`;
     }
     await tx`DELETE FROM push_tokens WHERE user_id = ${userId}`;
-    return { email: row.email, displayName: row.display_name };
+    return { email: row.email, displayName: row.display_name, leftGymIds: closed.map((c) => c.gym_id) };
   });
 }
 

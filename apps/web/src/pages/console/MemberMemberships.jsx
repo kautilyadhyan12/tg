@@ -251,12 +251,15 @@ export default function MemberMemberships({
    *  news is compared with (Stage 4 item 18), so news that comes before the page has drawn the
    *  first answer still knows what changed. */
   const lastAnswer = useRef(null);
+  /** Numbers each read of the memberships, the first one too: only the newest asked is drawn. */
+  const readSeq = useRef(0);
 
   useEffect(() => {
     let live = true;
+    const asked = ++readSeq.current;
     orgService.getHeldMemberships(gymId, entryId).then(
       (res) => {
-        if (!live) return;
+        if (!live || readSeq.current !== asked) return;
         lastAnswer.current = JSON.stringify({ entryId, ...res.data });
         setHeld({ entryId, ...res.data });
       },
@@ -292,7 +295,6 @@ export default function MemberMemberships({
   // this page and it reads them again, quietly; and again when its line opens after being away, or
   // when staff come back to a tab that had no line. An answer that changed tells the person's page
   // and the Members list behind it too, as a change made here does, so the two never disagree.
-  const readSeq = useRef(0);
   /** What is on screen: a save made here is drawn already, and its own news changes nothing. */
   const shownNow = useRef(null);
   useEffect(() => {

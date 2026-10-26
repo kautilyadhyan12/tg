@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Sql } from "postgres";
 import { z } from "zod";
 import { onboardingQuerySchema } from "@app/shared";
-import { createDualRateLimit } from "../auth/rateLimit.js";
+import { createDualRateLimit, giveBackRateLimit, type DualRateLimitOptions } from "../auth/rateLimit.js";
 import type { AppConfig } from "../../config.js";
 import type { RedisLike } from "../../redis.js";
 import { DPDP_RETENTION_DAYS } from "../../retention.js";
@@ -26,7 +26,6 @@ import {
 } from "./schemas.js";
 import * as service from "./service.js";
 import { tellGyms, tellMembersGyms, tellMembersLeaderboards, type LiveNewsSender } from "../live/news.js";
-import { gymsOfMember } from "../live/repo.js";
 
 /** Zod-parse a body; 400 with issue paths/codes only — never echo values (R3.10). */
 function parseBody<T>(schema: z.ZodType<T>, req: FastifyRequest, reply: FastifyReply): T | null {
@@ -94,22 +93,48 @@ export function registerUserRoutes(
     return reply.status(200).send({ user });
   });
 
-  app.patch("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const patch = parseBody(updateProfileRequestSchema, req, reply);
-    if (patch === null) return;
-    // What a gym shows, before, when it is sent: only a change is news to the person's gyms.
-    const shown = patch.displayName !== undefined || patch.leaderboardOptOut !== undefined;
-    const before = shown ? await service.getProfile(usersDeps, authedUserId(req)) : null;
-    const user = await service.updateProfile(usersDeps, authedUserId(req), patch);
-    // A name changed: the gyms that show it (the check-in log, Who came, the Leaderboard) read again.
-    if (before !== null && user.displayName !== before.displayName) {
-      tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+  // A change a gym shows (a name, Hide me, an age) makes every staff window of the person's gyms
+  // read again, so a person may make 30 of them an hour. A save that changes none of them, or is
+  // refused, is given back. The address is not counted: a gym's members share its wi-fi.
+  const shownChangesOpts: DualRateLimitOptions = {
+    name: "users_shown_changes",
+    max: 30,
+    ipMax: null,
+    windowMs: 60 * 60 * 1000,
+    identifier: (req) => req.authUser?.id ?? null,
+    redis: deps.redis,
+    message: "You've changed your name or profile many times in the last hour. Please try again later.",
+  };
+  const shownChangesLimit = createDualRateLimit(shownChangesOpts);
+  const sendsShown = (body: unknown): boolean =>
+    typeof body === "object" && body !== null && ("displayName" in body || "leaderboardOptOut" in body);
+  const profileLimit = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (sendsShown(req.body)) await shownChangesLimit(req, reply);
+  };
+
+  app.patch("/v1/users/me", { preHandler: [app.authenticate, profileLimit] }, async (req, reply) => {
+    const counted = { changed: false };
+    try {
+      const patch = parseBody(updateProfileRequestSchema, req, reply);
+      if (patch === null) return;
+      // What a gym shows, as it was, read under the save's own lock: only a change is news to the
+      // person's gyms.
+      const seen: { was: { displayName: string; leaderboardOptOut: boolean } | null } = { was: null };
+      const user = await service.updateProfile(usersDeps, authedUserId(req), patch, (before) => {
+        seen.was = before;
+      });
+      const was = seen.was;
+      const nameChanged = was !== null && user.displayName !== was.displayName;
+      const optOutChanged = was !== null && user.leaderboardOptOut !== was.leaderboardOptOut;
+      counted.changed = nameChanged || optOutChanged;
+      // A name changed: the gyms that show it (the check-in log, Who came, the Leaderboard) read again.
+      if (nameChanged) tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+      // Hide me changed here: the leaderboards read again, as `PUT /v1/users/me/leaderboard` tells them.
+      if (optOutChanged) tellMembersLeaderboards(deps.sql, deps.news, app.log, authedUserId(req));
+      return reply.status(200).send({ user });
+    } finally {
+      if (!counted.changed && sendsShown(req.body)) await giveBackRateLimit(shownChangesOpts, req);
     }
-    // Hide me changed here: the leaderboards read again, as `PUT /v1/users/me/leaderboard` tells them.
-    if (before !== null && user.leaderboardOptOut !== before.leaderboardOptOut) {
-      tellMembersLeaderboards(deps.sql, deps.news, app.log, authedUserId(req));
-    }
-    return reply.status(200).send({ user });
   });
 
   // onboarding/fitness profile (onboarding-storage card). Tenancy as above: no
@@ -123,18 +148,25 @@ export function registerUserRoutes(
   // body twice yields the same row, so no Idempotency-Key is needed (R3.5).
   // A body that FINISHES setup while an answer is still open is refused with
   // the onboarding PATCH's own 409 and its list (service `putFitnessProfile`).
-  app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate] }, async (req, reply) => {
-    const body = parseBody(putFitnessProfileRequestSchema, req, reply);
-    if (body === null) return;
-    // The whole profile is replaced, so an age left out becomes none: the age is compared every time.
-    const ageBefore = (await service.getFitnessProfile(usersDeps, authedUserId(req))).age;
-    const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body);
-    // An age changed: whether the leaderboards may show them can change with it. Nothing else here is
-    // shown to a gym.
-    if (fitnessProfile.age !== ageBefore) {
-      tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+  app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate, shownChangesLimit] }, async (req, reply) => {
+    const counted = { changed: false };
+    try {
+      const body = parseBody(putFitnessProfileRequestSchema, req, reply);
+      if (body === null) return;
+      // The whole profile is replaced, so an age left out becomes none: the age is compared every
+      // time, with the age read under the save's own lock.
+      const seen: { ageBefore: number | null } = { ageBefore: null };
+      const fitnessProfile = await service.putFitnessProfile(usersDeps, authedUserId(req), body, (age) => {
+        seen.ageBefore = age;
+      });
+      // An age changed: whether the leaderboards may show them can change with it. Nothing else here
+      // is shown to a gym.
+      counted.changed = fitnessProfile.age !== seen.ageBefore;
+      if (counted.changed) tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
+      return reply.status(200).send({ fitnessProfile });
+    } finally {
+      if (!counted.changed) await giveBackRateLimit(shownChangesOpts, req);
     }
-    return reply.status(200).send({ fitnessProfile });
   });
 
   // Onboarding v2 (ROADMAP 4a): the answers so far and the plan they make.
@@ -252,10 +284,9 @@ export function registerUserRoutes(
   app.delete("/v1/users/me", { preHandler: [app.authenticate] }, async (req, reply) => {
     const input = parseBody(deleteAccountRequestSchema, req, reply);
     if (input === null) return;
-    // The gyms are read before the account goes: afterwards it belongs to none.
-    const gyms = await gymsOfMember(deps.sql, authedUserId(req)).catch(() => []);
-    const { emailSent } = await service.deleteAccount(usersDeps, authedUserId(req), input.code);
-    tellGyms(deps.news, gyms, { what: "people" });
+    // The gyms the deletion itself took the person out of, a gym joined in that same instant too.
+    const { emailSent, leftGymIds } = await service.deleteAccount(usersDeps, authedUserId(req), input.code);
+    tellGyms(deps.news, leftGymIds, { what: "people" });
     // T3 2026-07-11 finding 6: don't promise an email that wasn't sent
     // (OAuth-only accounts have no address; sender may also have failed).
     // The number is interpolated from src/retention.ts, never restated: if

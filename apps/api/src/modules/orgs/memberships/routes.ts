@@ -213,7 +213,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
   // A change saved to a person's memberships tells the gym's open lines to read them again
   // (ROADMAP Stage 4 item 18): whoever has their page open sees it without a refresh.
   const tellMemberships = tellMembershipsAfter(deps.news);
-  const heldGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)], onResponse: tellMemberships };
+  const heldGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, heldLimit)], onSend: tellMemberships };
   const heldUrl = "/v1/orgs/:gymId/member-list/entries/:entryId/memberships";
 
   app.get(heldUrl, { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -316,7 +316,7 @@ export function registerMembershipRoutes(app: FastifyInstance, deps: MembershipR
     identifier: (req) => req.authUser?.id ?? null,
     redis: deps.redis,
   });
-  const paymentGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, paymentLimit)], onResponse: tellMemberships };
+  const paymentGuarded = { preHandler: [app.authenticate, staffOnly(deps.sql, paymentLimit)], onSend: tellMemberships };
 
   app.post(`${heldUrl}/:membershipId/payments`, paymentGuarded, async (req, reply) => {
     const params = parseOr400(heldMembershipParamsSchema, req.params, req, reply);
