@@ -388,6 +388,19 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
     referenceId: person.entryId,
   });
   if (result.kind !== "ok") {
+    // The key asked with another body: Members in Square made, or is making, this customer with the person's
+    // phone as well (18d-iii-b-ii-b-i). The customer Square made carries the record's id as its reference: found
+    // by it and written; not found yet, this save is tried again (round one, High 2).
+    if (result.kind === "refused" && result.code === "IDEMPOTENCY_KEY_REUSED") {
+      const found = await ready.square.api.searchCustomers(ready.token, { referenceId: person.entryId });
+      const made = found.kind === "ok" ? found.value.customers.filter((c) => c.reference_id === person.entryId).sort((x, y) => (x.id < y.id ? -1 : 1))[0] : undefined;
+      if (made === undefined) throw unavailable();
+      if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, made.id)) return made.id;
+      const now = await cards.claimCustomer(deps.sql, key, randomUUID());
+      if ("customerId" in now) return now.customerId;
+      await cards.finishCustomer(deps.sql, key, now.makingKey, made.id);
+      return made.id;
+    }
     if (result.kind === "refused") {
       deps.log.warn({ event: "square.customer_refused", gymId, status: result.status, code: result.code }, "Square refused a customer");
       await cards.abandonCustomer(deps.sql, key, claimed.makingKey);

@@ -524,6 +524,10 @@ export const USER_LINKED_NOT_PURGED_TABLES = [
   // on gym_payment_connections' footing: the gym's record; `ON DELETE set null`. A Terminal is
   // the gym's device, named by Square's serial number; nothing in the row is about a person.
   "gym_square_terminals",
+  // gym_square_member_runs.started_by — which owner pressed Add members to Square (`0166`;
+  // 18d-iii-b-ii-b-i), on gym_payment_connections' footing: the gym's record; `ON DELETE set null`.
+  // The row says where the gym's check of its Square customer list stands, never anybody's details.
+  "gym_square_member_runs",
   // gym_member_cards.saved_by — who saved a person's card on file, a member of staff at the desk
   // or the member in the app (`0144`; 18d-ii), on gym_leads' footing: the gym's record; `ON
   // DELETE set null`. The card is a record's, not an account's, and holds no card number:

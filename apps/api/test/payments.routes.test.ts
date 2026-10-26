@@ -174,6 +174,9 @@ function fakeSquare() {
     listPayments: () => Promise.resolve(unavailable),
     retrieveOrder: () => Promise.resolve(unavailable),
     listTaxes: () => Promise.resolve(unavailable),
+    listCustomers: () => Promise.resolve(unavailable),
+    searchCustomers: () => Promise.resolve(unavailable),
+    searchSubscriptions: () => Promise.resolve(unavailable),
   };
   /** The gym signs in at Square as this account and presses Allow: Square hands back a code. */
   const allow = (account: Account): string => {

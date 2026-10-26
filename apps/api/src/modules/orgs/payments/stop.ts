@@ -11,6 +11,7 @@ import { insertAudit } from "../repo.js";
 import * as repo from "./repo.js";
 import type { PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
+import { forgetListing } from "./squareMembersRepo.js";
 
 export interface StoppedAccount {
   accountId: string;
@@ -51,6 +52,7 @@ export async function stopSquare(deps: PaymentsDeps, square: SquareSettings, gym
     for (const holder of holders) {
       await deps.sql.begin(async (tx) => {
         if (!(await repo.markRemoved(tx, holder.gymId, square.environment, holder.connectedAt, deps.now()))) return;
+        await forgetListing(tx, holder.gymId, square.environment);
         await insertAudit(tx, {
           actorUserId: null,
           gymId: holder.gymId,

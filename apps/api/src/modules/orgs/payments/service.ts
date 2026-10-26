@@ -47,6 +47,7 @@ import type { SquareSettings } from "./settings.js";
 import { SQUARE_SCOPES } from "./square.js";
 import { anyWaitingIn } from "./terminalPaymentsRepo.js";
 import { anyChargingIn } from "./cardChargesRepo.js";
+import { forgetListing } from "./squareMembersRepo.js";
 import * as terminalsRepo from "./terminalsRepo.js";
 import type { TokenContext } from "./tokenBox.js";
 
@@ -97,8 +98,10 @@ export async function requireGymOwner(deps: PaymentsDeps, gymId: string, userId:
 
 /** What Square Terminals and the card on file need: every permission asked for before 18d-iii-b-i, whose
  *  Square Point of Sale asks for two of its own (what was sold, ORDERS_READ; the business's taxes,
- *  ITEMS_READ). A gym connected before then reconnects for Square Point of Sale alone. */
-const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => scope !== "ORDERS_READ" && scope !== "ITEMS_READ");
+ *  ITEMS_READ), and Members in Square one (Square's own subscriptions, SUBSCRIPTIONS_READ, 18d-iii-b-ii-b-i).
+ *  A gym connected before then reconnects for Square Point of Sale alone. */
+const POINT_OF_SALE_SCOPES: readonly string[] = ["ORDERS_READ", "ITEMS_READ", "SUBSCRIPTIONS_READ"];
+const TERMINAL_SCOPES: readonly string[] = SQUARE_SCOPES.filter((scope) => !POINT_OF_SALE_SCOPES.includes(scope));
 
 /** The connection allows less than Square Terminals need: the owner connects Square again. */
 export const missingScopes = (row: repo.ConnectionRow): boolean => TERMINAL_SCOPES.some((scope) => !row.scopes.includes(scope));
@@ -161,7 +164,7 @@ export async function readPayments(deps: PaymentsDeps, userId: string, gymId: st
       squareReady: deps.square !== null,
       square: connectionView(row, isOwner),
       terminals: deps.square === null ? null : await terminalsView(deps, deps.square, row, isOwner),
-      squareApp: row?.state === "connected" && row.locationId !== null ? { needsAllow: !readsOrders(row) || !readsItems(row) } : null,
+      squareApp: row?.state === "connected" && row.locationId !== null ? { needsAllow: POINT_OF_SALE_SCOPES.some((scope) => !row.scopes.includes(scope)) } : null,
     },
   });
 }
@@ -443,6 +446,7 @@ export async function disconnectSquare(deps: PaymentsDeps, userId: string, gymId
     if (await anyWaitingIn(tx, gymId, square.environment)) throw new OrgsError(409, "terminal_payment_waiting", TERMINAL_PAYMENT_WORDS.disconnect_waiting);
     if (await anyChargingIn(tx, gymId, square.environment)) throw new OrgsError(409, "card_charge_waiting", CARD_CHARGE_WORDS.disconnect_charging);
     await repo.deleteConnection(tx, gymId, square.environment);
+    await forgetListing(tx, gymId, square.environment);
     if (row.state !== "connected" || row.accessToken === null) return null;
     await insertAudit(tx, {
       actorUserId: userId,

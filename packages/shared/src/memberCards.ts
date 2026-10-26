@@ -62,7 +62,9 @@ export function cardAgreementWords(gymName: string): string {
 export function cardNameParts(fullName: string): { givenName: string; familyName: string } {
   const words = fullName.trim().split(/\s+/).filter((w) => w !== "");
   if (words.length <= 1) return { givenName: words[0] ?? "", familyName: "" };
-  return { givenName: words.slice(0, -1).join(" "), familyName: words[words.length - 1] ?? "" };
+  // A generation word stays with the family name: "John Smith Jr" is John, Smith Jr (18d-iii-b-ii-b-i).
+  const family = words.length >= 3 && /^(jr|sr|ii|iii|iv|junior|senior)\.?$/i.test(words[words.length - 1] ?? "") ? 2 : 1;
+  return { givenName: words.slice(0, -family).join(" "), familyName: words.slice(-family).join(" ") };
 }
 
 export const memberCardSchema = z

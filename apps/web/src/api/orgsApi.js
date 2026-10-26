@@ -87,6 +87,8 @@ import {
   gymWaiverResponseSchema,
   gymPaymentsResponseSchema,
   squareAppCheckResponseSchema,
+  squareMembersNamesResponseSchema,
+  squareMembersResponseSchema,
   squareConnectResponseSchema,
   squareFinishResponseSchema,
   squarePairResponseSchema,
@@ -688,6 +690,19 @@ export const orgService = {
   // Whether Square adds tax to amounts staff type in Square Point of Sale (18d-iii-b-i).
   getSquareAppCheck: (gymId) =>
     readThrough(squareAppCheckResponseSchema, 'your Square tax settings', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/app-check`)),
+  // Members in Square (18d-iii-b-ii-b-i): the box; the owner's check and Add; a group's names, a page at a time.
+  getSquareMembers: (gymId) =>
+    readThrough(squareMembersResponseSchema, 'your members in Square', authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members`)),
+  checkSquareMembers: (gymId) =>
+    readThrough(squareMembersResponseSchema, 'your members in Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members/check`)),
+  addSquareMembers: (gymId, runId) =>
+    readThrough(squareMembersResponseSchema, 'your members in Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members/add`, { runId })),
+  getSquareMembersNames: (gymId, group, from = 0) =>
+    readThrough(
+      squareMembersNamesResponseSchema,
+      'your members in Square',
+      authApi.get(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/members/names`, { params: { group, from } }),
+    ),
   connectSquare: (gymId) =>
     readThrough(squareConnectResponseSchema, 'Square', authApi.post(`/v1/orgs/${encodeURIComponent(gymId)}/payments/square/connect`)),
   finishSquare: (answer) => readThrough(squareFinishResponseSchema, 'Square', authApi.post('/v1/payments/square/finish', answer)),

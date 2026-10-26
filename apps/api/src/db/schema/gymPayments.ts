@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, check, date, foreignKey, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { citext, createdAt } from "./common.js";
 import { users } from "./identity.js";
 import { gymMemberListEntries } from "./memberList.js";
@@ -119,6 +119,8 @@ export const gymSquareCustomers = pgTable(
     accountId: text("account_id").notNull(),
     customerId: text("customer_id"),
     makingKey: uuid("making_key"),
+    /** Linked to a customer Square already had (0166; ROADMAP 18d-iii-b-ii-b-i), not one the app made. */
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
@@ -705,5 +707,107 @@ export const gymSquarePaymentSweeps = pgTable(
       sql`(${t.stuckPaymentId} IS NULL) = (${t.stuckSince} IS NULL) AND (${t.stuckPaymentId} IS NULL OR ${t.stuckPaymentId} ~ '^[A-Za-z0-9_-]{1,192}$')`,
     ),
     index("gym_square_payment_sweeps_due_idx").on(t.dueAt),
+  ],
+);
+
+/** Members in Square (0166; ROADMAP 18d-iii-b-ii-b-i): the owner's check of the gym's Square customer list
+ *  and where it stands, and, once members were added, `automatic`: each new member is added by itself. */
+export const gymSquareMemberRuns = pgTable(
+  "gym_square_member_runs",
+  {
+    gymId: uuid("gym_id")
+      .notNull()
+      .references(() => gyms.id, { onDelete: "cascade" }),
+    environment: text("environment").notNull(),
+    accountId: text("account_id").notNull(),
+    runId: uuid("run_id").notNull(),
+    state: text("state").notNull(),
+    automatic: boolean("automatic").notNull().default(false),
+    startedBy: uuid("started_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    cursor: text("cursor"),
+    looked: integer("looked").notNull().default(0),
+    listedAt: timestamp("listed_at", { withTimezone: true }),
+    listedUpto: bigint("listed_upto", { mode: "number" }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    addedAt: timestamp("added_at", { withTimezone: true }),
+    failure: text("failure"),
+    unansweredAt: timestamp("unanswered_at", { withTimezone: true }),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    listVersion: bigint("list_version", { mode: "number" }),
+    lookDueAt: timestamp("look_due_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_member_runs_pk", columns: [t.gymId, t.environment] }),
+    check("gym_square_member_runs_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check("gym_square_member_runs_account_check", sql`${t.accountId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check("gym_square_member_runs_state_check", sql`${t.state} IN ('checking','checked','adding','added','failed')`),
+    check(
+      "gym_square_member_runs_failure_check",
+      sql`(${t.state} = 'failed') = (${t.failure} IS NOT NULL) AND (${t.failure} IS NULL OR ${t.failure} IN ('square_refused','square_unauthorized'))`,
+    ),
+    check("gym_square_member_runs_checked_check", sql`${t.state} NOT IN ('checked','adding','added') OR ${t.checkedAt} IS NOT NULL`),
+    check("gym_square_member_runs_added_check", sql`NOT ${t.automatic} OR ${t.addedAt} IS NOT NULL`),
+    check("gym_square_member_runs_cursor_check", sql`(${t.cursor} IS NULL OR char_length(${t.cursor}) BETWEEN 1 AND 2048) AND ${t.looked} >= 0`),
+    index("gym_square_member_runs_work_idx").on(t.environment).where(sql`${t.state} IN ('checking','adding') OR ${t.automatic}`),
+  ],
+);
+
+/** While a check reads Square (0166): the customers sharing an email or a phone with a record here, or
+ *  naming one of its records as their reference, and nobody else's; removed once the check has decided. */
+export const gymSquareMemberCandidates = pgTable(
+  "gym_square_member_candidates",
+  {
+    gymId: uuid("gym_id").notNull(),
+    environment: text("environment").notNull(),
+    runId: uuid("run_id").notNull(),
+    customerId: text("customer_id").notNull(),
+    givenName: text("given_name"),
+    familyName: text("family_name"),
+    email: text("email"),
+    phoneE164: text("phone_e164"),
+    referenceId: text("reference_id"),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_member_candidates_pk", columns: [t.gymId, t.environment, t.runId, t.customerId] }),
+    foreignKey({ name: "gym_square_member_candidates_run_fk", columns: [t.gymId, t.environment], foreignColumns: [gymSquareMemberRuns.gymId, gymSquareMemberRuns.environment] }).onDelete("cascade"),
+    check("gym_square_member_candidates_ids_check", sql`${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$'`),
+    check(
+      "gym_square_member_candidates_text_check",
+      sql`(${t.givenName} IS NULL OR char_length(${t.givenName}) <= 300) AND (${t.familyName} IS NULL OR char_length(${t.familyName}) <= 300) AND (${t.email} IS NULL OR char_length(${t.email}) <= 320) AND (${t.phoneE164} IS NULL OR ${t.phoneE164} ~ '^\\+[1-9][0-9]{6,14}$') AND (${t.referenceId} IS NULL OR char_length(${t.referenceId}) <= 255)`,
+    ),
+  ],
+);
+
+/** What a check decided for each record not yet in Square (0166), and what adding did. */
+export const gymSquareMemberPlan = pgTable(
+  "gym_square_member_plan",
+  {
+    gymId: uuid("gym_id").notNull(),
+    environment: text("environment").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    runId: uuid("run_id").notNull(),
+    decision: text("decision").notNull(),
+    customerId: text("customer_id"),
+    digest: text("digest").notNull(),
+    billed: boolean("billed").notNull().default(false),
+    lookedAt: timestamp("looked_at", { withTimezone: true }).notNull(),
+    outcome: text("outcome"),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ name: "gym_square_member_plan_pk", columns: [t.gymId, t.environment, t.entryId] }),
+    foreignKey({ name: "gym_square_member_plan_entry_fk", columns: [t.gymId, t.entryId], foreignColumns: [gymMemberListEntries.gymId, gymMemberListEntries.id] }).onDelete("cascade"),
+    check("gym_square_member_plan_environment_check", sql`${t.environment} IN ('sandbox','production')`),
+    check(
+      "gym_square_member_plan_decision_check",
+      sql`${t.decision} IN ('ours','link','add','several_customers','several_people') AND (${t.decision} IN ('ours','link')) = (${t.customerId} IS NOT NULL) AND (${t.customerId} IS NULL OR ${t.customerId} ~ '^[A-Za-z0-9_-]{1,64}$')`,
+    ),
+    check("gym_square_member_plan_digest_check", sql`${t.digest} ~ '^[0-9a-f]{32}$'`),
+    check(
+      "gym_square_member_plan_outcome_check",
+      sql`(${t.outcome} IS NULL) = (${t.doneAt} IS NULL) AND (${t.outcome} IS NULL OR (${t.outcome} IN ('done','changed','refused') AND ${t.decision} IN ('ours','link','add')))`,
+    ),
+    index("gym_square_member_plan_run_idx").on(t.gymId, t.environment, t.runId),
   ],
 );

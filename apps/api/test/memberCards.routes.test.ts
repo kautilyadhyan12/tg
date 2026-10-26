@@ -231,6 +231,9 @@ function fakeSquare() {
     listPayments: () => Promise.resolve(unavailable),
     retrieveOrder: () => Promise.resolve(unavailable),
     listTaxes: () => Promise.resolve(unavailable),
+    listCustomers: () => Promise.resolve(unavailable),
+    searchCustomers: () => Promise.resolve(unavailable),
+    searchSubscriptions: () => Promise.resolve(unavailable),
   };
   const allow = (account: Account): string => {
     const code = `sq0cgb-${randomBytes(8).toString("hex")}`;
