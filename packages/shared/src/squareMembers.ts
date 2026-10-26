@@ -137,7 +137,7 @@ export const SQUARE_MEMBERS_WORDS = {
   checkingLooked: (n: number): string => `Looked at ${n.toLocaleString("en-US")} ${n === 1 ? "customer" : "customers"} in Square so far.`,
   unanswered: "Square isn't answering right now. The app keeps trying.",
   /** Under Checking and Adding (Kd's click-through, 2026-10-26: adding "did take sometime"). */
-  takesTime: "This can take a few minutes. You can leave this page: it carries on by itself.",
+  takesTime: "This can take a few minutes. Please don't close this page.",
   checkedTitle: "Check who changes, then press Add",
   checkedOther: (gym: string): string => `The owner of ${gym} is checking who to add to Square.`,
   addLead: (n: number): string => `Will be added to your Square customer list, with their name, email and phone (${n.toLocaleString("en-US")}):`,
