@@ -298,7 +298,7 @@ export default function SquareMembers({ org, owner, readOnly }) {
         </div>
       ) : null}
       {/* Square's Dashboard lists customers who share an email or phone as duplicates (18d-iii-b-ii-b-ii-a). */}
-      <Line soft>{W.duplicatesNote}</Line>
+      <Words text={W.duplicatesNote} soft />
       {owner ? pressButton(W.checkAgain, check, 'check', false) : null}
       {problem}
     </Step>

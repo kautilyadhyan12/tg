@@ -181,8 +181,9 @@ export const SQUARE_MEMBERS_WORDS = {
   mergedAwayLead: (n: number): string =>
     `Left out, as Square merged them into another customer with a different name, twice (${n.toLocaleString("en-US")}):`,
   mergedAwayFix: "Square merges customers who share an email or phone. Give each of them an email or phone of their own on their page, and the app adds them again.",
-  /** Under the added box: Square's Dashboard lists customers who share an email or phone as duplicates. */
-  duplicatesNote: "Square may list members who share an email or phone, such as a child on a parent's email, as duplicates. Merge customers in Square only if they are the same person.",
+  /** Under the added box: Square alerts the business to customers who share an email or phone and lists them under
+   *  Duplicate Suggestion (help article 8401, read 2026-10-26); two customers sharing neither are not flagged. */
+  duplicatesNote: "In Square, [Duplicate Suggestion] lists customers who share an email or phone, such as a child on a parent's email. Merge them only if they are the same person.",
   failedTitle: "Couldn't finish checking Square",
   failedRefused: "Square refused the request. Try again. If it happens again, reconnect Square.",
   failedUnauthorized: "Square no longer accepts this connection. Reconnect Square, then try again.",

@@ -10,4 +10,4 @@ What was built and checked: `handoff/2026-10-26-18d-iii-b-ii-b-ii-a.md`.
 
 ## Gyms and the console
 
-- 2026-10-26 · *The terminal's own:* once members are added, the Members in Square box says "Square may list members who share an email or phone, such as a child on a parent's email, as duplicates. Merge customers in Square only if they are the same person."; Square's merge button is named as its help page names it today, "••• → Merge customer" (help article 8401, read again 2026-10-26).
+- 2026-10-26 · *The terminal's own, after Kd's question at his click-through ("there is literalyy no warning in square that hey might be duplicate": the two Rosas share no email or phone, and Square alerts only to those that do, help article 8401):* once members are added, the Members in Square box says "In Square, [Duplicate Suggestion] lists customers who share an email or phone, such as a child on a parent's email. Merge them only if they are the same person.", Square's own label for the list; Square's merge button is named as its help page names it today, "••• → Merge customer" (help article 8401, read again 2026-10-26).

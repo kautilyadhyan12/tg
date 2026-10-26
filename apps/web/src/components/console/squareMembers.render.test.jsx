@@ -215,7 +215,7 @@ describe('who may, and while Square is read', () => {
     open(members({ state: 'added', runId: RUN, automatic: true, inSquare: 4, groups: { merged_away: group(1, ['Sam Smith']) } }));
     const step = await line();
     expect(
-      await step.findByText("Square may list members who share an email or phone, such as a child on a parent's email, as duplicates. Merge customers in Square only if they are the same person."),
+      await step.findByText((_, el) => el?.textContent === "In Square, Duplicate Suggestion lists customers who share an email or phone, such as a child on a parent's email. Merge them only if they are the same person." && el.hasAttribute('data-words')),
     ).toBeTruthy();
     const away = within(step.getByTestId('square-members-merged_away'));
     expect(away.getByText('Left out, as Square merged them into another customer with a different name, twice (1):')).toBeTruthy();
@@ -227,6 +227,6 @@ describe('who may, and while Square is read', () => {
     open(CHECKED);
     const step = await line();
     expect(await step.findByText('Check who changes, then press Add')).toBeTruthy();
-    expect(step.queryByText(/possible duplicates|as duplicates/)).toBeNull();
+    expect(step.queryByText(/Duplicate Suggestion/)).toBeNull();
   });
 });

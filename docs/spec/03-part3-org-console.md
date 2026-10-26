@@ -4352,8 +4352,9 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   or read about the old customer is dropped. Each old id is kept with the customer it is now (Square: "detect
   customer merges and store the merged IDs"), so a payment taken before the merge still finds its member. A merged
   customer's reference id is one of the old customers' and never makes it a record's. The box, once members are
-  added, says: "Square may list members who share an email or phone, such as a child on a parent's email, as
-  duplicates. Merge customers in Square only if they are the same person."
+  added, says: "In Square, Duplicate Suggestion lists customers who share an email or phone, such as a child on a
+  parent's email. Merge them only if they are the same person." (Square alerts the business only to customers who
+  share an email or phone, help article 8401.)
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the
