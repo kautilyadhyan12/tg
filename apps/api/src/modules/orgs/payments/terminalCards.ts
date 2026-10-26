@@ -41,6 +41,7 @@ import {
   entryNotFound,
   keepCard,
   letGoOfCard,
+  onMergedCustomer,
   orgNotFound,
   paidBy,
   readyOrThrow,
@@ -244,7 +245,9 @@ async function saving(a: Asking, action: SquareTerminalAction): Promise<Step> {
     deps.log.error({ event: "square.terminal_card_unreadable", gymId: save.gymId, status: read.status, code: read.code }, "Square refused the card a Terminal saved");
     return await ended(a, "refused", read);
   }
-  const usable = usableCard(read.value, save.customerId, save.accountId);
+  // Saved on another customer: Square merged the one asked into it since the app last heard (18d-iii-b-ii-b-ii-a).
+  const merged = await onMergedCustomer(deps, square, token, save.accountId, read.value, save.customerId);
+  const usable = merged?.usable ?? usableCard(read.value, save.customerId, save.accountId);
   if (usable === null || usable.cardId !== cardId) {
     deps.log.error({ event: "square.card_unexpected", gymId: save.gymId }, "the Terminal saved a card that is not the one asked for");
     await letGoOfCard(deps, square, { gymId: save.gymId, environment: save.environment, accountId: save.accountId, cardId });
@@ -268,7 +271,8 @@ async function saving(a: Asking, action: SquareTerminalAction): Promise<Step> {
       environment: save.environment,
       accountId: save.accountId,
       connectedAt: a.connectedAt,
-      customerId: save.customerId,
+      customerId: merged?.customerId ?? save.customerId,
+      afterMerge: merged !== null,
       card: usable,
       words: save.words,
       screen: "terminal",
@@ -277,7 +281,8 @@ async function saving(a: Asking, action: SquareTerminalAction): Promise<Step> {
       agreedAt: still.agreedAt,
       at,
     });
-    const outcome = done.kind === "saved" ? ("saved" as const) : ("gone" as const);
+    // On another person's merged customer: let go (round one, High 2), and said so (its re-check, Low B).
+    const outcome = done.kind === "saved" ? ("saved" as const) : done.kind === "merged_away" ? ("merged_away" as const) : ("gone" as const);
     await saves.finish(tx, save.id, "saving", outcome, at, outcome === "saved" ? cardId : null);
     return { outcome, owed: done.owed };
   });

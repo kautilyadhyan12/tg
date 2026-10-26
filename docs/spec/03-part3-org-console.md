@@ -4338,6 +4338,23 @@ is a gym with no country. People who use the app for themselves may be anywhere.
   when the list moves on, by the same rule, and anybody left out or refused looked at again a day later. Staff read
   the counts; the names are the owner's. Disconnect, or the app taken off in Square, lets go of the customers a
   check was holding.
+  *As built, 18d-iii-b-ii-b-ii-a (Kd, 2026-10-26: "go"; `rulings/2026-10-26-18d-iii-b-ii-b-ii-a.md`):* **Square's
+  merges followed.** Square merges customers into a new one with a new id, the business in its Dashboard or Square
+  by itself, and deletes the old ones; its message that an old one was deleted makes the app ask Square for it, and
+  Square answers an old id with the merged customer ("If you call RetrieveCustomer using the ID of customer A or B,
+  the Customers API returns customer C"). Then, at each gym that holds the old customer: a card saved on it is
+  charged through the merged customer, where Square keeps it; the one record whose name is the merged customer's
+  (the same rule as linking) keeps it, as one Square made, never one the app made; any other record that was linked
+  to it is separated (a merge of two people, Sam merged into his mum "Pat Smith", is never followed) and added to
+  Square again by itself, or, separated twice within 30 days, left out and named in the box ("Left out, as Square
+  merged them into another customer with a different name, twice") until their email or phone changes; a card left
+  on another person's merged customer is still charged but never says whose that customer is; what a check planned
+  or read about the old customer is dropped. Each old id is kept with the customer it is now (Square: "detect
+  customer merges and store the merged IDs"), so a payment taken before the merge still finds its member. A merged
+  customer's reference id is one of the old customers' and never makes it a record's. The box, once members are
+  added, says: "In Square, Duplicate Suggestion lists customers who share an email or phone, such as a child on a
+  parent's email. Merge them only if they are the same person." (Square alerts the business only to customers who
+  share an email or phone, help article 8401.)
 - **Cash, bank transfer, a card on another machine, and UPI in India** (18r): recorded.
 
 Our own app for the Square Reader is ruled out (Kd, 2026-10-21): no gym app found runs the

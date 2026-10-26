@@ -59,18 +59,35 @@ export async function watchingSince(sql: SqlOrTx, w: { gymId: string; environmen
 }
 
 /** The records whose Square customer this is: the one the app made for them (18d-ii), and the one
- *  their card on file is saved on. In the gyms named. */
+ *  their card on file is saved on. In the gyms named. A customer Square has merged into another since
+ *  (18d-iii-b-ii-b-ii-a; a payment taken before the merge keeps the old id) is the record it was at that gym
+ *  (round one, Critical 1: Sam's own payment never his mum's), and the merged customer's only at a gym where
+ *  it was nobody's. */
 export async function linkedRecords(
   sql: SqlOrTx,
   q: { environment: SquareEnvironment; accountId: string; customerId: string; gymIds: readonly string[] },
 ): Promise<{ gymId: string; entryId: string }[]> {
   if (q.gymIds.length === 0) return [];
   const rows = await sql<{ gym_id: string; entry_id: string }[]>`
-    SELECT gym_id, entry_id FROM gym_square_customers
-    WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id = ${q.customerId} AND gym_id = ANY(${[...q.gymIds]}::uuid[])
+    WITH holders AS (
+      SELECT gym_id, entry_id, customer_id FROM gym_square_customers
+      WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND gym_id = ANY(${[...q.gymIds]}::uuid[])
+      UNION
+      SELECT gym_id, entry_id, customer_id FROM gym_member_cards
+      WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND gym_id = ANY(${[...q.gymIds]}::uuid[]) AND merged_away_at IS NULL
+      UNION
+      SELECT gym_id, entry_id, customer_id FROM gym_square_old_customers
+      WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND gym_id = ANY(${[...q.gymIds]}::uuid[])
+    ),
+    own AS (SELECT gym_id, entry_id FROM holders WHERE customer_id = ${q.customerId}),
+    now_is AS (
+      SELECT to_customer_id AS id FROM gym_square_customer_merges
+      WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND from_customer_id = ${q.customerId}
+    )
+    SELECT gym_id, entry_id FROM own
     UNION
-    SELECT gym_id, entry_id FROM gym_member_cards
-    WHERE environment = ${q.environment} AND account_id = ${q.accountId} AND customer_id = ${q.customerId} AND gym_id = ANY(${[...q.gymIds]}::uuid[])
+    SELECT h.gym_id, h.entry_id FROM holders h
+    WHERE h.customer_id = (SELECT id FROM now_is) AND NOT EXISTS (SELECT 1 FROM own o WHERE o.gym_id = h.gym_id)
     ORDER BY gym_id, entry_id`;
   return rows.map((r) => ({ gymId: r.gym_id, entryId: r.entry_id }));
 }

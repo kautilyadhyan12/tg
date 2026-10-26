@@ -63,7 +63,7 @@ export function fakeSquare() {
   const taxes = new Map<string, SquareCatalogTax[]>();
   /** The customers Square has in each account, as RetrieveCustomer shows them (18d-iii-b-ii-a), in the order
    *  they were made, with their reference id (18d-iii-b-ii-b-i). */
-  const customers = new Map<string, SquareCustomer & { accountId: string; reference_id?: string | null }>();
+  const customers = new Map<string, SquareCustomer & { accountId: string }>();
   /** Each CreateCustomer key, what it was sent with, and the customer it made. */
   const customerKeys = new Map<string, { body: string; id: string }>();
   /** Every CreateCustomer asked, keys and all: tests read who was sent to Square. */
@@ -72,6 +72,12 @@ export function fakeSquare() {
   const subscriptions: { accountId: string; customerId: string; status: string }[] = [];
   /** ListCustomers' asks, each with the cursor it was given. */
   const customerListings: (string | null)[] = [];
+  /** Old ids of customers Square merged, and the customer each is now (18d-iii-b-ii-b-ii-a). */
+  const mergedInto = new Map<string, string>();
+  /** Customers deleted in Square: asked about, Square says not found. */
+  const gone = new Set<string>();
+  /** Every RetrieveCustomer asked, by the id asked about. */
+  const customerReads: string[] = [];
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
@@ -263,15 +269,45 @@ export function fakeSquare() {
       const hits = subscriptions.filter((x) => x.accountId === a.merchantId && q.customerIds.includes(x.customerId));
       return Promise.resolve({ kind: "ok", value: { subscriptions: hits.map((x) => ({ customerId: x.customerId, status: x.status })), cursor: null } });
     },
-    createCard: () => Promise.resolve(unavailable),
-    retrieveCard: () => Promise.resolve(unavailable),
-    // A customer a test made (`customer`) is shown; any other gives no answer, as before 18d-iii-b-ii-a.
-    retrieveCustomer(token, id) {
+    // A card saved from Square's form (`cnon:ok-VISA-1111-…`), on the customer asked or, for an old id of a merged
+    // one, on the customer it is now (18d-iii-b-ii-b-ii-a).
+    createCard(token, c) {
       if (state.down) return Promise.resolve(unavailable);
       const a = tokenAccount(token);
       if (a === undefined) return Promise.resolve(unauthorized);
-      const c = customers.get(id);
-      if (c === undefined) return Promise.resolve(unavailable);
+      const customerId = mergedInto.get(c.customerId) ?? c.customerId;
+      if (customers.get(customerId)?.accountId !== a.merchantId) return Promise.resolve({ kind: "refused", status: 400, code: "CUSTOMER_NOT_FOUND" });
+      const m = /^cnon:ok-([A-Z_]+)-([0-9]{4})/.exec(c.sourceId);
+      if (m === null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CARD_DATA" });
+      n += 1;
+      const id = `ccof:fake${String(n)}${randomBytes(4).toString("hex")}`;
+      cards.set(id, { accountId: a.merchantId, customerId, behaviour: "pays" });
+      return Promise.resolve({
+        kind: "ok",
+        value: { id, card_brand: m[1] ?? "VISA", last_4: m[2] ?? "1111", exp_month: 12, exp_year: 2031, customer_id: customerId, merchant_id: a.merchantId, enabled: true },
+      });
+    },
+    retrieveCard(token, cardId) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const card = cards.get(cardId);
+      if (card?.accountId !== a.merchantId) return Promise.resolve(notFound);
+      return Promise.resolve({
+        kind: "ok",
+        value: { id: cardId, card_brand: "VISA", last_4: "1111", exp_month: 12, exp_year: 2031, customer_id: card.customerId, merchant_id: a.merchantId, enabled: true },
+      });
+    },
+    // A customer a test made (`customer`) is shown; any other gives no answer, as before 18d-iii-b-ii-a.
+    retrieveCustomer(token, id) {
+      customerReads.push(id);
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      // An old id of a merged customer answers as the customer it is now ("If you call RetrieveCustomer using the
+      // ID of customer A or B, the Customers API returns customer C").
+      const c = customers.get(mergedInto.get(id) ?? id);
+      if (c === undefined) return Promise.resolve(gone.has(id) ? notFound : unavailable);
       if (c.accountId !== a.merchantId) return Promise.resolve(notFound);
       const out: SquareCustomer & { accountId?: string } = { ...c };
       delete out.accountId;
@@ -345,7 +381,8 @@ export function fakeSquare() {
       }
       const card = cards.get(p.cardId);
       if (card?.accountId !== a.merchantId) return Promise.resolve(notFound);
-      if (card.customerId !== p.customerId) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
+      const now = (customerId: string) => mergedInto.get(customerId) ?? customerId;
+      if (now(card.customerId) !== now(p.customerId)) return Promise.resolve({ kind: "refused", status: 400, code: "BAD_REQUEST" });
       n += 1;
       const id = `CPAY${String(n)}${randomBytes(6).toString("hex")}`;
       const amount = state.chargeOther ? p.amountMinor + 100 : p.amountMinor;
@@ -534,7 +571,7 @@ export function fakeSquare() {
   };
   /** A customer in this account's Square, as Square has them (18d-iii-b-ii-a); `reference_id` where another
    *  app or this one set it. */
-  const customer = (account: Account, c: SquareCustomer & { reference_id?: string | null }) => {
+  const customer = (account: Account, c: SquareCustomer) => {
     customers.set(c.id, { ...c, accountId: account.merchantId });
   };
   /** A subscription of Square's own on this customer. */
@@ -544,6 +581,29 @@ export function fakeSquare() {
   /** The business deletes a customer in Square, or merges it into another. */
   const forgetCustomer = (customerId: string) => {
     customers.delete(customerId);
+  };
+  const deleteCustomer = (customerId: string) => {
+    customers.delete(customerId);
+    gone.add(customerId);
+  };
+  /** The business merges these customers in its Square Dashboard, or Square does by itself (18d-iii-b-ii-b-ii-a):
+   *  a new customer with a new id made from the first's details ("The merge operation prioritizes older data"),
+   *  `over` changed on it, marked `MERGE`; the old ones deleted, each old id answering as the new one. As Square's
+   *  test area did on 2026-10-26 (`.cost/18d-iii-b-ii-b-ii-a/probe-merge.mts`): a saved card still names the old
+   *  customer, and is charged through the old id or the new; a card saved on an old id goes on the new customer.
+   *  Answers the new id. */
+  const merge = (account: Account, fromIds: readonly string[], over: Partial<SquareCustomer> = {}): string => {
+    const first = customers.get(fromIds[0] ?? "");
+    if (first === undefined) throw new Error("no such customer to merge");
+    n += 1;
+    const id = `CMRG${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
+    customers.set(id, { ...first, id, accountId: account.merchantId, creation_source: "MERGE", ...over });
+    for (const from of fromIds) {
+      customers.delete(from);
+      for (const [old, now] of mergedInto) if (now === from) mergedInto.set(old, id);
+      mergedInto.set(from, id);
+    }
+    return id;
   };
   /** Square made a customer for this key with this body (another ask's, a card save's), before the app asks. */
   const madeWithKey = (account: Account, key: string, c: NewSquareCustomer) => {
@@ -583,16 +643,19 @@ export function fakeSquare() {
     subscription,
     customersOf,
     forgetCustomer,
+    deleteCustomer,
+    merge,
     madeWithKey,
     customersMade,
     customerListings,
+    customerReads,
     refund,
     listed,
   };
 }
 
 /** A customer as ListCustomers and SearchCustomers show it. */
-function found(c: SquareCustomer & { accountId?: string; reference_id?: string | null }): SquareCustomerFound {
+function found(c: SquareCustomer & { accountId?: string }): SquareCustomerFound {
   return {
     id: c.id,
     given_name: c.given_name ?? null,
@@ -600,6 +663,7 @@ function found(c: SquareCustomer & { accountId?: string; reference_id?: string |
     email_address: c.email_address ?? null,
     phone_number: c.phone_number ?? null,
     reference_id: c.reference_id ?? null,
+    creation_source: c.creation_source ?? null,
   };
 }
 

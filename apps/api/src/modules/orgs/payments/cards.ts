@@ -32,6 +32,7 @@ import {
   gymPaymentsAvailability,
   memberCardResponseSchema,
   myCardResponseSchema,
+  squareMadeByMerge,
   type CardForm,
   type MemberCard,
   type MemberCardResponse,
@@ -40,6 +41,7 @@ import {
   type SaveCardRequest,
   type CardTerminal,
   type SquareCard,
+  type SquareCustomer,
   type TerminalSave,
 } from "@app/shared";
 import type { TransactionSql } from "postgres";
@@ -52,6 +54,8 @@ import { OrgsError, requirePrivilege, requireWritablePrivilege } from "../servic
 import { cardPaysForRenewal, noticeOfCard, remindersOn } from "./cardExpiryRepo.js";
 import * as cards from "./cardsRepo.js";
 import * as repo from "./repo.js";
+import { followMerge } from "./squareMerges.js";
+import * as merges from "./squareMergesRepo.js";
 import { REVOKE_MAX_TRIES, REVOKE_RETRY_MS, accessContext, missingScopes, terminalsOffered, type PaymentsDeps } from "./service.js";
 import type { SquareSettings } from "./settings.js";
 import type { SquareEnvironment, SquareResult } from "./square.js";
@@ -393,7 +397,10 @@ export async function customerFor(deps: PaymentsDeps, ready: Ready, gymId: strin
     // by it and written; not found yet, this save is tried again (round one, High 2).
     if (result.kind === "refused" && result.code === "IDEMPOTENCY_KEY_REUSED") {
       const found = await ready.square.api.searchCustomers(ready.token, { referenceId: person.entryId });
-      const made = found.kind === "ok" ? found.value.customers.filter((c) => c.reference_id === person.entryId).sort((x, y) => (x.id < y.id ? -1 : 1))[0] : undefined;
+      const made =
+        found.kind === "ok"
+          ? found.value.customers.filter((c) => c.reference_id === person.entryId && !squareMadeByMerge(c)).sort((x, y) => (x.id < y.id ? -1 : 1))[0]
+          : undefined;
       if (made === undefined) throw unavailable();
       if (await cards.finishCustomer(deps.sql, key, claimed.makingKey, made.id)) return made.id;
       const now = await cards.claimCustomer(deps.sql, key, randomUUID());
@@ -451,7 +458,9 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   const card = created.value;
   const environment = ready.square.environment;
   const accountId = ready.row.accountId;
-  const usable = usableCard(card, customerId, accountId);
+  // Saved on another customer: Square merged the one asked into it since the app last heard (18d-iii-b-ii-b-ii-a).
+  const merged = await onMergedCustomer(deps, ready.square, ready.token, accountId, card, customerId);
+  const usable = merged?.usable ?? usableCard(card, customerId, accountId);
   if (usable === null) {
     deps.log.error({ event: "square.card_unexpected", gymId: s.gymId }, "Square saved a card that is not the one asked for");
     await letGoOfCard(deps, ready.square, { gymId: s.gymId, environment, accountId, cardId: card.id });
@@ -466,7 +475,8 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
       environment,
       accountId,
       connectedAt: ready.row.connectedAt,
-      customerId,
+      customerId: merged?.customerId ?? customerId,
+      afterMerge: merged !== null,
       card: usable,
       words,
       screen: s.screen,
@@ -480,6 +490,7 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   if (outcome.kind === "gone") throw entryNotFound();
   if (outcome.kind === "paid_by") throw paidBy(outcome.payer, person.fullName);
   if (outcome.kind === "not_ready") throw notReady();
+  if (outcome.kind === "merged_away") throw new OrgsError(409, "card_merged_away", MEMBER_CARD_WORDS.merged_away);
 }
 
 /** A card Square saved, as it may be kept. */
@@ -508,6 +519,27 @@ export function usableCard(card: SquareCard, customerId: string, accountId: stri
   return { cardId: card.id, brand: card.card_brand ?? "OTHER_BRAND", last4, expMonth, expYear };
 }
 
+/** A card Square saved on another customer than the one asked: where Square has merged the one asked into that
+ *  one since the app last heard, the merge is followed (`squareMerges.ts`) and the card is kept on the customer
+ *  Square put it on. Square's test area saved a card asked for on an old id onto the merged customer, and named
+ *  that customer in its answer (measured 2026-10-26, `.cost/18d-iii-b-ii-b-ii-a/probe-merge.mts`). Null otherwise. */
+export async function onMergedCustomer(
+  deps: PaymentsDeps,
+  square: SquareSettings,
+  token: string,
+  accountId: string,
+  card: SquareCard,
+  asked: string,
+): Promise<{ customerId: string; usable: UsableCard } | null> {
+  const got = card.customer_id;
+  if (got === undefined || got === asked) return null;
+  const read = await square.api.retrieveCustomer(token, asked);
+  if (read.kind !== "ok" || read.value.id !== got) return null;
+  await followMerge(deps, square, accountId, asked, read.value);
+  const usable = usableCard(card, got, accountId);
+  return usable === null ? null : { customerId: got, usable };
+}
+
 /** A card Square made that is not kept: Square is told to stop it, now and by the worker. */
 export async function letGoOfCard(deps: PaymentsDeps, square: SquareSettings, c: { gymId: string; environment: SquareEnvironment; accountId: string; cardId: string }): Promise<void> {
   const id = await deps.sql.begin((tx) => cards.oweDisable(tx, { ...c, notBefore: deps.now() }));
@@ -522,6 +554,9 @@ export interface KeepCard {
   /** The connection the save began with. */
   connectedAt: Date;
   customerId: string;
+  /** The card went on a customer Square merged the record's into (18d-iii-b-ii-b-ii-a): kept only where the record
+   *  kept that customer; on another person's, it is let go (round one, High 2). */
+  afterMerge?: boolean;
   card: UsableCard;
   /** What the person agreed to, word for word. */
   words: string;
@@ -534,7 +569,12 @@ export interface KeepCard {
   at: Date;
 }
 
-export type Kept = { kind: "saved"; owed: string[] } | { kind: "gone"; owed: string[] } | { kind: "paid_by"; payer: string; owed: string[] } | { kind: "not_ready"; owed: string[] };
+export type Kept =
+  | { kind: "saved"; owed: string[] }
+  | { kind: "gone"; owed: string[] }
+  | { kind: "paid_by"; payer: string; owed: string[] }
+  | { kind: "not_ready"; owed: string[] }
+  | { kind: "merged_away"; owed: string[] };
 
 /** The card goes on the record, under the gym's lock (the caller's), only while it is still the
  *  gym's record, paid for by nobody, and the gym still on the connection the save began with;
@@ -549,6 +589,10 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
   if (still === null) return { kind: "gone", owed: await owe() };
   if (payerNow !== null) return { kind: "paid_by", payer: payerNow.name, owed: await owe() };
   if (row?.state !== "connected" || row.accountId !== accountId || row.connectedAt.getTime() !== k.connectedAt.getTime()) return { kind: "not_ready", owed: await owe() };
+  // Square put the card on a customer it merged the record's into, and the record did not keep that customer: in
+  // Square the card would sit on another person's profile, chargeable at the till. Let go; the next save makes the
+  // person a customer of their own (round one, High 2).
+  if (k.afterMerge === true && !(await cards.isLinkedTo(tx, { gymId, entryId, environment, accountId, customerId: k.customerId }))) return { kind: "merged_away", owed: await owe() };
   const before = await cards.readCard(tx, gymId, entryId, true);
   // The same press sent twice: Square gave back the same card, already kept.
   if (before !== null && before.environment === environment && before.accountId === accountId && before.cardId === card.cardId) return { kind: "saved", owed: [] };
@@ -643,23 +687,36 @@ export async function sendOwedCardDisables(
   return run;
 }
 
-/** Square's message that the gym deleted a customer inside Square: Square is asked for the
- *  customer, with the gym's own token, before anything changes; only Square's own "not found"
- *  lets the record go of the customer and its card. */
+/** Square's message that a customer was deleted inside Square: Square is asked for the customer, with a gym's
+ *  own token, before anything changes. Only Square's own "not found" lets the records go of the customer and its
+ *  card. A customer Square merged into another answers as that other one (18d-iii-b-ii-b-ii-a): the merge is
+ *  followed (`squareMerges.ts`). Square's answer is the account's, so it is asked once, with the token of a gym
+ *  connected to that account that holds the customer. */
 export async function checkSquareCustomer(deps: PaymentsDeps, square: SquareSettings, accountId: string, customerId: string): Promise<"done" | "unknown"> {
-  let unknown = false;
+  let read: SquareResult<SquareCustomer> | null = null;
+  for (const gymId of await merges.holdersOf(deps.sql, { environment: square.environment, accountId, customerId })) {
+    const row = await repo.readConnection(deps.sql, gymId, square.environment);
+    if (row?.state !== "connected" || row.accountId !== accountId || row.accessToken === null) continue;
+    const token = square.tokens.open(row.accessToken, accessContext(gymId));
+    if (token === null) continue;
+    read = await square.api.retrieveCustomer(token, customerId);
+    // A token Square no longer takes: another gym's on the same account may still be.
+    if (read.kind === "refused" && read.status === 401) continue;
+    break;
+  }
+  if (read === null || (read.kind === "refused" && read.status === 401)) return "done";
+  if (read.kind === "unavailable") return "unknown";
+  if (read.kind === "refused" && read.status !== 404) {
+    deps.log.error({ event: "square.customer_check_refused", status: read.status, code: read.code }, "Square refused a customer check");
+    return "unknown";
+  }
+  if (read.kind === "ok") {
+    if (read.value.id !== customerId) await followMerge(deps, square, accountId, customerId, read.value);
+    return "done";
+  }
   for (const record of await cards.recordsOfSquareCustomer(deps.sql, square.environment, accountId, customerId)) {
     const row = await repo.readConnection(deps.sql, record.gymId, square.environment);
-    if (row?.state !== "connected" || row.accountId !== accountId || row.accessToken === null) continue;
-    const token = square.tokens.open(row.accessToken, accessContext(record.gymId));
-    if (token === null) continue;
-    const result = await square.api.retrieveCustomer(token, customerId);
-    if (result.kind === "ok" || (result.kind === "refused" && result.status === 401)) continue;
-    if (result.kind === "unavailable" || result.status !== 404) {
-      if (result.kind === "refused") deps.log.error({ event: "square.customer_check_refused", gymId: record.gymId, status: result.status, code: result.code }, "Square refused a customer check");
-      unknown = true;
-      continue;
-    }
+    if (row?.state !== "connected" || row.accountId !== accountId) continue;
     const owed = await deps.sql.begin(async (tx) => {
       await lockGym(tx, record.gymId);
       const card = await cards.letGoOfSquareCustomer(tx, { ...record, environment: square.environment, accountId, customerId, at: deps.now() });
@@ -677,7 +734,7 @@ export async function checkSquareCustomer(deps: PaymentsDeps, square: SquareSett
     // Square keeps the card of a customer it deleted, still on: it is told to stop it.
     if (owed !== null) await sendOwedCardDisables(deps, square, [owed]);
   }
-  return unknown ? "unknown" : "done";
+  return "done";
 }
 
 /** Square's message about a card (a bank updated it, or it was stopped or forgotten): Square is
