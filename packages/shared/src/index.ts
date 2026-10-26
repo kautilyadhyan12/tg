@@ -97,4 +97,5 @@ export * from "./failedPayments.js";
 export * from "./squareAppPayments.js";
 export * from "./matchBill.js";
 export * from "./paymentsToMatch.js";
+export * from "./squareMembers.js";
 export * from "./liveUpdates.js";

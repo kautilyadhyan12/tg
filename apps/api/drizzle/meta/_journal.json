@@ -1156,6 +1156,13 @@
       "when": 1790726400165,
       "tag": "0165_payments_to_match",
       "breakpoints": true
+    },
+    {
+      "idx": 165,
+      "version": "7",
+      "when": 1790726400166,
+      "tag": "0166_square_members",
+      "breakpoints": true
     }
   ]
 }

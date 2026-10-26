@@ -9,7 +9,19 @@ import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../api/orgsApi', async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...actual, orgService: { getGymPayments: vi.fn(), connectSquare: vi.fn(), chooseSquareLocation: vi.fn(), disconnectSquare: vi.fn(), getSquareAppCheck: vi.fn() } };
+  // Members in Square's line (18d-iii-b-ii-b-i), never checked: its own test is squareMembers.render.test.jsx.
+  const none = { state: 'none', runId: null, canAdd: true, automatic: false, looked: 0, unanswered: false, failure: null, checkedAt: null, expired: false, members: 0, inSquare: 0, progress: null, groups: {} };
+  return {
+    ...actual,
+    orgService: {
+      getGymPayments: vi.fn(),
+      connectSquare: vi.fn(),
+      chooseSquareLocation: vi.fn(),
+      disconnectSquare: vi.fn(),
+      getSquareAppCheck: vi.fn(),
+      getSquareMembers: vi.fn(() => Promise.resolve({ data: { members: none } })),
+    },
+  };
 });
 
 const { orgService } = await import('../../api/orgsApi');
@@ -170,7 +182,7 @@ describe("Square Point of Sale (18d-iii-b-i): a checklist a gym that opened last
     const where = said(device, 'On each phone, tablet or Register, in Square Point of Sale: More → Settings → Hardware → General → About, then Device Name.');
     for (const name of ['More', 'Settings', 'Hardware', 'General', 'About', 'Device Name']) label(where, name);
     // Nothing goes on a bill by itself (Kd, 2026-10-25, "one press"): said plainly, and where it waits.
-    expect(box.getByText('For members who have a card on file here, selecting them is enough: their payment appears on their page with their bill ticked, and their card on file is not charged until it is matched.')).toBeTruthy();
+    expect(box.getByText('For members the app has added to or linked in your Square customer list, selecting them is enough: their payment appears on their page with their bill ticked, and their card on file is not charged until it is matched.')).toBeTruthy();
     expect(box.queryByText(/automatically/)).toBeNull();
     label(said(box, 'Every payment taken in Square Point of Sale waits in Payments to match until it is matched.'), 'Payments to match');
     const others = said(box, 'For anyone else, or a sale where no member is selected, Square takes the payment as usual. It waits in Payments to match, where you choose who paid.');

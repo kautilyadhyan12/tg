@@ -22,6 +22,9 @@ export const liveNewsSchema = z.discriminatedUnion("what", [
   /** A payment from Square Point of Sale was matched, marked or put back on Payments to match, or taken
    *  off a bill with Not this bill (18d-iii-b-ii-a): that list, and Overview's line, read again. */
   z.object({ what: z.literal("paymentsToMatch") }).strict(),
+  /** Members in Square was checked, or members were added, or stopped (18d-iii-b-ii-b-i): Settings →
+   *  Payments' Square Point of Sale box reads again. */
+  z.object({ what: z.literal("squareMembers") }).strict(),
 ]);
 export type LiveNews = z.infer<typeof liveNewsSchema>;
 

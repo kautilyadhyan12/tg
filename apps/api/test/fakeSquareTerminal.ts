@@ -7,10 +7,15 @@
 // gives back the same payment, paid or failed; the same key with another body is refused; a decline
 // is a 400 with the FAILED payment. A payment taken in Square's own app (18d-iii-b-i, `appPayment`) has
 // the order Square makes with it, whose lines say what was sold; ListPayments lists a location's
-// payments by when Square made them, oldest first, 100 a page.
+// payments by when Square made them, oldest first, 100 a page. A business's customers (18d-iii-b-ii-b-i) are
+// listed 100 a page in the order they were made, searched by an exact email (either case), phone (its
+// digits) or reference id, and made once a key: the same key with the same customer gives back the same
+// one, with another is refused (IDEMPOTENCY_KEY_REUSED), as Square's idempotency does; nothing checks for
+// duplicates ("CreateCustomer ... don't check for duplicate records"). Square's own subscriptions are
+// searched by their customers.
 import { randomBytes } from "node:crypto";
-import type { SquareCatalogTax, SquareCustomer, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
-import type { CardPaymentResult, NewCardPayment, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
+import type { SquareCatalogTax, SquareCustomer, SquareCustomerFound, SquareLocation, SquareOrder, SquarePayment, SquareTerminalCheckout } from "@app/shared";
+import type { CardPaymentResult, NewCardPayment, NewSquareCustomer, NewTerminalCheckout, SquareApi, SquareResult } from "../src/modules/orgs/payments/square.js";
 
 export interface Account {
   merchantId: string;
@@ -56,8 +61,17 @@ export function fakeSquare() {
   const orders = new Map<string, SquareOrder & { accountId: string }>();
   /** Each account's own item library of taxes (18d-iii-b-i). */
   const taxes = new Map<string, SquareCatalogTax[]>();
-  /** The customers Square has in each account, as RetrieveCustomer shows them (18d-iii-b-ii-a). */
-  const customers = new Map<string, SquareCustomer & { accountId: string }>();
+  /** The customers Square has in each account, as RetrieveCustomer shows them (18d-iii-b-ii-a), in the order
+   *  they were made, with their reference id (18d-iii-b-ii-b-i). */
+  const customers = new Map<string, SquareCustomer & { accountId: string; reference_id?: string | null }>();
+  /** Each CreateCustomer key, what it was sent with, and the customer it made. */
+  const customerKeys = new Map<string, { body: string; id: string }>();
+  /** Every CreateCustomer asked, keys and all: tests read who was sent to Square. */
+  const customersMade: (NewSquareCustomer & { accountId: string; token: string })[] = [];
+  /** Square's own subscriptions: whose, at which account, and their status. */
+  const subscriptions: { accountId: string; customerId: string; status: string }[] = [];
+  /** ListCustomers' asks, each with the cursor it was given. */
+  const customerListings: (string | null)[] = [];
   // `down`: no answer at all. `refuseNew`: a new checkout is refused (the Terminal is not signed in).
   // `loseAnswers`: a new checkout is made and its answer lost on the way. `refuseRead`: Square
   // refuses to show a checkout (a permission taken away).
@@ -82,6 +96,18 @@ export function fakeSquare() {
     /** ListCatalog gives no answer; or answers one tax it cannot read. */
     taxesDown: boolean;
     taxUnreadable: boolean;
+    /** Members in Square (18d-iii-b-ii-b-i): ListCustomers gives no answer once this many pages were given
+     *  (null: always answers); refuses (`customersRefused`, its status); refuses a cursor it gave
+     *  (`cursorRefused`); CreateCustomer gives no answer to these emails, or refuses them; Square makes the
+     *  customer and the answer is lost (`loseCustomers`); SearchSubscriptions gives no answer, or refuses. */
+    customerPagesUntilDown: number | null;
+    customersRefused: number | null;
+    cursorRefused: boolean;
+    createUnanswered: Set<string>;
+    createRefused: Set<string>;
+    loseCustomers: boolean;
+    subscriptionsDown: boolean;
+    subscriptionsRefused: boolean;
     now: () => Date;
   } = {
     down: false,
@@ -97,6 +123,14 @@ export function fakeSquare() {
     ordersUnanswered: new Set<string>(),
     taxesDown: false,
     taxUnreadable: false,
+    customerPagesUntilDown: null,
+    customersRefused: null,
+    cursorRefused: false,
+    createUnanswered: new Set<string>(),
+    createRefused: new Set<string>(),
+    loseCustomers: false,
+    subscriptionsDown: false,
+    subscriptionsRefused: false,
     now: () => new Date(),
   };
   let n = 0;
@@ -171,7 +205,64 @@ export function fakeSquare() {
       const a = tokenAccount(token);
       return Promise.resolve(a === undefined ? unauthorized : { kind: "ok", value: a.locations });
     },
-    createCustomer: () => Promise.resolve(unavailable),
+    createCustomer(token, c) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      customersMade.push({ ...c, accountId: a.merchantId, token });
+      const email = c.email?.toLowerCase() ?? "";
+      if (state.createUnanswered.has(email)) return Promise.resolve(unavailable);
+      if (state.createRefused.has(email)) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_EMAIL_ADDRESS" });
+      const body = JSON.stringify({ g: c.givenName, f: c.familyName, e: c.email, p: c.phone, r: c.referenceId });
+      const keyed = `${a.merchantId}:${c.idempotencyKey}`;
+      const known = customerKeys.get(keyed);
+      if (known !== undefined) return Promise.resolve(known.body === body ? { kind: "ok", value: { id: known.id } } : { kind: "refused", status: 400, code: "IDEMPOTENCY_KEY_REUSED" });
+      n += 1;
+      const id = `CUS${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
+      customers.set(id, { id, accountId: a.merchantId, given_name: c.givenName, family_name: c.familyName, email_address: c.email, phone_number: c.phone, reference_id: c.referenceId });
+      customerKeys.set(keyed, { body, id });
+      if (state.loseCustomers) return Promise.resolve(unavailable);
+      return Promise.resolve({ kind: "ok", value: { id } });
+    },
+    listCustomers(token, cursor) {
+      customerListings.push(cursor);
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.customersRefused !== null) return Promise.resolve({ kind: "refused", status: state.customersRefused, code: "FORBIDDEN" });
+      if (state.cursorRefused && cursor !== null) return Promise.resolve({ kind: "refused", status: 400, code: "INVALID_CURSOR" });
+      if (state.customerPagesUntilDown !== null) {
+        if (state.customerPagesUntilDown <= 0) return Promise.resolve(unavailable);
+        state.customerPagesUntilDown -= 1;
+      }
+      const all = [...customers.values()].filter((c) => c.accountId === a.merchantId);
+      const from = cursor === null ? 0 : Number(cursor.slice(1));
+      const page = all.slice(from, from + 100).map(found);
+      return Promise.resolve({ kind: "ok", value: { customers: page, unread: 0, cursor: from + 100 < all.length ? `c${String(from + 100)}` : null } });
+    },
+    searchCustomers(token, by) {
+      if (state.down) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      const digits = (t: string | null | undefined) => (t ?? "").replace(/[^0-9]/g, "");
+      const all = [...customers.values()].filter((c) => c.accountId === a.merchantId);
+      const hits = all.filter((c) =>
+        "email" in by
+          ? (c.email_address ?? "").toLowerCase() === by.email.toLowerCase()
+          : "phone" in by
+            ? digits(c.phone_number) !== "" && digits(c.phone_number) === digits(by.phone)
+            : c.reference_id === by.referenceId,
+      );
+      return Promise.resolve({ kind: "ok", value: { customers: hits.slice(0, 100).map(found), unread: 0 } });
+    },
+    searchSubscriptions(token, q) {
+      if (state.down || state.subscriptionsDown) return Promise.resolve(unavailable);
+      const a = tokenAccount(token);
+      if (a === undefined) return Promise.resolve(unauthorized);
+      if (state.subscriptionsRefused) return Promise.resolve({ kind: "refused", status: 403, code: "INSUFFICIENT_SCOPES" });
+      const hits = subscriptions.filter((x) => x.accountId === a.merchantId && q.customerIds.includes(x.customerId));
+      return Promise.resolve({ kind: "ok", value: { subscriptions: hits.map((x) => ({ customerId: x.customerId, status: x.status })), cursor: null } });
+    },
     createCard: () => Promise.resolve(unavailable),
     retrieveCard: () => Promise.resolve(unavailable),
     // A customer a test made (`customer`) is shown; any other gives no answer, as before 18d-iii-b-ii-a.
@@ -441,10 +532,29 @@ export function fakeSquare() {
     });
     taxes.set(account.merchantId, list);
   };
-  /** A customer in this account's Square, as Square has them (18d-iii-b-ii-a). */
-  const customer = (account: Account, c: SquareCustomer) => {
+  /** A customer in this account's Square, as Square has them (18d-iii-b-ii-a); `reference_id` where another
+   *  app or this one set it. */
+  const customer = (account: Account, c: SquareCustomer & { reference_id?: string | null }) => {
     customers.set(c.id, { ...c, accountId: account.merchantId });
   };
+  /** A subscription of Square's own on this customer. */
+  const subscription = (account: Account, customerId: string, status = "ACTIVE") => {
+    subscriptions.push({ accountId: account.merchantId, customerId, status });
+  };
+  /** The business deletes a customer in Square, or merges it into another. */
+  const forgetCustomer = (customerId: string) => {
+    customers.delete(customerId);
+  };
+  /** Square made a customer for this key with this body (another ask's, a card save's), before the app asks. */
+  const madeWithKey = (account: Account, key: string, c: NewSquareCustomer) => {
+    n += 1;
+    const id = `CUS${String(n)}${randomBytes(4).toString("hex").toUpperCase()}`;
+    customers.set(id, { id, accountId: account.merchantId, given_name: c.givenName, family_name: c.familyName, email_address: c.email, phone_number: c.phone, reference_id: c.referenceId });
+    customerKeys.set(`${account.merchantId}:${key}`, { body: JSON.stringify({ g: c.givenName, f: c.familyName, e: c.email, p: c.phone, r: c.referenceId }), id });
+    return id;
+  };
+  /** The business's customers, as its Square Dashboard lists them. */
+  const customersOf = (account: Account) => [...customers.values()].filter((c) => c.accountId === account.merchantId);
   /** Square gives money back on a payment after it was taken in. */
   const refund = (paymentId: string, amount: number) => {
     const p = payments.get(paymentId);
@@ -453,7 +563,44 @@ export function fakeSquare() {
   };
   /** Every ListPayments asked, oldest first: the hourly look and the look before charging. */
   const listed = () => [...listings];
-  return { api, allow, state, devices, checkouts, payments, orders, taxes, at, card, cards, charged, taken, appPayment, addTax, customer, refund, listed };
+  return {
+    api,
+    allow,
+    state,
+    devices,
+    checkouts,
+    payments,
+    orders,
+    taxes,
+    at,
+    card,
+    cards,
+    charged,
+    taken,
+    appPayment,
+    addTax,
+    customer,
+    subscription,
+    customersOf,
+    forgetCustomer,
+    madeWithKey,
+    customersMade,
+    customerListings,
+    refund,
+    listed,
+  };
+}
+
+/** A customer as ListCustomers and SearchCustomers show it. */
+function found(c: SquareCustomer & { accountId?: string; reference_id?: string | null }): SquareCustomerFound {
+  return {
+    id: c.id,
+    given_name: c.given_name ?? null,
+    family_name: c.family_name ?? null,
+    email_address: c.email_address ?? null,
+    phone_number: c.phone_number ?? null,
+    reference_id: c.reference_id ?? null,
+  };
 }
 
 export const account = (merchantId: string, country = "US"): Account => ({

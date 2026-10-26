@@ -725,7 +725,8 @@ if (square === null) {
       const terminalPayments = run.terminalPayments.asked + run.terminalPayments.forgotten;
       const cardCharges = run.cardCharges.asked + run.cardCharges.charged;
       const sweeps = run.sweeps.payments + run.sweeps.unanswered;
-      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + terminalSaves + terminalPayments + cardCharges + sweeps + run.renewed + run.renewalsWaiting > 0) {
+      const squareMembers = run.members.pages + run.members.looked + run.members.unanswered;
+      if (run.removed + run.unchanged + run.deferred + run.givenUp + run.forgotten + revokes + cardStops + terminalSaves + terminalPayments + cardCharges + sweeps + squareMembers + run.renewed + run.renewalsWaiting > 0) {
         log.info({ ...run, durationMs: Date.now() - startedAt, event: "job.finished", job: job.name }, "job finished");
       }
     },

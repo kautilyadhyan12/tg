@@ -8,7 +8,8 @@
 // have fallen due are charged to the card on file (18d-iii-i, `cardCharges.ts`). Square's messages about
 // a payment, and the hourly look at each gym's Square payments, take in payments made in Square's own
 // app (18d-iii-b-i, `squareAppPayments.ts`); a gym's payments are also looked at right before its cards
-// are charged, so a desk payment whose message is late holds that member's card (18d-iii-b-ii-a).
+// are charged, so a desk payment whose message is late holds that member's card (18d-iii-b-ii-a). The gym's
+// members are put into its Square customer list a few pages a gym, and each new member after (18d-iii-b-ii-b-i).
 import * as webhooks from "../../webhooks/repo.js";
 import { insertAudit } from "../repo.js";
 import { SQUARE_CARD_EVENTS, SQUARE_CUSTOMER_DELETED_EVENT, checkSquareCard, checkSquareCustomer, sendOwedCardDisables } from "./cards.js";
@@ -19,6 +20,8 @@ import { processTerminalSaves } from "./terminalCards.js";
 import { processTerminalPayments } from "./terminalPayments.js";
 import { processCardCharges, type CardChargeRun } from "./cardCharges.js";
 import { SQUARE_PAYMENT_EVENTS, lookBeforeCharging, sweepSquarePayments, takeInSquarePayment, type SweepRun } from "./squareAppPayments.js";
+import { processSquareMembers, type SquareMembersRun } from "./squareMembers.js";
+import { forgetListing } from "./squareMembersRepo.js";
 
 export const SQUARE_REVOKED_EVENT = "oauth.authorization.revoked";
 
@@ -59,6 +62,8 @@ export interface SquareWorkRun {
   cardCharges: CardChargeRun;
   /** Payments taken in Square's own app found by the hourly look (18d-iii-b-i). */
   sweeps: SweepRun;
+  /** Members put into the gym's Square customer list (18d-iii-b-ii-b-i). */
+  members: SquareMembersRun;
 }
 
 type Check = "works" | "removed" | "unknown";
@@ -82,6 +87,7 @@ async function checkConnection(deps: PaymentsDeps, square: SquareSettings, row: 
   }
   await deps.sql.begin(async (tx) => {
     if (!(await repo.markRemoved(tx, row.gymId, square.environment, row.connectedAt, deps.now()))) return;
+    await forgetListing(tx, row.gymId, square.environment);
     await insertAudit(tx, {
       actorUserId: null,
       gymId: row.gymId,
@@ -149,6 +155,7 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     terminalPayments: { asked: 0, forgotten: 0 },
     cardCharges: { asked: 0, charged: 0, paid: 0, declined: 0 },
     sweeps: { looked: 0, payments: 0, unanswered: 0 },
+    members: { pages: 0, added: 0, linked: 0, looked: 0, unanswered: 0 },
   };
   const square = deps.square;
   if (square === null) return run;
@@ -213,6 +220,8 @@ export async function processSquareWork(deps: PaymentsDeps, eventIds: readonly s
     if (look !== null) addLook(look);
   });
   addLook(await sweepSquarePayments(deps, square, gymIds));
+  // After the card charges, so a gym's long check never holds its members' bills up.
+  run.members = await processSquareMembers(deps, square, gymIds);
 
   for (const row of await repo.claimDueRefreshes(deps.sql, square.environment, deps.now(), SQUARE_WORK.leaseMs, SQUARE_WORK.refreshesPerRun, gymIds)) {
     const outcome = await renew(deps, square, row);

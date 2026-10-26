@@ -287,7 +287,9 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iii-b-i. [x] **Payments from Square's app land on the right bill** — merged 2026-10-25 (PR #359).
        - 18d-iii-b-ii. **Match a payment from Square's app**, in three parts since 2026-10-25 (`handoff/2026-10-25-18d-iii-b-ii-a.md` keeps its line as first written):
          - 18d-iii-b-ii-a. [x] **Payments to match, one press** — merged 2026-10-26 (PR #361).
-         - 18d-iii-b-ii-b. [ ] **Members in Square** (Kd, 2026-10-25): the gym's members put into its Square customer list, joined to a customer there by the same email or phone or else added, never by name, and kept up to date, so a payment in Square Point of Sale with the member picked has their bill ticked, one press (Kd, 2026-10-25), from the first one. Web folder 1.
+         - 18d-iii-b-ii-b. **Members in Square**, in two parts since 2026-10-26 (`handoff/2026-10-26-18d-iii-b-ii-b-i.md` keeps its line as first written):
+           - 18d-iii-b-ii-b-i. [x] **Add members to Square** — merged 2026-10-26 (PR #362).
+           - 18d-iii-b-ii-b-ii. [ ] **Kept up to date**: a change of name, email or phone copied to Square; Square's own merging of two customers followed; a record deleted for good taken out of Square where the app added it. Web folder 1.
          - 18d-iii-b-ii-c. [ ] **Match once for the rest** (Kd, 2026-10-24): Match links Square's customer to the person, so their later payments have their name and bill filled in, one press; Unlink on their page; a card saved later uses the linked customer. Web folder 1.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.
      - 18d-v. [ ] **KWAZO listed in Square's App Marketplace, at launch** (Kd, 2026-10-20): once the site is online with Square's live return address. Square's partner page: "Any developer" can list, no fee or developer-country rule named; Square's quality review first. Unproven for a developer in India until applied.
