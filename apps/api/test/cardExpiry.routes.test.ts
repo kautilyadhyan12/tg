@@ -264,10 +264,13 @@ d("A reminder before a card expires (real Postgres)", { timeout: T }, () => {
     await sql.end();
   }, T);
 
-  /** Noon in Chicago today. */
+  /** Noon in Chicago today, or on the 20th of this month after it: reminders are written up to the 25th
+   *  (`CARD_EXPIRY_LAST_DAY`), so on the 26th to the 31st "today" would read every card as too late, and the
+   *  tests failed on every branch from 26 October 2026, 05:00 UTC. The 26th's own test sets its own day. */
   const noonToday = (): Date => {
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
-    return new Date(`${day}T17:00:00Z`);
+    const upTo20 = Number(day.slice(8, 10)) > 20 ? `${day.slice(0, 8)}20` : day;
+    return new Date(`${upTo20}T17:00:00Z`);
   };
 
   it("emails only the cardholder, about their own card, only at a gym that switched it on, and only once", async () => {
