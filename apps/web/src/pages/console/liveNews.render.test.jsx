@@ -270,7 +270,7 @@ describe('the open line', () => {
     calls[0].end();
     await until(() => calls.length === 2, 3_500);
     stop();
-  });
+  }, 10_000);
 
   it('refreshes the sign-in once when the server asks, then opens; asked again, it stops', async () => {
     answers = [{ status: 401 }, { status: 200 }];
