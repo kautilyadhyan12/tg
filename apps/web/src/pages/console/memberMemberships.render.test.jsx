@@ -1989,6 +1989,26 @@ describe("live updates on a person's page (Stage 4 item 18)", () => {
     expect(onChanged).toHaveBeenCalledTimes(1);
   });
 
+  it("the page's first read, landing after a read on news asked later, is not drawn over the newer answer", async () => {
+    const gold = held(1, GOLD, TODAY, true);
+    const first = later();
+    orgService.getHeldMemberships
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue(answer([{ ...gold, agreement: { at: '2026-10-20T15:05:00.000Z' } }], false, { agreementInUse: true }));
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    // News straight after the page opened: its read is answered first.
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    const b = await boxSoon();
+    expect(await b.findByText('Agreement signed')).toBeTruthy();
+    // The first read, asked before the change, comes back last.
+    await act(async () => {
+      first.resolve(answer([{ ...gold, agreementLink: LINK }], false, { agreementInUse: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(b.getByText('Agreement signed')).toBeTruthy();
+    expect(b.queryByText('Agreement not signed')).toBeNull();
+  });
+
   it('a change made here tells the page behind once: its own news, read back, changes nothing on screen', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);
