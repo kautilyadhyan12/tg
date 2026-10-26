@@ -519,7 +519,8 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 
 **Since 2026-10-12 (RULINGS that day; ROADMAP Stage 2's header and Stage 5).** The gym's
 web part was built on a borrowed laptop in three web folders (A, B, C) until 2026-10-16,
-and since then in web folders 1 and 2 on Kd's own laptop (ROADMAP Stage 2's header). Kd's
+then in web folders 1 and 2 on Kd's own laptop, and since 2026-10-26 in ONE web folder on
+a second laptop (ROADMAP Stage 2's header; its own `FOLDER.md`). Kd's
 own laptop builds the phone app and the exercises in FOUR folders, two running at a time,
 all checkouts of the one repository:
 
