@@ -2009,6 +2009,22 @@ describe("live updates on a person's page (Stage 4 item 18)", () => {
     expect(b.queryByText('Agreement not signed')).toBeNull();
   });
 
+  it("the page's first read is still drawn when the read on news asked after it fails", async () => {
+    const gold = held(1, GOLD, TODAY, true);
+    const first = later();
+    orgService.getHeldMemberships
+      .mockReturnValueOnce(first.promise)
+      .mockRejectedValueOnce(new Error('Network Error'));
+    render(draw(ADA, 'Ada Lovelace', { hasEmail: true }));
+    tell(GYM, { what: 'memberships', entryId: ADA });
+    await waitFor(() => expect(orgService.getHeldMemberships).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      first.resolve(answer([gold], false, { agreementInUse: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await (await boxSoon()).findByText('Gold Monthly')).toBeTruthy();
+  });
+
   it('a change made here tells the page behind once: its own news, read back, changes nothing on screen', async () => {
     const gold = held(1, GOLD, '2026-10-04', true);
     const frozen = held(1, GOLD, '2026-10-04', true, [[{ type: 'freeze' }, '2026-10-18']]);

@@ -105,6 +105,26 @@ describe('the front desk is never left on a log that has stopped', () => {
     stop();
   }, 15_000);
 
+  it('a ready on a line already open (the server has its Redis back) is told within 3 s, not in the same instant as every other console', async () => {
+    const heard = [];
+    const stop = listenLive(GYM, (m) => heard.push(m));
+    await until(() => calls.length === 1);
+    calls[0].write(frame({ what: 'ready' }));
+    await until(() => heard.length === 1);
+    // This console's moment: 2.7 s of the 3.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    calls[0].write(frame({ what: 'ready' }));
+    calls[0].write(frame({ what: 'ready' }));
+    await pause(1_500);
+    expect(heard).toEqual([{ what: 'ready' }]);
+    await until(() => heard.length === 2, 2_500);
+    random.mockRestore();
+    await pause(1_000);
+    // Told once, however many came before it was.
+    expect(heard).toEqual([{ what: 'ready' }, { what: 'ready' }]);
+    stop();
+  }, 10_000);
+
   it('a refresh that fails twice in a row is said, so the page checks for itself until the line is back', async () => {
     answers = [{ status: 401 }, { status: 401 }, { status: 401 }, { status: 200 }];
     refreshSession.mockRejectedValueOnce(blip()).mockRejectedValueOnce(blip()).mockResolvedValue({});

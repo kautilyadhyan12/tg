@@ -106,10 +106,24 @@ export function registerUserRoutes(
     message: "You've changed your name or profile many times in the last hour. Please try again later.",
   };
   const shownChangesLimit = createDualRateLimit(shownChangesOpts);
+  /** The requests that took one of the 30: only those are given it back. */
+  const tookShown = new WeakSet<FastifyRequest>();
+  const takeShown = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    tookShown.add(req);
+    await shownChangesLimit(req, reply);
+  };
   const sendsShown = (body: unknown): boolean =>
     typeof body === "object" && body !== null && ("displayName" in body || "leaderboardOptOut" in body);
   const profileLimit = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (sendsShown(req.body)) await shownChangesLimit(req, reply);
+    if (sendsShown(req.body)) await takeShown(req, reply);
+  };
+  // The fitness profile is counted only when its age differs from the one saved (left out, it
+  // becomes none): a member past the limit still saves their weight, height and goals.
+  const ageLimit = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const body = req.body;
+    const sent = typeof body === "object" && body !== null && "age" in body ? (body.age ?? null) : null;
+    const saved = (await service.getFitnessProfile(usersDeps, authedUserId(req))).age;
+    if (sent !== saved) await takeShown(req, reply);
   };
 
   app.patch("/v1/users/me", { preHandler: [app.authenticate, profileLimit] }, async (req, reply) => {
@@ -133,7 +147,7 @@ export function registerUserRoutes(
       if (optOutChanged) tellMembersLeaderboards(deps.sql, deps.news, app.log, authedUserId(req));
       return await reply.status(200).send({ user });
     } finally {
-      if (!counted.changed && sendsShown(req.body)) await giveBackRateLimit(shownChangesOpts, req);
+      if (!counted.changed && tookShown.has(req)) await giveBackRateLimit(shownChangesOpts, req);
     }
   });
 
@@ -148,7 +162,7 @@ export function registerUserRoutes(
   // body twice yields the same row, so no Idempotency-Key is needed (R3.5).
   // A body that FINISHES setup while an answer is still open is refused with
   // the onboarding PATCH's own 409 and its list (service `putFitnessProfile`).
-  app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate, shownChangesLimit] }, async (req, reply) => {
+  app.put("/v1/users/me/fitness-profile", { preHandler: [app.authenticate, ageLimit] }, async (req, reply) => {
     const counted = { changed: false };
     try {
       const body = parseBody(putFitnessProfileRequestSchema, req, reply);
@@ -165,7 +179,7 @@ export function registerUserRoutes(
       if (counted.changed) tellMembersGyms(deps.sql, deps.news, app.log, authedUserId(req), { what: "people" });
       return await reply.status(200).send({ fitnessProfile });
     } finally {
-      if (!counted.changed) await giveBackRateLimit(shownChangesOpts, req);
+      if (!counted.changed && tookShown.has(req)) await giveBackRateLimit(shownChangesOpts, req);
     }
   });
 

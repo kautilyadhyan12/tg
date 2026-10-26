@@ -596,10 +596,13 @@ d("live updates: the check-in log and the Leaderboard (real Postgres)", () => {
           "You've changed your name or profile many times in the last hour. Please try again later.",
         ]);
       }
-      // A save that sends nothing a gym shows is not stopped.
+      // A save that sends nothing a gym shows is not stopped, nor a height with the age as saved.
       expect((await me({ units: "imperial" })).statusCode).toBe(200);
+      expect((await body({ heightCm: 176 })).statusCode).toBe(200);
       await settle();
       expect(heard(line)).toEqual([PEOPLE]);
+      // 30, and the 3 refused: the height took none.
+      expect(await appRedis.get(key)).toBe("33");
       const [row] = await sql<{ display_name: string; leaderboard_opt_out: boolean }[]>`SELECT display_name, leaderboard_opt_out FROM users WHERE id = ${hal.userId}`;
       expect(row).toEqual({ display_name: "Hal One", leaderboard_opt_out: false });
       line.close();

@@ -7,6 +7,8 @@ import { refreshSession } from '../../api/authApi';
 // The server says what changed ({ what: 'memberships', entryId }) and the page reads that again
 // through its normal route. Every `ready` is told to every listener, the line's first too: a page's
 // own first read was answered before its line opened, and a change made in between is in neither.
+// A `ready` on a line already open (the server lost its Redis, where news passes, and has it back)
+// is told at a moment of its own within 3 s, so every console does not read in the same instant.
 // Off screen for a minute the line is closed; back on screen it opens again and says `ready`.
 //
 // The server ends a line when the sign-in runs out (at most 15 minutes): it is opened again within
@@ -93,6 +95,8 @@ function hangUp(line) {
   line.wait = null;
   clearTimeout(line.hidden);
   line.hidden = null;
+  clearTimeout(line.readyLater);
+  line.readyLater = null;
   line.open = false;
   const controller = line.controller;
   line.controller = null;
@@ -120,6 +124,15 @@ function tryLater(line, ms, counts = true) {
 
 function deliver(line, message) {
   for (const listener of [...line.listeners]) listener.fn(message);
+}
+
+/** A second `ready` on the same line, told at a moment of its own (see the top of this file). */
+function readyLater(line) {
+  if (line.readyLater !== null) return;
+  line.readyLater = setTimeout(() => {
+    line.readyLater = null;
+    deliver(line, { what: 'ready' });
+  }, Math.random() * REOPEN_SPREAD_MS);
 }
 
 /** The sign-in is really gone: no more lines, and the page checks for itself, so its own next read
@@ -211,6 +224,7 @@ async function connect(line) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let readyHeard = false;
   try {
     for (;;) {
       const { value, done } = await reader.read();
@@ -229,7 +243,14 @@ async function connect(line) {
           continue;
         }
         if (parsed.success) {
-          if (parsed.data.what === 'ready') line.failures = 0;
+          if (parsed.data.what === 'ready') {
+            line.failures = 0;
+            if (readyHeard) {
+              readyLater(line);
+              continue;
+            }
+            readyHeard = true;
+          }
           deliver(line, parsed.data);
         }
       }
@@ -249,7 +270,7 @@ export function listenLive(gymId, fn) {
   watchScreen();
   let line = lines.get(gymId);
   if (line === undefined) {
-    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, hidden: null, open: false, failures: 0, refreshed: false, stopped: false };
+    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, hidden: null, readyLater: null, open: false, failures: 0, refreshed: false, stopped: false };
     lines.set(gymId, line);
   }
   clearTimeout(line.linger);

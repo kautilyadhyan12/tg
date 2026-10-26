@@ -3,7 +3,7 @@
 //
 // The first block is the worst thing this job could do to a real person (CLAUDE.md §2.1): a
 // gym's news told to somebody who is not its staff — another gym's owner, a member of the same
-// gym, an account that belongs nowhere, somebody signed out, somebody removed from its staff —
+// gym, an account that belongs nowhere, a request with no sign-in, somebody removed from its staff —
 // or a message that carries a person's details instead of only what to read again.
 import { randomUUID } from "node:crypto";
 import { connect, type Socket } from "node:net";
@@ -17,7 +17,7 @@ import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { AgreementLinkLetter } from "../src/modules/orgs/agreement/email.js";
 import { createLiveHub, type LiveHub } from "../src/modules/live/hub.js";
-import { liveChannel } from "../src/modules/live/news.js";
+import { hearRedisNews, liveChannel } from "../src/modules/live/news.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -350,8 +350,8 @@ d("live updates: the console's open line (real Postgres)", () => {
         const refused = await openLine(base, a.gymId, cookies);
         expect([who, refused.status, refused.refusal?.error, refused.contentType]).toEqual([who, 404, "org_not_found", "application/json; charset=utf-8"]);
       }
-      const signedOut = await openLine(base, a.gymId, {});
-      expect([signedOut.status, signedOut.refusal?.error]).toEqual([401, "unauthorized"]);
+      const noSignIn = await openLine(base, a.gymId, {});
+      expect([noSignIn.status, noSignIn.refusal?.error]).toEqual([401, "unauthorized"]);
       const forged = await openLine(base, a.gymId, { bearer: jwt.sign({ sub: a.owner.userId, typ: "access" }, "not-the-secret-0123456789abcdefghij", { algorithm: "HS256", expiresIn: 600 }) });
       expect(forged.status).toBe(401);
       expect((await openLine(base, randomUUID(), a.owner.cookies)).status).toBe(404);
@@ -762,6 +762,27 @@ d("live updates: the console's open line (real Postgres)", () => {
         await until(() => line.messages.length === 3);
         expect(line.messages).toEqual([READY, READY, news(later)]);
         line.close();
+      },
+      T,
+    );
+
+    it(
+      "Redis down when the live server starts: its first connection tells every open line ready too",
+      async () => {
+        if (lines === undefined) throw new Error("beforeAll did not build the servers");
+        const hub = createLiveHub();
+        const told: string[] = [];
+        const counting: LiveHub = {
+          ...hub,
+          readAgainAll: () => {
+            told.push("ready");
+            hub.readAgainAll();
+          },
+        };
+        const stop = hearRedisNews(redisUrl ?? "", liveChannel(url ?? ""), counting, lines.log);
+        await until(() => told.length === 1, 10_000);
+        stop();
+        expect(told).toEqual(["ready"]);
       },
       T,
     );

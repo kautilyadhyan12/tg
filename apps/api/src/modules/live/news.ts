@@ -75,14 +75,13 @@ export function createRedisNews(url: string, channel: string, log: FastifyBaseLo
 /** A server that holds lines hears every server's news on the channel. Each message is parsed:
  *  one that does not read as news for a gym is dropped. Nothing waits for Redis: a server starts
  *  while Redis is down, and Redis's client subscribes by itself once it is back. News told while
- *  it was away is lost, so when it is back every line is told `ready` and its page reads again. */
+ *  it was away is lost, so each time it is ready every line is told `ready` and its page reads
+ *  again: the first time too, since a line can open while Redis is still down. */
 export function hearRedisNews(url: string, channel: string, hub: LiveHub, log: FastifyBaseLogger): () => void {
   const client = new Redis(url, { maxRetriesPerRequest: null });
   client.on("error", () => undefined);
-  let connections = 0;
   client.on("ready", () => {
-    connections += 1;
-    if (connections > 1) hub.readAgainAll();
+    hub.readAgainAll();
   });
   client.on("message", (_channel: string, raw: string) => {
     let parsed: unknown;

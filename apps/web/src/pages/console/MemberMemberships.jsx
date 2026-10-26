@@ -251,15 +251,18 @@ export default function MemberMemberships({
    *  news is compared with (Stage 4 item 18), so news that comes before the page has drawn the
    *  first answer still knows what changed. */
   const lastAnswer = useRef(null);
-  /** Numbers each read of the memberships, the first one too: only the newest asked is drawn. */
+  /** Numbers each read of the memberships, the first one too: an answer is drawn unless a newer one
+   *  already is, so a newer read that fails leaves the older answer on screen. */
   const readSeq = useRef(0);
+  const drawnSeq = useRef(0);
 
   useEffect(() => {
     let live = true;
     const asked = ++readSeq.current;
     orgService.getHeldMemberships(gymId, entryId).then(
       (res) => {
-        if (!live || readSeq.current !== asked) return;
+        if (!live || asked <= drawnSeq.current) return;
+        drawnSeq.current = asked;
         lastAnswer.current = JSON.stringify({ entryId, ...res.data });
         setHeld({ entryId, ...res.data });
       },
@@ -313,7 +316,8 @@ export default function MemberMemberships({
     const asked = ++readSeq.current;
     orgService.getHeldMemberships(gymId, entryId).then(
       (res) => {
-        if (readSeq.current !== asked) return;
+        if (asked <= drawnSeq.current) return;
+        drawnSeq.current = asked;
         const next = { entryId, ...res.data };
         const now = JSON.stringify(next);
         const before = lastAnswer.current;
