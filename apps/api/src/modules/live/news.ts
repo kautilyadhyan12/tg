@@ -16,9 +16,17 @@ import { gymsOfMember } from "./repo.js";
 
 /** One channel for each database: gym ids belong to one database, and Redis's channels are shared
  *  by every database number on it, so another environment or another folder's servers on the same
- *  Redis never hear this one's news. */
+ *  Redis never hear this one's news. Named from the database's host, port and name, never its user
+ *  or password: anybody who can list Redis's channels reads the name. */
 export function liveChannel(databaseUrl: string): string {
-  return `live:news:${createHash("sha256").update(databaseUrl).digest("hex").slice(0, 12)}`;
+  let place = databaseUrl;
+  try {
+    const url = new URL(databaseUrl);
+    place = `${url.host}${url.pathname}`;
+  } catch {
+    // Not a URL: postgres.js refuses it before anything is told.
+  }
+  return `live:news:${createHash("sha256").update(place).digest("hex").slice(0, 12)}`;
 }
 
 export interface LiveNewsSender {
@@ -66,10 +74,15 @@ export function createRedisNews(url: string, channel: string, log: FastifyBaseLo
 
 /** A server that holds lines hears every server's news on the channel. Each message is parsed:
  *  one that does not read as news for a gym is dropped. Nothing waits for Redis: a server starts
- *  while Redis is down, and Redis's client subscribes by itself once it is back. */
+ *  while Redis is down, and Redis's client subscribes by itself once it is back. News told while
+ *  it was away is lost, so each time it is ready every line is told `ready` and its page reads
+ *  again: the first time too, since a line can open while Redis is still down. */
 export function hearRedisNews(url: string, channel: string, hub: LiveHub, log: FastifyBaseLogger): () => void {
   const client = new Redis(url, { maxRetriesPerRequest: null });
   client.on("error", () => undefined);
+  client.on("ready", () => {
+    hub.readAgainAll();
+  });
   client.on("message", (_channel: string, raw: string) => {
     let parsed: unknown;
     try {
@@ -92,14 +105,17 @@ export function hearRedisNews(url: string, channel: string, hub: LiveHub, log: F
   };
 }
 
-/** A route's `onResponse`: a change saved to a person on the gym's list (2xx, not a read) tells the
- *  gym's open lines to read their memberships again. */
+/** A route's `onSend`: a change saved to a person on the gym's list (2xx, not a read) tells the
+ *  gym's open lines to read their memberships again. `onSend`, not `onResponse`: the answer has
+ *  been worked out, so the change is saved, and it is told even when the browser that asked has
+ *  already gone (`onResponse` waits for the answer to be written). */
 export function tellMembershipsAfter(news: LiveNewsSender) {
   const personInAddress = z.object({ gymId: z.string().uuid(), entryId: z.string().uuid() });
-  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (req.method === "GET" || reply.statusCode >= 300) return;
+  return async <P>(req: FastifyRequest, reply: FastifyReply, payload: P): Promise<P> => {
+    if (req.method === "GET" || reply.statusCode >= 300) return payload;
     const at = personInAddress.safeParse(req.params);
     if (at.success) news.tell(at.data.gymId, { what: "memberships", entryId: at.data.entryId });
+    return payload;
   };
 }
 
@@ -127,13 +143,14 @@ export function tellMembersLeaderboards(sql: Sql, news: LiveNewsSender, log: Fas
   tellMembersGyms(sql, news, log, userId, { what: "leaderboard", change: "counted" });
 }
 
-/** A route's `onResponse`: a change saved to the gym's people (2xx, not a read) tells the gym's open
- *  lines that names, records or members changed. */
+/** A route's `onSend` (as above): a change saved to the gym's people (2xx, not a read) tells the
+ *  gym's open lines that names, records or members changed. */
 export function tellPeopleAfter(news: LiveNewsSender) {
   const inGym = z.object({ gymId: z.string().uuid() });
-  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (req.method === "GET" || reply.statusCode >= 300) return;
+  return async <P>(req: FastifyRequest, reply: FastifyReply, payload: P): Promise<P> => {
+    if (req.method === "GET" || reply.statusCode >= 300) return payload;
     const at = inGym.safeParse(req.params);
     if (at.success) news.tell(at.data.gymId, { what: "people" });
+    return payload;
   };
 }

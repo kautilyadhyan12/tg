@@ -38,9 +38,13 @@ image running `src/live.ts` on port 3100. Caddy sends that one path there, uncom
 everything else to `api`, which runs with `LIVE_LINES=apart` and tells `live` what changed on a
 Redis channel named for its database. Both need `REDIS_URL`. Neither waits for Redis to start, and
 Caddy waits only for `live` to have started, so a Redis outage stops live updates, never the site:
-a page then catches up when its line next opens, within 15 minutes (a line ends when its sign-in
-runs out), or when staff reload it. Each `live` process holds at most 20,000 lines
-(17–19 KB each). Without `LIVE_LINES=apart` the api holds the lines itself, as on a laptop.
+when Redis is back, `live` tells every open line to read again, so each page catches up then.
+Each `live` process holds at most 20,000 lines (17–19 KB each). Without `LIVE_LINES=apart` the api
+holds the lines itself, as on a laptop.
+
+**Deploy `live` first, or both together.** `live` drops a kind of news it does not know, so an
+`api` that tells a new kind before `live` has it leaves pages showing old answers until their line
+next opens (within 15 minutes).
 
 ## Environment
 

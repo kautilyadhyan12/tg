@@ -417,25 +417,44 @@ function AttendanceDay({ org }) {
     nextCursor: null,
   });
   const [loadingMore, setLoadingMore] = useState(false);
+  /** How many pages of this day are on screen: a read again on news reads as many, so a list that
+   *  was paged with Show more is not folded back to its first page. */
+  const pagesShown = useRef({ forKey: null, pages: 1 });
+  /** Counts the day's reads that landed: a Show more asked before one of them is dropped, since it
+   *  continues a list that has been read again. */
+  const landed = useRef(0);
 
   // ONE READ ON MOUNT, ONE WHEN THE DAY CHANGES, ONE WHEN THE FILTER CHANGES,
   // and one when the server says a visit changed. No focus listener, no interval.
   useEffect(() => {
     let cancelled = false;
     const params = statusesParam === undefined ? { day } : { day, statuses: statusesParam };
-    void orgService
-      .getAttendanceDay(gymId, params)
-      .then((res) => {
+    const pages = pagesShown.current.forKey === readKey ? pagesShown.current.pages : 1;
+    const readPages = async () => {
+      const first = await orgService.getAttendanceDay(gymId, params);
+      const answer = first.data?.attendance;
+      let people = answer?.people ?? [];
+      let nextCursor = answer?.nextCursor ?? null;
+      for (let page = 1; page < pages && nextCursor !== null && !cancelled; page += 1) {
+        const more = await orgService.getAttendanceDay(gymId, { ...params, cursor: nextCursor });
+        people = [...people, ...(more.data?.attendance?.people ?? [])];
+        nextCursor = more.data?.attendance?.nextCursor ?? null;
+      }
+      return { answer, people, nextCursor };
+    };
+    void readPages()
+      .then(({ answer, people, nextCursor }) => {
         if (cancelled) return;
-        const answer = res.data?.attendance;
+        landed.current += 1;
+        pagesShown.current = { forKey: readKey, pages };
         setState({
           status: 'ready',
           forKey: readKey,
           day: answer ?? null,
           error: null,
           retryable: true,
-          people: answer?.people ?? [],
-          nextCursor: answer?.nextCursor ?? null,
+          people,
+          nextCursor,
           stale: false,
         });
       })
@@ -484,6 +503,7 @@ function AttendanceDay({ org }) {
   const showMore = useCallback(() => {
     if (nextCursor === null || loadingMore) return;
     setLoadingMore(true);
+    const after = landed.current;
     const params =
       statusesParam === undefined
         ? { day, cursor: nextCursor }
@@ -501,6 +521,9 @@ function AttendanceDay({ org }) {
         // appending it would put one day's people under another day's heading —
         // the same defect the stamp above exists to prevent, arriving by the
         // other door.
+        if (landed.current !== after) return;
+        const shownBefore = pagesShown.current.forKey === readKey ? pagesShown.current.pages : 1;
+        pagesShown.current = { forKey: readKey, pages: shownBefore + 1 };
         setState((held) => {
           if (held.forKey !== readKey) return held;
           return {

@@ -342,6 +342,8 @@ describe('the board for staff', () => {
       svc.board.mockResolvedValue(answer({ asOf: '2026-10-07T18:29:00.000Z' }));
       open();
       await waitFor(() => expect(svc.board).toHaveBeenCalledTimes(1));
+      // The board drawn, so its wait for midnight is set before the clock moves.
+      await screen.findByTestId('board-dates');
       await act(async () => {
         await vi.advanceTimersByTimeAsync(32_000);
       });

@@ -704,6 +704,53 @@ describe('who came, on live news', () => {
     });
     expect(api.getAttendanceDay).toHaveBeenCalledTimes(4);
   });
+
+  const paged = (people, nextCursor, visitors = 3) => ({
+    data: { attendance: { ...dayWith(people).data.attendance, totals: { visits: visitors, people: visitors }, nextCursor } },
+  });
+
+  it('a busy day paged with Show more keeps its pages when news reads it again', async () => {
+    const asha = someone('Asha App', 'asha@example.com');
+    const ben = someone('Ben Desk', 'ben@example.com');
+    const cara = someone('Cara Card', 'cara@example.com');
+    const dev = someone('Dev New', 'dev@example.com');
+    api.getAttendanceDay.mockResolvedValueOnce(paged([asha, ben], 'page-2'));
+    drawScreen();
+    await screen.findByText('ben@example.com');
+    api.getAttendanceDay.mockResolvedValueOnce(paged([cara], null));
+    fireEvent.click(screen.getByRole('button', { name: 'Show more people' }));
+    await screen.findByText('cara@example.com');
+    // Dev checks in: the day is read again, both pages of it, and nobody is folded away.
+    api.getAttendanceDay.mockResolvedValueOnce(paged([dev, asha], 'page-2b', 4)).mockResolvedValueOnce(paged([ben, cara], null, 4));
+    tell({ what: 'visits', change: 'added' });
+    await screen.findByText('dev@example.com');
+    expect(api.getAttendanceDay).toHaveBeenCalledTimes(4);
+    expect(api.getAttendanceDay.mock.calls[3][1]).toMatchObject({ cursor: 'page-2b' });
+    for (const email of ['asha@example.com', 'ben@example.com', 'cara@example.com']) expect(screen.getByText(email)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Show more people' })).toBeNull();
+  });
+
+  it('a Show more still on its way when news reads the day again is dropped: it went on from a list that was read again', async () => {
+    const asha = someone('Asha App', 'asha@example.com');
+    const ben = someone('Ben Desk', 'ben@example.com');
+    const cara = someone('Cara Card', 'cara@example.com');
+    const dev = someone('Dev New', 'dev@example.com');
+    api.getAttendanceDay.mockResolvedValueOnce(paged([asha, ben], 'page-2'));
+    drawScreen();
+    await screen.findByText('ben@example.com');
+    let finishShow;
+    api.getAttendanceDay.mockReturnValueOnce(new Promise((resolve) => (finishShow = resolve)));
+    fireEvent.click(screen.getByRole('button', { name: 'Show more people' }));
+    api.getAttendanceDay.mockResolvedValueOnce(paged([dev, asha], 'page-2b', 4));
+    tell({ what: 'visits', change: 'added' });
+    await screen.findByText('dev@example.com');
+    await act(async () => {
+      finishShow(paged([cara], null));
+    });
+    expect(screen.queryByText('cara@example.com')).toBeNull();
+    expect(screen.queryByText('ben@example.com')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show more people' })).toBeTruthy();
+  });
 });
 
 describe('who came, without news', () => {

@@ -182,8 +182,9 @@ export async function buildApp(
     // and the default is null — so without this line a custom header is sent
     // by the server and silently invisible to the client, exactly the shape of
     // the Card 4 preflight bug (inject() tests cannot see either).
-    // Content-Disposition carries a download's file name (the member list's CSV).
-    exposedHeaders: ["Idempotent-Replay", "Content-Disposition"],
+    // Content-Disposition carries a download's file name (the member list's CSV); Retry-After says
+    // when a refused live line may be asked for again.
+    exposedHeaders: ["Idempotent-Replay", "Content-Disposition", "Retry-After"],
     // A browser asks before each save it sends with a JSON body. That question is
     // answered here, before the floor below counts anything; two hours (Chromium's own
     // ceiling) saves a round trip a save, where a browser would otherwise ask again

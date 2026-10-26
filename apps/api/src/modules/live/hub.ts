@@ -20,6 +20,8 @@ export interface LiveHub {
   /** How many lines the news went to. */
   deliver(gymId: string, news: LiveNews): number;
   count(): number;
+  /** Tells every line `ready`: news may have been lost, so every page reads again. */
+  readAgainAll(): void;
   /** Ends every line, when the server stops. */
   endAll(): void;
 }
@@ -69,6 +71,9 @@ export function createLiveHub(limits: HubLimits = HUB_LIMITS): LiveHub {
     },
     count() {
       return total;
+    },
+    readAgainAll() {
+      for (const lines of byGym.values()) for (const line of [...lines]) line.send({ what: "ready" });
     },
     endAll() {
       for (const lines of [...byGym.values()]) for (const line of [...lines]) line.end();
