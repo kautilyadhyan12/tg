@@ -97,7 +97,7 @@ export function registerLiveRoutes(app: FastifyInstance, deps: LiveRouteDeps): v
     const timers: { heartbeat?: ReturnType<typeof setInterval>; end?: ReturnType<typeof setTimeout> } = {};
     const write = (text: string): void => {
       if (ended) return;
-      if (stream.writableLength + reply.raw.writableLength > MAX_WAITING_BYTES) {
+      if (stream.writableLength + stream.readableLength + reply.raw.writableLength > MAX_WAITING_BYTES) {
         finish();
         reply.raw.destroy();
         return;
