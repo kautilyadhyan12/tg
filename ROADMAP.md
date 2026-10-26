@@ -288,7 +288,7 @@ Order (Kd, 2026-09-13, reshaped 2026-09-17; RULINGS both days; Stage 1's food le
        - 18d-iii-b-ii. **Match a payment from Square's app**, in three parts since 2026-10-25 (`handoff/2026-10-25-18d-iii-b-ii-a.md` keeps its line as first written):
          - 18d-iii-b-ii-a. [x] **Payments to match, one press** — merged 2026-10-26 (PR #361).
          - 18d-iii-b-ii-b. **Members in Square**, in two parts since 2026-10-26 (`handoff/2026-10-26-18d-iii-b-ii-b-i.md` keeps its line as first written):
-           - 18d-iii-b-ii-b-i. [ ] **Add members to Square**: the owner's press checks Square first and says who is added, linked (the same email or phone and the same name) or left out and why, and whom Square already charges itself; then each new member is added by itself. Web folder 1.
+           - 18d-iii-b-ii-b-i. [x] **Add members to Square** — merged 2026-10-26 (PR #362).
            - 18d-iii-b-ii-b-ii. [ ] **Kept up to date**: a change of name, email or phone copied to Square; Square's own merging of two customers followed; a record deleted for good taken out of Square where the app added it. Web folder 1.
          - 18d-iii-b-ii-c. [ ] **Match once for the rest** (Kd, 2026-10-24): Match links Square's customer to the person, so their later payments have their name and bill filled in, one press; Unlink on their page; a card saved later uses the linked customer. Web folder 1.
      - 18d-iv. [ ] **Refund a card payment through Square** (`rulings/2026-10-15-18o.md`); a chargeback shown on its payment with Square's 7-day deadline (Kd, 2026-10-22). Web folder 1.
