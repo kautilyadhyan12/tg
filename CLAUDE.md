@@ -271,7 +271,10 @@ every button, field, message and permission its page has.
 **The phone app (Kd, RULINGS 2026-10-12; spec Part 6 §16).** A member feature is built
 for the phone, never the browser. Every screen rule above holds there, with "a gym" read
 as "a member" and "the real browser" as "the real phone": the terminal walks the whole
-task on Kd's phone, on its own folder's copy of the app, before he is asked. One look,
+task on Kd's phone, on its own folder's copy of the app, before he is asked. Before a
+terminal builds, installs, opens or takes pictures of the app on the phone, it asks Kd in
+one line, saying for how long, waits for his go, and says "phone free" when it is done:
+one terminal on the phone at a time (Kd, 2026-10-26). One look,
 drawn once (ROADMAP Stage 5 item 11): colours and building blocks by name, never written
 into a screen. What a person DOES (a workout, a meal, a weigh-in, a run) is kept on the
 phone until the server has it, and its route is safe to call twice; a lost connection
@@ -521,8 +524,9 @@ Redis number and ports; the two lists are in ROADMAP Stage 2's header.
 web part was built on a borrowed laptop in three web folders (A, B, C) until 2026-10-16,
 then in web folders 1 and 2 on Kd's own laptop, and since 2026-10-26 in ONE web folder on
 a second laptop (ROADMAP Stage 2's header; its own `FOLDER.md`). Kd's
-own laptop builds the phone app and the exercises in FOUR folders, two running at a time,
-all checkouts of the one repository:
+own laptop builds the phone app and the exercises in FOUR folders, three running at a time
+since 2026-10-26 (two before), each in its own PowerShell window, not VS Code, all
+checkouts of the one repository:
 
 | Folder | Path | Builds (ROADMAP Stage 5) |
 |---|---|---|
