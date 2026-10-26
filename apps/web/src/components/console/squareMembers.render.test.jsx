@@ -181,6 +181,7 @@ describe('who may, and while Square is read', () => {
     open(members({ state: 'adding', runId: RUN, progress: { done: 120, of: 1188 } }));
     expect(await screen.findByText('Adding members to Square…')).toBeTruthy();
     expect(screen.getByText('120 of 1,188 done.')).toBeTruthy();
+    expect(screen.getByText('This can take a few minutes. You can leave this page: it carries on by itself.')).toBeTruthy();
   });
 
   it('a check Square stopped says so, and Try again checks again', async () => {

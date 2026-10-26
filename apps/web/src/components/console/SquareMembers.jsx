@@ -221,6 +221,7 @@ export default function SquareMembers({ org, owner, readOnly }) {
     return (
       <Step icon="checking" title={W.checkingTitle} testId="square-members-step">
         <Line>{W.checkingLooked(data.looked)}</Line>
+        <Line soft>{W.takesTime}</Line>
         {data.unanswered ? <Line soft>{W.unanswered}</Line> : null}
       </Step>
     );
@@ -270,6 +271,7 @@ export default function SquareMembers({ org, owner, readOnly }) {
     return (
       <Step icon="checking" title={W.addingTitle} testId="square-members-step">
         {data.progress !== null ? <Line>{W.addingProgress(data.progress.done, data.progress.of)}</Line> : null}
+        <Line soft>{W.takesTime}</Line>
         {data.unanswered ? <Line soft>{W.unanswered}</Line> : null}
       </Step>
     );
