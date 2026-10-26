@@ -3,9 +3,10 @@
 //
 // The first block is the worst thing this job could do to a real person (CLAUDE.md §2.1): a
 // gym's news told to somebody who is not its staff — another gym's owner, a member of the same
-// gym, an account that belongs nowhere, somebody signed out, somebody removed from its staff —
+// gym, an account that belongs nowhere, a request with no sign-in, somebody removed from its staff —
 // or a message that carries a person's details instead of only what to read again.
 import { randomUUID } from "node:crypto";
+import { connect, type Socket } from "node:net";
 import type { ReadableStreamReadResult } from "node:stream/web";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
@@ -15,8 +16,8 @@ import { LIVE_WORDS, agreementLinkResponseSchema, membershipAgreementResponseSch
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import type { AgreementLinkLetter } from "../src/modules/orgs/agreement/email.js";
-import { createLiveHub } from "../src/modules/live/hub.js";
-import { liveChannel } from "../src/modules/live/news.js";
+import { createLiveHub, type LiveHub } from "../src/modules/live/hub.js";
+import { hearRedisNews, liveChannel } from "../src/modules/live/news.js";
 import { createMemoryRedis } from "../src/redis.js";
 import { proveAddress } from "./proveAddress.js";
 
@@ -95,9 +96,10 @@ interface Line {
   close: () => void;
 }
 
-async function openLine(base: string, gymId: string, cookies: Cookies | { bearer: string }, ip = nextIp()): Promise<Line> {
+async function openLine(base: string, gymId: string, cookies: Cookies | { bearer: string }, ip = nextIp(), origin: string | null = WEB): Promise<Line> {
   const controller = new AbortController();
   const headers: Record<string, string> = { accept: "text/event-stream", "x-forwarded-for": ip };
+  if (origin !== null) headers["origin"] = origin;
   if ("bearer" in cookies) headers["authorization"] = `Bearer ${cookies.bearer}`;
   else headers["cookie"] = cookieHeader(cookies);
   const res = await fetch(`${base}/v1/orgs/${gymId}/live`, { headers, signal: controller.signal });
@@ -149,6 +151,19 @@ async function openLine(base: string, gymId: string, cookies: Cookies | { bearer
   return line;
 }
 
+/** A request written straight onto a socket, so a test can go away mid-way or never read, as a
+ *  browser can. */
+function rawRequest(base: string, method: string, path: string, headers: Record<string, string>, body?: string): Socket {
+  const { hostname, port } = new URL(base);
+  const socket = connect(Number(port), hostname);
+  socket.on("error", () => undefined);
+  const head = [`${method} ${path} HTTP/1.1`, `host: ${hostname}:${port}`, ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`)];
+  if (body !== undefined) head.push(`content-length: ${String(Buffer.byteLength(body))}`);
+  socket.write(`${head.join("\r\n")}\r\n\r\n${body ?? ""}`);
+  return socket;
+}
+const lineHeaders = (cookies: Cookies): Record<string, string> => ({ accept: "text/event-stream", origin: WEB, cookie: cookieHeader(cookies), "x-forwarded-for": nextIp() });
+
 const READY = { what: "ready" };
 const news = (entryId: string) => ({ what: "memberships", entryId });
 
@@ -160,6 +175,9 @@ d("live updates: the console's open line (real Postgres)", () => {
   let app: App | undefined;
   /** The same server with lines that live 1.5 seconds and a hub of 2 a person, 3 in all. */
   let shortApp: App | undefined;
+  /** Each server's hub, so a test can count its lines and flood one. */
+  const mainHub: LiveHub = createLiveHub();
+  const shortHub: LiveHub = createLiveHub({ perPerson: 2, total: 3 });
   let base = "";
   let shortBase = "";
   const api = (): App => {
@@ -292,13 +310,13 @@ d("live updates: the console's open line (real Postgres)", () => {
         return Promise.resolve();
       },
     };
-    app = await buildApp(loadConfig(baseEnv), { redis: appRedis, emailSender: quietEmail, agreementEmailSender, live: { heartbeatMs: 250 } });
+    app = await buildApp(loadConfig(baseEnv), { redis: appRedis, emailSender: quietEmail, agreementEmailSender, live: { heartbeatMs: 250, hub: mainHub } });
     base = await app.listen({ port: 0, host: "127.0.0.1" });
     shortApp = await buildApp(loadConfig(baseEnv), {
       redis: createMemoryRedis(),
       emailSender: quietEmail,
       agreementEmailSender,
-      live: { heartbeatMs: 250, maxLineMs: 1_500, hub: createLiveHub({ perPerson: 2, total: 3 }) },
+      live: { heartbeatMs: 250, maxLineMs: 1_500, hub: shortHub },
     });
     shortBase = await shortApp.listen({ port: 0, host: "127.0.0.1" });
   }, T);
@@ -332,8 +350,8 @@ d("live updates: the console's open line (real Postgres)", () => {
         const refused = await openLine(base, a.gymId, cookies);
         expect([who, refused.status, refused.refusal?.error, refused.contentType]).toEqual([who, 404, "org_not_found", "application/json; charset=utf-8"]);
       }
-      const signedOut = await openLine(base, a.gymId, {});
-      expect([signedOut.status, signedOut.refusal?.error]).toEqual([401, "unauthorized"]);
+      const noSignIn = await openLine(base, a.gymId, {});
+      expect([noSignIn.status, noSignIn.refusal?.error]).toEqual([401, "unauthorized"]);
       const forged = await openLine(base, a.gymId, { bearer: jwt.sign({ sub: a.owner.userId, typ: "access" }, "not-the-secret-0123456789abcdefghij", { algorithm: "HS256", expiresIn: 600 }) });
       expect(forged.status).toBe(401);
       expect((await openLine(base, randomUUID(), a.owner.cookies)).status).toBe(404);
@@ -545,6 +563,108 @@ d("live updates: the console's open line (real Postgres)", () => {
   );
 
   it(
+    "only the console's own website opens a line: another site, or none, gets the 404 and takes no place",
+    async () => {
+      const a = await makeBusiness("Live Origin Gym");
+      for (const origin of ["https://evil.example", "http://localhost:5174", null]) {
+        const refused = await openLine(shortBase, a.gymId, a.owner.cookies, nextIp(), origin);
+        expect([origin, refused.status, refused.refusal?.error]).toEqual([origin, 404, "org_not_found"]);
+      }
+      // The account's two places here are still free.
+      const one = await openLine(shortBase, a.gymId, a.owner.cookies);
+      const two = await openLine(shortBase, a.gymId, a.owner.cookies);
+      expect([one.status, two.status]).toEqual([200, 200]);
+      one.close();
+      two.close();
+      // The console, on another site than the api, can read how long a refused line should wait.
+      const head = await api().inject({ method: "GET", url: "/health", headers: { origin: WEB } });
+      expect(head.headers["access-control-expose-headers"]).toContain("Retry-After");
+    },
+    T,
+  );
+
+  it(
+    "a request the browser drops while the server is still checking it takes no place",
+    async () => {
+      const a = await makeBusiness("Live Dropped Gym");
+      await until(() => shortHub.count() === 0, 4_000);
+      for (const ms of [0, 0, 1, 1, 2, 3, 5, 8, 12, 20]) {
+        const socket = rawRequest(shortBase, "GET", `/v1/orgs/${a.gymId}/live`, lineHeaders(a.owner.cookies));
+        await pause(ms);
+        socket.destroy();
+      }
+      await pause(500);
+      expect(shortHub.count()).toBe(0);
+      const one = await openLine(shortBase, a.gymId, a.owner.cookies);
+      const two = await openLine(shortBase, a.gymId, a.owner.cookies);
+      expect([one.status, two.status]).toEqual([200, 200]);
+      one.close();
+      two.close();
+    },
+    T,
+  );
+
+  it(
+    "a line its browser never reads is cut once a little is waiting, so unread news never piles up in the server",
+    async () => {
+      const a = await makeBusiness("Live Unread Gym");
+      const before = mainHub.count();
+      const socket = rawRequest(base, "GET", `/v1/orgs/${a.gymId}/live`, lineHeaders(a.owner.cookies));
+      socket.pause();
+      const closed = { yes: false };
+      socket.on("close", () => {
+        closed.yes = true;
+      });
+      await until(() => mainHub.count() === before + 1);
+      let sent = 0;
+      while (sent < 200_000 && mainHub.count() > before) {
+        mainHub.deliver(a.gymId, { what: "people" });
+        sent += 1;
+      }
+      // Cut long before 200,000 messages (about 14 MB), and its connection with it.
+      expect(mainHub.count()).toBe(before);
+      expect(sent).toBeLessThan(5_000);
+      // Read what had reached the browser: then its connection is found closed.
+      socket.resume();
+      await until(() => closed.yes, 3_000);
+    },
+    T,
+  );
+
+  it(
+    "a change saved for a browser that went away before the answer still reaches the other windows",
+    async () => {
+      const a = await makeBusiness("Live Gone Gym");
+      const people = [
+        await addPerson(a.gymId, a.owner.cookies, "Maya Patel", "live-p-maya6@example.com"),
+        await addPerson(a.gymId, a.owner.cookies, "Ben Stone", "live-p-ben6@example.com"),
+        await addPerson(a.gymId, a.owner.cookies, "Cara Diaz", "live-p-cara6@example.com"),
+      ];
+      const line = await openLine(base, a.gymId, a.owner.cookies);
+      for (const [i, entryId] of people.entries()) {
+        const body = JSON.stringify({ requestKey: nextForm(), typeId: a.typeId, startsOn: "2026-10-15", paid: true, method: "cash", priceMinor: 60000, totalMinor: 60000 });
+        const socket = rawRequest(base, "POST", heldUrl(a.gymId, entryId), { ...lineHeaders(a.owner.cookies), "content-type": "application/json" }, body);
+        await new Promise<void>((resolve) => socket.once("ready", resolve).once("error", () => {
+          resolve();
+        }));
+        await pause([5, 20, 40][i] ?? 5);
+        socket.destroy();
+        await until(() => line.messages.length === i + 2, 5_000);
+        expect((await sql`SELECT 1 FROM gym_held_memberships WHERE gym_id = ${a.gymId} AND entry_id = ${entryId}`).length).toBe(1);
+      }
+      expect(line.messages).toEqual([READY, ...people.map((p) => news(p))]);
+      line.close();
+    },
+    T,
+  );
+
+  it("the Redis channel is named without the database's user or password", () => {
+    expect(liveChannel("postgres://a:secret@db.example:5432/app")).toBe(liveChannel("postgres://b:other@db.example:5432/app"));
+    expect(liveChannel("postgres://a:secret@db.example:5432/app")).not.toBe(liveChannel("postgres://a:secret@db.example:5432/other"));
+    expect(liveChannel("postgres://a:secret@db.example:5432/app")).not.toBe(liveChannel("postgres://a:secret@db2.example:5432/app"));
+  });
+
+  it(
     "a Redis that cannot be reached does not stop the api or the live server starting",
     async () => {
       const nowhere = { ...baseEnv, REDIS_URL: "redis://127.0.0.1:6399/5" };
@@ -624,6 +744,45 @@ d("live updates: the console's open line (real Postgres)", () => {
         expect(lineB.messages).toEqual([READY, news(other)]);
         lineA.close();
         lineB.close();
+      },
+      T,
+    );
+
+    it(
+      "Redis lost and back: every open line is told ready, so each page reads what it missed, and news is heard again",
+      async () => {
+        if (publisher === undefined) throw new Error("beforeAll did not build the servers");
+        const a = await makeBusiness("Live Redis Back Gym");
+        const line = await openLine(linesBase, a.gymId, a.owner.cookies);
+        // The line server's own connection to the channel is cut, as when Redis restarts.
+        await publisher.call("CLIENT", "KILL", "TYPE", "pubsub");
+        await until(() => line.messages.length === 2, 10_000);
+        const later = randomUUID();
+        await publisher.publish(liveChannel(url ?? ""), JSON.stringify({ gymId: a.gymId, news: news(later) }));
+        await until(() => line.messages.length === 3);
+        expect(line.messages).toEqual([READY, READY, news(later)]);
+        line.close();
+      },
+      T,
+    );
+
+    it(
+      "Redis down when the live server starts: its first connection tells every open line ready too",
+      async () => {
+        if (lines === undefined) throw new Error("beforeAll did not build the servers");
+        const hub = createLiveHub();
+        const told: string[] = [];
+        const counting: LiveHub = {
+          ...hub,
+          readAgainAll: () => {
+            told.push("ready");
+            hub.readAgainAll();
+          },
+        };
+        const stop = hearRedisNews(redisUrl ?? "", liveChannel(url ?? ""), counting, lines.log);
+        await until(() => told.length === 1, 10_000);
+        stop();
+        expect(told).toEqual(["ready"]);
       },
       T,
     );

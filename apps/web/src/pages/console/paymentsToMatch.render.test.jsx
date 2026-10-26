@@ -285,7 +285,8 @@ describe('Payments to match', () => {
     await screen.findByText('2 payments to match · $42.06');
     expect(within(row('Amy Lee')).getByTestId('match-box')).toBeTruthy();
     expect(within(row('Ben Ortiz')).queryByTestId('match-box')).toBeNull();
-    expect(scrolled).toHaveBeenCalled();
+    // The box scrolls into view once it is drawn.
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
   });
 
   it('payments another gym here shares a Square location with are counted, with the button to choose another location, or who can', async () => {

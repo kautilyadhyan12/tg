@@ -5,14 +5,18 @@ import { refreshSession } from '../../api/authApi';
 // LIVE UPDATES (ROADMAP Stage 4 item 18; Kd, 2026-10-24). While a console tab is on screen it keeps
 // ONE open line to the server for the gym it shows, shared by every part of the page that listens.
 // The server says what changed ({ what: 'memberships', entryId }) and the page reads that again
-// through its normal route. Off screen for a minute the line is closed; back on screen it opens
-// again and says `ready`, and a page that was already listening reads again whatever it may have
-// missed.
+// through its normal route. Every `ready` is told to every listener, the line's first too: a page's
+// own first read was answered before its line opened, and a change made in between is in neither.
+// A `ready` on a line already open (the server lost its Redis, where news passes, and has it back)
+// is told at a moment of its own within 3 s, so every console does not read in the same instant.
+// Off screen for a minute the line is closed; back on screen it opens again and says `ready`.
 //
 // The server ends a line when the sign-in runs out (at most 15 minutes): it is opened again within
 // a few seconds, after a refreshed sign-in if the server asks for one (one tab at a time:
-// `refreshSession`). A line that cannot open waits longer each time, up to a minute. Not staff here
-// (404): no line, and nothing is retried.
+// `refreshSession`). A refresh that fails for a blip is tried again like a line that would not
+// open; a sign-in that is really gone is said as `refused`, so the page checks for itself and its
+// own read takes the person to sign in. A line that cannot open waits longer each time, up to a
+// minute. Not staff here (404): no line, and nothing is retried.
 //
 // Besides the server's messages a listener hears two of this file's own: `refused` ({ message }),
 // whenever the server refused the line, or it could not be opened twice in a row (the server or the
@@ -55,10 +59,7 @@ function cameBack(line) {
   line.hidden = null;
   if (line.open || line.stopped) return;
   // No line while it was away: the page reads again, and the line is asked for once more.
-  for (const listener of [...line.listeners]) {
-    listener.seenReady = true;
-    listener.fn({ what: 'cameBack' });
-  }
+  for (const listener of [...line.listeners]) listener.fn({ what: 'cameBack' });
   clearTimeout(line.wait);
   line.wait = null;
   connect(line);
@@ -94,6 +95,8 @@ function hangUp(line) {
   line.wait = null;
   clearTimeout(line.hidden);
   line.hidden = null;
+  clearTimeout(line.readyLater);
+  line.readyLater = null;
   line.open = false;
   const controller = line.controller;
   line.controller = null;
@@ -120,15 +123,23 @@ function tryLater(line, ms, counts = true) {
 }
 
 function deliver(line, message) {
-  for (const listener of [...line.listeners]) {
-    if (message.what === 'ready') {
-      // A page reads for itself when it is drawn; it reads again only for a line opened since.
-      if (listener.seenReady) listener.fn(message);
-      listener.seenReady = true;
-    } else {
-      listener.fn(message);
-    }
-  }
+  for (const listener of [...line.listeners]) listener.fn(message);
+}
+
+/** A second `ready` on the same line, told at a moment of its own (see the top of this file). */
+function readyLater(line) {
+  if (line.readyLater !== null) return;
+  line.readyLater = setTimeout(() => {
+    line.readyLater = null;
+    deliver(line, { what: 'ready' });
+  }, Math.random() * REOPEN_SPREAD_MS);
+}
+
+/** The sign-in is really gone: no more lines, and the page checks for itself, so its own next read
+ *  takes the person to sign in. */
+function signedOut(line) {
+  line.stopped = true;
+  deliver(line, { what: 'refused', message: LIVE_WORDS.unreachable });
 }
 
 /** Why the server would not open the line, in its own words where it gave them. */
@@ -170,15 +181,28 @@ async function connect(line) {
     line.refreshed = true;
     try {
       await refreshSession();
-    } catch {
-      // The sign-in is gone; the page's own reads take the person to sign in.
-      line.stopped = true;
+    } catch (err) {
+      if (line.controller !== null || line.listeners.size === 0) return;
+      if (err?.response?.status === 401) {
+        signedOut(line);
+        return;
+      }
+      // A blip (no network, the server restarting, a 5xx or 429): asked for again, said from the
+      // second failure in a row, as a line that would not open is.
+      line.refreshed = false;
+      if (line.failures >= 1) deliver(line, { what: 'refused', message: LIVE_WORDS.unreachable });
+      tryLater(line);
       return;
     }
     connect(line);
     return;
   }
-  if (res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404) {
+  if (res.status === 401) {
+    line.controller = null;
+    signedOut(line);
+    return;
+  }
+  if (res.status === 400 || res.status === 403 || res.status === 404) {
     line.controller = null;
     line.stopped = true;
     return;
@@ -200,6 +224,7 @@ async function connect(line) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let readyHeard = false;
   try {
     for (;;) {
       const { value, done } = await reader.read();
@@ -218,7 +243,14 @@ async function connect(line) {
           continue;
         }
         if (parsed.success) {
-          if (parsed.data.what === 'ready') line.failures = 0;
+          if (parsed.data.what === 'ready') {
+            line.failures = 0;
+            if (readyHeard) {
+              readyLater(line);
+              continue;
+            }
+            readyHeard = true;
+          }
           deliver(line, parsed.data);
         }
       }
@@ -238,13 +270,12 @@ export function listenLive(gymId, fn) {
   watchScreen();
   let line = lines.get(gymId);
   if (line === undefined) {
-    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, hidden: null, open: false, failures: 0, refreshed: false, stopped: false };
+    line = { gymId, listeners: new Set(), controller: null, wait: null, linger: null, hidden: null, readyLater: null, open: false, failures: 0, refreshed: false, stopped: false };
     lines.set(gymId, line);
   }
   clearTimeout(line.linger);
   line.linger = null;
-  // Joining a line already open: its `ready` has gone, and the next one means it was away.
-  const listener = { fn, seenReady: line.open };
+  const listener = { fn };
   line.listeners.add(listener);
   connect(line);
   return () => {

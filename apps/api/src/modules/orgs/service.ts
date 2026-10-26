@@ -1026,7 +1026,7 @@ export async function holdsPrivilege(
  *  stranger "that STUDIO was not found" would answer a question they were
  *  refused. "Organisation" is the word `ConsoleHome` already puts above the list
  *  of everything somebody runs, so it is not a new one to learn. */
-const ORG_NOT_FOUND_MESSAGE = "Organisation not found.";
+export const ORG_NOT_FOUND_MESSAGE = "Organisation not found.";
 
 /** THE SENTENCE A REFUSED WRITE CARRIES, and it is written once because twelve
  *  routes say it.
