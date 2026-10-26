@@ -42,12 +42,22 @@ export async function rememberMerge(sql: SqlOrTx, m: At & { fromId: string; toId
     WHERE environment = ${m.environment} AND account_id = ${m.accountId} AND to_customer_id = ${m.fromId} AND from_customer_id <> ${m.toId}`;
 }
 
-/** The customer a payment's customer is now: the one Square merged it into, or itself. */
-export async function currentCustomer(sql: SqlOrTx, a: At & { customerId: string }): Promise<string> {
-  const [row] = await sql<{ to_customer_id: string }[]>`
-    SELECT to_customer_id FROM gym_square_customer_merges
-    WHERE environment = ${a.environment} AND account_id = ${a.accountId} AND from_customer_id = ${a.customerId}`;
-  return row?.to_customer_id ?? a.customerId;
+/** The records of this gym the old customer was (its link, or a card saved on it that says whose it is), kept
+ *  with them before anything moves: a payment under the old id is theirs, whoever keeps the merged customer
+ *  (round one, Critical 1). The first record kept stays. */
+export async function rememberOldCustomer(tx: TransactionSql, m: At & { gymId: string; fromId: string; at: Date }): Promise<void> {
+  await tx`
+    INSERT INTO gym_square_old_customers (gym_id, entry_id, environment, account_id, customer_id, merged_at)
+    SELECT gym_id, entry_id, ${m.environment}, ${m.accountId}, ${m.fromId}, ${m.at} FROM (
+      SELECT gym_id, entry_id FROM gym_square_customers
+      WHERE gym_id = ${m.gymId} AND environment = ${m.environment} AND account_id = ${m.accountId} AND customer_id = ${m.fromId}
+      UNION
+      SELECT gym_id, entry_id FROM gym_member_cards
+      WHERE gym_id = ${m.gymId} AND environment = ${m.environment} AND account_id = ${m.accountId} AND customer_id = ${m.fromId}
+        AND merged_away_at IS NULL
+      ORDER BY entry_id
+      LIMIT 1) held
+    ON CONFLICT DO NOTHING`;
 }
 
 /** Square keeps a card on the customer it was merged into: the gym's cards saved on the old customer are

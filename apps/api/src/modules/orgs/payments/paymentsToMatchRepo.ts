@@ -269,8 +269,9 @@ export function phoneE164Like(phone: string): string | null {
 }
 
 /** The records each Square customer is linked to in this gym, by name: the customer the app made for them,
- *  or the one their card on file is saved on. A customer Square has merged into another since is that other one
- *  (18d-iii-b-ii-b-ii-a); the names are keyed by the id asked about. */
+ *  or the one their card on file is saved on. A customer Square has merged into another since (18d-iii-b-ii-b-ii-a)
+ *  is the record it was here, and the merged customer's only where it was nobody's (round one, Critical 1); the
+ *  names are keyed by the id asked about. */
 export async function linkedNames(
   sql: SqlOrTx,
   q: { gymId: string; environment: SquareEnvironment; accountId: string; customerIds: readonly string[] },
@@ -278,22 +279,27 @@ export async function linkedNames(
   const out = new Map<string, string[]>();
   if (q.customerIds.length === 0) return out;
   const rows = await sql<{ customer_id: string; full_name: string }[]>`
-    WITH asked AS (
-      SELECT a.id AS asked, a.id AS id FROM unnest(${[...q.customerIds]}::text[]) AS a(id)
+    WITH holders AS (
+      SELECT customer_id, entry_id FROM gym_square_customers
+      WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId}
       UNION
-      SELECT m.from_customer_id, m.to_customer_id FROM gym_square_customer_merges m
-      WHERE m.environment = ${q.environment} AND m.account_id = ${q.accountId} AND m.from_customer_id = ANY(${[...q.customerIds]}::text[])
+      SELECT customer_id, entry_id FROM gym_member_cards
+      WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId} AND merged_away_at IS NULL
+      UNION
+      SELECT customer_id, entry_id FROM gym_square_old_customers
+      WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId}
+    ),
+    asked AS (SELECT a.id FROM unnest(${[...q.customerIds]}::text[]) AS a(id)),
+    own AS (SELECT a.id AS asked, h.entry_id FROM asked a JOIN holders h ON h.customer_id = a.id),
+    mapped AS (
+      SELECT a.id AS asked, h.entry_id FROM asked a
+      JOIN gym_square_customer_merges m ON m.environment = ${q.environment} AND m.account_id = ${q.accountId} AND m.from_customer_id = a.id
+      JOIN holders h ON h.customer_id = m.to_customer_id
+      WHERE NOT EXISTS (SELECT 1 FROM own o WHERE o.asked = a.id)
     )
     SELECT customer_id, full_name FROM (
-      SELECT DISTINCT a.asked AS customer_id, e.id, e.full_name
-      FROM asked a
-      JOIN (
-        SELECT customer_id, entry_id FROM gym_square_customers
-        WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId}
-        UNION
-        SELECT customer_id, entry_id FROM gym_member_cards
-        WHERE gym_id = ${q.gymId} AND environment = ${q.environment} AND account_id = ${q.accountId} AND merged_away_at IS NULL
-      ) l ON l.customer_id = a.id
+      SELECT DISTINCT l.asked AS customer_id, e.id, e.full_name
+      FROM (SELECT asked, entry_id FROM own UNION SELECT asked, entry_id FROM mapped) l
       JOIN gym_member_list_entries e ON e.gym_id = ${q.gymId} AND e.id = l.entry_id
     ) x
     ORDER BY customer_id, lower(full_name), id`;

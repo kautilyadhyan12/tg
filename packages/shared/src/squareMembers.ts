@@ -180,7 +180,7 @@ export const SQUARE_MEMBERS_WORDS = {
   /** Square merged their customer into one with another name, twice (18d-iii-b-ii-b-ii-a). */
   mergedAwayLead: (n: number): string =>
     `Left out, as Square merged them into another customer with a different name, twice (${n.toLocaleString("en-US")}):`,
-  mergedAwayFix: "Square merges customers who share an email or phone. Give each of them an email or phone of their own on their page, and the app adds them again.",
+  mergedAwayFix: "Give each of them an email or phone of their own on their page, and the app adds them again. In Square, merge only customers who are the same person.",
   /** Under the added box: Square alerts the business to customers who share an email or phone and lists them under
    *  Duplicate Suggestion (help article 8401, read 2026-10-26); two customers sharing neither are not flagged. */
   duplicatesNote: "In Square, [Duplicate Suggestion] lists customers who share an email or phone, such as a child on a parent's email. Merge them only if they are the same person.",

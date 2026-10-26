@@ -405,6 +405,14 @@ export async function linkCustomer(
     FROM gym_member_list_entries e WHERE e.gym_id = ${r.gymId} AND e.id = ${r.entryId} AND e.former_at IS NULL
     ON CONFLICT DO NOTHING
     RETURNING entry_id`;
+  // Separated from this customer by a merge and linked to it again (two records of one person): its card on it says
+  // whose it is again (round one, Low 5).
+  if (rows.length === 1) {
+    await tx`
+      UPDATE gym_member_cards SET merged_away_at = NULL
+      WHERE gym_id = ${r.gymId} AND entry_id = ${r.entryId} AND environment = ${r.environment} AND account_id = ${r.accountId}
+        AND customer_id = ${r.customerId} AND merged_away_at IS NOT NULL`;
+  }
   return rows.length === 1 ? "linked" : "already";
 }
 

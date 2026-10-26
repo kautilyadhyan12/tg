@@ -220,7 +220,7 @@ describe('who may, and while Square is read', () => {
     const away = within(step.getByTestId('square-members-merged_away'));
     expect(away.getByText('Left out, as Square merged them into another customer with a different name, twice (1):')).toBeTruthy();
     expect(away.getByText('Sam Smith')).toBeTruthy();
-    expect(away.getByText('Square merges customers who share an email or phone. Give each of them an email or phone of their own on their page, and the app adds them again.')).toBeTruthy();
+    expect(away.getByText('Give each of them an email or phone of their own on their page, and the app adds them again. In Square, merge only customers who are the same person.')).toBeTruthy();
   });
 
   it('before anything is added, the duplicates line is not shown', async () => {

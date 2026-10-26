@@ -9,8 +9,10 @@
 // one's; the one record whose name is the new customer's keeps it; any other record linked to the old customer or
 // the new one is separated from it and, where the gym added its members to Square, added again by itself (left
 // out if it happens twice within 30 days, so the app and Square never take turns); what a check planned or read
-// about the old customer is dropped. The old id is kept with the customer it is now, so a payment taken under it
-// still finds its member ("detect customer merges and store the merged IDs", Square's "Duplicated customers").
+// about the old customer is dropped. The old id is kept with the customer it is now ("detect customer merges and
+// store the merged IDs", Square's "Duplicated customers"), and with the record it was here: a payment taken under
+// it before the merge is that record's (round one, Critical 1), and only an old id nobody here was is read as the
+// merged customer's.
 //
 // THE WORST THING is a merge of two people followed: Sam, added on his mum Pat's email, merged by Square into
 // "Pat Smith" (a merge keeps the older customer's details), and moved onto her customer, so her payments at the
@@ -53,6 +55,7 @@ export async function followMerge(deps: PaymentsDeps, square: SquareSettings, ac
     const country = readCountry(gym?.country ?? null);
     const done = await deps.sql.begin(async (tx) => {
       await lockGym(tx, gymId);
+      await merges.rememberOldCustomer(tx, { gymId, environment, accountId, fromId, at: now });
       const cards = await merges.moveCards(tx, { gymId, environment, accountId, fromId, toId: to.id });
       const records = await merges.linkedTo(tx, { gymId, environment, accountId, customerIds: [fromId, to.id] });
       const { keep, separate } = followMerged(records, { givenName: to.given_name ?? null, familyName: to.family_name ?? null });

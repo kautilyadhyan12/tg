@@ -490,6 +490,7 @@ async function save(deps: PaymentsDeps, s: SaveFor): Promise<void> {
   if (outcome.kind === "gone") throw entryNotFound();
   if (outcome.kind === "paid_by") throw paidBy(outcome.payer, person.fullName);
   if (outcome.kind === "not_ready") throw notReady();
+  if (outcome.kind === "merged_away") throw new OrgsError(409, "card_merged_away", MEMBER_CARD_WORDS.merged_away);
 }
 
 /** A card Square saved, as it may be kept. */
@@ -553,8 +554,8 @@ export interface KeepCard {
   /** The connection the save began with. */
   connectedAt: Date;
   customerId: string;
-  /** The card went on a customer Square merged the record's into: it says whose that customer is only where the
-   *  record kept it (18d-iii-b-ii-b-ii-a). */
+  /** The card went on a customer Square merged the record's into (18d-iii-b-ii-b-ii-a): kept only where the record
+   *  kept that customer; on another person's, it is let go (round one, High 2). */
   afterMerge?: boolean;
   card: UsableCard;
   /** What the person agreed to, word for word. */
@@ -568,7 +569,12 @@ export interface KeepCard {
   at: Date;
 }
 
-export type Kept = { kind: "saved"; owed: string[] } | { kind: "gone"; owed: string[] } | { kind: "paid_by"; payer: string; owed: string[] } | { kind: "not_ready"; owed: string[] };
+export type Kept =
+  | { kind: "saved"; owed: string[] }
+  | { kind: "gone"; owed: string[] }
+  | { kind: "paid_by"; payer: string; owed: string[] }
+  | { kind: "not_ready"; owed: string[] }
+  | { kind: "merged_away"; owed: string[] };
 
 /** The card goes on the record, under the gym's lock (the caller's), only while it is still the
  *  gym's record, paid for by nobody, and the gym still on the connection the save began with;
@@ -583,6 +589,10 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
   if (still === null) return { kind: "gone", owed: await owe() };
   if (payerNow !== null) return { kind: "paid_by", payer: payerNow.name, owed: await owe() };
   if (row?.state !== "connected" || row.accountId !== accountId || row.connectedAt.getTime() !== k.connectedAt.getTime()) return { kind: "not_ready", owed: await owe() };
+  // Square put the card on a customer it merged the record's into, and the record did not keep that customer: in
+  // Square the card would sit on another person's profile, chargeable at the till. Let go; the next save makes the
+  // person a customer of their own (round one, High 2).
+  if (k.afterMerge === true && !(await cards.isLinkedTo(tx, { gymId, entryId, environment, accountId, customerId: k.customerId }))) return { kind: "merged_away", owed: await owe() };
   const before = await cards.readCard(tx, gymId, entryId, true);
   // The same press sent twice: Square gave back the same card, already kept.
   if (before !== null && before.environment === environment && before.accountId === accountId && before.cardId === card.cardId) return { kind: "saved", owed: [] };
@@ -613,7 +623,6 @@ export async function keepCard(tx: TransactionSql, k: KeepCard): Promise<Kept> {
     agreementId,
     at: k.at,
   });
-  if (k.afterMerge === true) await cards.markMergedAwayUnlessLinked(tx, { gymId, entryId, environment, accountId, customerId: k.customerId, at: k.at });
   const owed = before === null ? [] : [await cards.oweDisable(tx, { gymId, environment: before.environment, accountId: before.accountId, cardId: before.cardId, notBefore: k.at })];
   await insertAudit(tx, {
     actorUserId: k.userId,

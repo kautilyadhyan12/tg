@@ -260,6 +260,8 @@ export const MEMBER_CARD_WORDS = {
   connection_refused: "Square didn't accept the connection to your Square account. The owner can connect Square again in Settings.",
   square_unavailable: "Square didn't answer. Nothing was changed. Try again in a minute.",
   customer_gone: "Square no longer has this person in your customers. Type the card again to save it.",
+  /** Square had merged the person into another customer (18d-iii-b-ii-b-ii-a, round one, High 2). */
+  merged_away: "In Square, this person had been merged with another customer, so the card wasn't saved. Type the card again to save it.",
   contact_refused: "Square didn't accept this person's email address or phone number. Check them with Edit, then try again.",
   expired: "This card has expired. Try another card.",
   not_supported: "This kind of card can't be saved here. Try another card.",

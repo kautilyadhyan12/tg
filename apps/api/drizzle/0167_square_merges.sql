@@ -9,6 +9,10 @@
 -- one step always reaches the newest), so a payment taken under an old id still finds its member. Square's
 -- ids, never a person's details; a Square account's, not a gym's: two gyms can share one account.
 --
+-- `gym_square_old_customers`: the old customer each record of a gym was, at a merge (round one, Critical 1): a
+-- payment Sam took under his own old customer before Square merged it into his mum's is his, never hers; only an
+-- old id no record of the gym was is read as the customer it is now. It goes with its record.
+--
 -- `gym_member_cards.merged_away_at`: Square merged the customer a card is saved on into somebody of another name.
 -- Square keeps the card there and it is still charged through that customer, but the customer says nothing of
 -- whose payments are whose: a card so marked never links its customer to its record.
@@ -29,6 +33,19 @@ CREATE TABLE "gym_square_customer_merges" (
 );
 --> statement-breakpoint
 CREATE INDEX "gym_square_customer_merges_to_idx" ON "gym_square_customer_merges" USING btree ("environment","account_id","to_customer_id");
+--> statement-breakpoint
+CREATE TABLE "gym_square_old_customers" (
+	"gym_id" uuid NOT NULL,
+	"entry_id" uuid NOT NULL,
+	"environment" text NOT NULL,
+	"account_id" text NOT NULL,
+	"customer_id" text NOT NULL,
+	"merged_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "gym_square_old_customers_pk" PRIMARY KEY("gym_id","environment","account_id","customer_id"),
+	CONSTRAINT "gym_square_old_customers_entry_fk" FOREIGN KEY ("gym_id","entry_id") REFERENCES "gym_member_list_entries"("gym_id","id") ON DELETE CASCADE,
+	CONSTRAINT "gym_square_old_customers_environment_check" CHECK ("environment" IN ('sandbox','production')),
+	CONSTRAINT "gym_square_old_customers_ids_check" CHECK ("account_id" ~ '^[A-Za-z0-9_-]{1,64}$' AND "customer_id" ~ '^[A-Za-z0-9_-]{1,64}$')
+);
 --> statement-breakpoint
 ALTER TABLE "gym_square_member_plan" ADD COLUMN "separated_at" timestamp with time zone;
 --> statement-breakpoint
